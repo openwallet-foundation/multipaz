@@ -24,17 +24,19 @@ class OriginInfoTest {
     @Test
     fun testOriginInfoDomainOrigin() {
         val info = OriginInfoDomain("https://foo.com/bar")
-        val decoded = OriginInfoDomain.decode(info.encode())
+        val decoded = OriginInfoDomain.fromDataItem(info.toDataItem())
         assertEquals("https://foo.com/bar", decoded!!.url)
         assertEquals(
-            """{
-  "cat": 1,
-  "type": 1,
-  "details": {
-    "domain": "https://foo.com/bar"
-  }
-}""",
-            Cbor.toDiagnostics(info.encode(), setOf(DiagnosticOption.PRETTY_PRINT))
+            """
+                {
+                  "cat": 1,
+                  "type": 1,
+                  "details": {
+                    "domain": "https://foo.com/bar"
+                  }
+                }
+            """.trimIndent().trim(),
+            Cbor.toDiagnostics(info.toDataItem(), setOf(DiagnosticOption.PRETTY_PRINT))
         )
     }
 }

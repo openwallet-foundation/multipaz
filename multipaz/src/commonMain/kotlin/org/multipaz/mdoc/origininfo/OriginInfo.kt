@@ -22,15 +22,15 @@ import org.multipaz.util.Logger
  * A class representing the OriginInfo structure exchanged by the mdoc and the mdoc reader.
  */
 abstract class OriginInfo {
-    abstract fun encode(): DataItem
+    abstract fun toDataItem(): DataItem
 
     companion object {
         private const val TAG = "OriginInfo"
 
-        fun decode(oiDataItem: DataItem): OriginInfo? =
-            oiDataItem["type"].asNumber.let { type ->
-                if (type.toInt() == OriginInfoDomain.TYPE) {
-                    return OriginInfoDomain.decode(oiDataItem)
+        fun fromDataItem(dataItem: DataItem): OriginInfo? =
+            dataItem["type"].asNumber.let { type ->
+                if (type == OriginInfoDomain.TYPE) {
+                    return OriginInfoDomain.fromDataItem(dataItem)
                 }
                 Logger.w(TAG, "Unsupported type $type")
                 null

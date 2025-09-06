@@ -3,7 +3,6 @@ package org.multipaz.testapp.multidevicetests
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.engagement.EngagementParser
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
@@ -17,6 +16,8 @@ import io.ktor.utils.io.writeStringUtf8
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
+import org.multipaz.cbor.Cbor
+import org.multipaz.mdoc.engagement.DeviceEngagement
 import kotlin.time.Clock
 import org.multipaz.mdoc.role.MdocRole
 import kotlin.time.Duration.Companion.seconds
@@ -58,10 +59,9 @@ class MultiDeviceTestsClient(
                 Logger.i(TAG, "====== STARTING ITERATION ${iterationNumber} OF ${numIterationsTotal} ======")
                 Logger.i(TAG, "Test: $test")
                 Logger.iHex(TAG, "DeviceEngagement from server", encodedDeviceEngagement)
-                val deviceEngagement =
-                    EngagementParser(encodedDeviceEngagement).parse()
+                val deviceEngagement = DeviceEngagement.fromDataItem(Cbor.decode(encodedDeviceEngagement))
                 val connectionMethod = deviceEngagement.connectionMethods[0]
-                val eDeviceKey = deviceEngagement.eSenderKey
+                val eDeviceKey = deviceEngagement.eDeviceKey
                 val transport = MdocTransportFactory.Default.createTransport(
                     connectionMethod,
                     MdocRole.MDOC_READER,

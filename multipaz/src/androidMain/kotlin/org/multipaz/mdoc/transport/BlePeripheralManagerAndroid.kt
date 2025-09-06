@@ -548,7 +548,8 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
         incomingMessages.close()
         l2capSocket?.let {
             CoroutineScope(Dispatchers.IO).launch() {
-                delay(15_000)
+                // Need 25 seconds for ZKP since the proofs are large
+                delay(25_000)
                 it.close()
             }
         }

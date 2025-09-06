@@ -2,9 +2,6 @@ package org.multipaz.cbor
 
 import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.util.getUInt8
-import kotlin.contracts.ExperimentalContracts
-import kotlin.contracts.InvocationKind
-import kotlin.contracts.contract
 
 /**
  * Array (major type 4).
@@ -138,11 +135,9 @@ class CborArray(
  * @param builderAction the builder action.
  * @return the resulting [DataItem].
  */
-@OptIn(ExperimentalContracts::class)
 fun buildCborArray(
     builderAction: ArrayBuilder<CborBuilder>.() -> Unit
 ): DataItem {
-    contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
     val builder = CborArray.builder()
     builder.builderAction()
     return builder.end().build()
@@ -153,9 +148,7 @@ fun buildCborArray(
  *
  * @param builderAction the builder action.
  */
-@OptIn(ExperimentalContracts::class)
 fun<T> ArrayBuilder<T>.addCborArray(builderAction: ArrayBuilder<ArrayBuilder<T>>.() -> Unit) {
-    contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
     val innerBuilder = addArray()
     innerBuilder.builderAction()
     innerBuilder.end()
@@ -166,9 +159,7 @@ fun<T> ArrayBuilder<T>.addCborArray(builderAction: ArrayBuilder<ArrayBuilder<T>>
  *
  * @param builderAction the builder action.
  */
-@OptIn(ExperimentalContracts::class)
 fun<T> ArrayBuilder<T>.addCborMap(builderAction: MapBuilder<ArrayBuilder<T>>.() -> Unit) {
-    contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
     val innerBuilder = addMap()
     innerBuilder.builderAction()
     innerBuilder.end()

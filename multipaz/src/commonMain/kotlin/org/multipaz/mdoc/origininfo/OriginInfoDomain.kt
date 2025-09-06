@@ -15,31 +15,31 @@
  */
 package org.multipaz.mdoc.origininfo
 
-import org.multipaz.cbor.CborMap.Companion.builder
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.putCborMap
 
-class OriginInfoDomain(val url: String) : OriginInfo() {
-
-    override fun encode(): DataItem =
-        builder()
-            .put("cat", CAT)
-            .put("type", TYPE)
-            .putMap("details").put("domain", url).end()
-            .end()
-            .build()
+data class OriginInfoDomain(val url: String) : OriginInfo() {
+    override fun toDataItem() = buildCborMap {
+        put("cat", CAT)
+        put("type", TYPE)
+        putCborMap("details") {
+            put("domain", url)
+        }
+    }
 
     companion object {
-        const val CAT: Long = 1
-        const val TYPE = 1
+        const val CAT = 1L
+        const val TYPE = 1L
 
-        fun decode(oiDataItem: DataItem): OriginInfoDomain? {
-            val cat = oiDataItem["cat"].asNumber
-            val type = oiDataItem["type"].asNumber
-            require(cat == 1L && type == 1L) {
+        fun fromDataItem(dataItem: DataItem): OriginInfoDomain? {
+            val cat = dataItem["cat"].asNumber
+            val type = dataItem["type"].asNumber
+            require(cat == CAT && type == TYPE) {
                 "This CBOR object has the wrong category or type. Expected cat = $CAT, " +
                         "type = $TYPE but got cat = $cat, type = $type"
             }
-            val details = oiDataItem["details"]
+            val details = dataItem["details"]
             return OriginInfoDomain(details["domain"].asTstr)
         }
     }

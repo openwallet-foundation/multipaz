@@ -30,6 +30,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import org.multipaz.cbor.DataItem
 import org.multipaz.util.Logger.LogPrinter.Level
 
 /**
@@ -233,6 +234,24 @@ object Logger {
 
     fun eCbor(tag: String, message: String, encodedCbor: ByteArray) {
         cbor(Level.ERROR, tag, message, encodedCbor)
+    }
+
+    fun dCbor(tag: String, message: String, dataItem: DataItem) {
+        if (isDebugEnabled) {
+            cbor(Level.DEBUG, tag, message, Cbor.encode(dataItem))
+        }
+    }
+
+    fun iCbor(tag: String, message: String, dataItem: DataItem) {
+        cbor(Level.INFO, tag, message, Cbor.encode(dataItem))
+    }
+
+    fun wCbor(tag: String, message: String, dataItem: DataItem) {
+        cbor(Level.WARNING, tag, message, Cbor.encode(dataItem))
+    }
+
+    fun eCbor(tag: String, message: String, dataItem: DataItem) {
+        cbor(Level.ERROR, tag, message, Cbor.encode(dataItem))
     }
 
     @OptIn(ExperimentalSerializationApi::class)

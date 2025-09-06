@@ -2,9 +2,6 @@ package org.multipaz.cbor
 
 import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.util.getUInt8
-import kotlin.contracts.ExperimentalContracts
-import kotlin.contracts.InvocationKind
-import kotlin.contracts.contract
 
 /**
  * Map (major type 5).
@@ -149,11 +146,9 @@ class CborMap(
  * @param builderAction the builder action.
  * @return the resulting [DataItem].
  */
-@OptIn(ExperimentalContracts::class)
 fun buildCborMap(
     builderAction: MapBuilder<CborBuilder>.() -> Unit
 ): DataItem {
-    contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
     val builder = CborMap.builder()
     builder.builderAction()
     return builder.end().build()
@@ -165,12 +160,10 @@ fun buildCborMap(
  * @param key the key to for item to add.
  * @param builderAction the builder action.
  */
-@OptIn(ExperimentalContracts::class)
 fun<T> MapBuilder<T>.putCborArray(
     key: DataItem,
     builderAction: ArrayBuilder<MapBuilder<T>>.() -> Unit
 ) {
-    contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
     val innerBuilder = putArray(key)
     innerBuilder.builderAction()
     innerBuilder.end()
@@ -182,12 +175,10 @@ fun<T> MapBuilder<T>.putCborArray(
  * @param key the key to for item to add.
  * @param builderAction the builder action.
  */
-@OptIn(ExperimentalContracts::class)
 fun<T> MapBuilder<T>.putCborArray(
     key: Long,
     builderAction: ArrayBuilder<MapBuilder<T>>.() -> Unit
 ) {
-    contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
     val innerBuilder = putArray(key)
     innerBuilder.builderAction()
     innerBuilder.end()
@@ -199,12 +190,10 @@ fun<T> MapBuilder<T>.putCborArray(
  * @param key the key to for item to add.
  * @param builderAction the builder action.
  */
-@OptIn(ExperimentalContracts::class)
 fun<T> MapBuilder<T>.putCborArray(
     key: String,
     builderAction: ArrayBuilder<MapBuilder<T>>.() -> Unit
 ) {
-    contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
     val innerBuilder = putArray(key)
     innerBuilder.builderAction()
     innerBuilder.end()
@@ -216,12 +205,10 @@ fun<T> MapBuilder<T>.putCborArray(
  * @param key the key to for item to add.
  * @param builderAction the builder action.
  */
-@OptIn(ExperimentalContracts::class)
 fun<T> MapBuilder<T>.putCborMap(
     key: DataItem,
     builderAction: MapBuilder<MapBuilder<T>>.() -> Unit
 ) {
-    contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
     val innerBuilder = putMap(key)
     innerBuilder.builderAction()
     innerBuilder.end()
@@ -233,12 +220,10 @@ fun<T> MapBuilder<T>.putCborMap(
  * @param key the key to for item to add.
  * @param builderAction the builder action.
  */
-@OptIn(ExperimentalContracts::class)
 fun<T> MapBuilder<T>.putCborMap(
     key: Long,
     builderAction: MapBuilder<MapBuilder<T>>.() -> Unit
 ) {
-    contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
     val innerBuilder = putMap(key)
     innerBuilder.builderAction()
     innerBuilder.end()
@@ -250,12 +235,10 @@ fun<T> MapBuilder<T>.putCborMap(
  * @param key the key to for item to add.
  * @param builderAction the builder action.
  */
-@OptIn(ExperimentalContracts::class)
 fun<T> MapBuilder<T>.putCborMap(
     key: String,
     builderAction: MapBuilder<MapBuilder<T>>.() -> Unit
 ) {
-    contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
     val innerBuilder = putMap(key)
     innerBuilder.builderAction()
     innerBuilder.end()

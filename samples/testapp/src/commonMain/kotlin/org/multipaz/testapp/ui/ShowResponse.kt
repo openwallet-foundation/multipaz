@@ -255,6 +255,9 @@ private suspend fun parseResponse(
                         { onViewCertChain?.let { it(vp.documentSignerCertChain) } }
                     )
                 )
+                if (vp.zkpUsed) {
+                    lines.add(Line("ZK proof", ValueText("Successfully verified \uD83E\uDE84")))
+                }
                 lines.add(Line("Valid from", ValueDateTime(vp.validFrom)))
                 lines.add(Line("Valid until", ValueDateTime(vp.validUntil)))
                 lines.add(Line("Signed at", ValueDateTime(vp.signedAt)))
@@ -298,6 +301,9 @@ private suspend fun parseResponse(
                         { onViewCertChain?.let { it(vp.documentSignerCertChain) } }
                     )
                 )
+                if (vp.zkpUsed) {
+                    lines.add(Line("ZK proof", ValueText("Successfully verified \uD83E\uDE84")))
+                }
                 lines.add(Line("Valid from", ValueDateTime(vp.validFrom)))
                 lines.add(Line("Valid until", ValueDateTime(vp.validUntil)))
                 lines.add(Line("Signed at", ValueDateTime(vp.signedAt)))

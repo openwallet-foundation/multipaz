@@ -1,11 +1,30 @@
 package org.multipaz.testapp
 
+import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.encodeToByteString
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import multipazproject.samples.testapp.generated.resources.Res
+import multipazproject.samples.testapp.generated.resources.av18_card_art
+import multipazproject.samples.testapp.generated.resources.driving_license_card_art
+import multipazproject.samples.testapp.generated.resources.movie_ticket_cart_art
+import multipazproject.samples.testapp.generated.resources.photo_id_card_art
+import multipazproject.samples.testapp.generated.resources.pid_card_art
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.ExperimentalResourceApi
+import org.jetbrains.compose.resources.getDrawableResourceBytes
+import org.jetbrains.compose.resources.getSystemResourceEnvironment
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
@@ -20,6 +39,7 @@ import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentCannedRequest
 import org.multipaz.documenttype.DocumentType
+import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
@@ -27,43 +47,22 @@ import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
-import org.multipaz.mdoc.request.DeviceRequestGenerator
+import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.ZkRequest
+import org.multipaz.mdoc.request.buildDeviceRequest
+import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureArea
-import org.multipaz.util.Logger
-import multipazproject.samples.testapp.generated.resources.Res
-import multipazproject.samples.testapp.generated.resources.driving_license_card_art
-import multipazproject.samples.testapp.generated.resources.movie_ticket_cart_art
-import multipazproject.samples.testapp.generated.resources.photo_id_card_art
-import multipazproject.samples.testapp.generated.resources.pid_card_art
-import kotlin.time.Clock
-import kotlin.time.Instant
-import kotlinx.io.bytestring.ByteString
-import kotlinx.io.bytestring.encodeToByteString
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import multipazproject.samples.testapp.generated.resources.av18_card_art
-import org.jetbrains.compose.resources.DrawableResource
-import org.jetbrains.compose.resources.ExperimentalResourceApi
-import org.jetbrains.compose.resources.getDrawableResourceBytes
-import org.jetbrains.compose.resources.getSystemResourceEnvironment
-import org.multipaz.cbor.buildCborArray
-import org.multipaz.cbor.buildCborMap
-import org.multipaz.documenttype.knowntypes.AgeVerification
-import org.multipaz.mdoc.zkp.ZkSystemRepository
-import org.multipaz.sdjwt.SdJwt
 import org.multipaz.testapp.ui.DocumentCreationMode
+import org.multipaz.util.Logger
 import org.multipaz.util.truncateToWholeSeconds
-import kotlin.collections.component1
-import kotlin.collections.component2
-import kotlin.collections.iterator
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Instant
 
 object TestAppUtils {
     private const val TAG = "TestAppUtils"
@@ -89,7 +88,7 @@ object TestAppUtils {
     // This domain is for KeylessSdJwtVcCredential
     const val CREDENTIAL_DOMAIN_SDJWT_KEYLESS = "sdjwt_keyless"
 
-    fun generateEncodedDeviceRequest(
+    suspend fun generateEncodedDeviceRequest(
         request: DocumentCannedRequest,
         encodedSessionTranscript: ByteArray,
         readerKey: EcPrivateKey,
@@ -106,26 +105,32 @@ object TestAppUtils {
             }
         }
 
-        val zkSystemSpecs = if (mdocRequest.useZkp) {
+        val zkRequest = if (mdocRequest.useZkp) {
             if (zkSystemRepository == null){
                 throw IllegalStateException("zkSystemRepository is null")
             }
-            zkSystemRepository.getAllZkSystemSpecs()
+            ZkRequest(
+                systemSpecs = zkSystemRepository.getAllZkSystemSpecs(),
+                zkRequired = false
+            )
         } else {
-            emptyList()
+            null
         }
 
-        val deviceRequestGenerator = DeviceRequestGenerator(encodedSessionTranscript)
-        deviceRequestGenerator.addDocumentRequest(
-            docType = mdocRequest.docType,
-            itemsToRequest = itemsToRequest,
-            requestInfo = null,
-            readerKey = readerKey,
-            signatureAlgorithm = readerKey.curve.defaultSigningAlgorithm,
-            readerKeyCertificateChain = X509CertChain(listOf(readerCert, readerRootCert)),
-            zkSystemSpecs = zkSystemSpecs
-        )
-        return deviceRequestGenerator.generate()
+        return Cbor.encode(buildDeviceRequest(
+            sessionTranscript = RawCbor(encodedSessionTranscript)
+        ) {
+            addDocRequest(
+                docType = mdocRequest.docType,
+                nameSpaces = itemsToRequest,
+                docRequestInfo = DocRequestInfo(
+                    zkRequest = zkRequest
+                ),
+                readerKey = readerKey,
+                signatureAlgorithm = readerKey.curve.defaultSigningAlgorithm,
+                readerKeyCertificateChain = X509CertChain(listOf(readerCert, readerRootCert)),
+            )
+        }.toDataItem())
     }
 
     fun generateEncodedSessionTranscript(

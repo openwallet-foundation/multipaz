@@ -5,7 +5,6 @@ import org.multipaz.cbor.Simple
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.engagement.EngagementGenerator
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.HandoverRequestRecord
 import org.multipaz.nfc.HandoverSelectRecord
@@ -22,7 +21,9 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.io.bytestring.append
 import kotlinx.io.bytestring.encodeToByteString
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.getUInt16
 
@@ -148,10 +149,9 @@ class MdocNfcEngagementHelper(
                     selectedFilePayload = bsb.toByteString()
                     negotiatedHandoverState = NegotiatedHandoverState.EXPECT_SERVICE_SELECT
                 } else {
-                    val encodedDeviceEngagement = EngagementGenerator(
-                        eDeviceKey,
-                        EngagementGenerator.ENGAGEMENT_VERSION_1_0
-                    ).generate()
+                    val encodedDeviceEngagement = Cbor.encode(
+                        buildDeviceEngagement(eDeviceKey = eDeviceKey) { }.toDataItem()
+                    )
 
                     val combinedStaticHandoverMethods = MdocConnectionMethod.combine(staticHandoverMethods!!)
                     val handoverSelectMessage = generateHandoverSelectMessage(
@@ -241,10 +241,9 @@ class MdocNfcEngagementHelper(
 
         // Handover Select message is defined in section 5.2 Handover Select Message
         //
-        val encodedDeviceEngagement = EngagementGenerator(
-            eDeviceKey,
-            EngagementGenerator.ENGAGEMENT_VERSION_1_0
-        ).generate()
+        val encodedDeviceEngagement = Cbor.encode(
+            buildDeviceEngagement(eDeviceKey = eDeviceKey) { }.toDataItem()
+        )
 
         // When doing Negotiated Handover, the standard says to don't include the UUIDs in Handover Select
         // message for mdoc central client mode:

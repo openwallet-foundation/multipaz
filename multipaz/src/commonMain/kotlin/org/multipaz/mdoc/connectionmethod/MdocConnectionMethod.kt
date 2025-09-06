@@ -26,6 +26,8 @@ abstract class MdocConnectionMethod {
      *
      * This is the reverse operation of [.fromDeviceEngagement].
      */
+    // TODO: at some point when we do a lot of other breaking changes, rename toDeviceEngagement()
+    //  to toDataItem() and make it return a DataItem. Ditto for fromDeviceEngagement().
     abstract fun toDeviceEngagement(): ByteArray
 
     /**

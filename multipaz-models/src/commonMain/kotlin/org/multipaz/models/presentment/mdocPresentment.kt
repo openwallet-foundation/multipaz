@@ -5,8 +5,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.claim.Claim
+import org.multipaz.claim.findMatchingClaim
+import org.multipaz.credential.Credential
+import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.document.Document
 import org.multipaz.document.NameSpacedData
@@ -14,19 +19,21 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObjectParser
-import org.multipaz.mdoc.request.DeviceRequestParser
+import org.multipaz.mdoc.request.DeviceRequest
+import org.multipaz.mdoc.request.DocRequest
 import org.multipaz.mdoc.response.DeviceResponseGenerator
 import org.multipaz.mdoc.response.DocumentGenerator
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportClosedException
-import org.multipaz.mdoc.util.toMdocRequest
 import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.presentment.CredentialPresentmentData
 import org.multipaz.presentment.CredentialPresentmentSelection
+import org.multipaz.presentment.SimpleCredentialPresentmentData
 import org.multipaz.request.MdocRequestedClaim
+import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.securearea.KeyUnlockInteractive
 import org.multipaz.trustmanagement.TrustPoint
@@ -98,12 +105,10 @@ internal suspend fun mdocPresentment(
 
             val deviceResponseGenerator = DeviceResponseGenerator(Constants.DEVICE_RESPONSE_STATUS_OK)
 
-            val deviceRequest = DeviceRequestParser(
-                encodedDeviceRequest!!,
-                encodedSessionTranscript!!,
-            ).parse()
+            val deviceRequest = DeviceRequest.fromDataItem(Cbor.decode(encodedDeviceRequest!!))
+            deviceRequest.verifyReaderAuthentication(sessionTranscript = RawCbor(encodedSessionTranscript!!))
             for (docRequest in deviceRequest.docRequests) {
-                val zkRequested = docRequest.zkSystemSpecs.isNotEmpty()
+                val zkRequested = docRequest.docRequestInfo?.zkRequest != null
 
                 val request = docRequest.toMdocRequest(
                     documentTypeRepository = documentTypeRepository,
@@ -139,8 +144,7 @@ internal suspend fun mdocPresentment(
                 var zkSystemMatch: ZkSystem? = null
                 var zkSystemSpec: ZkSystemSpec? = null
                 if (zkRequested) {
-                    val requesterSupportedZkSpecs = docRequest.zkSystemSpecs
-
+                    val requesterSupportedZkSpecs = docRequest.docRequestInfo!!.zkRequest!!.systemSpecs
                     val zkSystemRepository = source.zkSystemRepository
                     if (zkSystemRepository != null) {
                         // Find the first ZK System that the requester supports and matches the document
@@ -169,7 +173,7 @@ internal suspend fun mdocPresentment(
                 val documentBytes = calcDocument(
                     credential = mdocCredential,
                     requestedClaims = request.requestedClaims,
-                    encodedSessionTranscript = encodedSessionTranscript,
+                    encodedSessionTranscript = encodedSessionTranscript!!,
                     eReaderKey = SessionEncryption.getEReaderKey(sessionData).publicKey,
                 )
 
@@ -213,6 +217,76 @@ internal suspend fun mdocPresentment(
         err.printStackTrace()
         Logger.i(TAG, "Ending holderJob due to MdocTransportClosedException")
     }
+}
+
+// TODO: this is just temporary until we have an equivalent of DcqlQuery.execute() for DeviceRequest
+internal suspend fun DocRequest.getPresentmentData(
+    documentTypeRepository: DocumentTypeRepository,
+    source: PresentmentSource,
+    keyAgreementPossible: List<EcCurve>,
+): CredentialPresentmentData? {
+    val zkRequested = docRequestInfo?.zkRequest != null
+    val requestWithoutFiltering = toMdocRequest(
+        documentTypeRepository = documentTypeRepository,
+        mdocCredential = null
+    )
+    val documents = source.getDocumentsMatchingRequest(
+        request = requestWithoutFiltering,
+    )
+    val matches = mutableListOf<Pair<Credential, Map<RequestedClaim, Claim>>>()
+    for (document in documents) {
+        var zkSystemSpec: ZkSystemSpec? = null
+        if (zkRequested) {
+            val requesterSupportedZkSpecs = docRequestInfo!!.zkRequest!!.systemSpecs
+            val zkSystemRepository = source.zkSystemRepository
+            if (zkSystemRepository != null) {
+                // Find the first ZK System that the requester supports and matches the document
+                for (zkSpec in requesterSupportedZkSpecs) {
+                    val zkSystem = zkSystemRepository.lookup(zkSpec.system)
+                    if (zkSystem == null) {
+                        continue
+                    }
+
+                    val matchingZkSystemSpec = zkSystem.getMatchingSystemSpec(
+                        zkSystemSpecs = requesterSupportedZkSpecs,
+                        requestedClaims = requestWithoutFiltering.requestedClaims
+                    )
+                    if (matchingZkSystemSpec != null) {
+                        zkSystemSpec = matchingZkSystemSpec
+                        break
+                    }
+                }
+            }
+        }
+        if (zkRequested && zkSystemSpec == null) {
+            Logger.w(TAG, "Reader requested ZK proof but no compatible ZkSpec was found.")
+        }
+        val mdocCredential = source.selectCredential(
+            document = document,
+            request = requestWithoutFiltering,
+            // Check is zk is requested and a compatible ZK system spec was found
+            keyAgreementPossible = if (zkRequested && zkSystemSpec != null) {
+                listOf()
+            } else {
+                keyAgreementPossible
+            }
+        ) as MdocCredential?
+        if (mdocCredential == null) {
+            Logger.w(TAG, "No credential found")
+            continue
+        }
+
+        val claims = mdocCredential.getClaims(documentTypeRepository)
+        val claimsToShow = buildMap {
+            for (requestedClaim in requestWithoutFiltering.requestedClaims) {
+                claims.findMatchingClaim(requestedClaim)?.let {
+                    put(requestedClaim as RequestedClaim, it)
+                }
+            }
+        }
+        matches.add(Pair(mdocCredential,claimsToShow))
+    }
+    return SimpleCredentialPresentmentData(matches)
 }
 
 private suspend fun calcDocument(

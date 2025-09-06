@@ -29,6 +29,7 @@ import org.multipaz.util.Logger
  *
  * @param encodedEngagement the bytes of the `Engagement` structure.
  */
+@Deprecated(message = "This class is deprecated, use DeviceEngagement instead.")
 class EngagementParser(private val encodedEngagement: ByteArray) {
     /**
      * Parses the given `Engagement` structure.
@@ -105,7 +106,7 @@ class EngagementParser(private val encodedEngagement: ByteArray) {
                     val originInfoItems: List<DataItem> = (map[5] as CborArray?)!!.items
                     for (oiDataItem in originInfoItems) {
                         try {
-                            val originInfo = OriginInfo.decode(oiDataItem)
+                            val originInfo = OriginInfo.fromDataItem(oiDataItem)
                             if (originInfo != null) {
                                 ois.add(originInfo)
                             }

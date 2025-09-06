@@ -34,14 +34,13 @@ import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.mdoc.request.DeviceRequestGenerator
+import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.ZkRequest
+import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.response.DeviceResponseParser
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.models.openid.OpenID4VP
-import org.multipaz.models.verification.DcResponse
-import org.multipaz.models.verification.MdocApiDcResponse
-import org.multipaz.models.verification.OpenID4VPDcResponse
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.sdjwt.SdJwt
@@ -149,34 +148,44 @@ object VerificationUtil {
                                     add(base64EncryptionInfo)
                                     add(origin)
                                 }
-                                val sessionTranscript = Cbor.encode(
-                                    buildCborArray {
-                                        add(Simple.NULL) // DeviceEngagementBytes
-                                        add(Simple.NULL) // EReaderKeyBytes
-                                        addCborArray {
-                                            add("dcapi")
-                                            add(Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo)))
-                                        }
+                                val sessionTranscript = buildCborArray {
+                                    add(Simple.NULL) // DeviceEngagementBytes
+                                    add(Simple.NULL) // EReaderKeyBytes
+                                    addCborArray {
+                                        add("dcapi")
+                                        add(Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo)))
                                     }
-                                )
+                                }
                                 val itemsToRequest = mutableMapOf<String, MutableMap<String, Boolean>>()
                                 for (claim in claims) {
                                     itemsToRequest.getOrPut(claim.namespaceName) { mutableMapOf() }
                                         .put(claim.dataElementName, claim.intentToRetain)
                                 }
-                                val generator = DeviceRequestGenerator(sessionTranscript)
-                                generator.addDocumentRequest(
-                                    docType = docType,
-                                    itemsToRequest = itemsToRequest,
-                                    requestInfo = null,
-                                    readerKey = readerAuthenticationKey,
-                                    signatureAlgorithm = readerAuthenticationKey?.publicKey?.curve?.defaultSigningAlgorithmFullySpecified
-                                        ?: Algorithm.UNSET,
-                                    readerKeyCertificateChain = readerAuthenticationCertChain,
-                                    zkSystemSpecs = zkSystemSpecs
-                                )
-                                val deviceRequest = generator.generate()
-                                val base64DeviceRequest = deviceRequest.toBase64Url()
+
+                                val zkRequest = if (zkSystemSpecs.size > 0) {
+                                    ZkRequest(
+                                        systemSpecs = zkSystemSpecs,
+                                        zkRequired = false
+                                    )
+                                } else {
+                                    null
+                                }
+                                val encodedDeviceRequest = Cbor.encode(buildDeviceRequest(
+                                    sessionTranscript = sessionTranscript
+                                ) {
+                                    addDocRequest(
+                                        docType = docType,
+                                        nameSpaces = itemsToRequest,
+                                        docRequestInfo = DocRequestInfo(
+                                            zkRequest = zkRequest
+                                        ),
+                                        readerKey = readerAuthenticationKey,
+                                        signatureAlgorithm = readerAuthenticationKey?.publicKey?.curve?.defaultSigningAlgorithmFullySpecified
+                                            ?: Algorithm.UNSET,
+                                        readerKeyCertificateChain = readerAuthenticationCertChain
+                                    )
+                                }.toDataItem())
+                                val base64DeviceRequest = encodedDeviceRequest.toBase64Url()
                                 putJsonObject("data") {
                                     put("deviceRequest", base64DeviceRequest)
                                     put("encryptionInfo", base64EncryptionInfo)
@@ -594,6 +603,7 @@ object VerificationUtil {
             documentSignerCertChain = issuerCertChain,
             issuerSignedClaims = claims,
             deviceSignedClaims = deviceSignedClaims,
+            zkpUsed = false,
             validFrom = validFrom,
             validUntil = validUntil,
             signedAt = signedAt,
@@ -681,6 +691,7 @@ object VerificationUtil {
                     documentSignerCertChain = document.issuerCertificateChain,
                     issuerSignedClaims = issuerSignedClaims,
                     deviceSignedClaims = deviceSignedClaims,
+                    zkpUsed = false,
                     validFrom = document.validityInfoValidFrom,
                     validUntil = document.validityInfoValidUntil,
                     expectedUpdate = document.validityInfoExpectedUpdate,
@@ -744,6 +755,7 @@ object VerificationUtil {
                     documentSignerCertChain = zkDocument.zkDocumentData.msoX5chain!!,
                     issuerSignedClaims = issuerSignedClaims,
                     deviceSignedClaims = deviceSignedClaims,
+                    zkpUsed = true,
                     validFrom = null,
                     validUntil = null,
                     expectedUpdate = null,

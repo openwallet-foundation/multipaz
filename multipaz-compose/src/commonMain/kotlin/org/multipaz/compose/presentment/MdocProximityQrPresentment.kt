@@ -13,12 +13,12 @@ import androidx.compose.ui.graphics.painter.Painter
 import coil3.ImageLoader
 import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Simple
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.engagement.EngagementGenerator
+import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
@@ -96,15 +96,11 @@ fun MdocProximityQrPresentment(
                             transportFactory = transportFactory,
                             options = MdocTransportOptions(bleUseL2CAP = true),
                         )
-                        val engagementGenerator = EngagementGenerator(
-                            eSenderKey = eDeviceKey.publicKey,
-                            version = "1.0"
-                        )
-                        engagementGenerator.addConnectionMethods(advertisedTransports.map {
-                            it.connectionMethod
-                        })
-                        val encodedDeviceEngagement = ByteString(engagementGenerator.generate())
-
+                        val encodedDeviceEngagement = ByteString(Cbor.encode(
+                            buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
+                                advertisedTransports.map { addConnectionMethod(it.connectionMethod) }
+                            }.toDataItem()
+                        ))
                         qrCodeToShow.value = "mdoc:" + encodedDeviceEngagement.toByteArray().toBase64Url()
 
                         val transport = advertisedTransports.waitForConnection(

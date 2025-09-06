@@ -58,7 +58,6 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
-import org.multipaz.mdoc.engagement.EngagementParser
 import org.multipaz.mdoc.nfc.scanNfcMdocReader
 import org.multipaz.mdoc.response.DeviceResponseParser
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
@@ -92,6 +91,7 @@ import org.multipaz.compose.cards.WarningCard
 import org.multipaz.compose.decodeImage
 import org.multipaz.compose.permissions.rememberBluetoothEnabledState
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
+import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.zkp.ZkDocument
 import org.multipaz.mdoc.zkp.ZkSystemRepository
@@ -581,8 +581,8 @@ private suspend fun doReaderFlow(
     requestSelected: MutableState<RequestPickerEntry>,
     selectConnectionMethod: suspend (connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod?
 ) {
-    val deviceEngagement = EngagementParser(encodedDeviceEngagement.toByteArray()).parse()
-    val eDeviceKey = deviceEngagement.eSenderKey
+    val deviceEngagement = DeviceEngagement.fromDataItem(Cbor.decode(encodedDeviceEngagement.toByteArray()))
+    val eDeviceKey = deviceEngagement.eDeviceKey
     Logger.i(TAG, "Using curve ${eDeviceKey.curve.name} for session encryption")
     eReaderKey.value = Crypto.createEcPrivateKey(eDeviceKey.curve)
 
@@ -696,6 +696,7 @@ private suspend fun doReaderFlowWithTransport(
         readerRootCert = app.readerRootCert,
         zkSystemRepository = app.zkSystemRepository,
     )
+    Logger.iCbor(TAG, "deviceRequest", encodedDeviceRequest)
     try {
         transport.open(eDeviceKey)
         transport.sendMessage(

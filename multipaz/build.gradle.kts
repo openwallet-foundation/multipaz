@@ -101,6 +101,7 @@ kotlin {
                 implementation(libs.bouncy.castle.bcpkix)
                 implementation(libs.kotlin.test)
                 implementation(libs.kotlinx.coroutines.test)
+                implementation(project(":multipaz-doctypes"))
             }
         }
 

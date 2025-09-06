@@ -27,7 +27,6 @@ import org.multipaz.documenttype.knowntypes.UtopiaNaturalization
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable
-import org.multipaz.mdoc.request.DeviceRequestGenerator
 import org.multipaz.mdoc.response.DeviceResponseParser
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.storage.StorageTableSpec
@@ -81,6 +80,9 @@ import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.documenttype.knowntypes.IDPass
+import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.ZkRequest
+import org.multipaz.mdoc.request.buildDeviceRequestSuspend
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
@@ -1203,7 +1205,7 @@ private suspend fun handleGetDataMdoc(
                 if (zkSystemSpec == null) {
                     lines.add(
                         ResultLine(
-                            "ZK Verification",
+                            "ZK proof",
                             "ZK System Spec ID ${zkDocument.zkDocumentData.zkSystemSpecId} was not found."
                         )
                     )
@@ -1218,8 +1220,8 @@ private suspend fun handleGetDataMdoc(
                         ?: throw IllegalStateException("Zk System '${zkSystemSpec.system}' was not found.")
                     lines.add(
                         ResultLine(
-                            "ZK Verification",
-                            "Successfully validated proof"
+                            "ZK proof",
+                            "Successfully validated proof \uD83E\uDE84"
                         )
                     )
                 }
@@ -1877,16 +1879,14 @@ private suspend fun mdocCalcDcRequestStringMdocApi(
         emptyList()
     }
 
-    val sessionTranscript = Cbor.encode(
-        buildCborArray {
-            add(Simple.NULL) // DeviceEngagementBytes
-            add(Simple.NULL) // EReaderKeyBytes
-            addCborArray {
-                add("dcapi")
-                add(Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo)))
-            }
+    val sessionTranscript = buildCborArray {
+        add(Simple.NULL) // DeviceEngagementBytes
+        add(Simple.NULL) // EReaderKeyBytes
+        addCborArray {
+            add("dcapi")
+            add(Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo)))
         }
-    )
+    }
 
     val itemsToRequest = mutableMapOf<String, MutableMap<String, Boolean>>()
     for (ns in request.mdocRequest!!.namespacesToRequest) {
@@ -1895,18 +1895,31 @@ private suspend fun mdocCalcDcRequestStringMdocApi(
                 .put(de.attribute.identifier, intentToRetain)
         }
     }
-    val generator = DeviceRequestGenerator(sessionTranscript)
-    generator.addDocumentRequest(
-        docType = request.mdocRequest!!.docType,
-        itemsToRequest = itemsToRequest,
-        requestInfo = null,
-        readerKey = readerAuthKey,
-        signatureAlgorithm = Algorithm.ES256,
-        readerKeyCertificateChain = readerAuthKeyCertification,
-        zkSystemSpecs = zkSystemSpecs
-    )
-    val deviceRequest = generator.generate()
-    val base64DeviceRequest = deviceRequest.toBase64Url()
+
+    val zkRequest = if (request.mdocRequest!!.useZkp) {
+        ZkRequest(
+            systemSpecs = zkSystemSpecs,
+            zkRequired = false
+        )
+    } else {
+        null
+    }
+
+    val encodedDeviceRequest = Cbor.encode(buildDeviceRequestSuspend(
+        sessionTranscript = sessionTranscript
+    ) {
+        addDocRequest(
+            docType = request.mdocRequest!!.docType,
+            nameSpaces = itemsToRequest,
+            docRequestInfo = DocRequestInfo(
+                zkRequest = zkRequest
+            ),
+            readerKey = readerAuthKey,
+            signatureAlgorithm = readerKey.curve.defaultSigningAlgorithm,
+            readerKeyCertificateChain = readerAuthKeyCertification,
+        )
+    }.toDataItem())
+    val base64DeviceRequest = encodedDeviceRequest.toBase64Url()
 
     val top = JSONObject()
     top.put("deviceRequest", base64DeviceRequest)

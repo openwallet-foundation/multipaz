@@ -2,9 +2,6 @@ package org.multipaz.mdoc.issuersigned
 
 import org.multipaz.cbor.DataItem
 import kotlinx.io.bytestring.ByteString
-import kotlin.contracts.ExperimentalContracts
-import kotlin.contracts.InvocationKind
-import kotlin.contracts.contract
 import kotlin.random.Random
 
 class IssuerNamespacesBuilder(
@@ -58,13 +55,11 @@ class IssuerNamespacesBuilder(
     }
 }
 
-@OptIn(ExperimentalContracts::class)
 fun buildIssuerNamespaces(
     dataElementRandomSize: Int = 16,
     randomProvider: Random = Random,
     builderAction: IssuerNamespacesBuilder.() -> Unit
 ): IssuerNamespaces {
-    contract { callsInPlace(builderAction, InvocationKind.EXACTLY_ONCE) }
     val builder = IssuerNamespacesBuilder(dataElementRandomSize, randomProvider)
     builder.builderAction()
     return builder.build()

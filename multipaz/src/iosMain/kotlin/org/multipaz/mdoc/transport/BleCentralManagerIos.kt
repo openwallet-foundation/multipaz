@@ -580,7 +580,8 @@ internal class BleCentralManagerIos : BleCentralManager {
         // Delayed closed because there's no way to flush L2CAP connections...
         peripheral?.let {
             CoroutineScope(Dispatchers.IO).launch {
-                delay(15_000)
+                // Need 25 seconds for ZKP since the proofs are large
+                delay(25_000)
                 centralManager.cancelPeripheralConnection(it)
             }
         }

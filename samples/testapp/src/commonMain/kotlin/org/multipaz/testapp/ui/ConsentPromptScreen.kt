@@ -59,8 +59,6 @@ import org.multipaz.documenttype.DocumentCannedRequest
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.PhotoID
-import org.multipaz.mdoc.request.DeviceRequestGenerator
-import org.multipaz.mdoc.request.DeviceRequestParser
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.util.toMdocRequest
 import org.multipaz.models.openid.dcql.DcqlQuery
@@ -567,45 +565,6 @@ private fun calculateRequester(
             origin = origin.origin
         ),
         trustPoint
-    )
-}
-
-private fun calculateRequest(
-    cannedRequest: DocumentCannedRequest,
-    requester: Requester
-): MdocRequest {
-    val namespacesToRequest = mutableMapOf<String, Map<String, Boolean>>()
-    for (ns in cannedRequest.mdocRequest!!.namespacesToRequest) {
-        val dataElementsToRequest = mutableMapOf<String, Boolean>()
-        for ((de, intentToRetain) in ns.dataElementsToRequest) {
-            dataElementsToRequest[de.attribute.identifier] = intentToRetain
-        }
-        namespacesToRequest[ns.namespace] = dataElementsToRequest
-    }
-    val encodedSessionTranscript = Cbor.encode(buildCborMap { put("doesn't", "matter") })
-    val encodedDeviceRequest = DeviceRequestGenerator(encodedSessionTranscript)
-        .addDocumentRequest(
-            cannedRequest.mdocRequest!!.docType,
-            namespacesToRequest,
-            null,
-            null,
-            Algorithm.UNSET,
-            null
-        ).generate()
-    val deviceRequest = DeviceRequestParser(encodedDeviceRequest, encodedSessionTranscript).parse()
-
-    val docTypeRepo = DocumentTypeRepository()
-    docTypeRepo.addDocumentType(DrivingLicense.getDocumentType())
-    val mdocRequest = deviceRequest.docRequests[0].toMdocRequest(
-        documentTypeRepository = docTypeRepo,
-        mdocCredential = null,
-        requesterAppId = requester.appId,
-        requesterOrigin = requester.origin,
-    )
-    return MdocRequest(
-        requester = requester,
-        requestedClaims = mdocRequest.requestedClaims,
-        docType = mdocRequest.docType
     )
 }
 

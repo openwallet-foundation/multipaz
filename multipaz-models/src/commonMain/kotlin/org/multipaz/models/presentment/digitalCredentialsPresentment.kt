@@ -23,7 +23,7 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObjectParser
-import org.multipaz.mdoc.request.DeviceRequestParser
+import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.response.DeviceResponseGenerator
 import org.multipaz.mdoc.response.DocumentGenerator
 import org.multipaz.mdoc.util.toMdocRequest
@@ -153,25 +153,22 @@ private suspend fun digitalCredentialsMdocApiProtocol(
         add(presentmentMechanism.origin)
     }
 
-    val encodedSessionTranscript = Cbor.encode(
-        buildCborArray {
-            add(Simple.NULL) // DeviceEngagementBytes
-            add(Simple.NULL) // EReaderKeyBytes
-            addCborArray {
-                add("dcapi")
-                add(Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo)))
-            }
+    val sessionTranscript = buildCborArray {
+        add(Simple.NULL) // DeviceEngagementBytes
+        add(Simple.NULL) // EReaderKeyBytes
+        addCborArray {
+            add("dcapi")
+            add(Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo)))
         }
-    )
+    }
+    val encodedSessionTranscript = Cbor.encode(sessionTranscript)
 
     val deviceResponseGenerator = DeviceResponseGenerator(Constants.DEVICE_RESPONSE_STATUS_OK)
 
-    val deviceRequest = DeviceRequestParser(
-        deviceRequestBase64.fromBase64Url(),
-        encodedSessionTranscript,
-    ).parse()
+    val deviceRequest = DeviceRequest.fromDataItem(Cbor.decode(deviceRequestBase64.fromBase64Url()))
+    deviceRequest.verifyReaderAuthentication(sessionTranscript)
     for (docRequest in deviceRequest.docRequests) {
-        val zkRequested = docRequest.zkSystemSpecs.isNotEmpty()
+        val zkRequested = docRequest.docRequestInfo?.zkRequest != null
 
         val request = docRequest.toMdocRequest(
             documentTypeRepository = documentTypeRepository,
@@ -212,7 +209,7 @@ private suspend fun digitalCredentialsMdocApiProtocol(
         var zkSystemMatch: ZkSystem? = null
         var zkSystemSpec: ZkSystemSpec? = null
         if (zkRequested) {
-            val requesterSupportedZkSpecs = docRequest.zkSystemSpecs
+            val requesterSupportedZkSpecs = docRequest.docRequestInfo!!.zkRequest!!.systemSpecs
             val zkSystemRepository = source.zkSystemRepository
             if (zkSystemRepository != null) {
                 // Find the first ZK System that the requester supports and matches the document

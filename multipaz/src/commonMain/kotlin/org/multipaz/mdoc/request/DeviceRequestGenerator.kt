@@ -47,6 +47,7 @@ import org.multipaz.securearea.SecureArea
  *
  * @param encodedSessionTranscript the bytes of `SessionTranscript`.
  */
+@Deprecated(message = "This class is deprecated, use DeviceRequest instead.")
 class DeviceRequestGenerator(
     val encodedSessionTranscript: ByteArray
 ) {

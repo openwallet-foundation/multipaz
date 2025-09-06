@@ -32,6 +32,7 @@ import org.multipaz.mdoc.origininfo.OriginInfo
  * `DeviceEngagement`) or the reader (when generating `ReaderEngagement`).
  * @param version the version to use.
  */
+@Deprecated(message = "This class is deprecated, use DeviceEngagement instead.")
 class EngagementGenerator(
     private val eSenderKey: EcPublicKey,
     private val version: String
@@ -61,7 +62,7 @@ class EngagementGenerator(
      */
     fun addOriginInfos(originInfos: List<OriginInfo>): EngagementGenerator {
         for (originInfo in originInfos) {
-            originInfoArrayBuilder.add(originInfo.encode())
+            originInfoArrayBuilder.add(originInfo.toDataItem())
         }
         return this
     }
