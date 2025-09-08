@@ -199,6 +199,7 @@ private suspend fun caPublicKey(
     val escapedKeyId = keyId
         .replace("%", "%25")
         .replace("/", "%2F")
+        .replace(":", "%3A")
     val caPath = "$caName/$escapedKeyId"
     val caKey =
         BackendEnvironment.cache(
