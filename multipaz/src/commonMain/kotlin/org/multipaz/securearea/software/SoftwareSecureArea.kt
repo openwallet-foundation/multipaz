@@ -309,7 +309,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         return false
     }
 
-    @CborSerializable(schemaHash = "s3fitojNQkNiyyWqszh98yfetQJdp-anpxmfq1wnyCY")
+    @CborSerializable(schemaHash = "uDNIH6LIvDH5IXbAKIX7aVmFeEJwBUZAd7s7prLKBBw")
     internal data class KeyMetadata(
         val algorithm: Algorithm,
         val passphraseRequired: Boolean,

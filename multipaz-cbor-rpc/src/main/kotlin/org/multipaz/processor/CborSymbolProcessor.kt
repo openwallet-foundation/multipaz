@@ -824,7 +824,7 @@ class CborSymbolProcessor(
             }
             if (typeInfo.specifiedHash != null && computedHash != typeInfo.specifiedHash) {
                 val encoded = computedHash.toBase64Url()
-                logger.error("Schema change detected, new schemaHash = \"${encoded}\"", declaration)
+                logger.error("Schema change detected for $className, new schemaHash = \"${encoded}\"", declaration)
             }
             schemaIds[declaration] = typeInfo.specifiedId ?: computedHash
         }

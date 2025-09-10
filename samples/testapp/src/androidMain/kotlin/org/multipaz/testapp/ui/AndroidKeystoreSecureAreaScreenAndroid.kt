@@ -125,7 +125,7 @@ actual fun AndroidKeystoreSecureAreaScreen(
             TextButton(onClick = {
                 coroutineScope.launch {
                     try {
-                        val attestation = aksAttestation(false)
+                        val attestation = aksAttestation(useStrongBox = false, useAttestKey = false)
                         Logger.d(TAG, "attestation: " + attestation)
                         withContext(Dispatchers.Main) {
                             onViewCertificate(Cbor.encode(attestation.certChain!!.toDataItem()).toBase64Url())
@@ -148,7 +148,30 @@ actual fun AndroidKeystoreSecureAreaScreen(
             TextButton(onClick = {
                 coroutineScope.launch {
                     try {
-                        val attestation = aksAttestation(true)
+                        val attestation = aksAttestation(useStrongBox = false, useAttestKey = true)
+                        Logger.d(TAG, "attestation: " + attestation)
+                        withContext(Dispatchers.Main) {
+                            onViewCertificate(Cbor.encode(attestation.certChain!!.toDataItem()).toBase64Url())
+                        }
+                    } catch (e: Throwable) {
+                        e.printStackTrace();
+                        showToast("${e.message}")
+                    }
+                }
+            })
+            {
+                Text(
+                    text = "Attestation w/ Attest Key",
+                    fontSize = 15.sp
+                )
+            }
+        }
+
+        item {
+            TextButton(onClick = {
+                coroutineScope.launch {
+                    try {
+                        val attestation = aksAttestation(useStrongBox = true, useAttestKey = false)
                         Logger.d(TAG, "attestation: " + attestation)
                         withContext(Dispatchers.Main) {
                             onViewCertificate(
@@ -164,6 +187,31 @@ actual fun AndroidKeystoreSecureAreaScreen(
             {
                 Text(
                     text = "StrongBox Attestation",
+                    fontSize = 15.sp
+                )
+            }
+        }
+
+        item {
+            TextButton(onClick = {
+                coroutineScope.launch {
+                    try {
+                        val attestation = aksAttestation(useStrongBox = true, useAttestKey = true)
+                        Logger.d(TAG, "attestation: " + attestation)
+                        withContext(Dispatchers.Main) {
+                            onViewCertificate(
+                                Cbor.encode(attestation.certChain!!.toDataItem()).toBase64Url()
+                            )
+                        }
+                    } catch (e: Throwable) {
+                        e.printStackTrace();
+                        showToast("${e.message}")
+                    }
+                }
+            })
+            {
+                Text(
+                    text = "StrongBox Attestation w/ Attest Key",
                     fontSize = 15.sp
                 )
             }
@@ -475,10 +523,27 @@ private fun getFeatureVersionKeystore(appContext: Context, useStrongbox: Boolean
     return 0
 }
 
-private suspend fun aksAttestation(strongBox: Boolean): KeyAttestation {
+private suspend fun aksAttestation(
+    useStrongBox: Boolean,
+    useAttestKey: Boolean
+): KeyAttestation {
     val now = Clock.System.now()
     val thirtyDaysFromNow = now + 30.days
     val androidKeystoreSecureArea = Platform.getSecureArea() as AndroidKeystoreSecureArea
+
+    val attestKeyAlias = if (useAttestKey) {
+        androidKeystoreSecureArea.createKey(
+            "attestKey",
+            AndroidKeystoreCreateKeySettings.Builder("AttestKeyChallenge".encodeToByteString())
+                .setAlgorithm(Algorithm.ANDROID_KEYSTORE_ATTEST_KEY)
+                .setUseStrongBox(useStrongBox)
+                .build()
+        )
+        "attestKey"
+    } else {
+        null
+    }
+
     androidKeystoreSecureArea.createKey(
         "testKey",
         AndroidKeystoreCreateKeySettings.Builder("Challenge".encodeToByteString())
@@ -487,7 +552,8 @@ private suspend fun aksAttestation(strongBox: Boolean): KeyAttestation {
                 setOf(UserAuthenticationType.LSKF, UserAuthenticationType.BIOMETRIC)
             )
             .setValidityPeriod(now, thirtyDaysFromNow)
-            .setUseStrongBox(strongBox)
+            .setUseStrongBox(useStrongBox)
+            .setAttestKeyAlias(attestKeyAlias)
             .build()
     )
     return androidKeystoreSecureArea.getKeyInfo("testKey").attestation

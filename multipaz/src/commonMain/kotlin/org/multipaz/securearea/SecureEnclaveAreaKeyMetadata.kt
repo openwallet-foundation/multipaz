@@ -8,7 +8,7 @@ import org.multipaz.crypto.EcPublicKey
 // TODO: move this class to iOS source tree once annotation processors can work across
 // multiple source trees
 @CborSerializable(
-    schemaHash = "okPebBsfGHrGeeSEzxKcVkUcpqlYMSZKPnciGJNDpTY"
+    schemaHash = "gkdLkv688A8DbRvIxxLKnjofvCHrtsJWuTvRh0ZhGTo"
 )
 internal data class SecureEnclaveAreaKeyMetadata(
     val algorithm: Algorithm,

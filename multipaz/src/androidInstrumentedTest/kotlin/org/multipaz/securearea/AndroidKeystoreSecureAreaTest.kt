@@ -49,6 +49,7 @@ import java.security.cert.Certificate
 import java.security.cert.CertificateException
 import kotlin.time.Instant.Companion.fromEpochMilliseconds
 import kotlinx.io.bytestring.ByteString
+import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -605,37 +606,15 @@ class AndroidKeystoreSecureAreaTest {
     @Throws(IOException::class)
     fun testAttestKeyHelper(useStrongBox: Boolean) = runTest {
         val ks = secureAreaProvider.get()
+
         val attestKeyAlias = "icTestAttestKey"
-        val attestKeyCertificates: Array<Certificate>
-        val kpg: KeyPairGenerator?
-        try {
-            kpg = KeyPairGenerator.getInstance(
-                KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore"
-            )
-            val builder = KeyGenParameterSpec.Builder(
-                attestKeyAlias,
-                KeyProperties.PURPOSE_ATTEST_KEY
-            )
-            builder.setAttestationChallenge(byteArrayOf(1, 2, 3))
-            if (useStrongBox) {
-                builder.setIsStrongBoxBacked(true)
-            }
-            kpg.initialize(builder.build())
-            kpg.generateKeyPair()
-            val aks = KeyStore.getInstance("AndroidKeyStore")
-            aks.load(null)
-            attestKeyCertificates = aks.getCertificateChain(attestKeyAlias)
-        } catch (e: InvalidAlgorithmParameterException) {
-            throw IllegalStateException("Error creating attest key", e)
-        } catch (e: NoSuchAlgorithmException) {
-            throw IllegalStateException("Error creating attest key", e)
-        } catch (e: NoSuchProviderException) {
-            throw IllegalStateException("Error creating attest key", e)
-        } catch (e: KeyStoreException) {
-            throw IllegalStateException("Error creating attest key", e)
-        } catch (e: CertificateException) {
-            throw IllegalStateException("Error creating attest key", e)
-        }
+        ks.deleteKey(attestKeyAlias)
+        val attestKeyInfo = ks.createKey(attestKeyAlias,
+            AndroidKeystoreCreateKeySettings.Builder(ByteString(1, 2, 3))
+                .setAlgorithm(Algorithm.ANDROID_KEYSTORE_ATTEST_KEY)
+                .setUseStrongBox(useStrongBox)
+                .build()
+        )
         val challenge = ByteString(4, 5, 6, 7)
         val settings = AndroidKeystoreCreateKeySettings.Builder(challenge)
             .setAttestKeyAlias(attestKeyAlias)
@@ -655,17 +634,15 @@ class AndroidKeystoreSecureAreaTest {
         Assert.assertNull(keyInfo.validFrom)
         Assert.assertNull(keyInfo.validUntil)
 
-        // When using an attest key, only one certificate is returned ...
-        Assert.assertEquals(1, keyInfo.attestation.certChain!!.certificates.size.toLong())
-        // ... and this certificate is signed by the attest key. Check that.
-        try {
-            keyInfo.attestation.certChain!!.certificates[0].javaX509Certificate.verify(
-                attestKeyCertificates[0].publicKey
-            )
-            // expected path
-        } catch (e: Throwable) {
-            Assert.fail()
-        }
+        // When using an attest key, the first certificate is signed by the AttestKey
+        keyInfo.attestation.certChain.certificates[0].verify(
+            attestKeyInfo.publicKey
+        )
+        // The rest of the chain is the attestation for AttestKey
+        assertEquals(
+            keyInfo.attestation.certChain.certificates.subList(1, keyInfo.attestation.certChain.certificates.size),
+            attestKeyInfo.attestation.certChain!!.certificates
+        )
 
         // Check the attestation extension
         val parser = AndroidAttestationExtensionParser(

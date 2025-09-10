@@ -186,41 +186,53 @@ class AndroidKeystoreSecureArea private constructor(
                 KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore"
             )
             var purposes = 0
-            if (aSettings.algorithm.isSigning) {
-                purposes = purposes or KeyProperties.PURPOSE_SIGN
-            }
-            if (aSettings.algorithm.isKeyAgreement) {
-                purposes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    purposes or KeyProperties.PURPOSE_AGREE_KEY
+            if (aSettings.algorithm == Algorithm.ANDROID_KEYSTORE_ATTEST_KEY) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    purposes = KeyProperties.PURPOSE_ATTEST_KEY
                 } else {
                     throw IllegalArgumentException(
                         "PURPOSE_AGREE_KEY not supported on this device"
                     )
                 }
-
-                // Android KeyStore tries to be "helpful" by creating keys in Software if
-                // the Secure World (Keymint) lacks support for the requested feature, for
-                // example ECDH. This will never work (for RWI, the document issuer will
-                // detect it when examining the attestation) so just bail early if this
-                // is the case.
-                if (aSettings.useStrongBox) {
-                    require(keymintSbFeatureLevel >= 100) {
-                        "PURPOSE_AGREE_KEY not supported on " +
-                                "this StrongBox KeyMint version"
+            } else {
+                if (aSettings.algorithm.isSigning) {
+                    purposes = purposes or KeyProperties.PURPOSE_SIGN
+                }
+                if (aSettings.algorithm.isKeyAgreement) {
+                    purposes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        purposes or KeyProperties.PURPOSE_AGREE_KEY
+                    } else {
+                        throw IllegalArgumentException(
+                            "PURPOSE_AGREE_KEY not supported on this device"
+                        )
                     }
-                } else {
-                    require(keymintTeeFeatureLevel >= 100) {
-                        "PURPOSE_AGREE_KEY not supported on " +
-                                "this KeyMint version"
+
+                    // Android KeyStore tries to be "helpful" by creating keys in Software if
+                    // the Secure World (Keymint) lacks support for the requested feature, for
+                    // example ECDH. This will never work (for RWI, the document issuer will
+                    // detect it when examining the attestation) so just bail early if this
+                    // is the case.
+                    if (aSettings.useStrongBox) {
+                        require(keymintSbFeatureLevel >= 100) {
+                            "PURPOSE_AGREE_KEY not supported on " +
+                                    "this StrongBox KeyMint version"
+                        }
+                    } else {
+                        require(keymintTeeFeatureLevel >= 100) {
+                            "PURPOSE_AGREE_KEY not supported on " +
+                                    "this KeyMint version"
+                        }
                     }
                 }
             }
             val builder = KeyGenParameterSpec.Builder(newKeyAlias, purposes)
-            when (aSettings.algorithm.curve) {
-                EcCurve.P256 -> builder.setDigests(KeyProperties.DIGEST_SHA256)
-                EcCurve.ED25519 -> builder.setAlgorithmParameterSpec(ECGenParameterSpec("ed25519"))
-                EcCurve.X25519 -> builder.setAlgorithmParameterSpec(ECGenParameterSpec("x25519"))
-                else -> throw IllegalArgumentException("Curve is not supported")
+            if (aSettings.algorithm != Algorithm.ANDROID_KEYSTORE_ATTEST_KEY) {
+                when (aSettings.algorithm.curve) {
+                    EcCurve.P256 -> builder.setDigests(KeyProperties.DIGEST_SHA256)
+                    EcCurve.ED25519 -> builder.setAlgorithmParameterSpec(ECGenParameterSpec("ed25519"))
+                    EcCurve.X25519 -> builder.setAlgorithmParameterSpec(ECGenParameterSpec("x25519"))
+                    else -> throw IllegalArgumentException("Curve is not supported")
+                }
             }
             if (aSettings.userAuthenticationRequired) {
                 val keyguardManager =
@@ -635,7 +647,14 @@ class AndroidKeystoreSecureArea private constructor(
                     keyInfo.keyValidityForOriginationEnd!!.time
                 )
             }
-            val attestationCertChain = keyMetadata.attestation
+            val attestationCertChain = if (keyMetadata.attestKeyAlias != null) {
+                X509CertChain(
+                    certificates = keyMetadata.attestation.certificates +
+                            getKeyInfo(keyMetadata.attestKeyAlias).attestation.certChain!!.certificates
+                )
+            } else {
+                keyMetadata.attestation
+            }
             val publicKey = attestationCertChain.certificates.first().ecPublicKey
 
             val userAuthenticationTypes = mutableSetOf<UserAuthenticationType>()

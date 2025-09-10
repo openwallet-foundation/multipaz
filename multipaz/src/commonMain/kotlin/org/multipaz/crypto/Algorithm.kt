@@ -217,6 +217,11 @@ enum class Algorithm(
         description = "ECDH using X448 curve without KDF", curve = EcCurve.X448,
         isKeyAgreement = true),
 
+    ANDROID_KEYSTORE_ATTEST_KEY(
+        description = "Android Keystore Attest Key",
+        fullySpecified = true
+    )
+
     ;
 
     companion object {

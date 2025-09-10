@@ -150,6 +150,10 @@ class AndroidKeystoreCreateKeySettings private constructor(
          * [setAttestKeyAlias() method](https://developer.android.com/reference/android/security/keystore/KeyGenParameterSpec.Builder#setAttestKeyAlias(java.lang.String))
          * for more information about attest keys.
          *
+         * When an attest key is used, the certificate chain for the created key will include the certificate
+         * for the key as its leaf certificate (signed by the attest key) followed by the attestation for the
+         * attest key.
+         *
          * @param attestKeyAlias the Android Keystore alias of the attest key or `null` to not use an attest key.
          * @return the builder.
          */
