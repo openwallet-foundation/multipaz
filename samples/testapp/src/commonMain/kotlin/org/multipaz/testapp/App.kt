@@ -616,7 +616,7 @@ class App private constructor (val promptModel: PromptModel) {
                     certificate = MULTIPAZ_IDENTITY_READER_CERT,
                     metadata = TrustMetadata(
                         displayName = "Multipaz Identity Reader",
-                        displayIcon = ByteString(Res.readBytes("drawable/app_icon.webp")),
+                        displayIcon = ByteString(Res.readBytes("drawable/mpz_identity_reader.webp")),
                         privacyPolicyUrl = "https://apps.multipaz.org"
                     )
                 )
@@ -630,7 +630,7 @@ class App private constructor (val promptModel: PromptModel) {
                     certificate = MULTIPAZ_IDENTITY_READER_CERT_UNTRUSTED_DEVICES,
                     metadata = TrustMetadata(
                         displayName = "Multipaz Identity Reader (Untrusted Devices)",
-                        displayIcon = ByteString(Res.readBytes("drawable/app_icon.webp")),
+                        displayIcon = ByteString(Res.readBytes("drawable/mpz_identity_reader.webp")),
                         privacyPolicyUrl = "https://apps.multipaz.org"
                     )
                 )
