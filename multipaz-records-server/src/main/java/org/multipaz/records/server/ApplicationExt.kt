@@ -28,6 +28,7 @@ import org.multipaz.records.request.identityDelete
 import org.multipaz.records.request.identitySchema
 import org.multipaz.records.request.identityGet
 import org.multipaz.records.request.identityList
+import org.multipaz.records.request.identityOffer
 import org.multipaz.records.request.identityPut
 import org.multipaz.records.request.pushedAuthorizationRequest
 import org.multipaz.records.request.token
@@ -130,6 +131,10 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
             runRequest {
                 call.respondText(
                     text = buildJsonObject {
+                        val issuerUrl = configuration.getValue("issuer_url")
+                        if (issuerUrl != null) {
+                            put("issuer_url", issuerUrl)
+                        }
                         putJsonObject("names") {
                             put(
                                 "state",
@@ -171,6 +176,11 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
             runRequest {
                 validateAdminCookie(call)
                 identityDelete(call)
+            }
+        }
+        post("/identity/offer") {
+            runRequest {
+                identityOffer(call)
             }
         }
         get("/identity/schema") {

@@ -5,15 +5,20 @@ async function identityList() {
     let list = await (await fetch(base + "identity/list", {
        method: 'POST'
     })).json();
+    let metadata = await(await fetch(base + "identity/metadata")).json();
+    let issuerUrl = metadata.issuer_url;
     let table = document.getElementById("list");
+    if (issuerUrl) {
+        document.getElementById("offer").style.display = "";
+    }
     for (let token of list) {
         let row = document.createElement("tr")
         table.appendChild(row)
-        fetchIdentity(base, row, token)
+        fetchIdentity(base, row, token, issuerUrl)
     }
 }
 
-async function fetchIdentity(base, row, token) {
+async function fetchIdentity(base, row, token, issuerUrl) {
     let identity = await (await fetch(base + "identity/get", {
        method: 'POST',
        headers: {
@@ -38,5 +43,13 @@ async function fetchIdentity(base, row, token) {
     link.textContent = core.utopia_id_number;
     link.href = "person.html?token=" + token;
     row.appendChild(idnum);
+    if (issuerUrl) {
+        let offerCell = document.createElement("td")
+        let offerLink = document.createElement("a");
+        offerCell.appendChild(offerLink);
+        offerLink.textContent = "Credentials";
+        offerLink.href = "offer.html?token=" + token;
+        row.appendChild(offerCell);
+    }
 }
 

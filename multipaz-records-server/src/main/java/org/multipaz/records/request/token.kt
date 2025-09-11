@@ -33,7 +33,7 @@ import kotlin.time.Duration.Companion.minutes
  */
 suspend fun token(call: ApplicationCall) {
     val parameters = call.receiveParameters()
-    val scopeAndId = when (parameters["grant_type"]) {
+    val qualifiedId = when (parameters["grant_type"]) {
         "authorization_code" -> {
             val code = parameters["code"]
                 ?: throw InvalidRequestException("'code' parameter missing")
@@ -49,7 +49,7 @@ suspend fun token(call: ApplicationCall) {
             if (authorizationData.codeChallenge != digest) {
                 throw InvalidRequestException("authorization: bad code_verifier")
             }
-            authorizationData.scopeAndId
+            authorizationData.qualifiedId
         }
         "refresh_token" -> {
             val refreshToken = parameters["refresh_token"]
@@ -59,8 +59,8 @@ suspend fun token(call: ApplicationCall) {
         else -> throw InvalidRequestException("invalid parameter 'grant_type'")
     }
     val expiresIn = 60.minutes
-    val accessToken = idToToken(TokenType.ACCESS_TOKEN, scopeAndId, expiresIn)
-    val refreshToken = idToToken(TokenType.REFRESH_TOKEN, scopeAndId, Duration.INFINITE)
+    val accessToken = idToToken(TokenType.ACCESS_TOKEN, qualifiedId, expiresIn)
+    val refreshToken = idToToken(TokenType.REFRESH_TOKEN, qualifiedId, Duration.INFINITE)
     call.respondText(
         text = buildJsonObject {
             put("access_token", accessToken)

@@ -5,6 +5,7 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respondText
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -60,7 +61,10 @@ suspend fun identitySchema(call: ApplicationCall) {
         text = buildJsonObject {
             putJsonArray("schema") {
                 for (recordType in recordTypes.values) {
-                    add(recordType.toJson(jsonEnv))
+                    add(recordType.toJson(
+                        jsonEnv,
+                        includeInstanceTitle = recordType.attribute.identifier != "core"
+                    ))
                 }
             }
             put("types", JsonObject(jsonEnv.namedTypes))
@@ -76,7 +80,8 @@ private class JsonEnv {
 
 private fun RecordType.toJson(
     jsonEnv: JsonEnv,
-    listItem: Boolean = false
+    listItem: Boolean = false,
+    includeInstanceTitle: Boolean = false
 ): JsonObject {
     return buildJsonObject {
         if (!listItem) {
@@ -138,10 +143,17 @@ private fun RecordType.toJson(
             is DocumentAttributeType.ComplexType -> putJsonObject("type") {
                 if (isList) {
                     put("type", "list")
-                    put("elements", listElement.toJson(jsonEnv, true))
+                    put("elements", listElement.toJson(jsonEnv, listItem = true))
                 } else {
                     put("type", "complex")
                     putJsonArray("attributes") {
+                        if (includeInstanceTitle) {
+                            addJsonObject {
+                                put("identifier", "instance_title")
+                                put("display_name", "Instance Title")
+                                put("type", "string")
+                            }
+                        }
                         for (recordType in subAttributes.values) {
                             add(recordType.toJson(jsonEnv))
                         }

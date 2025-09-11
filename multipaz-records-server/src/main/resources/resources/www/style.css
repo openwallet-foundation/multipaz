@@ -13,6 +13,7 @@ body {
 }
 
 body.wide {
+    min-width: 800px;
     max-width: 1320px;
 }
 
@@ -106,4 +107,10 @@ input, select {
 
 input[type=checkbox], input[type=submit] {
     width: auto;
+}
+
+.qr {
+    display: block;
+    margin-top: 1em;
+    width:200px;
 }

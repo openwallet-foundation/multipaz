@@ -1,7 +1,7 @@
 (function() {
-    const loginStyle = document.createElement("style");
     const pagePath = document.location.pathname;
     const basePath = pagePath.substring(0, pagePath.lastIndexOf("/") + 1);
+    const loginStyle = document.createElement("style");
     document.head.appendChild(loginStyle);
 
     const isLoggedIn = function() {

@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="en-US">
 <head>
-    <title>Utopia Registry - List of identities</title>
+    <title>List of identities</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -19,13 +20,13 @@
     information on the given individual. Digital identities issued by
     <i class="state_name">State</i> are based on the information entered in this system.
 </p>
-<p class="logged_in">You are logged in and thus have power to
+<p class="purpose logged_in">You are logged in and thus have power to
     add a new individual by clicking "New Individual" at the bottom of
     the page. Make sure to only enter fictional identities here, this system
     is designed for demo purposes only and as such should not be used to store
     any real-world personal information!
 </p>
-<p class="logged_out">As you are not logged in, you can view, but not alter this data.
+<p class="purpose logged_out">As you are not logged in, you can view, but not alter this data.
     Use "Login" button at the top of the page to log in.
 </p>
 <p>
@@ -34,6 +35,7 @@
         <th>Last name</th>
         <th>First name</th>
         <th>Utopia id</th>
+        <th id="offer" style="display:none">Credential offer</th>
     </tr>
 </table>
 <form class="logged_in" action="person.html">

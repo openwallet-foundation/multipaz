@@ -101,7 +101,7 @@ async function displayCredentialConfig(configId) {
     let txText = document.createElement("input");
     txText.type = "text";
     txText.value = "Transaction Code"
-    txText.name = "tx_text";
+    txText.name = "tx_prompt";
     txBlock.appendChild(txText);
     preAuthForm.appendChild(txBlock);
     txLength.onchange = function() {

@@ -17,6 +17,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.CborMap
@@ -91,8 +92,15 @@ fun JsonElement.toDataItem(recordType: RecordType): DataItem {
         is JsonObject -> buildCborMap {
             for ((itemKey, item) in jsonObject) {
                 val itemType = recordType.subAttributes[itemKey]
-                    ?: throw IllegalArgumentException("Unexpected item: '$itemKey'")
-                put(itemKey, item.toDataItem(itemType))
+                if (itemType != null) {
+                    put(itemKey, item.toDataItem(itemType))
+                } else {
+                    if (itemKey == "instance_title") {
+                        put("instance_title", item.jsonPrimitive.content)
+                    } else {
+                        throw IllegalArgumentException("Unexpected item: '$itemKey'")
+                    }
+                }
             }
         }
     }

@@ -118,14 +118,6 @@ internal class CredentialFactoryMdocPid : CredentialFactoryBase() {
                     added.add("resident_address")
                 }
 
-                if (!added.contains("portrait")) {
-                    addDataElement(
-                        dataElementName = "portrait",
-                        value = Bstr(resources.getRawResource("female.jpg")!!.toByteArray())
-                    )
-                    added.add("portrait")
-                }
-
                 // Transfer core fields that have counterparts in the PID credential
                 for ((nameItem, value) in coreData.asMap) {
                     val name = nameItem.asTstr
@@ -133,6 +125,14 @@ internal class CredentialFactoryMdocPid : CredentialFactoryBase() {
                         addDataElement(name, value)
                         added.add(name)
                     }
+                }
+
+                if (!added.contains("portrait")) {
+                    addDataElement(
+                        dataElementName = "portrait",
+                        value = Bstr(resources.getRawResource("female.jpg")!!.toByteArray())
+                    )
+                    added.add("portrait")
                 }
 
                 // Values derived from the birth_date

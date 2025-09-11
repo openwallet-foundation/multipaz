@@ -33,6 +33,7 @@ import org.multipaz.openid4vci.request.credential
 import org.multipaz.openid4vci.request.credentialRequest
 import org.multipaz.openid4vci.request.fetchResource
 import org.multipaz.openid4vci.request.finishAuthorization
+import org.multipaz.openid4vci.request.preauthorizedOffer
 import org.multipaz.openid4vci.request.nonce
 import org.multipaz.openid4vci.request.openid4VpResponse
 import org.multipaz.openid4vci.request.pushedAuthorizationRequest
@@ -134,6 +135,9 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
         }
         get("/signing_certificate") {
             runRequest { signingCertificate(call) }
+        }
+        post("/preauthorized_offer") {
+            runRequest { preauthorizedOffer(call) }
         }
     }
 }

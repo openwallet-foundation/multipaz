@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <title>Pre-authorized credential offers</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="style.css" />
+    <style>
+        label {
+            display: block;
+            margin: 0.5em;
+        }
+        label span {
+            display: inline-block;
+            width: 8.5em;
+            text-align: end;
+        }
+        select, input {
+            width: auto;
+        }
+    </style>
+</head>
+<body>
+<div id="main">
+    <h1 class="state_name">State</h1>
+    <h2>Pre-authorized credential offers</h2>
+    <p class="purpose">
+        You are playing the role of <i class="official_name">Admin</i> of
+        <i class="state_name">State</i>. You are helping a <i class="subject_name">user</i>
+        to obtain a credential from the official records of <i class="state_name">State</i>.
+        Select the record type and the record instance (if there are multiple records
+        of the given type). Then generate a <i>pre-authorized</i> credential offer
+        that the <i class="subject_name">user</i> then can use on their device
+        to obtain the actual credential. Note that pre-authorized credential offers
+        are very sensitive and can be converted to actual credentials by the bearer.
+        Transaction code, typically passed to the <i class="subject_name">user</i>
+        through a separate delivery method can add a little bit of additional
+        protection.
+    </p>
+    <label>
+        <span>Person's name:</span>
+        <input id="name" type="text" readonly="readonly"/>
+    </label>
+    <label>
+        <span>Record type:</span>
+        <select id="recordType"></select>
+    </label>
+    <label id="instanceRow">
+        <span>Record instance:</span>
+        <select id="instance"></select>
+    </label>
+    <label>
+        <span>Transaction code:</span>
+        <select id="txCode">
+            <option value="none">None</option>
+            <option value="n4">4 digits</option>
+            <option value="a4">4 letters or digits</option>
+            <option value="n6">6 digits</option>
+            <option value="a6">6 letters or digits</option>
+        </select>
+    </label>
+    <label id="txPromptRow" style="display:none">
+        <span>Prompt:</span>
+        <input id="txPrompt" type="text" value="Transaction Code"/>
+    </label>
+    <button id="generate">Generate</button>
+    <div id="offers">
+    </div>
+</div>
+</body>
+<script src="offer.js"></script>
+<script src="metadata.js"></script>
+</html>

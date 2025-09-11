@@ -41,6 +41,7 @@ import org.multipaz.server.getBaseUrl
 import org.multipaz.openid4vci.util.getReaderIdentity
 import org.multipaz.openid4vci.util.getSystemOfRecordUrl
 import org.multipaz.openid4vci.util.idToCode
+import org.multipaz.openid4vci.util.parseTxKind
 import org.multipaz.provisioning.SecretCodeRequest
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
@@ -72,15 +73,10 @@ suspend fun authorizeGet(call: ApplicationCall) {
             ?: throw InvalidRequestException("'configuration_id' parameter is required")
         val factory = CredentialFactory.getRegisteredFactories().byOfferId[configurationId]
             ?: throw InvalidRequestException("invalid 'configuration_id' parameter")
-        val txKind = queryParameters["tx_kind"] ?: "none"
-        val txCode = if (txKind == "none") {
-            null
-        } else {
-            val txText = queryParameters["tx_text"] ?: "Transaction code"
-            val txNumeric = txKind.startsWith("n")
-            val txLength = txKind.substring(1).toInt()
-            SecretCodeRequest(txText, txNumeric, txLength)
-        }
+        val txCodeSpec = parseTxKind(
+            txKind = queryParameters["tx_kind"],
+            txPrompt = queryParameters["tx_prompt"]
+        )
         // Create a new session
         IssuanceState.createIssuanceState(IssuanceState(
             clientId = null,
@@ -90,7 +86,7 @@ suspend fun authorizeGet(call: ApplicationCall) {
             redirectUri = null,
             codeChallenge = null,
             configurationId = configurationId,
-            txCodeSpec = txCode
+            txCodeSpec = txCodeSpec
         ))
     } else {
         throw InvalidRequestException("Invalid or missing 'request_uri' parameter")

@@ -8,12 +8,11 @@ import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.utils.io.CancellationException
 import kotlin.time.Clock
-import kotlinx.datetime.LocalDate
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import org.multipaz.records.data.AuthorizationData
 import org.multipaz.records.data.Identity
 import org.multipaz.records.data.IdentityNotFoundException
@@ -59,16 +58,25 @@ private suspend fun getHtml(code: String, call: ApplicationCall) {
     val cipher = BackendEnvironment.getInterface(SimpleCipher::class)!!
     val oauthParams = OauthParams.fromCbor(cipher.decrypt(code.fromBase64Url()))
     val authorizeHtml = resources.getStringResource("authorize.html")!!
-    val personList = buildJsonArray {
+    val personMap = buildJsonObject {
         Identity.listAll().forEach { id ->
             try {
                 val identity = Identity.findById(id)
                 val firstName = identity.data.core["given_name"]?.asTstr ?: "Unnamed"
                 val lastName = identity.data.core["family_name"]?.asTstr ?: "NoSurname"
                 val personId = idToToken(TokenType.FE_TOKEN, id, Duration.INFINITE)
-                addJsonObject {
-                    put("personId", personId)
+                putJsonObject(personId) {
                     put("name", "$firstName $lastName")
+                    putJsonObject("instances") {
+                        identity.data.records[oauthParams.scope]?.forEach { recordId, recordData ->
+                            val text = if (recordData.hasKey("instance_title")) {
+                                recordData["instance_title"].asTstr
+                            } else {
+                                "Document instance $recordId"
+                            }
+                            put(recordId, text)
+                        }
+                    }
                 }
             } catch (err: Exception) {
                 Logger.e(TAG, "Failed to read identity '$id'", err)
@@ -79,7 +87,7 @@ private suspend fun getHtml(code: String, call: ApplicationCall) {
         text = authorizeHtml
             .replace("\$scope", oauthParams.scope)
             .replace("\$authorizationCode", code)
-            .replace("\$personList", personList.toString()),
+            .replace("\$personMap", personMap.toString()),
         contentType = ContentType.Text.Html
     )
 }
@@ -98,6 +106,7 @@ suspend fun authorizePost(call: ApplicationCall) {
     val oauthParams = OauthParams.fromCbor(cipher.decrypt(code.fromBase64Url()))
     val person = parameters["person"]
         ?: throw InvalidRequestException("'person' missing")
+    val recordId = parameters["instance"]
     try {
         if (person.isEmpty()) {
             throw AuthorizationFailed()
@@ -114,7 +123,7 @@ suspend fun authorizePost(call: ApplicationCall) {
         }
         val authCode = cipher.encrypt(
             AuthorizationData(
-                scopeAndId = oauthParams.scope + ":" + id,
+                qualifiedId = oauthParams.scope + ":" + recordId + ":" + id,
                 codeChallenge = oauthParams.codeChallenge,
                 expiration = Clock.System.now() + 3.minutes
             ).toCbor()

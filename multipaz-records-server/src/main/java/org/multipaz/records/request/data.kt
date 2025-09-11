@@ -7,6 +7,9 @@ import io.ktor.server.request.header
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.CborMap
+import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborMap
 import org.multipaz.records.data.Identity
@@ -38,7 +41,7 @@ suspend fun data(call: ApplicationCall) {
         )
         return
     }
-    val (scope, id) = tokenToId(
+    val (scope, recordId, id) = tokenToId(
         type = TokenType.ACCESS_TOKEN,
         code = authorization.substring(7)
     ).split(":")
@@ -57,8 +60,14 @@ suspend fun data(call: ApplicationCall) {
                 val records = identity.data.records[scope]
                 if (records != null) {
                     putCborMap(scope) {
-                        for ((recordId, recordValue) in records) {
-                            put(recordId, recordValue)
+                        val record = records[recordId]
+                        if (record != null) {
+                            put(
+                                recordId,
+                                CborMap(record.asMap.filter { (key, _) ->
+                                    key.asTstr != "instance_title"
+                                }.toMutableMap())
+                            )
                         }
                     }
                 }

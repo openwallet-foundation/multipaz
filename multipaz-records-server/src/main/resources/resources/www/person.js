@@ -30,7 +30,7 @@ async function load() {
             fields.push(attribute.identifier);
         }
         for (let recordTypeId in byRecordTypeId) {
-            if (recordTypeId != "code") {
+            if (recordTypeId != "core") {
                 records[recordTypeId] = [];
             }
         }
@@ -333,7 +333,8 @@ function readField(input, typedefs, attribute) {
         }
     } else if (type == "picture") {
         let image = document.getElementById(input.dataset.image);
-        return image.src.substring(dataUrlPrefix.length);
+        let imageData = image.src.substring(dataUrlPrefix.length);
+        return imageData ? imageData : undefined;
     } else if (type == "number") {
         return input.value ? input.value - 0 : undefined;
     } else if (type == "boolean") {

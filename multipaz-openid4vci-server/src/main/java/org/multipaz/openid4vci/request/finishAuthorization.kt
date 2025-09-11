@@ -16,6 +16,8 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.openid4vci.util.IssuanceState
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.codeToId
+import org.multipaz.openid4vci.util.generatePreauthorizedOffer
+import org.multipaz.openid4vci.util.generateRandom
 import org.multipaz.openid4vci.util.getSystemOfRecordUrl
 import org.multipaz.server.getBaseUrl
 import org.multipaz.openid4vci.util.idToCode
@@ -88,25 +90,11 @@ suspend fun finishAuthorization(call: ApplicationCall) {
         }
         IssuanceState.updateIssuanceState(id, state)
         if (error == null) {
-            val preauthCode = idToCode(OpaqueIdType.PRE_AUTHORIZED, id, 100.days)
-            preauthorizedOffer(call, preauthCode, txCode, state)
+            preauthorizedOffer(call, id, txCode, state)
         } else {
             preauthorizedError(call, error)
         }
     }
-}
-
-private const val NUMERIC_ALPHABET = "0123456789"
-private const val ALPHANUMERIC_ALPHABET = "23456789ABCDEFGHJKLMNPRSTUVWXYZ"  // skip 0/O/Q, 1/I
-
-private fun SecretCodeRequest.generateRandom(): String {
-    val alphabet = if (isNumeric) NUMERIC_ALPHABET else ALPHANUMERIC_ALPHABET
-    val code = StringBuilder()
-    val length = this.length ?: 6
-    for (i in 0..<length) {
-        code.append(alphabet[Random.Default.nextInt(alphabet.length)])
-    }
-    return code.toString()
 }
 
 private suspend fun processRedirect(
@@ -165,32 +153,14 @@ private suspend fun processRedirect(
     }
 }
 
-const val OFFER_URL_SCHEMA = "openid-credential-offer:"
+private const val OFFER_URL_SCHEMA = "openid-credential-offer:"
 private suspend fun preauthorizedOffer(
     call: ApplicationCall,
-    preauthCode: String,
+    id: String,
     txCode: String?,
     state: IssuanceState
 ) {
-    val offer = "$OFFER_URL_SCHEMA//?credential_offer=" + buildJsonObject {
-        put("credential_issuer", BackendEnvironment.getBaseUrl())
-        putJsonArray("credential_configuration_ids") {
-            add(state.configurationId)
-        }
-        putJsonObject("grants") {
-            putJsonObject("urn:ietf:params:oauth:grant-type:pre-authorized_code") {
-                put("pre-authorized_code", preauthCode)
-                val txCodeSpec = state.txCodeSpec
-                if (txCodeSpec != null) {
-                    putJsonObject("tx_code") {
-                        put("input_mode", if (txCodeSpec.isNumeric) "numeric" else "text")
-                        put("length", txCodeSpec.length)
-                        put("description", txCodeSpec.description)
-                    }
-                }
-            }
-        }
-    }.toString().encodeURLParameter()
+    val offer = generatePreauthorizedOffer(OFFER_URL_SCHEMA, id, state)
     val resources = BackendEnvironment.getInterface(Resources::class)!!
     val preauthorizedHtml = resources.getStringResource("pre-authorized.html")!!
     call.respondText(

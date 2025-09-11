@@ -6,7 +6,7 @@ import org.multipaz.cbor.annotation.CborSerializable
 
 @CborSerializable
 data class AuthorizationData(
-    val scopeAndId: String,
+    val qualifiedId: String,
     val codeChallenge: ByteString,
     val expiration: Instant
 ) {

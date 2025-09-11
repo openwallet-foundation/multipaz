@@ -95,7 +95,7 @@ suspend fun wellKnownOpenidCredentialIssuer(call: ApplicationCall) {
                             putJsonArray("display") {
                                 addJsonObject {
                                     put("name", credentialFactory.name)
-                                    put("locale", "en-US")
+                                    put("locale", locale)
                                     if (credentialFactory.logo != null) {
                                         putJsonObject("logo") {
                                             put("uri", "$baseUrl/${credentialFactory.logo}")
