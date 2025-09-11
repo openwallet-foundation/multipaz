@@ -735,14 +735,25 @@ public class KeystoreIdentityCredential extends IdentityCredential {
 
     @Override
     public @NonNull
+    List<List<X509Certificate>> getAuthKeyChainsNeedingCertification(byte[] challenge) {
+        return mData.getAuthKeyChainsNeedingCertification(challenge);
+    }
+
+    @Override
+    public @NonNull
     Collection<X509Certificate> getAuthKeysNeedingCertification() {
         return mData.getAuthKeysNeedingCertification();
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public void storeStaticAuthenticationData(@NonNull X509Certificate authenticationKey,
-            @NonNull byte[] staticAuthData) throws UnknownAuthenticationKeyException {
+        @NonNull byte[] staticAuthData) throws UnknownAuthenticationKeyException {
+        mData.storeStaticAuthenticationData(authenticationKey, null, staticAuthData);
+    }
+
+    @Override
+    public void storeStaticAuthenticationData(@NonNull PublicKey authenticationKey,
+        @NonNull byte[] staticAuthData) throws UnknownAuthenticationKeyException {
         mData.storeStaticAuthenticationData(authenticationKey, null, staticAuthData);
     }
 
@@ -755,6 +766,14 @@ public class KeystoreIdentityCredential extends IdentityCredential {
         mData.storeStaticAuthenticationData(authenticationKey, expirationDate, staticAuthData);
     }
 
+    @Override
+    public void storeStaticAuthenticationData(
+        @NonNull PublicKey authenticationKey,
+        @NonNull Calendar expirationDate,
+        @NonNull byte[] staticAuthData)
+        throws UnknownAuthenticationKeyException {
+        mData.storeStaticAuthenticationData(authenticationKey, expirationDate, staticAuthData);
+    }
 
     @Override
     public @NonNull

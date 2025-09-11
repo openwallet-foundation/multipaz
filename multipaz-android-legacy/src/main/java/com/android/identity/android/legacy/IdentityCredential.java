@@ -406,6 +406,30 @@ public abstract class IdentityCredential {
     public @NonNull abstract Collection<X509Certificate> getAuthKeysNeedingCertification();
 
     /**
+     * Gets a collection of dynamic authentication keys that need certification.
+     *
+     * <p>When there aren't enough certified dynamic authentication keys (either because the key
+     * count has been increased, one or more keys have reached their usage count, or keys have
+     * expired), this method will generate replacement keys and certificates and return them for
+     * issuer certification. The issuer certificates and associated static authentication data
+     * must then be provided back to the {@code IdentityCredential} using
+     * {@link #storeStaticAuthenticationData(X509Certificate, Calendar, byte[])}.
+     *
+     * <p>Each X.509 certificate chain is signed by ultimately signed by Keystore Root and the
+     * keystore extensions can be found on the leaf certificate.
+     *
+     * @param challenge a byte array whose contents should be unique, fresh and provided by
+     * the issuing authority. The value provided is embedded in the keystore attestation extension
+     * and enables the issuing authority to verify that the returned attestation is for this
+     * transaction. If Optional.empty() is provided the challenge value will not be set.
+     *
+     * @return A collection of X.509 certificates chains for dynamic authentication keys that need
+     * issuer certification.
+     */
+    public @NonNull abstract List<List<X509Certificate>> getAuthKeyChainsNeedingCertification(
+        byte[] challenge);
+
+    /**
      * Store authentication data associated with a dynamic authentication key.
      *
      * <p>This should only be called for an authenticated key returned by
@@ -422,9 +446,30 @@ public abstract class IdentityCredential {
      */
     @Deprecated
     public abstract void storeStaticAuthenticationData(
-            @NonNull X509Certificate authenticationKey,
-            @NonNull byte[] staticAuthData)
-            throws UnknownAuthenticationKeyException;
+        @NonNull X509Certificate authenticationKey,
+        @NonNull byte[] staticAuthData)
+        throws UnknownAuthenticationKeyException;
+
+    /**
+     * Store authentication data associated with a dynamic authentication key.
+     *
+     * <p>This should only be called for an authenticated key returned by
+     * {@link #getAuthKeysNeedingCertification()}.</p>
+     *
+     * @param authenticationKey The dynamic authentication key for which certification and
+     *                          associated static authentication data is being provided.
+     * @param staticAuthData    Static authentication data provided by the issuer that validates
+     *                          the authenticity
+     *                          and integrity of the credential data fields.
+     * @throws UnknownAuthenticationKeyException If the given authentication key is not recognized.
+     * @deprecated Use {@link #storeStaticAuthenticationData(X509Certificate, Calendar, byte[])}
+     *     instead.
+     */
+    @Deprecated
+    public abstract void storeStaticAuthenticationData(
+        @NonNull PublicKey authenticationKey,
+        @NonNull byte[] staticAuthData)
+        throws UnknownAuthenticationKeyException;
 
     /**
      * Store authentication data associated with a dynamic authentication key.
@@ -443,6 +488,7 @@ public abstract class IdentityCredential {
      *                          and integrity of the credential data fields.
      * @throws UnknownAuthenticationKeyException If the given authentication key is not recognized.
      */
+    @Deprecated
     public void storeStaticAuthenticationData(
             @NonNull X509Certificate authenticationKey,
             @NonNull Calendar expirationDate,
@@ -450,6 +496,35 @@ public abstract class IdentityCredential {
             throws UnknownAuthenticationKeyException {
         throw new UnsupportedOperationException();
     }
+
+    /**
+     * Store authentication data associated with a dynamic authentication key.
+     *
+     * <p>This should only be called for an authenticated key returned by
+     * {@link #getAuthKeysNeedingCertification()}.</p>
+     *
+     * <p>This is only implemented on {@link IdentityCredentialStore#FEATURE_VERSION_202101}, fails
+     * with {@link UnsupportedOperationException} if using a store with a lesser version.
+     *
+     * <p>This method will find search for the matching keystore key for the given public key and
+     * store the static authentication data with it.
+     *
+     * @param authenticationKey The dynamic authentication key for which certification and
+     *                          associated static authentication data is being provided.
+     * @param expirationDate    The expiration date of the static authentication data.
+     * @param staticAuthData    Static authentication data provided by the issuer that validates
+     *                          the authenticity
+     *                          and integrity of the credential data fields.
+     * @throws UnknownAuthenticationKeyException If the given authentication key is not recognized.
+     */
+    public void storeStaticAuthenticationData(
+        @NonNull PublicKey authenticationKey,
+        @NonNull Calendar expirationDate,
+        @NonNull byte[] staticAuthData)
+        throws UnknownAuthenticationKeyException {
+        throw new UnsupportedOperationException();
+    }
+
 
     /**
      * Get the number of times the dynamic authentication keys have been used.

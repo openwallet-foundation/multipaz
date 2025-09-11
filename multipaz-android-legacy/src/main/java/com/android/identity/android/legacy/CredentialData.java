@@ -21,6 +21,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import android.content.Context;
 import android.icu.util.Calendar;
+import android.os.Build;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.security.keystore.UserNotAuthenticatedException;
@@ -33,8 +34,10 @@ import com.google.errorprone.annotations.CanIgnoreReturnValue;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
+import java.security.cert.Certificate;
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.Optional;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
@@ -347,6 +350,20 @@ class CredentialData {
         } catch (KeyStoreException e) {
             throw new RuntimeException("Error deleting key", e);
         }
+    }
+
+    private KeyStore loadKeyStore() {
+        KeyStore ks;
+        try {
+            ks = KeyStore.getInstance("AndroidKeyStore");
+            ks.load(null);
+        } catch (CertificateException
+                 | IOException
+                 | NoSuchAlgorithmException
+                 | KeyStoreException e) {
+            throw new RuntimeException("Error loading keystore", e);
+        }
+        return ks;
     }
 
     @CanIgnoreReturnValue
@@ -1316,81 +1333,84 @@ class CredentialData {
         saveToDisk();
     }
 
-    Collection<X509Certificate> getAuthKeysNeedingCertification() {
-        KeyStore ks = null;
-        try {
-            ks = KeyStore.getInstance("AndroidKeyStore");
-            ks.load(null);
-        } catch (CertificateException
-                | IOException
-                | NoSuchAlgorithmException
-                | KeyStoreException e) {
-            throw new RuntimeException("Error loading keystore", e);
-        }
+    List<List<X509Certificate>> getAuthKeyChainsNeedingCertification(byte[] challenge) {
+        KeyStore ks = loadKeyStore();
 
-        ArrayList<X509Certificate> certificates = new ArrayList<X509Certificate>();
-
-        Calendar now = Calendar.getInstance();
+        ArrayList<List<X509Certificate>> chains = new ArrayList<>();
 
         // Determine which keys need certification (or re-certification) and generate
         // keys and X.509 certs for these and mark them as pending.
         for (int n = 0; n < mAuthKeyCount; n++) {
             AuthKeyData data = mAuthKeyDatas.get(n);
 
-            boolean keyExceededUseCount = (data.mUseCount >= mAuthMaxUsesPerKey);
-            boolean keyBeyondExpirationDate = false;
-            if (data.mExpirationDate != null) {
-                // Adjust expiration date for the minimum amount of time required in order
-                // for an auth key to be considered valid.
-                Calendar expirationDateAdjusted = (Calendar) data.mExpirationDate.clone();
-                expirationDateAdjusted.add(Calendar.MILLISECOND, (int) -mAuthKeyMinValidTimeMillis);
-                keyBeyondExpirationDate = now.after(expirationDateAdjusted);
-            }
-            boolean newKeyNeeded =
-                    data.mAlias.isEmpty() || keyExceededUseCount || keyBeyondExpirationDate;
+            boolean newKeyNeeded = isNewKeyNeeded(data);
             boolean certificationPending = !data.mPendingAlias.isEmpty();
 
             if (newKeyNeeded && !certificationPending) {
                 try {
-                    // Calculate name to use and be careful to avoid collisions when
-                    // re-certifying an already populated slot.
-                    String aliasForAuthKey = mCredentialKeyAlias + String.format(Locale.US,
-                            "_auth_%d", n);
-                    if (aliasForAuthKey.equals(data.mAlias)) {
-                        aliasForAuthKey = aliasForAuthKey + "_";
-                    }
+                    String aliasForAuthKey = generateAliasForAuthKey(n, data.mAlias);
 
-                    KeyPairGenerator kpg = KeyPairGenerator.getInstance(
-                            KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
-                    KeyGenParameterSpec.Builder builder = new KeyGenParameterSpec.Builder(
-                            aliasForAuthKey,
-                            KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
-                            .setDigests(KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_SHA512);
+                    generateKeyPairForAuthKey(aliasForAuthKey, challenge);
 
-                    boolean isStrongBoxBacked = false;
-                    /* Disable StrongBox usage for now, see Issue #259 for details
-                     *
-                    PackageManager pm = mContext.getPackageManager();
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
-                            pm.hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)) {
-                        isStrongBoxBacked = true;
-                        builder.setIsStrongBoxBacked(true);
+                    data.mPendingAlias = aliasForAuthKey;
+                    certificationPending = true;
+                } catch (InvalidAlgorithmParameterException
+                         | NoSuchAlgorithmException
+                         | NoSuchProviderException e) {
+                    throw new RuntimeException("Error creating auth key", e);
+                }
+            }
+
+            if (certificationPending) {
+                try {
+                    Certificate[] chain = ks.getCertificateChain(data.mPendingAlias);
+                    List<X509Certificate> list = new ArrayList<>();
+                    for (Certificate cert : chain) {
+                        list.add((X509Certificate) cert);
                     }
-                     */
-                    kpg.initialize(builder.build());
-                    kpg.generateKeyPair();
-                    Logger.INSTANCE.i(TAG, "AuthKey created, strongBoxBacked=" + isStrongBoxBacked);
+                    chains.add(list);
+                } catch (KeyStoreException e) {
+                    throw new RuntimeException(
+                        "Error creating certificate for auth key", e);
+                }
+            }
+        }
+
+        saveToDisk();
+
+        return chains;
+    }
+
+    Collection<X509Certificate> getAuthKeysNeedingCertification() {
+        KeyStore ks = loadKeyStore();
+
+        ArrayList<X509Certificate> certificates = new ArrayList<X509Certificate>();
+
+        // Determine which keys need certification (or re-certification) and generate
+        // keys and X.509 certs for these and mark them as pending.
+        for (int n = 0; n < mAuthKeyCount; n++) {
+            AuthKeyData data = mAuthKeyDatas.get(n);
+
+            boolean newKeyNeeded = isNewKeyNeeded(data);
+            boolean certificationPending = !data.mPendingAlias.isEmpty();
+
+            if (newKeyNeeded && !certificationPending) {
+                try {
+                    String aliasForAuthKey = generateAliasForAuthKey(n, data.mAlias);
+
+                    generateKeyPairForAuthKey(aliasForAuthKey,
+                        new byte[]{}); ///* null challenge as leaf cert will be ignored and regenerated later*/
 
                     X509Certificate certificate = generateAuthenticationKeyCert(
-                            aliasForAuthKey, mCredentialKeyAlias, mProofOfProvisioningSha256);
+                        aliasForAuthKey, mCredentialKeyAlias, mProofOfProvisioningSha256);
 
                     data.mPendingAlias = aliasForAuthKey;
                     data.mPendingCertificate = certificate.getEncoded();
                     certificationPending = true;
                 } catch (InvalidAlgorithmParameterException
-                        | NoSuchAlgorithmException
-                        | NoSuchProviderException
-                        | CertificateEncodingException e) {
+                         | NoSuchAlgorithmException
+                         | NoSuchProviderException
+                         | CertificateEncodingException e) {
                     throw new RuntimeException("Error creating auth key", e);
                 }
             }
@@ -1402,7 +1422,7 @@ class CredentialData {
                     certificates.add((X509Certificate) cf.generateCertificate(bais));
                 } catch (CertificateException e) {
                     throw new RuntimeException(
-                            "Error creating certificate for auth key", e);
+                        "Error creating certificate for auth key", e);
                 }
             }
         }
@@ -1410,6 +1430,61 @@ class CredentialData {
         saveToDisk();
 
         return certificates;
+    }
+
+    private void generateKeyPairForAuthKey(String aliasForAuthKey, byte[] challenge)
+        throws NoSuchAlgorithmException, NoSuchProviderException, InvalidAlgorithmParameterException {
+        KeyPairGenerator kpg = KeyPairGenerator.getInstance(
+            KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
+        KeyGenParameterSpec.Builder builder = new KeyGenParameterSpec.Builder(
+            aliasForAuthKey,
+            KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
+            .setDigests(KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_SHA512);
+
+        // setAttestationChallenge is only supported on >= API level 24
+        boolean isSetAttestationChallengeSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N;
+        if (challenge != null && isSetAttestationChallengeSupported) {
+            builder.setAttestationChallenge(challenge);
+        }
+
+        boolean isStrongBoxBacked = false;
+        /* Disable StrongBox usage for now, see Issue #259 for details
+         *
+        PackageManager pm = mContext.getPackageManager();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+                pm.hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)) {
+            isStrongBoxBacked = true;
+            builder.setIsStrongBoxBacked(true);
+        }
+         */
+        kpg.initialize(builder.build());
+        kpg.generateKeyPair();
+        Logger.INSTANCE.i(TAG, "AuthKey created, strongBoxBacked=" + isStrongBoxBacked);
+    }
+
+    private String generateAliasForAuthKey(int n, String currentAlias) {
+        // Calculate name to use and be careful to avoid collisions when
+        // re-certifying an already populated slot.
+        String aliasForAuthKey = mCredentialKeyAlias + String.format(Locale.US,
+            "_auth_%d", n);
+        if (aliasForAuthKey.equals(currentAlias)) {
+            aliasForAuthKey = aliasForAuthKey + "_";
+        }
+        return aliasForAuthKey;
+    }
+
+    private boolean isNewKeyNeeded(AuthKeyData data) {
+        Calendar now = Calendar.getInstance();
+        boolean keyExceededUseCount = (data.mUseCount >= mAuthMaxUsesPerKey);
+        boolean keyBeyondExpirationDate = false;
+        if (data.mExpirationDate != null) {
+            // Adjust expiration date for the minimum amount of time required in order
+            // for an auth key to be considered valid.
+            Calendar expirationDateAdjusted = (Calendar) data.mExpirationDate.clone();
+            expirationDateAdjusted.add(Calendar.MILLISECOND, (int) -mAuthKeyMinValidTimeMillis);
+            keyBeyondExpirationDate = now.after(expirationDateAdjusted);
+        }
+        return data.mAlias.isEmpty() || keyExceededUseCount || keyBeyondExpirationDate;
     }
 
     void storeStaticAuthenticationData(X509Certificate authenticationKey,
@@ -1439,19 +1514,53 @@ class CredentialData {
             throw new UnknownAuthenticationKeyException("No such authentication key");
         }
 
+        KeyStore ks = loadKeyStore();
+        updateAuthKeyData(dataForAuthKey, expirationDate, staticAuthData, ks);
+    }
+
+    void storeStaticAuthenticationData(@NonNull PublicKey pendingAuthKey,
+        Calendar expirationDate,
+        byte[] staticAuthData)
+        throws UnknownAuthenticationKeyException {
+        AuthKeyData dataForAuthKey = null;
+        KeyStore ks = loadKeyStore();
+
+        for (AuthKeyData data : mAuthKeyDatas) {
+            if (data.mPendingAlias != null && !data.mPendingAlias.isEmpty()) {
+                // Get the certificate from Keystore using data.mPendingAlias and compare its
+                // public key with the public key of the provided authenticationKey.
+                PublicKey keystorePublicKey;
+                try {
+                    keystorePublicKey = getPublicKeyFromKeystoreAlias(ks, data.mPendingAlias);
+                } catch (KeyStoreException e) {
+                    throw new RuntimeException("Error loading penidng auth key from keystore", e);
+                }
+
+                if (keystorePublicKey.equals(pendingAuthKey)) {
+                    dataForAuthKey = data;
+                    break;
+                }
+            }
+        }
+
+        if (dataForAuthKey == null) {
+            throw new UnknownAuthenticationKeyException("No such authentication key");
+        }
+
+        updateAuthKeyData(dataForAuthKey, expirationDate, staticAuthData, ks);
+    }
+
+    private void updateAuthKeyData(@NonNull AuthKeyData dataForAuthKey,
+        @NonNull Calendar expirationDate,
+        @NonNull byte[] staticAuthData,
+        @NonNull KeyStore ks) {
         // Delete old key, if set.
         if (!dataForAuthKey.mAlias.isEmpty()) {
-            KeyStore ks = null;
             try {
-                ks = KeyStore.getInstance("AndroidKeyStore");
-                ks.load(null);
                 if (ks.containsAlias(dataForAuthKey.mAlias)) {
                     ks.deleteEntry(dataForAuthKey.mAlias);
                 }
-            } catch (CertificateException
-                    | IOException
-                    | NoSuchAlgorithmException
-                    | KeyStoreException e) {
+            } catch (KeyStoreException e) {
                 throw new RuntimeException("Error deleting old authentication key", e);
             }
         }
@@ -1463,6 +1572,17 @@ class CredentialData {
         dataForAuthKey.mPendingCertificate = new byte[0];
         dataForAuthKey.mExpirationDate = expirationDate;
         saveToDisk();
+    }
+
+    private PublicKey getPublicKeyFromKeystoreAlias(@NonNull KeyStore ks, @NonNull String alias) throws KeyStoreException {
+        if (!ks.containsAlias(alias)) {
+            throw new KeyStoreException("Key not found in Keystore");
+        }
+        Certificate keystoreCert = ks.getCertificate(alias);
+        if (keystoreCert == null) {
+            throw new KeyStoreException("No certificate for this alias");
+        }
+        return keystoreCert.getPublicKey();
     }
 
     /**

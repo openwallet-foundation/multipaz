@@ -38,6 +38,8 @@ import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.util.Collection;
 
+import java.util.List;
+import java.util.Optional;
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
@@ -275,6 +277,13 @@ class HardwareIdentityCredential extends IdentityCredential {
 
     @Override
     public @NonNull
+    List<List<X509Certificate>> getAuthKeyChainsNeedingCertification(byte[] challenge) {
+        throw new UnsupportedOperationException("Not implemented");
+    }
+
+
+    @Override
+    public @NonNull
     Collection<X509Certificate> getAuthKeysNeedingCertification() {
         return mCredential.getAuthKeysNeedingCertification();
     }
@@ -282,12 +291,27 @@ class HardwareIdentityCredential extends IdentityCredential {
     @SuppressWarnings("deprecation")
     @Override
     public void storeStaticAuthenticationData(@NonNull X509Certificate authenticationKey,
-            @NonNull byte[] staticAuthData) throws UnknownAuthenticationKeyException {
+        @NonNull byte[] staticAuthData) throws UnknownAuthenticationKeyException {
         try {
             mCredential.storeStaticAuthenticationData(authenticationKey, staticAuthData);
         } catch (android.security.identity.UnknownAuthenticationKeyException e) {
             throw new UnknownAuthenticationKeyException(e.getMessage(), e);
         }
+    }
+
+    @Override
+    public void storeStaticAuthenticationData(@NonNull PublicKey authenticationKey,
+        @NonNull byte[] staticAuthData) throws UnknownAuthenticationKeyException {
+        throw new UnsupportedOperationException("Not implemented");
+    }
+
+    @Override
+    public void storeStaticAuthenticationData(
+        @NonNull PublicKey authenticationKey,
+        @NonNull Calendar expirationDate,
+        @NonNull byte[] staticAuthData)
+        throws UnknownAuthenticationKeyException {
+        throw new UnsupportedOperationException("Not implemented");
     }
 
     @Override
