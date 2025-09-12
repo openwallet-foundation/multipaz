@@ -1,13 +1,15 @@
 package org.multipaz.compose
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisallowComposableCalls
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.refTo
 import kotlinx.cinterop.useContents
-import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.io.bytestring.ByteString
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
@@ -16,17 +18,16 @@ import org.multipaz.compose.camera.CameraImage
 import platform.CoreGraphics.CGBitmapContextCreate
 import platform.CoreGraphics.CGBitmapContextCreateImage
 import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
-import platform.CoreGraphics.CGContextRelease
 import platform.CoreGraphics.CGContextRotateCTM
 import platform.CoreGraphics.CGContextScaleCTM
 import platform.CoreGraphics.CGContextTranslateCTM
 import platform.CoreGraphics.CGImageAlphaInfo
-import platform.CoreGraphics.CGImageRef
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSizeMake
 import platform.UIKit.UIGraphicsImageRenderer
 import platform.UIKit.UIGraphicsImageRendererFormat
 import platform.UIKit.UIImage
+import kotlin.coroutines.CoroutineContext
 import kotlin.math.PI
 
 actual fun getApplicationInfo(appId: String): ApplicationInfo {
@@ -153,3 +154,8 @@ actual fun ImageBitmap.cropRotateScaleImage(
         targetWidthPx = targetWidthPx
     )
 }
+
+@Composable
+actual fun rememberUiBoundCoroutineScope(
+    getContext: @DisallowComposableCalls () -> CoroutineContext
+): CoroutineScope = rememberCoroutineScope(getContext)

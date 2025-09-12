@@ -57,6 +57,7 @@ import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.testapp.ui.DocumentCreationMode
+import org.multipaz.util.truncateToWholeSeconds
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
@@ -591,7 +592,7 @@ object TestAppUtils {
             cardArt = ByteString(cardArt),
         )
 
-        val now = Clock.System.now()
+        val now = Clock.System.now().truncateToWholeSeconds()
         val signedAt = now - 1.hours
         val validFrom =  now - 1.hours
         val validUntil = now + 365.days
@@ -801,8 +802,6 @@ object TestAppUtils {
                                 sampleValue
                             }
                             addDataElement(deName, value)
-                        } else {
-                            Logger.w(TAG, "No sample value for data element $deName")
                         }
                     }
                 }
@@ -947,8 +946,6 @@ object TestAppUtils {
                         sampleValue
                     }
                     put(claimName, value)
-                } else {
-                    Logger.w(TAG, "No sample value for claim $claimName")
                 }
             }
         }

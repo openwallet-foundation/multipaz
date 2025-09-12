@@ -5,16 +5,23 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisallowComposableCalls
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.toBitmap
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.compose.camera.CameraFrame
+import org.multipaz.context.AndroidUiContext
 import org.multipaz.context.applicationContext
 import org.multipaz.util.Logger
 import java.io.ByteArrayOutputStream
+import kotlin.coroutines.CoroutineContext
 
 private const val TAG = "Util"
 
@@ -29,8 +36,11 @@ actual fun getApplicationInfo(appId: String): ApplicationInfo {
 
 actual fun decodeImage(encodedData: ByteArray): ImageBitmap {
     val bitmap = BitmapFactory.decodeByteArray(encodedData, 0, encodedData.size)
-    Logger.e(TAG, "Failed to decode image (${encodedData.size} bytes)")
-    return bitmap?.asImageBitmap() ?: ImageBitmap(1, 1)
+    if (bitmap == null) {
+        Logger.e(TAG, "Failed to decode image (${encodedData.size} bytes)")
+        return ImageBitmap(1, 1)
+    }
+    return bitmap.asImageBitmap()
 }
 
 actual fun encodeImageToPng(image: ImageBitmap): ByteString {
@@ -103,4 +113,12 @@ actual fun ImageBitmap.cropRotateScaleImage(
         outputHeightPx = outputHeightPx,
         targetWidthPx = targetWidthPx
     ).asImageBitmap()
+}
+
+@Composable
+actual fun rememberUiBoundCoroutineScope(
+    getContext: @DisallowComposableCalls () -> CoroutineContext
+): CoroutineScope {
+    val context = LocalContext.current
+    return rememberCoroutineScope { getContext() + AndroidUiContext(context) }
 }

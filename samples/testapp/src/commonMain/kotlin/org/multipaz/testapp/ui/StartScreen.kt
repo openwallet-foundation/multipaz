@@ -39,6 +39,7 @@ import multipazproject.samples.testapp.generated.resources.face_detection_title
 import multipazproject.samples.testapp.generated.resources.selfie_check_title
 import multipazproject.samples.testapp.generated.resources.face_match_title
 import kotlinx.coroutines.launch
+import multipazproject.samples.testapp.generated.resources.dc_request_title
 import multipazproject.samples.testapp.generated.resources.barcode_scanning_title
 import multipazproject.samples.testapp.generated.resources.camera_title
 import multipazproject.samples.testapp.generated.resources.trusted_issuers_screen_title
@@ -67,6 +68,7 @@ fun StartScreen(
     onClickNfc: () -> Unit = {},
     onClickIsoMdocProximitySharing: () -> Unit = {},
     onClickIsoMdocProximityReading: () -> Unit = {},
+    onClickDcRequest: () -> Unit = {},
     onClickMdocTransportMultiDeviceTesting: () -> Unit = {},
     onClickCertificatesViewerExamples: () -> Unit = {},
     onClickRichText: () -> Unit = {},
@@ -221,6 +223,12 @@ fun StartScreen(
                 item {
                     TextButton(onClick = onClickIsoMdocProximityReading) {
                         Text(stringResource(Res.string.iso_mdoc_proximity_reading_title))
+                    }
+                }
+
+                item {
+                    TextButton(onClick = onClickDcRequest) {
+                        Text(stringResource(Res.string.dc_request_title))
                     }
                 }
 

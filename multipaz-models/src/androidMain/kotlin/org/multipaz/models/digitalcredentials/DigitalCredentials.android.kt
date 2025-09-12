@@ -3,6 +3,11 @@ package org.multipaz.models.digitalcredentials
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.credentials.CredentialManager
+import androidx.credentials.DigitalCredential
+import androidx.credentials.ExperimentalDigitalCredentialApi
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.GetDigitalCredentialOption
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.DataItem
@@ -26,14 +31,22 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
+import org.multipaz.context.AndroidUiContext
+import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.Crypto
 import org.multipaz.documenttype.DocumentAttribute
+import org.multipaz.util.toBase64Url
 import kotlin.time.Duration.Companion.seconds
 import java.io.ByteArrayOutputStream
 import kotlin.collections.iterator
@@ -410,3 +423,52 @@ suspend fun DocumentStore.lookupForCredmanId(credManId: String): Document? {
     return lookupDocument(credManId)
 }
 
+@OptIn(ExperimentalDigitalCredentialApi::class)
+internal actual suspend fun defaultRequest(request: JsonObject): JsonObject {
+    val uiContext = AndroidUiContext.current()
+    val credentialManager = CredentialManager.create(applicationContext)
+    val requestString = Json.encodeToString(request)
+    val digitalCredentialOption = GetDigitalCredentialOption(requestJson = requestString)
+    val getCredRequest = GetCredentialRequest(listOf(digitalCredentialOption))
+    val result = withContext(Dispatchers.Main) {
+        credentialManager.getCredential(
+            context = uiContext,
+            request = getCredRequest
+        )
+    }
+    val credential = result.credential
+    when (credential) {
+        is DigitalCredential -> {
+            val responseJson = credential.credentialJson
+            return Json.decodeFromString<JsonObject>(responseJson)
+        }
+        else -> {
+            // Workaround to make this work with Google Wallet versions not yet switched to the new Credman API
+            if (credential.type == DigitalCredential.TYPE_DIGITAL_CREDENTIAL) {
+                val protocolType = credential.data.getString("protocolType")
+                val identityToken = credential.data.getByteArray("identityToken")
+                if (protocolType != null && identityToken != null) {
+                    val responseJson = buildJsonObject {
+                        put("protocol", protocolType)
+                        put("data", Json.decodeFromString<JsonObject>(identityToken.decodeToString()))
+                    }
+                    return responseJson
+                }
+            }
+            throw IllegalStateException("Unexpected result type of credential ${credential.type}")
+        }
+    }
+}
+
+/**
+ * Calculates the origin for a native Android app.
+ *
+ * This is implemented in accordance with the guidance at https://developer.android.com/identity/sign-in/credential-manager#verify-origin
+ *
+ * @param appSigningInfo the bytes of the signing information for the application, typically obtained from
+ *   a [android.content.pm.Signature] object.
+ * @return the origin string of the form "android:apk-key-hash:<sha256_hash-of-apk-signing-cert>"
+ */
+fun getAppOrigin(appSigningInfo: ByteArray): String {
+    return "android:apk-key-hash:${Crypto.digest(Algorithm.SHA256, appSigningInfo).toBase64Url()}"
+}

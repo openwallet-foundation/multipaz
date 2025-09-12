@@ -30,6 +30,8 @@ import kotlinx.datetime.LocalDate
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.putCborMap
 
 /**
  * Object containing the metadata of the Driving License
@@ -150,13 +152,13 @@ object DrivingLicense {
                 buildCborArray {
                     addCborMap {
                         put("vehicle_category_code", "A")
-                        put("issue_date", Tagged(1004, Tstr("2018-08-09")))
-                        put("expiry_date", Tagged(1004, Tstr("2028-09-01")))
+                        put("issue_date", Tagged(Tagged.FULL_DATE_STRING, Tstr("2018-08-09")))
+                        put("expiry_date", Tagged(Tagged.FULL_DATE_STRING, Tstr("2028-09-01")))
                     }
                     addCborMap {
                         put("vehicle_category_code", "B")
-                        put("issue_date", Tagged(1004, Tstr("2017-02-23")))
-                        put("expiry_date", Tagged(1004, Tstr("2028-09-01")))
+                        put("issue_date", Tagged(Tagged.FULL_DATE_STRING, Tstr("2017-02-23")))
+                        put("expiry_date", Tagged(Tagged.FULL_DATE_STRING, Tstr("2028-09-01")))
                     }
                 }
             )
@@ -493,10 +495,10 @@ object DrivingLicense {
                 "domestic_driving_privileges",
                 "Domestic Driving Privileges",
                 "Vehicle types the license holder is authorized to operate",
-                false,
+                true,
                 AAMVA_NAMESPACE,
                 Icon.DIRECTIONS_CAR,
-                Simple.NULL
+                buildCborArray {}
             )
             .addMdocAttribute(
                 DocumentAttributeType.StringOptions(Options.AAMVA_NAME_SUFFIX),
@@ -506,7 +508,7 @@ object DrivingLicense {
                 false,
                 AAMVA_NAMESPACE,
                 Icon.PERSON,
-                Simple.NULL
+                null
             )
             .addMdocAttribute(
                 DocumentAttributeType.IntegerOptions(
@@ -536,7 +538,7 @@ object DrivingLicense {
                 false,
                 AAMVA_NAMESPACE,
                 Icon.MILITARY_TECH,
-                Simple.NULL
+                null
             )
             .addMdocAttribute(
                 DocumentAttributeType.StringOptions(
@@ -553,7 +555,7 @@ object DrivingLicense {
                 true,
                 AAMVA_NAMESPACE,
                 Icon.PERSON,
-                Simple.NULL
+                "N".toDataItem()
             )
             .addMdocAttribute(
                 DocumentAttributeType.StringOptions(
@@ -570,7 +572,7 @@ object DrivingLicense {
                 true,
                 AAMVA_NAMESPACE,
                 Icon.PERSON,
-                Simple.NULL
+                "N".toDataItem()
             )
             .addMdocAttribute(
                 DocumentAttributeType.String,
@@ -580,7 +582,7 @@ object DrivingLicense {
                 false,
                 AAMVA_NAMESPACE,
                 Icon.PERSON,
-                Simple.NULL
+                null
             )
             .addMdocAttribute(
                 DocumentAttributeType.String,
@@ -590,7 +592,7 @@ object DrivingLicense {
                 false,
                 AAMVA_NAMESPACE,
                 Icon.PERSON,
-                Simple.NULL
+                null
             )
             .addMdocAttribute(
                 DocumentAttributeType.StringOptions(Options.AAMVA_NAME_SUFFIX),
@@ -600,7 +602,7 @@ object DrivingLicense {
                 false,
                 AAMVA_NAMESPACE,
                 Icon.PERSON,
-                Simple.NULL
+                null
             )
             .addMdocAttribute(
                 DocumentAttributeType.IntegerOptions(
@@ -676,7 +678,7 @@ object DrivingLicense {
                 false,
                 AAMVA_NAMESPACE,
                 Icon.STARS,
-                Simple.NULL
+                null
             )
             .addMdocAttribute(
                 DocumentAttributeType.IntegerOptions(
@@ -712,7 +714,7 @@ object DrivingLicense {
                 true,
                 AAMVA_NAMESPACE,
                 Icon.CALENDAR_CLOCK,
-                Simple.NULL
+                null
             )
             .addMdocAttribute(
                 DocumentAttributeType.IntegerOptions(Options.SEX_ISO_IEC_5218),
@@ -735,7 +737,7 @@ object DrivingLicense {
                 false,
                 MDL_NAMESPACE,
                 Icon.FACE,
-                Simple.NULL
+                null
             )
             .addMdocAttribute(
                 DocumentAttributeType.Picture,
@@ -745,7 +747,7 @@ object DrivingLicense {
                 false,
                 MDL_NAMESPACE,
                 Icon.FINGERPRINT,
-                Simple.NULL
+                null
             )
             .addMdocAttribute(
                 DocumentAttributeType.Picture,
@@ -755,7 +757,7 @@ object DrivingLicense {
                 false,
                 MDL_NAMESPACE,
                 Icon.SIGNATURE,
-                Simple.NULL
+                null
             )
             .addMdocAttribute(
                 DocumentAttributeType.Picture,
@@ -765,7 +767,7 @@ object DrivingLicense {
                 false,
                 MDL_NAMESPACE,
                 Icon.EYE_TRACKING,
-                Simple.NULL
+                null
             )
             .addMdocAttribute(
                 DocumentAttributeType.String,
@@ -775,7 +777,7 @@ object DrivingLicense {
                 false,
                 AAMVA_NAMESPACE,
                 Icon.STARS,
-                Simple.NULL
+                null
             )
             .addMdocAttribute(
                 DocumentAttributeType.Number,
@@ -785,7 +787,7 @@ object DrivingLicense {
                 true,
                 AAMVA_NAMESPACE,
                 Icon.NUMBERS,
-                Simple.NULL
+                1.toDataItem()
             )
             .addSampleRequest(
                 id = "us-transportation",

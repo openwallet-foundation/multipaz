@@ -1,5 +1,6 @@
 package org.multipaz.models.digitalcredentials
 
+import kotlinx.serialization.json.JsonObject
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 
@@ -29,5 +30,9 @@ internal actual suspend fun defaultStartExportingCredentials(
 internal actual suspend fun defaultStopExportingCredentials(
     documentStore: DocumentStore,
 ) {
+    throw NotImplementedError("DigitalCredentials is not available on iOS")
+}
+
+internal actual suspend fun defaultRequest(request: JsonObject): JsonObject {
     throw NotImplementedError("DigitalCredentials is not available on iOS")
 }

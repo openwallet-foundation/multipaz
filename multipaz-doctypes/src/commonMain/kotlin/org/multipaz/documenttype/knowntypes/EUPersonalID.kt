@@ -171,7 +171,7 @@ object EUPersonalID {
                 sampleValue = SampleData.BIRTH_PLACE.toDataItem(),
             )
             .addJsonAttribute(
-                type = DocumentAttributeType.String,
+                type = DocumentAttributeType.ComplexType,
                 identifier = "place_of_birth",
                 displayName = "Place of Birth",
                 description = "Country and municipality or state/province where the PID holder was born",

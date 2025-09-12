@@ -109,15 +109,13 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
         preReq
     }
 
-    val origin = presentmentMechanism.webOrigin
-        ?: throw IllegalArgumentException("origin is not available")
-
     val response = OpenID4VP.generateResponse(
         version = version,
         preselectedDocuments = presentmentMechanism.preselectedDocuments,
         source = source,
         showConsentPrompt = showConsentPrompt,
-        origin = origin,
+        appId = presentmentMechanism.appId,
+        origin = presentmentMechanism.origin,
         request = req,
         requesterCertChain = requesterCertChain,
     )
@@ -152,7 +150,7 @@ private suspend fun digitalCredentialsMdocApiProtocol(
 
     val dcapiInfo = buildCborArray {
         add(encryptionInfoBase64)
-        add(presentmentMechanism.webOrigin!!)
+        add(presentmentMechanism.origin)
     }
 
     val encodedSessionTranscript = Cbor.encode(
@@ -178,7 +176,7 @@ private suspend fun digitalCredentialsMdocApiProtocol(
         val request = docRequest.toMdocRequest(
             documentTypeRepository = documentTypeRepository,
             mdocCredential = null,
-            requesterWebsiteOrigin = presentmentMechanism.webOrigin,
+            requesterOrigin = presentmentMechanism.origin,
             requesterAppId = presentmentMechanism.appId
         )
         val trustPoint = source.findTrustPoint(request.requester)

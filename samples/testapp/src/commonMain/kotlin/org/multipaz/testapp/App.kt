@@ -103,11 +103,14 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.io.bytestring.ByteString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import multipazproject.samples.testapp.generated.resources.Res
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.multipaz.asn1.OID
+import org.multipaz.cbor.DataItem
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.compose.prompt.PromptDialogs
@@ -127,8 +130,10 @@ import org.multipaz.request.Requester
 import org.multipaz.storage.base.BaseStorageTable
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.testapp.provisioning.ProvisioningSupport
+import org.multipaz.testapp.ui.DcRequestScreen
 import org.multipaz.util.Platform
 import org.multipaz.testapp.ui.FaceMatchScreen
+import org.multipaz.testapp.ui.ShowResponseScreen
 import org.multipaz.testapp.ui.TrustManagerScreen
 import org.multipaz.testapp.ui.TrustPointViewerScreen
 import org.multipaz.trustmanagement.CompositeTrustManager
@@ -138,6 +143,7 @@ import org.multipaz.trustmanagement.TrustPointAlreadyExistsException
 import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.trustmanagement.VicalTrustManager
 import org.multipaz.util.fromBase64Url
+import org.multipaz.util.toBase64Url
 import org.multipaz.util.toHex
 
 /**
@@ -860,6 +866,7 @@ class App private constructor (val promptModel: PromptModel) {
                             onClickNfc = { navController.navigate(NfcDestination.route) },
                             onClickIsoMdocProximitySharing = { navController.navigate(IsoMdocProximitySharingDestination.route) },
                             onClickIsoMdocProximityReading = { navController.navigate(IsoMdocProximityReadingDestination.route) },
+                            onClickDcRequest = { navController.navigate(DcRequestDestination.route) },
                             onClickMdocTransportMultiDeviceTesting = { navController.navigate(IsoMdocMultiDeviceTestingDestination.route) },
                             onClickCertificatesViewerExamples = { navController.navigate(CertificatesViewerExamplesDestination.route) },
                             onClickRichText = { navController.navigate(RichTextDestination.route) },
@@ -1068,6 +1075,46 @@ class App private constructor (val promptModel: PromptModel) {
                         IsoMdocProximityReadingScreen(
                             app = this@App,
                             showToast = { message -> showToast(message) }
+                        )
+                    }
+                    composable(route = DcRequestDestination.route) {
+                        DcRequestScreen(
+                            app = this@App,
+                            showToast = { message -> showToast(message) },
+                            showResponse = { vpToken: JsonObject?, deviceResponse: DataItem?, sessionTranscript: DataItem, nonce: ByteString? ->
+                                val route = ShowResponseDestination.route +
+                                        "/${vpToken?.let { Json.encodeToString(it) }?.encodeToByteArray()?.toBase64Url() ?: "_"}" +
+                                        "/${deviceResponse?.let { Cbor.encode(it).toBase64Url() } ?: "_"}" +
+                                        "/${Cbor.encode(sessionTranscript).toBase64Url()}" +
+                                        "/${nonce?.let { nonce.toByteArray().toBase64Url() } ?: "_"}"
+                                navController.navigate(route)
+                            }
+                        )
+                    }
+                    composable(
+                        route = ShowResponseDestination.routeWithArgs,
+                        arguments = ShowResponseDestination.arguments
+                    ) { backStackEntry ->
+                        val vpToken = backStackEntry.arguments?.getString(ShowResponseDestination.VP_TOKEN)
+                            ?.let { if (it != "_") Json.decodeFromString<JsonObject>(it.fromBase64Url().decodeToString()) else null }
+                        val deviceResponse = backStackEntry.arguments?.getString(ShowResponseDestination.DEVICE_RESPONSE)
+                            ?.let { if (it != "_") Cbor.decode(it.fromBase64Url()) else null }
+                        val sessionTranscript = backStackEntry.arguments!!.getString(ShowResponseDestination.SESSION_TRANSCRIPT)!!
+                            .fromBase64Url().let { Cbor.decode(it) }
+                        val nonce = backStackEntry.arguments?.getString(ShowResponseDestination.NONCE)
+                            ?.let { if (it != "_") ByteString(it.fromBase64Url()) else null }
+                        ShowResponseScreen(
+                            vpToken = vpToken,
+                            deviceResponse = deviceResponse,
+                            sessionTranscript = sessionTranscript,
+                            nonce = nonce,
+                            issuerTrustManager = issuerTrustManager,
+                            documentTypeRepository = documentTypeRepository,
+                            zkSystemRepository = zkSystemRepository,
+                            onViewCertChain = { certChain ->
+                                val encodedCertificateData = Cbor.encode(certChain.toDataItem()).toBase64Url()
+                                navController.navigate(CertificateViewerDestination.route + "/${encodedCertificateData}")
+                            }
                         )
                     }
                     composable(route = IsoMdocMultiDeviceTestingDestination.route) {

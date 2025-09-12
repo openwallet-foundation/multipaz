@@ -123,24 +123,26 @@ private data class RequestPickerEntry(
     val sampleRequest: DocumentCannedRequest
 )
 
+private var lastRequest: Int = 0
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalCoroutinesApi::class)
 @Composable
 fun IsoMdocProximityReadingScreen(
     app: App,
     showToast: (message: String) -> Unit,
 ) {
-    val availableRequests = mutableListOf<RequestPickerEntry>()
+    val requestOptions = mutableListOf<RequestPickerEntry>()
     for (documentType in TestAppUtils.provisionedDocumentTypes) {
         for (sampleRequest in documentType.cannedRequests) {
-            availableRequests.add(RequestPickerEntry(
+            requestOptions.add(RequestPickerEntry(
                 displayName = "${documentType.displayName}: ${sampleRequest.displayName}",
                 documentType = documentType,
                 sampleRequest = sampleRequest
             ))
         }
     }
-    val dropdownExpanded = remember { mutableStateOf(false) }
-    val selectedRequest = remember { mutableStateOf(availableRequests[0]) }
+    val requestDropdownExpanded = remember { mutableStateOf(false) }
+    val requestSelected = remember { mutableStateOf(requestOptions[lastRequest]) }
     val blePermissionState = rememberBluetoothPermissionState()
     val bleEnabledState = rememberBluetoothEnabledState()
     val coroutineScope = rememberCoroutineScope { app.promptModel }
@@ -151,7 +153,6 @@ fun IsoMdocProximityReadingScreen(
     val readerMostRecentDeviceResponse = remember { mutableStateOf<ByteArray?>(null) }
     val connectionMethodPickerData = remember { mutableStateOf<ConnectionMethodPickerData?>(null) }
     val eReaderKey = remember { mutableStateOf<EcPrivateKey?>(null) }
-
     var readerJob by remember { mutableStateOf<Job?>(null) }
 
     if (connectionMethodPickerData.value != null) {
@@ -227,6 +228,7 @@ fun IsoMdocProximityReadingScreen(
             onCodeScanned = { data ->
                 if (data.startsWith("mdoc:")) {
                     readerShowQrScanner.value = false
+                    eReaderKey.value = null
                     readerJob = coroutineScope.launch() {
                         try {
                             doReaderFlow(
@@ -243,7 +245,7 @@ fun IsoMdocProximityReadingScreen(
                                 readerSessionTranscript = readerSessionTranscript,
                                 readerMostRecentDeviceResponse = readerMostRecentDeviceResponse,
                                 eReaderKey = eReaderKey,
-                                selectedRequest = selectedRequest,
+                                requestSelected = requestSelected,
                                 selectConnectionMethod = { connectionMethods ->
                                     if (app.settingsModel.readerAutomaticallySelectTransport.value) {
                                         showToast("Auto-selected first from $connectionMethods")
@@ -258,7 +260,6 @@ fun IsoMdocProximityReadingScreen(
                             )
                         } catch (error: Throwable) {
                             Logger.e(TAG, "Caught exception", error)
-                            error.printStackTrace()
                             showToast("Error: ${error.message}")
                         }
                         readerJob = null
@@ -317,7 +318,7 @@ fun IsoMdocProximityReadingScreen(
                     modifier = Modifier.weight(1.0f),
                     verticalArrangement = Arrangement.Top,
                 ) {
-                    ShowReaderResults(app, readerMostRecentDeviceResponse, readerSessionTranscript, eReaderKey.value!!)
+                    ShowReaderResults(app, readerMostRecentDeviceResponse, readerSessionTranscript, eReaderKey.value)
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
@@ -337,7 +338,7 @@ fun IsoMdocProximityReadingScreen(
                                 try {
                                     val encodedDeviceRequest =
                                         TestAppUtils.generateEncodedDeviceRequest(
-                                            request = selectedRequest.value.sampleRequest,
+                                            request = requestSelected.value.sampleRequest,
                                             encodedSessionTranscript = readerSessionTranscript.value!!,
                                             readerKey = app.readerKey,
                                             readerCert = app.readerCert,
@@ -352,7 +353,6 @@ fun IsoMdocProximityReadingScreen(
                                     )
                                 } catch (error: Throwable) {
                                     Logger.e(TAG, "Caught exception", error)
-                                    error.printStackTrace()
                                     showToast("Error: ${error.message}")
                                 }
                             }
@@ -362,6 +362,7 @@ fun IsoMdocProximityReadingScreen(
                     }
                     Button(
                         onClick = {
+                            readerMostRecentDeviceResponse.value = null
                             coroutineScope.launch {
                                 try {
                                     readerTransport.value!!.sendMessage(
@@ -370,7 +371,6 @@ fun IsoMdocProximityReadingScreen(
                                     readerTransport.value!!.close()
                                 } catch (error: Throwable) {
                                     Logger.e(TAG, "Caught exception", error)
-                                    error.printStackTrace()
                                     showToast("Error: ${error.message}")
                                 }
                             }
@@ -380,13 +380,13 @@ fun IsoMdocProximityReadingScreen(
                     }
                     Button(
                         onClick = {
+                            readerMostRecentDeviceResponse.value = null
                             coroutineScope.launch {
                                 try {
                                     readerTransport.value!!.sendMessage(byteArrayOf())
                                     readerTransport.value!!.close()
                                 } catch (error: Throwable) {
                                     Logger.e(TAG, "Caught exception", error)
-                                    error.printStackTrace()
                                     showToast("Error: ${error.message}")
                                 }
                             }
@@ -396,12 +396,12 @@ fun IsoMdocProximityReadingScreen(
                     }
                     Button(
                         onClick = {
+                            readerMostRecentDeviceResponse.value = null
                             coroutineScope.launch {
                                 try {
                                     readerTransport.value!!.close()
                                 } catch (error: Throwable) {
                                     Logger.e(TAG, "Caught exception", error)
-                                    error.printStackTrace()
                                     showToast("Error: ${error.message}")
                                 }
                             }
@@ -441,11 +441,13 @@ fun IsoMdocProximityReadingScreen(
                 modifier = Modifier.padding(8.dp)
             ) {
                 item {
-                    RequestPicker(
-                        availableRequests,
-                        selectedRequest,
-                        dropdownExpanded,
-                        onRequestSelected = {}
+                    ComboBox(
+                        headline = "DocType and data elements to request",
+                        availableRequests = requestOptions,
+                        comboBoxSelected = requestSelected,
+                        comboBoxExpanded = requestDropdownExpanded,
+                        getDisplayName = { it.displayName },
+                        onSelected = { index, value -> lastRequest = index }
                     )
                 }
                 item {
@@ -462,7 +464,8 @@ fun IsoMdocProximityReadingScreen(
                         onClick = {
                             readerMostRecentDeviceResponse.value = null
 
-                            coroutineScope.launch {
+                            eReaderKey.value = null
+                            readerJob = coroutineScope.launch {
                                 try {
                                     val negotiatedHandoverConnectionMethods = mutableListOf<MdocConnectionMethod>()
                                     val bleUuid = UUID.randomUUID()
@@ -494,58 +497,62 @@ fun IsoMdocProximityReadingScreen(
                                             )
                                         )
                                     }
-                                    scanNfcMdocReader(
-                                        message = "Hold near credential holder's phone.",
-                                        options = MdocTransportOptions(
-                                            bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value
-                                        ),
-                                        selectConnectionMethod = { connectionMethods ->
-                                            if (app.settingsModel.readerAutomaticallySelectTransport.value) {
-                                                showToast("Auto-selected first from $connectionMethods")
-                                                connectionMethods[0]
-                                            } else {
-                                                selectConnectionMethod(
-                                                    connectionMethods,
-                                                    connectionMethodPickerData
-                                                )
-                                            }
-                                        },
-                                        negotiatedHandoverConnectionMethods = negotiatedHandoverConnectionMethods,
-                                        onHandover = { transport, encodedDeviceEngagement, handover, updateMessage ->
-                                            doReaderFlow(
-                                                app = app,
-                                                encodedDeviceEngagement = encodedDeviceEngagement,
-                                                existingTransport = transport,
-                                                handover = handover,
-                                                updateNfcDialogMessage = updateMessage,
-                                                allowMultipleRequests = app.settingsModel.readerAllowMultipleRequests.value,
-                                                bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
-                                                showToast = showToast,
-                                                readerTransport = readerTransport,
-                                                readerSessionEncryption = readerSessionEncryption,
-                                                readerSessionTranscript = readerSessionTranscript,
-                                                readerMostRecentDeviceResponse = readerMostRecentDeviceResponse,
-                                                eReaderKey = eReaderKey,
-                                                selectedRequest = selectedRequest,
-                                                selectConnectionMethod = { connectionMethods ->
-                                                    if (app.settingsModel.readerAutomaticallySelectTransport.value) {
-                                                        showToast("Auto-selected first from $connectionMethods")
-                                                        connectionMethods[0]
-                                                    } else {
-                                                        selectConnectionMethod(
-                                                            connectionMethods,
-                                                            connectionMethodPickerData
-                                                        )
-                                                    }
+                                    if (!scanNfcMdocReader(
+                                            message = "Hold near credential holder's phone.",
+                                            options = MdocTransportOptions(
+                                                bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value
+                                            ),
+                                            selectConnectionMethod = { connectionMethods ->
+                                                if (app.settingsModel.readerAutomaticallySelectTransport.value) {
+                                                    showToast("Auto-selected first from $connectionMethods")
+                                                    connectionMethods[0]
+                                                } else {
+                                                    selectConnectionMethod(
+                                                        connectionMethods,
+                                                        connectionMethodPickerData
+                                                    )
                                                 }
-                                            )
-                                            readerJob = null
-                                        }
-                                    )
+                                            },
+                                            negotiatedHandoverConnectionMethods = negotiatedHandoverConnectionMethods,
+                                            onHandover = { transport, encodedDeviceEngagement, handover, updateMessage ->
+                                                doReaderFlow(
+                                                    app = app,
+                                                    encodedDeviceEngagement = encodedDeviceEngagement,
+                                                    existingTransport = transport,
+                                                    handover = handover,
+                                                    updateNfcDialogMessage = updateMessage,
+                                                    allowMultipleRequests = app.settingsModel.readerAllowMultipleRequests.value,
+                                                    bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
+                                                    showToast = showToast,
+                                                    readerTransport = readerTransport,
+                                                    readerSessionEncryption = readerSessionEncryption,
+                                                    readerSessionTranscript = readerSessionTranscript,
+                                                    readerMostRecentDeviceResponse = readerMostRecentDeviceResponse,
+                                                    eReaderKey = eReaderKey,
+                                                    requestSelected = requestSelected,
+                                                    selectConnectionMethod = { connectionMethods ->
+                                                        if (app.settingsModel.readerAutomaticallySelectTransport.value) {
+                                                            showToast("Auto-selected first from $connectionMethods")
+                                                            connectionMethods[0]
+                                                        } else {
+                                                            selectConnectionMethod(
+                                                                connectionMethods,
+                                                                connectionMethodPickerData
+                                                            )
+                                                        }
+                                                    }
+                                                )
+                                                readerJob = null
+                                            }
+                                        )
+                                    ) {
+                                        // when cancelled
+                                        readerJob = null
+                                    }
                                 } catch (e: Throwable) {
                                     Logger.e(TAG, "NFC engagement failed", e)
-                                    e.printStackTrace()
                                     showToast("NFC engagement failed with $e")
+                                    readerJob = null
                                 }
                             }
                         },
@@ -571,7 +578,7 @@ private suspend fun doReaderFlow(
     readerSessionTranscript: MutableState<ByteArray?>,
     readerMostRecentDeviceResponse: MutableState<ByteArray?>,
     eReaderKey: MutableState<EcPrivateKey?>,
-    selectedRequest: MutableState<RequestPickerEntry>,
+    requestSelected: MutableState<RequestPickerEntry>,
     selectConnectionMethod: suspend (connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod?
 ) {
     val deviceEngagement = EngagementParser(encodedDeviceEngagement.toByteArray()).parse()
@@ -618,7 +625,7 @@ private suspend fun doReaderFlow(
                         readerSessionEncryption = readerSessionEncryption,
                         readerSessionTranscript = readerSessionTranscript,
                         readerMostRecentDeviceResponse = readerMostRecentDeviceResponse,
-                        selectedRequest = selectedRequest,
+                        selectedRequest = requestSelected,
                         eDeviceKey = eDeviceKey,
                         eReaderKey = eReaderKey.value!!,
                     )
@@ -641,7 +648,7 @@ private suspend fun doReaderFlow(
         readerSessionEncryption = readerSessionEncryption,
         readerSessionTranscript = readerSessionTranscript,
         readerMostRecentDeviceResponse = readerMostRecentDeviceResponse,
-        selectedRequest = selectedRequest,
+        selectedRequest = requestSelected,
         eDeviceKey = eDeviceKey,
         eReaderKey = eReaderKey.value!!,
     )
@@ -807,299 +814,35 @@ private fun ShowReaderResults(
     app: App,
     readerMostRecentDeviceResponse: MutableState<ByteArray?>,
     readerSessionTranscript: MutableState<ByteArray?>,
-    eReaderKey: EcPrivateKey
+    eReaderKey: EcPrivateKey?,
 ) {
     val coroutineScope = rememberCoroutineScope()
 
     val deviceResponse1 = readerMostRecentDeviceResponse.value
-    if (deviceResponse1 == null || deviceResponse1.isEmpty()) {
+    if (deviceResponse1 == null || deviceResponse1.isEmpty() || eReaderKey == null) {
         Text(
             text = "Waiting for data",
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Bold,
         )
     } else {
-        val documentData = remember { mutableStateOf<DocumentData?>(null) }
-
-        documentData.value?.let {
-            ShowDocumentData(it)
-        }
-
-        LaunchedEffect(Unit) {
-            coroutineScope.launch {
-                val parser = DeviceResponseParser(
-                    encodedDeviceResponse = deviceResponse1,
-                    encodedSessionTranscript = readerSessionTranscript.value!!,
-                )
-                parser.setEphemeralReaderKey(eReaderKey)
-                val deviceResponse2 = parser.parse()
-                // TODO: support showing multiple documents
-                if (deviceResponse2.documents.isNotEmpty()) {
-                    documentData.value = DocumentData.fromMdocDeviceResponseDocument(
-                        document = deviceResponse2.documents[0],
-                        documentTypeRepository = app.documentTypeRepository,
-                        issuerTrustManager = app.issuerTrustManager
-                    )
-                } else if (deviceResponse2.zkDocuments.isNotEmpty()) {
-                    documentData.value = DocumentData.fromZkMdocDeviceResponseDocument(
-                        zkDocument = deviceResponse2.zkDocuments[0],
-                        encodedSessionTranscript = readerSessionTranscript.value!!,
-                        zkSystemRepository = app.zkSystemRepository,
-                        issuerTrustManager = app.issuerTrustManager
-                    )
-                } else {
-                    documentData.value = DocumentData(
-                        infoTexts = listOf("No documents in response"),
-                        warningTexts = emptyList(),
-                        kvPairs = emptyList()
-                    )
-                }
-            }
+        val scrollState = rememberScrollState()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth().padding(8.dp)
+                .verticalScroll(scrollState)
+        ) {
+            ShowResponse(
+                vpToken = null,
+                deviceResponse = Cbor.decode(deviceResponse1!!),
+                sessionTranscript = Cbor.decode(readerSessionTranscript.value!!),
+                nonce = null,
+                eReaderKey = eReaderKey,
+                issuerTrustManager = app.issuerTrustManager,
+                documentTypeRepository = app.documentTypeRepository,
+                zkSystemRepository = app.zkSystemRepository,
+                onViewCertChain = null
+            )
         }
     }
 }
-
-@Composable
-private fun ShowKeyValuePair(kvPair: DocumentKeyValuePair) {
-    Column(
-        Modifier
-            .padding(8.dp)
-            .fillMaxWidth()) {
-        Text(
-            text = kvPair.key,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleMedium
-        )
-        Text(
-            text = kvPair.textValue,
-            style = MaterialTheme.typography.bodyMedium
-        )
-        if (kvPair.bitmap != null) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Image(
-                    bitmap = kvPair.bitmap,
-                    modifier = Modifier.size(200.dp),
-                    contentDescription = null
-                )
-            }
-
-        }
-    }
-}
-
-@Composable
-private fun ShowDocumentData(documentData: DocumentData) {
-    Column(
-        Modifier
-            .padding(8.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
-
-        for (text in documentData.infoTexts) {
-            InfoCard {
-                Text(text)
-            }
-        }
-        for (text in documentData.warningTexts) {
-            WarningCard {
-                Text(text)
-            }
-        }
-
-        for (kvPair in documentData.kvPairs) {
-            ShowKeyValuePair(kvPair)
-        }
-    }
-}
-
-// TODO:
-//  - add infos/warnings according to TrustManager (need to port TrustManager to KMP), that is
-//    add a warning if the issuer isn't well-known.
-//  - move to identity-models
-//  - add fromSdJwtVcResponse()
-private data class DocumentData(
-    val infoTexts: List<String>,
-    val warningTexts: List<String>,
-    val kvPairs: List<DocumentKeyValuePair>
-) {
-    companion object {
-
-        suspend fun fromZkMdocDeviceResponseDocument(
-            zkDocument: ZkDocument,
-            encodedSessionTranscript: ByteArray,
-            zkSystemRepository: ZkSystemRepository,
-            issuerTrustManager: TrustManager
-        ): DocumentData {
-            val infos = mutableListOf<String>()
-            val warnings = mutableListOf<String>()
-            val kvPairs = mutableListOf<DocumentKeyValuePair>()
-
-            if (zkDocument.zkDocumentData.msoX5chain == null) {
-                warnings.add("No msoX5chain in ZkDocumentData")
-            } else {
-                val trustResult = issuerTrustManager.verify(zkDocument.zkDocumentData.msoX5chain!!.certificates)
-                if (trustResult.isTrusted) {
-                    if (trustResult.trustPoints[0].metadata.displayName != null) {
-                        infos.add("Issuer '${trustResult.trustPoints[0].metadata.displayName}' is in a trust list")
-                    } else {
-                        infos.add(
-                            "Issuer with name '${trustResult.trustPoints[0].certificate.subject.name}' " +
-                                    "is in a trust list"
-                        )
-                    }
-                } else {
-                    warnings.add("Issuer is not in trust list")
-                }
-            }
-
-            try {
-                val zkSystemSpec = zkSystemRepository.getAllZkSystemSpecs().find {
-                    it.id == zkDocument.zkDocumentData.zkSystemSpecId
-                }
-                if (zkSystemSpec == null) {
-                    throw IllegalArgumentException("ZK System Spec ID ${zkDocument.zkDocumentData.zkSystemSpecId} was not found.")
-                }
-
-                zkSystemRepository.lookup(zkSystemSpec.system)
-                    ?.verifyProof(zkDocument, zkSystemSpec, ByteString(encodedSessionTranscript))
-                    ?: throw IllegalStateException("Zk System '${zkSystemSpec.system}' was not found.")
-                infos.add("ZK verification succeeded.")
-            } catch (e: Throwable) {
-                warnings.add("ZK verification failed with error ${e.message}.")
-            }
-
-            zkDocument.zkDocumentData.issuerSigned.forEach { (nameSpaceName, dataElements) ->
-                kvPairs.add(DocumentKeyValuePair("Namespace", nameSpaceName))
-                for ((dataElementName, dataElementValue) in dataElements) {
-                    val prettyPrintedValue = Cbor.toDiagnostics(
-                        dataElementValue, setOf(
-                            DiagnosticOption.PRETTY_PRINT,
-                            DiagnosticOption.EMBEDDED_CBOR,
-                            DiagnosticOption.BSTR_PRINT_LENGTH,
-                        )
-                    )
-                    kvPairs.add(DocumentKeyValuePair(dataElementName, prettyPrintedValue))
-                }
-            }
-            // TODO: also iterate over DeviceSigned items
-
-            return DocumentData(infos, warnings, kvPairs)
-        }
-
-        suspend fun fromMdocDeviceResponseDocument(
-            document: DeviceResponseParser.Document,
-            documentTypeRepository: DocumentTypeRepository,
-            issuerTrustManager: TrustManager
-        ): DocumentData {
-            val infos = mutableListOf<String>()
-            val warnings = mutableListOf<String>()
-            val kvPairs = mutableListOf<DocumentKeyValuePair>()
-
-            if (document.issuerSignedAuthenticated) {
-                val trustResult = issuerTrustManager.verify(document.issuerCertificateChain.certificates)
-                if (trustResult.isTrusted) {
-                    if (trustResult.trustPoints[0].metadata.displayName != null) {
-                        infos.add("Issuer '${trustResult.trustPoints[0].metadata.displayName}' is in a trust list")
-                    } else {
-                        infos.add("Issuer with name '${trustResult.trustPoints[0].certificate.subject.name}' " +
-                                "is in a trust list")
-                    }
-                } else {
-                    warnings.add("Issuer is not in trust list")
-                }
-            }
-            if (!document.deviceSignedAuthenticated) {
-                warnings.add("Device Authentication failed")
-            }
-            if (!document.issuerSignedAuthenticated) {
-                warnings.add("Issuer Authentication failed")
-            }
-            if (document.numIssuerEntryDigestMatchFailures > 0) {
-                warnings.add("One or more issuer provided data elements failed to authenticate")
-            }
-            val now = Clock.System.now()
-            if (now < document.validityInfoValidFrom || now > document.validityInfoValidUntil) {
-                warnings.add("Document information is not valid at this point in time.")
-            }
-
-            kvPairs.add(DocumentKeyValuePair("Type", "ISO mdoc (ISO/IEC 18013-5:2021)"))
-            kvPairs.add(DocumentKeyValuePair("DocType", document.docType))
-            kvPairs.add(DocumentKeyValuePair("Valid From", formatTime(document.validityInfoValidFrom)))
-            kvPairs.add(DocumentKeyValuePair("Valid Until", formatTime(document.validityInfoValidUntil)))
-            kvPairs.add(DocumentKeyValuePair("Signed At", formatTime(document.validityInfoSigned)))
-            kvPairs.add(DocumentKeyValuePair(
-                "Expected Update",
-                document.validityInfoExpectedUpdate?.let { formatTime(it) } ?: "Not Set"
-            ))
-
-            val mdocType = documentTypeRepository.getDocumentTypeForMdoc(document.docType)?.mdocDocumentType
-
-            // TODO: Handle DeviceSigned data
-            for (namespaceName in document.issuerNamespaces) {
-                val mdocNamespace = if (mdocType !=null) {
-                    mdocType.namespaces.get(namespaceName)
-                } else {
-                    // Some DocTypes not known by [documentTypeRepository] - could be they are
-                    // private or was just never added - may use namespaces from existing
-                    // DocTypes... support that as well.
-                    //
-                    documentTypeRepository.getDocumentTypeForMdocNamespace(namespaceName)
-                        ?.mdocDocumentType?.namespaces?.get(namespaceName)
-                }
-
-                kvPairs.add(DocumentKeyValuePair("Namespace", namespaceName))
-                for (dataElementName in document.getIssuerEntryNames(namespaceName)) {
-                    val mdocDataElement = mdocNamespace?.dataElements?.get(dataElementName)
-                    val encodedDataElementValue = document.getIssuerEntryData(namespaceName, dataElementName)
-                    val dataElement = Cbor.decode(encodedDataElementValue)
-                    var bitmap: ImageBitmap? = null
-                    val (key, value) = if (mdocDataElement != null) {
-                        if (dataElement is Bstr && mdocDataElement.attribute.type == DocumentAttributeType.Picture) {
-                            try {
-                                bitmap = decodeImage(dataElement.value)
-                            } catch (e: Throwable) {
-                                Logger.w(TAG, "Error decoding image for data element $dataElement in " +
-                                        "namespace $namespaceName", e)
-                            }
-                        }
-                        Pair(
-                            mdocDataElement.attribute.displayName,
-                            mdocDataElement.renderValue(dataElement)
-                        )
-                    } else {
-                        Pair(
-                            dataElementName,
-                            Cbor.toDiagnostics(
-                                dataElement, setOf(
-                                    DiagnosticOption.PRETTY_PRINT,
-                                    DiagnosticOption.EMBEDDED_CBOR,
-                                    DiagnosticOption.BSTR_PRINT_LENGTH,
-                                )
-                            )
-                        )
-                    }
-                    kvPairs.add(DocumentKeyValuePair(key, value, bitmap = bitmap))
-                }
-            }
-            return DocumentData(infos, warnings, kvPairs)
-        }
-    }
-}
-
-private data class DocumentKeyValuePair(
-    val key: String,
-    val textValue: String,
-    val bitmap: ImageBitmap? = null
-)
-
-private fun formatTime(instant: Instant): String {
-    val tz = TimeZone.currentSystemDefault()
-    val isoStr = instant.toLocalDateTime(tz).format(LocalDateTime.Formats.ISO)
-    // Get rid of the middle 'T'
-    return isoStr.substring(0, 10) + " " + isoStr.substring(11)
-}
-
-

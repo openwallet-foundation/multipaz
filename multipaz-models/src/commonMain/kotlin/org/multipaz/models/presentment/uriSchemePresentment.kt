@@ -80,6 +80,7 @@ internal suspend fun uriSchemePresentment(
         preselectedDocuments = listOf(),
         source = source,
         showConsentPrompt = showConsentPrompt,
+        appId = null, // TODO: maybe pass the browser's appId if we can
         origin = mechanism.origin,
         request = requestObject,
         requesterCertChain = requesterChain,

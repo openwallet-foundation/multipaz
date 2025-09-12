@@ -18,14 +18,19 @@ fun Context.getActivity(): Activity? = when (this) {
  *
  * Must be explicitly initialized as early as possible using [initializeApplication]
  */
-val applicationContext: Context get() = _applicationContext!!
+val applicationContext: Context
+    get() = _applicationContext!!
 
 private var _applicationContext: Context? = null
 
 /**
- * Initializes [applicationContext].
+ * Initializes the application.
+ *
+ * @param applicationContext the application [Context].
  */
-fun initializeApplication(applicationContext: Context) {
+fun initializeApplication(
+    applicationContext: Context,
+) {
     if (_applicationContext == null) {
         check(applicationContext.getActivity() == null) { "Not an application context" }
         _applicationContext = applicationContext

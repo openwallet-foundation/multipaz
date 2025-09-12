@@ -434,9 +434,9 @@ private fun ConsentPage(
             iconUrl = metadata.displayIconUrl,
             disclaimer = metadata.disclaimer,
         )
-    } else if (requester.websiteOrigin != null) {
+    } else if (requester.origin != null && isWebOrigin(requester.origin!!)) {
         RequesterDisplayData(
-            name = requester.websiteOrigin,
+            name = requester.origin,
         )
     } else if (appInfo != null) {
         RequesterDisplayData(
@@ -578,10 +578,10 @@ private fun CredentialSetViewer(
                     Res.string.credential_presentment_share_with_known_requester,
                     requesterDisplayData.name
                 )
-            } else if (requester.websiteOrigin != null) {
+            } else if (requester.origin != null && isWebOrigin(requester.origin!!)) {
                 stringResource(
                     Res.string.credential_presentment_share_with_known_requester,
-                    requester.websiteOrigin!!
+                    requester.origin!!
                 )
             } else if (appInfo != null) {
                 stringResource(
@@ -597,10 +597,10 @@ private fun CredentialSetViewer(
                     Res.string.credential_presentment_share_and_stored_by_known_requester,
                     requesterDisplayData.name
                 )
-            } else if (requester.websiteOrigin != null) {
+            } else if (requester.origin != null && isWebOrigin(requester.origin!!)) {
                 stringResource(
                     Res.string.credential_presentment_share_and_stored_by_known_requester,
-                    requester.websiteOrigin!!
+                    requester.origin!!
                 )
             } else if (appInfo != null) {
                 stringResource(
@@ -727,7 +727,7 @@ private fun RelyingPartyTrailer(
     trustPoint: TrustPoint?,
 ) {
     if (trustPoint != null) {
-        var text = if (requester.websiteOrigin != null) {
+        var text = if (requester.origin != null && isWebOrigin(requester.origin!!)) {
             stringResource(Res.string.credential_presentment_info_verifier_in_trust_list_website)
         } else if (requester.appId != null) {
             stringResource(Res.string.credential_presentment_info_verifier_in_trust_list_app)
@@ -757,7 +757,7 @@ private fun RelyingPartyTrailer(
             )
         }
     } else {
-        val text = if (requester.websiteOrigin != null) {
+        val text = if (requester.origin != null && isWebOrigin(requester.origin!!)) {
             stringResource(Res.string.credential_presentment_warning_verifier_not_in_trust_list_website)
         } else if (requester.appId != null) {
             stringResource(Res.string.credential_presentment_warning_verifier_not_in_trust_list_app)
@@ -1054,3 +1054,5 @@ private fun RelyingPartySection(
         Spacer(modifier = Modifier.height(16.dp))
     }
 }
+
+private fun isWebOrigin(origin: String) = origin.startsWith("http://") || origin.startsWith("https://")

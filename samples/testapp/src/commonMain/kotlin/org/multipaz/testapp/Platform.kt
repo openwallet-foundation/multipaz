@@ -38,3 +38,5 @@ expect fun platformHttpClientEngineFactory(): HttpClientEngineFactory<*>
 expect fun platformRestartApp()
 
 expect val platformSecureAreaHasKeyAgreement: Boolean
+
+expect fun getAppToAppOrigin(): String

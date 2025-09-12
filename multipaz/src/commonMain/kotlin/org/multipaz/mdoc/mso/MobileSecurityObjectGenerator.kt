@@ -236,7 +236,7 @@ class MobileSecurityObjectGenerator(
         if (validUntil.nanosecondsOfSecond != 0 ) {
             Logger.w(TAG, "Dropping non-zero fractional seconds for timestamp validUntil")
         }
-        if (expectedUpdate?.nanosecondsOfSecond != 0 ) {
+        if (expectedUpdate != null && expectedUpdate.nanosecondsOfSecond != 0 ) {
             Logger.w(TAG, "Dropping non-zero fractional seconds for timestamp expectedUpdate")
         }
         mSigned = Instant.fromEpochSeconds(signed.epochSeconds, 0)

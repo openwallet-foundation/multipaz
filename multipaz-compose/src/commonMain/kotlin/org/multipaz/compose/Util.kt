@@ -1,8 +1,13 @@
 package org.multipaz.compose
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisallowComposableCalls
 import androidx.compose.ui.graphics.ImageBitmap
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.compose.camera.CameraFrame
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 
 data class ApplicationInfo(
     val name: String,
@@ -135,3 +140,23 @@ expect fun ImageBitmap.cropRotateScaleImage(
     outputHeightPx: Int,
     targetWidthPx: Int
 ): ImageBitmap
+
+/**
+ * Like [androidx.compose.runtime.rememberCoroutineScope] but also makes a platform-specific UI context available in
+ * the coroutine context.
+ *
+ * On Android this makes [org.multipaz.context.UiContext] available in the coroutine-context and
+ * callers can use [org.multipaz.context.UiContext.Companion.current] to get a [android.content.Context]
+ * object for which [android.content.Context.getActivity] will return the Activity the coroutine is bound to.
+ *
+ * On iOS this is equivalent to [androidx.compose.runtime.rememberCoroutineScope].
+ *
+ * @param getContext optional context.
+ * @return the [CoroutineScope].
+ */
+@Composable
+expect fun rememberUiBoundCoroutineScope(
+    getContext: @DisallowComposableCalls () -> CoroutineContext = {
+        EmptyCoroutineContext
+    }
+): CoroutineScope

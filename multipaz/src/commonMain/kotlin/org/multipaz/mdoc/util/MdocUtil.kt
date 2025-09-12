@@ -25,7 +25,6 @@ import org.multipaz.asn1.ASN1TaggedObject
 import org.multipaz.asn1.OID
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
@@ -706,13 +705,13 @@ object MdocUtil {
  * @param mdocCredential if set, the returned list is filtered so it only references data
  *     elements available in the credential.
  * @param requesterAppId the appId if an app is making the request or `null`.
- * @param requesterWebsiteOrigin the website origin if a website is making the request or `null`.
+ * @param requesterOrigin the origin or `null`.
  */
 fun DeviceRequestParser.DocRequest.toMdocRequest(
     documentTypeRepository: DocumentTypeRepository,
     mdocCredential: MdocCredential?,
     requesterAppId: String? = null,
-    requesterWebsiteOrigin: String? = null,
+    requesterOrigin: String? = null,
 ): MdocRequest {
     val requestedData = mutableMapOf<String, MutableList<Pair<String, Boolean>>>()
     for (namespaceName in namespaces) {
@@ -730,7 +729,7 @@ fun DeviceRequestParser.DocRequest.toMdocRequest(
                 null
             },
             appId = requesterAppId,
-            websiteOrigin = requesterWebsiteOrigin
+            origin = requesterOrigin
         ),
         requestedClaims = MdocUtil.generateRequestedClaims(
             docType,

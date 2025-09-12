@@ -7,7 +7,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.core.graphics.drawable.toDrawable
 import androidx.credentials.DigitalCredential
 import androidx.credentials.ExperimentalDigitalCredentialApi
@@ -18,8 +17,6 @@ import androidx.credentials.provider.ProviderGetCredentialRequest
 import androidx.credentials.registry.provider.selectedEntryId
 import androidx.fragment.app.FragmentActivity
 import coil3.ImageLoader
-import coil3.compose.LocalPlatformContext
-import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -36,6 +33,7 @@ import org.multipaz.compose.presentment.Presentment
 import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.context.initializeApplication
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.models.digitalcredentials.getAppOrigin
 import org.multipaz.models.digitalcredentials.lookupForCredmanId
 import org.multipaz.models.presentment.DigitalCredentialsPresentmentMechanism
 import org.multipaz.models.presentment.PresentmentModel
@@ -116,7 +114,8 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
 
             val callingAppInfo = credentialRequest.callingAppInfo
             val callingPackageName = callingAppInfo.packageName
-            val callingOrigin = callingAppInfo.getOrigin(settings.privilegedAllowList)
+            val origin = callingAppInfo.getOrigin(settings.privilegedAllowList)
+                ?: getAppOrigin(callingAppInfo.signingInfoCompat.signingCertificateHistory[0].toByteArray())
             val option = credentialRequest.credentialOptions[0] as GetDigitalCredentialOption
             val json = Json.parseToJsonElement(option.requestJson).jsonObject
             Logger.iJson(TAG, "Request Json", json)
@@ -135,7 +134,7 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
             }!!.jsonObject
             val mechanism = object : DigitalCredentialsPresentmentMechanism(
                 appId = callingPackageName,
-                webOrigin = callingOrigin,
+                origin = origin,
                 protocol = requestForSelectedEntry["protocol"]!!.jsonPrimitive.content,
                 data = requestForSelectedEntry["data"]!!.jsonObject,
                 preselectedDocuments = documents

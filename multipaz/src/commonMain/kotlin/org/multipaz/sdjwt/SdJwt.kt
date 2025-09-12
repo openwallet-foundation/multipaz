@@ -295,6 +295,7 @@ class SdJwt(
      * @param nonce the nonce, obtained from the verifier.
      * @param audience the audience, obtained from the verifier.
      * @param creationTime the time the presentation was made.
+     * @return a [SdJwtKb].
      */
     fun present(
         kbKey: EcPrivateKey,

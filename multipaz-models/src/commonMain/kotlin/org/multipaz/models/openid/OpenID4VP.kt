@@ -73,11 +73,11 @@ object OpenID4VP {
     }
 
     /**
-     * Generates an OpenID4VP 1.0 request.
+     * Generates an OpenID4VP request.
      *
      * @param version the version of OpenID4vp to generate the request for.
-     * @param origin the origin, e.g. `https://verifier.multipaz.org`.
-     * @param clientId the client ID, e.g. `x509_san_dns:verifier.multipaz.org`.
+     * @param origin the origin, e.g. `https://verifier.multipaz.org` or `android:apk-key-hash:<sha256_hash-of-apk-signing-cert>`.
+     * @param clientId the client ID, e.g. `x509_san_dns:verifier.multipaz.org` or `null`.
      * @param nonce the nonce to use.
      * @param responseEncryptionKey the key to encrypt the response against or `null`.
      * @param requestSigningKey the key to sign the request with or `null`.
@@ -90,14 +90,14 @@ object OpenID4VP {
     fun generateRequest(
         version: Version,
         origin: String,
-        clientId: String,
+        clientId: String?,
         nonce: String,
         responseEncryptionKey: EcPublicKey?,
         requestSigningKey: EcPrivateKey?,
         requestSigningKeyCertification: X509CertChain?,
         responseMode: ResponseMode,
         responseUri: String?,
-        dclqQuery: JsonObject
+        dclqQuery: JsonObject,
     ): JsonObject {
         if (version == Version.DRAFT_24) {
             return generateRequestDraft24(
@@ -122,6 +122,7 @@ object OpenID4VP {
             )
             responseUri?.let { put("response_uri", it)}
             if (requestSigningKey != null) {
+                require(clientId != null) { "clientId must be set for signed requests"}
                 put("client_id", clientId)
                 putJsonArray("expected_origins") {
                     add(origin)
@@ -180,8 +181,8 @@ object OpenID4VP {
     }
 
     private fun generateRequestDraft24(
-        origin: String,
-        clientId: String,
+        origin: String?,
+        clientId: String?,
         nonce: String,
         responseEncryptionKey: EcPublicKey?,
         requestSigningKey: EcPrivateKey?,
@@ -200,9 +201,12 @@ object OpenID4VP {
             )
             responseUri?.let { put("response_uri", it)}
             if (requestSigningKey != null) {
+                require(clientId != null) { "clientId must be set for signed requests"}
                 put("client_id", clientId)
-                putJsonArray("expected_origins") {
-                    add(origin)
+                if (origin != null) {
+                    putJsonArray("expected_origins") {
+                        add(origin)
+                    }
                 }
             }
             put("dcql_query", dclqQuery)
@@ -264,8 +268,9 @@ object OpenID4VP {
      *   if the user didn't preselect.
      * @param source an object for application to provide data and policy.
      * @param showConsentPrompt a function to ask the user for consent.
-     * @param origin the origin of the requester or `null` if not known. This must be set if
-     *   using the W3C Digital Credentials API.
+     * @property appId if this is a request from a local application, this contains the app identifier
+     *   for example `com.example.app` on Android or `<teamId>.<bundleId>` on iOS.
+     * @param origin the origin of the requester or `null` if not known.
      * @param request the authorization request object according to OpenID4VP Section 5 Authorization
      *   Request.
      * @param requesterCertChain the X.509 certificate chain if the request is signed or `null`
@@ -283,6 +288,7 @@ object OpenID4VP {
             requester: Requester,
             trustPoint: TrustPoint?
         ) -> CredentialPresentmentSelection?,
+        appId: String?,
         origin: String?,
         request: JsonObject,
         requesterCertChain: X509CertChain?,
@@ -400,8 +406,8 @@ object OpenID4VP {
 
         val requester = Requester(
             certChain = requesterCertChain,
-            appId = null,
-            websiteOrigin = origin
+            appId = appId,
+            origin = origin
         )
         val trustPoint = source.findTrustPoint(requester)
 

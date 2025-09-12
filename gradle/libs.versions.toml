@@ -123,6 +123,7 @@ androidx-sqlite-bundled = { module="androidx.sqlite:sqlite-bundled", version.ref
 postgresql = { module="org.postgresql:postgresql", version.ref = "postgresql" }
 play-services-identity-credentials = {module = "com.google.android.gms:play-services-identity-credentials", version.ref = "play-services-identity-credentials"}
 androidx-credentials = { module = "androidx.credentials:credentials", version.ref="androidx-credentials" }
+androidx-credentials-play-services-auth = { module = "androidx.credentials:credentials-play-services-auth", version.ref="androidx-credentials" }
 androidx-credentials-registry-provider = { module = "androidx.credentials.registry:registry-provider", version.ref = "androidx-credentials-registry-provider" }
 errorprone-annotations = { module = "com.google.errorprone:error_prone_annotations", version.ref="errorprone"}
 mlkit-barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref="mlkit-barcode-scanning"}

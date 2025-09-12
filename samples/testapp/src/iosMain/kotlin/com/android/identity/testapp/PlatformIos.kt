@@ -135,3 +135,7 @@ private fun openDatabase(): SQLiteConnection {
 actual fun platformHttpClientEngineFactory(): HttpClientEngineFactory<*> = Darwin
 
 actual val platformSecureAreaHasKeyAgreement = true
+
+actual fun getAppToAppOrigin(): String {
+    TODO("Add support for iOS")
+}

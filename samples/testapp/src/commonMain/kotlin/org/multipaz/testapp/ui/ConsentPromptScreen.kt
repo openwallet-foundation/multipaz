@@ -564,7 +564,7 @@ private fun calculateRequester(
         Requester(
             certChain = readerCert?.let { X509CertChain(certificates = listOf(readerCert, readerRootCert)) },
             appId = appId.appId,
-            websiteOrigin = origin.origin
+            origin = origin.origin
         ),
         trustPoint
     )
@@ -600,7 +600,7 @@ private fun calculateRequest(
         documentTypeRepository = docTypeRepo,
         mdocCredential = null,
         requesterAppId = requester.appId,
-        requesterWebsiteOrigin = requester.websiteOrigin,
+        requesterOrigin = requester.origin,
     )
     return MdocRequest(
         requester = requester,

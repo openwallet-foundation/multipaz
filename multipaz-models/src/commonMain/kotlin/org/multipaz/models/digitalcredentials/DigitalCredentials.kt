@@ -1,7 +1,10 @@
 package org.multipaz.models.digitalcredentials
 
+import kotlinx.serialization.json.JsonObject
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.models.verification.VerificationUtil
+import org.multipaz.models.verification.VerifiedPresentation
 
 /**
  * An interface for interacting with the W3C Digital Credentials API provider
@@ -62,6 +65,29 @@ interface DigitalCredentials {
     )
 
     /**
+     * Request credentials from wallet applications.
+     *
+     * This is a wrapper for a native implementation of the
+     * [W3C Digital Credentials API](https://www.w3.org/TR/digital-credentials/)
+     * available in web browsers via `navigator.credentials.get()`. This may not be available
+     * on all platforms.
+     *
+     * This will trigger external components for the user to interact with so make sure to launch
+     * this from a coroutine which is properly bound to the UI, see [org.multipaz.context.UiContext]
+     * for details.
+     *
+     * Use [VerificationUtil.generateDcRequestMdoc] or [VerificationUtil.generateDcRequestSdJwt]
+     * to generate requests and use [VerificationUtil.decryptDcResponse] to decrypt the response.
+     * Once decrypted [VerificationUtil.verifyMdocDeviceResponse],
+     * [VerificationUtil.verifyOpenID4VPResponse] can be used to generate [VerifiedPresentation]
+     * instances for further checks and analysis.
+     *
+     * @param request a W3C Digital Credentials request.
+     * @return the W3C Digital Credentials response.
+     */
+    suspend fun request(request: JsonObject): JsonObject
+
+    /**
      * The default implementation of the [DigitalCredentials] API on the platform.
      */
     object Default: DigitalCredentials {
@@ -86,6 +112,8 @@ interface DigitalCredentials {
         override suspend fun stopExportingCredentials(
             documentStore: DocumentStore
         ) = defaultStopExportingCredentials(documentStore)
+
+        override suspend fun request(request: JsonObject): JsonObject = defaultRequest(request)
     }
 }
 
@@ -107,3 +135,7 @@ internal expect suspend fun defaultStartExportingCredentials(
 internal expect suspend fun defaultStopExportingCredentials(
     documentStore: DocumentStore,
 )
+
+internal expect suspend fun defaultRequest(
+    request: JsonObject
+): JsonObject

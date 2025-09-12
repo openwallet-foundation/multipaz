@@ -1,5 +1,6 @@
 package org.multipaz.testapp
 
+import android.content.pm.PackageManager
 import android.os.Build
 import com.jakewharton.processphoenix.ProcessPhoenix
 import io.ktor.client.engine.HttpClientEngineFactory
@@ -17,6 +18,7 @@ import multipazproject.samples.testapp.generated.resources.app_icon_red
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.multipaz.compose.notifications.NotificationManagerAndroid
 import org.multipaz.crypto.Algorithm
+import org.multipaz.models.digitalcredentials.getAppOrigin
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.prompt.PromptModel
 import org.multipaz.util.Logger
@@ -113,4 +115,11 @@ actual val platformIsEmulator: Boolean by lazy {
             || Build.PRODUCT == "google_sdk")
     // another Android SDK emulator check
     /* || SystemProperties.getProp("ro.kernel.qemu") == "1") */
+}
+
+@Suppress("DEPRECATION")
+actual fun getAppToAppOrigin(): String {
+    val packageInfo = applicationContext.packageManager
+        .getPackageInfo(applicationContext.packageName, PackageManager.GET_SIGNATURES)
+    return getAppOrigin(packageInfo.signatures!![0].toByteArray())
 }

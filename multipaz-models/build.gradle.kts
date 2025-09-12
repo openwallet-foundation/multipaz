@@ -71,6 +71,8 @@ kotlin {
                 implementation(libs.accompanist.permissions)
                 implementation(libs.androidx.material)
                 implementation(libs.play.services.identity.credentials)
+                implementation(libs.androidx.credentials)
+                implementation(libs.androidx.credentials.play.services.auth)
             }
         }
 

@@ -59,7 +59,7 @@ class DigitalCredentialsPresentmentTest {
         var closed: Boolean = false
     ): DigitalCredentialsPresentmentMechanism(
         appId = APP_ID,
-        webOrigin = ORIGIN,
+        origin = ORIGIN,
         protocol = protocol,
         data = data,
         preselectedDocuments = documents,
