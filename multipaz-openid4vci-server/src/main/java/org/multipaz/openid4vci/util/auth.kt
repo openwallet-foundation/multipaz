@@ -24,8 +24,10 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.SimpleCipher
 import org.multipaz.server.getBaseUrl
+import org.multipaz.util.JwtCheck
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.validateJwt
 import kotlin.time.Duration
 
 const val OAUTH_REQUEST_URI_PREFIX = "urn:ietf:params:oauth:request_uri:"
@@ -152,7 +154,7 @@ suspend fun validateClientAttestation(
         jwtName = "Client Attestation",
         publicKey = null,
         checks = mapOf(
-            JwtCheck.TRUST to "client_attestation",  // where to find CA
+            JwtCheck.TRUST to "trusted_client_attestations",  // where to find CA
             JwtCheck.TYP to "oauth-client-attestation+jwt",
             JwtCheck.SUB to clientId
         )
@@ -325,7 +327,7 @@ private suspend fun validateClientAssertionJwt(clientAssertionJwt: String, clien
         jwtName = "client_assertion",
         publicKey = null,
         checks = mapOf(
-            JwtCheck.TRUST to "client_assertion",  // where to find CA
+            JwtCheck.TRUST to "trusted_client_assertions",  // where to find CA
             JwtCheck.JTI to clientId,
             JwtCheck.SUB to clientId,
             JwtCheck.ISS to clientId,

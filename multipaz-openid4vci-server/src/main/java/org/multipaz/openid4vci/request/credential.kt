@@ -38,15 +38,15 @@ import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.openid4vci.credential.Openid4VciFormat
 import org.multipaz.openid4vci.util.DPoPNonceException
 import org.multipaz.openid4vci.util.IssuanceState
-import org.multipaz.openid4vci.util.JwtCheck
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.authorizeWithDpop
 import org.multipaz.openid4vci.util.codeToId
 import org.multipaz.openid4vci.util.extractAccessToken
 import org.multipaz.openid4vci.util.getSystemOfRecordUrl
-import org.multipaz.openid4vci.util.validateJwt
 import org.multipaz.server.getBaseUrl
+import org.multipaz.util.JwtCheck
 import org.multipaz.util.Logger
+import org.multipaz.util.validateJwt
 import kotlin.random.Random
 
 /**
@@ -141,7 +141,7 @@ suspend fun credential(call: ApplicationCall) {
                     publicKey = null,
                     checks = mapOf(
                         JwtCheck.TYP to "keyattestation+jwt",
-                        JwtCheck.TRUST to "key_attestation"
+                        JwtCheck.TRUST to "trusted_key_attestations"
                     )
                 )
                 validateAndConsumeCredentialChallenge(body["nonce"]!!.jsonPrimitive.content)

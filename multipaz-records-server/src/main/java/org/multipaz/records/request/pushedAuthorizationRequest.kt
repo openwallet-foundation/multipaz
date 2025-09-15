@@ -9,17 +9,17 @@ import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import org.multipaz.records.data.JwtCheck
 import org.multipaz.records.data.OauthParams
 import org.multipaz.records.data.recordTypes
 import org.multipaz.records.data.toCbor
-import org.multipaz.records.data.validateJwt
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.SimpleCipher
 import org.multipaz.server.getBaseUrl
+import org.multipaz.util.JwtCheck
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.validateJwt
 import kotlin.time.Duration.Companion.minutes
 
 /**
@@ -67,7 +67,7 @@ suspend fun pushedAuthorizationRequest(call: ApplicationCall) {
         jwtName = "client_assertion",
         publicKey = null,
         checks = mapOf(
-            JwtCheck.TRUST to "client_assertion",  // where to find CA
+            JwtCheck.TRUST to "trusted_client_assertions",  // where to find CA
             JwtCheck.JTI to clientId,
             JwtCheck.SUB to clientId,
             JwtCheck.ISS to clientId,

@@ -1,7 +1,7 @@
-package org.multipaz.openid4vci.util
+package org.multipaz.util
 
-import kotlin.time.Clock
-import kotlin.time.Instant
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.buildByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -17,16 +17,15 @@ import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.rpc.backend.BackendEnvironment
-import org.multipaz.rpc.backend.Resources
+import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.backend.getTable
-import org.multipaz.rpc.cache
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.storage.KeyExistsStorageException
 import org.multipaz.storage.StorageTableSpec
-import org.multipaz.util.fromBase64Url
-import java.io.File
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Instant
 
 enum class JwtCheck(
     val fieldNameValueCheck: String? = null,
@@ -46,7 +45,8 @@ enum class JwtCheck(
 
 /**
  * General-purpose JWT [jwt] validation using a set of built-in required checks (expiration
- * and signature validity) and a set of optional checks specified in [checks] parameter.
+ * and signature validity) and a set of optional checks specified in [checks] parameter, mostly
+ * aim to simplify server-side code.
  *
  * JWT signature is verified either using a supplied [publicKey] and [algorithm] or using a
  * trusted key ([JwtCheck.TRUST] check must be specified in this case).
@@ -61,11 +61,10 @@ enum class JwtCheck(
  *
  * [JwtCheck.TRUST] specifies that the signature must be checked against a known trusted key
  * (directly or through the certificate chain specified in `x5c'). The value provided with this
- * check id determines the path for the resource that holds trusted key. The name of the key is
- * derived either from the X509 top certificate subject common name, from `kid` parameter in JWT
- * header or `iss` value in the JWT body. Once the path and the name are determined, a certificate
- * with the trusted key is extracted from the server resource (see [Resources])
- * "trust/$path/$name.pem" or, failing that, key is loaded from "trust/$path/$name.jwk".
+ * check id determines [Configuration] name that holds JSON-formatted object that maps
+ * the name to the trusted key as either JWK or Base64-encode CA certificate. The name of the key
+ * in the map is derived either from the X509 top certificate subject common name, from `kid`
+ * parameter in JWT header or `iss` value in the JWT body.
  *
  * [maxValidity] determines expiration time for JWTs that have `iat`, but not `exp` parameter
  * un their body and [clock] determines current time to check for expiration.
@@ -156,8 +155,8 @@ suspend fun validateJwt(
             Pair(first.ecPublicKey, first.signatureAlgorithm)
         } else {
             val keyId = header["kid"]?.jsonPrimitive?.content ?: issuer
-                ?: throw InvalidRequestException(
-                    "$jwtName: either 'iss', 'kid', or 'x5c' must be specified")
+            ?: throw InvalidRequestException(
+                "$jwtName: either 'iss', 'kid', or 'x5c' must be specified")
             val caKey = caPublicKey(keyId, caName)
             Pair(caKey, caKey.curve.defaultSigningAlgorithmFullySpecified)
         }
@@ -184,7 +183,7 @@ suspend fun validateJwt(
                 partitionId = jtiPartition,
                 expiration = Instant.fromEpochSeconds(expiration)
             )
-        } catch (err: KeyExistsStorageException) {
+        } catch (_: KeyExistsStorageException) {
             throw InvalidRequestException("$jwtName: given 'jti' value was used before")
         }
     }
@@ -192,45 +191,30 @@ suspend fun validateJwt(
     return body
 }
 
+private val keyCacheLock = Mutex()
+private val keyCache = mutableMapOf<String, EcPublicKey>()
+
 private suspend fun caPublicKey(
     keyId: String,
     caName: String
 ): EcPublicKey {
-    val escapedKeyId = keyId
-        .replace("%", "%25")
-        .replace("/", "%2F")
-        .replace(":", "%3A")
-    val caPath = "$caName/$escapedKeyId"
-    val caKey =
-        BackendEnvironment.cache(
-            CAPublicKey::class,
-            caPath
-        ) { configuration, resources ->
-            val certificateStore = configuration.getValue("trustRoot")
-            if (certificateStore != null) {
-                val pemFile = File("$caPath.pem")
-                if (pemFile.canRead()) {
-                    return@cache CAPublicKey(X509Cert.fromPem(pemFile.readText()).ecPublicKey)
-                }
-                val jwkFile = File("$caPath.jwk")
-                if (jwkFile.canRead()) {
-                    return@cache CAPublicKey(EcPublicKey.fromJwk(
-                        Json.parseToJsonElement(jwkFile.readText()).jsonObject))
-                }
+    val configuration = BackendEnvironment.getInterface(Configuration::class)
+        ?: throw IllegalStateException("Configuration is required for JwtCheck.TRUST")
+    val caPath = "$caName:$keyId"
+    return keyCacheLock.withLock {
+        keyCache.getOrPut(caPath) {
+            val caConfig = configuration.getValue(caName)
+                ?: throw IllegalStateException("'$caName': no trusted keys in config")
+            val ca = Json.parseToJsonElement(caConfig).jsonObject[keyId]
+            if (ca is JsonPrimitive) {
+                X509Cert(ca.jsonPrimitive.content.fromBase64()).ecPublicKey
+            } else if (ca is JsonObject) {
+                EcPublicKey.fromJwk(ca)
+            } else {
                 throw InvalidRequestException("CA not registered: $caPath")
             }
-            val cert = resources.getStringResource("trust/$caPath.pem")
-            if (cert != null) {
-                return@cache CAPublicKey(X509Cert.fromPem(cert).ecPublicKey)
-            }
-            val jwk = resources.getStringResource("trust/$caPath.jwk")
-            if (jwk != null) {
-                return@cache CAPublicKey(EcPublicKey.fromJwk(
-                    Json.parseToJsonElement(jwk).jsonObject))
-            }
-            throw InvalidRequestException("CA not registered: $caPath")
         }
-    return caKey.publicKey
+    }
 }
 
 private val jtiTableSpec = StorageTableSpec(
@@ -238,5 +222,3 @@ private val jtiTableSpec = StorageTableSpec(
     supportPartitions = true,
     supportExpiration = true
 )
-
-private data class CAPublicKey(val publicKey: EcPublicKey)

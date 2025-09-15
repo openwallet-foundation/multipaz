@@ -1,14 +1,11 @@
-package org.multipaz.openid4vci.util
+package org.multipaz.util
 
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
-import kotlin.time.Clock
-import kotlin.time.Instant
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import org.junit.Assert
-import org.junit.Test
+import kotlin.test.Test
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -17,27 +14,31 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
-import org.multipaz.openid4vci.request.nonce
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.backend.Resources
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
-import org.multipaz.util.toBase64Url
 import kotlin.reflect.KClass
 import kotlin.reflect.cast
+import kotlin.test.assertTrue
+import kotlin.test.fail
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 
 class JwtTest {
     private val clock = FakeClock()
+    private val privateTrustedKey = Crypto.createEcPrivateKey(EcCurve.P256)
+    private val trustedKey = privateTrustedKey.publicKey
 
     @Test
-    fun testSimple() = runBackendTest { privateKey ->
-        val jwt = makeJwt(privateKey)
-        validateJwt(jwt, "test", privateKey.publicKey, clock = clock, checks = mapOf(
+    fun testSimple() = runBackendTest {
+        val jwt = makeJwt(privateTrustedKey)
+        validateJwt(jwt, "test", privateTrustedKey.publicKey, clock = clock, checks = mapOf(
             JwtCheck.JTI to TEST_JTI,
             JwtCheck.SUB to TEST_SUB,
             JwtCheck.ISS to TEST_ISS,
@@ -48,81 +49,89 @@ class JwtTest {
     }
 
     @Test
-    fun testExpirationExp() = runBackendTest { privateKey ->
-        val jwt = makeJwt(privateKey)
+    fun testExpirationExp() = runBackendTest {
+        val jwt = makeJwt(privateTrustedKey)
         clock.advance(2.minutes)
         try {
-            validateJwt(jwt, "test", privateKey.publicKey, clock = clock)
-            Assert.fail()
+            validateJwt(jwt, "test", privateTrustedKey.publicKey, clock = clock)
+            fail()
         } catch (err: InvalidRequestException) {
-            Assert.assertTrue(err.message!!.lowercase().contains("expired"))
+            assertTrue(err.message!!.lowercase().contains("expired"))
         }
     }
 
     @Test
-    fun testExpirationIat() = runBackendTest { privateKey ->
-        val jwt = makeJwt(privateKey, exp = null, iat = clock.now())
+    fun testExpirationIat() = runBackendTest {
+        val jwt = makeJwt(privateTrustedKey, exp = null, iat = clock.now())
         clock.advance(2.minutes)
         try {
-            validateJwt(jwt, "test", privateKey.publicKey,
+            validateJwt(jwt, "test", privateTrustedKey.publicKey,
                 clock = clock, maxValidity = 1.minutes)
-            Assert.fail()
+            fail()
         } catch (err: InvalidRequestException) {
-            Assert.assertTrue(err.message!!.lowercase().contains("expired"))
+            assertTrue(err.message!!.lowercase().contains("expired"))
         }
     }
 
     @Test
-    fun testReplay() = runBackendTest { privateKey ->
-        val jwt = makeJwt(privateKey)
-        validateJwt(jwt, "test", privateKey.publicKey, clock = clock,
+    fun testReplay() = runBackendTest {
+        val jwt = makeJwt(privateTrustedKey)
+        validateJwt(jwt, "test", privateTrustedKey.publicKey, clock = clock,
             checks = mapOf(JwtCheck.JTI to "jti-space1"))
         try {
-            validateJwt(jwt, "test", privateKey.publicKey, clock = clock,
+            validateJwt(jwt, "test", privateTrustedKey.publicKey, clock = clock,
                 checks = mapOf(JwtCheck.JTI to "jti-space1"))
-            Assert.fail()
+            fail()
         } catch (err: InvalidRequestException) {
-            Assert.assertTrue(err.message!!.lowercase().contains("jti"))
+            assertTrue(err.message!!.lowercase().contains("jti"))
         }
-        validateJwt(jwt, "test", privateKey.publicKey, clock = clock,
+        validateJwt(jwt, "test", privateTrustedKey.publicKey, clock = clock,
             checks = mapOf(JwtCheck.JTI to "jti-space2"))
         clock.advance(2.minutes)
-        val newJwt = makeJwt(privateKey)
-        validateJwt(newJwt, "test", privateKey.publicKey, clock = clock,
+        val newJwt = makeJwt(privateTrustedKey)
+        validateJwt(newJwt, "test", privateTrustedKey.publicKey, clock = clock,
             checks = mapOf(JwtCheck.JTI to "jti-space1"))
     }
 
     @Test
-    fun testTrustIss() = runBackendTest { privateKey ->
-        val jwt = makeJwt(privateKey)
+    fun testTrustIss() = runBackendTest {
+        val jwt = makeJwt(privateTrustedKey)
         validateJwt(jwt, "test", publicKey = null, clock = clock,
             checks = mapOf(JwtCheck.TRUST to "iss"))
     }
 
     @Test
-    fun testTrustKid() = runBackendTest { privateKey ->
-        val jwt = makeJwt(privateKey, iss = null, kid = "test-kid")
+    fun testTrustKid() = runBackendTest {
+        val jwt = makeJwt(privateTrustedKey, iss = null, kid = "test-kid")
         validateJwt(jwt, "test", publicKey = null, clock = clock,
             checks = mapOf(JwtCheck.TRUST to "kid"))
     }
 
     @Test
-    fun testTrustX5C() = runBackendTest { privateKey ->
+    fun testTrustX5C() = runBackendTest {
         val x5cKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val cert = X509Cert.Builder(
             publicKey = x5cKey.publicKey,
-            signingKey = privateKey,
-            signatureAlgorithm = privateKey.curve.defaultSigningAlgorithm,
+            signingKey = privateTrustedKey,
+            signatureAlgorithm = privateTrustedKey.curve.defaultSigningAlgorithm,
             serialNumber = ASN1Integer(2),
-            subject = X500Name.fromName("CN=test-x5c"),
-            issuer = X500Name.fromName("CN=test-root"),
+            subject = X500Name.fromName("CN=test-x5c-leaf"),
+            issuer = X500Name.fromName("CN=test-x5c"),
             validFrom = clock.now() - 1.days,
             validUntil = clock.now() + 1.days
         ).build()
-        val root = X509Cert.fromPem(BackendEnvironment.getInterface(Resources::class)!!
-            .getStringResource("trust/x5c/test-root.pem")!!)
+        val root = X509Cert.Builder(
+            publicKey = trustedKey,
+            signingKey = Crypto.createEcPrivateKey(EcCurve.P384),
+            signatureAlgorithm = EcCurve.P384.defaultSigningAlgorithm,
+            serialNumber = ASN1Integer(57),
+            subject = X500Name.fromName("CN=test-x5c"),
+            issuer = X500Name.fromName("CN=test-ca"),
+            validFrom = clock.now() - 10.days,
+            validUntil = clock.now() + 100.days
+        ).build()
         val chain = X509CertChain(listOf(cert, root))
-        val jwt = makeJwt(x5cKey, iss = "test-x5c", x5c = chain)
+        val jwt = makeJwt(x5cKey, iss = "test-x5c-leaf", x5c = chain)
         validateJwt(jwt, "test", publicKey = null, clock = clock,
             checks = mapOf(JwtCheck.TRUST to "x5c"))
     }
@@ -179,53 +188,46 @@ class JwtTest {
         return "$message.${sig.toCoseEncoded().toBase64Url()}"
     }
 
-    private fun runBackendTest(body: suspend TestScope.(privateKey: EcPrivateKey) -> Unit) =
+    private fun runBackendTest(body: suspend TestScope.() -> Unit) =
         runTest {
-            val privateKey = Crypto.createEcPrivateKey(EcCurve.P256)
-            withContext(TestBackendEnvironment(clock, privateKey.publicKey)) {
-                body(privateKey)
+            withContext(TestBackendEnvironment()) {
+                body()
             }
         }
 
-    object TestConfiguration: Configuration {
-        override fun getValue(key: String) = null
-    }
+    inner class TestConfiguration(): Configuration {
+        private val trustedCert = X509Cert.Builder(
+            publicKey = trustedKey,
+            signingKey = Crypto.createEcPrivateKey(EcCurve.P384),
+            signatureAlgorithm = EcCurve.P384.defaultSigningAlgorithm,
+            serialNumber = ASN1Integer(57),
+            subject = X500Name.fromName("CN=test-root"),
+            issuer = X500Name.fromName("CN=test-ca"),
+            validFrom = clock.now() - 10.days,
+            validUntil = clock.now() + 100.days
+        ).build()
 
-    class TestResources(
-        val clock: Clock,
-        private val trustedKey: EcPublicKey
-    ): Resources {
-        override fun getRawResource(name: String) = null
-
-        override fun getStringResource(name: String) =
-            when (name) {
-                "trust/iss/test-iss.jwk" -> trustedKey.toJwk().toString()
-                "trust/kid/test-kid.jwk" -> trustedKey.toJwk().toString()
-                "trust/x5c/test-root.pem" ->
-                    X509Cert.Builder(
-                        publicKey = trustedKey,
-                        signingKey = Crypto.createEcPrivateKey(EcCurve.P384),
-                        signatureAlgorithm = EcCurve.P384.defaultSigningAlgorithm,
-                        serialNumber = ASN1Integer(57),
-                        subject = X500Name.fromName("CN=test-root"),
-                        issuer = X500Name.fromName("CN=test-ca"),
-                        validFrom = clock.now() - 10.days,
-                        validUntil = clock.now() + 100.days
-                    ).build().toPem()
-                else -> null
+        override fun getValue(key: String): String? {
+            if (key == "iss" || key == "kid") {
+                return buildJsonObject {
+                    put("test-$key", trustedKey.toJwk())
+                }.toString()
             }
+            if (key == "x5c") {
+                return buildJsonObject {
+                    put("test-$key", trustedCert.encodedCertificate.toBase64())
+                }.toString()
+            }
+            return null
+        }
     }
 
-    class TestBackendEnvironment(
-        clock: Clock,
-        trustedKey: EcPublicKey
-    ): BackendEnvironment {
-        private val resources = TestResources(clock, trustedKey)
+    inner class TestBackendEnvironment(): BackendEnvironment {
+        private val configuration = TestConfiguration()
         private val storage: Storage = EphemeralStorage(clock)
         override fun <T : Any> getInterface(clazz: KClass<T>): T? {
             return clazz.cast(when (clazz) {
-                Configuration::class -> TestConfiguration
-                Resources::class -> resources
+                Configuration::class -> configuration
                 Storage::class -> storage
                 else -> return null
             })
