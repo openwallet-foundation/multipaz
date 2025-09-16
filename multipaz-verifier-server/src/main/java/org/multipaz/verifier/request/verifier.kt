@@ -22,6 +22,7 @@ import org.multipaz.documenttype.knowntypes.EUCertificateOfResidence
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.GermanPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
+import org.multipaz.documenttype.knowntypes.MyNumberCard
 import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
 import org.multipaz.documenttype.knowntypes.UtopiaNaturalization
 import org.multipaz.rpc.backend.Configuration
@@ -291,6 +292,7 @@ private val documentTypeRepo: DocumentTypeRepository by lazy {
     repo.addDocumentType(GermanPersonalID.getDocumentType())
     repo.addDocumentType(PhotoID.getDocumentType())
     repo.addDocumentType(EUCertificateOfResidence.getDocumentType())
+    repo.addDocumentType(MyNumberCard.getDocumentType())
     repo.addDocumentType(UtopiaNaturalization.getDocumentType())
     repo.addDocumentType(UtopiaMovieTicket.getDocumentType())
     repo.addDocumentType(IDPass.getDocumentType())

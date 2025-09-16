@@ -59,6 +59,7 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
+import org.multipaz.documenttype.knowntypes.MyNumberCard
 import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.vical.SignedVical
@@ -317,6 +318,7 @@ class App private constructor (val promptModel: PromptModel) {
         documentTypeRepository.addDocumentType(DrivingLicense.getDocumentType())
         documentTypeRepository.addDocumentType(PhotoID.getDocumentType())
         documentTypeRepository.addDocumentType(EUPersonalID.getDocumentType())
+        documentTypeRepository.addDocumentType(MyNumberCard.getDocumentType())
         documentTypeRepository.addDocumentType(UtopiaMovieTicket.getDocumentType())
         documentTypeRepository.addDocumentType(IDPass.getDocumentType())
         documentTypeRepository.addDocumentType(AgeVerification.getDocumentType())

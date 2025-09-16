@@ -45,6 +45,7 @@ import org.multipaz.documenttype.knowntypes.LoyaltyID
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
+import org.multipaz.documenttype.knowntypes.MyNumberCard
 import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
@@ -155,6 +156,7 @@ object TestAppUtils {
         DrivingLicense.getDocumentType(),
         PhotoID.getDocumentType(),
         EUPersonalID.getDocumentType(),
+        MyNumberCard.getDocumentType(),
         UtopiaMovieTicket.getDocumentType(),
         AgeVerification.getDocumentType(),
         LoyaltyID.getDocumentType(),
