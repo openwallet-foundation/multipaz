@@ -1,8 +1,13 @@
 package org.multipaz.compose
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisallowComposableCalls
 import androidx.compose.ui.graphics.ImageBitmap
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.compose.camera.CameraFrame
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 
 data class ApplicationInfo(
     val name: String,
@@ -135,3 +140,10 @@ expect fun ImageBitmap.cropRotateScaleImage(
     outputHeightPx: Int,
     targetWidthPx: Int
 ): ImageBitmap
+
+@Composable
+expect fun rememberUiBoundCoroutineScope(
+    getContext: @DisallowComposableCalls () -> CoroutineContext = {
+        EmptyCoroutineContext
+    }
+): CoroutineScope
