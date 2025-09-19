@@ -11,6 +11,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -80,6 +81,8 @@ class ProvisioningModel(
 
     private var job: Job? = null
 
+    val isActive: Boolean get() = job?.isActive ?: false
+
     /**
      * Launch provisioning session to provision credentials to a new [Document] using
      * OpenID4VCI protocol.
@@ -110,8 +113,7 @@ class ProvisioningModel(
         coroutineContext: CoroutineContext,
         provisioningClientFactory: suspend () -> ProvisioningClient
     ): Deferred<Document> {
-        val job = this.job
-        if (job != null && job.isActive) {
+        if (isActive) {
             throw IllegalStateException("Existing job is active")
         }
         val deferred = CoroutineScope(coroutineContext).async {
@@ -120,6 +122,7 @@ class ProvisioningModel(
                 val provisioningClient = provisioningClientFactory.invoke()
                 runProvisioning(provisioningClient)
             } catch(err: CancellationException) {
+                mutableState.emit(Idle)
                 throw err
             } catch(err: Throwable) {
                 Logger.e(TAG, "Error provisioning", err)
@@ -132,10 +135,21 @@ class ProvisioningModel(
     }
 
     /**
-     * Cancel currently-running provisioning session (if any).
+     * Cancel currently-running provisioning session (if any) and sets the state to [Idle].
+     *
+     * Note: cancellation is asynchronous and is typically not going to happen yet when this
+     * function returns.
      */
     fun cancel() {
-        job?.cancel()
+        job?.let {
+            if (it.isActive) {
+                it.cancel()
+            } else {
+                CoroutineScope(Dispatchers.Default).launch {
+                    mutableState.emit(Idle)
+                }
+            }
+        }
     }
 
     /**

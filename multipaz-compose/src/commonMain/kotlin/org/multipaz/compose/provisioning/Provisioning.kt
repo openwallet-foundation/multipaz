@@ -1,4 +1,4 @@
-package org.multipaz.testapp.ui
+package org.multipaz.compose.provisioning
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,27 +17,59 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.PassphraseEntryField
 import org.multipaz.models.provisioning.ProvisioningModel
+import org.multipaz.multipaz_compose.generated.resources.Res
+import org.multipaz.multipaz_compose.generated.resources.provisioning_authorization_failed
+import org.multipaz.multipaz_compose.generated.resources.provisioning_authorized
+import org.multipaz.multipaz_compose.generated.resources.provisioning_browser
+import org.multipaz.multipaz_compose.generated.resources.provisioning_connected
+import org.multipaz.multipaz_compose.generated.resources.provisioning_credentials_issued
+import org.multipaz.multipaz_compose.generated.resources.provisioning_error
+import org.multipaz.multipaz_compose.generated.resources.provisioning_idle
+import org.multipaz.multipaz_compose.generated.resources.provisioning_initial
+import org.multipaz.multipaz_compose.generated.resources.provisioning_processing_authorization
+import org.multipaz.multipaz_compose.generated.resources.provisioning_requestion_credentials
+import org.multipaz.multipaz_compose.generated.resources.provisioning_retry
 import org.multipaz.provisioning.AuthorizationChallenge
 import org.multipaz.provisioning.AuthorizationException
 import org.multipaz.provisioning.AuthorizationResponse
 import org.multipaz.securearea.PassphraseConstraints
-import org.multipaz.testapp.provisioning.ProvisioningSupport
 
+/**
+ * UI Panel (implemented as Compose [Column]) that interacts with the user and
+ * drives credential provisioning in the given [ProvisioningModel].
+ *
+ * When OpenId-style user authorization is launched, user interacts with the browser, at
+ * the end of this interaction, browser is navigated to a redirect URL that the app should
+ * intercept. Meanwhile [waitForRedirectLinkInvocation] is invoked (asynchronously), it should
+ * return the redirect URL once it was navigated to. Although an exotic possibility, multiple
+ * authorization sessions can run in parallel (each with its own model). Each authorization
+ * session is assigned a unique state value (passed as url parameter on the redirect url). It is
+ * important that url with the correct state parameter value is returned by
+ * [waitForRedirectLinkInvocation]. This is important in all cases to avoid contaminating
+ * an active authorization session with stale URLs (e.g. from a browser tab)
+ *
+ * @param modifier Compose [Modifier] for this UI control
+ * @param provisioningModel model that manages credential provisioning
+ * @param waitForRedirectLinkInvocation wait for redirect url with the given state parameter
+ *     being navigated to in the browser.
+ */
 @Composable
-fun ProvisioningTestScreen(
+fun Provisioning(
+    modifier: Modifier = Modifier,
     provisioningModel: ProvisioningModel,
-    provisioningSupport: ProvisioningSupport,
+    waitForRedirectLinkInvocation: suspend (state: String) -> String
 ) {
-    val provisioningState = provisioningModel.state.collectAsState(ProvisioningModel.Idle).value
-    Column {
+    val provisioningState = provisioningModel.state.collectAsState().value
+    Column(modifier = modifier) {
         when (provisioningState) {
             is ProvisioningModel.Authorizing -> {
                 Authorize(
-                    provisioningModel,
-                    provisioningState.authorizationChallenges,
-                    provisioningSupport,
+                    provisioningModel = provisioningModel,
+                    waitForRedirectLinkInvocation = waitForRedirectLinkInvocation,
+                    challenges = provisioningState.authorizationChallenges
                 )
             }
 
@@ -47,19 +79,22 @@ fun ProvisioningTestScreen(
                         .align(Alignment.CenterHorizontally)
                         .padding(8.dp),
                     style = MaterialTheme.typography.titleLarge,
-                    text = "Authorization failed"
+                    text = stringResource(Res.string.provisioning_authorization_failed)
                 )
                 val err = provisioningState.err as AuthorizationException
                 Text(
                     modifier = Modifier.padding(4.dp),
                     style = MaterialTheme.typography.bodyMedium,
-                    text = "Error code: ${err.code}"
+                    text = stringResource(
+                        Res.string.provisioning_error,
+                        err.code
+                    )
                 )
-                if (err.description != null) {
+                err.description?.let {
                     Text(
                         modifier = Modifier.padding(4.dp),
                         style = MaterialTheme.typography.bodyMedium,
-                        text = err.description!!
+                        text = it
                     )
                 }
             } else {
@@ -68,27 +103,25 @@ fun ProvisioningTestScreen(
                         .align(Alignment.CenterHorizontally)
                         .padding(8.dp),
                     style = MaterialTheme.typography.titleLarge,
-                    text = "Error: ${provisioningState.err.message}"
-                )
-                Text(
-                    modifier = Modifier.padding(4.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    text = "For details: adb logcat -s ProvisioningModel"
+                    text = stringResource(
+                        Res.string.provisioning_error,
+                        provisioningState.err.message ?: "unknown"
+                    )
                 )
             }
 
             else -> {
-                val text = when (provisioningState) {
-                    ProvisioningModel.Idle -> "Initializing..."
-                    ProvisioningModel.Initial -> "Starting provisioning..."
-                    ProvisioningModel.Connected -> "Connected to the back-end"
-                    ProvisioningModel.ProcessingAuthorization -> "Processing authorization..."
-                    ProvisioningModel.Authorized -> "Authorized"
-                    ProvisioningModel.RequestingCredentials -> "Requesting credentials..."
-                    ProvisioningModel.CredentialsIssued -> "Credentials issued"
+                val text = stringResource(when (provisioningState) {
+                    ProvisioningModel.Idle -> Res.string.provisioning_idle
+                    ProvisioningModel.Initial -> Res.string.provisioning_initial
+                    ProvisioningModel.Connected -> Res.string.provisioning_connected
+                    ProvisioningModel.ProcessingAuthorization -> Res.string.provisioning_processing_authorization
+                    ProvisioningModel.Authorized -> Res.string.provisioning_authorized
+                    ProvisioningModel.RequestingCredentials -> Res.string.provisioning_requestion_credentials
+                    ProvisioningModel.CredentialsIssued -> Res.string.provisioning_credentials_issued
                     is ProvisioningModel.Error -> throw IllegalStateException()
                     is ProvisioningModel.Authorizing -> throw IllegalStateException()
-                }
+                })
                 Text(
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
@@ -104,33 +137,33 @@ fun ProvisioningTestScreen(
 @Composable
 private fun Authorize(
     provisioningModel: ProvisioningModel,
-    challenges: List<AuthorizationChallenge>,
-    provisioningSupport: ProvisioningSupport
+    waitForRedirectLinkInvocation: suspend (state: String) -> String,
+    challenges: List<AuthorizationChallenge>
 ) {
     when (val challenge = challenges.first()) {
         is AuthorizationChallenge.OAuth ->
             EvidenceRequestWebView(
-                evidenceRequest = challenge,
                 provisioningModel = provisioningModel,
-                provisioningSupport = provisioningSupport
+                waitForRedirectLinkInvocation = waitForRedirectLinkInvocation,
+                evidenceRequest = challenge
             )
         is AuthorizationChallenge.SecretText ->
             EvidenceRequestSecretText(
-                challenge = challenge,
-                provisioningModel = provisioningModel
+                provisioningModel = provisioningModel,
+                challenge = challenge
             )
     }
 }
 
 @Composable
-fun EvidenceRequestWebView(
-    evidenceRequest: AuthorizationChallenge.OAuth,
+private fun EvidenceRequestWebView(
     provisioningModel: ProvisioningModel,
-    provisioningSupport: ProvisioningSupport
+    waitForRedirectLinkInvocation: suspend (state: String) -> String,
+    evidenceRequest: AuthorizationChallenge.OAuth
 ) {
     // NB: these scopes will be cancelled when navigating outside of this screen.
     LaunchedEffect(evidenceRequest.url) {
-        val invokedUrl = provisioningSupport.waitForAppLinkInvocation(evidenceRequest.state)
+        val invokedUrl = waitForRedirectLinkInvocation(evidenceRequest.state)
         provisioningModel.provideAuthorizationResponse(
             AuthorizationResponse.OAuth(evidenceRequest.id, invokedUrl)
         )
@@ -147,7 +180,7 @@ fun EvidenceRequestWebView(
             horizontalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "Launching browser, continue there",
+                text = stringResource(Res.string.provisioning_browser),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(8.dp),
                 style = MaterialTheme.typography.bodyLarge
@@ -157,9 +190,9 @@ fun EvidenceRequestWebView(
 }
 
 @Composable
-fun EvidenceRequestSecretText(
-    challenge: AuthorizationChallenge.SecretText,
-    provisioningModel: ProvisioningModel
+private fun EvidenceRequestSecretText(
+    provisioningModel: ProvisioningModel,
+    challenge: AuthorizationChallenge.SecretText
 ) {
     val coroutineScope = rememberCoroutineScope()
     val passphraseRequest = challenge.request
@@ -182,7 +215,7 @@ fun EvidenceRequestSecretText(
                     .align(Alignment.CenterHorizontally)
                     .padding(8.dp),
                 style = MaterialTheme.typography.titleLarge,
-                text = "Please retry"
+                text = stringResource(Res.string.provisioning_retry)
             )
         }
         PassphraseEntryField(

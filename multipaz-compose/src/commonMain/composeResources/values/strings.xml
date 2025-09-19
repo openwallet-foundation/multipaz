@@ -78,6 +78,19 @@
     <string name="passphrase_pin_screen_done">Done</string>
     <string name="passphrase_prompt_bottom_sheet_cancel">Cancel</string>
 
+    <!-- Provisioning -->
+    <string name="provisioning_authorization_failed">Authorization failed</string>
+    <string name="provisioning_idle">Waiting</string>
+    <string name="provisioning_initial">Starting provisioning...</string>
+    <string name="provisioning_connected">Connected to the back-end</string>
+    <string name="provisioning_processing_authorization">Processing authorization...</string>
+    <string name="provisioning_authorized">Authorized</string>
+    <string name="provisioning_requestion_credentials">Requesting credentials...</string>
+    <string name="provisioning_credentials_issued">Credentials issued</string>
+    <string name="provisioning_browser">Launching browser, continue there</string>
+    <string name="provisioning_retry">Please retry</string>
+    <string name="provisioning_error">Error provisioning (error code: %1$s)</string>
+
     <!-- durationFromNowText -->
     <string name="duration_just_now">just now</string>
     <string name="duration_in_a_few_moments">in a few moments</string>

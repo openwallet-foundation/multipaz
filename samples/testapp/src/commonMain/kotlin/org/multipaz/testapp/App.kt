@@ -2,11 +2,13 @@ package org.multipaz.testapp
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -21,9 +23,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
@@ -80,7 +84,6 @@ import org.multipaz.testapp.ui.NfcScreen
 import org.multipaz.testapp.ui.NotificationsScreen
 import org.multipaz.testapp.ui.PassphraseEntryFieldScreen
 import org.multipaz.testapp.ui.PassphrasePromptScreen
-import org.multipaz.testapp.ui.ProvisioningTestScreen
 import org.multipaz.testapp.ui.QrCodesScreen
 import org.multipaz.testapp.ui.RichTextScreen
 import org.multipaz.testapp.ui.ScreenLockScreen
@@ -95,6 +98,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -114,6 +118,7 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.compose.prompt.PromptDialogs
+import org.multipaz.compose.provisioning.Provisioning
 import org.multipaz.document.AbstractDocumentMetadata
 import org.multipaz.document.DocumentMetadata
 import org.multipaz.document.buildDocumentStore
@@ -146,6 +151,7 @@ import org.multipaz.trustmanagement.VicalTrustManager
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.toHex
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Application singleton.
@@ -814,12 +820,16 @@ class App private constructor (val promptModel: PromptModel) {
         LaunchedEffect(true) {
             while (true) {
                 val credentialOffer = credentialOffers.receive()
-                provisioningModel.launchOpenID4VCIProvisioning(
-                    offerUri = credentialOffer,
-                    clientPreferences = ProvisioningSupport.OPENID4VCI_CLIENT_PREFERENCES,
-                    backend = provisioningSupport
-                )
-                navController.navigate(ProvisioningTestDestination.route)
+                if (provisioningModel.isActive) {
+                    Logger.e(TAG, "Provisioning is already in progress")
+                } else {
+                    provisioningModel.launchOpenID4VCIProvisioning(
+                        offerUri = credentialOffer,
+                        clientPreferences = ProvisioningSupport.OPENID4VCI_CLIENT_PREFERENCES,
+                        backend = provisioningSupport
+                    )
+                    navController.navigate(ProvisioningTestDestination.route)
+                }
             }
         }
 
@@ -1038,10 +1048,38 @@ class App private constructor (val promptModel: PromptModel) {
                         PassphrasePromptScreen(showToast = { message -> showToast(message) })
                     }
                     composable(route = ProvisioningTestDestination.route) {
-                        ProvisioningTestScreen(
-                            provisioningModel = provisioningModel,
-                            provisioningSupport = provisioningSupport
-                        )
+                        val coroutineScope = rememberCoroutineScope()
+                        val provisioningState = provisioningModel.state.collectAsState().value
+                        LaunchedEffect(provisioningState) {
+                            if (provisioningState == ProvisioningModel.CredentialsIssued) {
+                                delay(1.seconds)
+                                navController.navigate(DocumentStoreDestination.route)
+                            }
+                        }
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Spacer(modifier = Modifier.weight(1.0f))
+                            Provisioning(
+                                provisioningModel = provisioningModel,
+                                waitForRedirectLinkInvocation = { state ->
+                                    provisioningSupport.waitForAppLinkInvocation(state)
+                                }
+                            )
+                            Spacer(modifier = Modifier.weight(1.0f))
+                            Button(onClick = {
+                                provisioningModel.cancel()
+                                coroutineScope.launch {
+                                    delay(1.seconds)
+                                    navController.navigateUp()
+                                }
+                            }) {
+                                Text("Cancel Provisioning")
+                            }
+                            Spacer(modifier = Modifier.weight(1.0f))
+                        }
                     }
                     composable(route = ConsentPromptDestination.route) {
                         ConsentPromptScreen(
