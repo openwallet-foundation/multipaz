@@ -31,6 +31,7 @@ import org.multipaz.util.toJavaUuid
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -46,6 +47,9 @@ import kotlin.math.min
 internal class BlePeripheralManagerAndroid: BlePeripheralManager {
     companion object {
         private const val TAG = "BlePeripheralManagerAndroid"
+
+        private var deferredCloseJob: Job? = null
+        private var deferredCloseSocket: BluetoothSocket? = null
     }
 
     private lateinit var stateCharacteristicUuid: UUID
@@ -147,6 +151,21 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
     init {
         if (bluetoothManager.adapter == null) {
             throw IllegalStateException("Bluetooth is not available on this device")
+        }
+        if (deferredCloseJob != null) {
+            Logger.i(TAG, "Closing deferred L2CAP socket (via init)")
+            try {
+                deferredCloseSocket?.close()
+            } catch (e: Throwable) {
+                Logger.e(TAG, "Error closing L2CAP socket (via init)", e)
+            }
+            deferredCloseSocket = null
+            try {
+                deferredCloseJob?.cancel()
+            } catch (e: Throwable) {
+                Logger.e(TAG, "Error canceling deferred closing job (via init)", e)
+            }
+            deferredCloseJob = null
         }
     }
 
@@ -547,10 +566,19 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
         l2capServerSocket = null
         incomingMessages.close()
         l2capSocket?.let {
-            CoroutineScope(Dispatchers.IO).launch() {
+            deferredCloseSocket = it
+            deferredCloseJob = CoroutineScope(Dispatchers.IO).launch() {
                 // Need 25 seconds for ZKP since the proofs are large
                 delay(25_000)
                 it.close()
+                Logger.i(TAG, "Closing deferred L2CAP socket (via delay)")
+                try {
+                    deferredCloseSocket?.close()
+                } catch (e: Throwable) {
+                    Logger.e(TAG, "Error closing L2CAP socket (via delay)", e)
+                }
+                deferredCloseSocket = null
+                deferredCloseJob = null
             }
         }
         l2capSocket = null
