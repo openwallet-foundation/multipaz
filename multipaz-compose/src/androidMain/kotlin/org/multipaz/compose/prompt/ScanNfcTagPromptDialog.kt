@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.multipaz.compose.R
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resumeWithException
 import kotlin.time.Duration.Companion.seconds
 
@@ -102,7 +103,8 @@ private fun ScanNfcTagPromptDialogShown(
                     initialMessage = dialogStateValue.parameters.initialMessage,
                     tagInteractionFunc = dialogStateValue.parameters.interactionFunction,
                     dialogMessage = message,
-                    continuation = continuation
+                    continuation = continuation,
+                    context = dialogStateValue.parameters.context
                 )
                 adapter.enableReaderMode(
                     activity,
@@ -150,12 +152,10 @@ private fun vibrateSuccess(context: Context) {
 @OptIn(ExperimentalCoroutinesApi::class)
 class NfcReaderCallback<T>(
     val initialMessage: String?,
-    val tagInteractionFunc: suspend (
-        tag: NfcIsoTag,
-        updateMessage: (message: String) -> Unit
-    ) -> T?,
+    val tagInteractionFunc: suspend (tag: NfcIsoTag) -> T?,
     val dialogMessage: MutableStateFlow<String?>,
-    val continuation: CancellableContinuation<T>
+    val continuation: CancellableContinuation<T>,
+    val context: CoroutineContext
 ) : NfcAdapter.ReaderCallback {
     override fun onTagDiscovered(tag: Tag?) {
         if (tag == null) {
@@ -172,13 +172,17 @@ class NfcReaderCallback<T>(
                     // to return until we're done interrogating the tag.
                     val ret = runBlocking {
                         Logger.i(TAG, "maxTransceiveLength: ${isoDep.maxTransceiveLength}")
-                        val isoTag = NfcIsoTagAndroid(isoDep, coroutineContext)
-                        tagInteractionFunc(isoTag) { message ->
-                            Logger.i(TAG, "NFC dialog message: $message")
-                            if (initialMessage != null) {
-                                dialogMessage.value = message
+                        val isoTag = NfcIsoTagAndroid(
+                            tag = isoDep,
+                            context = context,
+                            updateMessage = { message ->
+                                Logger.i(TAG, "NFC dialog message: $message")
+                                if (initialMessage != null) {
+                                    dialogMessage.value = message
+                                }
                             }
-                        }
+                        )
+                        tagInteractionFunc(isoTag)
                     }
                     Logger.i(TAG, "Tag processed")
                     if (ret == null) {

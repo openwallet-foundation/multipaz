@@ -73,6 +73,15 @@ class NfcTransportMdocReader(
         )
     }
 
+    /**
+     * Updates the message on the NFC scanning dialog
+     *
+     * @param message the message to show.
+     */
+    suspend fun updateDialogMessage(message: String) {
+        tag.updateDialogMessage(message)
+    }
+
     private var ioJob: Job? = null
 
     override suspend fun open(eSenderKey: EcPublicKey) {
@@ -241,6 +250,9 @@ class NfcTransportMdocReader(
             ioJob?.cancel()
             ioJob = null
             incomingMessages.close()
+            if (::tag.isInitialized) {
+                tag.close()
+            }
             _state.value = State.CLOSED
         }
     }
@@ -254,6 +266,7 @@ class NfcTransportMdocReader(
             return
         }
         Logger.w(TAG, "Failing transport with error", error)
+        Error().printStackTrace()
         incomingMessages.close(error)
         ioJob?.cancel()
         ioJob = null

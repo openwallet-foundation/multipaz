@@ -139,6 +139,7 @@ import org.multipaz.testapp.provisioning.ProvisioningSupport
 import org.multipaz.testapp.ui.DcRequestScreen
 import org.multipaz.util.Platform
 import org.multipaz.testapp.ui.FaceMatchScreen
+import org.multipaz.testapp.ShowResponseMetadata
 import org.multipaz.testapp.ui.ShowResponseScreen
 import org.multipaz.testapp.ui.TrustManagerScreen
 import org.multipaz.testapp.ui.TrustPointViewerScreen
@@ -1114,19 +1115,43 @@ class App private constructor (val promptModel: PromptModel) {
                     composable(route = IsoMdocProximityReadingDestination.route) {
                         IsoMdocProximityReadingScreen(
                             app = this@App,
-                            showToast = { message -> showToast(message) }
+                            showToast = { message -> showToast(message) },
+                            showResponse = {
+                                    vpToken: JsonObject?,
+                                    deviceResponse: DataItem?,
+                                    sessionTranscript: DataItem,
+                                    nonce: ByteString?,
+                                    eReaderKey: EcPrivateKey?,
+                                    metadata: ShowResponseMetadata ->
+                                val route = ShowResponseDestination.route +
+                                        "/${vpToken?.let { Json.encodeToString(it) }?.encodeToByteArray()?.toBase64Url() ?: "_"}" +
+                                        "/${deviceResponse?.let { Cbor.encode(it).toBase64Url() } ?: "_"}" +
+                                        "/${Cbor.encode(sessionTranscript).toBase64Url()}" +
+                                        "/${nonce?.let { nonce.toByteArray().toBase64Url() } ?: "_"}" +
+                                        "/${eReaderKey?.let { Cbor.encode(eReaderKey.toCoseKey().toDataItem()).toBase64Url() } ?: "_"}" +
+                                        "/${Cbor.encode(metadata.toDataItem()).toBase64Url()}"
+                                navController.navigate(route)
+                            }
                         )
                     }
                     composable(route = DcRequestDestination.route) {
                         DcRequestScreen(
                             app = this@App,
                             showToast = { message -> showToast(message) },
-                            showResponse = { vpToken: JsonObject?, deviceResponse: DataItem?, sessionTranscript: DataItem, nonce: ByteString? ->
+                            showResponse = {
+                                    vpToken: JsonObject?,
+                                    deviceResponse: DataItem?,
+                                    sessionTranscript: DataItem,
+                                    nonce: ByteString?,
+                                    eReaderKey: EcPrivateKey?,
+                                    metadata: ShowResponseMetadata ->
                                 val route = ShowResponseDestination.route +
                                         "/${vpToken?.let { Json.encodeToString(it) }?.encodeToByteArray()?.toBase64Url() ?: "_"}" +
                                         "/${deviceResponse?.let { Cbor.encode(it).toBase64Url() } ?: "_"}" +
                                         "/${Cbor.encode(sessionTranscript).toBase64Url()}" +
-                                        "/${nonce?.let { nonce.toByteArray().toBase64Url() } ?: "_"}"
+                                        "/${nonce?.let { nonce.toByteArray().toBase64Url() } ?: "_"}" +
+                                        "/${eReaderKey?.let { Cbor.encode(eReaderKey.toCoseKey().toDataItem()).toBase64Url() } ?: "_"}" +
+                                        "/${Cbor.encode(metadata.toDataItem()).toBase64Url()}"
                                 navController.navigate(route)
                             }
                         )
@@ -1143,11 +1168,17 @@ class App private constructor (val promptModel: PromptModel) {
                             .fromBase64Url().let { Cbor.decode(it) }
                         val nonce = backStackEntry.arguments?.getString(ShowResponseDestination.NONCE)
                             ?.let { if (it != "_") ByteString(it.fromBase64Url()) else null }
+                        val eReaderKey = backStackEntry.arguments?.getString(ShowResponseDestination.EREADERKEY)
+                            ?.let { if (it != "_") Cbor.decode(it.fromBase64Url()).asCoseKey.ecPrivateKey else null }
+                        val metadata = backStackEntry.arguments!!.getString(ShowResponseDestination.METADATA)!!
+                            .fromBase64Url().let { ShowResponseMetadata.Companion.fromDataItem(Cbor.decode(it)) }
                         ShowResponseScreen(
                             vpToken = vpToken,
                             deviceResponse = deviceResponse,
                             sessionTranscript = sessionTranscript,
                             nonce = nonce,
+                            eReaderKey = eReaderKey,
+                            metadata = metadata,
                             issuerTrustManager = issuerTrustManager,
                             documentTypeRepository = documentTypeRepository,
                             zkSystemRepository = zkSystemRepository,

@@ -51,9 +51,12 @@ import org.multipaz.models.verification.JsonVerifiedPresentation
 import org.multipaz.models.verification.MdocVerifiedPresentation
 import org.multipaz.models.verification.VerificationUtil.verifyMdocDeviceResponse
 import org.multipaz.models.verification.VerificationUtil.verifyOpenID4VPResponse
+import org.multipaz.testapp.ShowResponseMetadata
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.DurationUnit
 import kotlin.time.Instant
+import kotlin.time.toDuration
 
 private const val TAG = "ShowResponse"
 
@@ -61,6 +64,10 @@ private sealed class Value
 
 private data class ValueText(
     val text: String
+): Value()
+
+private data class ValueSize(
+    val size: Long
 ): Value()
 
 private data class ValueImage(
@@ -73,7 +80,7 @@ private data class ValueDateTime(
 ): Value()
 
 private data class ValueDuration(
-    val duration: Duration
+    val duration: Duration?
 ): Value()
 
 private data class ValueCertChain(
@@ -102,6 +109,7 @@ fun ShowResponse(
     sessionTranscript: DataItem,
     nonce: ByteString?,
     eReaderKey: EcPrivateKey?,
+    metadata: ShowResponseMetadata?,
     issuerTrustManager: TrustManager,
     documentTypeRepository: DocumentTypeRepository?,
     zkSystemRepository: ZkSystemRepository?,
@@ -122,6 +130,7 @@ fun ShowResponse(
                     sessionTranscript = sessionTranscript,
                     nonce = nonce,
                     eReaderKey = eReaderKey,
+                    metadata = metadata,
                     documentTypeRepository = documentTypeRepository,
                     zkSystemRepository = zkSystemRepository,
                     issuerTrustManager = issuerTrustManager,
@@ -161,9 +170,11 @@ fun ShowResponse(
                                 } ?: Text(text = "-")
                             }
                             is ValueDuration -> {
-                                Text(
-                                    text = "${line.value.duration.inWholeMilliseconds} msec"
-                                )
+                                line.value.duration?.let {
+                                    Text(
+                                        text = "${it.inWholeMilliseconds} msec"
+                                    )
+                                } ?: Text(text = "-")
                             }
                             is ValueImage -> {
                                 line.value.text?.let {
@@ -182,6 +193,10 @@ fun ShowResponse(
 
                             is ValueText -> {
                                 Text(text = line.value.text)
+                            }
+
+                            is ValueSize -> {
+                                Text(text = "${line.value.size} bytes")
                             }
                         }
                     }
@@ -202,6 +217,7 @@ private suspend fun parseResponse(
     sessionTranscript: DataItem,
     nonce: ByteString?,
     eReaderKey: EcPrivateKey?,
+    metadata: ShowResponseMetadata?,
     documentTypeRepository: DocumentTypeRepository?,
     zkSystemRepository: ZkSystemRepository?,
     issuerTrustManager: TrustManager,
@@ -230,6 +246,34 @@ private suspend fun parseResponse(
         )
     } else {
         throw IllegalStateException("Either deviceResponse or vpToken must be non-null")
+    }
+
+    if (metadata != null) {
+        lines = mutableListOf()
+        lines.add(Line("Engagement Type", ValueText(metadata.engagementType)))
+        lines.add(Line("Transfer Protocol", ValueText(metadata.transferProtocol)))
+        lines.add(Line("Request size", ValueSize(metadata.requestSize)))
+        lines.add(Line("Response size", ValueSize(metadata.responseSize)))
+        lines.add(Line("Tap to engagement received", ValueDuration(
+            metadata.durationMsecNfcTapToEngagement?.toDuration(DurationUnit.MILLISECONDS)
+        )))
+        lines.add(Line("Engagement received to request sent", ValueDuration(
+            metadata.durationMsecEngagementReceivedToRequestSent?.toDuration(DurationUnit.MILLISECONDS)
+        )))
+        lines.add(Line("Request sent to response received", ValueDuration(
+            metadata.durationMsecRequestSentToResponseReceived.toDuration(DurationUnit.MILLISECONDS)
+        )))
+        var totalMsec = 0L
+        metadata.durationMsecNfcTapToEngagement?.let { totalMsec += it }
+        metadata.durationMsecEngagementReceivedToRequestSent?.let { totalMsec += it }
+        totalMsec += metadata.durationMsecRequestSentToResponseReceived
+        lines.add(Line("Total duration", ValueDuration(totalMsec.toDuration(DurationUnit.MILLISECONDS))))
+        sections.add(
+            Section(
+                header = "Transfer info",
+                lines = lines
+            )
+        )
     }
 
     verifiedPresentations.forEachIndexed { vpNum, vp ->

@@ -12,6 +12,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.DataItem
@@ -132,8 +133,6 @@ abstract class MdocNdefService: HostApduService() {
      */
     abstract suspend fun getSettings(): Settings
 
-    private lateinit var settings: Settings
-
     override fun onCreate() {
         Logger.i(TAG, "onCreate")
         super.onCreate()
@@ -142,15 +141,6 @@ abstract class MdocNdefService: HostApduService() {
 
         // Essentially, start a coroutine on an I/O thread for handling incoming APDUs
         commandApduListenJob = CoroutineScope(Dispatchers.IO).launch {
-            // Note: Every millisecond literally counts here because we're handling a
-            // NFC tap and users tend to remove their phone from the reader really fast. So
-            // log how much time the application takes to give us settings.
-            //
-            val t0 = Clock.System.now()
-            settings = getSettings()
-            val t1 = Clock.System.now()
-            Logger.i(TAG, "Settings provided by application in ${(t1 - t0).inWholeMilliseconds} ms")
-
             while (true) {
                 val commandApdu = commandApduChannel.receive()
                 val responseApdu = processCommandApdu(commandApdu)
@@ -165,6 +155,15 @@ abstract class MdocNdefService: HostApduService() {
 
     private fun startEngagement() {
         Logger.i(TAG, "startEngagement")
+
+        // Note: Every millisecond literally counts here because we're handling a
+        // NFC tap and users tend to remove their phone from the reader really fast. So
+        // log how much time the application takes to give us settings.
+        //
+        val t0 = Clock.System.now()
+        val settings = runBlocking { getSettings() }
+        val t1 = Clock.System.now()
+        Logger.i(TAG, "Settings provided by application in ${(t1 - t0).inWholeMilliseconds} ms")
 
         disableEngagementJob?.cancel()
         disableEngagementJob = null
@@ -265,6 +264,7 @@ abstract class MdocNdefService: HostApduService() {
                 vibrateSuccess()
                 val duration = Clock.System.now() - timeStarted
                 listenOnMethods(
+                    settings = settings,
                     connectionMethods = connectionMethods,
                     encodedDeviceEngagement = encodedDeviceEngagement,
                     handover = handover,
@@ -284,6 +284,7 @@ abstract class MdocNdefService: HostApduService() {
     }
 
     private fun listenOnMethods(
+        settings: Settings,
         connectionMethods: List<MdocConnectionMethod>,
         encodedDeviceEngagement: ByteString,
         handover: DataItem,

@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.ByteString
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -38,7 +39,9 @@ import org.multipaz.testapp.getAppToAppOrigin
 import org.multipaz.trustmanagement.TrustManager
 import org.multipaz.util.Logger
 import org.multipaz.models.verification.VerificationUtil
+import org.multipaz.testapp.ShowResponseMetadata
 import kotlin.random.Random
+import kotlin.time.Clock
 
 private const val TAG = "AppToAppReadingScreen"
 
@@ -143,7 +146,14 @@ private var lastFormat: Int = 0
 fun DcRequestScreen(
     app: App,
     showToast: (message: String) -> Unit,
-    showResponse: (vpToken: JsonObject?, deviceResponse: DataItem?, sessionTranscript: DataItem, nonce: ByteString?) -> Unit
+    showResponse: (
+        vpToken: JsonObject?,
+        deviceResponse: DataItem?,
+        sessionTranscript: DataItem,
+        nonce: ByteString?,
+        eReaderKey: EcPrivateKey?,
+        metadata: ShowResponseMetadata
+    ) -> Unit
 ) {
     val requestOptions = mutableListOf<RequestEntry>()
     for (documentType in TestAppUtils.provisionedDocumentTypes) {
@@ -206,12 +216,9 @@ fun DcRequestScreen(
                             doDcRequestFlow(
                                 appReaderKey = app.readerKey,
                                 appReaderCertChain = X509CertChain(certificates = listOf(app.readerCert, app.readerRootCert)),
-                                documentType = requestSelected.value.documentType,
                                 request = requestSelected.value.sampleRequest,
                                 protocol = protocolSelected.value,
                                 format = formatSelected.value,
-                                issuerTrustManager = app.issuerTrustManager,
-                                documentTypeRepository = app.documentTypeRepository,
                                 zkSystemRepository = app.zkSystemRepository,
                                 showResponse = showResponse
                             )
@@ -221,7 +228,7 @@ fun DcRequestScreen(
                         }
                     }
                 },
-                content = { Text("Request Digital Credential via AppToApp API") }
+                content = { Text("Request via OS CredentialManager API") }
             )
         }
     }
@@ -230,14 +237,18 @@ fun DcRequestScreen(
 private suspend fun doDcRequestFlow(
     appReaderKey: EcPrivateKey,
     appReaderCertChain: X509CertChain,
-    documentType: DocumentType,
     request: DocumentCannedRequest,
     protocol: RequestProtocol,
     format: CredentialFormat,
-    issuerTrustManager: TrustManager,
-    documentTypeRepository: DocumentTypeRepository,
     zkSystemRepository: ZkSystemRepository,
-    showResponse: (vpToken: JsonObject?, deviceResponse: DataItem?, sessionTranscript: DataItem, nonce: ByteString?) -> Unit
+    showResponse: (
+        vpToken: JsonObject?,
+        deviceResponse: DataItem?,
+        sessionTranscript: DataItem,
+        nonce: ByteString?,
+        eReaderKey: EcPrivateKey?,
+        metadata: ShowResponseMetadata
+    ) -> Unit
 ) {
     when (format) {
         CredentialFormat.ISO_MDOC -> {
@@ -319,6 +330,7 @@ private suspend fun doDcRequestFlow(
 
     Logger.i(TAG, "clientId: $clientId")
     Logger.iJson(TAG, "Request", dcRequestObject)
+    val t0 = Clock.System.now()
     val dcResponseObject = DigitalCredentials.Default.request(dcRequestObject)
     Logger.iJson(TAG, "Response", dcResponseObject)
 
@@ -328,12 +340,35 @@ private suspend fun doDcRequestFlow(
         origin = origin,
         responseEncryptionKey = responseEncryptionKey,
     )
+    val metadata = ShowResponseMetadata(
+        engagementType = "OS-provided CredentialManager API",
+        transferProtocol = "W3C Digital Credentials (${protocol.displayName})",
+        requestSize = Json.encodeToString(dcRequestObject).length.toLong(),
+        responseSize = Json.encodeToString(dcResponseObject).length.toLong(),
+        durationMsecNfcTapToEngagement = null,
+        durationMsecEngagementReceivedToRequestSent = null,
+        durationMsecRequestSentToResponseReceived = (Clock.System.now() - t0).inWholeMilliseconds
+    )
     when (dcResponse) {
         is MdocApiDcResponse -> {
-            showResponse(null, dcResponse.deviceResponse, dcResponse.sessionTranscript, nonce)
+            showResponse(
+                /* vpToken = */ null,
+                /* deviceResponse = */ dcResponse.deviceResponse,
+                /* sessionTranscript = */ dcResponse.sessionTranscript,
+                /* nonce = */ nonce,
+                /* eReaderKey = */ null,
+                /* metadata = */ metadata
+            )
         }
         is OpenID4VPDcResponse -> {
-            showResponse(dcResponse.vpToken, null, dcResponse.sessionTranscript, nonce)
+            showResponse(
+                /* vpToken = */ dcResponse.vpToken,
+                /* deviceResponse = */ null,
+                /* sessionTranscript = */ dcResponse.sessionTranscript,
+                /* nonce = */ nonce,
+                /* eReaderKey = */ null,
+                /* metadata = */ metadata
+            )
         }
     }
 }

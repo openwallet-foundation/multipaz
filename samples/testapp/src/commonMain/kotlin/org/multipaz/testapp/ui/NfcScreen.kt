@@ -76,12 +76,13 @@ fun NfcScreen(
                         try {
                             val ccFile = scanNfcTag(
                                 message = "Hold your phone near a NDEF tag.",
-                                tagInteractionFunc = { tag, updateMessage ->
+                                tagInteractionFunc = { tag ->
                                     tag.selectApplication(Nfc.NDEF_APPLICATION_ID)
                                     tag.selectFile(Nfc.NDEF_CAPABILITY_CONTAINER_FILE_ID)
                                     val ccFile = tag.readBinary(0, 15)
                                     check(ccFile.size == 15) { "CC file is ${ccFile.size} bytes, expected 15" }
-                                    updateMessage("CC file: ${ccFile.toHex()}")
+                                    tag.updateDialogMessage("CC file: ${ccFile.toHex()}")
+                                    tag.close()
                                     ccFile
                                 }
                             )
@@ -106,12 +107,13 @@ fun NfcScreen(
                         try {
                             val ccFile = scanNfcTag(
                                 message = "Hold your phone near a NDEF tag.",
-                                tagInteractionFunc = { tag, updateMessage ->
+                                tagInteractionFunc = { tag ->
                                     tag.selectApplication(Nfc.NDEF_APPLICATION_ID)
                                     tag.selectFile(Nfc.NDEF_CAPABILITY_CONTAINER_FILE_ID)
                                     val ccFile = tag.readBinary(0, 15)
                                     check(ccFile.size == 15) { "CC file is ${ccFile.size} bytes, expected 15" }
-                                    updateMessage("CC file: ${ccFile.toHex()}")
+                                    tag.updateDialogMessage("CC file: ${ccFile.toHex()}")
+                                    tag.close()
                                     ccFile
                                 },
                             )
@@ -141,12 +143,13 @@ fun NfcScreen(
                         try {
                             val ccFile = scanNfcTag(
                                 message = null,
-                                tagInteractionFunc = { tag, updateMessage ->
+                                tagInteractionFunc = { tag ->
                                     tag.selectApplication(Nfc.NDEF_APPLICATION_ID)
                                     tag.selectFile(Nfc.NDEF_CAPABILITY_CONTAINER_FILE_ID)
                                     val ccFile = tag.readBinary(0, 15)
                                     check(ccFile.size == 15) { "CC file is ${ccFile.size} bytes, expected 15" }
-                                    updateMessage("CC file: ${ccFile.toHex()}")
+                                    tag.updateDialogMessage("CC file: ${ccFile.toHex()}")
+                                    tag.close()
                                     ccFile
                                 },
                             )

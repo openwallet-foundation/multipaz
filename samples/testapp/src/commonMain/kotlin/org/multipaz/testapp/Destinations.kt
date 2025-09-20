@@ -192,12 +192,16 @@ data object ShowResponseDestination : Destination {
     const val DEVICE_RESPONSE = "device_response_arg"
     const val SESSION_TRANSCRIPT = "session_transcript_arg"
     const val NONCE = "nonce_arg"
-    val routeWithArgs = "$route/{$VP_TOKEN}/{$DEVICE_RESPONSE}/{$SESSION_TRANSCRIPT}/{$NONCE}"
+    const val EREADERKEY = "ereaderkey_arg"
+    const val METADATA = "metadata_arg"
+    val routeWithArgs = "$route/{$VP_TOKEN}/{$DEVICE_RESPONSE}/{$SESSION_TRANSCRIPT}/{$NONCE}/{$EREADERKEY}/{$METADATA}"
     val arguments = listOf(
         navArgument(VP_TOKEN) { type = NavType.StringType },
         navArgument(DEVICE_RESPONSE) { type = NavType.StringType },
         navArgument(SESSION_TRANSCRIPT) { type = NavType.StringType },
         navArgument(NONCE) { type = NavType.StringType },
+        navArgument(EREADERKEY) { type = NavType.StringType },
+        navArgument(METADATA) { type = NavType.StringType },
     )
 }
 

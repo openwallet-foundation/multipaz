@@ -20,13 +20,16 @@ import platform.Foundation.NSError
 import platform.CoreNFC.NFCErrorDomain
 import platform.CoreNFC.NFCReaderSessionInvalidationErrorUserCanceled
 import platform.darwin.NSObject
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resumeWithException
 
 actual val nfcTagScanningSupported = true
 
 actual val nfcTagScanningSupportedWithoutDialog: Boolean = false
 
-private class NfcTagReader<T> {
+private class NfcTagReader<T>(
+    context: CoroutineContext
+) {
 
     companion object {
         private const val TAG = "NfcTagReader"
@@ -65,12 +68,15 @@ private class NfcTagReader<T> {
                 if (error != null) {
                     Logger.e(TAG, "Connection failed", error.toKotlinError())
                 } else {
-                    val isoTag = NfcIsoTagIos(tag as NFCISO7816TagProtocol)
-                    CoroutineScope(Dispatchers.IO).launch {
+                    val isoTag = NfcIsoTagIos(
+                        tag = tag as NFCISO7816TagProtocol,
+                        session = session
+                    )
+                    CoroutineScope(context).launch {
                         try {
-                            val ret = tagInteractionFunc(isoTag) { message -> session.alertMessage = message }
+                            val ret = tagInteractionFunc(isoTag)
                             if (ret != null) {
-                                continuation?.resume(ret, null)
+                                continuation?.resume(Pair(ret, isoTag), null)
                                 continuation = null
                             } else {
                                 session.restartPolling()
@@ -93,29 +99,28 @@ private class NfcTagReader<T> {
         )
     }
 
-    private var continuation: CancellableContinuation<T>? = null
+    private var continuation: CancellableContinuation<Pair<T, NfcIsoTagIos>>? = null
 
-    private lateinit var tagInteractionFunc: suspend (
-        tag: NfcIsoTag,
-        updateMessage: (message: String) -> Unit
-    ) -> T?
+    private lateinit var tagInteractionFunc: suspend (tag: NfcIsoTag) -> T?
 
     suspend fun beginSession(
         alertMessage: String,
-        tagInteractionFunc: suspend (
-            tag: NfcIsoTag,
-            updateMessage: (message: String) -> Unit
-        ) -> T?
+        tagInteractionFunc: suspend (tag: NfcIsoTag) -> T?
     ): T {
         check(NFCTagReaderSession.readingAvailable) { "The device doesn't support NFC tag reading" }
         try {
-            val ret = suspendCancellableCoroutine { continuation ->
+            val (ret, tag) = suspendCancellableCoroutine { continuation ->
                 this.continuation = continuation
                 this.tagInteractionFunc = tagInteractionFunc
                 session.setAlertMessage(alertMessage)
                 session.beginSession()
             }
-            session.invalidateSession()
+            if (tag.closeCalled) {
+                session.invalidateSession()
+            } else {
+                Logger.i(TAG, "NfcIsoTag.close() not yet called, keeping session alive until then")
+                tag.invalidateSessionOnClose = true
+            }
             return ret
         } catch (e: CancellationException) {
             session.invalidateSessionWithErrorMessage("Dialog was canceled")
@@ -129,12 +134,10 @@ private class NfcTagReader<T> {
 
 actual suspend fun<T: Any> scanNfcTag(
     message: String?,
-    tagInteractionFunc: suspend (
-        tag: NfcIsoTag,
-        updateMessage: (message: String) -> Unit
-    ) -> T?
+    tagInteractionFunc: suspend (tag: NfcIsoTag) -> T?,
+    context: CoroutineContext
 ): T {
     require(message != null) { "Cannot not show the NFC tag scanning dialog on iOS" }
-    val reader = NfcTagReader<T>()
+    val reader = NfcTagReader<T>(context)
     return reader.beginSession(message, tagInteractionFunc)
 }

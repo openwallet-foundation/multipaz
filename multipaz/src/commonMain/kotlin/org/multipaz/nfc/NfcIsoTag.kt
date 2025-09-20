@@ -12,6 +12,8 @@ import kotlin.time.Duration
  * Class representing a ISO/IEC 14443-4 tag.
  *
  * This is an abstract super class intended for OS-specific code to implement the [transceive] method.
+ *
+ * Once you're done with the tag, [close] must be called to release all resources.
  */
 abstract class NfcIsoTag {
 
@@ -30,6 +32,18 @@ abstract class NfcIsoTag {
      * @throws NfcTagLostException if the tag was lost.
      */
     abstract suspend fun transceive(command: CommandApdu): ResponseApdu
+
+    /**
+     * Closes the tag and releases all resources.
+     */
+    abstract suspend fun close()
+
+    /**
+     * Updates the message in the Scan NFC dialog
+     *
+     * @param message the new message to show.
+     */
+    abstract suspend fun updateDialogMessage(message: String)
 
     /**
      * Selects an application according to ISO 7816-4 clause 11.2.2.

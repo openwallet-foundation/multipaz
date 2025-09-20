@@ -37,6 +37,12 @@ class MdocNfcEngagementHelperTest {
         override val maxTransceiveLength: Int
             get() = 65536
 
+        override suspend fun close() {
+            transcript.appendLine("close")
+        }
+
+        override suspend fun updateDialogMessage(message: String) {}
+
         override suspend fun transceive(command: CommandApdu): ResponseApdu {
             transcript.appendLine("${command}")
             val response = engagementHelper.processApdu(command)

@@ -123,7 +123,9 @@ fun MdocProximityQrPresentment(
             }
 
             PresentmentModel.State.CONNECTING -> {
-                showQrCode(qrCodeToShow.value!!)
+                qrCodeToShow.value?.let {
+                    showQrCode(it)
+                }
             }
 
             PresentmentModel.State.WAITING_FOR_SOURCE,

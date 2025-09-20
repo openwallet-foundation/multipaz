@@ -11,9 +11,11 @@ import androidx.compose.ui.unit.dp
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonObject
 import org.multipaz.cbor.DataItem
+import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.testapp.ShowResponseMetadata
 import org.multipaz.trustmanagement.TrustManager
 
 private const val TAG = "ShowResponseScreen"
@@ -24,6 +26,8 @@ fun ShowResponseScreen(
     deviceResponse: DataItem?,
     sessionTranscript: DataItem,
     nonce: ByteString?,
+    eReaderKey: EcPrivateKey?,
+    metadata: ShowResponseMetadata,
     issuerTrustManager: TrustManager,
     documentTypeRepository: DocumentTypeRepository?,
     zkSystemRepository: ZkSystemRepository?,
@@ -40,7 +44,8 @@ fun ShowResponseScreen(
             deviceResponse = deviceResponse,
             sessionTranscript = sessionTranscript,
             nonce = nonce,
-            eReaderKey = null,
+            eReaderKey = eReaderKey,
+            metadata = metadata,
             issuerTrustManager = issuerTrustManager,
             documentTypeRepository = documentTypeRepository,
             zkSystemRepository = zkSystemRepository,

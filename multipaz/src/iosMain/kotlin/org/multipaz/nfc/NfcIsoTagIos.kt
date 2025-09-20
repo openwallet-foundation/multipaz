@@ -5,13 +5,18 @@ import org.multipaz.util.toKotlinError
 import org.multipaz.util.toNSData
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.multipaz.util.Logger
 import platform.CoreNFC.NFCISO7816APDU
 import platform.CoreNFC.NFCISO7816TagProtocol
 import platform.CoreNFC.NFCErrorDomain
 import platform.CoreNFC.NFCReaderTransceiveErrorTagResponseError
+import platform.CoreNFC.NFCTagReaderSession
 import kotlin.coroutines.resumeWithException
 
-internal class NfcIsoTagIos(val tag: NFCISO7816TagProtocol): NfcIsoTag() {
+internal class NfcIsoTagIos(
+    val tag: NFCISO7816TagProtocol,
+    private val session: NFCTagReaderSession
+): NfcIsoTag() {
     companion object {
         private const val TAG = "NfcIsoTagIos"
     }
@@ -20,6 +25,21 @@ internal class NfcIsoTagIos(val tag: NFCISO7816TagProtocol): NfcIsoTag() {
     //
     override val maxTransceiveLength: Int
         get() = 0xfeff
+
+    internal var closeCalled = false
+    internal var invalidateSessionOnClose = false
+
+    override suspend fun close() {
+        if (invalidateSessionOnClose) {
+            Logger.i(TAG, "close: Invalidating session")
+            session.invalidateSession()
+        }
+        closeCalled = true
+    }
+
+    override suspend fun updateDialogMessage(message: String) {
+        session.alertMessage = message
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override suspend fun transceive(command: CommandApdu): ResponseApdu {
