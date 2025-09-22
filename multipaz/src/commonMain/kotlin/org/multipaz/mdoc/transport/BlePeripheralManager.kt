@@ -12,7 +12,8 @@ internal interface BlePeripheralManager {
         client2ServerCharacteristicUuid: UUID,
         server2ClientCharacteristicUuid: UUID,
         identCharacteristicUuid: UUID?,
-        l2capCharacteristicUuid: UUID?
+        l2capCharacteristicUuid: UUID?,
+        startL2capServer: Boolean
     )
 
     fun setCallbacks(

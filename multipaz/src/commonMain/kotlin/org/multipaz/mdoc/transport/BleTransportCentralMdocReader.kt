@@ -43,7 +43,7 @@ internal class BleTransportCentralMdocReader(
                 supportsCentralClientMode = true,
                 peripheralServerModeUuid = null,
                 centralClientModeUuid = uuid,
-                peripheralServerModePsm = peripheralManager.l2capPsm,
+                peripheralServerModePsm = if (options.bleUseL2CAPInEngagement) peripheralManager.l2capPsm else null,
                 peripheralServerModeMacAddress = null
             )
         }
@@ -58,7 +58,8 @@ internal class BleTransportCentralMdocReader(
                 UUID.fromString("0000000b-a123-48ce-896b-4c76973373e6")
             } else {
                 null
-            }
+            },
+            startL2capServer = options.bleUseL2CAPInEngagement
         )
         peripheralManager.setCallbacks(
             onError = { error ->

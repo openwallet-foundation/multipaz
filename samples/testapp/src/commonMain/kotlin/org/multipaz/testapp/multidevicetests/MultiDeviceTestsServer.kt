@@ -129,7 +129,10 @@ class MultiDeviceTestsServer(
                 true
             }
         }
-        val options = MdocTransportOptions(bleUseL2CAP = bleUseL2CAP)
+        val options = MdocTransportOptions(
+            bleUseL2CAP = bleUseL2CAP,
+            bleUseL2CAPInEngagement = bleUseL2CAP
+        )
 
         var holderSuccess = false
         var readerSuccess = false

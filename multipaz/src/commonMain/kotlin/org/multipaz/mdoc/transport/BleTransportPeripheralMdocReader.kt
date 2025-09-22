@@ -39,7 +39,12 @@ internal class BleTransportPeripheralMdocReader(
     override val state: StateFlow<State> = _state.asStateFlow()
 
     override val connectionMethod: MdocConnectionMethod
-        get() = MdocConnectionMethodBle(true, false, uuid, null)
+        get() = MdocConnectionMethodBle(
+            supportsPeripheralServerMode = true,
+            supportsCentralClientMode = false,
+            peripheralServerModeUuid = uuid,
+            centralClientModeUuid = null
+        )
 
     init {
         centralManager.setUuids(

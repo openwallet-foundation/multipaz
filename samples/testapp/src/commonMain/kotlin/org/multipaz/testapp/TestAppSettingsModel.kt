@@ -132,11 +132,12 @@ class TestAppSettingsModel private constructor(
     //
 
     private suspend fun init() {
-        bind(presentmentBleCentralClientModeEnabled, "presentmentBleCentralClientModeEnabled", true)
-        bind(presentmentBlePeripheralServerModeEnabled, "presentmentBlePeripheralServerModeEnabled", false)
+        bind(presentmentBleCentralClientModeEnabled, "presentmentBleCentralClientModeEnabled", false)
+        bind(presentmentBlePeripheralServerModeEnabled, "presentmentBlePeripheralServerModeEnabled", true)
         bind(presentmentNfcDataTransferEnabled, "presentmentNfcDataTransferEnabled", false)
         bind(presentmentSessionEncryptionCurve, "presentmentSessionEncryptionCurve", EcCurve.P256)
-        bind(presentmentBleL2CapEnabled, "presentmentBleL2CapEnabled", true)
+        bind(presentmentBleL2CapEnabled, "presentmentBleL2CapEnabled", false)
+        bind(presentmentBleL2CapInEngagementEnabled, "presentmentBleL2CapInEngagementEnabled", true)
         bind(presentmentUseNegotiatedHandover, "presentmentUseNegotiatedHandover", true)
         bind(presentmentAllowMultipleRequests, "presentmentAllowMultipleRequests", false)
         bind(presentmentNegotiatedHandoverPreferredOrder, "presentmentNegotiatedHandoverPreferredOrder",
@@ -153,7 +154,8 @@ class TestAppSettingsModel private constructor(
         bind(readerBleCentralClientModeEnabled, "readerBleCentralClientModeEnabled", true)
         bind(readerBlePeripheralServerModeEnabled, "readerBlePeripheralServerModeEnabled", true)
         bind(readerNfcDataTransferEnabled, "readerNfcDataTransferEnabled", true)
-        bind(readerBleL2CapEnabled, "readerBleL2CapEnabled", true)
+        bind(readerBleL2CapEnabled, "readerBleL2CapEnabled", false)
+        bind(readerBleL2CapInEngagementEnabled, "readerBleL2CapInEngagementEnabled", true)
         bind(readerAutomaticallySelectTransport, "readerAutomaticallySelectTransport", false)
         bind(readerAllowMultipleRequests, "readerAllowMultipleRequests", false)
 
@@ -168,6 +170,7 @@ class TestAppSettingsModel private constructor(
     val presentmentNfcDataTransferEnabled = MutableStateFlow<Boolean>(false)
     val presentmentSessionEncryptionCurve = MutableStateFlow<EcCurve>(EcCurve.P256)
     val presentmentBleL2CapEnabled = MutableStateFlow<Boolean>(false)
+    val presentmentBleL2CapInEngagementEnabled = MutableStateFlow<Boolean>(false)
     val presentmentUseNegotiatedHandover = MutableStateFlow<Boolean>(false)
     val presentmentAllowMultipleRequests = MutableStateFlow<Boolean>(false)
     val presentmentNegotiatedHandoverPreferredOrder = MutableStateFlow<List<String>>(listOf())
@@ -179,6 +182,7 @@ class TestAppSettingsModel private constructor(
     val readerBlePeripheralServerModeEnabled = MutableStateFlow<Boolean>(false)
     val readerNfcDataTransferEnabled = MutableStateFlow<Boolean>(false)
     val readerBleL2CapEnabled = MutableStateFlow<Boolean>(false)
+    val readerBleL2CapInEngagementEnabled = MutableStateFlow<Boolean>(false)
     val readerAutomaticallySelectTransport = MutableStateFlow<Boolean>(false)
     val readerAllowMultipleRequests = MutableStateFlow<Boolean>(false)
 

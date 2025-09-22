@@ -63,19 +63,22 @@ internal class BlePeripheralManagerIos: BlePeripheralManager {
     private lateinit var server2ClientCharacteristicUuid: UUID
     private var identCharacteristicUuid: UUID? = null
     private var l2capCharacteristicUuid: UUID? = null
+    private var startL2capServer = false
 
     override fun setUuids(
         stateCharacteristicUuid: UUID,
         client2ServerCharacteristicUuid: UUID,
         server2ClientCharacteristicUuid: UUID,
         identCharacteristicUuid: UUID?,
-        l2capCharacteristicUuid: UUID?
+        l2capCharacteristicUuid: UUID?,
+        startL2capServer: Boolean
     ) {
         this.stateCharacteristicUuid = stateCharacteristicUuid
         this.client2ServerCharacteristicUuid = client2ServerCharacteristicUuid
         this.server2ClientCharacteristicUuid = server2ClientCharacteristicUuid
         this.identCharacteristicUuid = identCharacteristicUuid
         this.l2capCharacteristicUuid = l2capCharacteristicUuid
+        this.startL2capServer = startL2capServer
     }
 
     private lateinit var onError: (error: Throwable) -> Unit
@@ -353,26 +356,28 @@ internal class BlePeripheralManagerIos: BlePeripheralManager {
                 permissions = CBAttributePermissionsReadable,
             )
         }
-        if (l2capCharacteristicUuid != null) {
+        if (l2capCharacteristicUuid != null || startL2capServer) {
             suspendCancellableCoroutine<Boolean> { continuation ->
                 setWaitCondition(WaitState.PUBLISH_L2CAP_CHANNEL, continuation)
                 peripheralManager.publishL2CAPChannelWithEncryption(false)
             }
             Logger.i(TAG, "Listening on PSM $_l2capPsm")
-            val bsb = ByteStringBuilder()
-            bsb.apply {
-                append((_l2capPsm!! shr 24).and(0xff).toByte())
-                append((_l2capPsm!! shr 16).and(0xff).toByte())
-                append((_l2capPsm!! shr 8).and(0xff).toByte())
-                append((_l2capPsm!! shr 0).and(0xff).toByte())
+            if (l2capCharacteristicUuid != null) {
+                val bsb = ByteStringBuilder()
+                bsb.apply {
+                    append((_l2capPsm!! shr 24).and(0xff).toByte())
+                    append((_l2capPsm!! shr 16).and(0xff).toByte())
+                    append((_l2capPsm!! shr 8).and(0xff).toByte())
+                    append((_l2capPsm!! shr 0).and(0xff).toByte())
+                }
+                val encodedPsm = bsb.toByteString().toByteArray()
+                l2capCharacteristic = CBMutableCharacteristic(
+                    type = CBUUID.UUIDWithString(l2capCharacteristicUuid.toString()),
+                    properties = CBCharacteristicPropertyRead,
+                    value = encodedPsm.toNSData(),
+                    permissions = CBAttributePermissionsReadable,
+                )
             }
-            val encodedPsm = bsb.toByteString().toByteArray()
-            l2capCharacteristic = CBMutableCharacteristic(
-                type = CBUUID.UUIDWithString(l2capCharacteristicUuid.toString()),
-                properties = CBCharacteristicPropertyRead,
-                value = encodedPsm.toNSData(),
-                permissions = CBAttributePermissionsReadable,
-            )
         }
 
         service!!.setCharacteristics((

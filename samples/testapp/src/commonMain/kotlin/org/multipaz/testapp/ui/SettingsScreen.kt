@@ -171,6 +171,13 @@ fun SettingsScreen(
         }
         item {
             SettingToggle(
+                title = "Use L2CAP in engagement if available",
+                isChecked = app.settingsModel.presentmentBleL2CapInEngagementEnabled.collectAsState().value,
+                onCheckedChange = { app.settingsModel.presentmentBleL2CapInEngagementEnabled.value = it },
+            )
+        }
+        item {
+            SettingToggle(
                 title = "Keep connection open after first request",
                 isChecked = app.settingsModel.presentmentAllowMultipleRequests.collectAsState().value,
                 onCheckedChange = { app.settingsModel.presentmentAllowMultipleRequests.value = it },
@@ -222,6 +229,13 @@ fun SettingsScreen(
                 title = "Use L2CAP if available",
                 isChecked = app.settingsModel.readerBleL2CapEnabled.collectAsState().value,
                 onCheckedChange = { app.settingsModel.readerBleL2CapEnabled.value = it },
+            )
+        }
+        item {
+            SettingToggle(
+                title = "Use L2CAP in engagement if available",
+                isChecked = app.settingsModel.readerBleL2CapInEngagementEnabled.collectAsState().value,
+                onCheckedChange = { app.settingsModel.readerBleL2CapInEngagementEnabled.value = it },
             )
         }
         item {

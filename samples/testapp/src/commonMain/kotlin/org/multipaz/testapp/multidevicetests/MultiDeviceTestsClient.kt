@@ -54,7 +54,10 @@ class MultiDeviceTestsClient(
                 val getPsmFromReader = if (parts[6] == "true") true else false
                 val encodedDeviceEngagement = parts[7].fromBase64Url()
                 val test = Test.valueOf(testName)
-                val options = MdocTransportOptions(bleUseL2CAP = bleUseL2CAP)
+                val options = MdocTransportOptions(
+                    bleUseL2CAP = bleUseL2CAP,
+                    bleUseL2CAPInEngagement = bleUseL2CAP,
+                )
 
                 Logger.i(TAG, "====== STARTING ITERATION ${iterationNumber} OF ${numIterationsTotal} ======")
                 Logger.i(TAG, "Test: $test")

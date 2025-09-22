@@ -228,6 +228,7 @@ fun IsoMdocProximityReadingScreen(
                                 handover = Simple.NULL,
                                 allowMultipleRequests = app.settingsModel.readerAllowMultipleRequests.value,
                                 bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
+                                bleUseL2CAPInEngagement = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
                                 showToast = showToast,
                                 readerTransport = readerTransport,
                                 readerSessionEncryption = readerSessionEncryption,
@@ -515,7 +516,8 @@ fun IsoMdocProximityReadingScreen(
                                     val scanResult = scanNfcMdocReader(
                                         message = "Hold near credential holder's phone.",
                                         options = MdocTransportOptions(
-                                            bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value
+                                            bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
+                                            bleUseL2CAPInEngagement = app.settingsModel.readerBleL2CapInEngagementEnabled.value
                                         ),
                                         selectConnectionMethod = { connectionMethods ->
                                             if (connectionMethods.size == 1) {
@@ -541,6 +543,7 @@ fun IsoMdocProximityReadingScreen(
                                             handover = scanResult.handover,
                                             allowMultipleRequests = app.settingsModel.readerAllowMultipleRequests.value,
                                             bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
+                                            bleUseL2CAPInEngagement = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
                                             showToast = showToast,
                                             readerTransport = readerTransport,
                                             readerSessionEncryption = readerSessionEncryption,
@@ -561,7 +564,7 @@ fun IsoMdocProximityReadingScreen(
                                                         connectionMethodPickerData
                                                     )
                                                 }
-                                            }
+                                            },
                                         )
                                         readerJob = null
                                         if (readerMostRecentDeviceResponse.value != null) {
@@ -615,6 +618,7 @@ private suspend fun doReaderFlow(
     handover: DataItem,
     allowMultipleRequests: Boolean,
     bleUseL2CAP: Boolean,
+    bleUseL2CAPInEngagement: Boolean,
     showToast: (message: String) -> Unit,
     readerTransport: MutableState<MdocTransport?>,
     readerSessionEncryption: MutableState<SessionEncryption?>,
@@ -627,6 +631,7 @@ private suspend fun doReaderFlow(
     requestSelected: MutableState<RequestPickerEntry>,
     selectConnectionMethod: suspend (connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod?
 ) {
+    Logger.iCbor(TAG, "DeviceEngagement", encodedDeviceEngagement.toByteArray())
     val deviceEngagement = DeviceEngagement.fromDataItem(Cbor.decode(encodedDeviceEngagement.toByteArray()))
     val eDeviceKey = deviceEngagement.eDeviceKey
     Logger.i(TAG, "Using curve ${eDeviceKey.curve.name} for session encryption")
@@ -650,7 +655,10 @@ private suspend fun doReaderFlow(
         val transport = MdocTransportFactory.Default.createTransport(
             connectionMethod,
             MdocRole.MDOC_READER,
-            MdocTransportOptions(bleUseL2CAP = bleUseL2CAP)
+            MdocTransportOptions(
+                bleUseL2CAP = bleUseL2CAP,
+                bleUseL2CAPInEngagement = bleUseL2CAPInEngagement
+            )
         )
         if (transport is NfcTransportMdocReader) {
             scanNfcTag(

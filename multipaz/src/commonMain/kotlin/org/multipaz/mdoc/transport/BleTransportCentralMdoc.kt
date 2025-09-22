@@ -40,7 +40,12 @@ internal class BleTransportCentralMdoc(
     override val state: StateFlow<State> = _state.asStateFlow()
 
     override val connectionMethod: MdocConnectionMethod
-        get() = MdocConnectionMethodBle(false, true, null, uuid)
+        get() = MdocConnectionMethodBle(
+            supportsPeripheralServerMode = false,
+            supportsCentralClientMode = true,
+            peripheralServerModeUuid = null,
+            centralClientModeUuid = uuid
+        )
 
     init {
         centralManager.setUuids(

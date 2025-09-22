@@ -128,7 +128,8 @@ fun IsoMdocProximitySharingScreen(
                             MdocProximityQrSettings(
                                 availableConnectionMethods = connectionMethods,
                                 createTransportOptions = MdocTransportOptions(
-                                    bleUseL2CAP = settingsModel.presentmentBleL2CapEnabled.value
+                                    bleUseL2CAP = settingsModel.presentmentBleL2CapEnabled.value,
+                                    bleUseL2CAPInEngagement = settingsModel.presentmentBleL2CapInEngagementEnabled.value
                                 )
                             )
                         )

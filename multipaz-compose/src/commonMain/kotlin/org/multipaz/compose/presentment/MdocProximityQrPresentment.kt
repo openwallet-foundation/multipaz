@@ -94,7 +94,7 @@ fun MdocProximityQrPresentment(
                         val advertisedTransports = qrSettings.availableConnectionMethods.advertise(
                             role = MdocRole.MDOC,
                             transportFactory = transportFactory,
-                            options = MdocTransportOptions(bleUseL2CAP = true),
+                            options = qrSettings.createTransportOptions,
                         )
                         val encodedDeviceEngagement = ByteString(Cbor.encode(
                             buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {

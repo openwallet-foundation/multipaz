@@ -57,6 +57,7 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
     private lateinit var server2ClientCharacteristicUuid: UUID
     private var identCharacteristicUuid: UUID? = null
     private var l2capCharacteristicUuid: UUID? = null
+    private var startL2capServer = false
 
     private var negotiatedMtu = -1
     private var maxCharacteristicSizeMemoized = 0
@@ -80,13 +81,15 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
         client2ServerCharacteristicUuid: UUID,
         server2ClientCharacteristicUuid: UUID,
         identCharacteristicUuid: UUID?,
-        l2capCharacteristicUuid: UUID?
+        l2capCharacteristicUuid: UUID?,
+        startL2capServer: Boolean
     ) {
         this.stateCharacteristicUuid = stateCharacteristicUuid
         this.client2ServerCharacteristicUuid = client2ServerCharacteristicUuid
         this.server2ClientCharacteristicUuid = server2ClientCharacteristicUuid
         this.identCharacteristicUuid = identCharacteristicUuid
         this.l2capCharacteristicUuid = l2capCharacteristicUuid
+        this.startL2capServer = startL2capServer
     }
 
     private lateinit var onError: (error: Throwable) -> Unit
@@ -441,18 +444,20 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
                 permissions = BluetoothGattCharacteristic.PERMISSION_READ
             )
         }
-        if (l2capCharacteristicUuid != null) {
+        if (l2capCharacteristicUuid != null || startL2capServer) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 l2capServerSocket = bluetoothManager.adapter.listenUsingInsecureL2capChannel()
                 // Listen in a coroutine
                 CoroutineScope(Dispatchers.IO).launch {
                     l2capListen()
                 }
-                l2capCharacteristic = addCharacteristic(
-                    characteristicUuid = l2capCharacteristicUuid!!,
-                    properties = BluetoothGattCharacteristic.PROPERTY_READ,
-                    permissions = BluetoothGattCharacteristic.PERMISSION_READ
-                )
+                if (l2capCharacteristicUuid != null) {
+                    l2capCharacteristic = addCharacteristic(
+                        characteristicUuid = l2capCharacteristicUuid!!,
+                        properties = BluetoothGattCharacteristic.PROPERTY_READ,
+                        permissions = BluetoothGattCharacteristic.PERMISSION_READ
+                    )
+                }
             } else {
                 Logger.w(TAG, "L2CAP only support on API 29 or later")
             }

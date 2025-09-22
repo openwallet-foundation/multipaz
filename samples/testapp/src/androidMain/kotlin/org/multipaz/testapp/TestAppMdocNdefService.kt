@@ -22,7 +22,10 @@ class TestAppMdocNdefService: MdocNdefService() {
             staticHandoverBleCentralClientModeEnabled = settingsModel.presentmentBleCentralClientModeEnabled.value,
             staticHandoverBlePeripheralServerModeEnabled = settingsModel.presentmentBlePeripheralServerModeEnabled.value,
             staticHandoverNfcDataTransferEnabled = settingsModel.presentmentNfcDataTransferEnabled.value,
-            transportOptions = MdocTransportOptions(bleUseL2CAP = settingsModel.presentmentBleL2CapEnabled.value),
+            transportOptions = MdocTransportOptions(
+                bleUseL2CAP = settingsModel.presentmentBleL2CapEnabled.value,
+                bleUseL2CAPInEngagement = settingsModel.presentmentBleL2CapInEngagementEnabled.value
+            ),
             promptModel = platformPromptModel,
             presentmentActivityClass = TestAppMdocNfcPresentmentActivity::class.java
         )
