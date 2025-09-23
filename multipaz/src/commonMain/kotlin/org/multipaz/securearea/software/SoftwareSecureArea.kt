@@ -56,7 +56,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
 
     private val supportedAlgorithms_: List<Algorithm> by lazy {
         Algorithm.entries.filter {
-            it.fullySpecified && Crypto.supportedCurves.contains(it.curve!!)
+            it.fullySpecified && it.curve != null && Crypto.supportedCurves.contains(it.curve)
         }
     }
 
