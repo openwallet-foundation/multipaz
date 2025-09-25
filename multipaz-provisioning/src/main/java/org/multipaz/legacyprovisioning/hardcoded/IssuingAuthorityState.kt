@@ -964,8 +964,8 @@ class IssuingAuthorityState(
             // Make sure we set at least all the mandatory data elements
             //
             staticData = NameSpacedData.Builder().apply {
-                putEntryString(ISO_23220_2_NAMESPACE, "given_name_unicode", firstName)
-                putEntryString(ISO_23220_2_NAMESPACE, "family_name_unicode", lastName)
+                putEntryString(ISO_23220_2_NAMESPACE, "given_name", firstName)
+                putEntryString(ISO_23220_2_NAMESPACE, "family_name", lastName)
                 putEntry(
                     ISO_23220_2_NAMESPACE, "birthdate",
                     Cbor.encode(dateOfBirth.toDataItemFullDate())
@@ -1000,7 +1000,7 @@ class IssuingAuthorityState(
             }.build()
         }
 
-        val firstName = staticData.getDataElementString(ISO_23220_2_NAMESPACE, "given_name_unicode")
+        val firstName = staticData.getDataElementString(ISO_23220_2_NAMESPACE, "given_name")
         return DocumentConfiguration(
             displayName = "$firstName's Photo ID",
             typeDisplayName = "Photo ID",

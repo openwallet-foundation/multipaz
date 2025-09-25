@@ -351,7 +351,7 @@ class DocumentStoreTestHarness {
             dsCert = dsCert,
             documentType = PhotoID.getDocumentType(),
             overrideMdocClaims = mapOf(
-                Pair(PhotoID.ISO_23220_2_NAMESPACE, "given_name_unicode") to Tstr("Erika"),
+                Pair(PhotoID.ISO_23220_2_NAMESPACE, "given_name") to Tstr("Erika"),
                 Pair(PhotoID.ISO_23220_2_NAMESPACE, "sex") to Uint(2UL),
                 Pair(PhotoID.ISO_23220_2_NAMESPACE, "age_over_25") to Simple.FALSE
             ),
@@ -367,7 +367,7 @@ class DocumentStoreTestHarness {
             dsCert = dsCert,
             documentType = PhotoID.getDocumentType(),
             overrideMdocClaims = mapOf(
-                Pair(PhotoID.ISO_23220_2_NAMESPACE, "given_name_unicode") to Tstr("Max"),
+                Pair(PhotoID.ISO_23220_2_NAMESPACE, "given_name") to Tstr("Max"),
                 Pair(PhotoID.ISO_23220_2_NAMESPACE, "sex") to Uint(1UL),
                 Pair(PhotoID.ISO_23220_2_NAMESPACE, "age_over_25") to Simple.TRUE
             ),

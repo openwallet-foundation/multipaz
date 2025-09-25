@@ -466,8 +466,8 @@ function rawDcqlReset_mdl_pid_photoid_mandatory() {
         "doctype_value": "org.iso.23220.photoID.1"
       },
       "claims": [
-        { "path": ["org.iso.23220.1", "family_name_unicode" ] },
-        { "path": ["org.iso.23220.1", "given_name_unicode" ] },
+        { "path": ["org.iso.23220.1", "family_name" ] },
+        { "path": ["org.iso.23220.1", "given_name" ] },
         { "path": ["org.iso.23220.1", "birth_date" ] },
         { "path": ["org.iso.23220.1", "portrait" ] },
         { "path": ["org.iso.23220.1", "issue_date" ] },
@@ -531,8 +531,8 @@ function rawDcqlReset_movie_and_id() {
         "doctype_value": "org.iso.23220.photoID.1"
       },
       "claims": [
-        { "path": ["org.iso.23220.1", "family_name_unicode" ] },
-        { "path": ["org.iso.23220.1", "given_name_unicode" ] },
+        { "path": ["org.iso.23220.1", "family_name" ] },
+        { "path": ["org.iso.23220.1", "given_name" ] },
         { "path": ["org.iso.23220.1", "portrait" ] }
       ]
     },
@@ -596,8 +596,8 @@ function rawDcqlReset_movie_and_id_alt() {
         "doctype_value": "org.iso.23220.photoID.1"
       },
       "claims": [
-        { "path": ["org.iso.23220.1", "family_name_unicode" ] },
-        { "path": ["org.iso.23220.1", "given_name_unicode" ] },
+        { "path": ["org.iso.23220.1", "family_name" ] },
+        { "path": ["org.iso.23220.1", "given_name" ] },
         { "path": ["org.iso.23220.1", "portrait" ] }
       ]
     },

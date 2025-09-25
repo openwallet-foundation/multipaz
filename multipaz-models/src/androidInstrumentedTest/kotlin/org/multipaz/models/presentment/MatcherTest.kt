@@ -458,8 +458,8 @@ class MatcherTest {
                             "doctype_value": "org.iso.23220.photoID.1"
                           },
                           "claims": [
-                            { "path": ["org.iso.23220.1", "family_name_unicode" ] },
-                            { "path": ["org.iso.23220.1", "given_name_unicode" ] },
+                            { "path": ["org.iso.23220.1", "family_name" ] },
+                            { "path": ["org.iso.23220.1", "given_name" ] },
                             { "path": ["org.iso.23220.1", "portrait" ] }
                           ]
                         },
@@ -612,8 +612,8 @@ class MatcherTest {
                             "doctype_value": "org.iso.23220.photoID.1"
                           },
                           "claims": [
-                            { "path": ["org.iso.23220.1", "family_name_unicode" ] },
-                            { "path": ["org.iso.23220.1", "given_name_unicode" ] },
+                            { "path": ["org.iso.23220.1", "family_name" ] },
+                            { "path": ["org.iso.23220.1", "given_name" ] },
                             { "path": ["org.iso.23220.1", "portrait" ] }
                           ]
                         },
@@ -1132,8 +1132,8 @@ class MatcherTest {
                         "doctype_value": "org.iso.23220.photoID.1"
                       },
                       "claims": [
-                        {"path": ["org.iso.23220.1", "given_name_unicode"], "values": ["Erika"]},
-                        {"path": ["org.iso.23220.1", "family_name_unicode"]},
+                        {"path": ["org.iso.23220.1", "given_name"], "values": ["Erika"]},
+                        {"path": ["org.iso.23220.1", "family_name"]},
                         {"path": ["org.iso.23220.1", "sex"]},
                         {"path": ["org.iso.23220.1", "age_over_25"]}
                       ]
@@ -1177,8 +1177,8 @@ class MatcherTest {
                         "doctype_value": "org.iso.23220.photoID.1"
                       },
                       "claims": [
-                        {"path": ["org.iso.23220.1", "given_name_unicode"]},
-                        {"path": ["org.iso.23220.1", "family_name_unicode"]},
+                        {"path": ["org.iso.23220.1", "given_name"]},
+                        {"path": ["org.iso.23220.1", "family_name"]},
                         {"path": ["org.iso.23220.1", "sex"], "values": [1]},
                         {"path": ["org.iso.23220.1", "age_over_25"]}
                       ]
@@ -1222,8 +1222,8 @@ class MatcherTest {
                         "doctype_value": "org.iso.23220.photoID.1"
                       },
                       "claims": [
-                        {"path": ["org.iso.23220.1", "given_name_unicode"]},
-                        {"path": ["org.iso.23220.1", "family_name_unicode"]},
+                        {"path": ["org.iso.23220.1", "given_name"]},
+                        {"path": ["org.iso.23220.1", "family_name"]},
                         {"path": ["org.iso.23220.1", "sex"]},
                         {"path": ["org.iso.23220.1", "age_over_25"], "values": [true]}
                       ]
@@ -1267,8 +1267,8 @@ class MatcherTest {
                         "doctype_value": "org.iso.23220.photoID.1"
                       },
                       "claims": [
-                        {"path": ["org.iso.23220.1", "given_name_unicode"]},
-                        {"path": ["org.iso.23220.1", "family_name_unicode"]},
+                        {"path": ["org.iso.23220.1", "given_name"]},
+                        {"path": ["org.iso.23220.1", "family_name"]},
                         {"path": ["org.iso.23220.1", "sex"]},
                         {"path": ["org.iso.23220.1", "age_over_25"], "values": [false]}
                       ]
