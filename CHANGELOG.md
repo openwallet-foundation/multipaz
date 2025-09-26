@@ -5,8 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.94.0] - Expected Aug 2025
+## [0.94.0] - 2025-09-26
 Changes since Multipaz 0.93.0 include:
+- Improved and standards-compliant DCQL support in OpenID4VP implementation.
+- Generalizing of the Multipaz X.509 extension including adding support for
+  using this extension on reader certificates for conveying reader identity.
+- OpenID4VCI support with `ProvisioningModel` and `ProvisioningClient`.
+- Support for querying and setting whether Bluetooth is enabled.
+- High-level composable for simpler QR mdoc presentment.
+- Support for creating AttestKey in Android Keystore Secure Area.
+- Native support for W3 Digital Credentials API on Android.
+- New `org.multipaz.models.verification` package with utility functions to
+  make it easier to create W3C DC requests and validate W3C DC Responses.
+- Support for EU Age Verification ISO mdoc document type (`eu.europa.ec.av.1`)
+  with support for this in both the issuer, testapp, and verifier.
+- Support for 18013-5 Second Edition in `DeviceRequest` and
+  `DeviceEngagement`. Additional support 18013-5 Second Edition will appear
+  in future releases.
+- New `org.multipaz.loyality.1` ISO mdoc document type, for use in samples
+  and codelabs.
+- Update PhotoID document type to latest ISO/IEC 23220-4 draft.
+- System of Record and Issuer enhancements.
+- NFC Reading enhancements.
 
 ## [0.93.0] - 2025-08-04
 Changes since Multipaz 0.92.1 include:
