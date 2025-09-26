@@ -2,30 +2,25 @@ package org.multipaz.testapp
 
 import android.content.pm.PackageManager
 import android.os.Build
+import android.widget.Toast
 import com.jakewharton.processphoenix.ProcessPhoenix
 import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.engine.android.Android
 import org.multipaz.context.applicationContext
-import org.multipaz.securearea.AndroidKeystoreCreateKeySettings
 import org.multipaz.securearea.AndroidKeystoreSecureArea
-import org.multipaz.securearea.UserAuthenticationType
-import org.multipaz.securearea.CreateKeySettings
-import kotlin.time.Instant
-import kotlinx.io.bytestring.ByteString
 import multipazproject.samples.testapp.generated.resources.Res
 import multipazproject.samples.testapp.generated.resources.app_icon
 import multipazproject.samples.testapp.generated.resources.app_icon_red
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.multipaz.compose.notifications.NotificationManagerAndroid
-import org.multipaz.crypto.Algorithm
 import org.multipaz.models.digitalcredentials.getAppOrigin
 import org.multipaz.nfc.NfcTagReader
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.prompt.PromptModel
+import org.multipaz.testapp.externalnfc.nfcTagReaderUsbCheck
 import org.multipaz.util.Logger
 import java.net.NetworkInterface
 import java.security.Security
-import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "PlatformAndroid"
 
@@ -125,4 +120,15 @@ actual fun getAppToAppOrigin(): String {
     return getAppOrigin(packageInfo.signatures!![0].toByteArray())
 }
 
-actual suspend fun getExternalNfcTagReaders(): List<NfcTagReader> = emptyList()
+actual suspend fun getExternalNfcTagReaders(): List<NfcTagReader> {
+    val externalNfcReader = nfcTagReaderUsbCheck()
+    if (externalNfcReader == null) {
+        return emptyList()
+    }
+    Toast.makeText(
+        applicationContext,
+        "Using USB-connected NFC reader ${externalNfcReader.readerName}",
+        Toast.LENGTH_LONG
+    ).show()
+    return listOf(externalNfcReader)
+}

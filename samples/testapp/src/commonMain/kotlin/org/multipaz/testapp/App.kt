@@ -303,6 +303,13 @@ class App private constructor (val promptModel: PromptModel) {
 
     lateinit var externalNfcTagReaders: List<NfcTagReader>
 
+    // TODO: Instead of only scanning for external NFC readers at startup, make it hotplug aware
+    //   so things work when the user adds/removes an external NFC reader while the application
+    //   is running. We'd probably want some kind of stateful ExternalNfcReaderManager object
+    //   which maintains a list of these external readers. This should also support readers
+    //   connected via BLE (e.g. ACR1555U) and support a way to programmatically request
+    //   permission.
+    //
     private suspend fun platformExternalNfcTagReadersInit() {
         externalNfcTagReaders = getExternalNfcTagReaders()
     }
