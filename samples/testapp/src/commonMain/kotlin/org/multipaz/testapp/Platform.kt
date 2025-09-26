@@ -10,6 +10,7 @@ import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import org.jetbrains.compose.resources.DrawableResource
 import org.multipaz.crypto.Algorithm
+import org.multipaz.nfc.NfcTagReader
 import org.multipaz.prompt.PromptModel
 
 enum class Platform(val displayName: String) {
@@ -40,3 +41,5 @@ expect fun platformRestartApp()
 expect val platformSecureAreaHasKeyAgreement: Boolean
 
 expect fun getAppToAppOrigin(): String
+
+expect suspend fun getExternalNfcTagReaders(): List<NfcTagReader>

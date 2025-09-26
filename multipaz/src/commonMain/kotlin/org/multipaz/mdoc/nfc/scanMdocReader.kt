@@ -8,38 +8,21 @@ import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.mdoc.transport.NfcTransportMdocReader
-import org.multipaz.nfc.scanNfcTag
 import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.util.Logger
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.mdoc.role.MdocRole
+import org.multipaz.nfc.NfcTagReader
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Clock
 import kotlin.time.Duration
 
-const private val TAG = "scanNfcMdocReader"
+private const val TAG = "scanMdocReader"
 
 /**
- * Result from NFC engagement.
+ * Performs NFC engagement as a mdoc reader.
  *
- * @property transport The [MdocTransport] which to hand over to.
- * @property encodedDeviceEngagement the device engagement that was used.
- * @property handover the handover that was used.
- * @property processingDuration the amount of time spent exchanging APDUs to set up the handover.
- */
-data class ScanNfcMdocReaderResult(
-    val transport: MdocTransport,
-    val encodedDeviceEngagement: ByteString,
-    val handover: DataItem,
-    val processingDuration: Duration
-)
-
-/**
- * Performs NFC engagement as a reader.
- *
- * This uses [scanNfcTag] to show a dialog prompting the user to tap the mdoc.
- *
- * This blocks until a connection has been established and on successful handover a [ScanNfcMdocReaderResult]
+ * This blocks until a connection has been established and on successful handover a [ScanMdocReaderResult]
  * instance is returned with the transport, device engagement, handover, and the time spent exchanging APDUs
  * with the remote mdoc.
  *
@@ -52,16 +35,16 @@ data class ScanNfcMdocReaderResult(
  * @param negotiatedHandoverConnectionMethods the connection methods to offer if the remote mdoc is using NFC
  * Negotiated Handover.
  * @param context the [CoroutineContext] to use for calls to the tag which blocks the calling thread.
- * @return a [ScanNfcMdocReaderResult] if successful handover was established, `null` if the user dismissed the dialog.
+ * @return a [ScanMdocReaderResult] if successful handover was established, `null` if the user dismissed the dialog.
  */
-suspend fun scanNfcMdocReader(
+suspend fun NfcTagReader.scanMdocReader(
     message: String?,
     options: MdocTransportOptions,
     transportFactory: MdocTransportFactory = MdocTransportFactory.Default,
     selectConnectionMethod: suspend (connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod?,
     negotiatedHandoverConnectionMethods: List<MdocConnectionMethod>,
-    context: CoroutineContext = Dispatchers.IO
-): ScanNfcMdocReaderResult? {
+    context: CoroutineContext = Dispatchers.IO,
+): ScanMdocReaderResult? {
     // Start creating transports for Negotiated Handover and start advertising these
     // immediately. This helps with connection time because the holder's device will
     // get a chance to opportunistically read the UUIDs which helps reduce scanning
@@ -80,7 +63,7 @@ suspend fun scanNfcMdocReader(
     val transportsToClose = negotiatedHandoverTransports.toMutableList()
 
     try {
-        val result = scanNfcTag(
+        val result = scan(
             message = message,
             tagInteractionFunc = tagInteractionFunc@{ tag ->
                 val t0 = Clock.System.now()
@@ -127,7 +110,7 @@ suspend fun scanNfcMdocReader(
                     tag.close()
                 }
 
-                ScanNfcMdocReaderResult(
+                ScanMdocReaderResult(
                     transport = transport,
                     encodedDeviceEngagement = handoverResult.encodedDeviceEngagement,
                     handover = handoverResult.handover,

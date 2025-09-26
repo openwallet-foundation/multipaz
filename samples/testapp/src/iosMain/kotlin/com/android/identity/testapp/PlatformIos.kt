@@ -40,6 +40,7 @@ import org.jetbrains.compose.resources.painterResource
 import org.multipaz.compose.decodeImage
 import org.multipaz.crypto.Algorithm
 import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.nfc.NfcTagReader
 import org.multipaz.prompt.IosPromptModel
 import org.multipaz.prompt.PromptModel
 import platform.Foundation.NSDocumentDirectory
@@ -139,3 +140,5 @@ actual val platformSecureAreaHasKeyAgreement = true
 actual fun getAppToAppOrigin(): String {
     TODO("Add support for iOS")
 }
+
+actual suspend fun getExternalNfcTagReaders(): List<NfcTagReader> = emptyList()

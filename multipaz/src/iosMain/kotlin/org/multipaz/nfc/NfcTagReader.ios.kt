@@ -6,9 +6,7 @@ import org.multipaz.util.toKotlinError
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.CoreNFC.NFCISO7816TagProtocol
@@ -23,18 +21,11 @@ import platform.darwin.NSObject
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resumeWithException
 
-actual val nfcTagScanningSupported = true
+private const val TAG = "NfcReader"
 
-actual val nfcTagScanningSupportedWithoutDialog: Boolean = false
-
-private class NfcTagReader<T>(
+private class IosTagReader<T>(
     context: CoroutineContext
 ) {
-
-    companion object {
-        private const val TAG = "NfcTagReader"
-    }
-
     val session: NFCTagReaderSession
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -132,12 +123,25 @@ private class NfcTagReader<T>(
     }
 }
 
-actual suspend fun<T: Any> scanNfcTag(
-    message: String?,
-    tagInteractionFunc: suspend (tag: NfcIsoTag) -> T?,
-    context: CoroutineContext
-): T {
-    require(message != null) { "Cannot not show the NFC tag scanning dialog on iOS" }
-    val reader = NfcTagReader<T>(context)
-    return reader.beginSession(message, tagInteractionFunc)
+
+private object NfcTagReaderIos: NfcTagReader {
+    override val external: Boolean
+        get() = false
+
+    override val dialogAlwaysShown: Boolean
+        get() = true
+
+    override suspend fun <T : Any> scan(
+        message: String?,
+        tagInteractionFunc: suspend (NfcIsoTag) -> T?,
+        context: CoroutineContext
+    ): T {
+        require(message != null) { "Cannot not show the NFC tag scanning dialog on iOS" }
+        val reader = IosTagReader<T>(context)
+        return reader.beginSession(message, tagInteractionFunc)
+    }
+}
+
+internal actual fun nfcGetPlatformReaders(): List<NfcTagReader> {
+    return listOf(NfcTagReaderIos)
 }

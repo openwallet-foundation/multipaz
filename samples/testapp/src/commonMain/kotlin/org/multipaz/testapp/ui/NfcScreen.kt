@@ -16,18 +16,19 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import org.multipaz.nfc.Nfc
-import org.multipaz.nfc.scanNfcTag
 import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.prompt.PromptModel
 import org.multipaz.util.Logger
 import org.multipaz.util.toHex
 import kotlinx.coroutines.launch
+import org.multipaz.nfc.NfcTagReader
 import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "NfcScreen"
 
 @Composable
 fun NfcScreen(
+    externalNfcTagReaders: List<NfcTagReader>,
     promptModel: PromptModel,
     showToast: (message: String) -> Unit
 ) {
@@ -74,7 +75,12 @@ fun NfcScreen(
                 onClick = {
                     coroutineScope.launch {
                         try {
-                            val ccFile = scanNfcTag(
+                            val reader = if (externalNfcTagReaders.size > 0)  {
+                                externalNfcTagReaders.first()
+                            } else {
+                                NfcTagReader.getReaders().first()
+                            }
+                            val ccFile = reader.scan(
                                 message = "Hold your phone near a NDEF tag.",
                                 tagInteractionFunc = { tag ->
                                     tag.selectApplication(Nfc.NDEF_APPLICATION_ID)
@@ -105,7 +111,8 @@ fun NfcScreen(
                 onClick = {
                     dismissableNfcJob.value = coroutineScope.launch {
                         try {
-                            val ccFile = scanNfcTag(
+                            val reader = NfcTagReader.getReaders().first()
+                            val ccFile = reader.scan(
                                 message = "Hold your phone near a NDEF tag.",
                                 tagInteractionFunc = { tag ->
                                     tag.selectApplication(Nfc.NDEF_APPLICATION_ID)
@@ -141,7 +148,8 @@ fun NfcScreen(
                 onClick = {
                     dismissableNfcJob.value = coroutineScope.launch {
                         try {
-                            val ccFile = scanNfcTag(
+                            val reader = NfcTagReader.getReaders().first()
+                            val ccFile = reader.scan(
                                 message = null,
                                 tagInteractionFunc = { tag ->
                                     tag.selectApplication(Nfc.NDEF_APPLICATION_ID)

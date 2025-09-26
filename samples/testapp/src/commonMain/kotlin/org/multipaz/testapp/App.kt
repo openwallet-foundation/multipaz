@@ -131,6 +131,7 @@ import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
 import org.multipaz.models.presentment.PresentmentSource
 import org.multipaz.models.presentment.SimplePresentmentSource
 import org.multipaz.models.provisioning.ProvisioningModel
+import org.multipaz.nfc.NfcTagReader
 import org.multipaz.prompt.PromptModel
 import org.multipaz.provisioning.Display
 import org.multipaz.request.Requester
@@ -270,6 +271,7 @@ class App private constructor (val promptModel: PromptModel) {
                 Pair(::platformInit, "platformInit"),
                 Pair(::settingsInit, "settingsInit"),
                 Pair(::platformCryptoInit, "platformCryptoInit"),
+                Pair(::platformExternalNfcTagReadersInit, "platformExternalNfcTagReadersInit"),
                 Pair(::documentTypeRepositoryInit, "documentTypeRepositoryInit"),
                 Pair(::documentStoreInit, "documentStoreInit"),
                 Pair(::documentModelInit, "documentModelInit"),
@@ -298,6 +300,12 @@ class App private constructor (val promptModel: PromptModel) {
 
     private suspend fun platformCryptoInit() {
         platformCryptoInit(settingsModel)
+    }
+
+    lateinit var externalNfcTagReaders: List<NfcTagReader>
+
+    private suspend fun platformExternalNfcTagReadersInit() {
+        externalNfcTagReaders = getExternalNfcTagReaders()
     }
 
     private suspend fun settingsInit() {
@@ -1099,6 +1107,7 @@ class App private constructor (val promptModel: PromptModel) {
                     }
                     composable(route = NfcDestination.route) {
                         NfcScreen(
+                            externalNfcTagReaders = externalNfcTagReaders,
                             promptModel = promptModel,
                             showToast = { message -> showToast(message) }
                         )

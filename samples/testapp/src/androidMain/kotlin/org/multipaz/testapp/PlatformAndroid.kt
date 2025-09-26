@@ -19,6 +19,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.multipaz.compose.notifications.NotificationManagerAndroid
 import org.multipaz.crypto.Algorithm
 import org.multipaz.models.digitalcredentials.getAppOrigin
+import org.multipaz.nfc.NfcTagReader
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.prompt.PromptModel
 import org.multipaz.util.Logger
@@ -123,3 +124,5 @@ actual fun getAppToAppOrigin(): String {
         .getPackageInfo(applicationContext.packageName, PackageManager.GET_SIGNATURES)
     return getAppOrigin(packageInfo.signatures!![0].toByteArray())
 }
+
+actual suspend fun getExternalNfcTagReaders(): List<NfcTagReader> = emptyList()

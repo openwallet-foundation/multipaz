@@ -44,14 +44,13 @@ import org.multipaz.documenttype.DocumentType
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
-import org.multipaz.mdoc.nfc.scanNfcMdocReader
+import org.multipaz.mdoc.nfc.scanMdocReader
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportClosedException
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.mdoc.transport.NfcTransportMdocReader
-import org.multipaz.nfc.scanNfcTag
 import org.multipaz.testapp.App
 import org.multipaz.testapp.TestAppUtils
 import org.multipaz.util.Constants
@@ -70,6 +69,7 @@ import org.multipaz.compose.permissions.rememberBluetoothEnabledState
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
+import org.multipaz.nfc.NfcTagReader
 import org.multipaz.testapp.ShowResponseMetadata
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -223,6 +223,7 @@ fun IsoMdocProximityReadingScreen(
                             var transferProtocol = ""
                             doReaderFlow(
                                 app = app,
+                                nfcTagReader = null,
                                 encodedDeviceEngagement = ByteString(data.substring(5).fromBase64Url()),
                                 existingTransport = null,
                                 handover = Simple.NULL,
@@ -513,7 +514,12 @@ fun IsoMdocProximityReadingScreen(
                                         )
                                     }
 
-                                    val scanResult = scanNfcMdocReader(
+                                    val reader = if (app.externalNfcTagReaders.size > 0)  {
+                                        app.externalNfcTagReaders.first()
+                                    } else {
+                                        NfcTagReader.getReaders().first()
+                                    }
+                                    val scanResult = reader.scanMdocReader(
                                         message = "Hold near credential holder's phone.",
                                         options = MdocTransportOptions(
                                             bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
@@ -538,6 +544,7 @@ fun IsoMdocProximityReadingScreen(
                                         val transferProtocol = scanResult.transport.connectionMethod.toString()
                                         doReaderFlow(
                                             app = app,
+                                            nfcTagReader = reader,
                                             encodedDeviceEngagement = scanResult.encodedDeviceEngagement,
                                             existingTransport = scanResult.transport,
                                             handover = scanResult.handover,
@@ -613,6 +620,7 @@ fun IsoMdocProximityReadingScreen(
 
 private suspend fun doReaderFlow(
     app: App,
+    nfcTagReader: NfcTagReader?,
     encodedDeviceEngagement: ByteString,
     existingTransport: MdocTransport?,
     handover: DataItem,
@@ -661,7 +669,7 @@ private suspend fun doReaderFlow(
             )
         )
         if (transport is NfcTransportMdocReader) {
-            scanNfcTag(
+            nfcTagReader!!.scan(
                 message = "QR engagement with NFC Data Transfer. Move into NFC field of the mdoc",
                 tagInteractionFunc = { tag ->
                     transport.setTag(tag)
