@@ -32,6 +32,8 @@ import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
 import org.multipaz.util.toBase64Url
+import kotlin.random.Random
+import kotlin.random.nextInt
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
@@ -101,8 +103,15 @@ internal class CredentialFactoryUtopiaLoyaltyID : CredentialFactoryBase() {
         val ageOver18 = now > dateOfBirthInstant.plus(18, DateTimeUnit.YEAR, timeZone)
         val ageOver21 = now > dateOfBirthInstant.plus(21, DateTimeUnit.YEAR, timeZone)
         val records = data["records"]
+        if (!records.hasKey("wholesale")) {
+            throw IllegalArgumentException("No wholesale membership card is issued to this person")
+        }
         val loyaltyIDData = records["wholesale"].asMap.values.firstOrNull() ?: buildCborMap { }
-        val membershipId = loyaltyIDData["membership_id"]?.asTstr ?: "899878797979"
+        val membershipId = if (loyaltyIDData.hasKey("membership_number")) {
+            loyaltyIDData["membership_number"].asTstr
+        } else {
+            (1000000 + Random.nextInt(9000000)).toString()
+        }
         val issueDate = if (loyaltyIDData.hasKey("issue_date")) {
             loyaltyIDData["issue_date"].asDateString
         } else {

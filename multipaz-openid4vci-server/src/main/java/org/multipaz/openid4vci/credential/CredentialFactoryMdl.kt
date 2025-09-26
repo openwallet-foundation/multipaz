@@ -124,6 +124,16 @@ internal class CredentialFactoryMdl : CredentialFactoryBase() {
                     }
                 }
 
+                if (coreData.hasKey("given_name_unicode") && !added.contains("given_name_national_character")) {
+                    addDataElement("given_name_national_character", coreData["given_name_unicode"])
+                    added.add("given_name_national_character")
+                }
+
+                if (coreData.hasKey("family_name_unicode") && !added.contains("family_name_national_character")) {
+                    addDataElement("family_name_national_character", coreData["family_name_unicode"])
+                    added.add("family_name_national_character")
+                }
+
                 if (address != null) {
                     addDataElement("resident_address", address)
                     added.add("resident_address")

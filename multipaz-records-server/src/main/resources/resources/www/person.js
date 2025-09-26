@@ -332,9 +332,13 @@ function readField(input, typedefs, attribute) {
                 throw new Error("unsupported type")
         }
     } else if (type == "picture") {
-        let image = document.getElementById(input.dataset.image);
-        let imageData = image.src.substring(dataUrlPrefix.length);
-        return imageData ? imageData : undefined;
+        let imageSrc = document.getElementById(input.dataset.image).src;
+        if (imageSrc.startsWith(dataUrlPrefix)) {
+            let imageData = imageSrc.substring(dataUrlPrefix.length);
+            return imageData ? imageData : undefined;
+        } else {
+            return undefined
+        }
     } else if (type == "number") {
         return input.value ? input.value - 0 : undefined;
     } else if (type == "boolean") {
@@ -388,7 +392,9 @@ function setFieldData(input, typedefs, attribute, value) {
         }
     } else if (type == "picture") {
         let image = document.getElementById(input.dataset.image);
-        image.src = dataUrlPrefix + value;
+        if (value) {
+            image.src = dataUrlPrefix + value;
+        }
     } else if (type == "boolean") {
         input.checked = value;
     } else {
