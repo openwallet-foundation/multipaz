@@ -20,15 +20,12 @@ import android.icu.util.Calendar
 import android.icu.util.GregorianCalendar
 import android.icu.util.TimeZone
 import android.os.Build
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 import androidx.test.platform.app.InstrumentationRegistry
 import org.multipaz.android.TestUtil
 import org.multipaz.context.initializeApplication
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.javaX509Certificate
 import org.multipaz.storage.android.AndroidStorage
 import org.multipaz.util.AndroidAttestationExtensionParser
 import kotlinx.coroutines.test.runTest
@@ -39,16 +36,9 @@ import org.junit.Before
 import org.junit.Ignore
 import org.junit.Test
 import java.io.IOException
-import java.security.InvalidAlgorithmParameterException
-import java.security.KeyPairGenerator
-import java.security.KeyStore
-import java.security.KeyStoreException
-import java.security.NoSuchAlgorithmException
-import java.security.NoSuchProviderException
-import java.security.cert.Certificate
-import java.security.cert.CertificateException
 import kotlin.time.Instant.Companion.fromEpochMilliseconds
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.device.AndroidKeystoreSecurityLevel
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -565,9 +555,9 @@ class AndroidKeystoreSecureAreaTest {
         if (!TestUtil.isRunningOnEmulator) {
             Assert.assertEquals(
                 if (useStrongBox) {
-                    AndroidAttestationExtensionParser.SecurityLevel.STRONG_BOX
+                    AndroidKeystoreSecurityLevel.STRONG_BOX
                 } else {
-                    AndroidAttestationExtensionParser.SecurityLevel.TRUSTED_ENVIRONMENT
+                    AndroidKeystoreSecurityLevel.TRUSTED_ENVIRONMENT
                 },
                 securityLevel
             )
@@ -653,9 +643,9 @@ class AndroidKeystoreSecureAreaTest {
         if (!TestUtil.isRunningOnEmulator) {
             Assert.assertEquals(
                 if (useStrongBox) {
-                    AndroidAttestationExtensionParser.SecurityLevel.STRONG_BOX
+                    AndroidKeystoreSecurityLevel.STRONG_BOX
                 } else {
-                    AndroidAttestationExtensionParser.SecurityLevel.TRUSTED_ENVIRONMENT
+                    AndroidKeystoreSecurityLevel.TRUSTED_ENVIRONMENT
                 },
                 securityLevel
             )

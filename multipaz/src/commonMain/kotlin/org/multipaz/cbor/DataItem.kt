@@ -550,4 +550,10 @@ sealed class DataItem(
      */
     val asX509CertChain: X509CertChain
         get() = X509CertChain.fromDataItem(this)
+
+    /**
+     * Returns null if `this == Simple.Null`, this otherwise.
+     */
+    val asNullable: DataItem?
+        get() = if (this == Simple.NULL) null else this
 }

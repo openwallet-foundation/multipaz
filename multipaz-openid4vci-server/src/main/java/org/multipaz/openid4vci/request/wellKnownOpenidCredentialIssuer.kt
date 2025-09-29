@@ -25,6 +25,7 @@ const val PREFIX = "openid4vci.issuer"
 suspend fun wellKnownOpenidCredentialIssuer(call: ApplicationCall) {
     val configuration = BackendEnvironment.getInterface(Configuration::class)!!
     val baseUrl = configuration.baseUrl
+    val useScopes = configuration.getValue("use_scopes") != "false"
     val name = configuration.getValue("issuer_name") ?: "Multipaz Sample Issuer"
     val locale = configuration.getValue("issuer_locale") ?: "en-US"
     val byOfferId = CredentialFactory.getRegisteredFactories().byOfferId
@@ -53,7 +54,9 @@ suspend fun wellKnownOpenidCredentialIssuer(call: ApplicationCall) {
             putJsonObject("credential_configurations_supported") {
                 for (credentialFactory in byOfferId.values) {
                     putJsonObject(credentialFactory.offerId) {
-                        put("scope", credentialFactory.scope)
+                        if (useScopes) {
+                            put("scope", credentialFactory.scope)
+                        }
                         val format = credentialFactory.format
                         put("format", format.id)
                         when (format) {
@@ -89,7 +92,10 @@ suspend fun wellKnownOpenidCredentialIssuer(call: ApplicationCall) {
                         }
                         putJsonArray("credential_signing_alg_values_supported") {
                             val cert = credentialFactory.signingCertificateChain.certificates.first()
-                            add(cert.signatureAlgorithm.joseAlgorithmIdentifier)
+                            add(cert.ecPublicKey.curve.defaultSigningAlgorithmFullySpecified.joseAlgorithmIdentifier)
+                        }
+                        putJsonArray("token_endpoint_auth_methods_supported") {
+                            add("attest_jwt_client_auth")
                         }
                         putJsonObject("credential_metadata") {
                             putJsonArray("display") {

@@ -3,6 +3,7 @@ package org.multipaz.util
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.device.AndroidKeystoreSecurityLevel
 
 private const val TAG = "validateAndroidKeyAttestation"
 
@@ -11,7 +12,9 @@ fun validateAndroidKeyAttestation(
     challenge: ByteString?,
     requireGmsAttestation: Boolean,
     requireVerifiedBootGreen: Boolean,
-    requireAppSignatureCertificateDigests: List<ByteString>,
+    requireKeyMintSecurityLevel: AndroidKeystoreSecurityLevel,
+    requireAppSignatureCertificateDigests: Set<ByteString>,
+    requireAppPackages: Set<String>
 ) {
     if (requireGmsAttestation) {
         // Google root certificate uses RSA private key (and not EC key that we currently support
@@ -32,41 +35,56 @@ fun validateAndroidKeyAttestation(
     }
 
     // Check the Attestation Extension...
-    try {
-        val parser = AndroidAttestationExtensionParser(chain.certificates.first())
-
-        // Challenge must match...
-        check(challenge == null || challenge == ByteString(parser.attestationChallenge)) {
-            "Challenge didn't match what was expected"
-        }
-
-        if (requireVerifiedBootGreen) {
-            // Verified Boot state must VERIFIED
-            check(
-                parser.verifiedBootState ==
-                        AndroidAttestationExtensionParser.VerifiedBootState.GREEN
-            ) { "Verified boot state is not GREEN" }
-        }
-
-        if (requireAppSignatureCertificateDigests.isNotEmpty()) {
-            check (parser.applicationSignatureDigests.size == requireAppSignatureCertificateDigests.size)
-            { "Number Signing certificates mismatch" }
-            for (n in 0..<parser.applicationSignatureDigests.size) {
-                check (parser.applicationSignatureDigests[n] == requireAppSignatureCertificateDigests[n])
-                { "Signing certificate $n mismatch" }
-            }
-        }
-
-        // Log the digests for easy copy-pasting into config file.
-        Logger.d(
-            TAG, "Accepting Android client with ${parser.applicationSignatureDigests.size} " +
-                    "signing certificates digests")
-        for (n in 0..<parser.applicationSignatureDigests.size) {
-            Logger.d(TAG,
-                "Digest $n: ${parser.applicationSignatureDigests[n].toByteArray().toBase64Url()}")
-        }
+    val parser = try {
+        AndroidAttestationExtensionParser(chain.certificates.first())
     } catch (e: Throwable) {
         throw IllegalArgumentException("Error parsing Android Attestation Extension", e)
+    }
+
+    // Challenge must match...
+    check(challenge == null || challenge == ByteString(parser.attestationChallenge)) {
+        "Challenge didn't match what was expected"
+    }
+
+    if (requireVerifiedBootGreen) {
+        // Verified Boot state must be GREEN
+        check(
+            parser.verifiedBootState ==
+                    AndroidAttestationExtensionParser.VerifiedBootState.GREEN
+        ) { "Verified boot state is not GREEN" }
+    }
+
+    check(parser.keymasterSecurityLevel >= requireKeyMintSecurityLevel) {
+        "KeyMint security level is below required"
+    }
+
+    if (requireAppSignatureCertificateDigests.isNotEmpty()) {
+        check(parser.applicationSignatureDigests.isNotEmpty()) {
+            "No application signature digests"
+        }
+        for (digest in parser.applicationSignatureDigests) {
+            check (requireAppSignatureCertificateDigests.contains(digest))
+            { "Signing certificate '${digest.toByteArray().toBase64Url()}' is not trusted" }
+        }
+    }
+
+    if (requireAppPackages.isNotEmpty()) {
+        check(parser.applicationPackages.isNotEmpty()) {
+            "No application package names"
+        }
+        for (packageName in parser.applicationPackages) {
+            check (requireAppPackages.contains(packageName))
+            { "Package '$packageName' is not trusted" }
+        }
+    }
+
+    // Log the digests for easy copy-pasting into config file.
+    Logger.d(
+        TAG, "Accepting Android client with ${parser.applicationSignatureDigests.size} " +
+                "signing certificates digests")
+    for (n in 0..<parser.applicationSignatureDigests.size) {
+        Logger.d(TAG,
+            "Digest $n: ${parser.applicationSignatureDigests[n].toByteArray().toBase64Url()}")
     }
 }
 

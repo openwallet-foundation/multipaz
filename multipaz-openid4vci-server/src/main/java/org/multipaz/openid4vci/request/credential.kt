@@ -44,9 +44,9 @@ import org.multipaz.openid4vci.util.codeToId
 import org.multipaz.openid4vci.util.extractAccessToken
 import org.multipaz.openid4vci.util.getSystemOfRecordUrl
 import org.multipaz.server.getBaseUrl
-import org.multipaz.util.JwtCheck
+import org.multipaz.jwt.JwtCheck
 import org.multipaz.util.Logger
-import org.multipaz.util.validateJwt
+import org.multipaz.jwt.validateJwt
 import kotlin.random.Random
 
 /**
@@ -135,15 +135,31 @@ suspend fun credential(call: ApplicationCall) {
     val authenticationKeys = when (proofType) {
         "attestation" -> {
             proofs.flatMap { proof ->
-                val body = validateJwt(
-                    jwt = proof.jsonPrimitive.content,
-                    jwtName = "Key attestation",
-                    publicKey = null,
-                    checks = mapOf(
-                        JwtCheck.TYP to "keyattestation+jwt",
-                        JwtCheck.TRUST to "trusted_key_attestations"
+                val body = try {
+                    // TODO: old 'typ' value (draft 15), remove once clients are up to date
+                    validateJwt(
+                        jwt = proof.jsonPrimitive.content,
+                        jwtName = "Key attestation",
+                        publicKey = null,
+                        checks = mapOf(
+                            JwtCheck.TYP to "keyattestation+jwt",
+                            JwtCheck.TRUST to "trusted_key_attestations"
+                        )
+                    ).also {
+                        Logger.w(TAG, "Outdated value for key attestation 'typ', please update")
+                    }
+                } catch (err: InvalidRequestException) {
+                    // New clients that use up-to-date 'typ' value will get here
+                    validateJwt(
+                        jwt = proof.jsonPrimitive.content,
+                        jwtName = "Key attestation",
+                        publicKey = null,
+                        checks = mapOf(
+                            JwtCheck.TYP to "key-attestation+jwt",
+                            JwtCheck.TRUST to "trusted_key_attestations"
+                        )
                     )
-                )
+                }
                 validateAndConsumeCredentialChallenge(body["nonce"]!!.jsonPrimitive.content)
                 body["attested_keys"]!!.jsonArray.map { key ->
                     EcPublicKey.fromJwk(key.jsonObject)

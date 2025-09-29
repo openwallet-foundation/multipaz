@@ -33,6 +33,7 @@ import org.multipaz.provisioning.openid4vci.OpenID4VCI
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
 import org.multipaz.provisioning.openid4vci.OpenID4VCIClientPreferences
 import org.multipaz.rpc.backend.BackendEnvironment
+import org.multipaz.rpc.handler.RpcAuthClientSession
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
@@ -97,7 +98,7 @@ class ProvisioningModel(
         clientPreferences: OpenID4VCIClientPreferences,
         backend: OpenID4VCIBackend,
     ): Deferred<Document> =
-        launch(Dispatchers.Default + promptModel + ProvisioningEnvironment(backend)) {
+        launch(Dispatchers.Default + promptModel + RpcAuthClientSession() + ProvisioningEnvironment(backend)) {
             OpenID4VCI.createClientFromOffer(offerUri, clientPreferences)
         }
 

@@ -348,15 +348,9 @@ class RpcSymbolProcessor(
                 }
                 val parameters = op.parameters.map { parameter ->
                     if (parameter.typeInfo == null) {
-                        val serialization = CborSymbolProcessor.serializeValue(
-                            this, parameter.name, parameter.type
+                        CborSymbolProcessor.serializeValue(
+                            this, parameter.name, parameter.type, true
                         )
-                        if (parameter.type.isMarkedNullable) {
-                            importQualifiedName(CborSymbolProcessor.SIMPLE_TYPE)
-                            "if (${parameter.name} == null) { Simple.NULL } else { $serialization }"
-                        } else {
-                            serialization
-                        }
                     } else {
                         "RpcStub.rpcParameter(${parameter.name})"
                     }
@@ -570,15 +564,9 @@ class RpcSymbolProcessor(
                                     val simpleName = declaration.simpleName.asString()
                                     "dispatcher.decodeStateParameter($param) as $simpleName"
                                 } else {
-                                    val deserialized = CborSymbolProcessor.deserializeValue(
-                                        this, param, parameter.type
+                                    CborSymbolProcessor.deserializeValue(
+                                        this, param, parameter.type, true
                                     )
-                                    if (parameter.type.isMarkedNullable) {
-                                        importQualifiedName(CborSymbolProcessor.SIMPLE_TYPE)
-                                        "if ($param == Simple.NULL) { null } else { $deserialized }"
-                                    } else {
-                                        deserialized
-                                    }
                                 }
 
                             }

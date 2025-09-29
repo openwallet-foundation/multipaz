@@ -23,7 +23,6 @@ import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.util.getInt16
 import org.multipaz.util.getInt32
-import org.multipaz.util.getUInt16
 import org.multipaz.crypto.SignatureVerificationException
 
 /** On iOS device attestation is the result of Apple's DeviceCheck API. */
@@ -97,12 +96,19 @@ data class DeviceAttestationIos(
 
         // Now, parse and validate the content of authData
         val auth = parseAuthData(authData)
-        val appIdentifier = validationData.iosAppIdentifier
-        if (appIdentifier != null) {
-            // If app identifier is given (it must be given for production environment!),
-            // validate it
-            val appHash = Crypto.digest(Algorithm.SHA256, appIdentifier.encodeToByteArray())
-            if (auth.appIdHash != ByteString(appHash)) {
+        val appIdentifiers = validationData.iosAppIdentifiers
+        if (appIdentifiers.isNotEmpty()) {
+            // If acceptable app identifiers are given (some must be given for production
+            // environment!), ensure app identifier is acceptable.
+            var valid = false
+            for (appIdentifier in appIdentifiers) {
+                val appHash = Crypto.digest(Algorithm.SHA256, appIdentifier.encodeToByteArray())
+                if (auth.appIdHash == ByteString(appHash)) {
+                    valid = true
+                    break
+                }
+            }
+            if (!valid) {
                 throw DeviceAttestationException("Application id mismatch")
             }
         } else {

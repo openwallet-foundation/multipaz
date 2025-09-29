@@ -203,7 +203,7 @@ class App private constructor (val promptModel: PromptModel) {
 
     private val credentialOffers = Channel<String>()
 
-    private val provisioningSupport = ProvisioningSupport()
+    private lateinit var provisioningSupport: ProvisioningSupport
 
     lateinit var zkSystemRepository: ZkSystemRepository
 
@@ -374,6 +374,11 @@ class App private constructor (val promptModel: PromptModel) {
             promptModel = promptModel,
             documentMetadataInitializer = App::initializeDocumentMetadata
         )
+        provisioningSupport = ProvisioningSupport(
+            storage = Platform.storage,
+            secureArea = Platform.getSecureArea(),
+        )
+        provisioningSupport.init()
     }
 
     @OptIn(ExperimentalResourceApi::class)
@@ -836,8 +841,8 @@ class App private constructor (val promptModel: PromptModel) {
                 } else {
                     provisioningModel.launchOpenID4VCIProvisioning(
                         offerUri = credentialOffer,
-                        clientPreferences = ProvisioningSupport.OPENID4VCI_CLIENT_PREFERENCES,
-                        backend = provisioningSupport
+                        clientPreferences = provisioningSupport.getOpenID4VCIClientPreferences(),
+                        backend = provisioningSupport.getOpenID4VCIBackend()
                     )
                     navController.navigate(ProvisioningTestDestination.route)
                 }

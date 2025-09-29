@@ -267,5 +267,4 @@ class X509CertTests {
         assertEquals(ByteString(extData), cert.extensions[1].data)
         assertContentEquals(extData, cert.getExtensionValue("1.2.4"))
     }
-
 }

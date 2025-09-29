@@ -184,6 +184,11 @@ class CodeBuilder(
         endLine()
     }
 
+    fun finishLine(code: String) {
+        append(code)
+        endLine()
+    }
+
     /**
      * Generate a line of code in a [lambda]
      */

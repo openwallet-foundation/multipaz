@@ -16,10 +16,12 @@ class DeviceAttestationIosTest {
             DeviceAttestationValidationData(
                 attestationChallenge = attestationChallenge.encodeToByteString(),
                 iosReleaseBuild = false,
-                iosAppIdentifier = "74HWMG89B3.com.sorototkin.testapp5",
+                iosAppIdentifiers = setOf("74HWMG89B3.com.sorototkin.testapp5"),
                 androidGmsAttestation = false,
                 androidVerifiedBootGreen = false,
-                androidAppSignatureCertificateDigests = listOf()
+                androidRequiredKeyMintSecurityLevel = AndroidKeystoreSecurityLevel.SOFTWARE,
+                androidAppSignatureCertificateDigests = setOf(),
+                androidAppPackageNames = setOf()
             )
         )
     }

@@ -17,11 +17,13 @@ data class DeviceAttestationAndroid(
     override fun validate(validationData: DeviceAttestationValidationData) {
         try {
             validateAndroidKeyAttestation(
-                certificateChain,
-                validationData.attestationChallenge,
-                validationData.androidGmsAttestation,
-                validationData.androidVerifiedBootGreen,
-                validationData.androidAppSignatureCertificateDigests
+                chain = certificateChain,
+                challenge = validationData.attestationChallenge,
+                requireGmsAttestation = validationData.androidGmsAttestation,
+                requireVerifiedBootGreen = validationData.androidVerifiedBootGreen,
+                requireKeyMintSecurityLevel = validationData.androidRequiredKeyMintSecurityLevel,
+                requireAppSignatureCertificateDigests = validationData.androidAppSignatureCertificateDigests,
+                requireAppPackages = validationData.androidAppPackageNames
             )
         } catch (err: Exception) {
             throw DeviceAttestationException("Failed Android device attestation", err)

@@ -43,6 +43,7 @@ import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.util.fromBase64Url
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
+import org.multipaz.device.AndroidKeystoreSecurityLevel
 import java.io.IOException
 import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
@@ -169,10 +170,12 @@ class CloudSecureAreaTest {
                 cloudRootAttestationKeyCertification = cloudBindingKeyAttestationCertificates,
                 e2eeKeyLimitSeconds = 10 * 60,
                 iosReleaseBuild = false,
-                iosAppIdentifier = null,
+                iosAppIdentifiers = listOf(),
                 androidGmsAttestation = false,
                 androidVerifiedBootGreen = false,
                 androidAppSignatureCertificateDigests = digestOfSignatures.map { it -> ByteString(it) },
+                androidAppPackageNames = listOf(),
+                androidKeystoreSecurityLevel = AndroidKeystoreSecurityLevel.SOFTWARE,
                 openid4vciKeyAttestationIssuer = VCI_KA_ISSUER,
                 openid4vciKeyAttestationKeyStorage = VCI_KA_KEY_STORAGE,
                 openid4vciKeyAttestationUserAuthentication = VCI_KA_USER_AUTHENTICATION,

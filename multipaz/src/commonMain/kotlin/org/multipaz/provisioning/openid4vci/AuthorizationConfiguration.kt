@@ -9,6 +9,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import org.multipaz.crypto.Algorithm
 import org.multipaz.rpc.backend.BackendEnvironment
+import org.multipaz.util.Logger
 
 internal data class AuthorizationConfiguration(
     val pushedAuthorizationRequestEndpoint: String,
@@ -66,14 +67,21 @@ internal data class AuthorizationConfiguration(
             val authMethods = metadata.arrayOrNull("token_endpoint_auth_methods_supported")
             var requireClientAssertion = false
             if (authMethods != null) {
+                var walletAttestationSupported = false
+                var clientAssertionSupported = false
+                for (authMethod in authMethods) {
+                    if (authMethod is JsonPrimitive) {
+                        when (val auth = authMethod.content) {
+                            "private_key_jwt" -> clientAssertionSupported = true
+                            "attest_jwt_client_auth" -> walletAttestationSupported = true
+                            else -> Logger.w(TAG, "Unknown auth method: '$auth'")
+                        }
+                    }
+                }
                 // Normally we send client attestation, but if server requests it, we can do
                 // client assertion too.
-                // TODO: see what other types (if any) we may want to support.
-                for (authMethod in authMethods) {
-                    if (authMethod is JsonPrimitive && authMethod.content == "private_key_jwt") {
-                        requireClientAssertion = true
-                        break
-                    }
+                if (!walletAttestationSupported && clientAssertionSupported) {
+                    requireClientAssertion = true
                 }
             }
             return AuthorizationConfiguration(
@@ -84,5 +92,7 @@ internal data class AuthorizationConfiguration(
                 useClientAssertion = requireClientAssertion
             )
         }
+
+        const val TAG = "AuthorizationConfiguration"
     }
 }

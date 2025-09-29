@@ -3,6 +3,9 @@ package org.multipaz.device
 import org.multipaz.util.fromBase64Url
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
+import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.X509Cert
+import kotlin.collections.setOf
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test
@@ -15,12 +18,14 @@ class DeviceAttestationAndroidTest {
             DeviceAttestationValidationData(
                 attestationChallenge = ATTESTATION_CHALLENGE_PIXEL7A.encodeToByteString(),
                 iosReleaseBuild = false,
-                iosAppIdentifier = "",
+                iosAppIdentifiers = setOf(),
                 androidGmsAttestation = true,
                 androidVerifiedBootGreen = true,
-                androidAppSignatureCertificateDigests = listOf(
+                androidRequiredKeyMintSecurityLevel = AndroidKeystoreSecurityLevel.TRUSTED_ENVIRONMENT,
+                androidAppSignatureCertificateDigests = setOf(
                     ByteString("VEpxrWMf2GFLy2_HHTuN7xlW5fy6mKhVAmRADo4aLh0".fromBase64Url())
-                )
+                ),
+                androidAppPackageNames = setOf("org.multipaz_credential.wallet")
             )
         )
     }
@@ -39,12 +44,14 @@ class DeviceAttestationAndroidTest {
             DeviceAttestationValidationData(
                 attestationChallenge = ATTESTATION_CHALLENGE_EMULATOR_PIXEL3A.encodeToByteString(),
                 iosReleaseBuild = false,
-                iosAppIdentifier = "",
+                iosAppIdentifiers = setOf(),
+                androidRequiredKeyMintSecurityLevel = AndroidKeystoreSecurityLevel.SOFTWARE,
                 androidGmsAttestation = false,
                 androidVerifiedBootGreen = false,
-                androidAppSignatureCertificateDigests = listOf(
+                androidAppSignatureCertificateDigests = setOf(
                     ByteString("VEpxrWMf2GFLy2_HHTuN7xlW5fy6mKhVAmRADo4aLh0".fromBase64Url())
-                )
+                ),
+                androidAppPackageNames = setOf("org.multipaz_credential.wallet")
             )
         )
     }
@@ -54,6 +61,38 @@ class DeviceAttestationAndroidTest {
         val deviceAttestation = DeviceAttestation.fromCbor(ATTESTATION_EMULATOR_PIXEL3A)
         val deviceAssertion = DeviceAssertion.fromCbor(ASSERTION_EMULATOR_PIXEL3A)
         deviceAttestation.validateAssertion(deviceAssertion)
+    }
+
+    @Test
+    fun testFoo() {
+        val attestationCertificate = X509Cert.fromPem("""
+            -----BEGIN CERTIFICATE-----
+            MIIBxTCCAUugAwIBAgIJAOQTL9qcQopZMAoGCCqGSM49BAMDMDgxNjA0BgNVBAMT
+            LXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjAe
+            Fw0yNDA5MjMyMjUxMzFaFw0zNDA5MjMyMjUxMzFaMDgxNjA0BgNVBAMTLXVybjp1
+            dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjB2MBAGByqG
+            SM49AgEGBSuBBAAiA2IABN4D7fpNMAv4EtxyschbITpZ6iNH90rGapa6YEO/uhKn
+            C6VpPt5RUrJyhbvwAs0edCPthRfIZwfwl5GSEOS0mKGCXzWdRv4GGX/Y0m7EYypo
+            x+tzfnRTmoVX3v6OxQiapKMhMB8wHQYDVR0OBBYEFPqAK5EjiQbxFAeWt//DCaWt
+            C57aMAoGCCqGSM49BAMDA2gAMGUCMEO01fJKCy+iOTpaVp9LfO7jiXcXksn2BA22
+            reiR9ahDRdGNCrH1E3Q2umQAssSQbQIxAIz1FTHbZPcEbA5uE5lCZlRG/DQxlZhk
+            /rZrkPyXFhqEgfMnQ45IJ6f8Utlg+4Wiiw==
+            -----END CERTIFICATE-----
+                """.trimIndent()
+        )
+
+        val attestationPrivateKey = EcPrivateKey.fromPem("""
+                -----BEGIN PRIVATE KEY-----
+                ME4CAQAwEAYHKoZIzj0CAQYFK4EEACIENzA1AgEBBDBn7jeRC9u9de3kOkrt9lLT
+                Pvd1hflNq1FCgs7D+qbbwz1BQa4XXU0SjsV+R1GjnAY=
+                -----END PRIVATE KEY-----
+                """.trimIndent(),
+            attestationCertificate.ecPublicKey
+        )
+
+        val text = attestationPrivateKey.toJwk()
+
+        println(text)
     }
 
     companion object {

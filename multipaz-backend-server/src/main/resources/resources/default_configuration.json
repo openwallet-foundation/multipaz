@@ -2,32 +2,25 @@
   "server_port": 8008,
   "developerMode": true,
   "waitForNotificationSupported": true,
-  "androidRequireGmsAttestation": false,
-  "androidRequireVerifiedBootGreen": false,
-  "androidRequireAppSignatureCertificateDigests": false,
-  "issuingAuthorityList": "utopia utopia_pid utopia_photoid eldorado",
-  "issuingAuthority.utopia.name": "Utopia DMV",
-  "issuingAuthority.utopia.type": "DrivingLicense",
-  "issuingAuthority.utopia.logo": "utopia/logo.png",
-  "issuingAuthority.utopia.description": "Utopia Driver's License",
-  "issuingAuthority.utopia.cardArt": "utopia/card_art.png",
-  "issuingAuthority.utopia.requireUserAuthenticationToViewDocument": true,
-  "issuingAuthority.utopia_pid.name": "Utopia Gov",
-  "issuingAuthority.utopia_pid.type": "EuPid",
-  "issuingAuthority.utopia_pid.logo": "utopia_pid/logo.png",
-  "issuingAuthority.utopia_pid.description": "Utopia Personal ID",
-  "issuingAuthority.utopia_pid.cardArt": "utopia_pid/card_art.png",
-  "issuingAuthority.utopia_pid.requireUserAuthenticationToViewDocument": true,
-  "issuingAuthority.utopia_photoid.name": "Utopia Gov",
-  "issuingAuthority.utopia_photoid.type": "PhotoId",
-  "issuingAuthority.utopia_photoid.logo": "utopia_photoid/logo.png",
-  "issuingAuthority.utopia_photoid.description": "Utopia Photo ID",
-  "issuingAuthority.utopia_photoid.cardArt": "utopia_photoid/card_art.png",
-  "issuingAuthority.utopia_photoid.requireUserAuthenticationToViewDocument": true,
-  "issuingAuthority.eldorado.name": "El Dorado DMV",
-  "issuingAuthority.eldorado.type": "DrivingLicense",
-  "issuingAuthority.eldorado.logo": "eldorado/logo.png",
-  "issuingAuthority.eldorado.description": "El Dorado Driver License",
-  "issuingAuthority.eldorado.cardArt": "eldorado/card_art.png",
-  "issuingAuthority.eldorado.requireUserAuthenticationToViewDocument": false
+  "client_requirements": {
+    "ios": {
+      "release_build": false,
+      "app_identifiers": []
+    },
+    "android": {
+      "gms_attestation": true,
+      "verified_boot_green": true,
+      "app_signature_certificate_digests": [
+        "9D:63:92:0E:03:F6:15:28:26:39:00:FF:E5:1D:03:3E:E2:2C:4B:77:5C:AA:CF:E2:93:78:AA:3E:1C:F7:BE:F4",
+        "54:4A:71:AD:63:1F:D8:61:4B:CB:6F:C7:1D:3B:8D:EF:19:56:E5:FC:BA:98:A8:55:02:64:40:0E:8E:1A:2E:1D",
+        "AC:7F:F2:B8:77:D0:9A:9C:5F:29:1A:E4:28:1F:E9:17:8F:1B:74:A6:8E:B8:0C:61:69:D0:18:EA:CE:CA:4A:88"
+      ],
+      "app_packages": [
+        "org.multipaz.testapp",
+        "org.multipaz.testapp.red",
+        "org.multipaz.samples.wallet.cmp"
+      ],
+      "key_mint_security_level": "tee"
+    }
+  }
 }

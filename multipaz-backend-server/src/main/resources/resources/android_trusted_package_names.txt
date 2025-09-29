@@ -1,2 +1,0 @@
-org.multipaz.testapp
-org.multipaz.testapp.red

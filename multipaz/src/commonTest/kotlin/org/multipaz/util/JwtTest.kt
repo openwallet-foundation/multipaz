@@ -10,13 +10,13 @@ import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.jwt.JwtCheck
+import org.multipaz.jwt.validateJwt
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
-import org.multipaz.rpc.backend.Resources
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
@@ -38,14 +38,16 @@ class JwtTest {
     @Test
     fun testSimple() = runBackendTest {
         val jwt = makeJwt(privateTrustedKey)
-        validateJwt(jwt, "test", privateTrustedKey.publicKey, clock = clock, checks = mapOf(
-            JwtCheck.JTI to TEST_JTI,
-            JwtCheck.SUB to TEST_SUB,
-            JwtCheck.ISS to TEST_ISS,
-            JwtCheck.AUD to TEST_AUD,
-            JwtCheck.NONCE to TEST_NONCE,
-            JwtCheck.JTI to "space1"
-        ))
+        validateJwt(
+            jwt, "test", privateTrustedKey.publicKey, clock = clock, checks = mapOf(
+                JwtCheck.JTI to TEST_JTI,
+                JwtCheck.SUB to TEST_SUB,
+                JwtCheck.ISS to TEST_ISS,
+                JwtCheck.AUD to TEST_AUD,
+                JwtCheck.NONCE to TEST_NONCE,
+                JwtCheck.JTI to "space1"
+            )
+        )
     }
 
     @Test
@@ -65,8 +67,10 @@ class JwtTest {
         val jwt = makeJwt(privateTrustedKey, exp = null, iat = clock.now())
         clock.advance(2.minutes)
         try {
-            validateJwt(jwt, "test", privateTrustedKey.publicKey,
-                clock = clock, maxValidity = 1.minutes)
+            validateJwt(
+                jwt, "test", privateTrustedKey.publicKey,
+                clock = clock, maxValidity = 1.minutes
+            )
             fail()
         } catch (err: InvalidRequestException) {
             assertTrue(err.message!!.lowercase().contains("expired"))
@@ -76,35 +80,47 @@ class JwtTest {
     @Test
     fun testReplay() = runBackendTest {
         val jwt = makeJwt(privateTrustedKey)
-        validateJwt(jwt, "test", privateTrustedKey.publicKey, clock = clock,
-            checks = mapOf(JwtCheck.JTI to "jti-space1"))
+        validateJwt(
+            jwt, "test", privateTrustedKey.publicKey, clock = clock,
+            checks = mapOf(JwtCheck.JTI to "jti-space1")
+        )
         try {
-            validateJwt(jwt, "test", privateTrustedKey.publicKey, clock = clock,
-                checks = mapOf(JwtCheck.JTI to "jti-space1"))
+            validateJwt(
+                jwt, "test", privateTrustedKey.publicKey, clock = clock,
+                checks = mapOf(JwtCheck.JTI to "jti-space1")
+            )
             fail()
         } catch (err: InvalidRequestException) {
             assertTrue(err.message!!.lowercase().contains("jti"))
         }
-        validateJwt(jwt, "test", privateTrustedKey.publicKey, clock = clock,
-            checks = mapOf(JwtCheck.JTI to "jti-space2"))
+        validateJwt(
+            jwt, "test", privateTrustedKey.publicKey, clock = clock,
+            checks = mapOf(JwtCheck.JTI to "jti-space2")
+        )
         clock.advance(2.minutes)
         val newJwt = makeJwt(privateTrustedKey)
-        validateJwt(newJwt, "test", privateTrustedKey.publicKey, clock = clock,
-            checks = mapOf(JwtCheck.JTI to "jti-space1"))
+        validateJwt(
+            newJwt, "test", privateTrustedKey.publicKey, clock = clock,
+            checks = mapOf(JwtCheck.JTI to "jti-space1")
+        )
     }
 
     @Test
     fun testTrustIss() = runBackendTest {
         val jwt = makeJwt(privateTrustedKey)
-        validateJwt(jwt, "test", publicKey = null, clock = clock,
-            checks = mapOf(JwtCheck.TRUST to "iss"))
+        validateJwt(
+            jwt, "test", publicKey = null, clock = clock,
+            checks = mapOf(JwtCheck.TRUST to "iss")
+        )
     }
 
     @Test
     fun testTrustKid() = runBackendTest {
         val jwt = makeJwt(privateTrustedKey, iss = null, kid = "test-kid")
-        validateJwt(jwt, "test", publicKey = null, clock = clock,
-            checks = mapOf(JwtCheck.TRUST to "kid"))
+        validateJwt(
+            jwt, "test", publicKey = null, clock = clock,
+            checks = mapOf(JwtCheck.TRUST to "kid")
+        )
     }
 
     @Test
@@ -132,8 +148,10 @@ class JwtTest {
         ).build()
         val chain = X509CertChain(listOf(cert, root))
         val jwt = makeJwt(x5cKey, iss = "test-x5c-leaf", x5c = chain)
-        validateJwt(jwt, "test", publicKey = null, clock = clock,
-            checks = mapOf(JwtCheck.TRUST to "x5c"))
+        validateJwt(
+            jwt, "test", publicKey = null, clock = clock,
+            checks = mapOf(JwtCheck.TRUST to "x5c")
+        )
     }
 
     private fun makeJwt(

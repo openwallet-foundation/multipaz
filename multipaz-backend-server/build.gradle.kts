@@ -25,8 +25,6 @@ java {
 dependencies {
     ksp(project(":multipaz-cbor-rpc"))
     implementation(project(":multipaz"))
-    implementation(project(":multipaz-provisioning-api"))
-    implementation(project(":multipaz-provisioning"))
 
     implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.serialization.json)
@@ -34,9 +32,12 @@ dependencies {
     implementation(libs.kotlinx.io.bytestring)
     implementation(libs.hsqldb)
     implementation(libs.mysql)
+    implementation(libs.postgresql)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.java)
     implementation(libs.ktor.server.netty)
+    implementation(libs.ktor.server.logging)
+    implementation(libs.logback.classic)
 
     testImplementation(libs.junit)
 }

@@ -10,8 +10,8 @@ class CloudSecureAreaSettings(private val conf: Configuration) {
     val iosReleaseBuild
         get() = getBool("ios_require_release_build", false)
 
-    val iosAppIdentifier
-        get() = getString("ios_require_app_identifier")
+    val iosAppIdentifiers
+        get() = getStringList("ios_require_app_identifiers")
 
     val androidRequireGmsAttestation
         get() = getBool("android_require_gms_attestation", true)
@@ -23,6 +23,12 @@ class CloudSecureAreaSettings(private val conf: Configuration) {
         get() = getStringList("android_require_app_signature_certificate_digests").map {
             ByteString(it.fromBase64Url())
         }
+
+    val androidRequireAppPackageNames: List<String>
+        get() = getStringList("android_require_app_package_names")
+
+    val androidRequireKeystoreSecurityLevel: String?
+        get() = getString("android_require_keystore_security_level")
 
     val cloudSecureAreaRekeyingIntervalSeconds: Int
         get() = getInt("cloud_secure_area_rekeying_interval_seconds", 300)

@@ -3,6 +3,9 @@ package org.multipaz.openid4vci.server
 import io.ktor.client.HttpClient
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
+import io.ktor.client.request.headers
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.readBytes
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.URLBuilder
@@ -14,11 +17,15 @@ import io.ktor.server.testing.testApplication
 import io.ktor.util.encodeBase64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.Assert
 import org.junit.Before
@@ -28,6 +35,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X509Cert
+import org.multipaz.openid4vci.request.preauthorizedOffer
 import org.multipaz.provisioning.AuthorizationChallenge
 import org.multipaz.provisioning.AuthorizationResponse
 import org.multipaz.provisioning.KeyBindingInfo
@@ -66,11 +74,28 @@ class ProvisioningClientTest {
     }
 
     @Test
-    fun basic() = testApplication {
-        val serverArgs = arrayOf(
-            "-param", "base_url=http://localhost",
-            "-param", "database_engine=ephemeral"
+    fun authorizationCodeWithScope() {
+        runWithAuthorizationCode(
+            arrayOf(
+                "-param", "base_url=http://localhost",
+                "-param", "database_engine=ephemeral",
+                "-use_scopes", "false"
+            )
         )
+    }
+
+    @Test
+    fun authorizationCodeWithAuthorizationDetails() {
+        runWithAuthorizationCode(
+            arrayOf(
+                "-param", "base_url=http://localhost",
+                "-param", "database_engine=ephemeral",
+                "-use_scopes", "false"
+            )
+        )
+    }
+
+    fun runWithAuthorizationCode(serverArgs: Array<String>) = testApplication {
         application {
             configureRouting(ServerConfiguration(serverArgs))
         }
@@ -144,7 +169,76 @@ class ProvisioningClientTest {
         }
     }
 
+    @Test
+    fun runWithPreauthorizedCode() = testApplication {
+        val serverArgs = arrayOf(
+            "-param", "base_url=http://localhost",
+            "-param", "database_engine=ephemeral",
+        )
+        application {
+            configureRouting(ServerConfiguration(serverArgs))
+        }
+        val httpClient = createClient {
+            followRedirects = false
+        }
+        val env = TestBackendEnvironment(httpClient)
+        withContext(env) {
+
+            val response = httpClient.post( "http://localhost/preauthorized_offer") {
+                headers {
+                    append("Content-Type", "application/json")
+                }
+                setBody(buildJsonObject {
+                    put("access_token", "Given:Family:1970-01-01")
+                    put("expires_in", 1000000)
+                    put("refresh_token", "foobar")
+                    put("scope", "mDL")
+                    put("instance", "")
+                    put("tx_kind", "n6")
+                    put("tx_prompt", "Prompt")
+                }.toString())
+            }
+            Assert.assertEquals(HttpStatusCode.OK, response.status)
+            val json = Json.parseToJsonElement(response.readBytes().decodeToString()).jsonArray
+            val offerObject = json.first().jsonObject
+            val preauthorizedOffer = offerObject["offer"]!!.jsonPrimitive.content
+            val txCode = offerObject["tx_code"]!!.jsonPrimitive.content
+
+            val provisioningClient = OpenID4VCI.createClientFromOffer(
+                offerUri = preauthorizedOffer,
+                clientPreferences = testClientPreferences
+            )
+            val challenges = provisioningClient.getAuthorizationChallenges()
+            Assert.assertEquals(1, challenges.size)
+            val challenge = challenges.first() as AuthorizationChallenge.SecretText
+
+            Assert.assertEquals("Prompt", challenge.request.description)
+            Assert.assertTrue(challenge.request.isNumeric)
+
+            provisioningClient.authorize(
+                AuthorizationResponse.SecretText(
+                    id = challenge.id,
+                    secret = txCode
+                )
+            )
+
+            Assert.assertEquals(0, provisioningClient.getAuthorizationChallenges().size)
+
+            val secureArea = secureAreaProvider.get()
+
+            provisioningClient.getKeyBindingChallenge()  // Our test backend does not verify key attestation
+
+            val keyInfo = secureArea.createKey(null, CreateKeySettings())
+
+            val credentials = provisioningClient.obtainCredentials(KeyBindingInfo.Attestation(listOf(keyInfo.attestation)))
+
+            Assert.assertEquals(1, credentials.size)
+        }
+    }
+
     object TestBackend: OpenID4VCIBackend {
+        override suspend fun getClientId(): String = localClientId
+
         override suspend fun createJwtClientAssertion(tokenUrl: String): String {
             throw IllegalStateException()
         }
@@ -198,7 +292,9 @@ class ProvisioningClientTest {
 
         override suspend fun createJwtKeyAttestation(
             keyAttestations: List<KeyAttestation>,
-            challenge: String
+            challenge: String,
+            userAuthentication: List<String>?,
+            keyStorage: List<String>?
         ): String {
             // Generate key attestation
             val keyList = keyAttestations.map { it.publicKey }

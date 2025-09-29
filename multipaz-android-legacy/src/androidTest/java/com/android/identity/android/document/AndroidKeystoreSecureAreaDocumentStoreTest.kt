@@ -35,8 +35,8 @@ import kotlinx.io.bytestring.ByteString
 import org.junit.Assert
 import org.junit.Before
 import org.junit.Test
+import org.multipaz.device.AndroidKeystoreSecurityLevel
 import org.multipaz.document.buildDocumentStore
-import org.multipaz.securearea.SecureAreaProvider
 
 // See DocumentStoreTest in non-Android tests for main tests for DocumentStore. These
 // tests are just for the Android-specific bits including attestation.
@@ -87,7 +87,7 @@ class AndroidKeystoreSecureAreaDocumentStoreTest {
         )
         if (!TestUtil.isRunningOnEmulator) {
             Assert.assertEquals(
-                AndroidAttestationExtensionParser.SecurityLevel.TRUSTED_ENVIRONMENT,
+                AndroidKeystoreSecurityLevel.TRUSTED_ENVIRONMENT,
                 parser.keymasterSecurityLevel
             )
         }

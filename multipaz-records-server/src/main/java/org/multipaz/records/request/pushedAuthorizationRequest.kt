@@ -16,10 +16,10 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.SimpleCipher
 import org.multipaz.server.getBaseUrl
-import org.multipaz.util.JwtCheck
+import org.multipaz.jwt.JwtCheck
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
-import org.multipaz.util.validateJwt
+import org.multipaz.jwt.validateJwt
 import kotlin.time.Duration.Companion.minutes
 
 /**

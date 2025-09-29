@@ -25,7 +25,6 @@ class RpcAuthIssuerAssertion(
     private val secureArea: SecureArea,
     private val deviceAttestationId: String
 ): RpcAuthIssuer {
-    val lock = Mutex()
     override suspend fun auth(target: String, method: String, payload: Bstr): DataItem {
         val sessionContext = coroutineContext[RpcAuthClientSession.Key]
             ?: throw IllegalStateException("RpcAuthClientSessionContext must be provided")

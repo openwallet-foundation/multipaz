@@ -25,15 +25,10 @@ import org.multipaz.asn1.ASN1Set
 import org.multipaz.asn1.ASN1TaggedObject
 import org.multipaz.crypto.X509Cert
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.device.AndroidKeystoreSecurityLevel
 
 // This code is based on https://github.com/google/android-key-attestation
 class AndroidAttestationExtensionParser(cert: X509Cert) {
-    enum class SecurityLevel {
-        SOFTWARE,
-        TRUSTED_ENVIRONMENT,
-        STRONG_BOX
-    }
-
     enum class VerifiedBootState {
         UNKNOWN,
         GREEN,
@@ -42,10 +37,10 @@ class AndroidAttestationExtensionParser(cert: X509Cert) {
         RED
     }
 
-    val attestationSecurityLevel: SecurityLevel
+    val attestationSecurityLevel: AndroidKeystoreSecurityLevel
     val attestationVersion: Int
 
-    val keymasterSecurityLevel: SecurityLevel
+    val keymasterSecurityLevel: AndroidKeystoreSecurityLevel
     val keymasterVersion: Int
 
     val attestationChallenge: ByteArray
@@ -54,6 +49,8 @@ class AndroidAttestationExtensionParser(cert: X509Cert) {
     val verifiedBootState: VerifiedBootState
 
     val applicationSignatureDigests: List<ByteString>
+
+    val applicationPackages: List<String>
 
     private val softwareEnforcedAuthorizations: Map<Int, ASN1Object>
     private val teeEnforcedAuthorizations: Map<Int, ASN1Object>
@@ -106,13 +103,21 @@ class AndroidAttestationExtensionParser(cert: X509Cert) {
         val attestationApplicationIdSeq = (ASN1.decode(encodedAttestationApplicationId)
             ?: throw IllegalArgumentException("ASN.1 parsing failed")) as ASN1Sequence
 
-        val signatureDigestSet = attestationApplicationIdSeq.elements[1] as ASN1Set
-        val digests = mutableListOf<ByteString>()
-        for (element in signatureDigestSet.elements) {
-            val octetString = element as ASN1OctetString
-            digests.add(ByteString(octetString.value))
+        val packageInfoSet = attestationApplicationIdSeq.elements[0] as ASN1Set
+        applicationPackages = buildList {
+            for (element in packageInfoSet.elements) {
+                val packageInfo = element as ASN1Sequence
+                add((packageInfo.elements[0] as ASN1OctetString).value.decodeToString())
+            }
         }
-        applicationSignatureDigests = digests
+
+        val signatureDigestSet = attestationApplicationIdSeq.elements[1] as ASN1Set
+        applicationSignatureDigests = buildList {
+            for (element in signatureDigestSet.elements) {
+                val octetString = element as ASN1OctetString
+                add(ByteString(octetString.value))
+            }
+        }
     }
 
     val softwareEnforcedAuthorizationTags: Set<Int>
@@ -441,11 +446,11 @@ class AndroidAttestationExtensionParser(cert: X509Cert) {
             return authorizationMap
         }
 
-        private fun securityLevelToEnum(securityLevel: Int): SecurityLevel {
+        private fun securityLevelToEnum(securityLevel: Int): AndroidKeystoreSecurityLevel {
             return when (securityLevel) {
-                KM_SECURITY_LEVEL_SOFTWARE -> SecurityLevel.SOFTWARE
-                KM_SECURITY_LEVEL_TRUSTED_ENVIRONMENT -> SecurityLevel.TRUSTED_ENVIRONMENT
-                KM_SECURITY_LEVEL_STRONG_BOX -> SecurityLevel.STRONG_BOX
+                KM_SECURITY_LEVEL_SOFTWARE -> AndroidKeystoreSecurityLevel.SOFTWARE
+                KM_SECURITY_LEVEL_TRUSTED_ENVIRONMENT -> AndroidKeystoreSecurityLevel.TRUSTED_ENVIRONMENT
+                KM_SECURITY_LEVEL_STRONG_BOX -> AndroidKeystoreSecurityLevel.STRONG_BOX
                 else -> throw IllegalArgumentException("Invalid security level.")
             }
         }

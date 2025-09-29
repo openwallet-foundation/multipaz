@@ -18,15 +18,17 @@ data class DeviceAttestationValidationData(
     val iosReleaseBuild: Boolean,
 
     /**
+     * List of allowed iOS app identifiers.
+     *
      * iOS app identifier that consists of a team id followed by a dot and app bundle name. If
-     * `null`, any app identifier is accepted.
+     * empty, any app identifier is accepted.
      *
      * On iOS this is the primary method of ensuring the the app that generated a given
      * [DeviceAttestation] is legitimate, as team id is tied to your team.
      *
-     * It must not be `null` if [iosReleaseBuild] is `true`
+     * It must not be empty if [iosReleaseBuild] is `true`
      */
-    val iosAppIdentifier: String?,
+    val iosAppIdentifiers: Set<String>,
 
     /**
      * Ensure that the private key in the Android attestation is certified as legitimate using the
@@ -40,10 +42,36 @@ data class DeviceAttestationValidationData(
     val androidVerifiedBootGreen: Boolean,
 
     /**
-     * Allowed list of Android applications. Each element is the bytes of the SHA-256 of
-     * a signing certificate, see the
-     * [Signature](https://developer.android.com/reference/android/content/pm/Signature) class in
-     * the Android SDK for details. If empty, allow any app.
+     * Minimally acceptable security level on Android.
      */
-    val androidAppSignatureCertificateDigests: List<ByteString>,
-)
+    val androidRequiredKeyMintSecurityLevel: AndroidKeystoreSecurityLevel,
+
+    /**
+     * Allowed list of Android applications signing certificates.
+     *
+     * Each element is the bytes of the SHA-256 of a signing certificate, see the
+     * [Signature](https://developer.android.com/reference/android/content/pm/Signature) class in
+     * the Android SDK for details. If empty, allow apps signed with any signature.
+     */
+    val androidAppSignatureCertificateDigests: Set<ByteString>,
+
+    /**
+     * Allowed list of Android application package names.
+     *
+     * If empty, allow any app.
+     */
+    val androidAppPackageNames: Set<String>
+) {
+    fun withChallenge(challenge: ByteString): DeviceAttestationValidationData {
+        return DeviceAttestationValidationData(
+            attestationChallenge = challenge,
+            iosReleaseBuild = iosReleaseBuild,
+            iosAppIdentifiers = iosAppIdentifiers,
+            androidRequiredKeyMintSecurityLevel = androidRequiredKeyMintSecurityLevel,
+            androidGmsAttestation = androidGmsAttestation,
+            androidVerifiedBootGreen = androidVerifiedBootGreen,
+            androidAppSignatureCertificateDigests = androidAppSignatureCertificateDigests,
+            androidAppPackageNames = androidAppPackageNames
+        )
+    }
+}

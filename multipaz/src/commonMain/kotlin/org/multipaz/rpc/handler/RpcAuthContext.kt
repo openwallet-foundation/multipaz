@@ -1,6 +1,7 @@
 package org.multipaz.rpc.handler
 
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.device.DeviceAttestation
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
 
@@ -30,6 +31,9 @@ class RpcAuthContext(
         suspend fun getClientId(): String {
             return coroutineContext[Key]!!.clientId
         }
+
+        suspend fun getClientDeviceAttestation(): DeviceAttestation? =
+            RpcAuthInspectorAssertion.getClientDeviceAttestation(getClientId())
 
         suspend fun getSessionId(): String {
             return coroutineContext[Key]!!.sessionId

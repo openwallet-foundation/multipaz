@@ -5,7 +5,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
 import io.ktor.server.request.receive
-import io.ktor.server.request.uri
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
@@ -18,24 +17,28 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
-import org.multipaz.legacyprovisioning.LandingUrlNotification
-import org.multipaz.legacyprovisioning.wallet.ApplicationSupportState
-import org.multipaz.legacyprovisioning.wallet.LandingRecord
-import org.multipaz.legacyprovisioning.wallet.ProvisioningBackendState
-import org.multipaz.legacyprovisioning.wallet.emit
-import org.multipaz.legacyprovisioning.wallet.fromCbor
-import org.multipaz.legacyprovisioning.wallet.toCbor
-import org.multipaz.rpc.backend.Resources
-import org.multipaz.rpc.backend.getTable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
+import org.multipaz.rpc.server.ClientCheckImpl
+import org.multipaz.rpc.server.ClientRegistrationImpl
+import org.multipaz.backend.openid4vci.OpenID4VCIBackendImpl
+import org.multipaz.backend.openid4vci.register
+import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.handler.HttpHandler
 import org.multipaz.rpc.handler.RpcDispatcherLocal
 import org.multipaz.rpc.handler.RpcExceptionMap
 import org.multipaz.rpc.handler.SimpleCipher
+import org.multipaz.rpc.server.register
 import org.multipaz.rpc.transport.HttpTransport
 import org.multipaz.server.ServerConfiguration
 import org.multipaz.server.ServerEnvironment
-import org.multipaz.server.baseUrl
 import org.multipaz.util.Logger
+import java.util.Locale
 
 const val TAG = "ApplicationExt"
 
@@ -44,39 +47,18 @@ const val TAG = "ApplicationExt"
  */
 fun Application.configureRouting(configuration: ServerConfiguration) {
     val environment = ServerEnvironment.create(configuration)
-    val httpHandler = createHttpHandler(environment)
+    val httpHandler = initAndCreateHttpHandler(environment)
     routing {
         get ("/") {
-            call.respondText("Multipaz RPC server is running")
+            call.respondText("Multipaz back-end server is running")
         }
-        get("/landing/{id}") {
-            val id = call.parameters["id"]!!
-            val env = environment.await()
-            val rawUri = call.request.uri
-            Logger.i(TAG, "landing $rawUri")
-            val queryIndex = rawUri.indexOf("?")
-            if (queryIndex < 0) {
-                call.respond(HttpStatusCode.BadRequest, "No query")
-                return@get
+        get("/.well-known/assetlinks.json") {
+            withContext(environment.await()) {
+                call.respondText(
+                    contentType = ContentType.Application.Json,
+                    text = generateAssetLinksJson().toString()
+                )
             }
-            val storage = env.getTable(ApplicationSupportState.landingTableSpec)
-            val recordData = storage.get(id)
-            if (recordData == null) {
-                call.respond(HttpStatusCode.NotFound, "No such landing id")
-                return@get
-            }
-            val record = LandingRecord.fromCbor(recordData.toByteArray())
-            record.resolved = rawUri.substring(queryIndex + 1)
-            storage.update(id, ByteString(record.toCbor()))
-            val baseUrl = configuration.baseUrl
-            val landingUrl = "$baseUrl/${ApplicationSupportState.URL_PREFIX}$id"
-            withContext(env) {
-                ApplicationSupportState(record.clientId)
-                    .emit(LandingUrlNotification(landingUrl))
-            }
-            val resources = env.getInterface(Resources::class)!!
-            val html = resources.getStringResource("landing/index.html")!!
-            call.respondText(html, ContentType.Text.Html)
         }
         post("/rpc/{endpoint}/{method}") {
             val endpoint = call.parameters["endpoint"]!!
@@ -88,6 +70,7 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
                 Logger.i(TAG, "POST $endpoint/$method status 200")
                 call.respond(response.toByteArray())
             } catch (e: CancellationException) {
+                Logger.e(TAG, "POST $endpoint/$method, request cancelled", e)
                 throw e
             } catch (e: UnsupportedOperationException) {
                 Logger.e(TAG, "POST $endpoint/$method status 404", e)
@@ -110,11 +93,14 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
     }
 }
 
-private fun createHttpHandler(
+private fun initAndCreateHttpHandler(
     environment: Deferred<ServerEnvironment>
 ): Deferred<HttpHandler> {
     return CoroutineScope(Dispatchers.Default).async {
         val env = environment.await()
+        withContext(env) {
+            OpenID4VCIBackendImpl.init()
+        }
         val exceptionMapBuilder = RpcExceptionMap.Builder()
         buildExceptionMap(exceptionMapBuilder)
         val dispatcherBuilder = RpcDispatcherLocal.Builder()
@@ -130,9 +116,39 @@ private fun createHttpHandler(
 }
 
 private fun buildExceptionMap(exceptionMapBuilder: RpcExceptionMap.Builder) {
-    ProvisioningBackendState.registerExceptions(exceptionMapBuilder)
 }
 
 private fun buildDispatcher(dispatcherBuilder: RpcDispatcherLocal.Builder) {
-    ProvisioningBackendState.registerAll(dispatcherBuilder)
+    ClientRegistrationImpl.register(dispatcherBuilder)
+    ClientCheckImpl.register(dispatcherBuilder)
+    OpenID4VCIBackendImpl.register(dispatcherBuilder)
 }
+
+private suspend fun generateAssetLinksJson(): JsonElement =
+    buildJsonArray {
+        val clientRequirements = ClientRegistrationImpl.getClientRequirements()
+        // We only support assetlink generation for apps with a single signature
+        for (digest in clientRequirements.androidAppSignatureCertificateDigests) {
+            val digestString = digestToString(digest)
+            for (packageName in clientRequirements.androidAppPackageNames) {
+                addJsonObject {
+                    putJsonArray("relation") {
+                        add("delegate_permission/common.handle_all_urls")
+                    }
+                    putJsonObject("target") {
+                        put("namespace", "android_app")
+                        put("package_name", packageName)
+                        putJsonArray("sha256_cert_fingerprints") {
+                            add(digestString)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+private fun digestToString(digest: ByteString): String =
+    digest.toByteArray().joinToString(":") { byte ->
+        (byte.toInt() and 0xFF).toString(16).padStart(2, '0')
+    }.uppercase(Locale.ROOT)
