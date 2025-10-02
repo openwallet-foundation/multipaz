@@ -65,7 +65,7 @@ internal suspend fun mdocPresentment(
     if (transport.state.value != MdocTransport.State.CONNECTED) {
         throw Error("Expected state CONNECTED but found ${transport.state.value}")
     }
-
+    //Logger.iCbor(TAG, "DeviceEngagement", mechanism.encodedDeviceEngagement.toByteArray())
     try {
         var sessionEncryption: SessionEncryption? = null
         var encodedSessionTranscript: ByteArray? = null
@@ -105,7 +105,9 @@ internal suspend fun mdocPresentment(
 
             val deviceResponseGenerator = DeviceResponseGenerator(Constants.DEVICE_RESPONSE_STATUS_OK)
 
-            val deviceRequest = DeviceRequest.fromDataItem(Cbor.decode(encodedDeviceRequest!!))
+            val deviceRequestCbor = Cbor.decode(encodedDeviceRequest!!)
+            //Logger.iCbor(TAG, "DeviceRequest", deviceRequestCbor)
+            val deviceRequest = DeviceRequest.fromDataItem(deviceRequestCbor)
             deviceRequest.verifyReaderAuthentication(sessionTranscript = RawCbor(encodedSessionTranscript!!))
             for (docRequest in deviceRequest.docRequests) {
                 val zkRequested = docRequest.docRequestInfo?.zkRequest != null

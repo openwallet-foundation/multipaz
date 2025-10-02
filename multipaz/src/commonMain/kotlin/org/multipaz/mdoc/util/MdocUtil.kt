@@ -699,6 +699,52 @@ object MdocUtil {
 }
 
 /**
+ * Parses a version string used in ISO mdoc data structures into major and minor versions.
+ *
+ * @return the major and minor version
+ * @throws IllegalArgumentException if unable to parse the string.
+ */
+fun String.parseMdocVersion(): Pair<Int, Int> {
+    val splits = this.split(".")
+    require(splits.size == 2) { "Expected version string '$this' to only have two components" }
+    val major = try {
+        splits[0].toInt()
+    } catch (e: NumberFormatException) {
+        throw IllegalArgumentException("Expected first component of '$this' to be an integer", e)
+    }
+    val minor = try {
+        splits[1].toInt()
+    } catch (e: NumberFormatException) {
+        throw IllegalArgumentException("Expected second component of '$this' to be an integer", e)
+    }
+    return Pair(major, minor)
+}
+
+/**
+ * Compares two ISO mdoc versions.
+ *
+ * @param otherVersion the other ISO mdoc version.
+ * @return positive number if greater than [otherVersion], negative number of [otherVersion] is greater, 0 if the
+ *   versions are equal.
+ * @throws IllegalArgumentException if unable to parse the string.
+ */
+fun String.mdocVersionCompareTo(otherVersion: String): Int {
+    val (major, minor) = this.parseMdocVersion()
+    val (otherMajor, otherMinor) = otherVersion.parseMdocVersion()
+    if (major > otherMajor) {
+        return 1
+    } else if (major < otherMajor) {
+        return -1
+    }
+    if (minor > otherMinor) {
+        return 1
+    } else if (minor < otherMinor) {
+        return -1
+    }
+    return 0
+}
+
+/**
  * Convert to a [MdocRequest].
  *
  * @param documentTypeRepository a [DocumentTypeRepository] used to determine the display name for claims.

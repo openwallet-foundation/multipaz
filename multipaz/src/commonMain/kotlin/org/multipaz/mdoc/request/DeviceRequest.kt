@@ -19,8 +19,10 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.SecureArea
+import org.multipaz.util.Logger
 
 /**
  * Top-level request in ISO 18013-5.
@@ -166,10 +168,20 @@ data class DeviceRequest private constructor(
                 DocRequest.fromDataItem(it)
             }
             val deviceRequestInfo = dataItem.getOrNull("deviceRequestInfo")?.let {
-                DeviceRequestInfo.fromDataItem(it)
+                if (version.mdocVersionCompareTo("1.1") >= 0) {
+                    DeviceRequestInfo.fromDataItem(it)
+                } else {
+                    Logger.w(TAG, "Ignoring deviceRequestInfo field since version is less than 1.1")
+                    null
+                }
             }
-            val readerAuthAll = dataItem.getOrNull("readerAuthAll")?.asArray?.map {
-                it.asCoseSign1
+            val readerAuthAll = dataItem.getOrNull("readerAuthAll")?.let {
+                if (version.mdocVersionCompareTo("1.1") >= 0) {
+                    it.asArray.map { elem -> elem.asCoseSign1 }
+                } else {
+                    Logger.w(TAG, "Ignoring readerAuthAll field since version is less than 1.1")
+                    emptyList()
+                }
             } ?: emptyList()
             return DeviceRequest(
                 version = version,

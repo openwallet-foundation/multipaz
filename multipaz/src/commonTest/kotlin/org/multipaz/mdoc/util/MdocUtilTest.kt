@@ -43,6 +43,8 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class MdocUtilTest {
     @Test
@@ -446,5 +448,45 @@ class MdocUtilTest {
             ASN1.print(ASN1.decode(readerCert.getExtensionValue(
                 OID.X509_EXTENSION_KEY_USAGE.oid)!!)!!).trim()
         )
+    }
+
+    @Test
+    fun mdocVersionParsing() {
+        assertEquals(Pair(1, 0), "1.0".parseMdocVersion())
+        assertEquals(Pair(1, 1), "1.1".parseMdocVersion())
+        assertEquals(Pair(3, 10), "3.10".parseMdocVersion())
+
+        assertEquals(
+            "Expected version string '1.0.0' to only have two components",
+            assertFailsWith(IllegalArgumentException::class) {
+                val parsed = "1.0.0".parseMdocVersion()
+            }.message
+        )
+
+        assertEquals(
+            "Expected first component of 'a.1' to be an integer",
+            assertFailsWith(IllegalArgumentException::class) {
+                val parsed = "a.1".parseMdocVersion()
+            }.message
+        )
+
+        assertEquals(
+            "Expected second component of '1.a' to be an integer",
+            assertFailsWith(IllegalArgumentException::class) {
+                val parsed = "1.a".parseMdocVersion()
+            }.message
+        )
+    }
+
+    @Test
+    fun mdocVersionCompare() {
+        assertTrue("1.0".mdocVersionCompareTo("1.1") < 0)
+        assertTrue("1.1".mdocVersionCompareTo("1.0") > 0)
+
+        assertTrue("1.0".mdocVersionCompareTo("1.0") == 0)
+        assertTrue("1.2".mdocVersionCompareTo("1.2") == 0)
+
+        assertTrue("1.10".compareTo("1.2") < 0)
+        assertTrue("1.10".mdocVersionCompareTo("1.2") > 0)
     }
 }
