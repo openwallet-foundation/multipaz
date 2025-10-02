@@ -18,6 +18,7 @@ import org.multipaz.util.toBase64
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.toHex
 import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * Abstract base class for CBOR data items.
@@ -379,6 +380,7 @@ sealed class DataItem(
      *
      * @return a [JsonElement].
      */
+    @OptIn(ExperimentalEncodingApi::class)
     fun toJson(): JsonElement {
         // See RFC 8949 section 6.1
         return when (this) {
