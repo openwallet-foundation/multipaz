@@ -28,7 +28,10 @@ import org.multipaz.models.presentment.MdocPresentmentMechanism
 import org.multipaz.models.presentment.PresentmentModel
 import org.multipaz.models.presentment.PresentmentSource
 import org.multipaz.prompt.PromptModel
+import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
+
+private const val TAG = "MdocProximityQrPresentment"
 
 /**
  * A composable for presentment with QR engagement according to ISO/IEC 18013-5:2021.
@@ -44,6 +47,9 @@ import org.multipaz.util.toBase64Url
  * - in the other states, the [Presentment] composable is shown until the reader disconnect. This
  *   includes showing consent and authentication dialogs. When the reader disconnects [presentmentModel]
  *   goes to state [PresentmentModel.State.IDLE] and [showQrButton] composable is shown.
+ *
+ * Applications should call [PresentmentModel.reset] before entering the composition containing this
+ * composable.
  *
  * @param modifier a [Modifier].
  * @param appName the name of the application.
@@ -123,6 +129,10 @@ fun MdocProximityQrPresentment(
             }
 
             PresentmentModel.State.CONNECTING -> {
+                if (qrCodeToShow.value == null) {
+                    Logger.w(TAG, "No QR code. Did you forget to reset the PresentmentModel before " +
+                            "entering the composition containing this MdocProximityQrPresentment?")
+                }
                 qrCodeToShow.value?.let {
                     showQrCode(it)
                 }

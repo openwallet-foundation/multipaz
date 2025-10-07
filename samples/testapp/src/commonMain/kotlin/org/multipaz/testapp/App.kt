@@ -891,7 +891,10 @@ class App private constructor (val promptModel: PromptModel) {
                             onClickConsentSheetList = { navController.navigate(ConsentPromptDestination.route) },
                             onClickQrCodes = { navController.navigate(QrCodesDestination.route) },
                             onClickNfc = { navController.navigate(NfcDestination.route) },
-                            onClickIsoMdocProximitySharing = { navController.navigate(IsoMdocProximitySharingDestination.route) },
+                            onClickIsoMdocProximitySharing = {
+                                presentmentModel.reset()
+                                navController.navigate(IsoMdocProximitySharingDestination.route)
+                            },
                             onClickIsoMdocProximityReading = { navController.navigate(IsoMdocProximityReadingDestination.route) },
                             onClickDcRequest = { navController.navigate(DcRequestDestination.route) },
                             onClickMdocTransportMultiDeviceTesting = { navController.navigate(IsoMdocMultiDeviceTestingDestination.route) },
