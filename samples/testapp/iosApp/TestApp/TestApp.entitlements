@@ -6,9 +6,20 @@
 	<array>
 		<string>applinks:apps.multipaz.org</string>
 	</array>
+	<key>com.apple.developer.identity-document-services.document-provider.mobile-document-types</key>
+	<array>
+		<string>eu.europa.ec.av.1</string>
+		<string>eu.europa.ec.eudi.pid.1</string>
+		<string>org.iso.18013.5.1.mDL</string>
+		<string>org.iso.23220.photoid.1</string>
+	</array>
 	<key>com.apple.developer.nfc.readersession.formats</key>
 	<array>
 		<string>TAG</string>
+	</array>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.org.multipaz.testapp.sharedgroup</string>
 	</array>
 </dict>
 </plist>

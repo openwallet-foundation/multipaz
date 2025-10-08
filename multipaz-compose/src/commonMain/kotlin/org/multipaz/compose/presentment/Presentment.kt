@@ -260,7 +260,7 @@ private fun ConsentPrompt(
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true
     )
-    CredentialPresentmentModalBottomSheet(
+    ConsentModalBottomSheet(
         sheetState = sheetState,
         requester = presentmentModel.consentData.requester,
         trustPoint = presentmentModel.consentData.trustPoint,

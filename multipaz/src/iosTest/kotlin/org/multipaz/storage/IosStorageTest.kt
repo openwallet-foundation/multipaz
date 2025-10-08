@@ -34,9 +34,6 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlin.text.get
-import kotlin.text.insert
-import kotlin.text.iterator
 import kotlin.time.Duration.Companion.minutes
 
 class IosStorageTest {

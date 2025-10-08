@@ -3,30 +3,85 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		058557BB273AAA24004C7B11 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 058557BA273AAA24004C7B11 /* Assets.xcassets */; };
 		058557D9273AAEEB004C7B11 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 058557D8273AAEEB004C7B11 /* Preview Assets.xcassets */; };
 		2152FB042600AC8F00CF470E /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2152FB032600AC8F00CF470E /* iOSApp.swift */; };
+		51804B232EF70CAF00A95196 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51804B222EF70CAF00A95196 /* Extensions.swift */; };
+		51D0CF4A2E9682B1004EC0DB /* DocumentProviderExtension.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = 51D0CF432E9682B1004EC0DB /* DocumentProviderExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7555FF83242A565900829871 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7555FF82242A565900829871 /* ContentView.swift */; };
+		7B1E53ED2EF5EDE2007C8E8D /* DocumentModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B1E53EB2EF5EDE2007C8E8D /* DocumentModel.swift */; };
+		7B1E53EE2EF5EE16007C8E8D /* RequestAuthorizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51EF29922EF40D730077E722 /* RequestAuthorizationView.swift */; };
+		7B1E54072EF5F3CA007C8E8D /* Consent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B1E54062EF5F3CA007C8E8D /* Consent.swift */; };
 		7BAB1AC82DB687B000CAC98C /* DeveloperConfig.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 7BAB1AC72DB687B000CAC98C /* DeveloperConfig.xcconfig */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		51D0CF482E9682B1004EC0DB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7555FF73242A565900829871 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 51D0CF422E9682B1004EC0DB;
+			remoteInfo = DocumentProviderExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		51D0CF4F2E9682B1004EC0DB /* Embed ExtensionKit Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(EXTENSIONS_FOLDER_PATH)";
+			dstSubfolderSpec = 16;
+			files = (
+				51D0CF4A2E9682B1004EC0DB /* DocumentProviderExtension.appex in Embed ExtensionKit Extensions */,
+			);
+			name = "Embed ExtensionKit Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		058557BA273AAA24004C7B11 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		058557D8273AAEEB004C7B11 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		2152FB032600AC8F00CF470E /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
+		51804B222EF70CAF00A95196 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
+		51D0CF432E9682B1004EC0DB /* DocumentProviderExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.extensionkit-extension"; includeInIndex = 0; path = DocumentProviderExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		51EF29922EF40D730077E722 /* RequestAuthorizationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RequestAuthorizationView.swift; sourceTree = "<group>"; };
 		7555FF7B242A565900829871 /* Multipaz Test App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Multipaz Test App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7555FF82242A565900829871 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		7555FF8C242A565B00829871 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		7B1E53EB2EF5EDE2007C8E8D /* DocumentModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentModel.swift; sourceTree = "<group>"; };
+		7B1E54062EF5F3CA007C8E8D /* Consent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Consent.swift; sourceTree = "<group>"; };
 		7B39212C2C27D97A00A18AB5 /* TestApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TestApp.entitlements; sourceTree = "<group>"; };
 		7B9C61172DBA8D46000484FF /* AdditionalConfig.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = AdditionalConfig.xcconfig; sourceTree = "<group>"; };
 		7BAB1AC72DB687B000CAC98C /* DeveloperConfig.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = DeveloperConfig.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		51D0CF4B2E9682B1004EC0DB /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 51D0CF422E9682B1004EC0DB /* DocumentProviderExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		51D0CF442E9682B1004EC0DB /* DocumentProviderExtension */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (51D0CF4B2E9682B1004EC0DB /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = DocumentProviderExtension; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
+
 /* Begin PBXFrameworksBuildPhase section */
+		51D0CF402E9682B1004EC0DB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B92378962B6B1156000C7307 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -45,12 +100,26 @@
 			path = "Preview Content";
 			sourceTree = "<group>";
 		};
+		51B083112EF4028400A90AA1 /* MultipazSwift */ = {
+			isa = PBXGroup;
+			children = (
+				51804B222EF70CAF00A95196 /* Extensions.swift */,
+				7B1E54062EF5F3CA007C8E8D /* Consent.swift */,
+				7B1E53EB2EF5EDE2007C8E8D /* DocumentModel.swift */,
+				51EF29922EF40D730077E722 /* RequestAuthorizationView.swift */,
+			);
+			name = MultipazSwift;
+			path = "../../../multipaz-swift/Sources/MultipazSwift";
+			sourceTree = "<group>";
+		};
 		7555FF72242A565900829871 = {
 			isa = PBXGroup;
 			children = (
+				51B083112EF4028400A90AA1 /* MultipazSwift */,
 				7B9C61172DBA8D46000484FF /* AdditionalConfig.xcconfig */,
 				7BAB1AC72DB687B000CAC98C /* DeveloperConfig.xcconfig */,
 				7555FF7D242A565900829871 /* TestApp */,
+				51D0CF442E9682B1004EC0DB /* DocumentProviderExtension */,
 				7555FF7C242A565900829871 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -59,6 +128,7 @@
 			isa = PBXGroup;
 			children = (
 				7555FF7B242A565900829871 /* Multipaz Test App.app */,
+				51D0CF432E9682B1004EC0DB /* DocumentProviderExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -79,6 +149,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		51D0CF422E9682B1004EC0DB /* DocumentProviderExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 51D0CF4C2E9682B1004EC0DB /* Build configuration list for PBXNativeTarget "DocumentProviderExtension" */;
+			buildPhases = (
+				7B782E0A2EEC7EC90063BDE5 /* Compile Kotlin Framework */,
+				51D0CF3F2E9682B1004EC0DB /* Sources */,
+				51D0CF402E9682B1004EC0DB /* Frameworks */,
+				51D0CF412E9682B1004EC0DB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				51D0CF442E9682B1004EC0DB /* DocumentProviderExtension */,
+			);
+			name = DocumentProviderExtension;
+			packageProductDependencies = (
+			);
+			productName = DocumentProviderExtension;
+			productReference = 51D0CF432E9682B1004EC0DB /* DocumentProviderExtension.appex */;
+			productType = "com.apple.product-type.extensionkit-extension";
+		};
 		7555FF7A242A565900829871 /* TestApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 7555FFA5242A565B00829871 /* Build configuration list for PBXNativeTarget "TestApp" */;
@@ -87,10 +180,12 @@
 				7555FF77242A565900829871 /* Sources */,
 				B92378962B6B1156000C7307 /* Frameworks */,
 				7555FF79242A565900829871 /* Resources */,
+				51D0CF4F2E9682B1004EC0DB /* Embed ExtensionKit Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				51D0CF492E9682B1004EC0DB /* PBXTargetDependency */,
 			);
 			name = TestApp;
 			productName = TestApp;
@@ -104,10 +199,13 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastSwiftUpdateCheck = 1130;
+				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 1540;
 				ORGANIZATIONNAME = orgName;
 				TargetAttributes = {
+					51D0CF422E9682B1004EC0DB = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
 					7555FF7A242A565900829871 = {
 						CreatedOnToolsVersion = 11.3.1;
 					};
@@ -127,11 +225,19 @@
 			projectRoot = "";
 			targets = (
 				7555FF7A242A565900829871 /* TestApp */,
+				51D0CF422E9682B1004EC0DB /* DocumentProviderExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		51D0CF412E9682B1004EC0DB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		7555FF79242A565900829871 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -145,6 +251,24 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		7B782E0A2EEC7EC90063BDE5 /* Compile Kotlin Framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Compile Kotlin Framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"\n  exit 0\nfi\ncd \"$SRCROOT/..\"\n../../gradlew :samples:testapp:embedAndSignAppleFrameworkForXcode\n";
+		};
 		F36B1CEB2AD83DDC00CB74D5 /* Compile Kotlin Framework */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -167,6 +291,17 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		51D0CF3F2E9682B1004EC0DB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				51804B232EF70CAF00A95196 /* Extensions.swift in Sources */,
+				7B1E53ED2EF5EDE2007C8E8D /* DocumentModel.swift in Sources */,
+				7B1E53EE2EF5EE16007C8E8D /* RequestAuthorizationView.swift in Sources */,
+				7B1E54072EF5F3CA007C8E8D /* Consent.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		7555FF77242A565900829871 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -178,7 +313,93 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		51D0CF492E9682B1004EC0DB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 51D0CF422E9682B1004EC0DB /* DocumentProviderExtension */;
+			targetProxy = 51D0CF482E9682B1004EC0DB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		51D0CF4D2E9682B1004EC0DB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7B9C61172DBA8D46000484FF /* AdditionalConfig.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CODE_SIGN_ENTITLEMENTS = DocumentProviderExtension/DocumentProviderExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "$(inherited)";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DocumentProviderExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DocumentProviderExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025 orgName. All rights reserved.";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = "-lsqlite3";
+				PRODUCT_BUNDLE_IDENTIFIER = "${BUNDLE_ID}${TEAM_ID}.DocumentProviderExtension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		51D0CF4E2E9682B1004EC0DB /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7B9C61172DBA8D46000484FF /* AdditionalConfig.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CODE_SIGN_ENTITLEMENTS = DocumentProviderExtension/DocumentProviderExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "$(inherited)";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DocumentProviderExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = DocumentProviderExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025 orgName. All rights reserved.";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = "-lsqlite3";
+				PRODUCT_BUNDLE_IDENTIFIER = "${BUNDLE_ID}${TEAM_ID}.DocumentProviderExtension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		7555FFA3242A565B00829871 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -374,6 +595,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		51D0CF4C2E9682B1004EC0DB /* Build configuration list for PBXNativeTarget "DocumentProviderExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				51D0CF4D2E9682B1004EC0DB /* Debug */,
+				51D0CF4E2E9682B1004EC0DB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		7555FF76242A565900829871 /* Build configuration list for PBXProject "TestApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

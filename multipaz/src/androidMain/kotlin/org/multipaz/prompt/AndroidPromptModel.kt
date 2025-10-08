@@ -31,7 +31,7 @@ class AndroidPromptModel private constructor(builder: Builder): PromptModel(buil
         toHumanReadable: ConvertToHumanReadableFn = ::defaultConvertToHumanReadable
     ): PromptModel.Builder(toHumanReadable) {
 
-        override fun addCommonDialogs() {
+        override fun addCommonDialogs() = apply {
             super.addCommonDialogs()
             addPromptDialogModel(BiometricPromptDialogModel())
             addPromptDialogModel(ScanNfcPromptDialogModel())

@@ -13,6 +13,7 @@ plugins {
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.buildconfig)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.skie)
 }
 
 val projectVersionCode: Int by rootProject.extra
@@ -56,9 +57,17 @@ kotlin {
         iosSimulatorArm64()
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
-            baseName = "TestApp"
+            baseName = "Multipaz"
             isStatic = true
-            linkerOpts.add("-framework CoreVideo")
+            export(project(":multipaz"))
+            export(project(":multipaz-doctypes"))
+            export(project(":multipaz-longfellow"))
+            export(libs.ktor.client.darwin)
+            export(libs.kotlinx.io.bytestring)
+            export(libs.kotlinx.datetime)
+            export(libs.kotlinx.coroutines.core)
+            export(libs.kotlinx.serialization.json)
+            export(libs.ktor.client.core)
         }
     }
 
@@ -70,6 +79,16 @@ kotlin {
                 implementation(libs.ktor.client.darwin)
                 implementation(libs.androidx.sqlite)
                 implementation(libs.androidx.sqlite.framework)
+
+                api(project(":multipaz"))
+                api(project(":multipaz-doctypes"))
+                api(project(":multipaz-longfellow"))
+                api(libs.ktor.client.darwin)
+                api(libs.kotlinx.io.bytestring)
+                api(libs.kotlinx.datetime)
+                api(libs.kotlinx.coroutines.core)
+                api(libs.kotlinx.serialization.json)
+                api(libs.ktor.client.core)
             }
         }
 

@@ -22,7 +22,7 @@ import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
 import org.multipaz.compose.cards.InfoCard
 import org.multipaz.testapp.BuildConfig
-import org.multipaz.testapp.platformHttpClientEngineFactory
+import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.util.Logger
 import org.multipaz.util.Platform
 
@@ -47,7 +47,7 @@ fun AppUpdateCard() {
 
     LaunchedEffect(true) {
         try {
-            val httpClient = HttpClient(platformHttpClientEngineFactory().create())
+            val httpClient = HttpClient(TestAppConfiguration.httpClientEngineFactory.create())
             val response = httpClient.get(updateUrl)
             if (response.status == HttpStatusCode.OK) {
                 latestVersionString.value = response.readRawBytes().decodeToString().trim()

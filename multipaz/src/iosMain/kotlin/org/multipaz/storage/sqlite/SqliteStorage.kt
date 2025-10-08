@@ -12,9 +12,9 @@ import kotlin.time.Clock
 import kotlin.coroutines.CoroutineContext
 
 /**
- * [Storage] implementation based on Kotlin Multiplatform [SQLiteConnection] API.
+ * [Storage] implementation based on Kotlin Multiplatform [androidx.sqlite.SQLiteConnection] API.
  *
- * One limitation of [SQLiteConnection] APIs is that there is no way to get result from
+ * One limitation of [androidx.sqlite.SQLiteConnection] APIs is that there is no way to get result from
  * `UPDATE` and `DELETE` SQL statements. This can be worked around either using
  * SQLite-specific `RETURNING` clause (without breaking atomicity) or by additional
  * `SELECT` statements (this does break atomicity).
@@ -27,7 +27,7 @@ import kotlin.coroutines.CoroutineContext
  *   `RETURNING` clause and thus it is not possible to guarantee truly atomic operations
  *   (most notably insertions with unique keys and correct return value from deletions).
  */
-class SqliteStorage(
+open class SqliteStorage(
     private val connection: SQLiteConnection,
     clock: Clock = Clock.System,
     private val coroutineContext: CoroutineContext = Dispatchers.IO,

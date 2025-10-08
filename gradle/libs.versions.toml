@@ -124,6 +124,7 @@ coil-compose-core = { module = "io.coil-kt.coil3:coil-compose-core", version.ref
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 coil-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 kotlin-wrappers-web = { module = "org.jetbrains.kotlin-wrappers:kotlin-web", version.ref="kotlin-wrappers" }
+skie-annotations = { module = "co.touchlab.skie:configuration-annotations", version.ref = "skie" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

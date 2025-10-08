@@ -37,7 +37,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -116,7 +115,7 @@ import kotlin.math.min
 private val PAGER_INDICATOR_HEIGHT = 30.dp
 private val PAGER_INDICATOR_PADDING = 8.dp
 
-private const val TAG = "CredentialPresentmentModalBottomSheet"
+private const val TAG = "Consent"
 
 private data class CombinationElement(
     val matches: List<CredentialPresentmentSetOptionMemberMatch>
@@ -204,12 +203,11 @@ private fun setMatch(
 }
 
 /**
- * Bottom sheet used for obtaining consent when presenting one or more credentials.
+ * A composable used for obtaining consent when presenting one or more credentials.
  *
- * @param sheetState a [SheetState] for state.
  * @param requester the relying party which is requesting the data.
  * @param trustPoint if the requester is in a trust-list, the [TrustPoint] indicating this
- * @param credentialPresentmentData the combinatinos of credentials and claims that the user can select.
+ * @param credentialPresentmentData the combinations of credentials and claims that the user can select.
  * @param preselectedDocuments the list of documents the user may have preselected earlier (for
  *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
  *   if the user didn't preselect.
@@ -224,8 +222,7 @@ private fun setMatch(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CredentialPresentmentModalBottomSheet(
-    sheetState: SheetState,
+fun Consent(
     requester: Requester,
     trustPoint: TrustPoint?,
     credentialPresentmentData: CredentialPresentmentData,
@@ -257,87 +254,78 @@ fun CredentialPresentmentModalBottomSheet(
     }
     val pagerState = rememberPagerState(pageCount = { combinations.size })
 
-    ModalBottomSheet(
-        onDismissRequest = { onCancel() },
-        sheetState = sheetState,
-        sheetGesturesEnabled = false,
-        dragHandle = null,
-        containerColor = MaterialTheme.colorScheme.surface,
+    Column(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 0.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 0.dp)
-        ) {
-            if (appName != null) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Companion.CenterVertically,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                ) {
-                    if (appIconPainter != null) {
-                        Image(
-                            modifier = Modifier.size(20.dp),
-                            painter = appIconPainter,
-                            contentDescription = null,
-                            contentScale = ContentScale.Companion.Fit,
-                        )
-                    }
-                    Text(
-                        text = appName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Companion.ExtraBold,
+        if (appName != null) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Companion.CenterVertically,
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
+                if (appIconPainter != null) {
+                    Image(
+                        modifier = Modifier.size(20.dp),
+                        painter = appIconPainter,
+                        contentDescription = null,
+                        contentScale = ContentScale.Companion.Fit,
                     )
                 }
+                Text(
+                    text = appName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Companion.ExtraBold,
+                )
+            }
+        }
+
+        NavHost(
+            navController = navController,
+            startDestination = "main",
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
+        ) {
+            composable("main") {
+                ConsentPage(
+                    requester = requester,
+                    trustPoint = trustPoint,
+                    dynamicMetadataResolver = dynamicMetadataResolver,
+                    appInfo = appInfo,
+                    imageLoader = imageLoader,
+                    combinations = combinations,
+                    matchSelectionLists = matchSelectionLists,
+                    onChooseMatch = { combinationNum, elementNum ->
+                        selectMatchCombinationAndElement.value = Pair(combinationNum, elementNum)
+                        navController.navigate("selectMatch")
+                    },
+                    onConfirm = onConfirm,
+                    onCancel = onCancel,
+                    showCancelAsBack = showCancelAsBack,
+                    pagerState = pagerState
+                )
             }
 
-            NavHost(
-                navController = navController,
-                startDestination = "main",
-                enterTransition = { EnterTransition.None },
-                exitTransition = { ExitTransition.None },
-                popEnterTransition = { EnterTransition.None },
-                popExitTransition = { ExitTransition.None }
-            ) {
-                composable("main") {
-                    ConsentPage(
-                        requester = requester,
-                        trustPoint = trustPoint,
-                        dynamicMetadataResolver = dynamicMetadataResolver,
-                        appInfo = appInfo,
-                        imageLoader = imageLoader,
-                        combinations = combinations,
-                        matchSelectionLists = matchSelectionLists,
-                        onChooseMatch = { combinationNum, elementNum ->
-                            selectMatchCombinationAndElement.value = Pair(combinationNum, elementNum)
-                            navController.navigate("selectMatch")
-                        },
-                        onConfirm = onConfirm,
-                        onCancel = onCancel,
-                        showCancelAsBack = showCancelAsBack,
-                        sheetState = sheetState,
-                        pagerState = pagerState
-                    )
-                }
-
-                composable("selectMatch") {
-                    val (combinationNum, elementNum) = selectMatchCombinationAndElement.value!!
-                    ChooseMatchPage(
-                        combinations = combinations,
-                        combinationNum = combinationNum,
-                        elementNum = elementNum,
-                        onBackClicked = {
-                            navController.navigate("main")
-                        },
-                        onMatchClicked = { matchNumber ->
-                            matchSelectionLists.value = setMatch(
-                                oldValue = matchSelectionLists.value,
-                                combinationNum = combinationNum,
-                                elementNum = elementNum,
-                                newMatchNum = matchNumber
-                            )
-                            navController.navigate("main")
-                        }
-                    )
-                }
+            composable("selectMatch") {
+                val (combinationNum, elementNum) = selectMatchCombinationAndElement.value!!
+                ChooseMatchPage(
+                    combinations = combinations,
+                    combinationNum = combinationNum,
+                    elementNum = elementNum,
+                    onBackClicked = {
+                        navController.navigate("main")
+                    },
+                    onMatchClicked = { matchNumber ->
+                        matchSelectionLists.value = setMatch(
+                            oldValue = matchSelectionLists.value,
+                            combinationNum = combinationNum,
+                            elementNum = elementNum,
+                            newMatchNum = matchNumber
+                        )
+                        navController.navigate("main")
+                    }
+                )
             }
         }
     }
@@ -422,7 +410,6 @@ private fun ConsentPage(
     onConfirm: (selection: CredentialPresentmentSelection) -> Unit,
     onCancel: () -> Unit,
     showCancelAsBack: Boolean,
-    sheetState: SheetState,
     pagerState: PagerState
 ) {
     val scrollState = rememberScrollState()
@@ -524,7 +511,6 @@ private fun ConsentPage(
                 },
                 onCancel = onCancel,
                 showCancelAsBack = showCancelAsBack,
-                sheetState = sheetState,
                 scrollState = scrollState
             )
         }
@@ -832,7 +818,6 @@ private fun ButtonSection(
     onConfirm: () -> Unit = {},
     onCancel: () -> Unit,
     showCancelAsBack: Boolean,
-    sheetState: SheetState,
     scrollState: ScrollState
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -845,7 +830,6 @@ private fun ButtonSection(
     ) {
         TextButton(onClick = {
             coroutineScope.launch {
-                sheetState.hide()
                 onCancel()
             }
         }) {

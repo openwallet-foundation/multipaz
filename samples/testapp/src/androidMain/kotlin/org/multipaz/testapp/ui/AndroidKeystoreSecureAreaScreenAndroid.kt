@@ -66,6 +66,7 @@ import kotlin.time.Clock
 import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.crypto.Algorithm
 import org.multipaz.prompt.Reason
+import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.util.Platform
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -529,7 +530,7 @@ private suspend fun aksAttestation(
 ): KeyAttestation {
     val now = Clock.System.now()
     val thirtyDaysFromNow = now + 30.days
-    val androidKeystoreSecureArea = Platform.getSecureArea() as AndroidKeystoreSecureArea
+    val androidKeystoreSecureArea = Platform.getSecureArea(TestAppConfiguration.storage) as AndroidKeystoreSecureArea
 
     val attestKeyAlias = if (useAttestKey) {
         androidKeystoreSecureArea.createKey(
@@ -589,7 +590,7 @@ private suspend fun aksTestUnguarded(
     strongBox: Boolean,
     showToast: (message: String) -> Unit) {
 
-    val androidKeystoreSecureArea = Platform.getSecureArea() as AndroidKeystoreSecureArea
+    val androidKeystoreSecureArea = Platform.getSecureArea(TestAppConfiguration.storage) as AndroidKeystoreSecureArea
     androidKeystoreSecureArea.createKey(
         "testKey",
         AndroidKeystoreCreateKeySettings.Builder("Challenge".encodeToByteString())

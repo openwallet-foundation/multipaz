@@ -22,7 +22,7 @@ actual object Platform {
     actual val nonBackedUpStorage: Storage
         get() = TODO("Platform.nonBackedUpStorage not yet implemented")
 
-    actual suspend fun getSecureArea(): SecureArea {
+    actual suspend fun getSecureArea(storage: Storage): SecureArea {
         TODO("Platform.getSecureArea not yet implemented")
     }
 }

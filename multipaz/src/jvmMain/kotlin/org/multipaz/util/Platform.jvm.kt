@@ -19,7 +19,7 @@ actual object Platform {
     actual val nonBackedUpStorage: Storage
         get() = throw NotImplementedError()
 
-    actual suspend fun getSecureArea(): SecureArea {
+    actual suspend fun getSecureArea(storage: Storage): SecureArea {
         throw NotImplementedError()
     }
 }

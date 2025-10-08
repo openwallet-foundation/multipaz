@@ -221,7 +221,6 @@ data class DeviceRequest private constructor(
     ) {
         private val docRequests = mutableListOf<DocRequest>()
         private val readerAuthAll = mutableListOf<CoseSign1>()
-        private var usingSecondEdition = false
 
         /**
          * Adds a document request to the builder.

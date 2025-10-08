@@ -38,7 +38,7 @@ import org.multipaz.certext.GoogleAccount
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.certext.toCbor
-import org.multipaz.compose.presentment.CredentialPresentmentModalBottomSheet
+import org.multipaz.compose.presentment.ConsentModalBottomSheet
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -66,8 +66,7 @@ import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
-import org.multipaz.testapp.platformAppIcon
-import org.multipaz.testapp.platformAppName
+import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.trustmanagement.TrustPoint
@@ -320,7 +319,7 @@ fun ConsentPromptScreen(
 
     if (sheetState.isVisible) {
         queryResult.value?.let {
-            CredentialPresentmentModalBottomSheet(
+            ConsentModalBottomSheet(
                 sheetState = sheetState,
                 requester = it.requester,
                 trustPoint = it.trustPoint,
@@ -340,8 +339,8 @@ fun ConsentPromptScreen(
                             }
                         }
                 },
-                appName = platformAppName,
-                appIconPainter = painterResource(platformAppIcon),
+                appName = TestAppConfiguration.appName,
+                appIconPainter = painterResource(TestAppConfiguration.appIcon),
                 onConfirm = { selection ->
                     coroutineScope.launch {
                         sheetState.hide()

@@ -250,13 +250,13 @@ class App private constructor (val promptModel: PromptModel) {
         return null
     }
 
-    suspend fun init() {
+    suspend fun initialize() {
         initLock.withLock {
             if (initialized) {
                 return
             }
             val initFuncs = listOf<Pair<suspend () -> Unit, String>>(
-                Pair(::platformInit, "platformInit"),
+                Pair(TestAppConfiguration::init, "TestAppConfiguration::init"),
                 Pair(::settingsInit, "settingsInit"),
                 Pair(::platformCryptoInit, "platformCryptoInit"),
                 Pair(::platformExternalNfcTagReadersInit, "platformExternalNfcTagReadersInit"),
@@ -271,6 +271,7 @@ class App private constructor (val promptModel: PromptModel) {
                 Pair(::provisioningModelInit, "provisioningModelInit"),
                 Pair(::zkSystemRepositoryInit, "zkSystemRepositoryInit"),
                 Pair(::observeModeInit, "observeModeInit"),
+                Pair(::digitalCredentialsInit, "digitalCredentialsInit"),
             )
 
             val begin = Clock.System.now()
@@ -287,7 +288,7 @@ class App private constructor (val promptModel: PromptModel) {
     }
 
     private suspend fun platformCryptoInit() {
-        platformCryptoInit(settingsModel)
+        TestAppConfiguration.cryptoInit(settingsModel)
     }
 
     lateinit var externalNfcTagReaders: List<NfcTagReader>
@@ -300,11 +301,11 @@ class App private constructor (val promptModel: PromptModel) {
     //   permission.
     //
     private suspend fun platformExternalNfcTagReadersInit() {
-        externalNfcTagReaders = getExternalNfcTagReaders()
+        externalNfcTagReaders = TestAppConfiguration.getExternalNfcTagReaders()
     }
 
     private suspend fun settingsInit() {
-        settingsModel = TestAppSettingsModel.create(Platform.nonBackedUpStorage)
+        settingsModel = TestAppSettingsModel.create(TestAppConfiguration.storage)
     }
 
     private suspend fun documentTypeRepositoryInit() {
@@ -331,20 +332,20 @@ class App private constructor (val promptModel: PromptModel) {
                 val cloudSecureAreaUrl = params["url"]!!
                 Logger.i(TAG, "Creating CSA with url $cloudSecureAreaUrl for $identifier")
                 CloudSecureArea.create(
-                    Platform.nonBackedUpStorage,
+                    TestAppConfiguration.storage,
                     identifier,
                     cloudSecureAreaUrl,
-                    platformHttpClientEngineFactory()
+                    TestAppConfiguration.httpClientEngineFactory
                 )
             }
-        val platformSecureArea = Platform.getSecureArea()
+        val platformSecureArea = Platform.getSecureArea(TestAppConfiguration.storage)
         // It's possible the platform SecureArea _is_ SoftwareSecureArea so avoid duplicates.
         if (platformSecureArea !is SoftwareSecureArea) {
             secureAreaRepositoryBuilder.add(platformSecureArea)
         }
         val secureAreaRepository = secureAreaRepositoryBuilder.build()
         documentStore = buildDocumentStore(
-            storage = Platform.nonBackedUpStorage,
+            storage = TestAppConfiguration.storage,
             secureAreaRepository = secureAreaRepository
         ) {
             //setTableSpec(testDocumentTableSpec)
@@ -365,15 +366,15 @@ class App private constructor (val promptModel: PromptModel) {
     private suspend fun provisioningModelInit() {
         provisioningModel = ProvisioningModel(
             documentStore = documentStore,
-            secureArea = Platform.getSecureArea(),
-            httpClient = HttpClient(platformHttpClientEngineFactory()) {
+            secureArea = Platform.getSecureArea(TestAppConfiguration.storage),
+            httpClient = HttpClient(TestAppConfiguration.httpClientEngineFactory) {
                 followRedirects = false
             },
             promptModel = promptModel
         )
         provisioningSupport = ProvisioningSupport(
-            storage = Platform.nonBackedUpStorage,
-            secureArea = Platform.getSecureArea(),
+            storage = TestAppConfiguration.storage,
+            secureArea = Platform.getSecureArea(TestAppConfiguration.storage),
         )
         provisioningSupport.init()
     }
@@ -450,7 +451,7 @@ class App private constructor (val promptModel: PromptModel) {
     private lateinit var keyStorage: StorageTable
 
     private suspend fun keyStorageInit() {
-        keyStorage = Platform.nonBackedUpStorage.getTable(
+        keyStorage = TestAppConfiguration.storage.getTable(
             StorageTableSpec(
                 name = "TestAppKeys",
                 supportPartitions = false,
@@ -668,7 +669,7 @@ class App private constructor (val promptModel: PromptModel) {
      *
      * This should be called when the main wallet application UI is running.
      */
-    fun startExportDocumentsToDigitalCredentials() {
+    private suspend fun digitalCredentialsInit() {
         if (DigitalCredentials.Default.available) {
             val dc = DigitalCredentials.Default
             CoroutineScope(Dispatchers.Default).launch {
@@ -718,7 +719,7 @@ class App private constructor (val promptModel: PromptModel) {
         private var app: App? = null
         fun getInstance(): App {
             if (app == null) {
-                app = App(platformPromptModel)
+                app = App(TestAppConfiguration.promptModel)
             }
             return app!!
         }
@@ -745,7 +746,7 @@ class App private constructor (val promptModel: PromptModel) {
         var isInitialized = remember { mutableStateOf<Boolean>(false) }
         if (!isInitialized.value) {
             CoroutineScope(Dispatchers.Main).launch {
-                init()
+                initialize()
                 isInitialized.value = true
             }
             Column(
@@ -760,7 +761,7 @@ class App private constructor (val promptModel: PromptModel) {
 
         val context = LocalPlatformContext.current
         val imageLoader = remember {
-            val engineFactory = platformHttpClientEngineFactory()
+            val engineFactory = TestAppConfiguration.httpClientEngineFactory
             val httpClient = HttpClient(engineFactory.create()) {
             }
             ImageLoader.Builder(context)
@@ -1268,7 +1269,7 @@ class App private constructor (val promptModel: PromptModel) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(text = title ?: platformAppName) },
+                    title = { Text(text = title ?: TestAppConfiguration.appName) },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
                     ),

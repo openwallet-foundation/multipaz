@@ -13,17 +13,10 @@ The project provides libraries written in [Kotlin Multiplatform](https://kotlinl
   iOS, and in server-side environments. The library includes support 
   for ISO mdoc and IETF SD-JWT VC credential formats and also implements
   proximity presentment using ISO/IEC 18013-5:2021 (for ISO mdoc credentials)
-  and presentment to applications using the W3C Digital Credentials API.
-- `multipaz-models` is a Kotlin Multiplatform library with stateful models
-  with business logic intended to be used by graphical applications. The code
-  is written in a way so it's not tied to a particular UI framework, for
-  example Compose, SwiftUI, or other frameworks.
+  and presentment to applications using the W3C Digital Credentials API
+  according to ISO/IEC 18013-7:2025 and OpenID4VP 1.0.
 - `multipaz-compose` provides rich UI elements to be used in Compose
   applications.
-- `multipaz-android-legacy` contains an older version of the APIs for
-  applications not yet migrated to the newer libraries. At some point this
-  library will be removed. Unlike the other libraries and applications, this
-  library is in Java, not Kotlin, and only supports Android.
 - `multipaz-doctypes` contains known credential document types (for example
   ISO/IEC 18013-5:2021 mDL and EU PID) along with human-readable descriptions
   of claims / data elements, sample data, and sample requests. This is
@@ -33,6 +26,8 @@ The project provides libraries written in [Kotlin Multiplatform](https://kotlinl
 - `multipaz-longfellow` bundles the [Google Longfellow-ZK](https://github.com/google/longfellow-zk) library
   and integrates with the core `multipaz` for Zero-Knowledge Proofs
   according to latest available [ISO/IEC 18013-5 Second Edition draft](https://github.com/ISOWG10/ISO-18013).
+- `multipaz-swift` contains Swift and [SwiftUI](https://developer.apple.com/swiftui/)
+  functionality to easier use Multipaz in Swift applications on iOS.
 
 ## Command-line tool
 
@@ -64,6 +59,12 @@ and [Semantic Versioning](https://en.wikipedia.org/wiki/Software_versioning#Sema
 is used. At this time we're in pre-1.0 territory but we expect to hit 1.0 around
 early 2026.
 
+We are also making Multipaz available as a [Swift package](https://github.com/openwallet-foundation/multipaz/blob/main/Package.swift)
+which includes an the `multipaz`, `multipaz-doctypes`, `multipaz-doctypes`,
+`multipaz-longfellow`, and `multipaz-swift` libraries. This is built using
+[SKIE](https://skie.touchlab.co/). Be careful relying on this as Swift/Kotlin
+interop technology might change in the near future.
+
 At this point both API interfaces and data stored on disk is subject to change
 but we expect to provide stability guarantees post 1.0. We only expect minor changes
 for example conversion from `ByteArray` to `ByteString` and similar things.
@@ -91,30 +92,15 @@ exercise all code in the libraries. Prebuilt APKs are available from
 https://apps.multipaz.org.
 
 For a fully-featured proximity reader app using Multipaz, see
-[MpzIdentityReader](https://github.com/davidz25/MpzIdentityReader).
+[MpzIdentityReader](https://github.com/openwallet-foundation/multipaz-identity-reader/).
 Prebuilt APKs are available from https://apps.multipaz.org.
 
 For an over-the-Internet verifier supporting OpenID4VP (both W3C DC API and
-URI schemes) and ISO/IEC 18013-7 Annex C see https://verifier.multipaz.org
-which  is built from the `multipaz-verifier-server` module.
+URI schemes) and ISO/IEC 18013-7 Annex C see https://verifier.multipaz.org.
 
-To see how to use the Multipaz libraries in a 3rd party project, see
-[MpzSecureAreaSample](https://github.com/davidz25/MpzSecureAreaSample) for a
-minimal Compose Multiplatform app using the SecureArea abstraction and
-[MpzCmpWallet](https://github.com/davidz25/MpzCmpWallet) for a Compose Multiplatform app
-implementing a minimal ISO/IEC 18013-5:2021 wallet supporting both
-proximity and over-the-Internet readers. These applications work on
-both Android and iOS.
-
-To see how to consume Multipaz in a Swift application see
-[MpzSwiftWallet](https://github.com/davidz25/MpzSwiftWallet). This is a minimal
-ISO/IEC 18013-5:2021 wallet using QR and Bluetooth Low Energy, using SwiftUI.
-This is using [Multipaz.xcframework](https://apps.multipaz.org/xcf)
-through the Swift Packager Manager.
-
-For a sample using the legacy library, see
-[SimpleVerifierStandalone](https://github.com/davidz25/SimpleVerifierStandalone)
-which is a simple Android mDL reader application.
+To see how to use the Multipaz in a 3rd party project, see
+https://github.com/openwallet-foundation/multipaz-samples/ which includes
+a number of samples for different platforms.
 
 ## Developer Resources
 

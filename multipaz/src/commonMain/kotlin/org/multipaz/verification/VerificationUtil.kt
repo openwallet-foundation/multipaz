@@ -32,7 +32,10 @@ import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.mdoc.request.DeviceRequestInfo
 import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.DocumentSet
+import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.response.DeviceResponse
@@ -193,7 +196,20 @@ object VerificationUtil {
                     null
                 }
                 val encodedDeviceRequest = Cbor.encode(buildDeviceRequest(
-                    sessionTranscript = sessionTranscript
+                    sessionTranscript = sessionTranscript,
+                    // TODO: UseCases is optional even in a 1.1 request but iOS 26 currently assumes it's set.
+                    //   This has been reported to Apple so this can be removed once their bug-fix is out.
+                    deviceRequestInfo = DeviceRequestInfo(
+                        useCases = listOf(UseCase(
+                            mandatory = true,
+                            documentSets = listOf(
+                                DocumentSet(
+                                    docRequestIds = listOf(0)
+                                )
+                            ),
+                            purposeHints = emptyMap()
+                        ))
+                    )
                 ) {
                     if (readerAuthenticationKey != null) {
                         addDocRequest(
@@ -204,6 +220,7 @@ object VerificationUtil {
                             ),
                             readerKey = readerAuthenticationKey,
                         )
+                        addReaderAuthAll(readerKey = readerAuthenticationKey)
                     } else {
                         addDocRequest(
                             docType = docType,

@@ -13,7 +13,6 @@ import org.multipaz.prompt.PromptModel
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureEnclaveSecureArea
 import org.multipaz.storage.Storage
-import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.storage.sqlite.SqliteStorage
 import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
@@ -78,10 +77,10 @@ actual object Platform {
     private var secureArea: SecureArea? = null
     private val secureAreaLock = Mutex()
 
-    actual suspend fun getSecureArea(): SecureArea {
+    actual suspend fun getSecureArea(storage: Storage): SecureArea {
         secureAreaLock.withLock {
             if (secureArea == null) {
-                secureArea = SecureEnclaveSecureArea.create(nonBackedUpStorage)
+                secureArea = SecureEnclaveSecureArea.create(storage)
             }
             return secureArea!!
         }

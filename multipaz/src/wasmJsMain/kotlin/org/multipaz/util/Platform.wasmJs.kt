@@ -36,11 +36,11 @@ actual object Platform {
     private var secureArea: SecureArea? = null
     private val secureAreaLock = Mutex()
 
-    actual suspend fun getSecureArea(): SecureArea {
+    actual suspend fun getSecureArea(storage: Storage): SecureArea {
         // TODO
         secureAreaLock.withLock {
             if (secureArea == null) {
-                secureArea = SoftwareSecureArea.create(nonBackedUpStorage)
+                secureArea = SoftwareSecureArea.create(storage)
             }
             return secureArea!!
         }

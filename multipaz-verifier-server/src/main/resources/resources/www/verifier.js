@@ -1,6 +1,6 @@
 
 // Keep in sync with verifier.html
-var selectedProtocol = 'w3c_dc_openid4vp_29'
+var selectedProtocol = 'w3c_dc_mdoc_api'
 
 // If the user clicks on one of the protocol entries, that becomes both the selected and the
 // preferred protocol. If the selected protocol is disabled (because, for instance, the user selects

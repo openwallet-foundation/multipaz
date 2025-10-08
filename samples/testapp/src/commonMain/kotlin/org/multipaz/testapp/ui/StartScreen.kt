@@ -19,8 +19,8 @@ import org.multipaz.compose.cards.InfoCard
 import org.multipaz.compose.cards.WarningCard
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
 import org.multipaz.compose.document.DocumentModel
-import org.multipaz.testapp.Platform
-import org.multipaz.testapp.platform
+import org.multipaz.testapp.TestAppConfiguration
+import org.multipaz.testapp.TestAppPlatform
 
 @Composable
 fun StartScreen(
@@ -125,8 +125,8 @@ fun StartScreen(
                     }
                 }
 
-                when (platform) {
-                    Platform.ANDROID -> {
+                when (TestAppConfiguration.platform) {
+                    TestAppPlatform.ANDROID -> {
                         item {
                             TextButton(onClick = onClickAndroidKeystoreSecureArea) {
                                 Text("Android Keystore Secure Area")
@@ -134,7 +134,7 @@ fun StartScreen(
                         }
                     }
 
-                    Platform.IOS -> {
+                    TestAppPlatform.IOS -> {
                         item {
                             TextButton(onClick = onClickSecureEnclaveSecureArea) {
                                 Text("Secure Enclave Secure Area")
@@ -142,8 +142,8 @@ fun StartScreen(
                         }
                     }
 
-                    Platform.WASMJS -> {
-                        // No native SecureArea
+                    TestAppPlatform.WASMJS -> {
+                        // No native SecureArea (for now)
                     }
                 }
 

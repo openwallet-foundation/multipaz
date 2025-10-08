@@ -64,6 +64,7 @@ import net.minidev.json.JSONObject
 import net.minidev.json.JSONStyle
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Encoding
+import org.multipaz.asn1.ASN1ObjectIdentifier
 import org.multipaz.asn1.ASN1Sequence
 import org.multipaz.asn1.ASN1TagClass
 import org.multipaz.asn1.ASN1TaggedObject
@@ -77,6 +78,7 @@ import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509KeyUsage
+import org.multipaz.crypto.buildX509Cert
 import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.documenttype.knowntypes.IDPass
 import org.multipaz.documenttype.knowntypes.Loyalty
@@ -102,6 +104,7 @@ import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.TrustManager
 import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.trustmanagement.TrustMetadata
+import org.multipaz.util.fromHex
 import org.multipaz.util.fromHexByteString
 import org.multipaz.verification.VerificationUtil
 import java.net.URLEncoder
@@ -677,12 +680,14 @@ private suspend fun handleDcGetDataMdocApi(
             put("recipientPublicKey", session.encryptionKey.publicKey.toCoseKey().toDataItem())
         }
     }
+    //Logger.iCbor(TAG, "encryptionInfo", encryptionInfo)
     val base64EncryptionInfo = Cbor.encode(encryptionInfo).toBase64Url()
 
     val dcapiInfo = buildCborArray {
         add(base64EncryptionInfo)
         add(session.origin)
     }
+    //Logger.iCbor(TAG, "dcapiInfo", dcapiInfo)
 
     val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
     session.sessionTranscript = Cbor.encode(
@@ -1890,6 +1895,7 @@ private suspend fun mdocCalcDcRequestStringMdocApi(
         emptyList()
     }
 
+    //Logger.iCbor(TAG, "dcapiInfo", dcapiInfo)
     val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
     val sessionTranscript = buildCborArray {
         add(Simple.NULL) // DeviceEngagementBytes
@@ -1928,7 +1934,9 @@ private suspend fun mdocCalcDcRequestStringMdocApi(
             ),
             readerKey = readerAuthKey
         )
+        addReaderAuthAll(readerKey = readerAuthKey)
     }.toDataItem())
+    //Logger.iCbor(TAG, "deviceRequest", encodedDeviceRequest)
     val base64DeviceRequest = encodedDeviceRequest.toBase64Url()
 
     val top = JSONObject()

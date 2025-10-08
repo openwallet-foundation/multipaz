@@ -111,12 +111,14 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.ktor.client.core)
+                implementation(libs.skie.annotations)
                 api(libs.kotlinx.io.bytestring)
                 api(libs.kotlinx.io.core)
                 api(libs.kotlinx.datetime)
                 api(libs.kotlinx.coroutines.core)
                 api(libs.kotlinx.serialization.json)
                 api(libs.ktor.client.core)
+                api(libs.skie.annotations)
             }
         }
 

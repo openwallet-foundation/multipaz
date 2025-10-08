@@ -57,8 +57,9 @@ import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.crypto.Algorithm
-import org.multipaz.testapp.platformHttpClientEngineFactory
+import org.multipaz.testapp.TestAppConfiguration
 import kotlin.time.Duration.Companion.days
+import androidx.compose.runtime.collectAsState
 
 private val TAG = "CloudSecureAreaScreen"
 
@@ -90,7 +91,7 @@ fun CloudSecureAreaScreen(
 
     if (showConnectDialog.value) {
         CsaConnectDialog(
-            app.settingsModel.cloudSecureAreaUrl.value,
+            app.settingsModel.cloudSecureAreaUrl.collectAsState().value,
             onDismissRequest = {
                 showConnectDialog.value = false
             },
@@ -102,7 +103,7 @@ fun CloudSecureAreaScreen(
                         EphemeralStorage(),
                         "CloudSecureArea",
                         url,
-                        platformHttpClientEngineFactory()
+                        TestAppConfiguration.httpClientEngineFactory
                     )
                     try {
                         cloudSecureArea!!.register(

@@ -20,7 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import org.multipaz.testapp.getLocalIpAddress
 import org.multipaz.testapp.multidevicetests.MultiDeviceTestsClient
 import org.multipaz.testapp.multidevicetests.MultiDeviceTestsServer
 import org.multipaz.testapp.multidevicetests.Plan
@@ -36,8 +35,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.multipaz.compose.permissions.rememberBluetoothEnabledState
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
-import org.multipaz.testapp.ui.ScanQrCodeDialog
-import org.multipaz.testapp.ui.ShowQrCodeDialog
+import org.multipaz.testapp.TestAppConfiguration
 import kotlin.coroutines.coroutineContext
 import kotlin.time.Duration.Companion.seconds
 
@@ -120,7 +118,7 @@ fun IsoMdocMultiDeviceTestingScreen(
         coroutineScope.launch {
             withContext(Dispatchers.Default) {
                 try {
-                    val localAddress = getLocalIpAddress()
+                    val localAddress = TestAppConfiguration.localIpAddress
                     val selectorManager = SelectorManager(Dispatchers.Default)
                     val serverSocket = aSocket(selectorManager).tcp().bind(localAddress, 0)
                     val localAddressPort = (serverSocket.localAddress as InetSocketAddress).port

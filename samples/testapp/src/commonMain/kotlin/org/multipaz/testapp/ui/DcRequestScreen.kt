@@ -35,10 +35,10 @@ import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.testapp.App
 import org.multipaz.testapp.TestAppUtils
-import org.multipaz.testapp.getAppToAppOrigin
 import org.multipaz.util.Logger
 import org.multipaz.verification.VerificationUtil
 import org.multipaz.testapp.ShowResponseMetadata
+import org.multipaz.testapp.TestAppConfiguration
 import kotlin.random.Random
 import kotlin.time.Clock
 
@@ -259,7 +259,7 @@ private suspend fun doDcRequestFlow(
 
     val nonce = ByteString(Random.Default.nextBytes(16))
     val responseEncryptionKey = Crypto.createEcPrivateKey(EcCurve.P256)
-    val origin = getAppToAppOrigin()
+    val origin = TestAppConfiguration.getAppToAppOrigin()
     // According to OpenID4VP, Client ID must be set for signed requests and not for unsigned requests
     val clientId = "web-origin:$origin"
 

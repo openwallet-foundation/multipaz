@@ -12,7 +12,7 @@ class TestAppMdocNdefService: MdocNdefService() {
             storage = Platform.storage,
             readOnly = true
         )
-        platformCryptoInit(settingsModel)
+        TestAppConfiguration.cryptoInit(settingsModel)
 
         return Settings(
             sessionEncryptionCurve = settingsModel.presentmentSessionEncryptionCurve.value,
@@ -26,7 +26,7 @@ class TestAppMdocNdefService: MdocNdefService() {
                 bleUseL2CAP = settingsModel.presentmentBleL2CapEnabled.value,
                 bleUseL2CAPInEngagement = settingsModel.presentmentBleL2CapInEngagementEnabled.value
             ),
-            promptModel = platformPromptModel,
+            promptModel = TestAppConfiguration.promptModel,
             presentmentActivityClass = TestAppMdocNfcPresentmentActivity::class.java
         )
     }

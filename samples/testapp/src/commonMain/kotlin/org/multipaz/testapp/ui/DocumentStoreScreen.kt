@@ -28,7 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
-import org.multipaz.testapp.platformSecureAreaHasKeyAgreement
 import androidx.compose.ui.unit.dp
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
@@ -59,7 +58,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
-import org.multipaz.testapp.platformHttpClientEngineFactory
+import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.util.Logger
 import org.multipaz.util.Platform
 import org.multipaz.util.truncateToWholeSeconds
@@ -79,7 +78,8 @@ enum class DocumentCreationMode {
 private val userAuthenticationTimeoutValues = mapOf(
     "0 sec (Auth every use)" to 0.seconds,
     "10 sec" to 10.seconds,
-    "60 sec" to 60.seconds
+    "60 sec" to 60.seconds,
+    "No auth" to null
 )
 
 @Composable
@@ -99,7 +99,7 @@ fun DocumentStoreScreen(
     val deviceKeyMacAlgorithm = remember { mutableStateOf<Algorithm>(Algorithm.ECDH_P256) }
     val documentSigningAlgorithm = remember { mutableStateOf<Algorithm>(Algorithm.ESP256) }
     val showProvisioningResult = remember { mutableStateOf<AnnotatedString?>(null) }
-    val userAuthenticationTimeout = remember { mutableStateOf<Duration>(10.seconds) }
+    val userAuthenticationTimeout = remember { mutableStateOf<Duration?>(10.seconds) }
     val documentInfos = documentModel.documentInfos.collectAsState().value
 
     val showDocumentCreationDialog = remember { mutableStateOf(false) }
@@ -150,7 +150,7 @@ fun DocumentStoreScreen(
     val documentCreationMode = remember { mutableStateOf<DocumentCreationMode>(DocumentCreationMode.NORMAL) }
     if (showCsaConnectDialog.value) {
         CsaConnectDialog(
-            settingsModel.cloudSecureAreaUrl.value,
+            settingsModel.cloudSecureAreaUrl.collectAsState().value,
             onDismissRequest = {
                 showCsaConnectDialog.value = false
             },
@@ -159,10 +159,10 @@ fun DocumentStoreScreen(
                 settingsModel.cloudSecureAreaUrl.value = url
                 coroutineScope.launch {
                     val cloudSecureArea = CloudSecureArea.create(
-                        Platform.nonBackedUpStorage,
+                        TestAppConfiguration.storage,
                         "CloudSecureArea?url=${url.encodeURLParameter()}",
                         url,
-                        platformHttpClientEngineFactory()
+                        TestAppConfiguration.httpClientEngineFactory
                     )
                     try {
                         cloudSecureArea.register(
@@ -226,7 +226,7 @@ fun DocumentStoreScreen(
         item {
             TextButton(onClick = {
                 coroutineScope.launch {
-                    if (deviceKeyMacAlgorithm.value != Algorithm.UNSET && !platformSecureAreaHasKeyAgreement) {
+                    if (deviceKeyMacAlgorithm.value != Algorithm.UNSET && !TestAppConfiguration.platformSecureAreaHasKeyAgreement) {
                         showToast("Platform Secure Area does not have Key Agreement support. " +
                                 "Unset DeviceKey MAC Algorithm or try another Secure Area.")
                         return@launch
@@ -236,14 +236,14 @@ fun DocumentStoreScreen(
                         documentCreationMode = DocumentCreationMode.NORMAL,
                         showProvisioningResult = showProvisioningResult,
                         documentStore = documentStore,
-                        secureArea = Platform.getSecureArea(),
+                        secureArea = Platform.getSecureArea(TestAppConfiguration.storage),
                         secureAreaCreateKeySettingsFunc = { challenge, algorithm, userAuthenticationRequired,
                                                             validFrom, validUntil ->
                             CreateKeySettings(
                                 algorithm = algorithm,
                                 nonce = challenge,
-                                userAuthenticationRequired = userAuthenticationRequired,
-                                userAuthenticationTimeout = userAuthenticationTimeout.value,
+                                userAuthenticationRequired = userAuthenticationRequired && userAuthenticationTimeout.value != null,
+                                userAuthenticationTimeout = userAuthenticationTimeout.value ?: 0.seconds,
                                 validFrom = validFrom,
                                 validUntil = validUntil
                             )
@@ -320,14 +320,14 @@ fun DocumentStoreScreen(
                         documentCreationMode = DocumentCreationMode.DCQL_TEST_DOCUMENTS,
                         showProvisioningResult = showProvisioningResult,
                         documentStore = documentStore,
-                        secureArea = Platform.getSecureArea(),
+                        secureArea = Platform.getSecureArea(TestAppConfiguration.storage),
                         secureAreaCreateKeySettingsFunc = { challenge, algorithm, userAuthenticationRequired,
                                                             validFrom, validUntil ->
                             CreateKeySettings(
                                 algorithm = algorithm,
                                 nonce = challenge,
-                                userAuthenticationRequired = userAuthenticationRequired,
-                                userAuthenticationTimeout = userAuthenticationTimeout.value,
+                                userAuthenticationRequired = userAuthenticationRequired && userAuthenticationTimeout.value != null,
+                                userAuthenticationTimeout = userAuthenticationTimeout.value ?: 0.seconds,
                                 validFrom = validFrom,
                                 validUntil = validUntil
                             )
@@ -396,7 +396,8 @@ fun DocumentStoreScreen(
                 choices = userAuthenticationTimeoutValues.keys.toList(),
                 initialChoice = userAuthenticationTimeoutValues.keys.toList()[1],
                 onChoiceSelected = { choice ->
-                    userAuthenticationTimeout.value = userAuthenticationTimeoutValues[choice]!!
+                    val duration = userAuthenticationTimeoutValues[choice]
+                    userAuthenticationTimeout.value = duration
                 },
             )
         }

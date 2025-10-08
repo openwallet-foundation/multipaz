@@ -1,6 +1,6 @@
 import UIKit
 import SwiftUI
-import TestApp
+import Multipaz
 
 struct ComposeView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {

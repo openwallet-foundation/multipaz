@@ -1,18 +1,23 @@
-// swift-tools-version:5.3
+// swift-tools-version:6.2
 import PackageDescription
 
 let package = Package(
    name: "Multipaz",
    platforms: [
-     .iOS(.v14),
+    .iOS(.v26),
    ],
    products: [
-      .library(name: "Multipaz", targets: ["Multipaz"])
+      .library(name: "Multipaz", targets: ["MultipazSwift"])
    ],
    targets: [
-      .binaryTarget(
-         name: "Multipaz",
-         url: "https://apps.multipaz.org/xcf/Multipaz-0.96.0.xcframework.zip",
-         checksum:"93946e1644f3ebd524014ae996a4d0f5c78b5be83adaeec6751a6be624d446e2")
+        .target(
+            name: "MultipazSwift",
+            dependencies: ["Multipaz"],
+            path: "multipaz-swift/Sources/MultipazSwift"
+        ),
+        .binaryTarget(
+             name: "Multipaz",
+             path: "xcframework/build/XCFrameworks/release/Multipaz.xcframework"
+         )
    ]
 )

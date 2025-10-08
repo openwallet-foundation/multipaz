@@ -32,9 +32,8 @@ import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.presentment.model.PresentmentModel
 import org.multipaz.presentment.model.PresentmentSource
 import org.multipaz.prompt.PromptModel
+import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.testapp.TestAppSettingsModel
-import org.multipaz.testapp.platformAppIcon
-import org.multipaz.testapp.platformAppName
 import org.multipaz.util.UUID
 
 private const val TAG = "IsoMdocProximitySharingScreen"
@@ -84,8 +83,8 @@ fun IsoMdocProximitySharingScreen(
         } else {
             MdocProximityQrPresentment(
                 modifier = Modifier,
-                appName = platformAppName,
-                appIconPainter = painterResource(platformAppIcon),
+                appName = TestAppConfiguration.appName,
+                appIconPainter = painterResource(TestAppConfiguration.appIcon),
                 presentmentModel = presentmentModel,
                 presentmentSource = presentmentSource,
                 promptModel = promptModel,

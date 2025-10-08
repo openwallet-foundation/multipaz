@@ -4,7 +4,6 @@ import android.content.ComponentName
 import android.content.Intent
 import android.nfc.NfcAdapter
 import android.nfc.cardemulation.CardEmulation
-import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
@@ -15,8 +14,6 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import kotlinx.coroutines.launch
 import org.multipaz.applinks.AppLinksCheck
-import org.multipaz.compose.mdoc.MdocNdefService
-import org.multipaz.context.applicationContext
 import org.multipaz.context.initializeApplication
 import org.multipaz.testapp.provisioning.ProvisioningSupport
 import org.multipaz.util.Logger
@@ -58,8 +55,7 @@ class MainActivity : FragmentActivity() {
 
         lifecycle.coroutineScope.launch {
             val app = App.getInstance()
-            app.init()
-            app.startExportDocumentsToDigitalCredentials()
+            app.initialize()
             setContent {
                 app.Content()
             }
@@ -91,7 +87,7 @@ class MainActivity : FragmentActivity() {
             if (url != null) {
                 lifecycle.coroutineScope.launch {
                     val app = App.getInstance()
-                    app.init()
+                    app.initialize()
                     app.handleUrl(url)
                 }
             }

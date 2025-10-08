@@ -6,6 +6,7 @@ import LocalAuthentication
 import DeviceCheck
 import CoreImage
 import CommonCrypto
+import IdentityDocumentServices
 
 @objc public class SwiftBridge : NSObject {
     @objc(sha1:) public class func sha1(data: Data) -> Data {
@@ -449,6 +450,39 @@ import CommonCrypto
             }
         }
         return nil
+    }
+
+    @objc(docRegAdd:::) public class func docRegAdd(
+     documentIdentifier: String,
+     documentType: String,
+    ) async throws -> Bool {
+        if #available(iOS 26.0, *) {
+            let store = IdentityDocumentProviderRegistrationStore()
+
+            let registration = MobileDocumentRegistration(
+                mobileDocumentType: documentType,
+                supportedAuthorityKeyIdentifiers: [],  // TODO: param
+                documentIdentifier: documentIdentifier,
+                invalidationDate: nil          // TODO: param
+            )
+            try await store.addRegistration(registration)
+            return true
+        }
+        return false
+    }
+
+    @objc(docRegRemoveAll:) public class func docRegRemoveAll() async throws -> Int {
+        if #available(iOS 26.0, *) {
+            var numRemoved = 0
+            let store = IdentityDocumentProviderRegistrationStore()
+            let registrations = try await store.registrations
+            for registration in registrations {
+                try await store.removeRegistration(forDocumentIdentifier: registration.documentIdentifier)
+                numRemoved += 1
+            }
+            return numRemoved
+        }
+        return 0
     }
 }
 

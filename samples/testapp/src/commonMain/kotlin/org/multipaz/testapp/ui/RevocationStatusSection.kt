@@ -33,7 +33,7 @@ import org.multipaz.revocation.RevocationStatus
 import org.multipaz.revocation.StatusList
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
-import org.multipaz.testapp.platformHttpClientEngineFactory
+import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.util.Logger
 import org.multipaz.util.toHex
 
@@ -108,7 +108,7 @@ private fun StatusListCheckSection(
         modifier = Modifier.fillMaxWidth()
             .clickable {
                 coroutineScope.launch {
-                    val client = HttpClient(platformHttpClientEngineFactory())
+                    val client = HttpClient(TestAppConfiguration.httpClientEngineFactory)
                     val response = client.get(status.uri) {
                         // CWT is more compact, so prefer that
                         headers.append(
@@ -182,7 +182,7 @@ fun IdentifierListCheckSection(
         modifier = Modifier.fillMaxWidth()
             .clickable {
                 coroutineScope.launch {
-                    val client = HttpClient(platformHttpClientEngineFactory())
+                    val client = HttpClient(TestAppConfiguration.httpClientEngineFactory)
                     val response = client.get(status.uri)
                     if (response.status != HttpStatusCode.OK) {
                         statusText.value = "HTTP Status: ${response.status}"

@@ -2,6 +2,7 @@ package org.multipaz.presentment.model
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -36,6 +37,91 @@ import org.multipaz.util.toBase64Url
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 private const val TAG = "digitalCredentialsPresentment"
+
+/**
+ * Present credentials according to the [W3C Digital Credentials API](https://www.w3.org/TR/digital-credentials/).
+ *
+ * @param protocol the `protocol` field in the [DigitalCredentialGetRequest](https://www.w3.org/TR/digital-credentials/#the-digitalcredentialgetrequest-dictionary) dictionary.
+ * @param data a string with JSON from the `data` field in the [DigitalCredentialGetRequest](https://www.w3.org/TR/digital-credentials/#the-digitalcredentialgetrequest-dictionary) dictionary.
+ * @param appId the id of the application making the request, if available, for example `com.example.app` on Android or `<teamId>.<bundleId>` on iOS.
+ * @param origin the origin of the requester.
+ * @param preselectedDocuments the list of documents the user may have preselected earlier (for
+ *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
+ *   if the user didn't preselect.
+ * @return a string with JSON with the result, this is a JSON object containing the `protocol` and `data` fields in [DigitalCredential](https://www.w3.org/TR/digital-credentials/#the-digitalcredential-interface) interface.
+ */
+suspend fun digitalCredentialsPresentment(
+    protocol: String,
+    data: String,
+    appId: String?,
+    origin: String,
+    preselectedDocuments: List<Document>,
+    source: PresentmentSource,
+): String {
+    return Json.encodeToString(
+        digitalCredentialsPresentment(
+            protocol = protocol,
+            data = Json.decodeFromString<JsonObject>(data),
+            appId = appId,
+            origin = origin,
+            preselectedDocuments = preselectedDocuments,
+            source = source
+        )
+    )
+}
+
+/**
+ * Present credentials according to the [W3C Digital Credentials API](https://www.w3.org/TR/digital-credentials/).
+ *
+ * @param protocol the `protocol` field in the [DigitalCredentialGetRequest](https://www.w3.org/TR/digital-credentials/#the-digitalcredentialgetrequest-dictionary) dictionary.
+ * @param data the `data` field in the [DigitalCredentialGetRequest](https://www.w3.org/TR/digital-credentials/#the-digitalcredentialgetrequest-dictionary) dictionary.
+ * @param appId the id of the application making the request, if available, for example `com.example.app` on Android or `<teamId>.<bundleId>` on iOS.
+ * @param origin the origin of the requester.
+ * @param preselectedDocuments the list of documents the user may have preselected earlier (for
+ *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
+ *   if the user didn't preselect.
+ * @return JSON with the result, this is a JSON object containing the `protocol` and `data` fields in [DigitalCredential](https://www.w3.org/TR/digital-credentials/#the-digitalcredential-interface) interface.
+ */
+suspend fun digitalCredentialsPresentment(
+    protocol: String,
+    data: JsonObject,
+    appId: String?,
+    origin: String,
+    preselectedDocuments: List<Document>,
+    source: PresentmentSource,
+): JsonObject {
+    var result: Pair<String, JsonObject>? = null
+    val mechanism = object : DigitalCredentialsPresentmentMechanism(
+        appId = appId,
+        origin = origin,
+        protocol = protocol,
+        data = data,
+        preselectedDocuments = preselectedDocuments
+    ) {
+        override fun sendResponse(
+            protocol: String,
+            data: JsonObject
+        ) {
+            result = Pair(protocol, data)
+        }
+
+        override fun close() {
+        }
+    }
+    val dismissable = MutableStateFlow<Boolean>(false)
+    digitalCredentialsPresentment(
+        documentTypeRepository = source.documentTypeRepository,
+        source = source,
+        mechanism = mechanism,
+        dismissable = dismissable,
+        showConsentPrompt = { credentialPresentmentData, preselectedDocuments, requester, trustPoint -> null }
+    )
+
+    return buildJsonObject {
+        put("protocol", result!!.first)
+        put("data", result!!.second)
+    }
+}
 
 internal suspend fun digitalCredentialsPresentment(
     documentTypeRepository: DocumentTypeRepository,
@@ -135,6 +221,7 @@ private suspend fun digitalCredentialsMdocApiProtocol(
     val encryptionInfoBase64 = arfRequest["encryptionInfo"]!!.jsonPrimitive.content
 
     val encryptionInfo = Cbor.decode(encryptionInfoBase64.fromBase64Url())
+    Logger.iCbor(TAG, "encryptionInfo", encryptionInfo)
     if (encryptionInfo.asArray.get(0).asTstr != "dcapi") {
         throw IllegalArgumentException("Malformed EncryptionInfo")
     }
@@ -146,6 +233,7 @@ private suspend fun digitalCredentialsMdocApiProtocol(
         add(presentmentMechanism.origin)
     }
 
+    Logger.iCbor(TAG, "dcapiInfo", dcapiInfo)
     val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
     val sessionTranscript = buildCborArray {
         add(Simple.NULL) // DeviceEngagementBytes

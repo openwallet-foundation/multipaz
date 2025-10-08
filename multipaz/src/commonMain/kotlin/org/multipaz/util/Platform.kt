@@ -48,7 +48,10 @@ expect object Platform {
     /**
      * Gets a [SecureArea] implementation suitable for the platform.
      *
+     * @param storage the [Storage] to use for metadata.
      * @throws NotImplementedError if called on a platform which isn't Android or iOS.
      */
-    suspend fun getSecureArea(): SecureArea
+    suspend fun getSecureArea(
+        storage: Storage = nonBackedUpStorage
+    ): SecureArea
 }

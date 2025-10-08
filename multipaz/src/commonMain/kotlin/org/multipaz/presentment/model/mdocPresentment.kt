@@ -221,7 +221,7 @@ internal suspend fun mdocPresentment(
 }
 
 // TODO: this is just temporary until we have an equivalent of DcqlQuery.execute() for DeviceRequest
-internal suspend fun DocRequest.getPresentmentData(
+suspend fun DocRequest.getPresentmentData(
     documentTypeRepository: DocumentTypeRepository,
     source: PresentmentSource,
     keyAgreementPossible: List<EcCurve>,

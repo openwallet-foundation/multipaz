@@ -92,13 +92,13 @@ abstract class PromptModel protected constructor(
 
         fun<PromptDialogModelT: PromptDialogModel<*,*>> addPromptDialogModel(
             dialogModel: PromptDialogModelT
-        ) {
+        ) = apply {
             val dialogType = dialogModel.dialogType
             check(!promptDialogModels.containsKey(dialogType))
             promptDialogModels[dialogType] = dialogModel
         }
 
-        open fun addCommonDialogs() {
+        open fun addCommonDialogs() = apply {
             addPromptDialogModel(PassphrasePromptDialogModel())
         }
 

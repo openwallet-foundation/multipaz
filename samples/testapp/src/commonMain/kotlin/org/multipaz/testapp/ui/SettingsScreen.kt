@@ -22,13 +22,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.multipaz.crypto.EcCurve
 import org.multipaz.testapp.App
-import org.multipaz.testapp.Platform
+import org.multipaz.testapp.TestAppPlatform
 import org.multipaz.testapp.TestAppSettingsModel
-import org.multipaz.testapp.platform
 import org.multipaz.compose.cards.WarningCard
 import org.multipaz.digitalcredentials.Default
 import org.multipaz.digitalcredentials.DigitalCredentials
-import org.multipaz.testapp.platformRestartApp
+import org.multipaz.testapp.TestAppConfiguration
 
 @Composable
 fun SettingsScreen(
@@ -37,7 +36,7 @@ fun SettingsScreen(
 ) {
     // NFC engagement as an mdoc is only supported on Android.
     //
-    val nfcAvailable = (platform == Platform.ANDROID)
+    val nfcAvailable = (TestAppConfiguration.platform == TestAppPlatform.ANDROID)
     val negotiatedHandoverOrder = app.settingsModel.presentmentNegotiatedHandoverPreferredOrder.collectAsState().value
 
     LazyColumn(
@@ -51,19 +50,19 @@ fun SettingsScreen(
                 onCheckedChange = {
                     app.settingsModel.cryptoPreferBouncyCastle.value = it
                     try {
-                        platformRestartApp()
+                        TestAppConfiguration.restartApp()
                     } catch (e: Throwable) {
                         showToast("An error occurred: $e")
                     }
                 },
-                enabled = (platform == Platform.ANDROID)
+                enabled = (TestAppConfiguration.platform == TestAppPlatform.ANDROID)
             )
         }
         item { SettingHeadline("ISO mdoc NFC Engagement Settings") }
         item {
             if (!nfcAvailable) {
                 WarningCard {
-                    Text("NFC Engagement as an mdoc is not supported on ${platform.displayName}")
+                    Text("NFC Engagement as an mdoc is not supported on ${TestAppConfiguration.platform.displayName}")
                 }
             }
         }
@@ -268,7 +267,7 @@ fun SettingsScreen(
         } else {
             item {
                 WarningCard {
-                    Text("Digital Credentials API is not supported on ${platform.displayName}")
+                    Text("Digital Credentials API is not supported on ${TestAppConfiguration.platform.displayName}")
                 }
             }
         }

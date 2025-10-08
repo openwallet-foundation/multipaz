@@ -28,12 +28,17 @@ kotlin {
             export(libs.kotlinx.coroutines.core)
             export(libs.kotlinx.serialization.json)
             export(libs.ktor.client.core)
+            export(libs.ktor.client.darwin)
             baseName = xcFrameworkName
             binaryOption("bundleId", "org.multipaz.${xcFrameworkName}")
             binaryOption("bundleVersion", projectVersionCode.toString())
             binaryOption("bundleShortVersionString", projectVersionName)
             freeCompilerArgs += listOf(
-                "-Xoverride-konan-properties=minVersion.ios=16.0;minVersionSinceXcode15.ios=16.0",
+                // This is how we specify the minimum iOS version as 16.0
+                "-Xoverride-konan-properties=" +
+                        "osVersionMin.ios_arm64=16.0;" +
+                        "osVersionMin.ios_simulator_arm64=16.0;" +
+                        "osVersionMin.ios_x64=16.0",
                 // Uncomment the following to get Garbage Collection logging when using the framework:
                 //
                 // "-Xruntime-logs=gc=info"
@@ -56,6 +61,7 @@ kotlin {
                 api(libs.kotlinx.coroutines.core)
                 api(libs.kotlinx.serialization.json)
                 api(libs.ktor.client.core)
+                api(libs.ktor.client.darwin)
             }
         }
     }

@@ -12,6 +12,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.revocation.RevocationStatus
+import org.multipaz.util.Logger
 import kotlin.time.Instant
 
 /**
@@ -170,7 +171,13 @@ data class MobileSecurityObject(
             val validityInfo = dataItem["validityInfo"]
 
             val revocationStatus = if (dataItem.hasKey("status")) {
-                RevocationStatus.fromDataItem(dataItem["status"])
+                try {
+                    RevocationStatus.fromDataItem(dataItem["status"])
+                } catch (e: Throwable) {
+                    Logger.w(TAG, "Ignoring malformed status field in MSO", e)
+                    Logger.iCbor(TAG, "The malformed status field is", dataItem["status"])
+                    null
+                }
             } else {
                 null
             }

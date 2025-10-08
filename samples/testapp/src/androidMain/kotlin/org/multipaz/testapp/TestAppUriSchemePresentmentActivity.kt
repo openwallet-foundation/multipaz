@@ -10,18 +10,18 @@ import org.multipaz.testapp.ui.AppTheme
 class TestAppUriSchemePresentmentActivity: UriSchemePresentmentActivity() {
     override suspend fun getSettings(): Settings {
         val app = App.Companion.getInstance()
-        app.init()
+        app.initialize()
         val imageLoader = ImageLoader.Builder(applicationContext).components {
-            add(KtorNetworkFetcherFactory(HttpClient(platformHttpClientEngineFactory().create())))
+            add(KtorNetworkFetcherFactory(HttpClient(TestAppConfiguration.httpClientEngineFactory.create())))
         }.build()
         return Settings(
-            appName = platformAppName,
-            appIcon = platformAppIcon,
+            appName = TestAppConfiguration.appName,
+            appIcon = TestAppConfiguration.appIcon,
             promptModel = app.promptModel,
             applicationTheme = @Composable { AppTheme(it) },
             documentTypeRepository = app.documentTypeRepository,
             presentmentSource = app.getPresentmentSource(),
-            httpClientEngineFactory = platformHttpClientEngineFactory(),
+            httpClientEngineFactory = TestAppConfiguration.httpClientEngineFactory,
             imageLoader = imageLoader
         )
     }
