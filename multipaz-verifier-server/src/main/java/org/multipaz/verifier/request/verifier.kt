@@ -1696,8 +1696,8 @@ private suspend fun calcDcRequestNew(
             origin = origin,
             clientId = "x509_san_dns:${session.host}",
             responseEncryptionKey = if (encryptResponse) readerKey.publicKey else null,
-            readerAuthenticationKey = readerAuthKey,
-            readerAuthenticationCertChain = readerAuthKeyCertification,
+            readerAuthenticationKey = if (signRequest) readerAuthKey else null,
+            readerAuthenticationCertChain = if (signRequest) readerAuthKeyCertification else null,
             zkSystemSpecs = zkSystemSpecs
         )
     }
