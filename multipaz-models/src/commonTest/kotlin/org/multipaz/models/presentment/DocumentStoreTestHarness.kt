@@ -29,8 +29,8 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X500Name
-import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
@@ -92,11 +92,8 @@ class DocumentStoreTestHarness {
     lateinit var validFrom: Instant
     lateinit var validUntil: Instant
 
-    lateinit var dsKey: EcPrivateKey
-    lateinit var dsCert: X509Cert
-
-    lateinit var readerRootKey: EcPrivateKey
-    lateinit var readerRootCert: X509Cert
+    lateinit var dsKey: SigningKey.X509Certified
+    lateinit var readerRootKey: SigningKey.X509Certified
 
     private val lock = Mutex()
     private var isInitialized = false
@@ -184,7 +181,7 @@ class DocumentStoreTestHarness {
         )
 
         val iacaCert = MdocUtil.generateIacaCertificate(
-            iacaKey = iacaKey,
+            iacaKey = SigningKey.anonymous(iacaKey),
             subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST IACA"),
             serial = ASN1Integer.fromRandom(numBits = 128),
             validFrom = iacaValidFrom,
@@ -193,28 +190,33 @@ class DocumentStoreTestHarness {
             crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
         )
 
-        dsKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        dsCert = MdocUtil.generateDsCertificate(
-            iacaCert = iacaCert,
-            iacaKey = iacaKey,
-            dsKey = dsKey.publicKey,
+        val dsPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val dsCert = MdocUtil.generateDsCertificate(
+            iacaKey = SigningKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaKey),
+            dsKey = dsPrivateKey.publicKey,
             subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST DS"),
             serial = ASN1Integer.fromRandom(numBits = 128),
             validFrom = dsValidFrom,
             validUntil = dsValidUntil,
         )
+        dsKey = SigningKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert)), dsPrivateKey)
 
         val readerRootValidFrom = validFrom
         val readerRootValidUntil = validUntil
-        readerRootKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        readerRootCert = MdocUtil.generateReaderRootCertificate(
-            readerRootKey = readerRootKey,
+        val readerRootPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val readerRootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = SigningKey.anonymous(readerRootPrivateKey),
             subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST Reader Root"),
             serial = ASN1Integer.fromRandom(128),
             validFrom = readerRootValidFrom,
             validUntil = readerRootValidUntil,
             crlUrl = "https://verifier.multipaz.org/crl"
         )
+        readerRootKey = SigningKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(readerRootCert)),
+            privateKey = readerRootPrivateKey
+        )
+
         isInitialized = true
     }
 
@@ -223,7 +225,6 @@ class DocumentStoreTestHarness {
         provisionTestDocuments(
             documentStore = documentStore,
             dsKey = dsKey,
-            dsCert = dsCert,
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
@@ -256,7 +257,6 @@ class DocumentStoreTestHarness {
             validFrom = validFrom,
             validUntil = validUntil,
             dsKey = dsKey,
-            dsCert = dsCert
         )
         return document
     }
@@ -283,15 +283,13 @@ class DocumentStoreTestHarness {
             validFrom = validFrom,
             validUntil = validUntil,
             dsKey = dsKey,
-            dsCert = dsCert
         )
         return document
     }
 
     private suspend fun provisionTestDocuments(
         documentStore: DocumentStore,
-        dsKey: EcPrivateKey,
-        dsCert: X509Cert,
+        dsKey: SigningKey.X509Certified,
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
@@ -300,7 +298,6 @@ class DocumentStoreTestHarness {
             documentStore = documentStore,
             displayName = "mDL",
             dsKey = dsKey,
-            dsCert = dsCert,
             documentType = DrivingLicense.getDocumentType(),
             overrideMdocClaims = emptyMap(),
             overrideJsonClaims = emptyMap(),
@@ -312,7 +309,6 @@ class DocumentStoreTestHarness {
             documentStore = documentStore,
             displayName = "EU PID",
             dsKey = dsKey,
-            dsCert = dsCert,
             documentType = EUPersonalID.getDocumentType(),
             overrideMdocClaims = mapOf(
                 Pair(EUPersonalID.EUPID_NAMESPACE, "given_name") to Tstr("Erika"),
@@ -330,7 +326,6 @@ class DocumentStoreTestHarness {
             documentStore = documentStore,
             displayName = "EU PID 2",
             dsKey = dsKey,
-            dsCert = dsCert,
             documentType = EUPersonalID.getDocumentType(),
             overrideMdocClaims = mapOf(
                 Pair(EUPersonalID.EUPID_NAMESPACE, "given_name") to Tstr("Max"),
@@ -348,7 +343,6 @@ class DocumentStoreTestHarness {
             documentStore = documentStore,
             displayName = "Photo ID",
             dsKey = dsKey,
-            dsCert = dsCert,
             documentType = PhotoID.getDocumentType(),
             overrideMdocClaims = mapOf(
                 Pair(PhotoID.ISO_23220_2_NAMESPACE, "given_name") to Tstr("Erika"),
@@ -364,7 +358,6 @@ class DocumentStoreTestHarness {
             documentStore = documentStore,
             displayName = "Photo ID 2",
             dsKey = dsKey,
-            dsCert = dsCert,
             documentType = PhotoID.getDocumentType(),
             overrideMdocClaims = mapOf(
                 Pair(PhotoID.ISO_23220_2_NAMESPACE, "given_name") to Tstr("Max"),
@@ -381,8 +374,7 @@ class DocumentStoreTestHarness {
     private suspend fun provisionDocument(
         documentStore: DocumentStore,
         displayName: String,
-        dsKey: EcPrivateKey,
-        dsCert: X509Cert,
+        dsKey: SigningKey.X509Certified,
         documentType: DocumentType,
         overrideMdocClaims: Map<Pair<String, String>, DataItem>,
         overrideJsonClaims: Map<String, JsonElement>,
@@ -403,7 +395,6 @@ class DocumentStoreTestHarness {
                 validFrom = validFrom,
                 validUntil = validUntil,
                 dsKey = dsKey,
-                dsCert = dsCert,
             )
         }
 
@@ -416,7 +407,6 @@ class DocumentStoreTestHarness {
                 validFrom = validFrom,
                 validUntil = validUntil,
                 dsKey = dsKey,
-                dsCert = dsCert,
             )
         }
 
@@ -430,8 +420,7 @@ class DocumentStoreTestHarness {
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
-        dsKey: EcPrivateKey,
-        dsCert: X509Cert,
+        dsKey: SigningKey.X509Certified,
     ) {
         val issuerNamespaces = buildIssuerNamespaces {
             for ((nsName, ns) in documentType.mdocDocumentType?.namespaces!!) {
@@ -460,7 +449,6 @@ class DocumentStoreTestHarness {
             validFrom = validFrom,
             validUntil = validUntil,
             dsKey = dsKey,
-            dsCert = dsCert
         )
     }
 
@@ -471,8 +459,7 @@ class DocumentStoreTestHarness {
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
-        dsKey: EcPrivateKey,
-        dsCert: X509Cert,
+        dsKey: SigningKey.X509Certified,
     ) {
         // Create authentication keys...
         val mdocCredential = MdocCredential.create(
@@ -509,7 +496,7 @@ class DocumentStoreTestHarness {
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                X509CertChain(listOf(dsCert)).toDataItem()
+                dsKey.certChain.toDataItem()
             )
         )
         val encodedIssuerAuth = Cbor.encode(
@@ -517,7 +504,6 @@ class DocumentStoreTestHarness {
                 dsKey,
                 taggedEncodedMso,
                 true,
-                dsKey.publicKey.curve.defaultSigningAlgorithm,
                 protectedHeaders,
                 unprotectedHeaders
             ).toDataItem()
@@ -544,8 +530,7 @@ class DocumentStoreTestHarness {
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
-        dsKey: EcPrivateKey,
-        dsCert: X509Cert,
+        dsKey: SigningKey.X509Certified,
     ) {
         if (documentType.jsonDocumentType == null) {
             return
@@ -579,7 +564,6 @@ class DocumentStoreTestHarness {
             validFrom = validFrom,
             validUntil = validUntil,
             dsKey = dsKey,
-            dsCert = dsCert
         )
     }
 
@@ -590,8 +574,7 @@ class DocumentStoreTestHarness {
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
-        dsKey: EcPrivateKey,
-        dsCert: X509Cert,
+        dsKey: SigningKey.X509Certified,
     ) {
         val credential = KeyBoundSdJwtVcCredential.create(
             document = document,
@@ -604,8 +587,6 @@ class DocumentStoreTestHarness {
 
         val sdJwt = SdJwt.create(
             issuerKey = dsKey,
-            issuerAlgorithm = dsKey.curve.defaultSigningAlgorithmFullySpecified,
-            issuerCertChain = X509CertChain(listOf(dsCert)),
             kbKey = (credential as? SecureAreaBoundCredential)?.let { it.secureArea.getKeyInfo(it.alias).publicKey },
             claims = identityAttributes,
             nonSdClaims = buildJsonObject {

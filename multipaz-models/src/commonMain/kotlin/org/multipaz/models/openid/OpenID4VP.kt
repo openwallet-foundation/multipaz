@@ -4,7 +4,7 @@ import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -23,14 +23,14 @@ import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.JsonWebEncryption
-import org.multipaz.crypto.JsonWebSignature
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
 import org.multipaz.document.NameSpacedData
+import org.multipaz.jwt.buildJwt
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObjectParser
@@ -81,20 +81,18 @@ object OpenID4VP {
      * @param nonce the nonce to use.
      * @param responseEncryptionKey the key to encrypt the response against or `null`.
      * @param requestSigningKey the key to sign the request with or `null`.
-     * @param requestSigningKeyCertification the certification for [requestSigningKey] or `null`.
      * @param dclqQuery the DCQL query.
      * @param responseMode the response mode.
      * @param responseUri the response URI or `null`.
      * @return the OpenID4VP request.
      */
-    fun generateRequest(
+    suspend fun generateRequest(
         version: Version,
         origin: String,
         clientId: String?,
         nonce: String,
         responseEncryptionKey: EcPublicKey?,
-        requestSigningKey: EcPrivateKey?,
-        requestSigningKeyCertification: X509CertChain?,
+        requestSigningKey: SigningKey?,
         responseMode: ResponseMode,
         responseUri: String?,
         dclqQuery: JsonObject,
@@ -106,13 +104,12 @@ object OpenID4VP {
                 nonce = nonce,
                 responseEncryptionKey = responseEncryptionKey,
                 requestSigningKey = requestSigningKey,
-                requestSigningKeyCertification = requestSigningKeyCertification,
                 responseMode = responseMode,
                 responseUri = responseUri,
                 dclqQuery = dclqQuery
             )
         }
-        val unsignedRequest = buildJsonObject {
+        val jsonBuildBlock: JsonObjectBuilder.() -> Unit = {
             put("response_type", "vp_token")
             put("response_mode",
                 when (responseMode) {
@@ -166,32 +163,31 @@ object OpenID4VP {
                 }
             }
         }
-        if (requestSigningKey == null) {
-            return unsignedRequest
-        }
+
         return buildJsonObject {
-            put("request", JsonPrimitive(JsonWebSignature.sign(
-                key = requestSigningKey,
-                signatureAlgorithm = requestSigningKey.curve.defaultSigningAlgorithmFullySpecified,
-                claimsSet = unsignedRequest,
-                type = "oauth-authz-req+jwt",
-                x5c = requestSigningKeyCertification
-            )))
+            if (requestSigningKey == null) {
+                jsonBuildBlock()
+            } else {
+                put("request", buildJwt(
+                    key = requestSigningKey,
+                    type = "oauth-authz-req+jwt",
+                    body = jsonBuildBlock
+                ))
+            }
         }
     }
 
-    private fun generateRequestDraft24(
+    private suspend fun generateRequestDraft24(
         origin: String?,
         clientId: String?,
         nonce: String,
         responseEncryptionKey: EcPublicKey?,
-        requestSigningKey: EcPrivateKey?,
-        requestSigningKeyCertification: X509CertChain?,
+        requestSigningKey: SigningKey?,
         responseMode: ResponseMode,
         responseUri: String?,
         dclqQuery: JsonObject
     ): JsonObject {
-        val unsignedRequest = buildJsonObject {
+        val jsonBuildBlock: JsonObjectBuilder.() -> Unit = {
             put("response_type", "vp_token")
             put("response_mode",
                 when (responseMode) {
@@ -245,17 +241,17 @@ object OpenID4VP {
                 }
             }
         }
-        if (requestSigningKey == null) {
-            return unsignedRequest
-        }
+
         return buildJsonObject {
-            put("request", JsonPrimitive(JsonWebSignature.sign(
-                key = requestSigningKey,
-                signatureAlgorithm = requestSigningKey.curve.defaultSigningAlgorithmFullySpecified,
-                claimsSet = unsignedRequest,
-                type = "oauth-authz-req+jwt",
-                x5c = requestSigningKeyCertification
-            )))
+            if (requestSigningKey == null) {
+                jsonBuildBlock()
+            } else {
+                put("request", buildJwt(
+                    key = requestSigningKey,
+                    type = "oauth-authz-req+jwt",
+                    body = jsonBuildBlock
+                ))
+            }
         }
     }
 
@@ -708,11 +704,13 @@ object OpenID4VP {
                 "Authentication is required to share $it"
             } ?: "Authentication is required to share the document"
             filteredSdJwt.present(
-                kbSecureArea = sdjwtVcCredential.secureArea,
-                kbAlias = sdjwtVcCredential.alias,
-                kbKeyUnlockData = KeyUnlockInteractive(
-                    title = "Verify it's you",
-                    subtitle = authMessage
+                signingKey = SigningKey.anonymous(
+                    alias = sdjwtVcCredential.alias,
+                    secureArea = sdjwtVcCredential.secureArea,
+                    keyUnlockData = KeyUnlockInteractive(
+                        title = "Verify it's you",
+                        subtitle = authMessage
+                    ),
                 ),
                 nonce = nonce,
                 audience = if (version == Version.DRAFT_29) {

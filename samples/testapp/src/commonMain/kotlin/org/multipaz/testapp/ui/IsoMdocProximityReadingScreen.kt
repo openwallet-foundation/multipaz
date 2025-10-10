@@ -357,8 +357,6 @@ fun IsoMdocProximityReadingScreen(
                                             request = requestSelected.value.sampleRequest,
                                             encodedSessionTranscript = readerSessionTranscript.value!!,
                                             readerKey = app.readerKey,
-                                            readerCert = app.readerCert,
-                                            readerRootCert = app.readerRootCert,
                                         )
                                     readerMostRecentDeviceResponse.value = byteArrayOf()
                                     readerTransport.value!!.sendMessage(
@@ -753,8 +751,6 @@ private suspend fun doReaderFlowWithTransport(
         request = selectedRequest.value.sampleRequest,
         encodedSessionTranscript = readerSessionTranscript.value!!,
         readerKey = app.readerKey,
-        readerCert = app.readerCert,
-        readerRootCert = app.readerRootCert,
         zkSystemRepository = app.zkSystemRepository,
     )
     Logger.iCbor(TAG, "deviceRequest", encodedDeviceRequest)

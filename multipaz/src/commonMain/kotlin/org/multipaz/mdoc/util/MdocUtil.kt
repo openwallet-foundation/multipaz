@@ -33,7 +33,6 @@ import org.multipaz.document.DocumentRequest.DataElement
 import org.multipaz.document.NameSpacedData
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
@@ -49,6 +48,7 @@ import org.multipaz.request.Requester
 import org.multipaz.util.Logger
 import kotlin.time.Instant
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X509Extension
 import kotlin.random.Random
 
@@ -430,8 +430,8 @@ object MdocUtil {
      * @param crlUrl the URL for revocation (see RFC 5280 section 4.2.1.13).
      * @return a [X509Cert] with all the required extensions.
      */
-    fun generateIacaCertificate(
-        iacaKey: EcPrivateKey,
+    suspend fun generateIacaCertificate(
+        iacaKey: SigningKey,
         subject: X500Name,
         serial: ASN1Integer,
         validFrom: Instant,
@@ -442,7 +442,6 @@ object MdocUtil {
         return X509Cert.Builder(
             publicKey = iacaKey.publicKey,
             signingKey = iacaKey,
-            signatureAlgorithm = iacaKey.curve.defaultSigningAlgorithm,
             serialNumber = serial,
             subject = subject,
             issuer = subject,
@@ -504,19 +503,18 @@ object MdocUtil {
      * @param validUntil the point in time the certificate should be valid until.
      * @return a [X509Cert] with all the required extensions.
      */
-    fun generateDsCertificate(
-        iacaCert: X509Cert,
-        iacaKey: EcPrivateKey,
+    suspend fun generateDsCertificate(
+        iacaKey: SigningKey.X509Certified,
         dsKey: EcPublicKey,
         subject: X500Name,
         serial: ASN1Integer,
         validFrom: Instant,
         validUntil: Instant,
     ): X509Cert {
+        val iacaCert = iacaKey.certChain.certificates.first()
         return X509Cert.Builder(
             publicKey = dsKey,
             signingKey = iacaKey,
-            signatureAlgorithm = iacaKey.curve.defaultSigningAlgorithm,
             serialNumber = serial,
             subject = subject,
             issuer = iacaCert.subject,
@@ -564,8 +562,8 @@ object MdocUtil {
      * @param crlUrl the URL for revocation (see RFC 5280 section 4.2.1.13).
      * @return a [X509Cert].
      */
-    fun generateReaderRootCertificate(
-        readerRootKey: EcPrivateKey,
+    suspend fun generateReaderRootCertificate(
+        readerRootKey: SigningKey,
         subject: X500Name,
         serial: ASN1Integer,
         validFrom: Instant,
@@ -575,7 +573,6 @@ object MdocUtil {
         return X509Cert.Builder(
             publicKey = readerRootKey.publicKey,
             signingKey = readerRootKey,
-            signatureAlgorithm = readerRootKey.curve.defaultSigningAlgorithm,
             serialNumber = serial,
             subject = subject,
             issuer = subject,
@@ -621,9 +618,8 @@ object MdocUtil {
      * @param extensions additional extensions to include in the reader certificate.
      * @return a [X509Cert] with all the required extensions.
      */
-    fun generateReaderCertificate(
-        readerRootCert: X509Cert,
-        readerRootKey: EcPrivateKey,
+    suspend fun generateReaderCertificate(
+        readerRootKey: SigningKey.X509Certified,
         readerKey: EcPublicKey,
         subject: X500Name,
         serial: ASN1Integer,
@@ -631,10 +627,10 @@ object MdocUtil {
         validUntil: Instant,
         extensions: List<X509Extension> = emptyList()
     ): X509Cert {
+        val readerRootCert = readerRootKey.certChain.certificates.first()
         val builder = X509Cert.Builder(
             publicKey = readerKey,
             signingKey = readerRootKey,
-            signatureAlgorithm = readerRootKey.curve.defaultSigningAlgorithm,
             serialNumber = serial,
             subject = subject,
             issuer = readerRootCert.subject,

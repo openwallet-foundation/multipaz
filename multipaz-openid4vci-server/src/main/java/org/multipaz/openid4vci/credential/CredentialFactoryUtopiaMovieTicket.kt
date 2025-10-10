@@ -60,8 +60,6 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactoryBase() {
 
         val sdJwt = SdJwt.create(
             issuerKey = signingKey,
-            issuerAlgorithm = signingKey.curve.defaultSigningAlgorithmFullySpecified,
-            issuerCertChain = signingCertificateChain,
             kbKey = null,
             claims = ticket.toJson() as JsonObject,
             nonSdClaims = buildJsonObject {

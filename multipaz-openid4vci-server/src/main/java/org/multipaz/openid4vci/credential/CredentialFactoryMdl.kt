@@ -4,7 +4,6 @@ import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
-import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
@@ -27,8 +26,6 @@ import kotlinx.datetime.yearsUntil
 import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Uint
-import org.multipaz.cbor.addCborMap
-import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
@@ -204,7 +201,6 @@ internal class CredentialFactoryMdl : CredentialFactoryBase() {
                 signingKey,
                 taggedEncodedMso,
                 true,
-                signingKey.publicKey.curve.defaultSigningAlgorithm,
                 protectedHeaders,
                 unprotectedHeaders
             ).toDataItem()

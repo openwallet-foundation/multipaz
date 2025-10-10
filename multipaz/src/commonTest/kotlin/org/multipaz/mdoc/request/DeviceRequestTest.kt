@@ -10,16 +10,13 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborArray
-import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
 import org.multipaz.cose.toCoseLabel
-import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.SignatureVerificationException
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X500Name
-import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
@@ -28,7 +25,6 @@ import org.multipaz.mdoc.TestVectors
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.securearea.CreateKeySettings
-import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.fromHex
@@ -120,26 +116,27 @@ class DeviceRequestTest {
     }
 
     data class ReaderAuth(
-        val readerRootKey: EcPrivateKey,
-        val readerRootCert: X509Cert,
-        val readerKey: EcPrivateKey,
-        val readerCert: X509Cert,
+        val readerRootKey: SigningKey.X509Certified,
+        val readerKey: SigningKey.X509Certified,
     ) {
         companion object {
-            fun generate(): ReaderAuth {
+            suspend fun generateSoftware(): ReaderAuth {
                 val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P384)
                 val readerRootCert = MdocUtil.generateReaderRootCertificate(
-                    readerRootKey = readerRootKey,
+                    readerRootKey = SigningKey.anonymous(readerRootKey),
                     subject = X500Name.fromName("CN=TEST Reader Root,C=XG-US,ST=MA"),
                     serial = ASN1Integer(1),
                     validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
                     validUntil = LocalDateTime(2029, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
                     crlUrl = "http://www.example.com/issuer/crl"
                 )
+                val readerRootSigningKey = SigningKey.X509CertifiedExplicit(
+                    privateKey = readerRootKey,
+                    certChain = X509CertChain(listOf(readerRootCert))
+                )
                 val readerKey = Crypto.createEcPrivateKey(EcCurve.P384)
                 val readerCert = MdocUtil.generateReaderCertificate(
-                    readerRootCert = readerRootCert,
-                    readerRootKey = readerRootKey,
+                    readerRootKey = readerRootSigningKey,
                     readerKey = readerKey.publicKey,
                     subject = X500Name.fromName("CN=TEST Reader Certificate,C=XG-US,ST=MA"),
                     serial = ASN1Integer(1),
@@ -147,32 +144,27 @@ class DeviceRequestTest {
                     validUntil = LocalDateTime(2029, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
                 )
                 return ReaderAuth(
-                    readerRootKey = readerRootKey,
-                    readerRootCert = readerRootCert,
-                    readerKey = readerKey,
-                    readerCert = readerCert
+                    readerRootKey = readerRootSigningKey,
+                    readerKey = SigningKey.X509CertifiedExplicit(
+                        privateKey = readerKey,
+                        certChain = X509CertChain(listOf(readerCert, readerRootCert))
+                    )
                 )
             }
-        }
-    }
 
-    data class ReaderAuthSecureArea(
-        val readerRootKey: EcPrivateKey,
-        val readerRootCert: X509Cert,
-        val readerKeySecureArea: SecureArea,
-        val readerKeyAlias: String,
-        val readerCert: X509Cert,
-    ) {
-        companion object {
-            suspend fun generate(): ReaderAuthSecureArea {
+            suspend fun generateSecureArea(): ReaderAuth {
                 val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P384)
                 val readerRootCert = MdocUtil.generateReaderRootCertificate(
-                    readerRootKey = readerRootKey,
+                    readerRootKey = SigningKey.anonymous(readerRootKey),
                     subject = X500Name.fromName("CN=TEST Reader Root,C=XG-US,ST=MA"),
                     serial = ASN1Integer(1),
                     validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
                     validUntil = LocalDateTime(2029, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
                     crlUrl = "http://www.example.com/issuer/crl"
+                )
+                val readerRootSigningKey = SigningKey.X509CertifiedExplicit(
+                    privateKey = readerRootKey,
+                    certChain = X509CertChain(listOf(readerRootCert))
                 )
                 val storage = EphemeralStorage()
                 val readerKeySecureArea = SoftwareSecureArea.create(storage)
@@ -181,28 +173,29 @@ class DeviceRequestTest {
                     createKeySettings = CreateKeySettings()
                 )
                 val readerCert = MdocUtil.generateReaderCertificate(
-                    readerRootCert = readerRootCert,
-                    readerRootKey = readerRootKey,
+                    readerRootKey = readerRootSigningKey,
                     readerKey = readerKeyInfo.publicKey,
                     subject = X500Name.fromName("CN=TEST Reader Certificate,C=XG-US,ST=MA"),
                     serial = ASN1Integer(1),
                     validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
                     validUntil = LocalDateTime(2029, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
                 )
-                return ReaderAuthSecureArea(
-                    readerRootKey = readerRootKey,
-                    readerRootCert = readerRootCert,
-                    readerKeySecureArea = readerKeySecureArea,
-                    readerKeyAlias = readerKeyInfo.alias,
-                    readerCert = readerCert
+                return ReaderAuth(
+                    readerRootKey = readerRootSigningKey,
+                    readerKey = SigningKey.X509CertifiedSecureAreaBased(
+                        secureArea = readerKeySecureArea,
+                        alias = readerKeyInfo.alias,
+                        certChain = X509CertChain(listOf(readerCert, readerRootCert)),
+                        keyInfo = readerKeyInfo
+                    )
                 )
             }
         }
     }
 
     @Test
-    fun readerAuthRoundTrip() {
-        val ra = ReaderAuth.generate()
+    fun readerAuthRoundTrip() = runTest {
+        val ra = ReaderAuth.generateSoftware()
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript
@@ -216,9 +209,7 @@ class DeviceRequestTest {
                     )
                 ),
                 docRequestInfo = null,
-                readerKey = ra.readerKey,
-                signatureAlgorithm = Algorithm.ESP256,
-                readerKeyCertificateChain = X509CertChain(listOf(ra.readerCert, ra.readerRootCert))
+                readerKey = ra.readerKey
             )
         }
         assertEquals("1.0", deviceRequest.version)
@@ -250,8 +241,8 @@ class DeviceRequestTest {
     }
 
     @Test
-    fun readerAuthSecureAreaRoundTrip() = runTest {
-        val ra = ReaderAuthSecureArea.generate()
+    fun readerAuthRoundTripSecureArea() = runTest {
+        val ra = ReaderAuth.generateSecureArea()
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequestSuspend(
             sessionTranscript = sessionTranscript
@@ -265,10 +256,7 @@ class DeviceRequestTest {
                     )
                 ),
                 docRequestInfo = null,
-                readerKeySecureArea = ra.readerKeySecureArea,
-                readerKeyAlias = ra.readerKeyAlias,
-                readerKeyCertificateChain = X509CertChain(listOf(ra.readerCert, ra.readerRootCert)),
-                keyUnlockData = null
+                readerKey = ra.readerKey
             )
         }
         assertEquals("1.0", deviceRequest.version)
@@ -300,8 +288,8 @@ class DeviceRequestTest {
     }
 
     @Test
-    fun readerAuthAllRoundTrip() {
-        val ra = ReaderAuth.generate()
+    fun readerAuthAllRoundTrip() = runTest {
+        val ra = ReaderAuth.generateSoftware()
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript
@@ -316,11 +304,7 @@ class DeviceRequestTest {
                 ),
                 docRequestInfo = null,
             )
-            addReaderAuthAll(
-                readerKey = ra.readerKey,
-                signatureAlgorithm = Algorithm.ESP256,
-                readerKeyCertificateChain = X509CertChain(listOf(ra.readerCert, ra.readerRootCert))
-            )
+            addReaderAuthAll(readerKey = ra.readerKey)
         }
         assertEquals("1.1", deviceRequest.version)
 
@@ -353,7 +337,7 @@ class DeviceRequestTest {
 
     @Test
     fun readerAuthAllSecureAreaRoundTrip() = runTest {
-        val ra = ReaderAuthSecureArea.generate()
+        val ra = ReaderAuth.generateSecureArea()
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequestSuspend(
             sessionTranscript = sessionTranscript
@@ -368,12 +352,7 @@ class DeviceRequestTest {
                 ),
                 docRequestInfo = null,
             )
-            addReaderAuthAll(
-                readerKeySecureArea = ra.readerKeySecureArea,
-                readerKeyAlias = ra.readerKeyAlias,
-                readerKeyCertificateChain = X509CertChain(listOf(ra.readerCert, ra.readerRootCert)),
-                keyUnlockData = null
-            )
+            addReaderAuthAll(readerKey = ra.readerKey)
         }
         assertEquals("1.1", deviceRequest.version)
         val parsedDeviceRequest = DeviceRequest.fromDataItem(deviceRequest.toDataItem())
@@ -404,7 +383,7 @@ class DeviceRequestTest {
     }
 
     @Test
-    fun docRequestInfoAlternativeDataElements() {
+    fun docRequestInfoAlternativeDataElements() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript
@@ -478,7 +457,7 @@ class DeviceRequestTest {
     }
 
     @Test
-    fun docRequestInfoIssuerIdentifiers() {
+    fun docRequestInfoIssuerIdentifiers() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript
@@ -531,7 +510,7 @@ class DeviceRequestTest {
     }
 
     @Test
-    fun docRequestInfoUniqueDocSetRequiredSetToTrue() {
+    fun docRequestInfoUniqueDocSetRequiredSetToTrue() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript
@@ -581,7 +560,7 @@ class DeviceRequestTest {
     }
 
     @Test
-    fun docRequestInfoUniqueDocSetRequiredSetToFalse() {
+    fun docRequestInfoUniqueDocSetRequiredSetToFalse() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript
@@ -631,7 +610,7 @@ class DeviceRequestTest {
     }
 
     @Test
-    fun docRequestInfoMaximumResponseSizeSet() {
+    fun docRequestInfoMaximumResponseSizeSet() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript
@@ -681,7 +660,7 @@ class DeviceRequestTest {
     }
 
     @Test
-    fun docRequestInfoZkRequest() {
+    fun docRequestInfoZkRequest() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript
@@ -774,7 +753,7 @@ class DeviceRequestTest {
     }
 
     @Test
-    fun deviceRequestInfoAgeOverUseCase() {
+    fun deviceRequestInfoAgeOverUseCase() = runTest {
         // This DeviceRequest asks for either an mDL, a PhotoID, or a EU PID with claims that
         // the holder is 18 years or older as well as their portrait image.
         //
@@ -891,7 +870,7 @@ class DeviceRequestTest {
     }
 
     @Test
-    fun deviceRequestInfoAgeOverUseCaseWithPurposeHints() {
+    fun deviceRequestInfoAgeOverUseCaseWithPurposeHints() = runTest {
         // This DeviceRequest asks for either an mDL, a PhotoID, or a EU PID with claims that
         // the holder is 18 years or older as well as their portrait image.
         //
@@ -1015,7 +994,7 @@ class DeviceRequestTest {
     }
 
     @Test
-    fun testDocRequestInfoExt() {
+    fun testDocRequestInfoExt() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript,
@@ -1069,7 +1048,7 @@ class DeviceRequestTest {
     }
 
     @Test
-    fun testDeviceRequestInfoExt() {
+    fun testDeviceRequestInfoExt() = runTest {
         val sessionTranscript = buildCborArray { add("Doesn't matter") }
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript,

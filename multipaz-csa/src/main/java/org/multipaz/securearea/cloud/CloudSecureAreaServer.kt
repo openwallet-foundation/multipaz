@@ -8,7 +8,6 @@ import org.multipaz.cose.CoseKey
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
@@ -43,17 +42,17 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.multipaz.cbor.buildCborArray
-import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.securearea.cloud.CloudSecureAreaProtocol.BatchCreateKeyResponse1
 import org.multipaz.util.toBase64Url
 import org.multipaz.certext.CloudKeyAttestation
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.toCbor
+import org.multipaz.crypto.SigningKey
 import org.multipaz.device.AndroidKeystoreSecurityLevel
+import org.multipaz.jwt.buildJwt
 import java.nio.ByteBuffer
 import java.util.Locale
 import kotlin.random.Random
@@ -93,14 +92,8 @@ import kotlin.random.Random
  */
 class CloudSecureAreaServer(
     private val serverSecureAreaBoundKey: ByteArray,
-    private val attestationKey: EcPrivateKey,
-    private val attestationKeySignatureAlgorithm: Algorithm,
-    private val attestationKeyIssuer: String,
-    private val attestationKeyCertification: X509CertChain,
-    private val cloudRootAttestationKey: EcPrivateKey,
-    private val cloudRootAttestationKeySignatureAlgorithm: Algorithm,
-    private val cloudRootAttestationKeyIssuer: String,
-    private val cloudRootAttestationKeyCertification: X509CertChain,
+    private val attestationKey: SigningKey.X509Certified,
+    private val cloudRootAttestationKey: SigningKey.X509Certified,
     private val e2eeKeyLimitSeconds: Int,
     private val iosReleaseBuild: Boolean,
     private val iosAppIdentifiers: List<String>,
@@ -172,7 +165,7 @@ class CloudSecureAreaServer(
         return Pair(200, response0.toCbor())
     }
 
-    private fun doRegisterRequest1(request1: RegisterRequest1,
+    private suspend fun doRegisterRequest1(request1: RegisterRequest1,
                                    remoteHost: String): Pair<Int, ByteArray> {
         val state = RegisterState.decrypt(request1.serverState)
 
@@ -232,15 +225,14 @@ class CloudSecureAreaServer(
                 X509Cert.Builder(
                     publicKey = cloudBindingKey.publicKey,
                     signingKey = cloudRootAttestationKey,
-                    signatureAlgorithm = cloudRootAttestationKeySignatureAlgorithm,
                     serialNumber = ASN1Integer(1L),
                     subject = X500Name.fromName("CN=Cloud Secure Area Cloud Binding Key"),
-                    issuer = X500Name.fromName(cloudRootAttestationKeyIssuer),
+                    issuer = cloudRootAttestationKey.certChain.certificates.first().subject,
                     validFrom = cloudBindingKeyValidFrom,
                     validUntil = cloudBindingKeyValidUntil
                 )
                     .includeSubjectKeyIdentifier()
-                    .setAuthorityKeyIdentifierToCertificate(cloudRootAttestationKeyCertification.certificates[0])
+                    .setAuthorityKeyIdentifierToCertificate(cloudRootAttestationKey.certChain.certificates[0])
                     .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
                     .addExtension(
                         oid = OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid,
@@ -254,7 +246,7 @@ class CloudSecureAreaServer(
                         ).toCbor()
                     )
                     .build()
-            ) + cloudRootAttestationKeyCertification.certificates
+            ) + cloudRootAttestationKey.certChain.certificates
         )
         state.cloudBindingKey = cloudBindingKey.toCoseKey()
         val response1 = RegisterResponse1(
@@ -501,15 +493,14 @@ class CloudSecureAreaServer(
         val attestationCert = X509Cert.Builder(
             publicKey = keyInfo.publicKey,
             signingKey = attestationKey,
-            signatureAlgorithm = attestationKeySignatureAlgorithm,
             serialNumber = ASN1Integer(1L),
             subject = X500Name.fromName("CN=Cloud Secure Area Key"),
-            issuer = X500Name.fromName(attestationKeyIssuer),
+            issuer = attestationKey.certChain.certificates.first().subject,
             validFrom = Instant.fromEpochMilliseconds(state.validFromMillis),
             validUntil = Instant.fromEpochMilliseconds(state.validUntilMillis)
         )
             .includeSubjectKeyIdentifier()
-            .setAuthorityKeyIdentifierToCertificate(attestationKeyCertification.certificates[0])
+            .setAuthorityKeyIdentifierToCertificate(attestationKey.certChain.certificates[0])
             .setKeyUsage(setOf(
                 if (keyInfo.algorithm.isSigning) {
                     X509KeyUsage.DIGITAL_SIGNATURE
@@ -532,7 +523,7 @@ class CloudSecureAreaServer(
 
         state.cloudKeyStorage = storage.serialize().toByteArray()
         val response1 = CreateKeyResponse1(
-            X509CertChain(listOf(attestationCert) + attestationKeyCertification.certificates),
+            X509CertChain(listOf(attestationCert) + attestationKey.certChain.certificates),
             encryptCreateKeyState(state)
         )
         val encryptedResponse1 = E2EEResponse(
@@ -627,15 +618,14 @@ class CloudSecureAreaServer(
             val attestationCert = X509Cert.Builder(
                 publicKey = keyInfo.publicKey,
                 signingKey = attestationKey,
-                signatureAlgorithm = attestationKeySignatureAlgorithm,
                 serialNumber = ASN1Integer(1L),
                 subject = X500Name.fromName("CN=Cloud Secure Area Key"),
-                issuer = X500Name.fromName(attestationKeyIssuer),
+                issuer = attestationKey.certChain.certificates.first().subject,
                 validFrom = Instant.fromEpochMilliseconds(state.validFromMillis),
                 validUntil = Instant.fromEpochMilliseconds(state.validUntilMillis)
             )
                 .includeSubjectKeyIdentifier()
-                .setAuthorityKeyIdentifierToCertificate(attestationKeyCertification.certificates[0])
+                .setAuthorityKeyIdentifierToCertificate(attestationKey.certChain.certificates[0])
                 .setKeyUsage(
                     setOf(
                         if (keyInfo.algorithm.isSigning) {
@@ -665,9 +655,11 @@ class CloudSecureAreaServer(
                 keyInfo.publicKey.toJwk()
             )
         }
-        val openidvciAttestationBody = buildJsonObject {
+        val openidvciAttestationJwt = buildJwt(
+            key = attestationKey,
+            type = "key-attestation+jwt",
+        ) {
             openid4vciKeyAttestationIssuer?.let { put("iss", it) }
-            put("iat", Clock.System.now().epochSeconds)
             put("nbf", state.validFromMillis/1000L)
             put("exp", state.validUntilMillis/1000L)
             if (openid4vciKeyAttestationKeyStorage != null) {
@@ -693,18 +685,11 @@ class CloudSecureAreaServer(
             // TODO: include 'status' field
             put("attested_keys", JsonArray(openid4vciAttestedKeysJwks))
         }
-        val openidvciAttestation = JsonWebSignature.sign(
-            key = attestationKey,
-            signatureAlgorithm = attestationKeySignatureAlgorithm,
-            claimsSet = openidvciAttestationBody,
-            type = "key-attestation+jwt",
-            x5c = attestationKeyCertification
-        )
         val response1 = BatchCreateKeyResponse1(
-            commonCertChain = X509CertChain(attestationKeyCertification.certificates),
+            commonCertChain = X509CertChain(attestationKey.certChain.certificates),
             remoteKeyAttestationLeafs = remoteKeyAttestationLeafs,
             serverStates = serverStates,
-            openid4vciKeyAttestationCompactSerialization = openidvciAttestation
+            openid4vciKeyAttestationCompactSerialization = openidvciAttestationJwt
         )
         val encryptedResponse1 = E2EEResponse(
             encryptToDevice(e2eeState, response1.toCbor()),

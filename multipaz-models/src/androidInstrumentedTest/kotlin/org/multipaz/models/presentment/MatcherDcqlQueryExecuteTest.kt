@@ -15,14 +15,13 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.models.digitalcredentials.DigitalCredentials
 import org.multipaz.models.digitalcredentials.calculateCredentialDatabase
 import org.multipaz.models.openid.OpenID4VP
-import org.multipaz.storage.ephemeral.EphemeralStorage
-import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.util.toBase64Url
 import kotlin.random.Random
 
@@ -59,20 +58,23 @@ class MatcherDcqlQueryExecuteTest {
 
         val nonce = Random.Default.nextBytes(16).toBase64Url()
 
-        val (readerAuthKey, readerAuthCert) = if (signRequest) {
+        val readerAuthKey = if (signRequest) {
             val key = Crypto.createEcPrivateKey(EcCurve.P256)
+            val readerRootCerts = harness.readerRootKey.certChain.certificates
             val cert = MdocUtil.generateReaderCertificate(
-                readerRootCert = harness.readerRootCert,
                 readerRootKey = harness.readerRootKey,
                 readerKey = key.publicKey,
                 subject = X500Name.fromName("CN=Multipaz Reader Cert Single-Use key"),
                 serial = ASN1Integer.fromRandom(128),
-                validFrom = harness.readerRootCert.validityNotBefore,
-                validUntil = harness.readerRootCert.validityNotAfter
+                validFrom = readerRootCerts.first().validityNotBefore,
+                validUntil = readerRootCerts.first().validityNotAfter
             )
-            Pair(key, cert)
+            SigningKey.X509CertifiedExplicit(
+                privateKey = key,
+                certChain = X509CertChain(listOf(cert) + readerRootCerts)
+            )
         } else {
-            Pair(null, null)
+            null
         }
 
         val requestData = OpenID4VP.generateRequest(
@@ -82,9 +84,6 @@ class MatcherDcqlQueryExecuteTest {
             nonce = nonce,
             responseEncryptionKey = encryptionKey?.publicKey,
             requestSigningKey = readerAuthKey,
-            requestSigningKeyCertification = readerAuthCert?.let {
-                X509CertChain(listOf(it, harness.readerRootCert))
-            },
             responseMode = OpenID4VP.ResponseMode.DC_API,
             responseUri = null,
             dclqQuery = Json.decodeFromString(JsonObject.serializer(), dcql)

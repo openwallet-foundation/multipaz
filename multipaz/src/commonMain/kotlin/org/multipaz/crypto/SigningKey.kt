@@ -3,25 +3,27 @@ package org.multipaz.crypto
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 import org.multipaz.asn1.OID
 import org.multipaz.securearea.KeyInfo
+import org.multipaz.securearea.KeyInvalidatedException
+import org.multipaz.securearea.KeyLockedException
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.KeyUnlockInteractive
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaRepository
 
 /**
- * Private key with some kind of identification that can be used to sign messages (typically
- * in JWT format).
+ * Private key that can be used to sign messages, optionally with some kind of identification.
  *
  * A private key can either be a software key [EcPrivateKey] or reside in a [SecureArea]. Keys
- * can be identified either by a certificate chain or using a key id. When reading a key from
- * settings, all four possible variants are potentially useful, yet it makes very little
- * difference for the rest of the code which variant is actually used. [SigningKey] class
- * encapsulates these variants so the code can be written in more generic way.
+ * can either be anonymous or identified either by a certificate chain or using a key id. When
+ * reading a key from settings, all six possible variants are potentially useful, yet it makes
+ * very little difference for the rest of the code which variant is actually used. [SigningKey]
+ * class encapsulates these variants so the code can be written in more generic way.
+ *
+ * Although strictly speaking not a signing operation, [SigningKey] can also be used for
+ * key exchange operation, provided it was created with that capability.
  */
 sealed class SigningKey {
     /** Signature algorithm */
@@ -31,13 +33,44 @@ sealed class SigningKey {
     /**
      * Entity to which the key belongs; key id for named key, common name for the keys with
      * the certificate chain.
+     *
+     * @throws IllegalStateException when called on [Anonymous] key.
      */
     abstract val subject: String
 
-    /** Generates signature for the given message using this key. */
+    /**
+     * Signs [message] with this key.
+     *
+     * If the key needs unlocking before use (for example user authentication
+     * in any shape or form) and `keyUnlockData` isn't set or doesn't contain
+     * what's needed, [KeyLockedException] is thrown.
+     *
+     * @param message the data to sign.
+     * @return the signature.
+     * @throws IllegalArgumentException if there is no key with the given alias
+     *      or the key wasn't created with purpose [KeyPurpose.SIGN].
+     * @throws IllegalArgumentException if the signature algorithm isn’t compatible with the key.
+     * @throws KeyLockedException if the key needs unlocking.
+     * @throws KeyInvalidatedException if the key is no longer usable.
+     */
     abstract suspend fun sign(message: ByteArray): EcSignature
-    /** Adds the relevant data to JWT header. */
-    abstract fun addToJwtHeader(header: JsonObjectBuilder)
+
+    /**
+     * Performs Key Agreement using this key and [otherKey].
+     *
+     * If the key needs unlocking before use (for example user authentication
+     * in any shape or form) and `keyUnlockData` isn't set or doesn't contain
+     * what's needed, [KeyLockedException] is thrown.
+     *
+     * @param otherKey The public EC key from the other party
+     * @return The shared secret.
+     * @throws IllegalArgumentException if the other key isn't the same curve.
+     * @throws IllegalArgumentException if there is no key with the given alias
+     *     or the key wasn't created with purpose [KeyPurpose.AGREE_KEY].
+     * @throws KeyLockedException if the key needs unlocking.
+     * @throws KeyInvalidatedException if the key is no longer usable.
+     */
+    abstract suspend fun keyAgreement(otherKey: EcPublicKey): ByteArray
 
     /**
      * Implemented by [SigningKey] where the private key is explicitly given.
@@ -63,40 +96,67 @@ sealed class SigningKey {
         val keyInfo: KeyInfo
     }
 
-    interface Named {
-        /** Key identifier, corresponds to `kid` header value in JWT */
-        val keyId: String
-        /** Signature algorithm */
-        val algorithm: Algorithm
-        /** Public key that corresponds to the private key used for signing */
-        val publicKey: EcPublicKey
-    }
-
-    interface Certified {
+    /**
+     * Keys that are (potentially) compatible with X509-certificate-based workflows.
+     *
+     * Anonymous keys are compatible with X509 workflows if the identity of the key is clear
+     * from the context: one example is a newly-minted key for a self-signed certificate before
+     * the certificate is actually created.
+     */
+    sealed class X509Compatible: SigningKey() {
         /**
-         * Certificate chain for the key, corresponds to `x5c` header value in JWT.
+         * X509 certificate chain for the key, corresponds to `x5c` header value in JWT.
          *
          * Public key in the first certificate chain must correspond to the private key
          * used for signing. Certificate chain must be valid.
+         *
+         * [Anonymous] keys have `null` certificate chain, [X509Certified] keys always have
+         * non-`null` not-empty certificate chains.
          */
-        val certChain: X509CertChain
-        /** Signature algorithm */
-        val algorithm: Algorithm
-        /** Public key that corresponds to the private key used for signing */
-        val publicKey: EcPublicKey
+        abstract val certChain: X509CertChain?
     }
 
-    /** [SigningKey] which is both [SigningKey.Certified] and [SigningKey.Explicit]. */
-    data class CertifiedExplicit(
+    /**
+     * Key without identification, typically used when it is clear from the context which key
+     * must be employed.
+     */
+    sealed class Anonymous: X509Compatible() {
+        override val certChain: X509CertChain? get() = null
+        override val subject: String get() = throw IllegalStateException("anonymous key")
+    }
+
+    /**
+     * Key identified by a key id which is somehow known to other parties.
+     *
+     * [Named] keys must never be used in X509-certificate based workflows. Use [Anonymous]
+     * keys instead.
+     */
+    sealed class Named: SigningKey() {
+        /** Key identifier, corresponds to `kid` header value in JWT */
+        abstract val keyId: String
+        override val subject: String get() = keyId
+    }
+
+    /**
+     * A key which is identified by a X509 certificate chain.
+     */
+    sealed class X509Certified: X509Compatible() {
+        abstract override val certChain: X509CertChain
+        override val subject: String get() = commonName(certChain)
+
+        /** Returns key's certificate subject as X500Name. */
+        fun getX500Subject(): X500Name = certChain.certificates.first().subject
+    }
+
+    /** [SigningKey] which is both [SigningKey.X509Certified] and [SigningKey.Explicit]. */
+    data class X509CertifiedExplicit(
         override val certChain: X509CertChain,
         override val privateKey: EcPrivateKey,
         override val algorithm: Algorithm = privateKey.curve.defaultSigningAlgorithm
-    ): SigningKey(), Certified, Explicit {
+    ): X509Certified(), Explicit {
         override val publicKey: EcPublicKey get() = privateKey.publicKey
-        override val subject: String get() = commonName(certChain)
         override suspend fun sign(message: ByteArray) = sign(this, message)
-        override fun addToJwtHeader(header: JsonObjectBuilder) =
-            addToJwtHeader(this, header)
+        override suspend fun keyAgreement(otherKey: EcPublicKey) = keyAgreement(this, otherKey)
     }
 
     /** [SigningKey] which is both [SigningKey.Named] and [SigningKey.Explicit]. */
@@ -104,28 +164,34 @@ sealed class SigningKey {
         override val keyId: String,
         override val privateKey: EcPrivateKey,
         override val algorithm: Algorithm = privateKey.curve.defaultSigningAlgorithm
-    ): SigningKey(), Named, Explicit {
+    ): Named(), Explicit {
         override val publicKey: EcPublicKey get() = privateKey.publicKey
-        override val subject: String get() = keyId
         override suspend fun sign(message: ByteArray) = sign(this, message)
-        override fun addToJwtHeader(header: JsonObjectBuilder) =
-            addToJwtHeader(this, header)
+        override suspend fun keyAgreement(otherKey: EcPublicKey) = keyAgreement(this, otherKey)
     }
 
-    /** [SigningKey] which is both [SigningKey.Certified] and [SigningKey.SecureAreaBased]. */
-    data class CertifiedSecureAreaBased(
+    /** [SigningKey] which is both [SigningKey.Anonymous] and [SigningKey.Explicit]. */
+    data class AnonymousExplicit(
+        override val privateKey: EcPrivateKey,
+        override val algorithm: Algorithm = privateKey.curve.defaultSigningAlgorithm
+    ): Anonymous(), Explicit {
+        override val publicKey: EcPublicKey get() = privateKey.publicKey
+        override suspend fun sign(message: ByteArray) = sign(this, message)
+        override suspend fun keyAgreement(otherKey: EcPublicKey) = keyAgreement(this, otherKey)
+    }
+
+    /** [SigningKey] which is both [SigningKey.X509Certified] and [SigningKey.SecureAreaBased]. */
+    data class X509CertifiedSecureAreaBased(
         override val certChain: X509CertChain,
         override val alias: String,
         override val secureArea: SecureArea,
         override val keyInfo: KeyInfo,
         override val keyUnlockData: KeyUnlockData? = KeyUnlockInteractive(),
-    ): SigningKey(), Certified, SecureAreaBased {
-        override val algorithm: Algorithm get() = keyInfo.algorithm
+        override val algorithm: Algorithm = keyInfo.algorithm
+    ): X509Certified(), SecureAreaBased {
         override val publicKey: EcPublicKey get() = keyInfo.publicKey
-        override val subject: String get() = commonName(certChain)
         override suspend fun sign(message: ByteArray) = sign(this, message)
-        override fun addToJwtHeader(header: JsonObjectBuilder) =
-            addToJwtHeader(this, header)
+        override suspend fun keyAgreement(otherKey: EcPublicKey) = keyAgreement(this, otherKey)
     }
 
     /** [SigningKey] which is both [SigningKey.Named] and [SigningKey.SecureAreaBased]. */
@@ -134,14 +200,25 @@ sealed class SigningKey {
         override val alias: String,
         override val secureArea: SecureArea,
         override val keyInfo: KeyInfo,
-        override val keyUnlockData: KeyUnlockData? = KeyUnlockInteractive()
-    ): SigningKey(), Named, SecureAreaBased {
-        override val algorithm: Algorithm get() = keyInfo.algorithm
+        override val keyUnlockData: KeyUnlockData? = KeyUnlockInteractive(),
+        override val algorithm: Algorithm = keyInfo.algorithm
+    ): Named(), SecureAreaBased {
         override val publicKey: EcPublicKey get() = keyInfo.publicKey
-        override val subject: String get() = keyId
         override suspend fun sign(message: ByteArray) = sign(this, message)
-        override fun addToJwtHeader(header: JsonObjectBuilder) =
-            addToJwtHeader(this, header)
+        override suspend fun keyAgreement(otherKey: EcPublicKey) = keyAgreement(this, otherKey)
+    }
+
+    /** [SigningKey] which is both [SigningKey.Anonymous] and [SigningKey.SecureAreaBased]. */
+    class AnonymousSecureAreaBased(
+        override val alias: String,
+        override val secureArea: SecureArea,
+        override val keyInfo: KeyInfo,
+        override val keyUnlockData: KeyUnlockData? = KeyUnlockInteractive(),
+        override val algorithm: Algorithm = keyInfo.algorithm
+    ): Anonymous(), SecureAreaBased {
+        override val publicKey: EcPublicKey get() = keyInfo.publicKey
+        override suspend fun sign(message: ByteArray) = sign(this, message)
+        override suspend fun keyAgreement(otherKey: EcPublicKey) = keyAgreement(this, otherKey)
     }
 
     companion object {
@@ -158,23 +235,18 @@ sealed class SigningKey {
                 keyUnlockData = secureAreaBased.keyUnlockData
             )
 
-        private fun addToJwtHeader(certified: Certified, header: JsonObjectBuilder) {
-            header.put(
-                key = "alg",
-                value = certified.algorithm.joseAlgorithmIdentifier ?:
-                    certified.publicKey.curve.defaultSigningAlgorithmFullySpecified.joseAlgorithmIdentifier
-            )
-            header.put("x5c", certified.certChain.toX5c())
-        }
+        private fun keyAgreement(explicit: Explicit, otherKey: EcPublicKey): ByteArray =
+            Crypto.keyAgreement(key = explicit.privateKey, otherKey = otherKey)
 
-        private fun addToJwtHeader(named: Named, header: JsonObjectBuilder) {
-            header.put(
-                key = "alg",
-                value = named.algorithm.joseAlgorithmIdentifier ?:
-                named.publicKey.curve.defaultSigningAlgorithmFullySpecified.joseAlgorithmIdentifier
+        private suspend fun keyAgreement(
+            secureAreaBased: SecureAreaBased,
+            otherKey: EcPublicKey
+        ): ByteArray =
+            secureAreaBased.secureArea.keyAgreement(
+                alias = secureAreaBased.alias,
+                otherKey = otherKey,
+                keyUnlockData = secureAreaBased.keyUnlockData
             )
-            header.put("kid", named.keyId)
-        }
 
         /**
          * Parses json string that describes the private key.
@@ -185,7 +257,7 @@ sealed class SigningKey {
          */
         suspend fun parse(
             json: String,
-            secureAreaRepository: SecureAreaRepository,
+            secureAreaRepository: SecureAreaRepository?,
             keyUnlockData: KeyUnlockData? = KeyUnlockInteractive()
         ): SigningKey = parse(
             json = Json.parseToJsonElement(json),
@@ -198,14 +270,16 @@ sealed class SigningKey {
          */
         suspend fun parse(
             json: JsonElement,
-            secureAreaRepository: SecureAreaRepository,
+            secureAreaRepository: SecureAreaRepository?,
             keyUnlockData: KeyUnlockData? = KeyUnlockInteractive()
         ): SigningKey {
             if (json !is JsonObject) {
                 throw IllegalArgumentException("expected json object")
             }
             val secureArea = json["secure_area"]?.jsonPrimitive?.content?.let {
-                secureAreaRepository.getImplementation(it)
+                secureAreaRepository?.getImplementation(it)
+                    ?: throw IllegalStateException(
+                        "SecureArea '$it' requested, but SecureAreaRepository is not provided or that secure area is not registered")
             }
             return if (secureArea != null) {
                 val (kid, x5c) = parseIdentifier(json)
@@ -214,7 +288,7 @@ sealed class SigningKey {
                 if (kid != null) {
                     NamedSecureAreaBased(kid, alias, secureArea, keyInfo, keyUnlockData)
                 } else {
-                    CertifiedSecureAreaBased(x5c!!, alias, secureArea, keyInfo, keyUnlockData)
+                    X509CertifiedSecureAreaBased(x5c!!, alias, secureArea, keyInfo, keyUnlockData)
                 }
             } else {
                 parseExplicit(json)
@@ -248,8 +322,29 @@ sealed class SigningKey {
             if (x5c!!.certificates.first().ecPublicKey != privateKey.publicKey) {
                 throw IllegalArgumentException("certificate chain does not certify the key")
             }
-            return CertifiedExplicit(x5c, privateKey)
+            return X509CertifiedExplicit(x5c, privateKey)
         }
+
+        suspend fun anonymous(
+            secureArea: SecureArea,
+            alias: String,
+            keyUnlockData: KeyUnlockData = KeyUnlockInteractive(),
+            algorithm: Algorithm? = null
+        ): SigningKey {
+            val keyInfo = secureArea.getKeyInfo(alias)
+            return AnonymousSecureAreaBased(
+                secureArea = secureArea,
+                alias = alias,
+                keyInfo = keyInfo,
+                keyUnlockData = keyUnlockData,
+                algorithm = algorithm ?: keyInfo.algorithm
+            )
+        }
+
+        fun anonymous(
+            privateKey: EcPrivateKey,
+            algorithm: Algorithm = privateKey.curve.defaultSigningAlgorithmFullySpecified
+        ): SigningKey = AnonymousExplicit(privateKey, algorithm)
 
         private fun parseIdentifier(json: JsonObject): Pair<String?, X509CertChain?> {
             val kid = json["kid"]?.jsonPrimitive?.content

@@ -115,6 +115,8 @@ import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.compose.provisioning.Provisioning
+import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.AbstractDocumentMetadata
 import org.multipaz.document.DocumentMetadata
 import org.multipaz.document.buildDocumentStore
@@ -179,14 +181,10 @@ class App private constructor (val promptModel: PromptModel) {
     lateinit var documentStore: DocumentStore
     lateinit var documentModel: DocumentModel
 
-    lateinit var iacaKey: EcPrivateKey
-    lateinit var iacaCert: X509Cert
+    lateinit var iacaKey: SigningKey.X509Certified
 
-    lateinit var readerRootKey: EcPrivateKey
-    lateinit var readerRootCert: X509Cert
-
-    lateinit var readerKey: EcPrivateKey
-    lateinit var readerCert: X509Cert
+    lateinit var readerRootKey: SigningKey.X509Certified
+    lateinit var readerKey: SigningKey.X509Certified
 
     lateinit var issuerTrustManager: CompositeTrustManager
 
@@ -424,18 +422,6 @@ class App private constructor (val promptModel: PromptModel) {
         )
     }
 
-    val bundledIacaCert: X509Cert by lazy {
-        MdocUtil.generateIacaCertificate(
-            iacaKey = iacaKey,
-            subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST IACA"),
-            serial = ASN1Integer.fromRandom(numBits = 128),
-            validFrom = certsValidFrom,
-            validUntil = certsValidUntil,
-            issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
-            crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
-        )
-    }
-
     private val bundledReaderRootKey: EcPrivateKey by lazy {
         val readerRootKeyPub = EcPublicKey.fromPem(
             """
@@ -460,17 +446,6 @@ class App private constructor (val promptModel: PromptModel) {
         )
     }
 
-    private val bundledReaderRootCert: X509Cert by lazy {
-        MdocUtil.generateReaderRootCertificate(
-            readerRootKey = bundledReaderRootKey,
-            subject = X500Name.fromName("CN=OWF Multipaz TestApp Reader Root"),
-            serial = ASN1Integer.fromRandom(numBits = 128),
-            validFrom = certsValidFrom,
-            validUntil = certsValidUntil,
-            crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
-        )
-    }
-
     private lateinit var keyStorage: StorageTable
 
     private suspend fun keyStorageInit() {
@@ -484,45 +459,70 @@ class App private constructor (val promptModel: PromptModel) {
     }
 
     private suspend fun iacaInit() {
-        iacaKey = keyStorage.get("iacaKey")?.let { EcPrivateKey.fromDataItem(Cbor.decode(it.toByteArray())) }
+        val iacaPrivateKey = keyStorage.get("iacaKey")?.let { EcPrivateKey.fromDataItem(Cbor.decode(it.toByteArray())) }
             ?: run {
                 keyStorage.insert("iacaKey", ByteString(Cbor.encode(bundledIacaKey.toDataItem())))
                 bundledIacaKey
             }
-        iacaCert = keyStorage.get("iacaCert")?.let { X509Cert.fromDataItem(Cbor.decode(it.toByteArray())) }
+        val iacaCert = keyStorage.get("iacaCert")?.let { X509Cert.fromDataItem(Cbor.decode(it.toByteArray())) }
             ?: run {
+                val bundledIacaCert = MdocUtil.generateIacaCertificate(
+                    iacaKey = SigningKey.anonymous(iacaPrivateKey),
+                    subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST IACA"),
+                    serial = ASN1Integer.fromRandom(numBits = 128),
+                    validFrom = certsValidFrom,
+                    validUntil = certsValidUntil,
+                    issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
+                    crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
+                )
                 keyStorage.insert("iacaCert", ByteString(Cbor.encode(bundledIacaCert.toDataItem())))
                 bundledIacaCert
             }
+        iacaKey = SigningKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(iacaCert)),
+            privateKey = iacaPrivateKey
+        )
     }
 
     private suspend fun readerRootInit() {
-        readerRootKey = keyStorage.get("readerRootKey")?.let { EcPrivateKey.fromDataItem(Cbor.decode(it.toByteArray())) }
+        val readerRootPrivateKey = keyStorage.get("readerRootKey")?.let { EcPrivateKey.fromDataItem(Cbor.decode(it.toByteArray())) }
             ?: run {
                 keyStorage.insert("readerRootKey", ByteString(Cbor.encode(bundledReaderRootKey.toDataItem())))
                 bundledReaderRootKey
             }
-        readerRootCert = keyStorage.get("readerRootCert")?.let { X509Cert.fromDataItem(Cbor.decode(it.toByteArray())) }
+        val readerRootCert = keyStorage.get("readerRootCert")?.let { X509Cert.fromDataItem(Cbor.decode(it.toByteArray())) }
             ?: run {
+                val bundledReaderRootCert = MdocUtil.generateReaderRootCertificate(
+                    readerRootKey = SigningKey.anonymous(bundledReaderRootKey),
+                    subject = X500Name.fromName("CN=OWF Multipaz TestApp Reader Root"),
+                    serial = ASN1Integer.fromRandom(numBits = 128),
+                    validFrom = certsValidFrom,
+                    validUntil = certsValidUntil,
+                    crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
+                )
                 keyStorage.insert("readerRootCert", ByteString(Cbor.encode(bundledReaderRootCert.toDataItem())))
                 bundledReaderRootCert
             }
         println("readerRootCert: ${readerRootCert.toPem()}")
+        readerRootKey = SigningKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(readerRootCert)),
+            privateKey = readerRootPrivateKey
+        )
     }
 
     private suspend fun readerInit() {
-        readerKey = keyStorage.get("readerKey")?.let { EcPrivateKey.fromDataItem(Cbor.decode(it.toByteArray())) }
+        val readerPrivateKey = keyStorage.get("readerKey")?.let { EcPrivateKey.fromDataItem(Cbor.decode(it.toByteArray())) }
             ?: run {
                 val key = Crypto.createEcPrivateKey(EcCurve.P256)
                 keyStorage.insert("readerKey", ByteString(Cbor.encode(key.toDataItem())))
                 key
             }
-        readerCert = keyStorage.get("readerCert")?.let { X509Cert.fromDataItem(Cbor.decode(it.toByteArray())) }
+        val readerCert = keyStorage.get("readerCert")?.let {
+            X509Cert.fromDataItem(Cbor.decode(it.toByteArray())) }
             ?: run {
                 val cert = MdocUtil.generateReaderCertificate(
-                    readerRootCert = readerRootCert,
                     readerRootKey = readerRootKey,
-                    readerKey = readerKey.publicKey,
+                    readerKey = readerPrivateKey.publicKey,
                     subject = X500Name.fromName("CN=OWF Multipaz TestApp Reader Cert"),
                     serial = ASN1Integer.fromRandom(numBits = 128),
                     validFrom = certsValidFrom,
@@ -531,6 +531,10 @@ class App private constructor (val promptModel: PromptModel) {
                 keyStorage.insert("readerCert", ByteString(Cbor.encode(cert.toDataItem())))
                 cert
             }
+        readerKey = SigningKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(readerCert) + readerRootKey.certChain.certificates),
+            privateKey = readerPrivateKey
+        )
     }
 
     @OptIn(ExperimentalResourceApi::class)
@@ -541,7 +545,7 @@ class App private constructor (val promptModel: PromptModel) {
             identifier = "Built-in Trusted Issuers"
         )
         builtInIssuerTrustManager.addX509Cert(
-            certificate = iacaCert,
+            certificate = iacaKey.certChain.certificates.first(),
             metadata = TrustMetadata(displayName = "OWF Multipaz TestApp Issuer"),
         )
         val signedVical = SignedVical.parse(Res.readBytes("files/20250225 RDW Test Vical.vical"))
@@ -584,7 +588,7 @@ class App private constructor (val promptModel: PromptModel) {
         if (builtInReaderTrustManager.getTrustPoints().isEmpty()) {
             try {
                 builtInReaderTrustManager.addX509Cert(
-                    certificate = readerRootCert,
+                    certificate = readerRootKey.certChain.certificates.first(),
                     metadata = TrustMetadata(
                         displayName = "Multipaz TestApp",
                         displayIcon = ByteString(Res.readBytes("files/utopia-brewery.png")),
@@ -908,7 +912,6 @@ class App private constructor (val promptModel: PromptModel) {
                             softwareSecureArea = softwareSecureArea,
                             settingsModel = settingsModel,
                             iacaKey = iacaKey,
-                            iacaCert = iacaCert,
                             showToast = { message: String -> showToast(message) },
                             onViewDocument = { documentId ->
                                 navController.navigate(DocumentViewerDestination.route + "/${documentId}")

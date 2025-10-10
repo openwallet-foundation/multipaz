@@ -10,6 +10,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
+import org.multipaz.crypto.SigningKey
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
@@ -229,6 +230,77 @@ class CoseTests {
     @Test fun coseSign1_SecureArea_ESB512() = coseSign1_SecureArea_helper(Algorithm.ESB512)
     @Test fun coseSign1_SecureArea_ED25519() = coseSign1_SecureArea_helper(Algorithm.ED25519)
     @Test fun coseSign1_SecureArea_ED448() = coseSign1_SecureArea_helper(Algorithm.ED448)
+
+    fun coseSign1_SigningKey_helper(algorithm: Algorithm) = runTest {
+        assertTrue(algorithm.fullySpecified)
+
+        // TODO: use assumeTrue() when available in kotlin-test
+        if (!Crypto.supportedCurves.contains(algorithm.curve!!)) {
+            println("Curve ${algorithm.curve} not supported on platform")
+            return@runTest
+        }
+
+        val storage = EphemeralStorage()
+        val sa = SoftwareSecureArea.create(storage)
+
+        sa.createKey("testKey", CreateKeySettings(algorithm, ByteString()))
+        val message = "Hello World".encodeToByteArray()
+
+        // First check that coseSign1Sign() puts the EcCurve.defaultSigningAlgorithm in
+        // the protected headed as COSE_LABEL_ALG
+        val coseSignNoExplicitHeaderSet = Cose.coseSign1Sign(
+            signingKey = SigningKey.anonymous(
+                secureArea = sa,
+                alias = "testKey"
+            ),
+            message = message,
+            includeMessageInPayload = true,
+            protectedHeaders = mapOf(),
+            unprotectedHeaders = mapOf()
+        )
+        Cose.coseSign1Check(
+            sa.getKeyInfo("testKey").publicKey,
+            null,
+            coseSignNoExplicitHeaderSet,
+            algorithm
+        )
+        assertEquals(
+            algorithm.coseAlgorithmIdentifier,
+            coseSignNoExplicitHeaderSet.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
+        )
+
+        // Second, check we can override it if we e.g. want the fully-specified algorithm there
+        val protectedHeaders = mapOf<CoseLabel, DataItem>(
+            Cose.COSE_LABEL_ALG.toCoseLabel to algorithm.coseAlgorithmIdentifier!!.toDataItem()
+        )
+        val coseSignExplicitHeaderSet = Cose.coseSign1Sign(
+            signingKey = SigningKey.anonymous(sa, "testKey"),
+            message = message,
+            includeMessageInPayload = true,
+            protectedHeaders = protectedHeaders,
+            unprotectedHeaders = mapOf(),
+        )
+        Cose.coseSign1Check(
+            sa.getKeyInfo("testKey").publicKey,
+            null,
+            coseSignExplicitHeaderSet,
+            algorithm
+        )
+        assertEquals(
+            algorithm.coseAlgorithmIdentifier!!,
+            coseSignExplicitHeaderSet.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
+        )
+    }
+
+    @Test fun coseSign1_SigningKey_ESP256() = coseSign1_SigningKey_helper(Algorithm.ESP256)
+    @Test fun coseSign1_SigningKey_ESP384() = coseSign1_SigningKey_helper(Algorithm.ESP384)
+    @Test fun coseSign1_SigningKey_ESP521() = coseSign1_SigningKey_helper(Algorithm.ESP512)
+    @Test fun coseSign1_SigningKey_ESB256() = coseSign1_SigningKey_helper(Algorithm.ESB256)
+    @Test fun coseSign1_SigningKey_ESB320() = coseSign1_SigningKey_helper(Algorithm.ESB320)
+    @Test fun coseSign1_SigningKey_ESB384() = coseSign1_SigningKey_helper(Algorithm.ESB384)
+    @Test fun coseSign1_SigningKey_ESB512() = coseSign1_SigningKey_helper(Algorithm.ESB512)
+    @Test fun coseSign1_SigningKey_ED25519() = coseSign1_SigningKey_helper(Algorithm.ED25519)
+    @Test fun coseSign1_SigningKey_ED448() = coseSign1_SigningKey_helper(Algorithm.ED448)
 
     @Test
     fun coseSign1X5Chain() {

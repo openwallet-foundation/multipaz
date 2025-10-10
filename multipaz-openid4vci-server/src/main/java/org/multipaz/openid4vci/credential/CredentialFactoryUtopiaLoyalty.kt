@@ -131,14 +131,6 @@ internal class CredentialFactoryUtopiaLoyalty : CredentialFactoryBase() {
 
         msoGenerator.addValueDigests(issuerNamespaces)
 
-        val documentSigningKeyCert = X509Cert.fromPem(
-            resources.getStringResource("ds_certificate.pem")!!
-        )
-        val documentSigningKey = EcPrivateKey.fromPem(
-            resources.getStringResource("ds_private_key.pem")!!,
-            documentSigningKeyCert.ecPublicKey
-        )
-
         val mso = msoGenerator.generate()
         val taggedEncodedMso = Cbor.encode(Tagged(24, Bstr(mso)))
 
@@ -152,15 +144,14 @@ internal class CredentialFactoryUtopiaLoyalty : CredentialFactoryBase() {
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                X509CertChain(listOf(documentSigningKeyCert)).toDataItem()
+                signingCertificateChain.toDataItem()
             )
         )
         val encodedIssuerAuth = Cbor.encode(
             Cose.coseSign1Sign(
-                documentSigningKey,
+                signingKey,
                 taggedEncodedMso,
                 true,
-                documentSigningKey.publicKey.curve.defaultSigningAlgorithm,
                 protectedHeaders,
                 unprotectedHeaders
             ).toDataItem()

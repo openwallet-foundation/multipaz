@@ -32,10 +32,8 @@ import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.X509Cert
-import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.SigningKey
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentCannedRequest
@@ -93,9 +91,7 @@ object TestAppUtils {
     suspend fun generateEncodedDeviceRequest(
         request: DocumentCannedRequest,
         encodedSessionTranscript: ByteArray,
-        readerKey: EcPrivateKey,
-        readerCert: X509Cert,
-        readerRootCert: X509Cert,
+        readerKey: SigningKey.X509Compatible,
         zkSystemRepository: ZkSystemRepository? = null,
     ): ByteArray {
         val mdocRequest = request.mdocRequest!!
@@ -129,8 +125,6 @@ object TestAppUtils {
                     zkRequest = zkRequest
                 ),
                 readerKey = readerKey,
-                signatureAlgorithm = readerKey.curve.defaultSigningAlgorithm,
-                readerKeyCertificateChain = X509CertChain(listOf(readerCert, readerRootCert)),
             )
         }.toDataItem())
     }
@@ -171,8 +165,7 @@ object TestAppUtils {
             validFrom: Instant,
             validUntil: Instant
         ) -> CreateKeySettings,
-        dsKey: EcPrivateKey,
-        dsCert: X509Cert,
+        dsKey: SigningKey.X509Certified,
         deviceKeyAlgorithm: Algorithm,
         deviceKeyMacAlgorithm: Algorithm,
         numCredentialsPerDomain: Int,
@@ -188,7 +181,6 @@ object TestAppUtils {
                     secureArea,
                     secureAreaCreateKeySettingsFunc,
                     dsKey,
-                    dsCert,
                     deviceKeyAlgorithm,
                     deviceKeyMacAlgorithm,
                     EUPersonalID.getDocumentType(),
@@ -213,8 +205,7 @@ object TestAppUtils {
                     documentStore = documentStore,
                     secureArea = secureArea,
                     secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
-                    dsKey = dsKey,
-                    dsCert = dsCert
+                    dsKey = dsKey
                 )
                 dcqlTestProvisionSdJwtVc(
                     displayName = "Max's PID",
@@ -231,8 +222,7 @@ object TestAppUtils {
                     documentStore = documentStore,
                     secureArea = secureArea,
                     secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
-                    dsKey = dsKey,
-                    dsCert = dsCert
+                    dsKey = dsKey
                 )
                 dcqlTestProvisionSdJwtVc(
                     displayName = "Erika's PID",
@@ -249,8 +239,7 @@ object TestAppUtils {
                     documentStore = documentStore,
                     secureArea = secureArea,
                     secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
-                    dsKey = dsKey,
-                    dsCert = dsCert
+                    dsKey = dsKey
                 )
                 dcqlTestProvisionSdJwtVc(
                     displayName = "Erika's ID Card",
@@ -264,8 +253,7 @@ object TestAppUtils {
                     documentStore = documentStore,
                     secureArea = secureArea,
                     secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
-                    dsKey = dsKey,
-                    dsCert = dsCert
+                    dsKey = dsKey
                 )
                 dcqlTestProvisionSdJwtVc(
                     displayName = "Erika's Residence Card",
@@ -280,8 +268,7 @@ object TestAppUtils {
                     documentStore = documentStore,
                     secureArea = secureArea,
                     secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
-                    dsKey = dsKey,
-                    dsCert = dsCert
+                    dsKey = dsKey
                 )
                 dcqlTestProvisionSdJwtVc(
                     displayName = "Erika's Reward Card",
@@ -294,8 +281,7 @@ object TestAppUtils {
                     documentStore = documentStore,
                     secureArea = secureArea,
                     secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
-                    dsKey = dsKey,
-                    dsCert = dsCert
+                    dsKey = dsKey
                 )
                 return null
             }
@@ -305,7 +291,6 @@ object TestAppUtils {
                     secureArea,
                     secureAreaCreateKeySettingsFunc,
                     dsKey,
-                    dsCert,
                     deviceKeyAlgorithm,
                     deviceKeyMacAlgorithm,
                     numCredentialsPerDomain,
@@ -319,7 +304,6 @@ object TestAppUtils {
                     secureArea,
                     secureAreaCreateKeySettingsFunc,
                     dsKey,
-                    dsCert,
                     deviceKeyAlgorithm,
                     deviceKeyMacAlgorithm,
                     numCredentialsPerDomain,
@@ -333,7 +317,6 @@ object TestAppUtils {
                     secureArea,
                     secureAreaCreateKeySettingsFunc,
                     dsKey,
-                    dsCert,
                     deviceKeyAlgorithm,
                     deviceKeyMacAlgorithm,
                     numCredentialsPerDomain,
@@ -347,7 +330,6 @@ object TestAppUtils {
                     secureArea,
                     secureAreaCreateKeySettingsFunc,
                     dsKey,
-                    dsCert,
                     deviceKeyAlgorithm,
                     deviceKeyMacAlgorithm,
                     numCredentialsPerDomain,
@@ -361,7 +343,6 @@ object TestAppUtils {
                     secureArea,
                     secureAreaCreateKeySettingsFunc,
                     dsKey,
-                    dsCert,
                     deviceKeyAlgorithm,
                     deviceKeyMacAlgorithm,
                     numCredentialsPerDomain,
@@ -375,7 +356,6 @@ object TestAppUtils {
                     secureArea,
                     secureAreaCreateKeySettingsFunc,
                     dsKey,
-                    dsCert,
                     deviceKeyAlgorithm,
                     deviceKeyMacAlgorithm,
                     numCredentialsPerDomain,
@@ -389,7 +369,6 @@ object TestAppUtils {
                     secureArea,
                     secureAreaCreateKeySettingsFunc,
                     dsKey,
-                    dsCert,
                     deviceKeyAlgorithm,
                     deviceKeyMacAlgorithm,
                     numCredentialsPerDomain,
@@ -403,7 +382,6 @@ object TestAppUtils {
                     secureArea,
                     secureAreaCreateKeySettingsFunc,
                     dsKey,
-                    dsCert,
                     deviceKeyAlgorithm,
                     deviceKeyMacAlgorithm,
                     numCredentialsPerDomain,
@@ -417,7 +395,6 @@ object TestAppUtils {
                     secureArea,
                     secureAreaCreateKeySettingsFunc,
                     dsKey,
-                    dsCert,
                     deviceKeyAlgorithm,
                     deviceKeyMacAlgorithm,
                     numCredentialsPerDomain,
@@ -446,8 +423,7 @@ object TestAppUtils {
             validFrom: Instant,
             validUntil: Instant
         ) -> CreateKeySettings,
-        dsKey: EcPrivateKey,
-        dsCert: X509Cert
+        dsKey: SigningKey
     ): Document {
         val cardArt = getDrawableResourceBytes(
             getSystemResourceEnvironment(),
@@ -478,7 +454,6 @@ object TestAppUtils {
             secureArea = secureArea,
             secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
             dsKey = dsKey,
-            dsCert = dsCert
         )
         return document
     }
@@ -498,8 +473,7 @@ object TestAppUtils {
             validFrom: Instant,
             validUntil: Instant
         ) -> CreateKeySettings,
-        dsKey: EcPrivateKey,
-        dsCert: X509Cert,
+        dsKey: SigningKey,
     ) {
         for (domain in listOf(CREDENTIAL_DOMAIN_SDJWT_NO_USER_AUTH, CREDENTIAL_DOMAIN_SDJWT_USER_AUTH)) {
             val credential = KeyBoundSdJwtVcCredential.create(
@@ -519,8 +493,6 @@ object TestAppUtils {
 
             val sdJwt = SdJwt.create(
                 issuerKey = dsKey,
-                issuerAlgorithm = dsKey.curve.defaultSigningAlgorithmFullySpecified,
-                issuerCertChain = X509CertChain(listOf(dsCert)),
                 kbKey = (credential as? SecureAreaBoundCredential)?.let {
                     it.secureArea.getKeyInfo(
                         it.alias
@@ -555,8 +527,7 @@ object TestAppUtils {
             validFrom: Instant,
             validUntil: Instant
         ) -> CreateKeySettings,
-        dsKey: EcPrivateKey,
-        dsCert: X509Cert,
+        dsKey: SigningKey.X509Certified,
         deviceKeyAlgorithm: Algorithm,
         deviceKeyMacAlgorithm: Algorithm,
         documentType: DocumentType,
@@ -592,7 +563,6 @@ object TestAppUtils {
             validFrom = validFrom,
             validUntil = validUntil,
             dsKey = dsKey,
-            dsCert = dsCert,
             numCredentialsPerDomain = 10,
             givenNameOverride = givenNameOverride
         )
@@ -609,8 +579,7 @@ object TestAppUtils {
             validFrom: Instant,
             validUntil: Instant
         ) -> CreateKeySettings,
-        dsKey: EcPrivateKey,
-        dsCert: X509Cert,
+        dsKey: SigningKey.X509Certified,
         deviceKeyAlgorithm: Algorithm,
         deviceKeyMacAlgorithm: Algorithm,
         numCredentialsPerDomain: Int,
@@ -647,7 +616,6 @@ object TestAppUtils {
                 validFrom = validFrom,
                 validUntil = validUntil,
                 dsKey = dsKey,
-                dsCert = dsCert,
                 numCredentialsPerDomain = numCredentialsPerDomain,
                 givenNameOverride = givenNameOverride
             )
@@ -664,7 +632,6 @@ object TestAppUtils {
                 validFrom = validFrom,
                 validUntil = validUntil,
                 dsKey = dsKey,
-                dsCert = dsCert,
                 numCredentialsPerDomain = numCredentialsPerDomain,
                 givenNameOverride = givenNameOverride
             )
@@ -687,8 +654,7 @@ object TestAppUtils {
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
-        dsKey: EcPrivateKey,
-        dsCert: X509Cert,
+        dsKey: SigningKey.X509Certified,
         numCredentialsPerDomain: Int,
         givenNameOverride: String
     ) {
@@ -775,7 +741,7 @@ object TestAppUtils {
                 val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
                     Pair(
                         CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                        X509CertChain(listOf(dsCert)).toDataItem()
+                        dsKey.certChain.toDataItem()
                     )
                 )
                 val encodedIssuerAuth = Cbor.encode(
@@ -783,7 +749,6 @@ object TestAppUtils {
                         dsKey,
                         taggedEncodedMso,
                         true,
-                        dsKey.publicKey.curve.defaultSigningAlgorithm,
                         protectedHeaders,
                         unprotectedHeaders
                     ).toDataItem()
@@ -823,8 +788,7 @@ object TestAppUtils {
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
-        dsKey: EcPrivateKey,
-        dsCert: X509Cert,
+        dsKey: SigningKey.X509Certified,
         numCredentialsPerDomain: Int,
         givenNameOverride: String
     ): String? {
@@ -912,7 +876,7 @@ object TestAppUtils {
             val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
                 Pair(
                     CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                    X509CertChain(listOf(dsCert)).toDataItem()
+                    dsKey.certChain.toDataItem()
                 )
             )
             val encodedIssuerAuth = Cbor.encode(
@@ -920,7 +884,6 @@ object TestAppUtils {
                     dsKey,
                     taggedEncodedMso,
                     true,
-                    dsKey.publicKey.curve.defaultSigningAlgorithm,
                     protectedHeaders,
                     unprotectedHeaders
                 ).toDataItem()
@@ -961,8 +924,7 @@ object TestAppUtils {
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
-        dsKey: EcPrivateKey,
-        dsCert: X509Cert,
+        dsKey: SigningKey,
         numCredentialsPerDomain: Int,
         givenNameOverride: String
     ) {
@@ -1024,8 +986,6 @@ object TestAppUtils {
                 val kbKey = (credential as? SecureAreaBoundCredential)?.getAttestation()?.publicKey
                 val sdJwt = SdJwt.create(
                     issuerKey = dsKey,
-                    issuerAlgorithm = dsKey.publicKey.curve.defaultSigningAlgorithmFullySpecified,
-                    issuerCertChain = X509CertChain(listOf(dsCert)),
                     kbKey = kbKey,
                     claims = identityAttributes,
                     nonSdClaims = buildJsonObject {

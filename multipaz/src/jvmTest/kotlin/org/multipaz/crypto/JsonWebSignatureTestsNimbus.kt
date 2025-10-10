@@ -13,6 +13,7 @@ import com.nimbusds.jose.proc.SecurityContext
 import com.nimbusds.jwt.JWTClaimsSet
 import com.nimbusds.jwt.SignedJWT
 import com.nimbusds.jwt.proc.DefaultJWTProcessor
+import kotlinx.coroutines.test.runTest
 import kotlin.time.Clock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
@@ -39,13 +40,12 @@ class JsonWebSignatureTestsNimbus {
     // TODO: Check for other curves than just P-256.
 
     @Test
-    fun testSigning() {
+    fun testSigning() = runTest {
         val signingKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val now = Clock.System.now()
         val signingKeyCert = X509Cert.Builder(
             publicKey = signingKey.publicKey,
-            signingKey = signingKey,
-            signatureAlgorithm = signingKey.curve.defaultSigningAlgorithm,
+            signingKey = SigningKey.anonymous(signingKey, signingKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1L),
             subject = X500Name.fromName("CN=Test Key"),
             issuer = X500Name.fromName("CN=Test Key"),
@@ -94,13 +94,12 @@ class JsonWebSignatureTestsNimbus {
     }
 
     @Test
-    fun testVerification() {
+    fun testVerification() = runTest {
         val signingKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val now = Clock.System.now()
         val signingKeyCert = X509Cert.Builder(
             publicKey = signingKey.publicKey,
-            signingKey = signingKey,
-            signatureAlgorithm = signingKey.curve.defaultSigningAlgorithm,
+            signingKey = SigningKey.anonymous(signingKey, signingKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1L),
             subject = X500Name.fromName("CN=Test Key"),
             issuer = X500Name.fromName("CN=Test Key"),

@@ -100,14 +100,14 @@ private suspend fun handleGet(
     """.trimIndent()
     )
 
-    for (certificate in keyMaterial.attestationKeyCertificates.certificates) {
+    for (certificate in keyMaterial.attestationKey.certChain.certificates) {
         sb.append("<h3>Certificate</h3>")
         sb.append("<pre>")
         sb.append(ASN1.print(ASN1.decode(certificate.tbsCertificate)!!))
         sb.append("</pre>")
     }
     sb.append("<h2>Cloud Binding Key Attestation Root</h2>")
-    for (certificate in keyMaterial.cloudBindingKeyCertificates.certificates) {
+    for (certificate in keyMaterial.cloudBindingKey.certChain.certificates) {
         sb.append("<h3>Certificate</h3>")
         sb.append("<pre>")
         sb.append(ASN1.print(ASN1.decode(certificate.tbsCertificate)!!))
@@ -146,15 +146,9 @@ private fun createCloudSecureArea(
     val keyMaterial = keyMaterialDeferred.await()
     val settings = CloudSecureAreaSettings(backendEnvironment.getInterface(Configuration::class)!!)
     CloudSecureAreaServer(
-        serverSecureAreaBoundKey = keyMaterial.serverSecureAreaBoundKey,
+        serverSecureAreaBoundKey = keyMaterial.serverSecureAreaBoundKey.toByteArray(),
         attestationKey = keyMaterial.attestationKey,
-        attestationKeySignatureAlgorithm = keyMaterial.attestationKeySignatureAlgorithm,
-        attestationKeyIssuer = keyMaterial.attestationKeyIssuer,
-        attestationKeyCertification = keyMaterial.attestationKeyCertificates,
         cloudRootAttestationKey = keyMaterial.cloudBindingKey,
-        cloudRootAttestationKeySignatureAlgorithm = keyMaterial.cloudBindingKeySignatureAlgorithm,
-        cloudRootAttestationKeyIssuer = keyMaterial.cloudBindingKeyIssuer,
-        cloudRootAttestationKeyCertification = keyMaterial.cloudBindingKeyCertificates,
         e2eeKeyLimitSeconds = settings.cloudSecureAreaRekeyingIntervalSeconds,
         iosReleaseBuild = settings.iosReleaseBuild,
         iosAppIdentifiers = settings.iosAppIdentifiers,

@@ -395,8 +395,7 @@ class X509Cert(
      */
     class Builder(
         private val publicKey: EcPublicKey,
-        private val signingKey: EcPrivateKey,
-        private val signatureAlgorithm: Algorithm,
+        private val signingKey: SigningKey,
         private val serialNumber: ASN1Integer,
         private val subject: X500Name,
         private val issuer: X500Name,
@@ -405,7 +404,7 @@ class X509Cert(
     ) {
         private data class Extension(
             val critical: Boolean,
-            val value: ByteArray
+            val value: ByteString
         )
         private val extensions = mutableMapOf<String, Extension>()
 
@@ -421,7 +420,7 @@ class X509Cert(
          * @return the builder.
          */
         fun addExtension(oid: String, critical: Boolean, value: ByteArray): Builder {
-            extensions.put(oid, Extension(critical, value))
+            extensions.put(oid, Extension(critical, ByteString(value)))
             return this
         }
 
@@ -432,7 +431,7 @@ class X509Cert(
          * @return the builder
          */
         fun addExtension(extension: X509Extension): Builder {
-            extensions.put(extension.oid, Extension(extension.isCritical, extension.data.toByteArray()))
+            extensions.put(extension.oid, Extension(extension.isCritical, extension.data))
             return this
         }
 
@@ -537,8 +536,9 @@ class X509Cert(
          *
          * @return the built [X509Cert].
          */
-        fun build(): X509Cert {
-            val signatureAlgorithmSeq = signatureAlgorithm.getSignatureAlgorithmSeq(signingKey.curve)
+        suspend fun build(): X509Cert {
+            val signatureAlgorithmSeq =
+                signingKey.algorithm.getSignatureAlgorithmSeq(signingKey.publicKey.curve)
 
             val subjectPublicKey = when (publicKey) {
                 is EcPublicKeyDoubleCoordinate -> {
@@ -615,14 +615,14 @@ class X509Cert(
                                 listOf(
                                     ASN1ObjectIdentifier(oid),
                                     ASN1Boolean(true),
-                                    ASN1OctetString(ext.value)
+                                    ASN1OctetString(ext.value.toByteArray())
                                 )
                             )
                         } else {
                             ASN1Sequence(
                                 listOf(
                                     ASN1ObjectIdentifier(oid),
-                                    ASN1OctetString(ext.value)
+                                    ASN1OctetString(ext.value.toByteArray())
                                 )
                             )
                         }
@@ -639,17 +639,13 @@ class X509Cert(
             val tbsCert = ASN1Sequence(tbsCertObjs)
 
             val encodedTbsCert = ASN1.encode(tbsCert)
-            val signature = Crypto.sign(
-                signingKey,
-                signatureAlgorithm,
-                encodedTbsCert
-            )
-            val encodedSignature = when (signatureAlgorithm) {
+            val signature = signingKey.sign(encodedTbsCert)
+            val encodedSignature = when (signingKey.algorithm) {
                 Algorithm.ES256, Algorithm.ESP256, Algorithm.ESB256,
                 Algorithm.ES384, Algorithm.ESP384, Algorithm.ESB384, Algorithm.ESB320,
                 Algorithm.ES512, Algorithm.ESP512, Algorithm.ESB512 -> signature.toDerEncoded()
                 Algorithm.EDDSA, Algorithm.ED25519, Algorithm.ED448 -> signature.r + signature.s
-                else -> throw IllegalArgumentException("Unsupported signature algorithm $signatureAlgorithm")
+                else -> throw IllegalArgumentException("Unsupported signature algorithm ${signingKey.algorithm}")
             }
             val cert = ASN1Sequence(listOf(
                 tbsCert,
@@ -747,10 +743,9 @@ private fun generateName(name: X500Name): ASN1Sequence {
  * @param builderAction the builder action.
  * @return a [X509Cert].
  */
-fun buildX509Cert(
+suspend fun buildX509Cert(
     publicKey: EcPublicKey,
-    signingKey: EcPrivateKey,
-    signatureAlgorithm: Algorithm,
+    signingKey: SigningKey,
     serialNumber: ASN1Integer,
     subject: X500Name,
     issuer: X500Name,
@@ -761,7 +756,6 @@ fun buildX509Cert(
     val builder = X509Cert.Builder(
         publicKey = publicKey,
         signingKey = signingKey,
-        signatureAlgorithm = signatureAlgorithm,
         serialNumber = serialNumber,
         subject = subject,
         issuer = issuer,

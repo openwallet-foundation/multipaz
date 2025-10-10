@@ -1,12 +1,19 @@
 package org.multipaz.crypto
 
+import kotlinx.coroutines.test.runTest
 import kotlin.time.Clock
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.jwt.JwtCheck
+import org.multipaz.jwt.buildJwt
+import org.multipaz.jwt.validateJwt
 import org.multipaz.testUtilSetupCryptoProvider
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.days
 
 class JsonWebSignatureTests {
@@ -23,19 +30,18 @@ class JsonWebSignatureTests {
     @Test fun roundTrip_ED25519() = roundtrip(EcCurve.ED25519)
     @Test fun roundTrip_ED448() = roundtrip(EcCurve.ED448)
 
-    fun roundtrip(curve: EcCurve) {
+    fun roundtrip(curve: EcCurve) = runTest {
         // TODO: use assumeTrue() when available in kotlin-test
         if (!Crypto.supportedCurves.contains(curve)) {
             println("Curve $curve not supported on platform")
-            return
+            return@runTest
         }
 
-        val signingKey = Crypto.createEcPrivateKey(curve)
+        val privateKey = Crypto.createEcPrivateKey(curve)
         val now = Clock.System.now()
         val signingKeyCert = X509Cert.Builder(
-            publicKey = signingKey.publicKey,
-            signingKey = signingKey,
-            signatureAlgorithm = signingKey.curve.defaultSigningAlgorithm,
+            publicKey = privateKey.publicKey,
+            signingKey = SigningKey.anonymous(privateKey, privateKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1L),
             subject = X500Name.fromName("CN=Test Key"),
             issuer = X500Name.fromName("CN=Test Key"),
@@ -44,8 +50,16 @@ class JsonWebSignatureTests {
         ).includeSubjectKeyIdentifier()
             .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
             .build()
+        val signingKey = SigningKey.X509CertifiedExplicit(
+            privateKey = privateKey,
+            certChain = X509CertChain(listOf(signingKeyCert)),
+            algorithm = privateKey.curve.defaultSigningAlgorithmFullySpecified
+        )
 
-        val claimsSet = buildJsonObject {
+        val jwt = buildJwt(
+            key = signingKey,
+            type = "oauth-authz-req+jwt",
+        ) {
             put("vp_token", buildJsonObject {
                 put("credential", buildJsonObject {
                     put("foo", JsonPrimitive("blah"))
@@ -53,14 +67,19 @@ class JsonWebSignatureTests {
             })
         }
 
-        val jws = JsonWebSignature.sign(
-            key = signingKey,
-            signatureAlgorithm = signingKey.curve.defaultSigningAlgorithmFullySpecified,
-            claimsSet = claimsSet,
-            type = "oauth-authz-req+jwt",
-            x5c = X509CertChain(listOf(signingKeyCert))
-        )
+        JsonWebSignature.verify(jwt, signingKey.publicKey)
 
-        JsonWebSignature.verify(jws, signingKey.publicKey)
+        val body = validateJwt(
+            jwt = jwt,
+            jwtName = "test jwt",
+            publicKey = signingKey.publicKey,
+            checks = mapOf(
+                JwtCheck.TYP to "oauth-authz-req+jwt"
+            )
+        )
+        assertEquals(
+            expected = "blah",
+            actual = body["vp_token"]!!.jsonObject["credential"]!!.jsonObject["foo"]!!.jsonPrimitive.content
+        )
     }
 }

@@ -17,8 +17,6 @@ package org.multipaz.mdoc.response
 
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.CborArray
-import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Tagged

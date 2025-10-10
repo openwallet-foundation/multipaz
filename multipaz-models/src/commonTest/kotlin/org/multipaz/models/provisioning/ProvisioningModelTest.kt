@@ -28,6 +28,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
@@ -130,21 +131,26 @@ class ProvisioningModelTest {
             model.state.collect { state ->
                 if (state is ProvisioningModel.Authorizing) {
                     assertEquals(1, state.authorizationChallenges.size)
-                    val oauth = state.authorizationChallenges.first() as AuthorizationChallenge.OAuth
+                    val oauth =
+                        state.authorizationChallenges.first() as AuthorizationChallenge.OAuth
                     assertEquals("id", oauth.id)
                     assertEquals("https://example.com", oauth.url)
                     assertEquals("state", oauth.state)
-                    model.provideAuthorizationResponse(AuthorizationResponse.OAuth(
-                        id = "id",
-                        parameterizedRedirectUrl = "https://redirect.example.com/"
-                    ))
+                    model.provideAuthorizationResponse(
+                        AuthorizationResponse.OAuth(
+                            id = "id",
+                            parameterizedRedirectUrl = "https://redirect.example.com/"
+                        )
+                    )
                 }
             }
         }
         val doc = model.launch(UnconfinedTestDispatcher(testScheduler)) {
-            TestProvisioningClient(authorizationChallenges = listOf(
-                AuthorizationChallenge.OAuth("id", "https://example.com", "state")
-            ))
+            TestProvisioningClient(
+                authorizationChallenges = listOf(
+                    AuthorizationChallenge.OAuth("id", "https://example.com", "state")
+                )
+            )
         }.await()
         val docMetadata = doc.metadata as DocumentMetadata
         assertTrue(docMetadata.provisioned)
@@ -202,18 +208,21 @@ class ProvisioningModelTest {
     class TestProvisioningClient(
         val obtainCredentialsHook: suspend () -> Unit = {},
         val authorizationChallenges: List<AuthorizationChallenge> = listOf()
-    ): ProvisioningClient {
+    ) : ProvisioningClient {
         companion object {
             const val DOCTYPE = "http://doctype.example.org"
         }
+
         val metadata = ProvisioningMetadata(
             display = Display("Test Issuer", null),
-            credentials = mapOf("testId" to CredentialMetadata(
-                display = Display("Test Document", null),
-                format = CredentialFormat.Mdoc(DOCTYPE),
-                keyBindingType = KeyBindingType.Attestation(Algorithm.ESP256),
-                maxBatchSize = 2
-            ))
+            credentials = mapOf(
+                "testId" to CredentialMetadata(
+                    display = Display("Test Document", null),
+                    format = CredentialFormat.Mdoc(DOCTYPE),
+                    keyBindingType = KeyBindingType.Attestation(Algorithm.ESP256),
+                    maxBatchSize = 2
+                )
+            )
         )
         var authorizationResponse: AuthorizationResponse? = null
 
@@ -242,7 +251,7 @@ class ProvisioningModelTest {
         }
     }
 
-    class TestPromptModel: PromptModel {
+    class TestPromptModel : PromptModel {
         override val passphrasePromptModel = SinglePromptModel<PassphraseRequest, String?>()
         override val promptModelScope =
             CoroutineScope(Dispatchers.Default + SupervisorJob() + this)
@@ -257,81 +266,83 @@ class ProvisioningModelTest {
         fun generateTestMDoc(
             docType: String,
             publicKeys: List<EcPublicKey>
-        ): List<ByteString> {
-            val now = Clock.System.now()
-            val nameSpacedData = NameSpacedData.Builder()
-                .putEntryString("ns", "name", "value")
-                .build()
+        ): List<ByteString> =
+            runBlocking {
+                val now = Clock.System.now()
+                val nameSpacedData = NameSpacedData.Builder()
+                    .putEntryString("ns", "name", "value")
+                    .build()
 
-            // Generate an MSO and issuer-signed data for these authentication keys.
-            val validFrom = now - 1.days
-            val validUntil = now + 100.days
-            val dsKey = Crypto.createEcPrivateKey(EcCurve.P256)
-            val dsCert = X509Cert.Builder(
-                publicKey = dsKey.publicKey,
-                signingKey = dsKey,
-                signatureAlgorithm = Algorithm.ES256,
-                serialNumber = ASN1Integer(1),
-                subject = X500Name.fromName("CN=State of Utopia DS Key"),
-                issuer = X500Name.fromName("CN=State of Utopia DS Key"),
-                validFrom = validFrom,
-                validUntil = validUntil
-            ).build()
-            return publicKeys.map { publicKey ->
-                val msoGenerator = MobileSecurityObjectGenerator(
-                    Algorithm.SHA256,
-                    docType,
-                    publicKey
-                )
-                msoGenerator.setValidityInfo(now, now, now + 30.days, null)
-                val issuerNameSpaces = MdocUtil.generateIssuerNameSpaces(
-                    nameSpacedData,
-                    Random,
-                    16,
-                    null
-                )
-                for (nameSpaceName in issuerNameSpaces.keys) {
-                    val digests = MdocUtil.calculateDigestsForNameSpace(
-                        nameSpaceName,
-                        issuerNameSpaces,
-                        Algorithm.SHA256
+                // Generate an MSO and issuer-signed data for these authentication keys.
+                val validFrom = now - 1.days
+                val validUntil = now + 100.days
+                val dsKey = Crypto.createEcPrivateKey(EcCurve.P256)
+                val dsCert = X509Cert.Builder(
+                    publicKey = dsKey.publicKey,
+                    signingKey = SigningKey.anonymous(dsKey),
+                    serialNumber = ASN1Integer(1),
+                    subject = X500Name.fromName("CN=State of Utopia DS Key"),
+                    issuer = X500Name.fromName("CN=State of Utopia DS Key"),
+                    validFrom = validFrom,
+                    validUntil = validUntil
+                ).build()
+                publicKeys.map { publicKey ->
+                    val msoGenerator = MobileSecurityObjectGenerator(
+                        Algorithm.SHA256,
+                        docType,
+                        publicKey
                     )
-                    msoGenerator.addDigestIdsForNamespace(nameSpaceName, digests)
+                    msoGenerator.setValidityInfo(now, now, now + 30.days, null)
+                    val issuerNameSpaces = MdocUtil.generateIssuerNameSpaces(
+                        nameSpacedData,
+                        Random,
+                        16,
+                        null
+                    )
+                    for (nameSpaceName in issuerNameSpaces.keys) {
+                        val digests = MdocUtil.calculateDigestsForNameSpace(
+                            nameSpaceName,
+                            issuerNameSpaces,
+                            Algorithm.SHA256
+                        )
+                        msoGenerator.addDigestIdsForNamespace(nameSpaceName, digests)
+                    }
+                    val mso = msoGenerator.generate()
+                    val taggedEncodedMso = Cbor.encode(Tagged(24, Bstr(mso)))
+
+                    // IssuerAuth is a COSE_Sign1 where payload is MobileSecurityObjectBytes
+                    //
+                    // MobileSecurityObjectBytes = #6.24(bstr .cbor MobileSecurityObject)
+                    //
+                    val protectedHeaders = mapOf<CoseLabel, DataItem>(
+                        Pair(
+                            CoseNumberLabel(Cose.COSE_LABEL_ALG),
+                            Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+                        )
+                    )
+                    val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
+                        Pair(
+                            CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
+                            X509CertChain(listOf(dsCert)).toDataItem()
+                        )
+                    )
+                    val encodedIssuerAuth = Cbor.encode(
+                        Cose.coseSign1Sign(
+                            dsKey,
+                            taggedEncodedMso,
+                            true,
+                            Algorithm.ES256,
+                            protectedHeaders,
+                            unprotectedHeaders
+                        ).toDataItem()
+                    )
+                    ByteString(
+                        StaticAuthDataGenerator(
+                            MdocUtil.stripIssuerNameSpaces(issuerNameSpaces, null),
+                            encodedIssuerAuth
+                        ).generate()
+                    )
                 }
-                val mso = msoGenerator.generate()
-                val taggedEncodedMso = Cbor.encode(Tagged(24, Bstr(mso)))
-
-                // IssuerAuth is a COSE_Sign1 where payload is MobileSecurityObjectBytes
-                //
-                // MobileSecurityObjectBytes = #6.24(bstr .cbor MobileSecurityObject)
-                //
-                val protectedHeaders = mapOf<CoseLabel, DataItem>(
-                    Pair(
-                        CoseNumberLabel(Cose.COSE_LABEL_ALG),
-                        Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
-                    )
-                )
-                val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
-                    Pair(
-                        CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                        X509CertChain(listOf(dsCert)).toDataItem()
-                    )
-                )
-                val encodedIssuerAuth = Cbor.encode(
-                    Cose.coseSign1Sign(
-                        dsKey,
-                        taggedEncodedMso,
-                        true,
-                        Algorithm.ES256,
-                        protectedHeaders,
-                        unprotectedHeaders
-                    ).toDataItem()
-                )
-                ByteString(StaticAuthDataGenerator(
-                    MdocUtil.stripIssuerNameSpaces(issuerNameSpaces, null),
-                    encodedIssuerAuth
-                ).generate())
             }
-        }
     }
 }

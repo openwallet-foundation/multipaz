@@ -184,7 +184,6 @@ internal class CredentialFactoryMdocPid : CredentialFactoryBase() {
                 signingKey,
                 taggedEncodedMso,
                 true,
-                signingKey.publicKey.curve.defaultSigningAlgorithm,
                 protectedHeaders,
                 unprotectedHeaders
             ).toDataItem()

@@ -43,6 +43,7 @@ import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.util.fromBase64Url
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
+import org.multipaz.crypto.SigningKey
 import org.multipaz.device.AndroidKeystoreSecurityLevel
 import java.io.IOException
 import java.security.MessageDigest
@@ -101,13 +102,11 @@ class CloudSecureAreaTest {
             val attestationKeyValidUntil = attestationKeyValidFrom + 365.days*5
             val attestationKeyPrivate = Crypto.createEcPrivateKey(EcCurve.P256)
             attestationKey = attestationKeyPrivate.publicKey
-            val attestationKeySignatureAlgorithm = attestationKeyPrivate.curve.defaultSigningAlgorithmFullySpecified
             attestationKeyCertChain = X509CertChain(
                 listOf(
                     X509Cert.Builder(
                         publicKey = attestationKeyPrivate.publicKey,
-                        signingKey = attestationKeyPrivate,
-                        signatureAlgorithm = attestationKeySignatureAlgorithm,
+                        signingKey = SigningKey.anonymous(attestationKeyPrivate),
                         serialNumber = ASN1Integer(1L),
                         subject = X500Name.fromName(attestationKeySubject),
                         issuer = X500Name.fromName(attestationKeySubject),
@@ -119,6 +118,10 @@ class CloudSecureAreaTest {
                         .build(),
                 )
             )
+            val attestationSigningKey = SigningKey.X509CertifiedExplicit(
+                privateKey = attestationKeyPrivate,
+                certChain = attestationKeyCertChain
+            )
 
             val cloudBindingKeySubject = "CN=Cloud Secure Area Cloud Binding Key Attestation Root"
             val cloudBindingKeyValidFrom = Clock.System.now()
@@ -129,8 +132,7 @@ class CloudSecureAreaTest {
                 listOf(
                     X509Cert.Builder(
                         publicKey = cloudBindingKeyAttestationKey.publicKey,
-                        signingKey = cloudBindingKeyAttestationKey,
-                        signatureAlgorithm = cloudBindingKeySignatureAlgorithm,
+                        signingKey = attestationSigningKey,
                         serialNumber = ASN1Integer(1L),
                         subject = X500Name.fromName(cloudBindingKeySubject),
                         issuer = X500Name.fromName(cloudBindingKeySubject),
@@ -141,6 +143,10 @@ class CloudSecureAreaTest {
                         .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
                         .build(),
                 )
+            )
+            val cloudBindingKeyAttestationSigningKey = SigningKey.X509CertifiedExplicit(
+                privateKey = cloudBindingKeyAttestationKey,
+                certChain = cloudBindingKeyAttestationCertificates
             )
 
             val digestOfSignatures: MutableList<ByteArray> = ArrayList()
@@ -160,14 +166,8 @@ class CloudSecureAreaTest {
             }
             server = CloudSecureAreaServer(
                 serverSecureAreaBoundKey = enclaveBoundKey,
-                attestationKey = attestationKeyPrivate,
-                attestationKeySignatureAlgorithm = attestationKeySignatureAlgorithm,
-                attestationKeyIssuer = attestationKeySubject,
-                attestationKeyCertification = attestationKeyCertChain,
-                cloudRootAttestationKey = cloudBindingKeyAttestationKey,
-                cloudRootAttestationKeySignatureAlgorithm = cloudBindingKeySignatureAlgorithm,
-                cloudRootAttestationKeyIssuer = cloudBindingKeySubject,
-                cloudRootAttestationKeyCertification = cloudBindingKeyAttestationCertificates,
+                attestationKey = attestationSigningKey,
+                cloudRootAttestationKey = cloudBindingKeyAttestationSigningKey,
                 e2eeKeyLimitSeconds = 10 * 60,
                 iosReleaseBuild = false,
                 iosAppIdentifiers = listOf(),

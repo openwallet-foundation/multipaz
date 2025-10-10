@@ -32,7 +32,7 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.JsonWebEncryption
-import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.SigningKey
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.ZkRequest
@@ -90,7 +90,7 @@ object VerificationUtil {
      * @param zkSystemSpecs if non-empty, request a ZK proof using these systems.
      * @return a [JsonObject] with the request.
      */
-    fun generateDcRequestMdoc(
+    suspend fun generateDcRequestMdoc(
         exchangeProtocols: List<String>,
         docType: String,
         claims: List<MdocRequestedClaim>,
@@ -98,105 +98,131 @@ object VerificationUtil {
         origin: String,
         clientId: String?,
         responseEncryptionKey: EcPublicKey?,
-        readerAuthenticationKey: EcPrivateKey?,
-        readerAuthenticationCertChain: X509CertChain?,
+        readerAuthenticationKey: SigningKey.X509Compatible?,
         zkSystemSpecs: List<ZkSystemSpec>
     ): JsonObject {
+        val requests = exchangeProtocols.map { exchangeProtocol ->
+            generateSigleRequest(
+                exchangeProtocol = exchangeProtocol,
+                docType = docType,
+                claims = claims,
+                nonce = nonce,
+                origin = origin,
+                clientId = clientId,
+                responseEncryptionKey = responseEncryptionKey,
+                readerAuthenticationKey = readerAuthenticationKey,
+                zkSystemSpecs = zkSystemSpecs
+            )
+        }
         return buildJsonObject {
-            putJsonArray("requests") {
-                for (exchangeProtocol in exchangeProtocols) {
-                    addJsonObject {
-                        put("protocol", exchangeProtocol)
-                        when (exchangeProtocol) {
-                            "openid4vp",
-                            "openid4vp-v1-unsigned",
-                            "openid4vp-v1-signed" -> {
-                                put(
-                                    "data",
-                                    OpenID4VP.generateRequest(
-                                        version = if (exchangeProtocol == "openid4vp") {
-                                            OpenID4VP.Version.DRAFT_24
-                                        } else {
-                                            OpenID4VP.Version.DRAFT_29
-                                        },
-                                        origin = origin,
-                                        clientId = clientId,
-                                        nonce = nonce.toByteArray().toBase64Url(),
-                                        responseEncryptionKey = responseEncryptionKey,
-                                        requestSigningKey = readerAuthenticationKey,
-                                        requestSigningKeyCertification = readerAuthenticationCertChain,
-                                        responseMode = OpenID4VP.ResponseMode.DC_API,
-                                        responseUri = null,
-                                        dclqQuery = calcDcqlMdoc(docType, claims, zkSystemSpecs)
-                                    )
-                                )
-                            }
+            put("requests", JsonArray(requests))
+        }
+    }
 
-                            "org-iso-mdoc" -> {
-                                if (responseEncryptionKey == null) {
-                                    throw IllegalArgumentException("Response encryption is mandatory for org-iso-mdoc")
-                                }
-                                val encryptionInfo = buildCborArray {
-                                    add("dcapi")
-                                    addCborMap {
-                                        put("nonce", nonce.toByteArray())
-                                        put("recipientPublicKey", responseEncryptionKey.toCoseKey().toDataItem())
-                                    }
-                                }
-                                val base64EncryptionInfo = Cbor.encode(encryptionInfo).toBase64Url()
-                                val dcapiInfo = buildCborArray {
-                                    add(base64EncryptionInfo)
-                                    add(origin)
-                                }
-                                val sessionTranscript = buildCborArray {
-                                    add(Simple.NULL) // DeviceEngagementBytes
-                                    add(Simple.NULL) // EReaderKeyBytes
-                                    addCborArray {
-                                        add("dcapi")
-                                        add(Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo)))
-                                    }
-                                }
-                                val itemsToRequest = mutableMapOf<String, MutableMap<String, Boolean>>()
-                                for (claim in claims) {
-                                    itemsToRequest.getOrPut(claim.namespaceName) { mutableMapOf() }
-                                        .put(claim.dataElementName, claim.intentToRetain)
-                                }
+    private suspend fun generateSigleRequest(
+        exchangeProtocol: String,
+        docType: String,
+        claims: List<MdocRequestedClaim>,
+        nonce: ByteString,
+        origin: String,
+        clientId: String?,
+        responseEncryptionKey: EcPublicKey?,
+        readerAuthenticationKey: SigningKey.X509Compatible?,
+        zkSystemSpecs: List<ZkSystemSpec>
+    ): JsonObject = buildJsonObject {
+        put("protocol", exchangeProtocol)
+        when (exchangeProtocol) {
+            "openid4vp",
+            "openid4vp-v1-unsigned",
+            "openid4vp-v1-signed" -> {
+                put(
+                    "data",
+                    OpenID4VP.generateRequest(
+                        version = if (exchangeProtocol == "openid4vp") {
+                            OpenID4VP.Version.DRAFT_24
+                        } else {
+                            OpenID4VP.Version.DRAFT_29
+                        },
+                        origin = origin,
+                        clientId = clientId,
+                        nonce = nonce.toByteArray().toBase64Url(),
+                        responseEncryptionKey = responseEncryptionKey,
+                        requestSigningKey = readerAuthenticationKey,
+                        responseMode = OpenID4VP.ResponseMode.DC_API,
+                        responseUri = null,
+                        dclqQuery = calcDcqlMdoc(docType, claims, zkSystemSpecs)
+                    )
+                )
+            }
 
-                                val zkRequest = if (zkSystemSpecs.size > 0) {
-                                    ZkRequest(
-                                        systemSpecs = zkSystemSpecs,
-                                        zkRequired = false
-                                    )
-                                } else {
-                                    null
-                                }
-                                val encodedDeviceRequest = Cbor.encode(buildDeviceRequest(
-                                    sessionTranscript = sessionTranscript
-                                ) {
-                                    addDocRequest(
-                                        docType = docType,
-                                        nameSpaces = itemsToRequest,
-                                        docRequestInfo = DocRequestInfo(
-                                            zkRequest = zkRequest
-                                        ),
-                                        readerKey = readerAuthenticationKey,
-                                        signatureAlgorithm = readerAuthenticationKey?.publicKey?.curve?.defaultSigningAlgorithmFullySpecified
-                                            ?: Algorithm.UNSET,
-                                        readerKeyCertificateChain = readerAuthenticationCertChain
-                                    )
-                                }.toDataItem())
-                                val base64DeviceRequest = encodedDeviceRequest.toBase64Url()
-                                putJsonObject("data") {
-                                    put("deviceRequest", base64DeviceRequest)
-                                    put("encryptionInfo", base64EncryptionInfo)
-                                }
-                            }
-
-                            else -> throw IllegalArgumentException("Unsupported exchange protocol $exchangeProtocol")
-                        }
+            "org-iso-mdoc" -> {
+                if (responseEncryptionKey == null) {
+                    throw IllegalArgumentException("Response encryption is mandatory for org-iso-mdoc")
+                }
+                val encryptionInfo = buildCborArray {
+                    add("dcapi")
+                    addCborMap {
+                        put("nonce", nonce.toByteArray())
+                        put("recipientPublicKey", responseEncryptionKey.toCoseKey().toDataItem())
                     }
                 }
+                val base64EncryptionInfo = Cbor.encode(encryptionInfo).toBase64Url()
+                val dcapiInfo = buildCborArray {
+                    add(base64EncryptionInfo)
+                    add(origin)
+                }
+                val sessionTranscript = buildCborArray {
+                    add(Simple.NULL) // DeviceEngagementBytes
+                    add(Simple.NULL) // EReaderKeyBytes
+                    addCborArray {
+                        add("dcapi")
+                        add(Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo)))
+                    }
+                }
+                val itemsToRequest = mutableMapOf<String, MutableMap<String, Boolean>>()
+                for (claim in claims) {
+                    itemsToRequest.getOrPut(claim.namespaceName) { mutableMapOf() }
+                        .put(claim.dataElementName, claim.intentToRetain)
+                }
+
+                val zkRequest = if (zkSystemSpecs.size > 0) {
+                    ZkRequest(
+                        systemSpecs = zkSystemSpecs,
+                        zkRequired = false
+                    )
+                } else {
+                    null
+                }
+                val encodedDeviceRequest = Cbor.encode(buildDeviceRequest(
+                    sessionTranscript = sessionTranscript
+                ) {
+                    if (readerAuthenticationKey != null) {
+                        addDocRequest(
+                            docType = docType,
+                            nameSpaces = itemsToRequest,
+                            docRequestInfo = DocRequestInfo(
+                                zkRequest = zkRequest
+                            ),
+                            readerKey = readerAuthenticationKey,
+                        )
+                    } else {
+                        addDocRequest(
+                            docType = docType,
+                            nameSpaces = itemsToRequest,
+                            docRequestInfo = DocRequestInfo(
+                                zkRequest = zkRequest
+                            ),
+                        )
+                    }
+                }.toDataItem())
+                val base64DeviceRequest = encodedDeviceRequest.toBase64Url()
+                putJsonObject("data") {
+                    put("deviceRequest", base64DeviceRequest)
+                    put("encryptionInfo", base64EncryptionInfo)
+                }
             }
+
+            else -> throw IllegalArgumentException("Unsupported exchange protocol $exchangeProtocol")
         }
     }
 
@@ -231,7 +257,7 @@ object VerificationUtil {
      * @param readerAuthenticationCertChain the certification for [readerAuthenticationKey].
      * @return a [JsonObject] with the request.
      */
-    fun generateDcRequestSdJwt(
+    suspend fun generateDcRequestSdJwt(
         exchangeProtocols: List<String>,
         vct: List<String>,
         claims: List<JsonRequestedClaim>,
@@ -239,43 +265,40 @@ object VerificationUtil {
         origin: String,
         clientId: String?,
         responseEncryptionKey: EcPublicKey?,
-        readerAuthenticationKey: EcPrivateKey?,
-        readerAuthenticationCertChain: X509CertChain?
+        readerAuthenticationKey: SigningKey?
     ): JsonObject {
-        return buildJsonObject {
-            putJsonArray("requests") {
-                for (exchangeProtocol in exchangeProtocols) {
-                    addJsonObject {
-                        put("protocol", exchangeProtocol)
-                        when (exchangeProtocol) {
-                            "openid4vp",
-                            "openid4vp-v1-unsigned",
-                            "openid4vp-v1-signed" -> {
-                                put(
-                                    "data",
-                                    OpenID4VP.generateRequest(
-                                        version = if (exchangeProtocol == "openid4vp") {
-                                            OpenID4VP.Version.DRAFT_24
-                                        } else {
-                                            OpenID4VP.Version.DRAFT_29
-                                        },
-                                        origin = origin,
-                                        clientId = clientId,
-                                        nonce = nonce.toByteArray().toBase64Url(),
-                                        responseEncryptionKey = responseEncryptionKey,
-                                        requestSigningKey = readerAuthenticationKey,
-                                        requestSigningKeyCertification = readerAuthenticationCertChain,
-                                        responseMode = OpenID4VP.ResponseMode.DC_API,
-                                        responseUri = null,
-                                        dclqQuery = calcDcqlSdJwt(vct, claims)
-                                    )
-                                )
-                            }
-                            else -> throw IllegalArgumentException("Unsupported exchange protocol $exchangeProtocol")
-                        }
+        val requests = exchangeProtocols.map { exchangeProtocol ->
+            buildJsonObject {
+                put("protocol", exchangeProtocol)
+                when (exchangeProtocol) {
+                    "openid4vp",
+                    "openid4vp-v1-unsigned",
+                    "openid4vp-v1-signed" -> {
+                        put(
+                            "data",
+                            OpenID4VP.generateRequest(
+                                version = if (exchangeProtocol == "openid4vp") {
+                                    OpenID4VP.Version.DRAFT_24
+                                } else {
+                                    OpenID4VP.Version.DRAFT_29
+                                },
+                                origin = origin,
+                                clientId = clientId,
+                                nonce = nonce.toByteArray().toBase64Url(),
+                                responseEncryptionKey = responseEncryptionKey,
+                                requestSigningKey = readerAuthenticationKey,
+                                responseMode = OpenID4VP.ResponseMode.DC_API,
+                                responseUri = null,
+                                dclqQuery = calcDcqlSdJwt(vct, claims)
+                            )
+                        )
                     }
+                    else -> throw IllegalArgumentException("Unsupported exchange protocol $exchangeProtocol")
                 }
             }
+        }
+        return buildJsonObject {
+            put("requests", JsonArray(requests))
         }
     }
 

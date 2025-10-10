@@ -29,8 +29,7 @@ import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPrivateKey
-import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.SigningKey
 import org.multipaz.document.Document
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
@@ -349,8 +348,7 @@ class DocumentType private constructor(
         document: Document,
         secureArea: SecureArea,
         createKeySettings: CreateKeySettings,
-        dsKey: EcPrivateKey,
-        dsCertChain: X509CertChain,
+        dsKey: SigningKey.X509Certified,
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
@@ -406,7 +404,7 @@ class DocumentType private constructor(
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                dsCertChain.toDataItem()
+                dsKey.certChain.toDataItem()
             )
         )
         val encodedIssuerAuth = Cbor.encode(
@@ -414,7 +412,6 @@ class DocumentType private constructor(
                 dsKey,
                 taggedEncodedMso,
                 true,
-                dsKey.publicKey.curve.defaultSigningAlgorithm,
                 protectedHeaders,
                 unprotectedHeaders
             ).toDataItem()

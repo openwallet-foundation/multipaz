@@ -1,19 +1,14 @@
 package org.multipaz.openid4vci.credential
 
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.X509Cert
-import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.UtopiaNaturalization
 import org.multipaz.rpc.backend.BackendEnvironment
-import org.multipaz.rpc.backend.Resources
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
-import org.multipaz.crypto.X509CertChain
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.server.getBaseUrl
 
@@ -72,8 +67,6 @@ internal class CredentialFactoryUtopiaNaturatization : CredentialFactoryBase() {
 
         val sdJwt = SdJwt.create(
             issuerKey = signingKey,
-            issuerAlgorithm = signingKey.curve.defaultSigningAlgorithmFullySpecified,
-            issuerCertChain = signingCertificateChain,
             kbKey = authenticationKey,
             claims = identityAttributes,
             nonSdClaims = buildJsonObject {

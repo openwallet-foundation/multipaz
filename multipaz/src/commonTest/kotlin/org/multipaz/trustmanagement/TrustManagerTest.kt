@@ -1,5 +1,6 @@
 package org.multipaz.trustmanagement
 
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
@@ -10,6 +11,7 @@ import org.multipaz.crypto.X509KeyUsage
 import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.buildX509Cert
 import org.multipaz.mdoc.util.MdocUtil
@@ -46,113 +48,120 @@ class TrustManagerTest {
         val now = Clock.System.now().truncateToWholeSeconds()
 
         val caKey = Crypto.createEcPrivateKey(EcCurve.P384)
-        caCertificate = buildX509Cert(
-            publicKey = caKey.publicKey,
-            signingKey = caKey,
-            signatureAlgorithm = caKey.curve.defaultSigningAlgorithm,
-            serialNumber = ASN1Integer(1L),
-            subject = X500Name.fromName("CN=Test TrustManager CA"),
-            issuer = X500Name.fromName("CN=Test TrustManager CA"),
-            validFrom = now - 1.hours,
-            validUntil = now + 1.hours
-        ) {
-            includeSubjectKeyIdentifier()
-            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+        caCertificate = runBlocking {
+            buildX509Cert(
+                publicKey = caKey.publicKey,
+                signingKey = SigningKey.anonymous(caKey, caKey.curve.defaultSigningAlgorithm),
+                serialNumber = ASN1Integer(1L),
+                subject = X500Name.fromName("CN=Test TrustManager CA"),
+                issuer = X500Name.fromName("CN=Test TrustManager CA"),
+                validFrom = now - 1.hours,
+                validUntil = now + 1.hours
+            ) {
+                includeSubjectKeyIdentifier()
+                setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            }
         }
 
         val intermediateKey = Crypto.createEcPrivateKey(EcCurve.P384)
-        intermediateCertificate = buildX509Cert(
-            publicKey = intermediateKey.publicKey,
-            signingKey = caKey,
-            signatureAlgorithm = caKey.curve.defaultSigningAlgorithm,
-            serialNumber = ASN1Integer(1L),
-            subject = X500Name.fromName("CN=Test TrustManager Intermediate CA"),
-            issuer = caCertificate.subject,
-            validFrom = now - 1.hours,
-            validUntil = now + 1.hours
-        ) {
-            includeSubjectKeyIdentifier()
-            setAuthorityKeyIdentifierToCertificate(caCertificate)
-            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+        intermediateCertificate = runBlocking {
+            buildX509Cert(
+                publicKey = intermediateKey.publicKey,
+                signingKey = SigningKey.anonymous(caKey, caKey.curve.defaultSigningAlgorithm),
+                serialNumber = ASN1Integer(1L),
+                subject = X500Name.fromName("CN=Test TrustManager Intermediate CA"),
+                issuer = caCertificate.subject,
+                validFrom = now - 1.hours,
+                validUntil = now + 1.hours
+            ) {
+                includeSubjectKeyIdentifier()
+                setAuthorityKeyIdentifierToCertificate(caCertificate)
+                setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            }
         }
 
         val dsKey = Crypto.createEcPrivateKey(EcCurve.P384)
-        dsCertificate = buildX509Cert(
-            publicKey = dsKey.publicKey,
-            signingKey = intermediateKey,
-            signatureAlgorithm = intermediateKey.curve.defaultSigningAlgorithm,
-            serialNumber = ASN1Integer(1L),
-            subject = X500Name.fromName("CN=Test TrustManager DS"),
-            issuer = intermediateCertificate.subject,
-            validFrom = now - 1.hours,
-            validUntil = now + 1.hours
-        ) {
-            includeSubjectKeyIdentifier()
-            setAuthorityKeyIdentifierToCertificate(intermediateCertificate)
-            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        dsCertificate = runBlocking {
+            buildX509Cert(
+                publicKey = dsKey.publicKey,
+                signingKey = SigningKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
+                serialNumber = ASN1Integer(1L),
+                subject = X500Name.fromName("CN=Test TrustManager DS"),
+                issuer = intermediateCertificate.subject,
+                validFrom = now - 1.hours,
+                validUntil = now + 1.hours
+            ) {
+                includeSubjectKeyIdentifier()
+                setAuthorityKeyIdentifierToCertificate(intermediateCertificate)
+                setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            }
         }
 
         val dsValidInThePastKey = Crypto.createEcPrivateKey(EcCurve.P384)
-        dsValidInThePastCertificate = buildX509Cert(
-            publicKey = dsValidInThePastKey.publicKey,
-            signingKey = intermediateKey,
-            signatureAlgorithm = intermediateKey.curve.defaultSigningAlgorithm,
-            serialNumber = ASN1Integer(1L),
-            subject = X500Name.fromName("CN=Test TrustManager DS Valid In The Past"),
-            issuer = intermediateCertificate.subject,
-            validFrom = now - 3.hours,
-            validUntil = now - 1.hours
-        ) {
-            includeSubjectKeyIdentifier()
-            setAuthorityKeyIdentifierToCertificate(intermediateCertificate)
-            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        dsValidInThePastCertificate = runBlocking {
+            buildX509Cert(
+                publicKey = dsValidInThePastKey.publicKey,
+                signingKey = SigningKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
+                serialNumber = ASN1Integer(1L),
+                subject = X500Name.fromName("CN=Test TrustManager DS Valid In The Past"),
+                issuer = intermediateCertificate.subject,
+                validFrom = now - 3.hours,
+                validUntil = now - 1.hours
+            ) {
+                includeSubjectKeyIdentifier()
+                setAuthorityKeyIdentifierToCertificate(intermediateCertificate)
+                setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            }
         }
 
         val dsValidInTheFutureKey = Crypto.createEcPrivateKey(EcCurve.P384)
-        dsValidInTheFutureCertificate = buildX509Cert(
-            publicKey = dsValidInTheFutureKey.publicKey,
-            signingKey = intermediateKey,
-            signatureAlgorithm = intermediateKey.curve.defaultSigningAlgorithm,
-            serialNumber = ASN1Integer(1L),
-            subject = X500Name.fromName("CN=Test TrustManager Valid In The Future"),
-            issuer = intermediateCertificate.subject,
-            validFrom = now + 1.hours,
-            validUntil = now + 3.hours
-        ) {
-            includeSubjectKeyIdentifier()
-            setAuthorityKeyIdentifierToCertificate(intermediateCertificate)
-            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        dsValidInTheFutureCertificate = runBlocking {
+            buildX509Cert(
+                publicKey = dsValidInTheFutureKey.publicKey,
+                signingKey = SigningKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
+                serialNumber = ASN1Integer(1L),
+                subject = X500Name.fromName("CN=Test TrustManager Valid In The Future"),
+                issuer = intermediateCertificate.subject,
+                validFrom = now + 1.hours,
+                validUntil = now + 3.hours
+            ) {
+                includeSubjectKeyIdentifier()
+                setAuthorityKeyIdentifierToCertificate(intermediateCertificate)
+                setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            }
         }
 
         val ca2Key = Crypto.createEcPrivateKey(EcCurve.P384)
-        ca2Certificate = buildX509Cert(
-            publicKey = ca2Key.publicKey,
-            signingKey = ca2Key,
-            signatureAlgorithm = ca2Key.curve.defaultSigningAlgorithm,
-            serialNumber = ASN1Integer(1L),
-            subject = X500Name.fromName("CN=Test TrustManager CA2"),
-            issuer = X500Name.fromName("CN=Test TrustManager CA2"),
-            validFrom = now - 1.hours,
-            validUntil = now + 1.hours
-        ) {
-            includeSubjectKeyIdentifier()
-            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+        ca2Certificate = runBlocking {
+            buildX509Cert(
+                publicKey = ca2Key.publicKey,
+                signingKey = SigningKey.anonymous(ca2Key, ca2Key.curve.defaultSigningAlgorithm),
+                serialNumber = ASN1Integer(1L),
+                subject = X500Name.fromName("CN=Test TrustManager CA2"),
+                issuer = X500Name.fromName("CN=Test TrustManager CA2"),
+                validFrom = now - 1.hours,
+                validUntil = now + 1.hours
+            ) {
+                includeSubjectKeyIdentifier()
+                setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            }
         }
 
         val ds2Key = Crypto.createEcPrivateKey(EcCurve.P384)
-        ds2Certificate = buildX509Cert(
-            publicKey = ds2Key.publicKey,
-            signingKey = ca2Key,
-            signatureAlgorithm = ca2Key.curve.defaultSigningAlgorithm,
-            serialNumber = ASN1Integer(1L),
-            subject = X500Name.fromName("CN=Test TrustManager DS2"),
-            issuer = ca2Certificate.subject,
-            validFrom = now - 1.hours,
-            validUntil = now + 1.hours
-        ) {
-            includeSubjectKeyIdentifier()
-            setAuthorityKeyIdentifierToCertificate(ca2Certificate)
-            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        ds2Certificate = runBlocking {
+            buildX509Cert(
+                publicKey = ds2Key.publicKey,
+                signingKey = SigningKey.anonymous(ca2Key, ca2Key.curve.defaultSigningAlgorithm),
+                serialNumber = ASN1Integer(1L),
+                subject = X500Name.fromName("CN=Test TrustManager DS2"),
+                issuer = ca2Certificate.subject,
+                validFrom = now - 1.hours,
+                validUntil = now + 1.hours
+            ) {
+                includeSubjectKeyIdentifier()
+                setAuthorityKeyIdentifierToCertificate(ca2Certificate)
+                setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            }
         }
     }
 
@@ -302,14 +311,14 @@ class TrustManagerTest {
         val elboniaDsKey: EcPrivateKey,
     )
 
-    private fun createTestIaca(): TestIaca {
+    private suspend fun createTestIaca(): TestIaca {
         val now = Clock.System.now()
         val validFrom = now - 10.minutes
         val validUntil = now + 10.minutes
 
         val elboniaIacaKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val elboniaIaca = MdocUtil.generateIacaCertificate(
-            iacaKey = elboniaIacaKey,
+            iacaKey = SigningKey.anonymous(elboniaIacaKey),
             subject = X500Name.fromName("CN=Elbonia TrustManager CA"),
             serial = ASN1Integer.fromRandom(numBits = 128),
             validFrom = validFrom,
@@ -319,8 +328,10 @@ class TrustManagerTest {
         )
         val elboniaDsKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val elboniaDs = MdocUtil.generateDsCertificate(
-            iacaCert = elboniaIaca,
-            iacaKey = elboniaIacaKey,
+            iacaKey = SigningKey.X509CertifiedExplicit(
+                privateKey = elboniaIacaKey,
+                certChain = X509CertChain(listOf(elboniaIaca))
+            ),
             dsKey = elboniaDsKey.publicKey,
             subject = X500Name.fromName("CN=Elbonia DS"),
             serial = ASN1Integer.fromRandom(numBits = 128),
@@ -330,7 +341,7 @@ class TrustManagerTest {
 
         val atlantisIacaKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val atlantisIaca = MdocUtil.generateIacaCertificate(
-            iacaKey = atlantisIacaKey,
+            iacaKey = SigningKey.anonymous(atlantisIacaKey),
             subject = X500Name.fromName("CN=Atlantis TrustManager CA"),
             serial = ASN1Integer.fromRandom(numBits = 128),
             validFrom = validFrom,
@@ -360,8 +371,7 @@ class TrustManagerTest {
         val vicalKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val vicalCert = buildX509Cert(
             publicKey = vicalKey.publicKey,
-            signingKey = vicalKey,
-            signatureAlgorithm = vicalKey.curve.defaultSigningAlgorithm,
+            signingKey = SigningKey.anonymous(vicalKey, vicalKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1),
             subject = X500Name.fromName("CN=Test VICAL provider"),
             issuer = X500Name.fromName("CN=Test VICAL provider"),
@@ -378,10 +388,7 @@ class TrustManagerTest {
             atlantisIaca = atlantisIaca,
             atlantisIacaKey = atlantisIacaKey,
             encodedSignedVical = ByteString(
-                signedVical.generate(
-                    signingKey = vicalKey,
-                    signingAlgorithm = vicalKey.curve.defaultSigningAlgorithmFullySpecified
-                )
+                signedVical.generate(SigningKey.anonymous(vicalKey))
             ),
             elboniaDs = elboniaDs,
             elboniaDsKey = elboniaDsKey,
@@ -714,8 +721,7 @@ class TrustManagerTest {
         val vicalKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val vicalCert = buildX509Cert(
             publicKey = vicalKey.publicKey,
-            signingKey = vicalKey,
-            signatureAlgorithm = vicalKey.curve.defaultSigningAlgorithm,
+            signingKey = SigningKey.anonymous(vicalKey, vicalKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1),
             subject = X500Name.fromName("CN=Test VICAL provider"),
             issuer = X500Name.fromName("CN=Test VICAL provider"),

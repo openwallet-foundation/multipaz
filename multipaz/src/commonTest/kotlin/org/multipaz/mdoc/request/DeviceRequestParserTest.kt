@@ -15,6 +15,7 @@
  */
 package org.multipaz.mdoc.request
 
+import kotlinx.coroutines.test.runTest
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
@@ -23,6 +24,7 @@ import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.mdoc.TestVectors
@@ -132,11 +134,11 @@ class DeviceRequestParserTest {
         assertFalse(dr.readerAuthenticated)
     }
 
-    fun testDeviceRequestParserReaderAuthHelper(curve: EcCurve) {
+    fun testDeviceRequestParserReaderAuthHelper(curve: EcCurve) = runTest {
         // TODO: use assumeTrue() when available in kotlin-test
         if (!Crypto.supportedCurves.contains(curve)) {
             println("Curve $curve not supported on platform")
-            return
+            return@runTest
         }
 
         val encodedSessionTranscript = Cbor.encode(Bstr(byteArrayOf(0x01, 0x02)))
@@ -153,8 +155,7 @@ class DeviceRequestParserTest {
         )
         val readerCert = X509Cert.Builder(
             publicKey = readerKey.publicKey,
-            signingKey = readerKey,
-            signatureAlgorithm = curve.defaultSigningAlgorithm,
+            signingKey = SigningKey.anonymous(readerKey, curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1),
             subject = X500Name.fromName("CN=Test Key"),
             issuer = X500Name.fromName("CN=Test Key"),

@@ -14,12 +14,12 @@ import org.junit.Test
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Tstr
-import org.multipaz.cbor.Uint
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.knowntypes.EUPersonalID
@@ -28,8 +28,6 @@ import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.models.digitalcredentials.DigitalCredentials
 import org.multipaz.models.digitalcredentials.calculateCredentialDatabase
 import org.multipaz.models.openid.OpenID4VP
-import org.multipaz.storage.ephemeral.EphemeralStorage
-import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.util.toBase64Url
 import kotlin.random.Random
 
@@ -63,20 +61,23 @@ class MatcherTest {
         harnessInitializer(harness)
 
         val nonce = Random.Default.nextBytes(16).toBase64Url()
-        val (readerAuthKey, readerAuthCert) = if (signRequest) {
+        val readerAuthKey = if (signRequest) {
             val key = Crypto.createEcPrivateKey(EcCurve.P256)
+            val readerRootCert = harness.readerRootKey.certChain.certificates.first()
             val cert = MdocUtil.generateReaderCertificate(
-                readerRootCert = harness.readerRootCert,
                 readerRootKey = harness.readerRootKey,
                 readerKey = key.publicKey,
                 subject = X500Name.fromName("CN=Multipaz Reader Cert Single-Use key"),
                 serial = ASN1Integer.fromRandom(128),
-                validFrom = harness.readerRootCert.validityNotBefore,
-                validUntil = harness.readerRootCert.validityNotAfter
+                validFrom = readerRootCert.validityNotBefore,
+                validUntil = readerRootCert.validityNotAfter
             )
-            Pair(key, cert)
+            SigningKey.X509CertifiedExplicit(
+                privateKey = key,
+                certChain = X509CertChain(listOf(cert) + harness.readerRootKey.certChain.certificates)
+            )
         } else {
-            Pair(null, null)
+            null
         }
 
         val requestData = OpenID4VP.generateRequest(
@@ -86,9 +87,6 @@ class MatcherTest {
             nonce = nonce,
             responseEncryptionKey = encryptionKey?.publicKey,
             requestSigningKey = readerAuthKey,
-            requestSigningKeyCertification = readerAuthCert?.let {
-                X509CertChain(listOf(it, harness.readerRootCert))
-            },
             responseMode = OpenID4VP.ResponseMode.DC_API,
             responseUri = null,
             dclqQuery = Json.decodeFromString(JsonObject.serializer(), dcql)

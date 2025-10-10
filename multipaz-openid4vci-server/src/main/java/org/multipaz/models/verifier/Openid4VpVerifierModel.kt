@@ -1,6 +1,5 @@
 package org.multipaz.models.verifier
 
-import io.ktor.util.encodeBase64
 import kotlin.time.Clock
 import kotlinx.datetime.DateTimePeriod
 import kotlinx.datetime.TimeZone
@@ -29,10 +28,11 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.JsonWebEncryption
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X500Name
-import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentCannedRequest
+import org.multipaz.jwt.buildJwt
 import org.multipaz.mdoc.response.DeviceResponseParser
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.util.fromBase64Url
@@ -62,23 +62,20 @@ class Openid4VpVerifierModel(
      * Creates an Openid4VP presentation request for credentials (typically just one) in
      * [requests] parameter.
      */
-    fun makeRequest(
+    suspend fun makeRequest(
         state: String,
         responseMode: String,
         requests: Map<String, DocumentCannedRequest>,
         readerIdentity: ReaderIdentity,
         expectedOrigins: List<String> = listOf(),
         responseUri: String? = null,
-    ): String {
-        val publicKey = ephemeralPrivateKey.publicKey
-        val signingAlgorithm = publicKey.curve.defaultSigningAlgorithmFullySpecified
-        val header = buildJsonObject {
-            put("typ", JsonPrimitive("oauth-authz-req+jwt"))
-            put("alg", JsonPrimitive(signingAlgorithm.joseAlgorithmIdentifier))
-            put("x5c", createCertificateChain(readerIdentity).toX5c())
-        }.toString().toByteArray().toBase64Url()
-
-        val bodyJson = buildJsonObject {
+    ): String = buildJwt(
+            type = "oauth-authz-req+jwt",
+            key = SigningKey.X509CertifiedExplicit(
+                privateKey = ephemeralPrivateKey,
+                certChain = createCertificateChain(readerIdentity)
+            )
+        ) {
             put("client_id", clientId)
             if (responseUri != null) {
                 put("response_uri", responseUri)
@@ -151,15 +148,6 @@ class Openid4VpVerifierModel(
             }
         }
 
-        val body = bodyJson.toString().toByteArray().toBase64Url()
-
-        val message = "$header.$body"
-        val signature = Crypto.sign(ephemeralPrivateKey, signingAlgorithm, message.toByteArray())
-            .toCoseEncoded().toBase64Url()
-
-        return "$message.$signature"
-    }
-
     /**
      * Parses and validates credential presentation for the request that was previously created
      * using [makeRequest].
@@ -197,7 +185,7 @@ class Openid4VpVerifierModel(
         }
     }
 
-    private fun createCertificateChain(readerIdentity: ReaderIdentity): X509CertChain {
+    private suspend fun createCertificateChain(readerIdentity: ReaderIdentity): X509CertChain {
         val now = Clock.System.now()
         val validFrom = now.plus(DateTimePeriod(minutes = -10), TimeZone.currentSystemDefault())
         val validUntil = now.plus(DateTimePeriod(minutes = 10), TimeZone.currentSystemDefault())
@@ -205,8 +193,10 @@ class Openid4VpVerifierModel(
         val readerKeySubject = "CN=OWF IC Online Verifier Single-Use Reader Key"
 
         val readerKeyCertificate = MdocUtil.generateReaderCertificate(
-            readerRootCert = readerIdentity.certificateChain.certificates.first(),
-            readerRootKey = readerIdentity.privateKey,
+            readerRootKey = SigningKey.X509CertifiedExplicit(
+                privateKey = readerIdentity.privateKey,
+                certChain = readerIdentity.certificateChain
+            ),
             readerKey = readerKey.publicKey,
             subject = X500Name.fromName(readerKeySubject),
             serial = ASN1Integer(1L),

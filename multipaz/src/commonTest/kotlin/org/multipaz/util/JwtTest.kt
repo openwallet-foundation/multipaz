@@ -1,5 +1,6 @@
 package org.multipaz.util
 
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -10,6 +11,7 @@ import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
@@ -128,8 +130,10 @@ class JwtTest {
         val x5cKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val cert = X509Cert.Builder(
             publicKey = x5cKey.publicKey,
-            signingKey = privateTrustedKey,
-            signatureAlgorithm = privateTrustedKey.curve.defaultSigningAlgorithm,
+            signingKey = SigningKey.anonymous(
+                privateKey = privateTrustedKey,
+                algorithm = privateTrustedKey.curve.defaultSigningAlgorithm
+            ),
             serialNumber = ASN1Integer(2),
             subject = X500Name.fromName("CN=test-x5c-leaf"),
             issuer = X500Name.fromName("CN=test-x5c"),
@@ -138,8 +142,10 @@ class JwtTest {
         ).build()
         val root = X509Cert.Builder(
             publicKey = trustedKey,
-            signingKey = Crypto.createEcPrivateKey(EcCurve.P384),
-            signatureAlgorithm = EcCurve.P384.defaultSigningAlgorithm,
+            signingKey = SigningKey.anonymous(
+                privateKey = Crypto.createEcPrivateKey(EcCurve.P384),
+                algorithm = EcCurve.P384.defaultSigningAlgorithm
+            ),
             serialNumber = ASN1Integer(57),
             subject = X500Name.fromName("CN=test-x5c"),
             issuer = X500Name.fromName("CN=test-ca"),
@@ -214,16 +220,20 @@ class JwtTest {
         }
 
     inner class TestConfiguration(): Configuration {
-        private val trustedCert = X509Cert.Builder(
-            publicKey = trustedKey,
-            signingKey = Crypto.createEcPrivateKey(EcCurve.P384),
-            signatureAlgorithm = EcCurve.P384.defaultSigningAlgorithm,
-            serialNumber = ASN1Integer(57),
-            subject = X500Name.fromName("CN=test-root"),
-            issuer = X500Name.fromName("CN=test-ca"),
-            validFrom = clock.now() - 10.days,
-            validUntil = clock.now() + 100.days
-        ).build()
+        private val trustedCert = runBlocking {
+            X509Cert.Builder(
+                publicKey = trustedKey,
+                signingKey = SigningKey.anonymous(
+                    privateKey = Crypto.createEcPrivateKey(EcCurve.P384),
+                    algorithm = EcCurve.P384.defaultSigningAlgorithm
+                ),
+                serialNumber = ASN1Integer(57),
+                subject = X500Name.fromName("CN=test-root"),
+                issuer = X500Name.fromName("CN=test-ca"),
+                validFrom = clock.now() - 10.days,
+                validUntil = clock.now() + 100.days
+            ).build()
+        }
 
         override fun getValue(key: String): String? {
             if (key == "iss" || key == "kid") {

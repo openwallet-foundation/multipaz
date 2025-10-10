@@ -23,10 +23,9 @@ import org.multipaz.compose.rememberUiBoundCoroutineScope
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
-import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.SigningKey
 import org.multipaz.documenttype.DocumentCannedRequest
 import org.multipaz.documenttype.DocumentType
-import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.models.digitalcredentials.DigitalCredentials
 import org.multipaz.models.verification.MdocApiDcResponse
@@ -36,7 +35,6 @@ import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.testapp.App
 import org.multipaz.testapp.TestAppUtils
 import org.multipaz.testapp.getAppToAppOrigin
-import org.multipaz.trustmanagement.TrustManager
 import org.multipaz.util.Logger
 import org.multipaz.models.verification.VerificationUtil
 import org.multipaz.testapp.ShowResponseMetadata
@@ -215,7 +213,6 @@ fun DcRequestScreen(
                         try {
                             doDcRequestFlow(
                                 appReaderKey = app.readerKey,
-                                appReaderCertChain = X509CertChain(certificates = listOf(app.readerCert, app.readerRootCert)),
                                 request = requestSelected.value.sampleRequest,
                                 protocol = protocolSelected.value,
                                 format = formatSelected.value,
@@ -235,8 +232,7 @@ fun DcRequestScreen(
 }
 
 private suspend fun doDcRequestFlow(
-    appReaderKey: EcPrivateKey,
-    appReaderCertChain: X509CertChain,
+    appReaderKey: SigningKey.X509Compatible,
     request: DocumentCannedRequest,
     protocol: RequestProtocol,
     format: CredentialFormat,
@@ -263,11 +259,6 @@ private suspend fun doDcRequestFlow(
     val nonce = ByteString(Random.Default.nextBytes(16))
     val responseEncryptionKey = Crypto.createEcPrivateKey(EcCurve.P256)
     val origin = getAppToAppOrigin()
-    val (readerKey, readerCertChain) = if (protocol.signRequest) {
-        Pair(appReaderKey, appReaderCertChain)
-    } else {
-        Pair(null, null)
-    }
     // According to OpenID4VP, Client ID must be set for signed requests and not for unsigned requests
     val clientId = "web-origin:$origin"
 
@@ -293,8 +284,11 @@ private suspend fun doDcRequestFlow(
                 origin = origin,
                 clientId = clientId,
                 responseEncryptionKey = responseEncryptionKey.publicKey,
-                readerAuthenticationKey = readerKey,
-                readerAuthenticationCertChain = readerCertChain,
+                readerAuthenticationKey = if (protocol.signRequest) {
+                    appReaderKey
+                } else {
+                    null
+                },
                 zkSystemSpecs = if (request.mdocRequest!!.useZkp) {
                     zkSystemRepository.getAllZkSystemSpecs()
                 } else {
@@ -322,8 +316,7 @@ private suspend fun doDcRequestFlow(
                 origin = origin,
                 clientId = clientId,
                 responseEncryptionKey = responseEncryptionKey.publicKey,
-                readerAuthenticationKey = readerKey,
-                readerAuthenticationCertChain = readerCertChain,
+                readerAuthenticationKey = appReaderKey,
             )
         }
     }

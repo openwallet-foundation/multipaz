@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.vical
 
+import kotlinx.coroutines.test.runTest
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -9,6 +10,7 @@ import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.crypto.SigningKey
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -17,7 +19,7 @@ import kotlin.time.Duration.Companion.minutes
 
 class VicalGeneratorTest {
 
-    private fun createSelfsignedCert(
+    private suspend fun createSelfsignedCert(
         key: EcPrivateKey,
         subjectAndIssuer: X500Name
     ): X509Cert {
@@ -27,8 +29,7 @@ class VicalGeneratorTest {
 
         return X509Cert.Builder(
             publicKey = key.publicKey,
-            signingKey = key,
-            signatureAlgorithm = key.curve.defaultSigningAlgorithm,
+            signingKey = SigningKey.anonymous(key, key.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1),
             subject = subjectAndIssuer,
             issuer = subjectAndIssuer,
@@ -38,7 +39,7 @@ class VicalGeneratorTest {
     }
 
     @Test
-    fun testVicalGenerator() {
+    fun testVicalGenerator() = runTest {
         val vicalKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val vicalCert = createSelfsignedCert(vicalKey, X500Name.fromName("CN=Test VICAL"))
 
@@ -78,8 +79,7 @@ class VicalGeneratorTest {
             vicalProviderCertificateChain = X509CertChain(listOf(vicalCert))
         )
         val encodedSignedVical = signedVical.generate(
-            signingKey = vicalKey,
-            signingAlgorithm = vicalKey.curve.defaultSigningAlgorithm
+            signingKey = SigningKey.anonymous(vicalKey, vicalKey.curve.defaultSigningAlgorithm)
         )
 
         val decodedSignedVical = SignedVical.parse(

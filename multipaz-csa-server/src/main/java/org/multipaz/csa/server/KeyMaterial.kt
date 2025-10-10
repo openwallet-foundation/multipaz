@@ -16,14 +16,13 @@ import org.multipaz.cbor.buildCborArray
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable
-import org.multipaz.server.ServerIdentity
 import org.multipaz.server.getServerIdentity
 import org.multipaz.storage.StorageTableSpec
 import kotlin.random.Random
@@ -35,43 +34,45 @@ import kotlin.random.Random
  * runs, it is read from the database.
  */
 data class KeyMaterial(
-    val serverSecureAreaBoundKey: ByteArray,
-    val attestationKey: EcPrivateKey,
-    val attestationKeyCertificates: X509CertChain,
-    val attestationKeySignatureAlgorithm: Algorithm,
-    val attestationKeyIssuer: String,
-    val cloudBindingKey: EcPrivateKey,
-    val cloudBindingKeyCertificates: X509CertChain,
-    val cloudBindingKeySignatureAlgorithm: Algorithm,
-    val cloudBindingKeyIssuer: String
+    val serverSecureAreaBoundKey: ByteString,
+    val attestationKey: SigningKey.X509CertifiedExplicit,
+    val cloudBindingKey: SigningKey.X509CertifiedExplicit
 ) {
     fun toCbor() = Cbor.encode(
         buildCborArray {
-            add(serverSecureAreaBoundKey)
-            add(attestationKey.toCoseKey().toDataItem())
-            add(attestationKeyCertificates.toDataItem())
-            add(attestationKeySignatureAlgorithm.coseAlgorithmIdentifier!!)
-            add(attestationKeyIssuer)
-            add(cloudBindingKey.toCoseKey().toDataItem())
-            add(cloudBindingKeyCertificates.toDataItem())
-            add(cloudBindingKeySignatureAlgorithm.coseAlgorithmIdentifier!!)
-            add(cloudBindingKeyIssuer)
+            add(serverSecureAreaBoundKey.toByteArray())
+            add(attestationKey.privateKey.toCoseKey().toDataItem())
+            add(attestationKey.certChain.toDataItem())
+            add(attestationKey.algorithm.coseAlgorithmIdentifier!!)
+            add(attestationKey.getX500Subject().name)
+            add(cloudBindingKey.privateKey.toCoseKey().toDataItem())
+            add(cloudBindingKey.certChain.toDataItem())
+            add(cloudBindingKey.algorithm.coseAlgorithmIdentifier!!)
+            add(cloudBindingKey.getX500Subject().name)
         }
     )
 
     companion object {
         fun fromCbor(encodedCbor: ByteArray): KeyMaterial {
             val array = Cbor.decode(encodedCbor).asArray
+            val attestationKey = SigningKey.X509CertifiedExplicit(
+                privateKey = array[1].asCoseKey.ecPrivateKey,
+                certChain = array[2].asX509CertChain,
+                algorithm = Algorithm.fromCoseAlgorithmIdentifier(array[3].asNumber.toInt())
+            )
+            val attestationKeyIssuer = array[4].asTstr
+            check(attestationKeyIssuer == attestationKey.getX500Subject().name)
+            val cloudBindingKey = SigningKey.X509CertifiedExplicit(
+                privateKey = array[5].asCoseKey.ecPrivateKey,
+                certChain = array[6].asX509CertChain,
+                algorithm = Algorithm.fromCoseAlgorithmIdentifier(array[7].asNumber.toInt()),
+            )
+            val cloudBindingKeyIssuer = array[8].asTstr
+            check(cloudBindingKeyIssuer == cloudBindingKey.getX500Subject().name)
             return KeyMaterial(
-                array[0].asBstr,
-                array[1].asCoseKey.ecPrivateKey,
-                array[2].asX509CertChain,
-                Algorithm.fromCoseAlgorithmIdentifier(array[3].asNumber.toInt()),
-                array[4].asTstr,
-                array[5].asCoseKey.ecPrivateKey,
-                array[6].asX509CertChain,
-                Algorithm.fromCoseAlgorithmIdentifier(array[7].asNumber.toInt()),
-                array[8].asTstr,
+                ByteString(array[0].asBstr),
+                attestationKey = attestationKey,
+                cloudBindingKey = cloudBindingKey
             )
         }
 
@@ -108,8 +109,7 @@ data class KeyMaterial(
                 val rootName = X500Name.fromName("CN=csa_dev_root")
                 val certificate = X509Cert.Builder(
                     publicKey = rootKey.publicKey,
-                    signingKey = rootKey,
-                    signatureAlgorithm = EcCurve.P384.defaultSigningAlgorithmFullySpecified,
+                    signingKey = SigningKey.anonymous(rootKey),
                     serialNumber = ASN1Integer.fromRandom(128),
                     subject = rootName,
                     issuer = rootName,
@@ -120,21 +120,23 @@ data class KeyMaterial(
                     .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
                     .setBasicConstraints(ca = true, pathLenConstraint = null)
                     .build()
-                ServerIdentity(
+                SigningKey.X509CertifiedExplicit(
                     privateKey = rootKey,
-                    certificateChain = X509CertChain(listOf(certificate))
+                    certChain = X509CertChain(listOf(certificate))
                 )
             }
+
+            // Only X509-certified keys are acceptable
+            attestationRoot as SigningKey.X509Certified
 
             // Create instance-specific intermediate certificate.
             val attestationKey = Crypto.createEcPrivateKey(EcCurve.P256)
             val attestationKeySignatureAlgorithm = Algorithm.ESP256
             val attestationKeySubject = "CN=Cloud Secure Area Attestation Root"
-            val rootCertificate = attestationRoot.certificateChain.certificates.first()
+            val rootCertificate = attestationRoot.certChain.certificates.first()
             val attestationKeyCertificate = X509Cert.Builder(
                 publicKey = attestationKey.publicKey,
-                signingKey = attestationRoot.privateKey,
-                signatureAlgorithm = attestationKeySignatureAlgorithm,
+                signingKey = attestationRoot,
                 serialNumber = ASN1Integer(1L),
                 subject = X500Name.fromName(attestationKeySubject),
                 issuer = rootCertificate.subject,
@@ -146,6 +148,12 @@ data class KeyMaterial(
                 .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
                 .setBasicConstraints(ca = true, pathLenConstraint = null)
                 .build()
+            val attestationSigningKey = SigningKey.X509CertifiedExplicit(
+                privateKey = attestationKey,
+                certChain = X509CertChain(listOf(attestationKeyCertificate, rootCertificate)),
+                algorithm = attestationKeySignatureAlgorithm
+            )
+            check(attestationSigningKey.getX500Subject().name == attestationKeySubject)
 
             // Create Cloud Binding Key Attestation Root w/ self-signed certificate.
             val bindingRoot = BackendEnvironment.getServerIdentity("csa_binding_identity") {
@@ -155,8 +163,7 @@ data class KeyMaterial(
                     "CN=Cloud Secure Area Cloud Binding Key Attestation Root"
                 val cloudBindingKeyAttestationCertificate = X509Cert.Builder(
                     publicKey = cloudBindingKeyAttestationKey.publicKey,
-                    signingKey = cloudBindingKeyAttestationKey,
-                    signatureAlgorithm = cloudBindingKeySignatureAlgorithm,
+                    signingKey = SigningKey.anonymous(cloudBindingKeyAttestationKey),
                     serialNumber = ASN1Integer(1L),
                     subject = X500Name.fromName(cloudBindingKeySubject),
                     issuer = X500Name.fromName(cloudBindingKeySubject),
@@ -168,23 +175,17 @@ data class KeyMaterial(
                     .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
                     .setBasicConstraints(ca = true, pathLenConstraint = null)
                     .build()
-                ServerIdentity(
+                SigningKey.X509CertifiedExplicit(
                     privateKey = cloudBindingKeyAttestationKey,
-                    certificateChain = X509CertChain(listOf(cloudBindingKeyAttestationCertificate))
+                    certChain = X509CertChain(listOf(cloudBindingKeyAttestationCertificate)),
+                    algorithm = cloudBindingKeySignatureAlgorithm
                 )
             }
 
-            val bindingCertificate = bindingRoot.certificateChain.certificates.first()
             return KeyMaterial(
-                serverSecureAreaBoundKey,
-                attestationKey,
-                X509CertChain(listOf(attestationKeyCertificate, rootCertificate)),
-                attestationKeySignatureAlgorithm,
-                attestationKeySubject,
-                bindingRoot.privateKey,
-                bindingRoot.certificateChain,
-                bindingRoot.privateKey.curve.defaultSigningAlgorithmFullySpecified,
-                bindingCertificate.subject.name
+                ByteString(serverSecureAreaBoundKey),
+                attestationSigningKey,
+                bindingRoot as SigningKey.X509CertifiedExplicit
             )
         }
 

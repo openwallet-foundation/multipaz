@@ -50,6 +50,7 @@ import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import kotlinx.coroutines.test.runTest
+import org.multipaz.crypto.SigningKey
 import kotlin.time.Clock
 import kotlin.time.Instant
 import org.multipaz.document.DocumentStoreTest
@@ -149,8 +150,7 @@ class DeviceResponseGeneratorTest {
         dsKey = Crypto.createEcPrivateKey(EcCurve.P256)
         dsCert = X509Cert.Builder(
             publicKey = dsKey.publicKey,
-            signingKey = dsKey,
-            signatureAlgorithm = Algorithm.ES256,
+            signingKey = SigningKey.anonymous(dsKey, Algorithm.ES256),
             serialNumber = ASN1Integer(1),
             subject = X500Name.fromName("CN=State of Utopia DS Key"),
             issuer = X500Name.fromName("CN=State of Utopia DS Key"),

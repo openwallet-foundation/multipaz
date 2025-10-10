@@ -14,8 +14,8 @@ import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.cose.CoseSign1
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.SignatureVerificationException
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 
@@ -37,9 +37,8 @@ data class SignedVical(
      * @param signingAlgorithm the algorithm used to make the signature
      * @return the bytes of the CBOR encoded COSE_Sign1 with the VICAL.
      */
-    fun generate(
-        signingKey: EcPrivateKey,
-        signingAlgorithm: Algorithm
+    suspend fun generate(
+        signingKey: SigningKey
     ): ByteArray {
         val encodedVical = Cbor.encode(
             buildCborMap {
@@ -67,15 +66,16 @@ data class SignedVical(
             }
         )
         val signature = Cose.coseSign1Sign(
-            key = signingKey,
-            dataToSign = encodedVical,
-            includeDataInPayload = true,
-            signatureAlgorithm = signingAlgorithm,
+            signingKey = signingKey,
+            message = encodedVical,
+            includeMessageInPayload = true,
             protectedHeaders = mapOf(
-                Pair(CoseNumberLabel(Cose.COSE_LABEL_ALG), signingAlgorithm.coseAlgorithmIdentifier!!.toDataItem())
+                CoseNumberLabel(Cose.COSE_LABEL_ALG) to
+                    signingKey.algorithm.coseAlgorithmIdentifier!!.toDataItem()
             ),
             unprotectedHeaders = mapOf(
-                Pair(CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN), vicalProviderCertificateChain.toDataItem())
+                CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN) to
+                    vicalProviderCertificateChain.toDataItem()
             )
         )
         return Cbor.encode(signature.toDataItem())

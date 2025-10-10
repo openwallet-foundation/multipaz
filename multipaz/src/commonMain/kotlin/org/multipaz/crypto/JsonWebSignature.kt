@@ -18,6 +18,8 @@ object JsonWebSignature {
     /**
      * Sign a claims set.
      *
+     * Use [org.multipaz.jwt.buildJwt] instead.
+     *
      * @param key the key to sign with.
      * @param signatureAlgorithm a fully-specified signature algorithm to use.
      * @param claimsSet the claims set.
@@ -25,6 +27,7 @@ object JsonWebSignature {
      * @param x5c: the certificate chain to put in the "x5c" header parameter or `null`.
      * @return the compact serialization with the JWS.
      */
+    @Deprecated("Use org.multipaz.jwt.buildJwt instead")
     fun sign(
         key: EcPrivateKey,
         signatureAlgorithm: Algorithm,
@@ -55,6 +58,8 @@ object JsonWebSignature {
     /**
      * Sign a claims set using a [SecureArea].
      *
+     * Use [org.multipaz.jwt.buildJwt] instead.
+     *
      * @param secureArea the [SecureArea] for the key to sign with.
      * @param alias the alias for key to sign with.
      * @param keyUnlockData the [KeyUnlockData] to use or `null`.
@@ -63,6 +68,7 @@ object JsonWebSignature {
      * @param x5c: the certificate chain to put in the "x5c" header parameter or `null`.
      * @return the compact serialization of the JWS.
      */
+    @Deprecated("Use org.multipaz.jwt.buildJwt instead")
     suspend fun sign(
         secureArea: SecureArea,
         alias: String,

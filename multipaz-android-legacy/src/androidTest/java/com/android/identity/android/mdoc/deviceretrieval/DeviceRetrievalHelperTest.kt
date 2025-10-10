@@ -76,10 +76,9 @@ import kotlin.time.Instant.Companion.fromEpochMilliseconds
 import org.junit.Assert
 import org.junit.Before
 import org.junit.Test
+import org.multipaz.crypto.SigningKey
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.mdoc.role.MdocRole
-import org.multipaz.securearea.SecureAreaProvider
-import java.security.Security
 import java.util.Calendar
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
@@ -176,8 +175,7 @@ class DeviceRetrievalHelperTest {
         documentSignerKey = createEcPrivateKey(EcCurve.P256)
         documentSignerCert = X509Cert.Builder(
             publicKey = documentSignerKey.publicKey,
-            signingKey = documentSignerKey,
-            signatureAlgorithm = documentSignerKey.curve.defaultSigningAlgorithm,
+            signingKey = SigningKey.anonymous(documentSignerKey, documentSignerKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1L),
             subject = X500Name.fromName("CN=State of Utopia"),
             issuer = X500Name.fromName("CN=State of Utopia"),
@@ -401,9 +399,9 @@ class DeviceRetrievalHelperTest {
                             .setIssuerNamespaces(mergedIssuerNamespaces)
                             .setDeviceNamespacesSignature(
                                 deviceSignedData,
-                                mdocCredential.secureArea,
-                                mdocCredential.alias,
-                                null
+                                secureArea = mdocCredential.secureArea,
+                                keyAlias = mdocCredential.alias,
+                                keyUnlockData = null
                             )
                             .generate()
                     )

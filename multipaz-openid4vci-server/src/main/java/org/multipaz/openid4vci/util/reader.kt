@@ -7,6 +7,7 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.mdoc.util.MdocUtil
@@ -46,7 +47,7 @@ private suspend fun loadReaderIdentity(baseUrl: String): Openid4VpVerifierModel.
     val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P384)
     val readerRootKeySubject = "CN=$baseUrl"
     val readerRootKeyCertificate = MdocUtil.generateReaderRootCertificate(
-        readerRootKey = readerRootKey,
+        readerRootKey = SigningKey.anonymous(readerRootKey),
         subject = X500Name.fromName(readerRootKeySubject),
         serial = ASN1Integer(1L),
         validFrom = validFrom,

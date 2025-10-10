@@ -32,6 +32,7 @@ import kotlin.time.Instant
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import org.multipaz.crypto.SigningKey
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
@@ -49,7 +50,7 @@ import kotlin.test.assertTrue
 
 class DeviceRequestGeneratorTest {
     @Test
-    fun testDeviceRequestBuilder() {
+    fun testDeviceRequestBuilder() = runTest {
         val encodedSessionTranscript = Cbor.encode(Bstr(byteArrayOf(0x01, 0x02)))
         val mdlItemsToRequest =  mutableMapOf<String, Map<String, Boolean>>()
         val mdlNsItems = mutableMapOf<String, Boolean>()
@@ -70,8 +71,7 @@ class DeviceRequestGeneratorTest {
         )
         val readerCert = X509Cert.Builder(
             publicKey = readerKey.publicKey,
-            signingKey = readerKey,
-            signatureAlgorithm = Algorithm.ES256,
+            signingKey = SigningKey.anonymous(readerKey, Algorithm.ES256),
             serialNumber = ASN1Integer(1),
             subject = X500Name.fromName("CN=Test Key"),
             issuer = X500Name.fromName("CN=Test Key"),
@@ -165,7 +165,7 @@ class DeviceRequestGeneratorTest {
 
         val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val readerRootCert = MdocUtil.generateReaderRootCertificate(
-            readerRootKey = readerRootKey,
+            readerRootKey = SigningKey.anonymous(readerRootKey),
             subject = X500Name.fromName("CN=TEST Reader Root,C=XG-US,ST=MA"),
             serial = ASN1Integer(1),
             validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
@@ -173,8 +173,10 @@ class DeviceRequestGeneratorTest {
             crlUrl = "http://www.example.com/issuer/crl"
         )
         val readerCert = MdocUtil.generateReaderCertificate(
-            readerRootCert = readerRootCert,
-            readerRootKey = readerRootKey,
+            readerRootKey = SigningKey.X509CertifiedExplicit(
+                privateKey = readerRootKey,
+                certChain = X509CertChain(listOf(readerRootCert)),
+            ),
             readerKey = testKeyInfo.publicKey,
             subject = X500Name.fromName("CN=TEST Reader Certificate,C=XG-US,ST=MA"),
             serial = ASN1Integer(1),

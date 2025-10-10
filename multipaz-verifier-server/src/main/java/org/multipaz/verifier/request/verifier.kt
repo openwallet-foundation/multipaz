@@ -76,6 +76,7 @@ import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborMap
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.documenttype.knowntypes.AgeVerification
@@ -94,7 +95,6 @@ import org.multipaz.rpc.backend.Resources
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.SdJwtKb
-import org.multipaz.server.ServerIdentity
 import org.multipaz.server.baseUrl
 import org.multipaz.server.getBaseUrl
 import org.multipaz.server.getServerIdentity
@@ -337,7 +337,7 @@ private suspend fun clientId(): String {
     return "x509_san_dns:$ret"
 }
 
-private suspend fun getReaderIdentity(): ServerIdentity =
+private suspend fun getReaderIdentity(): SigningKey.X509Certified =
     BackendEnvironment.getServerIdentity("reader_root_identity") {
         val subjectAndIssuer = X500Name.fromName("CN=Multipaz TEST Reader CA")
 
@@ -348,17 +348,20 @@ private suspend fun getReaderIdentity(): ServerIdentity =
         val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val readerRootCertificate =
             MdocUtil.generateReaderRootCertificate(
-                readerRootKey = readerRootKey,
+                readerRootKey = SigningKey.anonymous(readerRootKey),
                 subject = subjectAndIssuer,
                 serial = serial,
                 validFrom = validFrom,
                 validUntil = validUntil,
                 crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
             )
-        ServerIdentity(readerRootKey, X509CertChain(listOf(readerRootCertificate)))
-    }
+        SigningKey.X509CertifiedExplicit(
+            privateKey = readerRootKey,
+            certChain = X509CertChain(listOf(readerRootCertificate))
+        )
+    } as SigningKey.X509Certified
 
-private suspend fun createSingleUseReaderKey(dnsName: String): Pair<EcPrivateKey, X509CertChain> {
+private suspend fun createSingleUseReaderKey(dnsName: String): SigningKey.X509Certified {
     val now = Clock.System.now()
     val validFrom = now.plus(DateTimePeriod(minutes = -10), TimeZone.currentSystemDefault())
     val validUntil = now.plus(DateTimePeriod(minutes = 10), TimeZone.currentSystemDefault())
@@ -367,11 +370,10 @@ private suspend fun createSingleUseReaderKey(dnsName: String): Pair<EcPrivateKey
 
     val readerIdentity = getReaderIdentity()
 
-    val cert = readerIdentity.certificateChain.certificates.first()
+    val cert = readerIdentity.certChain.certificates.first()
     val readerKeyCertificate = X509Cert.Builder(
         publicKey = readerKey.publicKey,
-        signingKey = readerIdentity.privateKey,
-        signatureAlgorithm = readerIdentity.privateKey.curve.defaultSigningAlgorithm,
+        signingKey = readerIdentity,
         serialNumber = ASN1Integer(1L),
         subject = X500Name.fromName(readerKeySubject),
         issuer = cert.subject,
@@ -397,9 +399,9 @@ private suspend fun createSingleUseReaderKey(dnsName: String): Pair<EcPrivateKey
         )
         .build()
 
-    return Pair(
-        readerKey,
-        X509CertChain(listOf(readerKeyCertificate) + readerIdentity.certificateChain.certificates)
+    return SigningKey.X509CertifiedExplicit(
+        privateKey = readerKey,
+        certChain = X509CertChain(listOf(readerKeyCertificate) + readerIdentity.certChain.certificates)
     )
 }
 
@@ -498,7 +500,7 @@ private suspend fun handleDcBegin(
         expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
     )
 
-    val (readerAuthKey, readerAuthKeyCertification) = createSingleUseReaderKey(session.host)
+    val readerAuthKey = createSingleUseReaderKey(session.host)
 
     // Uncomment when making test vectors...
     //Logger.iCbor(TAG, "readerKey: ", Cbor.encode(session.encryptionKey.toCoseKey().toDataItem()))
@@ -531,7 +533,6 @@ private suspend fun handleDcBegin(
             session.encryptionKey,
             session.encryptionKey.publicKey as EcPublicKeyDoubleCoordinate,
             readerAuthKey,
-            readerAuthKeyCertification,
             request.signRequest,
             request.encryptResponse,
         )
@@ -548,7 +549,6 @@ private suspend fun handleDcBegin(
             session.encryptionKey,
             session.encryptionKey.publicKey as EcPublicKeyDoubleCoordinate,
             readerAuthKey,
-            readerAuthKeyCertification,
             request.signRequest,
             request.encryptResponse,
         )
@@ -598,7 +598,7 @@ private suspend fun handleDcBeginRawDcql(
         expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
     )
 
-    val (readerAuthKey, readerAuthKeyCertification) = createSingleUseReaderKey(session.host)
+    val readerAuthKey = createSingleUseReaderKey(session.host)
 
     val dcRequestString = calcDcRequestStringOpenID4VPforDCQL(
         version = version,
@@ -606,7 +606,6 @@ private suspend fun handleDcBeginRawDcql(
         nonce = session.nonce,
         readerPublicKey = session.encryptionKey.publicKey as EcPublicKeyDoubleCoordinate,
         readerAuthKey = readerAuthKey,
-        readerAuthKeyCertification = readerAuthKeyCertification,
         signRequest = request.signRequest,
         encryptResponse = request.encryptResponse,
         dcql = Json.decodeFromString(JsonObject.serializer(), request.rawDcql),
@@ -904,7 +903,7 @@ private suspend fun handleOpenID4VPRequest(
     val session = Session.fromCbor(encodedSession.toByteArray())
     val baseUrl = BackendEnvironment.getBaseUrl()
 
-    val (readerAuthKey, readerAuthKeyCertification) = createSingleUseReaderKey(session.host)
+    val readerAuthKey = createSingleUseReaderKey(session.host)
 
     val request = lookupWellknownRequest(session.requestFormat, session.requestDocType, session.requestId)
 
@@ -922,7 +921,6 @@ private suspend fun handleOpenID4VPRequest(
         readerKey =  session.encryptionKey,
         readerPublicKey = session.encryptionKey.publicKey as EcPublicKeyDoubleCoordinate,
         readerAuthKey = readerAuthKey,
-        readerAuthKeyCertification = readerAuthKeyCertification,
         signRequest = session.signRequest,
         encryptResponse = session.encryptResponse,
         responseMode = OpenID4VP.ResponseMode.DIRECT_POST,
@@ -1081,7 +1079,7 @@ private suspend fun handleGetReaderRootCert(
     call: ApplicationCall
 ) = call.respondText(
     contentType = ContentType.Text.Plain,
-    text = getReaderIdentity().certificateChain.certificates.joinToString { it.toPem() }
+    text = getReaderIdentity().certChain.certificates.joinToString { it.toPem() }
 )
 
 private val issuerTrustManagerLock = Mutex()
@@ -1413,8 +1411,7 @@ private suspend fun calcDcRequest(
     origin: String,
     readerKey: EcPrivateKey,
     readerPublicKey: EcPublicKeyDoubleCoordinate,
-    readerAuthKey: EcPrivateKey,
-    readerAuthKeyCertification: X509CertChain,
+    readerAuthKey: SigningKey.X509Certified,
     signRequest: Boolean,
     encryptResponse: Boolean,
 ): DCBeginResponse {
@@ -1430,8 +1427,7 @@ private suspend fun calcDcRequest(
                     origin,
                     readerKey,
                     readerPublicKey,
-                    readerAuthKey,
-                    readerAuthKeyCertification
+                    readerAuthKey
                 ),
                 dcRequestProtocol2 = null,
                 dcRequestString2 = null
@@ -1452,7 +1448,6 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
-                    readerAuthKeyCertification,
                     signRequest,
                     encryptResponse,
                     OpenID4VP.ResponseMode.DC_API,
@@ -1477,7 +1472,6 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
-                    readerAuthKeyCertification,
                     signRequest,
                     encryptResponse,
                     OpenID4VP.ResponseMode.DC_API,
@@ -1502,7 +1496,6 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
-                    readerAuthKeyCertification,
                     signRequest,
                     encryptResponse,
                     OpenID4VP.ResponseMode.DC_API,
@@ -1517,7 +1510,6 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
-                    readerAuthKeyCertification
                 ),
             )
         }
@@ -1536,7 +1528,6 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
-                    readerAuthKeyCertification,
                     signRequest,
                     encryptResponse,
                     OpenID4VP.ResponseMode.DC_API,
@@ -1551,7 +1542,6 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
-                    readerAuthKeyCertification
                 ),
             )
         }
@@ -1567,7 +1557,6 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
-                    readerAuthKeyCertification
                 ),
                 dcRequestProtocol2 = if (signRequest) "openid4vp-v1-signed" else "openid4vp-v1-unsigned",
                 dcRequestString2 = calcDcRequestStringOpenID4VP(
@@ -1581,7 +1570,6 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
-                    readerAuthKeyCertification,
                     signRequest,
                     encryptResponse,
                     OpenID4VP.ResponseMode.DC_API,
@@ -1601,7 +1589,6 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
-                    readerAuthKeyCertification
                 ),
                 dcRequestProtocol2 = "openid4vp",
                 dcRequestString2 = calcDcRequestStringOpenID4VP(
@@ -1615,7 +1602,6 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
-                    readerAuthKeyCertification,
                     signRequest,
                     encryptResponse,
                     OpenID4VP.ResponseMode.DC_API,
@@ -1641,8 +1627,7 @@ private suspend fun calcDcRequestNew(
     origin: String,
     readerKey: EcPrivateKey,
     readerPublicKey: EcPublicKeyDoubleCoordinate,
-    readerAuthKey: EcPrivateKey,
-    readerAuthKeyCertification: X509CertChain,
+    readerAuthKey: SigningKey.X509Certified,
     signRequest: Boolean,
     encryptResponse: Boolean,
 ): DCBeginResponse {
@@ -1666,8 +1651,7 @@ private suspend fun calcDcRequestNew(
             origin = origin,
             clientId = "x509_san_dns:${session.host}",
             responseEncryptionKey = if (encryptResponse) readerKey.publicKey else null,
-            readerAuthenticationKey = readerAuthKey,
-            readerAuthenticationCertChain = readerAuthKeyCertification,
+            readerAuthenticationKey = readerAuthKey
         )
     } else {
         val claims = mutableListOf<MdocRequestedClaim>()
@@ -1697,7 +1681,6 @@ private suspend fun calcDcRequestNew(
             clientId = "x509_san_dns:${session.host}",
             responseEncryptionKey = if (encryptResponse) readerKey.publicKey else null,
             readerAuthenticationKey = if (signRequest) readerAuthKey else null,
-            readerAuthenticationCertChain = if (signRequest) readerAuthKeyCertification else null,
             zkSystemSpecs = zkSystemSpecs
         )
     }
@@ -1721,13 +1704,12 @@ private suspend fun calcDcRequestNew(
     )
 }
 
-private fun calcDcRequestStringOpenID4VPforDCQL(
+private suspend fun calcDcRequestStringOpenID4VPforDCQL(
     version: OpenID4VP.Version,
     session: Session,
     nonce: ByteString,
     readerPublicKey: EcPublicKeyDoubleCoordinate,
-    readerAuthKey: EcPrivateKey,
-    readerAuthKeyCertification: X509CertChain,
+    readerAuthKey: SigningKey.X509Certified,
     signRequest: Boolean,
     encryptResponse: Boolean,
     dcql: JsonObject,
@@ -1740,8 +1722,11 @@ private fun calcDcRequestStringOpenID4VPforDCQL(
         clientId = "x509_san_dns:${session.host}",
         nonce = nonce.toByteArray().toBase64Url(),
         responseEncryptionKey = if (encryptResponse) readerPublicKey else null,
-        requestSigningKey = if (signRequest) readerAuthKey else null,
-        requestSigningKeyCertification = if (signRequest) readerAuthKeyCertification else null,
+        requestSigningKey = if (signRequest) {
+            readerAuthKey
+        } else {
+            null
+        },
         responseMode = responseMode,
         responseUri = responseUri,
         dclqQuery = dcql
@@ -1758,8 +1743,7 @@ private suspend fun calcDcRequestStringOpenID4VP(
     origin: String,
     readerKey: EcPrivateKey,
     readerPublicKey: EcPublicKeyDoubleCoordinate,
-    readerAuthKey: EcPrivateKey,
-    readerAuthKeyCertification: X509CertChain,
+    readerAuthKey: SigningKey.X509Certified,
     signRequest: Boolean,
     encryptResponse: Boolean,
     responseMode: OpenID4VP.ResponseMode,
@@ -1843,7 +1827,6 @@ private suspend fun calcDcRequestStringOpenID4VP(
         nonce = nonce,
         readerPublicKey = readerPublicKey,
         readerAuthKey = readerAuthKey,
-        readerAuthKeyCertification = readerAuthKeyCertification,
         signRequest = signRequest,
         encryptResponse = encryptResponse,
         dcql = dcql,
@@ -1859,8 +1842,7 @@ private suspend fun mdocCalcDcRequestStringMdocApi(
     origin: String,
     readerKey: EcPrivateKey,
     readerPublicKey: EcPublicKeyDoubleCoordinate,
-    readerAuthKey: EcPrivateKey,
-    readerAuthKeyCertification: X509CertChain
+    readerAuthKey: SigningKey.X509Certified
 ): String {
     val encryptionInfo = buildCborArray {
         add("dcapi")
@@ -1916,9 +1898,7 @@ private suspend fun mdocCalcDcRequestStringMdocApi(
             docRequestInfo = DocRequestInfo(
                 zkRequest = zkRequest
             ),
-            readerKey = readerAuthKey,
-            signatureAlgorithm = readerKey.curve.defaultSigningAlgorithm,
-            readerKeyCertificateChain = readerAuthKeyCertification,
+            readerKey = readerAuthKey
         )
     }.toDataItem())
     val base64DeviceRequest = encodedDeviceRequest.toBase64Url()

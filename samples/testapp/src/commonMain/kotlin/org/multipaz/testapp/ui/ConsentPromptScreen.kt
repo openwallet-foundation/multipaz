@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -35,20 +34,16 @@ import multipazproject.samples.testapp.generated.resources.Res
 import org.jetbrains.compose.resources.painterResource
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.OID
-import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.buildCborMap
 import org.multipaz.certext.GoogleAccount
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.certext.toCbor
 import org.multipaz.compose.presentment.CredentialPresentmentModalBottomSheet
 import org.multipaz.credential.SecureAreaBoundCredential
-import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X500Name
-import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X509Extension
 import org.multipaz.crypto.buildX509Cert
@@ -60,10 +55,9 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.mdoc.util.MdocUtil
-import org.multipaz.mdoc.util.toMdocRequest
 import org.multipaz.models.openid.dcql.DcqlQuery
+import org.multipaz.models.openid.dcql.DcqlResponse
 import org.multipaz.models.presentment.SimplePresentmentSource
-import org.multipaz.request.MdocRequest
 import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
@@ -218,19 +212,19 @@ fun ConsentPromptScreen(
         val storage = EphemeralStorage()
         val secureArea = SoftwareSecureArea.create(storage)
         documentStore = buildDocumentStore(storage, secureAreaRepository) {}
-        val dsKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val dsPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val validFrom = Clock.System.now()
         val validUntil = Clock.System.now() + 10.days
         val dsCert = buildX509Cert(
-            publicKey = dsKey.publicKey,
-            signingKey = dsKey,
-            signatureAlgorithm = dsKey.curve.defaultSigningAlgorithmFullySpecified,
+            publicKey = dsPrivateKey.publicKey,
+            signingKey = SigningKey.anonymous(dsPrivateKey),
             serialNumber = ASN1Integer.fromRandom(numBits = 128),
             subject = X500Name.fromName("CN=Test"),
             issuer = X500Name.fromName("CN=Test"),
             validFrom = validFrom,
             validUntil = validUntil,
         ) {}
+        val dsKey = SigningKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert)), dsPrivateKey)
         DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
             document = documentStore!!.createDocument(
                 displayName = "Erika's Driving License",
@@ -240,7 +234,6 @@ fun ConsentPromptScreen(
             secureArea = secureArea,
             createKeySettings = CreateKeySettings(),
             dsKey = dsKey,
-            dsCertChain = X509CertChain(listOf(dsCert)),
             signedAt = validFrom,
             validFrom = validFrom,
             validUntil = validUntil,
@@ -256,7 +249,6 @@ fun ConsentPromptScreen(
             secureArea = secureArea,
             createKeySettings = CreateKeySettings(),
             dsKey = dsKey,
-            dsCertChain = X509CertChain(listOf(dsCert)),
             signedAt = validFrom,
             validFrom = validFrom,
             validUntil = validUntil,
@@ -272,7 +264,6 @@ fun ConsentPromptScreen(
             secureArea = secureArea,
             createKeySettings = CreateKeySettings(),
             dsKey = dsKey,
-            dsCertChain = X509CertChain(listOf(dsCert)),
             signedAt = validFrom,
             validFrom = validFrom,
             validUntil = validUntil,
@@ -286,10 +277,80 @@ fun ConsentPromptScreen(
             validFrom = validFrom,
             validUntil = validUntil,
             dsKey = dsKey,
-            dsCert = dsCert
         )
     }
 
+
+    if (showCredentialPresentmentBottomSheetState.isVisible) {
+        val queryResult = mutableStateOf<QueryResult?>(null)
+        LaunchedEffect(useCase, certChain, origin, appId) {
+            queryResult.value = getQueryResult(
+                useCase = useCase,
+                certChain = certChain,
+                origin = origin,
+                appId = appId,
+                utopiaBreweryIcon = utopiaBreweryIcon,
+                identityReaderIcon = identityReaderIcon,
+                documentStore = documentStore,
+                documentTypeRepository = documentTypeRepository
+            )
+        }
+        val result = queryResult.value
+        if (result != null) {
+            CredentialPresentmentModalBottomSheet(
+                sheetState = showCredentialPresentmentBottomSheetState,
+                requester = result.requester,
+                trustPoint = result.trustPoint,
+                credentialPresentmentData = result.dcqlResponse,
+                preselectedDocuments = emptyList(),
+                imageLoader = imageLoader,
+                dynamicMetadataResolver = { requester ->
+                    requester.certChain?.certificates?.first()
+                        ?.getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid)?.let {
+                            MultipazExtension.fromCbor(it).googleAccount?.let {
+                                TrustMetadata(
+                                    displayName = it.emailAddress,
+                                    displayIconUrl = it.profilePictureUri,
+                                    disclaimer = "The email and picture shown are from the requester's Google Account. " +
+                                            "This information has been verified but may not be their real identity"
+                                )
+                            }
+                        }
+                },
+                appName = platformAppName,
+                appIconPainter = painterResource(platformAppIcon),
+                onConfirm = { selection ->
+                    coroutineScope.launch {
+                        showCredentialPresentmentBottomSheetState.hide()
+                    }
+                },
+                onCancel = {
+                    coroutineScope.launch {
+                        showCredentialPresentmentBottomSheetState.hide()
+                    }
+                },
+                showCancelAsBack = showCancelAsBack
+            )
+        }
+    }
+}
+
+private data class QueryResult(
+    val requester: Requester,
+    val trustPoint: TrustPoint?,
+    val dcqlResponse: DcqlResponse
+)
+
+private suspend fun getQueryResult(
+    useCase: UseCase,
+    certChain: CertChain,
+    origin: Origin,
+    appId: AppId,
+    utopiaBreweryIcon: ByteString,
+    identityReaderIcon: ByteString,
+    documentStore: DocumentStore?,
+    documentTypeRepository: DocumentTypeRepository
+): QueryResult {
     val dcql = when (useCase) {
         UseCase.MDL_AGE_OVER_21_AND_PORTRAIT ->
             DrivingLicense.getDocumentType().cannedRequests.find { it.id == "age_over_21_and_portrait" }!!.toDcql()
@@ -386,66 +447,29 @@ fun ConsentPromptScreen(
             """.trimIndent()
         ).jsonObject
     }
-
-    if (showCredentialPresentmentBottomSheetState.isVisible) {
-        val (requester, trustPoint) = calculateRequester(
-            certChain = certChain,
-            origin = origin,
-            appId = appId,
-            utopiaBreweryIcon = utopiaBreweryIcon,
-            identityReaderIcon = identityReaderIcon
-        )
-        val readerTrustManager = TrustManagerLocal(
-            storage = EphemeralStorage()
-        )
-        val presentmentSource = SimplePresentmentSource(
-            documentStore = documentStore!!,
-            documentTypeRepository = documentTypeRepository,
-            readerTrustManager = readerTrustManager,
-            domainMdocSignature = "mdoc",
-            domainKeyBoundSdJwt = "sdjwt"
-        )
-        val dcqlQuery = DcqlQuery.fromJson(dcql = dcql)
-        val dcqlResponse = runBlocking { dcqlQuery.execute(presentmentSource = presentmentSource) }
-
-        CredentialPresentmentModalBottomSheet(
-            sheetState = showCredentialPresentmentBottomSheetState,
-            requester = requester,
-            trustPoint = trustPoint,
-            credentialPresentmentData = dcqlResponse,
-            preselectedDocuments = emptyList(),
-            imageLoader = imageLoader,
-            dynamicMetadataResolver = { requester ->
-                requester.certChain?.certificates?.first()
-                    ?.getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid)?.let {
-                    MultipazExtension.fromCbor(it).googleAccount?.let {
-                        TrustMetadata(
-                            displayName = it.emailAddress,
-                            displayIconUrl = it.profilePictureUri,
-                            disclaimer = "The email and picture shown are from the requester's Google Account. " +
-                                    "This information has been verified but may not be their real identity"
-                        )
-                    }
-                }
-            },
-            appName = platformAppName,
-            appIconPainter = painterResource(platformAppIcon),
-            onConfirm = { selection ->
-                coroutineScope.launch {
-                    showCredentialPresentmentBottomSheetState.hide()
-                }
-            },
-            onCancel = {
-                coroutineScope.launch {
-                    showCredentialPresentmentBottomSheetState.hide()
-                }
-            },
-            showCancelAsBack = showCancelAsBack
-        )
-    }
+    val (requester, trustPoint) = calculateRequester(
+        certChain = certChain,
+        origin = origin,
+        appId = appId,
+        utopiaBreweryIcon = utopiaBreweryIcon,
+        identityReaderIcon = identityReaderIcon
+    )
+    val readerTrustManager = TrustManagerLocal(
+        storage = EphemeralStorage()
+    )
+    val presentmentSource = SimplePresentmentSource(
+        documentStore = documentStore!!,
+        documentTypeRepository = documentTypeRepository,
+        readerTrustManager = readerTrustManager,
+        domainMdocSignature = "mdoc",
+        domainKeyBoundSdJwt = "sdjwt"
+    )
+    val dcqlQuery = DcqlQuery.fromJson(dcql = dcql)
+    val dcqlResponse = dcqlQuery.execute(presentmentSource = presentmentSource)
+    return QueryResult(requester, trustPoint, dcqlResponse)
 }
 
-private fun calculateRequester(
+private suspend fun calculateRequester(
     certChain: CertChain,
     origin: Origin,
     appId: AppId,
@@ -455,19 +479,23 @@ private fun calculateRequester(
     val now = Clock.System.now()
     val validFrom = now - 1.days
     val validUntil = now + 1.days
+    // TODO: should it be in SecureArea?
     val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P256)
     val readerRootCert = MdocUtil.generateReaderRootCertificate(
-        readerRootKey = readerRootKey,
+        readerRootKey = SigningKey.anonymous(readerRootKey),
         subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST Reader Root"),
         serial = ASN1Integer.fromRandom(128),
         validFrom = validFrom,
         validUntil = validUntil,
         crlUrl = "https://verifier.multipaz.org/crl"
     )
+    val readerRootSigningKey = SigningKey.X509CertifiedExplicit(
+        certChain = X509CertChain(listOf(readerRootCert)),
+        privateKey = readerRootKey
+    )
     val readerKey = Crypto.createEcPrivateKey(EcCurve.P256)
     val readerCertWithoutGoogleAccount = MdocUtil.generateReaderCertificate(
-        readerRootCert = readerRootCert,
-        readerRootKey = readerRootKey,
+        readerRootKey = readerRootSigningKey,
         readerKey =readerKey.publicKey,
         subject = X500Name.fromName("CN=Multipaz Reader Single-Use key"),
         serial = ASN1Integer.fromRandom(128),
@@ -475,9 +503,8 @@ private fun calculateRequester(
         validUntil = validUntil
     )
     val readerCertWithGoogleAccount = MdocUtil.generateReaderCertificate(
-        readerRootCert = readerRootCert,
-        readerRootKey = readerRootKey,
-        readerKey =readerKey.publicKey,
+        readerRootKey = readerRootSigningKey,
+        readerKey = readerKey.publicKey,
         subject = X500Name.fromName("CN=Multipaz Reader Single-Use key"),
         serial = ASN1Integer.fromRandom(128),
         validFrom = validFrom,
@@ -629,8 +656,7 @@ private suspend fun addCredentialsForOpenID4VPComplexExample(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: EcPrivateKey,
-    dsCert: X509Cert,
+    dsKey: SigningKey,
 ) {
     addCredPid(
         documentStore = documentStore,
@@ -639,7 +665,6 @@ private suspend fun addCredentialsForOpenID4VPComplexExample(
         validFrom = validFrom,
         validUntil = validUntil,
         dsKey = dsKey,
-        dsCert = dsCert,
     )
     addCredPidMax(
         documentStore = documentStore,
@@ -648,7 +673,6 @@ private suspend fun addCredentialsForOpenID4VPComplexExample(
         validFrom = validFrom,
         validUntil = validUntil,
         dsKey = dsKey,
-        dsCert = dsCert,
     )
     addCredOtherPid(
         documentStore = documentStore,
@@ -657,7 +681,6 @@ private suspend fun addCredentialsForOpenID4VPComplexExample(
         validFrom = validFrom,
         validUntil = validUntil,
         dsKey = dsKey,
-        dsCert = dsCert,
     )
     addCredPidReduced1(
         documentStore = documentStore,
@@ -666,7 +689,6 @@ private suspend fun addCredentialsForOpenID4VPComplexExample(
         validFrom = validFrom,
         validUntil = validUntil,
         dsKey = dsKey,
-        dsCert = dsCert,
     )
     addCredPidReduced2(
         documentStore = documentStore,
@@ -675,7 +697,6 @@ private suspend fun addCredentialsForOpenID4VPComplexExample(
         validFrom = validFrom,
         validUntil = validUntil,
         dsKey = dsKey,
-        dsCert = dsCert,
     )
     addCredCompanyRewards(
         documentStore = documentStore,
@@ -684,7 +705,6 @@ private suspend fun addCredentialsForOpenID4VPComplexExample(
         validFrom = validFrom,
         validUntil = validUntil,
         dsKey = dsKey,
-        dsCert = dsCert,
     )
 }
 
@@ -694,8 +714,7 @@ private suspend fun addCredPid(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: EcPrivateKey,
-    dsCert: X509Cert,
+    dsKey: SigningKey,
 ) {
     documentStore.provisionSdJwtVc(
         displayName = "my-pid",
@@ -712,7 +731,6 @@ private suspend fun addCredPid(
         validFrom = validFrom,
         validUntil = validUntil,
         dsKey = dsKey,
-        dsCert = dsCert,
     )
 }
 
@@ -722,8 +740,7 @@ private suspend fun addCredPidMax(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: EcPrivateKey,
-    dsCert: X509Cert,
+    dsKey: SigningKey,
 ) {
     documentStore.provisionSdJwtVc(
         displayName = "my-pid-max",
@@ -740,7 +757,6 @@ private suspend fun addCredPidMax(
         validFrom = validFrom,
         validUntil = validUntil,
         dsKey = dsKey,
-        dsCert = dsCert,
     )
 }
 
@@ -750,8 +766,7 @@ private suspend fun addCredOtherPid(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: EcPrivateKey,
-    dsCert: X509Cert,
+    dsKey: SigningKey,
 ) {
     documentStore.provisionSdJwtVc(
         displayName = "my-other-pid",
@@ -768,7 +783,6 @@ private suspend fun addCredOtherPid(
         validFrom = validFrom,
         validUntil = validUntil,
         dsKey = dsKey,
-        dsCert = dsCert,
     )
 }
 
@@ -778,8 +792,7 @@ private suspend fun addCredPidReduced1(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: EcPrivateKey,
-    dsCert: X509Cert,
+    dsKey: SigningKey,
 ) {
     documentStore.provisionSdJwtVc(
         displayName = "my-pid-reduced1",
@@ -793,7 +806,6 @@ private suspend fun addCredPidReduced1(
         validFrom = validFrom,
         validUntil = validUntil,
         dsKey = dsKey,
-        dsCert = dsCert,
     )
 }
 
@@ -803,8 +815,7 @@ private suspend fun addCredPidReduced2(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: EcPrivateKey,
-    dsCert: X509Cert,
+    dsKey: SigningKey,
 ) {
     documentStore.provisionSdJwtVc(
         displayName = "my-pid-reduced2",
@@ -819,7 +830,6 @@ private suspend fun addCredPidReduced2(
         validFrom = validFrom,
         validUntil = validUntil,
         dsKey = dsKey,
-        dsCert = dsCert,
     )
 }
 
@@ -829,8 +839,7 @@ private suspend fun addCredCompanyRewards(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: EcPrivateKey,
-    dsCert: X509Cert,
+    dsKey: SigningKey,
 ) {
     documentStore.provisionSdJwtVc(
         displayName = "my-reward-card",
@@ -843,7 +852,6 @@ private suspend fun addCredCompanyRewards(
         validFrom = validFrom,
         validUntil = validUntil,
         dsKey = dsKey,
-        dsCert = dsCert,
     )
 }
 
@@ -855,8 +863,7 @@ private suspend fun DocumentStore.provisionSdJwtVc(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: EcPrivateKey,
-    dsCert: X509Cert,
+    dsKey: SigningKey,
 ): Document {
     val document = createDocument(
         displayName = displayName,
@@ -879,8 +886,6 @@ private suspend fun DocumentStore.provisionSdJwtVc(
 
     val sdJwt = SdJwt.create(
         issuerKey = dsKey,
-        issuerAlgorithm = dsKey.curve.defaultSigningAlgorithmFullySpecified,
-        issuerCertChain = X509CertChain(listOf(dsCert)),
         kbKey = (credential as? SecureAreaBoundCredential)?.let { it.secureArea.getKeyInfo(it.alias).publicKey },
         claims = identityAttributes,
         nonSdClaims = buildJsonObject {

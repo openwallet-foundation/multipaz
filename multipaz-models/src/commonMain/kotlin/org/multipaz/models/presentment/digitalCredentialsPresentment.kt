@@ -26,7 +26,6 @@ import org.multipaz.mdoc.mso.MobileSecurityObjectParser
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.response.DeviceResponseGenerator
 import org.multipaz.mdoc.response.DocumentGenerator
-import org.multipaz.mdoc.util.toMdocRequest
 import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.models.openid.OpenID4VP

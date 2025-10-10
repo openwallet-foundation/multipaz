@@ -30,9 +30,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X500Name
-import org.multipaz.crypto.X509Cert
 import org.multipaz.document.DocumentStore
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.secure_area_test_app.ui.CsaConnectDialog
@@ -57,6 +55,8 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.JsonWebSignature
+import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.X509CertChain
 import org.multipaz.testapp.platformHttpClientEngineFactory
 import org.multipaz.util.Platform
 import kotlin.time.Duration
@@ -84,8 +84,7 @@ fun DocumentStoreScreen(
     documentModel: DocumentModel,
     softwareSecureArea: SoftwareSecureArea,
     settingsModel: TestAppSettingsModel,
-    iacaKey: EcPrivateKey,
-    iacaCert: X509Cert,
+    iacaKey: SigningKey.X509Certified,
     showToast: (message: String) -> Unit,
     onViewDocument: (documentId: String) -> Unit,
 ) {
@@ -165,7 +164,7 @@ fun DocumentStoreScreen(
                             constraints
                         ) { true }
                         showToast("Registered with CSA")
-                        val (dsKey, dsCert) = generateDsKeyAndCert(documentSigningAlgorithm.value, iacaKey, iacaCert)
+                        val dsKey = generateDsKeyAndCert(documentSigningAlgorithm.value, iacaKey)
                         provisionTestDocuments(
                             documentCreationMode = documentCreationMode.value,
                             showProvisioningResult = showProvisioningResult,
@@ -184,7 +183,6 @@ fun DocumentStoreScreen(
                                     .build()
                             },
                             dsKey = dsKey,
-                            dsCert = dsCert,
                             showToast = showToast,
                             deviceKeyAlgorithm = deviceKeyAlgorithm.value,
                             deviceKeyMacAlgorithm = deviceKeyMacAlgorithm.value,
@@ -224,7 +222,7 @@ fun DocumentStoreScreen(
                                 "Unset DeviceKey MAC Algorithm or try another Secure Area.")
                         return@launch
                     }
-                    val (dsKey, dsCert) = generateDsKeyAndCert(documentSigningAlgorithm.value, iacaKey, iacaCert)
+                    val dsKey = generateDsKeyAndCert(documentSigningAlgorithm.value, iacaKey)
                     provisionTestDocuments(
                         documentCreationMode = DocumentCreationMode.NORMAL,
                         showProvisioningResult = showProvisioningResult,
@@ -242,7 +240,6 @@ fun DocumentStoreScreen(
                             )
                         },
                         dsKey = dsKey,
-                        dsCert = dsCert,
                         showToast = showToast,
                         deviceKeyAlgorithm = deviceKeyAlgorithm.value,
                         deviceKeyMacAlgorithm = deviceKeyMacAlgorithm.value,
@@ -257,7 +254,7 @@ fun DocumentStoreScreen(
         item {
             TextButton(onClick = {
                 coroutineScope.launch {
-                    val (dsKey, dsCert) = generateDsKeyAndCert(documentSigningAlgorithm.value, iacaKey, iacaCert)
+                    val dsKey = generateDsKeyAndCert(documentSigningAlgorithm.value, iacaKey)
                     provisionTestDocuments(
                         documentCreationMode = DocumentCreationMode.NORMAL,
                         showProvisioningResult = showProvisioningResult,
@@ -271,7 +268,6 @@ fun DocumentStoreScreen(
                                 .build()
                         },
                         dsKey = dsKey,
-                        dsCert = dsCert,
                         showToast = showToast,
                         deviceKeyAlgorithm = deviceKeyAlgorithm.value,
                         deviceKeyMacAlgorithm = deviceKeyMacAlgorithm.value,
@@ -310,7 +306,7 @@ fun DocumentStoreScreen(
         item {
             TextButton(onClick = {
                 coroutineScope.launch {
-                    val (dsKey, dsCert) = generateDsKeyAndCert(documentSigningAlgorithm.value, iacaKey, iacaCert)
+                    val dsKey = generateDsKeyAndCert(documentSigningAlgorithm.value, iacaKey)
                     provisionTestDocuments(
                         documentCreationMode = DocumentCreationMode.DCQL_TEST_DOCUMENTS,
                         showProvisioningResult = showProvisioningResult,
@@ -328,7 +324,6 @@ fun DocumentStoreScreen(
                             )
                         },
                         dsKey = dsKey,
-                        dsCert = dsCert,
                         showToast = showToast,
                         deviceKeyAlgorithm = deviceKeyAlgorithm.value,
                         deviceKeyMacAlgorithm = deviceKeyMacAlgorithm.value,
@@ -436,11 +431,10 @@ fun DocumentStoreScreen(
     }
 }
 
-private fun generateDsKeyAndCert(
+private suspend fun generateDsKeyAndCert(
     algorithm: Algorithm,
-    iacaKey: EcPrivateKey,
-    iacaCert: X509Cert,
-): Pair<EcPrivateKey, X509Cert> {
+    iacaKey: SigningKey.X509Certified
+): SigningKey.X509Certified {
     // The DS cert must not be valid for more than 457 days.
     //
     // Reference: ISO/IEC 18013-5:2021 Annex B.1.4 Document signer certificate
@@ -449,7 +443,6 @@ private fun generateDsKeyAndCert(
     val dsCertsValidUntil = dsCertValidFrom + 455.days
     val dsKey = Crypto.createEcPrivateKey(algorithm.curve!!)
     val dsCert = MdocUtil.generateDsCertificate(
-        iacaCert = iacaCert,
         iacaKey = iacaKey,
         dsKey = dsKey.publicKey,
         subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST DS"),
@@ -457,7 +450,8 @@ private fun generateDsKeyAndCert(
         validFrom = dsCertValidFrom,
         validUntil = dsCertsValidUntil,
     )
-    return Pair(dsKey, dsCert)
+    // TODO: should we keep the whole chain here (from iacaKey?)
+    return SigningKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert)), dsKey)
 }
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -473,8 +467,7 @@ private suspend fun provisionTestDocuments(
         validFrom: Instant,
         validUntil: Instant
     ) -> CreateKeySettings,
-    dsKey: EcPrivateKey,
-    dsCert: X509Cert,
+    dsKey: SigningKey.X509Certified,
     deviceKeyAlgorithm: Algorithm,
     deviceKeyMacAlgorithm: Algorithm,
     numCredentialsPerDomain: Int,
@@ -510,7 +503,6 @@ private suspend fun provisionTestDocuments(
             secureArea,
             secureAreaCreateKeySettingsFunc,
             dsKey,
-            dsCert,
             deviceKeyAlgorithm,
             deviceKeyMacAlgorithm,
             numCredentialsPerDomain

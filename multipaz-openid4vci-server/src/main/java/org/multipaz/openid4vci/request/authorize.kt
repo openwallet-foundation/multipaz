@@ -14,19 +14,18 @@ import io.ktor.server.request.receiveParameters
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.utils.io.CancellationException
-import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.SigningKey
 import org.multipaz.document.NameSpacedData
 import org.multipaz.documenttype.knowntypes.EUPersonalID
+import org.multipaz.jwt.buildJwt
 import org.multipaz.models.verifier.Openid4VpVerifierModel
 import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.openid4vci.util.AUTHZ_REQ
@@ -42,11 +41,11 @@ import org.multipaz.openid4vci.util.getReaderIdentity
 import org.multipaz.openid4vci.util.getSystemOfRecordUrl
 import org.multipaz.openid4vci.util.idToCode
 import org.multipaz.openid4vci.util.parseTxKind
-import org.multipaz.provisioning.SecretCodeRequest
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
 import org.multipaz.rpc.cache
 import org.multipaz.rpc.handler.InvalidRequestException
+import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
 import java.lang.IllegalArgumentException
@@ -101,8 +100,7 @@ suspend fun authorizeGet(call: ApplicationCall) {
 }
 
 internal data class RecordsClient(
-    val privateKey: EcPrivateKey,
-    val clientId: String
+    val signingKey: SigningKey
 )
 
 private suspend fun authorizeUsingSystemOfRecord(
@@ -110,15 +108,14 @@ private suspend fun authorizeUsingSystemOfRecord(
     systemOfRecordUrl: String,
     call: ApplicationCall
 ) {
+    val secureAreaRepository = BackendEnvironment.getInterface(SecureAreaRepository::class)
     val recordsClient = BackendEnvironment.cache(RecordsClient::class) { config, _ ->
         val jwkText = config.getValue("system_of_record_jwk")
             ?: throw IllegalArgumentException(
                 "config error: 'system_of_record_jwk' parameter must be specified"
             )
-        val jwk = Json.parseToJsonElement(jwkText).jsonObject
         RecordsClient(
-            privateKey = EcPrivateKey.fromJwk(jwk),
-            clientId = jwk["kid"]!!.jsonPrimitive.content
+            signingKey = SigningKey.parse(jwkText, secureAreaRepository)
         )
     }
     val state = IssuanceState.getIssuanceState(id)
@@ -130,8 +127,7 @@ private suspend fun authorizeUsingSystemOfRecord(
     ).toBase64Url()
     val redirectUrl = BackendEnvironment.getBaseUrl() + "/finish_authorization"
     val clientAssertion = createJwtClientAssertion(
-        recordsClient.privateKey,
-        recordsClient.clientId,
+        recordsClient.signingKey,
         systemOfRecordUrl
     )
     val req = buildMap {
@@ -142,7 +138,7 @@ private suspend fun authorizeUsingSystemOfRecord(
         put("code_challenge_method", "S256")
         put("redirect_uri", redirectUrl)
         put("code_challenge", codeChallenge)
-        put("client_id", recordsClient.clientId)
+        put("client_id", recordsClient.signingKey.subject)
         put("state", idToCode(OpaqueIdType.RECORDS_STATE, id, 10.minutes))
     }
     val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
@@ -165,45 +161,25 @@ private suspend fun authorizeUsingSystemOfRecord(
     call.respondRedirect(buildString {
         append(systemOfRecordUrl)
         append("/authorize?clientId=")
-        append(recordsClient.clientId)
+        append(recordsClient.signingKey.subject)
         append("&request_uri=")
         append(requestUri.encodeURLParameter())
     })
 }
 
-private fun createJwtClientAssertion(
-    privateKey: EcPrivateKey,
-    clientId: String,
+private suspend fun createJwtClientAssertion(
+    key: SigningKey,
     aud: String
-): String {
-    val alg = privateKey.curve.defaultSigningAlgorithmFullySpecified.joseAlgorithmIdentifier
-    val head = buildJsonObject {
-        put("typ", "JWT")
-        put("alg", alg)
-        put("kid", clientId)
-    }.toString().encodeToByteArray().toBase64Url()
-
-    val now = Clock.System.now()
-    val expiration = now + 5.minutes
-    val payload = buildJsonObject {
+): String = buildJwt(
+        type = "JWT",
+        key = key,
+        expiresIn = 5.minutes
+    ) {
         put("jti", Random.Default.nextBytes(18).toBase64Url())
-        put("iss", clientId)
-        put("sub", clientId) // RFC 7523 Section 3, item 2.B
-        put("exp", expiration.epochSeconds)
-        put("iat", now.epochSeconds)
+        put("iss", key.subject)
+        put("sub", key.subject) // RFC 7523 Section 3, item 2.B
         put("aud", aud)
-    }.toString().encodeToByteArray().toBase64Url()
-
-    val message = "$head.$payload"
-    val sig = Crypto.sign(
-        key = privateKey,
-        signatureAlgorithm = privateKey.curve.defaultSigningAlgorithm,
-        message = message.encodeToByteArray()
-    )
-    val signature = sig.toCoseEncoded().toBase64Url()
-
-    return "$message.$signature"
-}
+    }
 
 private suspend fun getHtml(id: String, call: ApplicationCall) {
     val resources = BackendEnvironment.getInterface(Resources::class)!!

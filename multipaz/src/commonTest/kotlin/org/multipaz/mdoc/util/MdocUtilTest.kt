@@ -15,6 +15,7 @@
  */
 package org.multipaz.mdoc.util
 
+import kotlinx.coroutines.test.runTest
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.OID
@@ -39,6 +40,8 @@ import org.multipaz.util.toHex
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.X509CertChain
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -302,10 +305,10 @@ class MdocUtilTest {
 
     // Checks the correct extensions are present and that they are formatted correctly.
     @Test
-    fun testGenerateIacaCertificate() {
+    fun testGenerateIacaCertificate() = runTest {
         val iacaKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val iacaCert = MdocUtil.generateIacaCertificate(
-            iacaKey = iacaKey,
+            iacaKey = SigningKey.anonymous(iacaKey),
             subject = X500Name.fromName("CN=TEST IACA Certificate,C=XG-US,ST=MA"),
             serial = ASN1Integer(1),
             validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
@@ -351,10 +354,10 @@ class MdocUtilTest {
     }
 
     @Test
-    fun testGenerateDsCertificate() {
+    fun testGenerateDsCertificate() = runTest {
         val iacaKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val iacaCert = MdocUtil.generateIacaCertificate(
-            iacaKey = iacaKey,
+            iacaKey = SigningKey.anonymous(iacaKey),
             subject = X500Name.fromName("CN=TEST IACA Certificate,C=XG-US,ST=MA"),
             serial = ASN1Integer(1),
             validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
@@ -364,8 +367,10 @@ class MdocUtilTest {
         )
         val dsKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val dsCert = MdocUtil.generateDsCertificate(
-            iacaCert = iacaCert,
-            iacaKey = iacaKey,
+            iacaKey = SigningKey.X509CertifiedExplicit(
+                privateKey = iacaKey,
+                certChain = X509CertChain(listOf(iacaCert))
+            ),
             dsKey = dsKey.publicKey,
             subject = X500Name.fromName("CN=TEST DS Certificate,C=XG-US,ST=MA"),
             serial = ASN1Integer(1),
@@ -397,10 +402,10 @@ class MdocUtilTest {
     }
 
     @Test
-    fun testGenerateReaderAuthCertificate() {
+    fun testGenerateReaderAuthCertificate() = runTest {
         val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val rootCert = MdocUtil.generateReaderRootCertificate(
-            readerRootKey = readerRootKey,
+            readerRootKey = SigningKey.anonymous(readerRootKey),
             subject = X500Name.fromName("CN=TEST Reader Root,C=XG-US,ST=MA"),
             serial = ASN1Integer(1),
             validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
@@ -409,8 +414,10 @@ class MdocUtilTest {
         )
         val readerKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val readerCert = MdocUtil.generateReaderCertificate(
-            readerRootCert = rootCert,
-            readerRootKey = readerRootKey,
+            readerRootKey = SigningKey.X509CertifiedExplicit(
+                privateKey = readerRootKey,
+                certChain = X509CertChain(listOf(rootCert))
+            ),
             readerKey = readerKey.publicKey,
             subject = X500Name.fromName("CN=TEST Reader Certificate,C=XG-US,ST=MA"),
             serial = ASN1Integer(1),

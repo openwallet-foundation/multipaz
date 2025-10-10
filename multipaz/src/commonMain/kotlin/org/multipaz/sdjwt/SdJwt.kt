@@ -14,20 +14,21 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.SignatureVerificationException
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X509CertChain
-import org.multipaz.securearea.KeyUnlockData
-import org.multipaz.securearea.SecureArea
+import org.multipaz.jwt.buildJwt
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import kotlin.random.Random
+import kotlin.time.Duration
 
 private const val TAG = "SdJwt"
 
@@ -286,78 +287,33 @@ class SdJwt(
     }
 
     /**
-     * Presents an SD-JWT to a verifier.
+     * Presents an SD-JWT to a verifier, using SD-JWT's associated signing key.
      *
      * This generates a SD-JWT+KB from the SD-JWT by simply appending a Key-Binding JWT.
      *
-     * @param kbKey the private part of key corresponding to `cnf` claim in the body of the Issuer-signed JWT.
-     * @param kbAlgorithm the algorithm to use for signing, e.g. [Algorithm.ESP256].
-     * @param nonce the nonce, obtained from the verifier.
-     * @param audience the audience, obtained from the verifier.
-     * @param creationTime the time the presentation was made.
-     * @return a [SdJwtKb].
-     */
-    fun present(
-        kbKey: EcPrivateKey,
-        kbAlgorithm: Algorithm,
-        nonce: String,
-        audience: String,
-        creationTime: Instant = Clock.System.now()
-    ): SdJwtKb {
-        require(kbKey.publicKey == this.kbKey) { "Public part of signing key does not match key in `cnf` claim" }
-        val kbBody = buildJsonObject {
-            put("nonce", JsonPrimitive(nonce))
-            put("aud", JsonPrimitive(audience))
-            put("iat", JsonPrimitive(creationTime.epochSeconds))
-            put("sd_hash", JsonPrimitive(Crypto.digest(digestAlg, compactSerialization.encodeToByteArray()).toBase64Url()))
-        }
-        val kbJwt = JsonWebSignature.sign(
-            key = kbKey,
-            signatureAlgorithm = kbAlgorithm,
-            claimsSet = kbBody,
-            type = "kb+jwt",
-            x5c = null
-        )
-        return SdJwtKb(compactSerialization + kbJwt)
-    }
-
-    /**
-     * Presents an SD-JWT to a verifier, using a key in a [SecureArea].
-     *
-     * This generates a SD-JWT+KB from the SD-JWT by simply appending a Key-Binding JWT.
-     *
-     * @param kbSecureArea the [SecureArea] for the key-binding key.
-     * @param kbAlias the alias for the key-binding key.
-     * @param kbKeyUnlockData the [KeyUnlockData] to use or `null`.
+     * @param signingKey private key associated with this SD-JWT.
      * @param nonce the nonce, obtained from the verifier.
      * @param audience the audience, obtained from the verifier.
      * @param creationTime the time the presentation was made.
      */
     suspend fun present(
-        kbSecureArea: SecureArea,
-        kbAlias: String,
-        kbKeyUnlockData: KeyUnlockData?,
+        signingKey: SigningKey,
         nonce: String,
         audience: String,
         creationTime: Instant = Clock.System.now()
     ): SdJwtKb {
-        require(kbSecureArea.getKeyInfo(kbAlias).publicKey == this.kbKey) {
+        require(signingKey.publicKey == this.kbKey) {
             "Public part of signing key does not match key in `cnf` claim"
         }
-        val kbBody = buildJsonObject {
-            put("nonce", JsonPrimitive(nonce))
-            put("aud", JsonPrimitive(audience))
-            put("iat", JsonPrimitive(creationTime.epochSeconds))
-            put("sd_hash", JsonPrimitive(Crypto.digest(digestAlg, compactSerialization.encodeToByteArray()).toBase64Url()))
-        }
-        val kbJwt = JsonWebSignature.sign(
-            secureArea = kbSecureArea,
-            alias = kbAlias,
-            keyUnlockData = kbKeyUnlockData,
-            claimsSet = kbBody,
+        val kbJwt = buildJwt(
             type = "kb+jwt",
-            x5c = null
-        )
+            key = signingKey,
+            creationTime = creationTime
+        ) {
+            put("nonce", nonce)
+            put("aud", audience)
+            put("sd_hash", Crypto.digest(digestAlg, compactSerialization.encodeToByteArray()).toBase64Url())
+        }
         return SdJwtKb(compactSerialization + kbJwt)
     }
 
@@ -381,16 +337,16 @@ class SdJwt(
          * @param random the [Random] to use to generate salts.
          * @param saltSizeNumBits number of bits to use for each salt.
          */
-        fun create(
-            issuerKey: EcPrivateKey,
-            issuerAlgorithm: Algorithm,
-            issuerCertChain: X509CertChain?,
+        suspend fun create(
+            issuerKey: SigningKey,
             kbKey: EcPublicKey?,
             claims: JsonObject,
             nonSdClaims: JsonObject,
             digestAlgorithm: Algorithm = Algorithm.SHA256,
             random: Random = Random.Default,
-            saltSizeNumBits: Int = 128
+            saltSizeNumBits: Int = 128,
+            creationTime: Instant = Instant.DISTANT_PAST,  // TODO: switch to System.Clock.now()?
+            expiresIn: Duration? = null
         ): SdJwt {
             require(nonSdClaims["iss"] != null) { "Must include `iss` claim in nonSdClaims" }
 
@@ -398,7 +354,12 @@ class SdJwt(
 
             val disclosures = mutableListOf<JsonArray>()
 
-            val issuerSignedJwtBody = buildJsonObject {
+            val jwt = buildJwt(
+                type = "dc+sd-jwt",
+                key = issuerKey,
+                creationTime = creationTime,
+                expiresIn = expiresIn
+            ) {
                 for (claim in nonSdClaims) {
                     put(claim.key, claim.value)
                 }
@@ -433,15 +394,7 @@ class SdJwt(
                 }
             }
             val sb = StringBuilder()
-            sb.append(
-                JsonWebSignature.sign(
-                    key = issuerKey,
-                    signatureAlgorithm = issuerAlgorithm,
-                    claimsSet = issuerSignedJwtBody,
-                    type = "dc+sd-jwt",
-                    x5c = issuerCertChain
-                )
-            )
+            sb.append(jwt)
             sb.append('~')
             for (disclosure in disclosures) {
                 sb.append(disclosure.toString().encodeToByteArray().toBase64Url())

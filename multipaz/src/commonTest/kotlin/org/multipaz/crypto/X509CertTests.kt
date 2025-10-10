@@ -1,5 +1,6 @@
 package org.multipaz.crypto
 
+import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Integer
@@ -122,10 +123,10 @@ class X509CertTests {
     }
 
     // Checks that X509Cert.verify() works with certificates created by X509Cert.Builder
-    private fun testCertSignedWithCurve(curve: EcCurve) {
+    private fun testCertSignedWithCurve(curve: EcCurve) = runTest {
         if (!Crypto.supportedCurves.contains(curve)) {
             println("Skipping testCertSignedWithCurve($curve) since platform does not support the curve.")
-            return
+            return@runTest
         }
 
         val key = Crypto.createEcPrivateKey(curve)
@@ -135,8 +136,7 @@ class X509CertTests {
         val issuer = X500Name.fromName("CN=Foobar2")
         val cert = X509Cert.Builder(
             publicKey = key.publicKey,
-            signingKey = key,
-            signatureAlgorithm = key.curve.defaultSigningAlgorithm,
+            signingKey = SigningKey.anonymous(key, key.curve.defaultSigningAlgorithm),
             serialNumber = serialNumber,
             subject = subject,
             issuer = issuer,
@@ -236,7 +236,7 @@ class X509CertTests {
     }
 
     @Test
-    fun testExtensions() {
+    fun testExtensions() = runTest {
         val key = Crypto.createEcPrivateKey(EcCurve.P256)
         val now = Clock.System.now()
 
@@ -244,8 +244,7 @@ class X509CertTests {
 
         val cert = buildX509Cert(
             publicKey = key.publicKey,
-            signingKey = key,
-            signatureAlgorithm = key.curve.defaultSigningAlgorithmFullySpecified,
+            signingKey = SigningKey.anonymous(key, key.curve.defaultSigningAlgorithmFullySpecified),
             serialNumber = ASN1Integer(1L),
             subject = X500Name.fromName("CN=Foo"),
             issuer = X500Name.fromName("CN=Foo"),

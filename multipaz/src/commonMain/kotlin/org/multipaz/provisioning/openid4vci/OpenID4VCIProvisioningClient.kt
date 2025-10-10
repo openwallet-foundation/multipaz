@@ -31,6 +31,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.SigningKey
 import org.multipaz.provisioning.AuthorizationChallenge
 import org.multipaz.provisioning.AuthorizationException
 import org.multipaz.provisioning.AuthorizationResponse
@@ -41,7 +42,6 @@ import org.multipaz.provisioning.ProvisioningClient
 import org.multipaz.provisioning.ProvisioningMetadata
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.securearea.CreateKeySettings
-import org.multipaz.securearea.KeyInfo
 import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
@@ -272,11 +272,11 @@ internal class OpenID4VCIProvisioningClient(
                 null
             } else {
                 // If client assertion is not used, we always send wallet attestation.
-                val keyInfo = obtainWalletAttestation()
+                val key = obtainWalletAttestation()
                 val endpoint = Url(authorizationConfiguration.pushedAuthorizationRequestEndpoint)
                 OpenID4VCIUtil.createWalletAttestationPoP(
                     clientId = clientPreferences.clientId,
-                    keyInfo = keyInfo,
+                    key = key,
                     endpointUrl = endpoint,
                 )
             }
@@ -349,7 +349,7 @@ internal class OpenID4VCIProvisioningClient(
         return parsedResponse.string("request_uri")
     }
 
-    private suspend fun obtainWalletAttestation(): KeyInfo {
+    private suspend fun obtainWalletAttestation(): SigningKey {
         val secureArea = BackendEnvironment.getInterface(SecureAreaProvider::class)!!.get()
         val endpoint = Url(authorizationConfiguration.pushedAuthorizationRequestEndpoint)
         // https://datatracker.ietf.org/doc/html/draft-ietf-oauth-attestation-based-client-auth-01
@@ -367,7 +367,7 @@ internal class OpenID4VCIProvisioningClient(
         walletAttestationKeyAlias = keyInfo.alias
         val backend = BackendEnvironment.getInterface(OpenID4VCIBackend::class)!!
         walletAttestation = backend.createJwtWalletAttestation(keyInfo.attestation)
-        return keyInfo
+        return SigningKey.anonymous(secureArea, keyInfo.alias)
     }
 
     private suspend fun processOauthResponse(parameterizedRedirectUrl: String) {
@@ -417,17 +417,18 @@ internal class OpenID4VCIProvisioningClient(
             val walletAttestationPoP = if (authorizationConfiguration.useClientAssertion) {
                 null
             } else {
-                val keyInfo = if (walletAttestation == null) {
+                val key = if (walletAttestation == null) {
                     // For pre-authorized code case, this is where the session is initialized.
                     obtainWalletAttestation()
                 } else {
-                    val secureArea =
-                        BackendEnvironment.getInterface(SecureAreaProvider::class)!!.get()
-                    secureArea.getKeyInfo(walletAttestationKeyAlias!!)
+                    SigningKey.anonymous(
+                        secureArea = BackendEnvironment.getInterface(SecureAreaProvider::class)!!.get(),
+                        alias = walletAttestationKeyAlias!!
+                    )
                 }
                 OpenID4VCIUtil.createWalletAttestationPoP(
                     clientId = clientPreferences.clientId,
-                    keyInfo = keyInfo,
+                    key = key,
                     endpointUrl = Url(authorizationConfiguration.tokenEndpoint),
                 )
             }

@@ -1,5 +1,6 @@
 package org.multipaz.multipazctl
 
+import kotlinx.coroutines.runBlocking
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -12,10 +13,10 @@ import kotlinx.datetime.DateTimePeriod
 import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X509CertChain
 import java.io.File
 import java.nio.charset.StandardCharsets
@@ -87,15 +88,17 @@ object MultipazCtl {
 
         val serial = ASN1Integer.fromRandom(128)
 
-        val iacaCertificate = MdocUtil.generateIacaCertificate(
-            iacaKey,
-            subjectAndIssuer,
-            serial,
-            validFrom,
-            validUntil,
-            issuerAltNameUrl,
-            crlUrl
-        )
+        val iacaCertificate = runBlocking {
+            MdocUtil.generateIacaCertificate(
+                SigningKey.anonymous(iacaKey),
+                subjectAndIssuer,
+                serial,
+                validFrom,
+                validUntil,
+                issuerAltNameUrl,
+                crlUrl
+            )
+        }
 
         println("- Generated self-signed IACA cert and private key with curve $curve")
 
@@ -148,15 +151,16 @@ object MultipazCtl {
 
         val serial = ASN1Integer.fromRandom(128)
 
-        val dsCertificate = MdocUtil.generateDsCertificate(
-            iacaCert,
-            iacaPrivateKey,
-            dsKey.publicKey,
-            subject,
-            serial,
-            validFrom,
-            validUntil
-        )
+        val dsCertificate = runBlocking {
+            MdocUtil.generateDsCertificate(
+                SigningKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaPrivateKey),
+                dsKey.publicKey,
+                subject,
+                serial,
+                validFrom,
+                validUntil
+            )
+        }
 
         println("- Generated DS cert and private key with curve $curve")
 
@@ -201,15 +205,16 @@ object MultipazCtl {
 
         val readerRootKey = Crypto.createEcPrivateKey(curve)
 
-        val readerRootCertificate =
+        val readerRootCertificate = runBlocking {
             MdocUtil.generateReaderRootCertificate(
-                readerRootKey = readerRootKey,
+                readerRootKey = SigningKey.anonymous(readerRootKey),
                 subject = subjectAndIssuer,
                 serial = serial,
                 validFrom = validFrom,
                 validUntil = validUntil,
                 crlUrl = crlUrl
             )
+        }
 
         println("- Generated self-signed reader root cert and private key with curve $curve")
 
@@ -264,15 +269,19 @@ object MultipazCtl {
 
         val serial = ASN1Integer.fromRandom(128)
 
-        val readerCertificate = MdocUtil.generateReaderCertificate(
-            readerRootCert = readerRootCert,
-            readerRootKey = readerRootPrivateKey,
-            readerKey = readerKey.publicKey,
-            subject = subject,
-            serial = serial,
-            validFrom = validFrom,
-            validUntil = validUntil
-        )
+        val readerCertificate = runBlocking {
+            MdocUtil.generateReaderCertificate(
+                readerRootKey = SigningKey.X509CertifiedExplicit(
+                    certChain = X509CertChain(listOf(readerRootCert)),
+                    privateKey = readerRootPrivateKey
+                ),
+                readerKey = readerKey.publicKey,
+                subject = subject,
+                serial = serial,
+                validFrom = validFrom,
+                validUntil = validUntil
+            )
+        }
 
         println("- Generated Reader cert and private key with curve $curve")
 
