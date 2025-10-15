@@ -90,14 +90,15 @@ class X509Cert(
         ASN1.decode(encodedCertificate)!! as ASN1Sequence
     }
 
-    private val tbsCert: ASN1Sequence by lazy {
-        parsedCert.elements[0] as ASN1Sequence
+    private val tbsCert: NormalizedTbs by lazy {
+        NormalizedTbs.from(parsedCert.elements[0] as ASN1Sequence)
     }
 
     /**
      * The certificate version.
      *
-     * This returns the encoded value and for X.509 Version 3 Certificate this value is 2.
+     * This returns the encoded value and for X.509 Version 3 Certificate (the most common
+     * version in use) this value is 2.
      */
     val version: Int
         get() {
@@ -140,7 +141,7 @@ class X509Cert(
      * The bytes of TBSCertificate.
      */
     val tbsCertificate: ByteArray
-        get() = ASN1.encode(tbsCert)
+        get() = ASN1.encode(tbsCert.tbs)
 
     /**
      * The certificate signature.
@@ -562,12 +563,7 @@ class X509Cert(
             val validFromTruncated = Instant.fromEpochSeconds(validFrom.epochSeconds)
             val validUntilTruncated = Instant.fromEpochSeconds(validUntil.epochSeconds)
             val tbsCertObjs = mutableListOf(
-                ASN1TaggedObject(
-                    ASN1TagClass.CONTEXT_SPECIFIC,
-                    ASN1Encoding.CONSTRUCTED,
-                    0,
-                    ASN1.encode(ASN1Integer(2L))
-                ),
+                versionObject(2L),
                 serialNumber,
                 signatureAlgorithmSeq,
                 generateName(issuer),
@@ -656,6 +652,44 @@ class X509Cert(
         }
     }
 }
+
+/**
+ * View of the certificate structure without omitted default fields (specifically, version,
+ * which is often omitted for X.509 v1 certificates.
+ */
+private class NormalizedTbs private constructor(
+    /** Raw TBS sequence */
+    val tbs: ASN1Sequence,
+    /** TBS sequence with the default fields added */
+    val elements: List<ASN1Object>
+) {
+    companion object Companion {
+        /** Creates [NormalizedTbs] from the actual TBS data in the certificate. */
+        fun from(tbs: ASN1Sequence): NormalizedTbs {
+            val first = tbs.elements.first()
+            // Version is optional and is often omitted for v1 certificates
+            val elements = if (first is ASN1TaggedObject && first.tag == 0) {
+                tbs.elements
+            } else {
+                // "insert" omitted version tag, so that the rest of the code does
+                // not have to worry about it
+                listOf(versionObject(0L)) + tbs.elements
+            }
+            return NormalizedTbs(
+                tbs = tbs,
+                elements = elements
+            )
+        }
+    }
+}
+
+private fun versionObject(version: Long): ASN1TaggedObject =
+    ASN1TaggedObject(
+        ASN1TagClass.CONTEXT_SPECIFIC,
+        ASN1Encoding.CONSTRUCTED,
+        0,
+        ASN1.encode(ASN1Integer(version))
+    )
 
 private fun Algorithm.getSignatureAlgorithmSeq(signingKeyCurve: EcCurve): ASN1Sequence {
     val signatureAlgorithmOid = when (this) {

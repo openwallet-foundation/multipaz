@@ -67,6 +67,18 @@ class X509CertTests {
         -----END CERTIFICATE-----
     """.trimIndent() + "\n"
 
+    private val v1CertAsPem = """
+        -----BEGIN CERTIFICATE-----
+        MIIBITCByAIJAPeqGjkRIU3AMAoGCCqGSM49BAMCMBkxFzAVBgNVBAMMDnNhbXBs
+        ZV92MV9jZXJ0MB4XDTI1MTAxNTE3MjQwOFoXDTM1MTAxMzE3MjQwOFowGTEXMBUG
+        A1UEAwwOc2FtcGxlX3YxX2NlcnQwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARi
+        hzx6zPwtrJFUlB7PW9sj+3n4A4j45VZiLDKgXRHhZuzUMdDkkZy0GLU9C62C3B++
+        9urzuwq9B4nn7ZjRkC2hMAoGCCqGSM49BAMCA0gAMEUCIQCKlDxbTr7LLmTF8ZrU
+        8l6thMpHotRMYQWcJcJOWaduVAIgDCLyLqpNcNUQjZDg4OGNWG9H7QxyqVqRCO8e
+        Jh/gpxs=
+        -----END CERTIFICATE-----
+    """.trimIndent()
+
     @Test
     fun testPemEncodingRoundTrip() {
         // Check that each certificate is signed by the next one...
@@ -265,5 +277,13 @@ class X509CertTests {
         assertEquals(true, cert.extensions[1].isCritical)
         assertEquals(ByteString(extData), cert.extensions[1].data)
         assertContentEquals(extData, cert.getExtensionValue("1.2.4"))
+    }
+
+    @Test
+    fun testV1() = runTest {
+        val v1Cert = X509Cert.fromPem(v1CertAsPem)
+        v1Cert.verify(v1Cert.ecPublicKey)
+        assertEquals("CN=sample_v1_cert", v1Cert.subject.name)
+        assertTrue(v1Cert.extensions.isEmpty())
     }
 }
