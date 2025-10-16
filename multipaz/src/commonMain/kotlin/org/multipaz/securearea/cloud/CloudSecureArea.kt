@@ -131,7 +131,7 @@ open class CloudSecureArea protected constructor(
     private val supportedAlgorithms_: List<Algorithm> by lazy {
         // TODO: get from server to support configurations where only a subset of algorithms are supported.
         Algorithm.entries.filter {
-            it.fullySpecified
+            it.fullySpecified && it.curve != null
         }
     }
 

@@ -25,61 +25,11 @@ import kotlin.reflect.KClass
 /**
  * A class that aids in creation of credentials from serialized data.
  *
- * The [CredentialLoader] is initially empty, but in the
- * [org.multipaz.credential] package, there are well known [Credential] implementations
- * which can be added using the [addCredentialImplementation] method. In addition,
- * applications may add their own [Credential] implementations.
+ * Use [CredentialLoaderBuilder] class to build one
  */
-internal class CredentialLoader {
-    private val createCredentialFunctions:
-            MutableMap<String, suspend (Document) -> Credential> = mutableMapOf()
-
-    /**
-     * Add a new [Credential] implementation to the loader.
-     *
-     * @param credentialType the credential type
-     * @param createCredentialFunction a function to create a [Credential] of the given type.
-     */
-    fun addCredentialImplementation(
-        credentialType: String,
-        createCredentialFunction: suspend (Document) -> Credential
-    ) {
-        if (createCredentialFunctions.contains(credentialType)) {
-            throw IllegalArgumentException("'$credentialType' is already registered")
-        }
-        createCredentialFunctions[credentialType] = createCredentialFunction
-    }
-
-    /**
-     * Adds [MdocCredential] implementation to the loader.
-     */
-    fun addMdocCredential() {
-        addCredentialImplementation(
-            credentialType = MdocCredential.CREDENTIAL_TYPE,
-            createCredentialFunction = { document -> MdocCredential(document) }
-        )
-    }
-
-    /**
-     * Adds [KeyBoundSdJwtVcCredential] implementation to the loader.
-     */
-    fun addKeyBoundSdJwtVcCredential() {
-        addCredentialImplementation(
-            credentialType = KeyBoundSdJwtVcCredential.CREDENTIAL_TYPE,
-            createCredentialFunction = { document -> KeyBoundSdJwtVcCredential(document) }
-        )
-    }
-
-    /**
-     * Adds [KeylessSdJwtVcCredential] implementation to the loader.
-     */
-    fun addKeylessSdJwtVcCredential() {
-        addCredentialImplementation(
-            credentialType = KeylessSdJwtVcCredential.CREDENTIAL_TYPE,
-            createCredentialFunction = { document -> KeylessSdJwtVcCredential(document) }
-        )
-    }
-
+internal class CredentialLoader(
+    private val createCredentialFunctions: Map<String, suspend (Document) -> Credential>
+) {
     /**
      * Loads a [Credential] from storage
      *

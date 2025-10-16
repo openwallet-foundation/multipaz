@@ -28,6 +28,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.credential.Credential
+import org.multipaz.credential.CredentialLoaderBuilder
 
 /**
  * Class for storing real-world identity documents.
@@ -220,7 +221,7 @@ class DocumentStore private constructor(
         private val storage: Storage,
         private val secureAreaRepository: SecureAreaRepository,
     ) {
-        private val credentialLoader = CredentialLoader().apply {
+        private val credentialLoaderBuilder = CredentialLoaderBuilder().apply {
             addMdocCredential()
             addKeylessSdJwtVcCredential()
             addKeyBoundSdJwtVcCredential()
@@ -266,7 +267,7 @@ class DocumentStore private constructor(
             credentialType: String,
             createCredentialFunction: suspend (Document) -> Credential
         ): Builder {
-            credentialLoader.addCredentialImplementation(
+            credentialLoaderBuilder.addCredentialImplementation(
                 credentialType = credentialType,
                 createCredentialFunction = createCredentialFunction
             )
@@ -297,7 +298,7 @@ class DocumentStore private constructor(
             return DocumentStore(
                 storage = storage,
                 secureAreaRepository = secureAreaRepository,
-                credentialLoader = credentialLoader,
+                credentialLoader = credentialLoaderBuilder.build(),
                 documentMetadataFactory = documentMetadataFactory,
                 documentTableSpec = documentTableSpec
             )
