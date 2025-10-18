@@ -97,6 +97,11 @@ class Document internal constructor(
     internal var deleted = false
         private set
 
+    /** Clear cached credentials; only used for testing */
+    internal suspend fun deleteCache() = lock.withLock {
+        credentialCache.clear()
+    }
+
     /**
      * Returns the list of identifiers for all credentials for this document.
      */

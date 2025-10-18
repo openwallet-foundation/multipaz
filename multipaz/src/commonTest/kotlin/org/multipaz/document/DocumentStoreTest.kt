@@ -40,6 +40,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import kotlin.time.Instant;
 import kotlinx.io.bytestring.ByteString
+import kotlin.random.Random
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -75,6 +76,9 @@ class DocumentStoreTest {
             ) {
                 addCredentialImplementation(TestSecureAreaBoundCredential.CREDENTIAL_TYPE) { document ->
                     TestSecureAreaBoundCredential(document)
+                }
+                addCredentialImplementation(TestCredential.CREDENTIAL_TYPE) { document ->
+                    TestCredential(document)
                 }
             }
             testBody(documentStore)
@@ -668,6 +672,9 @@ class DocumentStoreTest {
                 for (documentId in documentStore.listDocuments()) {
                     // May be deleted before we load it
                     val document = documentStore.lookupDocument(documentId) ?: continue
+                    if (Random.Default.nextBoolean()) {
+                        document.deleteCache()
+                    }
                     document.getCredentials()
                 }
                 yield()  // so that this coroutine does not spin without a chance to be cancelled
@@ -684,7 +691,9 @@ class DocumentStoreTest {
                 ).addToDocument()
                 yield()
             }
-            documentStore.deleteDocument(document.identifier)
+            if (Random.Default.nextBoolean()) {
+                documentStore.deleteDocument(document.identifier)
+            }
         }
         frontEndJob.cancelAndJoin()
     }
