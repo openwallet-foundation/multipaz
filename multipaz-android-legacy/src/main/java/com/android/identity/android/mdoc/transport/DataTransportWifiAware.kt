@@ -44,7 +44,7 @@ import androidx.annotation.DoNotInline
 import androidx.annotation.RequiresApi
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.Hkdf
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodWifiAware
 import org.multipaz.util.HexUtil
@@ -97,17 +97,17 @@ class DataTransportWifiAware(
         // Service name is always derived from EReaderKey as per 18013-5.
         var ikm = mEncodedEDeviceKeyBytes
         var info = "NANService".toByteArray()
-        var salt = byteArrayOf()
-        serviceName = HexUtil.toHex(Crypto.hkdf(Algorithm.HMAC_SHA256, ikm!!, salt, info, 16), true)
+        var salt = null
+        serviceName = HexUtil.toHex(Hkdf.deriveKey(Algorithm.HMAC_SHA256, ikm!!, salt, info, 16), true)
         Logger.d(TAG, String.format("Using calculated service name '$serviceName'"))
 
         // If the passphrase isn't given, derive as per 18013-5.
         if (mPassphrase == null) {
             ikm = mEncodedEDeviceKeyBytes
             info = "NANPassphrase".toByteArray()
-            salt = byteArrayOf()
+            salt = null
             mPassphrase = Base64.encodeToString(
-                Crypto.hkdf(Algorithm.HMAC_SHA256, ikm!!, salt, info, 32),
+                Hkdf.deriveKey(Algorithm.HMAC_SHA256, ikm!!, salt, info, 32),
                 Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
             )
             Logger.d(TAG, String.format("Using calculated passphrase '$mPassphrase'"))

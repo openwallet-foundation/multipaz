@@ -9,9 +9,6 @@ import org.multipaz.util.UUID
 import org.multipaz.util.toByteArray
 import org.multipaz.util.toNSData
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import org.multipaz.util.toHex
 import platform.Foundation.NSData
 import platform.Foundation.NSUUID
 
@@ -50,6 +47,7 @@ actual object Crypto {
         message: ByteArray
     ): ByteArray {
         return when (algorithm) {
+            Algorithm.HMAC_INSECURE_SHA1 -> SwiftBridge.hmacSha1(key.toNSData(), message.toNSData()).toByteArray()
             Algorithm.HMAC_SHA256 -> SwiftBridge.hmacSha256(key.toNSData(), message.toNSData()).toByteArray()
             Algorithm.HMAC_SHA384 -> SwiftBridge.hmacSha384(key.toNSData(), message.toNSData()).toByteArray()
             Algorithm.HMAC_SHA512 -> SwiftBridge.hmacSha512(key.toNSData(), message.toNSData()).toByteArray()
@@ -89,28 +87,6 @@ actual object Crypto {
             nonce.toNSData(),
             aad?.toNSData()
         )?.toByteArray() ?: throw IllegalStateException("Decryption failed")
-    }
-
-    actual fun hkdf(
-        algorithm: Algorithm,
-        ikm: ByteArray,
-        salt: ByteArray?,
-        info: ByteArray?,
-        size: Int
-    ): ByteArray {
-        val hashLen = when (algorithm) {
-            Algorithm.HMAC_SHA256 -> 32
-            Algorithm.HMAC_SHA384 -> 48
-            Algorithm.HMAC_SHA512 -> 64
-            else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
-        }
-        return SwiftBridge.hkdf(
-            hashLen.toLong(),
-            ikm.toNSData(),
-            (if (salt != null && salt.size > 0) salt else ByteArray(hashLen)).toNSData(),
-            info!!.toNSData(),
-            size.toLong()
-        )?.toByteArray() ?: throw IllegalStateException("HKDF not available")
     }
 
     actual fun checkSignature(
@@ -175,55 +151,6 @@ actual object Crypto {
             key.d.toNSData(),
             otherKeyRaw.toNSData()
         )?.toByteArray() ?: throw UnsupportedOperationException("Curve is not supported")
-    }
-
-    actual fun hpkeEncrypt(
-        cipherSuite: Algorithm,
-        receiverPublicKey: EcPublicKey,
-        plainText: ByteArray,
-        aad: ByteArray
-    ): Pair<ByteArray, EcPublicKey> {
-        require(cipherSuite == Algorithm.HPKE_BASE_P256_SHA256_AES128GCM)
-        val receiverPublicKeyRaw = when (receiverPublicKey) {
-            is EcPublicKeyDoubleCoordinate -> receiverPublicKey.x + receiverPublicKey.y
-            is EcPublicKeyOkp -> receiverPublicKey.x
-        }
-        val ret = SwiftBridge.hpkeEncrypt(
-            receiverPublicKeyRaw.toNSData(),
-            plainText.toNSData(),
-            aad.toNSData()
-        )
-        if (ret.isEmpty()) {
-            throw IllegalStateException("HPKE not supported on this iOS version")
-        }
-        val encapsulatedPublicKeyRaw = (ret[0] as NSData).toByteArray()
-        val encapsulatedPublicKey = EcPublicKeyDoubleCoordinate.fromUncompressedPointEncoding(
-            EcCurve.P256,
-            encapsulatedPublicKeyRaw
-        )
-        val cipherText = (ret[1] as NSData).toByteArray()
-        return Pair(cipherText, encapsulatedPublicKey)
-    }
-
-    actual fun hpkeDecrypt(
-        cipherSuite: Algorithm,
-        receiverPrivateKey: EcPrivateKey,
-        cipherText: ByteArray,
-        aad: ByteArray,
-        encapsulatedPublicKey: EcPublicKey
-    ): ByteArray {
-        require(cipherSuite == Algorithm.HPKE_BASE_P256_SHA256_AES128GCM)
-        val receiverPrivateKeyRaw = receiverPrivateKey.d
-        val ret = SwiftBridge.hpkeDecrypt(
-            receiverPrivateKeyRaw.toNSData(),
-            cipherText.toNSData(),
-            aad.toNSData(),
-            (encapsulatedPublicKey as EcPublicKeyDoubleCoordinate).asUncompressedPointEncoding.toNSData()
-        )
-        if (ret == null) {
-            throw IllegalStateException("HPKE not supported on this iOS version")
-        }
-        return ret.toByteArray()
     }
 
     internal actual fun ecPublicKeyToPem(publicKey: EcPublicKey): String {

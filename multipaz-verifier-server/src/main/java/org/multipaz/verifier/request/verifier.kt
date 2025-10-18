@@ -76,6 +76,7 @@ import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborMap
+import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.SigningKey
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509KeyUsage
@@ -676,7 +677,7 @@ private suspend fun handleDcGetData(
     )
 }
 
-private fun handleDcGetDataMdocApi(
+private suspend fun handleDcGetDataMdocApi(
     session: Session,
     credentialResponse: String
 ) {
@@ -689,10 +690,6 @@ private fun handleDcGetDataMdocApi(
     }
     val encryptionParameters = array.get(1).asMap
     val enc = encryptionParameters[Tstr("enc")]!!.asBstr
-    val encapsulatedPublicKey = EcPublicKeyDoubleCoordinate.fromUncompressedPointEncoding(
-        EcCurve.P256,
-        enc
-    )
     val cipherText = encryptionParameters[Tstr("cipherText")]!!.asBstr
 
     val encryptionInfo = buildCborArray {
@@ -721,13 +718,17 @@ private fun handleDcGetDataMdocApi(
     )
 
     session.responseWasEncrypted = true
-    session.deviceResponses.add(Crypto.hpkeDecrypt(
-        Algorithm.HPKE_BASE_P256_SHA256_AES128GCM,
-        session.encryptionKey,
-        cipherText,
-        session.sessionTranscript!!,
-        encapsulatedPublicKey
-    ))
+    val decrypter = Hpke.getDecrypter(
+        cipherSuite = Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM,
+        receiverPrivateKey = SigningKey.AnonymousExplicit(session.encryptionKey),
+        encapsulatedKey = enc,
+        info = session.sessionTranscript!!
+    )
+    val deviceResponse = decrypter.decrypt(
+        ciphertext = cipherText,
+        aad = ByteArray(0)
+    )
+    session.deviceResponses.add(deviceResponse)
 
     //Logger.iCbor(TAG, "decrypted DeviceResponse", session.deviceResponse!!)
     Logger.iCbor(TAG, "SessionTranscript", session.sessionTranscript!!)

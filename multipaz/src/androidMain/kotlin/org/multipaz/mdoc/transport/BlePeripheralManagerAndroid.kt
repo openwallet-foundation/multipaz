@@ -22,7 +22,6 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Tagged
 import org.multipaz.context.applicationContext
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
@@ -39,6 +38,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteStringBuilder
+import org.multipaz.crypto.Hkdf
 import org.multipaz.util.getUInt32
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -491,8 +491,8 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
     override suspend fun setESenderKey(eSenderKey: EcPublicKey) {
         val ikm = Cbor.encode(Tagged(24, Bstr(Cbor.encode(eSenderKey.toCoseKey().toDataItem()))))
         val info = "BLEIdent".encodeToByteArray()
-        val salt = byteArrayOf()
-        identValue = Crypto.hkdf(Algorithm.HMAC_SHA256, ikm, salt, info, 16)
+        val salt = null
+        identValue = Hkdf.deriveKey(Algorithm.HMAC_SHA256, ikm, salt, info, 16)
     }
 
     override suspend fun waitForStateCharacteristicWriteOrL2CAPClient() {

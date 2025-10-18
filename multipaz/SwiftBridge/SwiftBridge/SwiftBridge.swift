@@ -5,6 +5,7 @@ import Security
 import LocalAuthentication
 import DeviceCheck
 import CoreImage
+import CommonCrypto
 
 @objc public class SwiftBridge : NSObject {
     @objc(sha1:) public class func sha1(data: Data) -> Data {
@@ -26,7 +27,20 @@ import CoreImage
         let hashed = SHA512.hash(data: data)
         return Data(hashed)
     }
-    
+
+    @objc(hmacSha1: :) public class func hmacSha1(key: Data, data: Data) -> Data {
+        var hmac = [UInt8](repeating: 0, count: Int(20))
+        data.withUnsafeBytes { messageBytes in
+            key.withUnsafeBytes { keyBytes in
+                CCHmac(CCHmacAlgorithm(kCCHmacAlgSHA1),
+                       keyBytes.baseAddress, key.count,
+                       messageBytes.baseAddress, data.count,
+                       &hmac)
+            }
+        }
+        return Data(hmac)
+    }
+
     @objc(hmacSha256: :) public class func hmacSha256(key: Data, data: Data) -> Data {
         let symmetricKey = SymmetricKey(data: key)
         let mac = HMAC<SHA256>.authenticationCode(for: data, using: symmetricKey)
@@ -71,45 +85,6 @@ import CoreImage
             }
         } catch {
             return nil
-        }
-    }
-    
-    @objc(hkdf: : : : :) public class func hkdf(hashLen: Int, ikm: Data, salt: Data, info: Data, size: Int) -> Data? {
-        guard #available(iOS 14.0, *) else {
-            return nil
-        }
-        let inputKeyMaterial = SymmetricKey(data: ikm)
-        let res: SymmetricKey
-        switch (hashLen) {
-        case 32:
-            res = HKDF<SHA256>.deriveKey(
-                inputKeyMaterial: inputKeyMaterial,
-                salt: salt,
-                info: info,
-                outputByteCount: size
-            )
-            break
-        case 48:
-            res = HKDF<SHA384>.deriveKey(
-                inputKeyMaterial: inputKeyMaterial,
-                salt: salt,
-                info: info,
-                outputByteCount: size
-            )
-            break
-        case 64:
-            res = HKDF<SHA512>.deriveKey(
-                inputKeyMaterial: inputKeyMaterial,
-                salt: salt,
-                info: info,
-                outputByteCount: size
-            )
-            break
-        default:
-            return nil
-        }
-        return res.withUnsafeBytes {
-            return Data(Array($0))
         }
     }
     
@@ -345,26 +320,6 @@ import CoreImage
         default:
             return nil
         }
-    }
-
-    @objc(hpkeEncrypt: : :) public class func hpkeEncrypt(receiverPublicKeyRepresentation: Data, plainText: Data, aad: Data) -> Array<Data> {
-        guard #available(iOS 17.0, *) else {
-            return []
-        }
-        let receiverKey = try! P256.KeyAgreement.PublicKey(rawRepresentation: receiverPublicKeyRepresentation)
-        var sender = try! HPKE.Sender(recipientKey: receiverKey, ciphersuite: HPKE.Ciphersuite.P256_SHA256_AES_GCM_256, info: Data())
-        let cipherText = try! sender.seal(plainText, authenticating: aad)
-        return [sender.encapsulatedKey, cipherText]
-    }
-
-    @objc(hpkeDecrypt: : : :) public class func hpkeDecrypt(receiverPrivateKeyRepresentation: Data, cipherText: Data, aad: Data, encapsulatedPublicKey: Data) -> Data? {
-        guard #available(iOS 17.0, *) else {
-            return nil
-        }
-        let receiverKey = try! P256.KeyAgreement.PrivateKey(rawRepresentation: receiverPrivateKeyRepresentation)
-        var receiver = try! HPKE.Recipient(privateKey: receiverKey, ciphersuite: HPKE.Ciphersuite.P256_SHA256_AES_GCM_256, info: Data(), encapsulatedKey: encapsulatedPublicKey)
-        let plainText = try! receiver.open(cipherText, authenticating: aad)
-        return plainText
     }
 
     @objc(x509CertGetKey:) public class func x509CertGetKey(encodedX509Cert: Data) -> Data? {

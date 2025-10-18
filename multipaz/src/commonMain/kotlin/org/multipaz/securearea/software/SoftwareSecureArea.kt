@@ -33,6 +33,7 @@ import org.multipaz.storage.StorageTableSpec
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.annotation.CborSerializable
+import org.multipaz.crypto.Hkdf
 import kotlin.random.Random
 
 /**
@@ -135,7 +136,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         passphrase: String
     ): ByteArray {
         val info = "ICPrivateKeyEncryption1".encodeToByteArray()
-        return Crypto.hkdf(
+        return Hkdf.deriveKey(
             Algorithm.HMAC_SHA256,
             passphrase.encodeToByteArray(),
             encodedPublicKey,
@@ -309,7 +310,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         return false
     }
 
-    @CborSerializable(schemaHash = "uDNIH6LIvDH5IXbAKIX7aVmFeEJwBUZAd7s7prLKBBw")
+    @CborSerializable(schemaHash = "6ifPnbV5Efd5Yf9NLMh4wXHWIVySzLaTeJqnGxrPuzI")
     internal data class KeyMetadata(
         val algorithm: Algorithm,
         val passphraseRequired: Boolean,

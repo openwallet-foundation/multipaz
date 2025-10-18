@@ -250,21 +250,6 @@ class CryptoTests {
         }
     }
 
-    @Test
-    fun hkdf() {
-        // From https://datatracker.ietf.org/doc/html/rfc5869#appendix-A
-        assertEquals(
-            "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865",
-            Crypto.hkdf(
-                Algorithm.HMAC_SHA256,
-                "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b".fromHex(),
-                "000102030405060708090a0b0c".fromHex(),
-                "f0f1f2f3f4f5f6f7f8f9".fromHex(),
-                42
-            ).toHex()
-        )
-    }
-
     fun testJwkEncodeDecode(curve: EcCurve) {
         // TODO: use assumeTrue() when available in kotlin-test
         if (!Crypto.supportedCurves.contains(curve)) {
@@ -398,27 +383,4 @@ class CryptoTests {
     fun testUncompressedFromTo_BRAINPOOLP384R1() = testUncompressedFromTo(EcCurve.BRAINPOOLP384R1)
     @Test
     fun testUncompressedFromTo_BRAINPOOLP512R1() = testUncompressedFromTo(EcCurve.BRAINPOOLP512R1)
-
-
-    @Test
-    fun testHpkeRoundtrip() {
-        val receiver = Crypto.createEcPrivateKey(EcCurve.P256)
-        val plainText = "Hello World".encodeToByteArray()
-        val aad = "123".encodeToByteArray()
-
-        val (cipherText, encKey) = Crypto.hpkeEncrypt(
-            Algorithm.HPKE_BASE_P256_SHA256_AES128GCM,
-            receiver.publicKey,
-            plainText,
-            aad)
-
-        val decryptedText = Crypto.hpkeDecrypt(
-            Algorithm.HPKE_BASE_P256_SHA256_AES128GCM,
-            receiver,
-            cipherText,
-            aad,
-            encKey)
-
-        assertContentEquals(decryptedText, plainText)
-    }
 }

@@ -14,7 +14,7 @@ import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
+import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
@@ -251,20 +251,22 @@ private suspend fun digitalCredentialsMdocApiProtocol(
     }
     val deviceResponse = deviceResponseGenerator.generate()
 
-    val (cipherText, encapsulatedPublicKey) = Crypto.hpkeEncrypt(
-        Algorithm.HPKE_BASE_P256_SHA256_AES128GCM,
-        recipientPublicKey,
-        deviceResponse,
-        encodedSessionTranscript
+    val encrypter = Hpke.getEncrypter(
+        cipherSuite = Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM,
+        receiverPublicKey = recipientPublicKey,
+        info = encodedSessionTranscript
     )
-    val enc = (encapsulatedPublicKey as EcPublicKeyDoubleCoordinate).asUncompressedPointEncoding
+    val ciphertext = encrypter.encrypt(
+        plaintext = deviceResponse,
+        aad = ByteArray(0),
+    )
     val encryptedResponse =
         Cbor.encode(
             buildCborArray {
                 add("dcapi")
                 addCborMap {
-                    put("enc", enc)
-                    put("cipherText", cipherText)
+                    put("enc", encrypter.encapsulatedKey.toByteArray())
+                    put("cipherText", ciphertext)
                 }
             }
         )

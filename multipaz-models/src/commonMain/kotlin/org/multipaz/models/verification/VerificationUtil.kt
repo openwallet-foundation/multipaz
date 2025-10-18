@@ -27,10 +27,9 @@ import org.multipaz.claim.JsonClaim
 import org.multipaz.claim.MdocClaim
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
+import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.SigningKey
 import org.multipaz.documenttype.DocumentTypeRepository
@@ -388,12 +387,13 @@ object VerificationUtil {
      * @param responseEncryptionKey the response encryption or `null` if the response isn't encrypted.
      * @return a [OpenID4VPDcResponse] or [MdocApiDcResponse] with the cleartext response.
      */
-    fun decryptDcResponse(
+    suspend fun decryptDcResponse(
         response: JsonObject,
         nonce: ByteString,
         origin: String,
         responseEncryptionKey: EcPrivateKey?,
     ): DcResponse {
+        // TODO: Change responseEncryptionKey to be a SigningKey
         val exchangeProtocol = response["protocol"]!!.jsonPrimitive.content
         when (exchangeProtocol) {
             "openid4vp",
@@ -481,17 +481,16 @@ object VerificationUtil {
                 }
                 val encryptionParameters = array[1].asMap
                 val enc = encryptionParameters[Tstr("enc")]!!.asBstr
-                val encapsulatedPublicKey = EcPublicKeyDoubleCoordinate.fromUncompressedPointEncoding(
-                    EcCurve.P256,
-                    enc
+                val ciphertext = encryptionParameters[Tstr("cipherText")]!!.asBstr
+                val decrypter = Hpke.getDecrypter(
+                    cipherSuite = Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM,
+                    receiverPrivateKey = SigningKey.AnonymousExplicit(responseEncryptionKey),
+                    encapsulatedKey = enc,
+                    info = Cbor.encode(sessionTranscript),
                 )
-                val cipherText = encryptionParameters[Tstr("cipherText")]!!.asBstr
-                val encodedDeviceResponse = Crypto.hpkeDecrypt(
-                    cipherSuite = Algorithm.HPKE_BASE_P256_SHA256_AES128GCM,
-                    receiverPrivateKey = responseEncryptionKey,
-                    cipherText = cipherText,
-                    aad = Cbor.encode(sessionTranscript),
-                    encapsulatedPublicKey = encapsulatedPublicKey
+                val encodedDeviceResponse = decrypter.decrypt(
+                    ciphertext = ciphertext,
+                    aad = ByteArray(0),
                 )
                 return MdocApiDcResponse(
                     deviceResponse = Cbor.decode(encodedDeviceResponse),

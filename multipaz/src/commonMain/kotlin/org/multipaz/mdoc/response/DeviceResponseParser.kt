@@ -35,6 +35,7 @@ import org.multipaz.util.Logger
 import org.multipaz.util.toHex
 import kotlin.time.Instant
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.crypto.Hkdf
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.mdoc.zkp.ZkDocument
 
@@ -287,7 +288,7 @@ class DeviceResponseParser(
                 val sessionTranscriptBytes = Cbor.encode(Tagged(24, Bstr(encodedSessionTranscript)))
                 val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
                 val info = "EMacKey".encodeToByteArray()
-                val eMacKey = Crypto.hkdf(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
+                val eMacKey = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
                 val expectedTag = Cose.coseMac0(
                     Algorithm.HMAC_SHA256,
                     eMacKey,

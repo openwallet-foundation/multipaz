@@ -78,6 +78,7 @@ import org.multipaz.util.Logger
 import org.multipaz.util.appendUInt32
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
+import org.multipaz.crypto.Hkdf
 import kotlin.random.Random
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -419,14 +420,14 @@ open class CloudSecureArea protected constructor(
                     }
                 )
             )
-            skDevice = Crypto.hkdf(
+            skDevice = Hkdf.deriveKey(
                 Algorithm.HMAC_SHA256,
                 zab,
                 salt,
                 "SKDevice".encodeToByteArray(),
                 32
             )
-            skCloud = Crypto.hkdf(
+            skCloud = Hkdf.deriveKey(
                 Algorithm.HMAC_SHA256,
                 zab,
                 salt,
@@ -968,7 +969,7 @@ open class CloudSecureArea protected constructor(
     }
 
     @CborSerializable(
-        schemaHash = "1nfI37qZNUhsEDoWxGOOmH3_1Akqb8axdvs_i2PawpU"
+        schemaHash = "w-5iNr7XcEFY2B2L8dT64GO06QiTsDV87YdGHeocruI"
     )
     internal data class KeyMetadata(
         val algorithm: Algorithm,

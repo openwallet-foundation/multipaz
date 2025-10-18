@@ -1,44 +1,19 @@
 package org.multipaz.crypto
 
-import com.google.crypto.tink.HybridDecrypt
-import com.google.crypto.tink.HybridEncrypt
-import com.google.crypto.tink.InsecureSecretKeyAccess
-import com.google.crypto.tink.KeysetHandle
-import com.google.crypto.tink.TinkProtoKeysetFormat
-import com.google.crypto.tink.config.TinkConfig
-import com.google.crypto.tink.hybrid.HybridConfig
-import com.google.crypto.tink.proto.HpkeAead
-import com.google.crypto.tink.proto.HpkeKdf
-import com.google.crypto.tink.proto.HpkeKem
-import com.google.crypto.tink.proto.HpkeParams
-import com.google.crypto.tink.proto.HpkePrivateKey
-import com.google.crypto.tink.proto.HpkePublicKey
-import com.google.crypto.tink.proto.KeyData
-import com.google.crypto.tink.proto.KeyStatusType
-import com.google.crypto.tink.proto.Keyset
-import com.google.crypto.tink.proto.OutputPrefixType
-import com.google.crypto.tink.subtle.EllipticCurves
 import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.asn1.ASN1
-import org.multipaz.asn1.ASN1Encoding
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.ASN1ObjectIdentifier
 import org.multipaz.asn1.ASN1OctetString
 import org.multipaz.asn1.ASN1Sequence
-import org.multipaz.asn1.ASN1TagClass
-import org.multipaz.asn1.ASN1TaggedObject
 import org.multipaz.util.UUID
 import org.multipaz.util.fromJavaUuid
-import org.multipaz.util.toHex
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.Security
 import java.security.Signature
 import java.security.interfaces.ECPrivateKey
-import java.security.interfaces.ECPublicKey
-import java.security.interfaces.EdECPrivateKey
-import java.security.interfaces.XECPrivateKey
 import java.security.spec.ECGenParameterSpec
 import java.security.spec.PKCS8EncodedKeySpec
 import java.security.spec.X509EncodedKeySpec
@@ -49,7 +24,6 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
-import com.google.crypto.tink.shaded.protobuf.ByteString as TinkByteString
 
 /**
  * Cryptographic support routines.
@@ -106,8 +80,6 @@ actual object Crypto {
         }
 
     init {
-        TinkConfig.register()
-        HybridConfig.register()
     }
 
     /**
@@ -137,8 +109,8 @@ actual object Crypto {
     /**
      * Message authentication code function.
      *
-     * @param algorithm must be one of [Algorithm.HMAC_SHA256], [Algorithm.HMAC_SHA384],
-     * [Algorithm.HMAC_SHA512].
+     * @param algorithm must be one of [Algorithm.HMAC_INSECURE_SHA1], [Algorithm.HMAC_SHA256],
+     *   [Algorithm.HMAC_SHA384], [Algorithm.HMAC_SHA512].
      * @param key the secret key.
      * @param message the message to authenticate.
      * @return the message authentication code.
@@ -150,6 +122,7 @@ actual object Crypto {
         message: ByteArray
     ): ByteArray {
         val algName = when (algorithm) {
+            Algorithm.HMAC_INSECURE_SHA1 -> "HmacSha1"
             Algorithm.HMAC_SHA256 -> "HmacSha256"
             Algorithm.HMAC_SHA384 -> "HmacSha384"
             Algorithm.HMAC_SHA512 -> "HmacSha512"
@@ -236,71 +209,6 @@ actual object Crypto {
         } catch (e: Exception) {
             throw IllegalStateException("Error decrypting", e)
         }
-    }
-
-    /**
-     * Computes an HKDF.
-     *
-     * @param algorithm must be one of [Algorithm.HMAC_SHA256], [Algorithm.HMAC_SHA384], [Algorithm.HMAC_SHA512].
-     * @param ikm the input keying material.
-     * @param salt optional salt. A possibly non-secret random value. If no salt is provided (ie. if
-     * salt has length 0) then an array of 0s of the same size as the hash digest is used as salt.
-     * @param info optional context and application specific information.
-     * @param size the length of the generated pseudorandom string in bytes. The maximal
-     * size is DigestSize, where DigestSize is the size of the underlying HMAC.
-     * @return size pseudorandom bytes.
-     */
-    actual fun hkdf(
-        algorithm: Algorithm,
-        ikm: ByteArray,
-        salt: ByteArray?,
-        info: ByteArray?,
-        size: Int
-    ): ByteArray {
-        // This function is based on
-        //
-        //  https://github.com/google/tink/blob/master/java/src/main/java/com/google/crypto/tink/subtle/Hkdf.java
-        //
-        val macLength =
-            when (algorithm) {
-                Algorithm.HMAC_SHA256 -> 32
-                Algorithm.HMAC_SHA384 -> 48
-                Algorithm.HMAC_SHA512 -> 64
-                else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
-            }
-        require(size <= 255 * macLength) { "size too large" }
-        val key =
-            if (salt == null || salt.size == 0) {
-                // According to RFC 5869, Section 2.2 the salt is optional. If no salt is provided
-                // then HKDF uses a salt that is an array of zeros of the same length as the hash
-                // digest.
-                ByteArray(macLength)
-            } else {
-                salt
-            }
-        val prk = mac(algorithm, key, ikm)
-        val result = ByteArray(size)
-        var ctr = 1
-        var pos = 0
-        var digest = ByteArray(0)
-        while (true) {
-            val bsb = ByteStringBuilder()
-            bsb.append(digest, 0, digest.size)
-            if (info != null) {
-                bsb.append(info, 0, info.size)
-            }
-            bsb.append(ctr.toByte())
-            digest = mac(algorithm, prk, bsb.toByteString().toByteArray())
-            if (pos + digest.size < size) {
-                System.arraycopy(digest, 0, result, pos, digest.size)
-                pos += digest.size
-                ctr++
-            } else {
-                System.arraycopy(digest, 0, result, pos, size - pos)
-                break
-            }
-        }
-        return result
     }
 
     /**
@@ -558,168 +466,6 @@ actual object Crypto {
             }
         }
 
-    private fun hpkeGetKeysetHandles(
-        publicKey: EcPublicKey,
-        privateKey: EcPrivateKey?
-    ): Pair<KeysetHandle, KeysetHandle?> {
-        val primaryKeyId = 1
-
-        val params = HpkeParams.newBuilder()
-            .setAead(HpkeAead.AES_128_GCM)
-            .setKdf(HpkeKdf.HKDF_SHA256)
-            .setKem(HpkeKem.DHKEM_P256_HKDF_SHA256)
-            .build()
-
-        val javaPublicKey = publicKey.javaPublicKey as ECPublicKey
-        val encodedKey = EllipticCurves.pointEncode(
-            EllipticCurves.CurveType.NIST_P256,
-            EllipticCurves.PointFormatType.UNCOMPRESSED,
-            javaPublicKey.w
-        )
-
-        val hpkePublicKey = HpkePublicKey.newBuilder()
-            .setVersion(0)
-            .setPublicKey(TinkByteString.copyFrom(encodedKey))
-            .setParams(params)
-            .build()
-
-        val publicKeyData = KeyData.newBuilder()
-            .setKeyMaterialType(KeyData.KeyMaterialType.ASYMMETRIC_PUBLIC)
-            .setTypeUrl("type.googleapis.com/google.crypto.tink.HpkePublicKey")
-            .setValue(hpkePublicKey.toByteString())
-            .build()
-
-        val publicKeysetKey = Keyset.Key.newBuilder()
-            .setKeyId(primaryKeyId)
-            .setKeyData(publicKeyData)
-            .setOutputPrefixType(OutputPrefixType.RAW)
-            .setStatus(KeyStatusType.ENABLED)
-            .build()
-
-        val publicKeyset = Keyset.newBuilder()
-            .setPrimaryKeyId(primaryKeyId)
-            .addKey(publicKeysetKey)
-            .build()
-
-        val publicKeysetHandle = TinkProtoKeysetFormat.parseKeyset(
-            publicKeyset.toByteArray(),
-            InsecureSecretKeyAccess.get()
-        )
-        var privateKeysetHandle: KeysetHandle? = null
-
-        if (privateKey != null) {
-            val javaPrivateKey = privateKey.javaPrivateKey as ECPrivateKey
-            val hpkePrivateKey = HpkePrivateKey.newBuilder()
-                .setPublicKey(hpkePublicKey)
-                .setPrivateKey(TinkByteString.copyFrom(javaPrivateKey.s.toByteArray()))
-                .build()
-
-            val privateKeyData = KeyData.newBuilder()
-                .setKeyMaterialType(KeyData.KeyMaterialType.ASYMMETRIC_PRIVATE)
-                .setTypeUrl("type.googleapis.com/google.crypto.tink.HpkePrivateKey")
-                .setValue(hpkePrivateKey.toByteString())
-                .build()
-
-            val privateKeysetKey = Keyset.Key.newBuilder()
-                .setKeyId(primaryKeyId)
-                .setKeyData(privateKeyData)
-                .setOutputPrefixType(OutputPrefixType.RAW)
-                .setStatus(KeyStatusType.ENABLED)
-                .build()
-            val privateKeyset = Keyset.newBuilder()
-                .setPrimaryKeyId(primaryKeyId)
-                .addKey(privateKeysetKey)
-                .build()
-            privateKeysetHandle = TinkProtoKeysetFormat.parseKeyset(
-                privateKeyset.toByteArray(),
-                InsecureSecretKeyAccess.get()
-            )
-        }
-
-        return Pair(publicKeysetHandle, privateKeysetHandle)
-    }
-
-    /**
-     * Encrypts data using HPKE according to [RFC 9180](https://datatracker.ietf.org/doc/rfc9180/).
-     *
-     * The resulting ciphertext and encapsulated key should be sent to the receiver and both
-     * parties must also agree on the AAD used.
-     *
-     * @param cipherSuite the cipher suite for selecting the KEM, KDF, and encryption algorithm.
-     *   Presently only [Algorithm.HPKE_BASE_P256_SHA256_AES128GCM] is supported.
-     * @param receiverPublicKey the public key of the receiver, curve must match the cipher suite.
-     * @param plainText the data to encrypt.
-     * @param aad additional authenticated data.
-     * @return the ciphertext and the encapsulated key.
-     */
-    actual fun hpkeEncrypt(
-        cipherSuite: Algorithm,
-        receiverPublicKey: EcPublicKey,
-        plainText: ByteArray,
-        aad: ByteArray
-    ): Pair<ByteArray, EcPublicKey> {
-        require(cipherSuite == Algorithm.HPKE_BASE_P256_SHA256_AES128GCM) {
-            "Only HPKE_BASE_P256_SHA256_AES128GCM is supported right now"
-        }
-        require(receiverPublicKey.curve == EcCurve.P256)
-
-        val (publicKeysetHandle, _) = hpkeGetKeysetHandles(receiverPublicKey, null)
-
-        val encryptor = publicKeysetHandle.getPrimitive(HybridEncrypt::class.java)
-        val output = encryptor.encrypt(plainText, aad)
-
-        // Output from Tink is (serialized encapsulated key || ciphertext) so we need to break it
-        // up ourselves
-
-        receiverPublicKey as EcPublicKeyDoubleCoordinate
-        val coordinateSize = (receiverPublicKey.curve.bitSize + 7)/8
-        val encapsulatedPublicKeySize = 1 + 2*coordinateSize
-
-        val encapsulatedKey = EcPublicKeyDoubleCoordinate.fromUncompressedPointEncoding(
-            EcCurve.P256,
-            output.sliceArray(IntRange(0, encapsulatedPublicKeySize - 1))
-        )
-        val encryptedData = output.sliceArray(IntRange(encapsulatedPublicKeySize, output.size - 1))
-
-        return Pair(encryptedData, encapsulatedKey)
-    }
-
-    /**
-     * Decrypts data using HPKE according to [RFC 9180](https://datatracker.ietf.org/doc/rfc9180/).
-     *
-     * The ciphertext and encapsulated key should be received from the sender and both parties
-     * must also agree on the AAD to use.
-     *
-     * @param cipherSuite the cipher suite for selecting the KEM, KDF, and encryption algorithm.
-     *   Presently only [Algorithm.HPKE_BASE_P256_SHA256_AES128GCM] is supported.
-     * @param receiverPrivateKey the private key of the receiver, curve must match the cipher suite.
-     * @param cipherText the data to decrypt.
-     * @param aad additional authenticated data.
-     * @param encapsulatedPublicKey the encapsulated key.
-     * @return the plaintext.
-     */
-    actual fun hpkeDecrypt(
-        cipherSuite: Algorithm,
-        receiverPrivateKey: EcPrivateKey,
-        cipherText: ByteArray,
-        aad: ByteArray,
-        encapsulatedPublicKey: EcPublicKey,
-    ): ByteArray {
-        require(cipherSuite == Algorithm.HPKE_BASE_P256_SHA256_AES128GCM) {
-            "Only HPKE_BASE_P256_SHA256_AES128GCM is supported right now"
-        }
-        require(receiverPrivateKey.curve == EcCurve.P256)
-        encapsulatedPublicKey as EcPublicKeyDoubleCoordinate
-
-        val (_, privateKeysetHandle) =
-            hpkeGetKeysetHandles(receiverPrivateKey.publicKey, receiverPrivateKey)
-
-        val decryptor = privateKeysetHandle!!.getPrimitive(HybridDecrypt::class.java)
-
-        // Tink expects the input to be (serialized encapsulated key || ciphertext)
-        return decryptor.decrypt(encapsulatedPublicKey.asUncompressedPointEncoding + cipherText, aad)
-    }
-
     @OptIn(ExperimentalEncodingApi::class)
     internal actual fun ecPublicKeyToPem(publicKey: EcPublicKey): String {
         val sb = StringBuilder()
@@ -812,7 +558,7 @@ internal fun getDerEncodedPrivateKeyFromPrivateKeyInfo(privateKeyInfo: ByteArray
     //
     //   Attributes ::= SET OF Attribute
     //
-    val seq = ASN1.decode(privateKeyInfo) as org.multipaz.asn1.ASN1Sequence
+    val seq = ASN1.decode(privateKeyInfo) as ASN1Sequence
     val derEncodedPrivateKeyOctetString = seq.elements[2] as ASN1OctetString
     val derEncodedPrivateKey = derEncodedPrivateKeyOctetString.value
     return (ASN1.decode(derEncodedPrivateKey) as ASN1OctetString).value

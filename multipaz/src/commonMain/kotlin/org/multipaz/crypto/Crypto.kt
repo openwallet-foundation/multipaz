@@ -91,26 +91,6 @@ expect object Crypto {
     ): ByteArray
 
     /**
-     * Computes an HKDF.
-     *
-     * @param algorithm must be one of [Algorithm.HMAC_SHA256], [Algorithm.HMAC_SHA384], [Algorithm.HMAC_SHA512].
-     * @param ikm the input keying material.
-     * @param salt optional salt. A possibly non-secret random value. If no salt is provided (ie. if
-     * salt has length 0) then an array of 0s of the same size as the hash digest is used as salt.
-     * @param info optional context and application specific information.
-     * @param size the length of the generated pseudorandom string in bytes. The maximal
-     * size is DigestSize, where DigestSize is the size of the underlying HMAC.
-     * @return size pseudorandom bytes.
-     */
-    fun hkdf(
-        algorithm: Algorithm,
-        ikm: ByteArray,
-        salt: ByteArray?,
-        info: ByteArray?,
-        size: Int
-    ): ByteArray
-
-    /**
      * Checks signature validity.
      *
      * @param publicKey the public key the signature was made with.
@@ -161,48 +141,6 @@ expect object Crypto {
     fun keyAgreement(
         key: EcPrivateKey,
         otherKey: EcPublicKey
-    ): ByteArray
-
-    /**
-     * Encrypts data using HPKE according to [RFC 9180](https://datatracker.ietf.org/doc/rfc9180/).
-     *
-     * The resulting ciphertext and encapsulated key should be sent to the receiver and both
-     * parties must also agree on the AAD used.
-     *
-     * @param cipherSuite the cipher suite for selecting the KEM, KDF, and encryption algorithm.
-     *   Presently only [Algorithm.HPKE_BASE_P256_SHA256_AES128GCM] is supported.
-     * @param receiverPublicKey the public key of the receiver, curve must match the cipher suite.
-     * @param plainText the data to encrypt.
-     * @param aad additional authenticated data.
-     * @return the ciphertext and the encapsulated key.
-     */
-    fun hpkeEncrypt(
-        cipherSuite: Algorithm,
-        receiverPublicKey: EcPublicKey,
-        plainText: ByteArray,
-        aad: ByteArray
-    ): Pair<ByteArray, EcPublicKey>
-
-    /**
-     * Decrypts data using HPKE according to [RFC 9180](https://datatracker.ietf.org/doc/rfc9180/).
-     *
-     * The ciphertext and encapsulated key should be received from the sender and both parties
-     * must also agree on the AAD to use.
-     *
-     * @param cipherSuite the cipher suite for selecting the KEM, KDF, and encryption algorithm.
-     *   Presently only [Algorithm.HPKE_BASE_P256_SHA256_AES128GCM] is supported.
-     * @param receiverPrivateKey the private key of the receiver, curve must match the cipher suite.
-     * @param cipherText the data to decrypt.
-     * @param aad additional authenticated data.
-     * @param encapsulatedPublicKey the encapsulated key.
-     * @return the plaintext.
-     */
-    fun hpkeDecrypt(
-        cipherSuite: Algorithm,
-        receiverPrivateKey: EcPrivateKey,
-        cipherText: ByteArray,
-        aad: ByteArray,
-        encapsulatedPublicKey: EcPublicKey,
     ): ByteArray
 
     internal fun ecPublicKeyToPem(publicKey: EcPublicKey): String

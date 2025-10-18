@@ -24,6 +24,7 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.crypto.Hkdf
 import org.multipaz.mdoc.role.MdocRole
 
 /**
@@ -62,9 +63,9 @@ class SessionEncryption(
         val sessionTranscriptBytes = Cbor.encode(Tagged(24, Bstr(encodedSessionTranscript)))
         val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
         var info = "SKDevice".encodeToByteArray()
-        val deviceSK = Crypto.hkdf(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
+        val deviceSK = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
         info = "SKReader".encodeToByteArray()
-        val readerSK = Crypto.hkdf(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
+        val readerSK = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
         if (role == MdocRole.MDOC) {
             skSelf = deviceSK
             skRemote = readerSK

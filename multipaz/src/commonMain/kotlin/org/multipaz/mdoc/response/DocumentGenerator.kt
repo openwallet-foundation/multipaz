@@ -31,6 +31,7 @@ import org.multipaz.document.NameSpacedData
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.Hkdf
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.securearea.KeyLockedException
 import org.multipaz.securearea.KeyUnlockData
@@ -138,7 +139,7 @@ class DocumentGenerator
             val sessionTranscriptBytes = Cbor.encode(Tagged(24, Bstr(encodedSessionTranscript)))
             val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
             val info = "EMacKey".encodeToByteArray()
-            val eMacKey = Crypto.hkdf(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
+            val eMacKey = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
             encodedDeviceMac = Cbor.encode(
                 Cose.coseMac0(
                     Algorithm.HMAC_SHA256,

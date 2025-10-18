@@ -109,14 +109,12 @@ kotlin {
         val javaSharedMain by creating {
             dependsOn(commonMain)
             dependencies {
-                implementation(libs.tink)
             }
         }
 
         val jvmMain by getting {
             dependsOn(javaSharedMain)
             dependencies {
-                implementation(libs.tink)
                 implementation(libs.ktor.client.java)
             }
         }
@@ -148,6 +146,7 @@ kotlin {
                 implementation(libs.postgresql)
                 implementation(libs.nimbus.oauth2.oidc.sdk)
                 implementation(libs.kotlinx.serialization.json)
+                implementation(libs.tink)
             }
         }
 

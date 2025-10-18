@@ -50,6 +50,7 @@ import org.multipaz.util.toBase64Url
 import org.multipaz.certext.CloudKeyAttestation
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.toCbor
+import org.multipaz.crypto.Hkdf
 import org.multipaz.crypto.SigningKey
 import org.multipaz.device.AndroidKeystoreSecurityLevel
 import org.multipaz.jwt.buildJwt
@@ -333,14 +334,14 @@ class CloudSecureAreaServer(
                 }
             )
         )
-        state.skDevice = Crypto.hkdf(
+        state.skDevice = Hkdf.deriveKey(
             Algorithm.HMAC_SHA256,
             zab,
             salt,
             "SKDevice".toByteArray(),
             32
         )
-        state.skCloud = Crypto.hkdf(
+        state.skCloud = Hkdf.deriveKey(
             Algorithm.HMAC_SHA256,
             zab,
             salt,

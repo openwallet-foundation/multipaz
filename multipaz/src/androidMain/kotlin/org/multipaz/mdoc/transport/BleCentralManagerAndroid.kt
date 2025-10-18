@@ -22,7 +22,6 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Tagged
 import org.multipaz.context.applicationContext
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
@@ -41,6 +40,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.io.bytestring.buildByteString
+import org.multipaz.crypto.Hkdf
 import org.multipaz.util.appendByteArray
 import org.multipaz.util.appendUInt32
 import org.multipaz.util.getUInt32
@@ -589,8 +589,8 @@ internal class BleCentralManagerAndroid : BleCentralManager {
 
         val ikm = Cbor.encode(Tagged(24, Bstr(Cbor.encode(eSenderKey.toCoseKey().toDataItem()))))
         val info = "BLEIdent".encodeToByteArray()
-        val salt = byteArrayOf()
-        expectedIdentValue = Crypto.hkdf(Algorithm.HMAC_SHA256, ikm, salt, info, 16)
+        val salt = null
+        expectedIdentValue = Hkdf.deriveKey(Algorithm.HMAC_SHA256, ikm, salt, info, 16)
 
         suspendCancellableCoroutine<Boolean> { continuation ->
             setWaitCondition(WaitState.GET_READER_IDENT, continuation)

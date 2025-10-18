@@ -25,7 +25,7 @@ import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.os.Build
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.Hkdf
 import org.multipaz.util.Logger
 import org.multipaz.util.toHex
 import java.io.ByteArrayOutputStream
@@ -72,8 +72,8 @@ internal class GattClient(
         if (encodedEDeviceKeyBytes != null) {
             val ikm: ByteArray = encodedEDeviceKeyBytes
             val info = "BLEIdent".toByteArray()
-            val salt = byteArrayOf()
-            identValue = Crypto.hkdf(Algorithm.HMAC_SHA256, ikm, salt, info, 16)
+            val salt = null
+            identValue = Hkdf.deriveKey(Algorithm.HMAC_SHA256, ikm, salt, info, 16)
         }
         try {
             gatt = device.connectGatt(context, false, this, BluetoothDevice.TRANSPORT_LE)
