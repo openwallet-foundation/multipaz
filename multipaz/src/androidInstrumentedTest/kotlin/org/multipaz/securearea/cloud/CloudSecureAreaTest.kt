@@ -25,6 +25,7 @@ import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
@@ -45,6 +46,10 @@ import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.crypto.SigningKey
 import org.multipaz.device.AndroidKeystoreSecurityLevel
+import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.KeyUnlockDataProvider
+import org.multipaz.securearea.UnlockReason
+import org.multipaz.securearea.SecureArea
 import java.io.IOException
 import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
@@ -127,7 +132,6 @@ class CloudSecureAreaTest {
             val cloudBindingKeyValidFrom = Clock.System.now()
             val cloudBindingKeyValidUntil = cloudBindingKeyValidFrom + 365.days*5
             val cloudBindingKeyAttestationKey = Crypto.createEcPrivateKey(EcCurve.P256)
-            val cloudBindingKeySignatureAlgorithm = cloudBindingKeyAttestationKey.curve.defaultSigningAlgorithmFullySpecified
             val cloudBindingKeyAttestationCertificates = X509CertChain(
                 listOf(
                     X509Cert.Builder(
@@ -225,7 +229,7 @@ class CloudSecureAreaTest {
                 setOf(X509KeyUsage.KEY_AGREEMENT)
             }
             val challenge = ByteString(1, 2, 3)
-            val tests = mapOf<CloudCreateKeySettings, MultipazExtension>(
+            val tests = mapOf(
                 CloudCreateKeySettings.Builder(challenge)
                     .setAlgorithm(algorithm)
                     .setValidityPeriod(validFrom, validUntil)
@@ -401,7 +405,13 @@ class CloudSecureAreaTest {
                 null
             }
             val signature = try {
-                csa.sign(keyInfo.alias, dataToSign, keyUnlockInfo)
+                if (keyUnlockInfo != null) {
+                    withContext(MockKeyUnlockDataProvider(keyUnlockInfo)) {
+                        csa.sign(keyInfo.alias, dataToSign)
+                    }
+                } else {
+                    csa.sign(keyInfo.alias, dataToSign)
+                }
             } catch (e: KeyLockedException) {
                 throw AssertionError(e)
             }
@@ -463,7 +473,7 @@ class CloudSecureAreaTest {
         csa.createKey("testKey", settings)
         val keyInfo = csa.getKeyInfo("testKey")
         Assert.assertNotNull(keyInfo)
-        Assert.assertTrue(keyInfo.attestation.certChain!!.certificates.size >= 1)
+        Assert.assertTrue(keyInfo.attestation.certChain!!.certificates.isNotEmpty())
         Assert.assertEquals(Algorithm.ESP256, keyInfo.algorithm)
         Assert.assertFalse(keyInfo.isUserAuthenticationRequired)
         Assert.assertEquals(setOf<Any>(), keyInfo.userAuthenticationTypes)
@@ -471,7 +481,7 @@ class CloudSecureAreaTest {
         Assert.assertNull(keyInfo.validUntil)
         val dataToSign = byteArrayOf(4, 5, 6)
         val signature = try {
-            csa.sign("testKey", dataToSign, null)
+            csa.sign("testKey", dataToSign)
         } catch (e: KeyLockedException) {
             throw AssertionError(e)
         }
@@ -497,7 +507,7 @@ class CloudSecureAreaTest {
         csa.createKey("testKey", settings)
         val keyInfo = csa.getKeyInfo("testKey")
         Assert.assertNotNull(keyInfo)
-        Assert.assertTrue(keyInfo.attestation.certChain!!.certificates.size >= 1)
+        Assert.assertTrue(keyInfo.attestation.certChain!!.certificates.isNotEmpty())
         Assert.assertEquals(Algorithm.ECDH_P256, keyInfo.algorithm)
         Assert.assertFalse(keyInfo.isUserAuthenticationRequired)
         Assert.assertEquals(setOf<Any>(), keyInfo.userAuthenticationTypes)
@@ -506,7 +516,7 @@ class CloudSecureAreaTest {
 
         // First do the ECDH from the perspective of our side...
         val ourSharedSecret = try {
-            csa.keyAgreement("testKey", otherKeyPair.publicKey, null)
+            csa.keyAgreement("testKey", otherKeyPair.publicKey)
         } catch (e: KeyLockedException) {
             throw AssertionError(e)
         }
@@ -574,7 +584,7 @@ class CloudSecureAreaTest {
                 PassphraseConstraints.NONE
             ) { true }
             Assert.fail("Expected exception")
-        } catch (e: CloudException) {
+        } catch (_: CloudException) {
             // Expected path.
         }
     }
@@ -615,7 +625,13 @@ class CloudSecureAreaTest {
         testWrongPassphraseDelayHelper(
             algorithm = Algorithm.ESP256,
             useKey = { alias, csa, unlockData ->
-                csa.sign(alias, byteArrayOf(1, 2, 3), unlockData)
+                if (unlockData == null) {
+                    csa.sign(alias, byteArrayOf(1, 2, 3))
+                } else {
+                    withContext(MockKeyUnlockDataProvider(unlockData)) {
+                        csa.sign(alias, byteArrayOf(1, 2, 3))
+                    }
+                }
         })
     }
 
@@ -626,7 +642,13 @@ class CloudSecureAreaTest {
         testWrongPassphraseDelayHelper(
             algorithm = Algorithm.ECDH_P256,
             useKey = { alias, csa, unlockData ->
-                csa.keyAgreement(alias, otherKey.publicKey, unlockData)
+                if (unlockData == null) {
+                    csa.keyAgreement(alias, otherKey.publicKey)
+                } else {
+                    withContext(MockKeyUnlockDataProvider(unlockData)) {
+                        csa.keyAgreement(alias, otherKey.publicKey)
+                    }
+                }
         })
     }
 
@@ -782,6 +804,16 @@ class CloudSecureAreaTest {
         Assert.assertEquals(Instant.fromEpochMilliseconds(2000 * 1000), serverTime)
         useKey("testKey1", csa, correctPassphrase)
         Assert.assertEquals(Instant.fromEpochMilliseconds(2060 * 1000), serverTime)
+    }
+
+    private class MockKeyUnlockDataProvider(
+        val keyUnlockData: KeyUnlockData
+    ): KeyUnlockDataProvider {
+        override suspend fun getKeyUnlockData(
+            secureArea: SecureArea,
+            alias: String,
+            unlockReason: UnlockReason
+        ): KeyUnlockData = keyUnlockData
     }
 
     companion object {

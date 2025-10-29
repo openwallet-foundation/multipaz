@@ -26,12 +26,10 @@ import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
-import org.multipaz.credential.CredentialLoader
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentRequest
 import org.multipaz.document.DocumentRequest.DataElement
-import org.multipaz.document.DocumentStore
 import org.multipaz.document.NameSpacedData
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.X509Cert
@@ -53,9 +51,8 @@ import kotlinx.coroutines.test.runTest
 import org.multipaz.crypto.SigningKey
 import kotlin.time.Clock
 import kotlin.time.Instant
-import org.multipaz.document.DocumentStoreTest
-import org.multipaz.document.DocumentUtilTest.TestSecureAreaBoundCredential
 import org.multipaz.document.buildDocumentStore
+import org.multipaz.securearea.UnlockReason
 import kotlin.random.Random
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -254,7 +251,7 @@ class DeviceResponseGeneratorTest {
                     NameSpacedData.Builder().build(),
                     mdocCredentialSign.secureArea,
                     mdocCredentialSign.alias,
-                    null,
+                    UnlockReason.Unspecified
                 )
                 .generate()
         )
@@ -336,8 +333,8 @@ class DeviceResponseGeneratorTest {
                     NameSpacedData.Builder().build(),
                     mdocCredentialMac.secureArea,
                     mdocCredentialMac.alias,
-                    null,
-                    eReaderKey.publicKey
+                    eReaderKey.publicKey,
+                    UnlockReason.Unspecified
                 )
                 .generate()
         )
@@ -393,7 +390,7 @@ class DeviceResponseGeneratorTest {
                     deviceSignedData,
                     mdocCredentialSign.secureArea,
                     mdocCredentialSign.alias,
-                    null
+                    UnlockReason.Unspecified
                 )
                 .generate()
         )
@@ -456,7 +453,7 @@ class DeviceResponseGeneratorTest {
                     deviceSignedData,
                     mdocCredentialSign.secureArea,
                     mdocCredentialSign.alias,
-                    null
+                    UnlockReason.Unspecified
                 )
                 .generate()
         )
@@ -520,7 +517,7 @@ class DeviceResponseGeneratorTest {
                     NameSpacedData.Builder().build(),
                     mdocCredentialSign.secureArea,
                     mdocCredentialSign.alias,
-                    null
+                    UnlockReason.Unspecified
                 )
                 .generate()
         )

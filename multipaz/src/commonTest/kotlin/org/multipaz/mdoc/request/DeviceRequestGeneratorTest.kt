@@ -193,7 +193,6 @@ class DeviceRequestGeneratorTest {
                 readerKeySecureArea = secureArea,
                 readerKeyAlias = "testKey",
                 readerKeyCertificateChain = readerCertChain,
-                keyUnlockData = null
             )
             .generate()
         val deviceRequest = DeviceRequestParser(

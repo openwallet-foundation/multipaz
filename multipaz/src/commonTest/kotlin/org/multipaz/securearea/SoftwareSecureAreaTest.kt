@@ -23,6 +23,7 @@ import org.multipaz.securearea.software.SoftwareKeyUnlockData
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -51,7 +52,7 @@ class SoftwareSecureAreaTest {
 
         // Now that we know the key doesn't exist, check that ecKeySign() throws
         try {
-            ks.sign("testKey", byteArrayOf(1, 2), null)
+            ks.sign("testKey", byteArrayOf(1, 2))
             fail()
         } catch (e: IllegalArgumentException) {
             // Expected path.
@@ -79,7 +80,7 @@ class SoftwareSecureAreaTest {
         assertNull(keyInfo.passphraseConstraints)
         val dataToSign = byteArrayOf(4, 5, 6)
         val signature = try {
-            ks.sign("testKey", dataToSign, null)
+            ks.sign("testKey", dataToSign)
         } catch (e: KeyLockedException) {
             throw AssertionError(e)
         }
@@ -137,7 +138,7 @@ class SoftwareSecureAreaTest {
         )
         val dataToSign = byteArrayOf(4, 5, 6)
         try {
-            ks.sign("testKey", dataToSign, null)
+            ks.sign("testKey", dataToSign)
             fail("Signing shouldn't work with a key w/o purpose SIGN")
         } catch (e: IllegalArgumentException) {
             assertEquals("Key algorithm is not for Signing", e.message)
@@ -170,7 +171,6 @@ class SoftwareSecureAreaTest {
             ks.keyAgreement(
                 "testKey",
                 otherKey.publicKey,
-                null
             )
         } catch (e: KeyLockedException) {
             throw AssertionError(e)
@@ -198,7 +198,6 @@ class SoftwareSecureAreaTest {
             ks.keyAgreement(
                 "testKey",
                 otherKey.publicKey,
-                null
             )
             fail("ECDH shouldn't work with a key w/o purpose AGREE_KEY")
         } catch (e: KeyLockedException) {
@@ -229,11 +228,7 @@ class SoftwareSecureAreaTest {
         assertEquals(keyInfo.passphraseConstraints, passphraseConstraints)
         val dataToSign = byteArrayOf(4, 5, 6)
         try {
-            ks.sign(
-                "testKey",
-                dataToSign,
-                null
-            )
+            ks.sign("testKey", dataToSign)
             fail()
         } catch (e: KeyLockedException) {
             // This is the expected path.
@@ -241,11 +236,9 @@ class SoftwareSecureAreaTest {
 
         // Try with the wrong passphrase. This should fail.
         try {
-            ks.sign(
-                "testKey",
-                dataToSign,
-                SoftwareKeyUnlockData("wrongPassphrase")
-            )
+            withContext(MockKeyUnlockDataProvider(SoftwareKeyUnlockData("wrongPassphrase"))) {
+                ks.sign("testKey", dataToSign)
+            }
             fail()
         } catch (e: KeyLockedException) {
             // This is the expected path.
@@ -253,11 +246,12 @@ class SoftwareSecureAreaTest {
 
         // ... and with the right passphrase. This should work.
         val signature = try {
-            ks.sign(
-                "testKey",
-                dataToSign,
-                SoftwareKeyUnlockData(passphrase)
-            )
+            withContext(MockKeyUnlockDataProvider(SoftwareKeyUnlockData(passphrase))) {
+                ks.sign(
+                    "testKey",
+                    dataToSign,
+                )
+            }
         } catch (e: KeyLockedException) {
             throw AssertionError(e)
         }
@@ -289,7 +283,7 @@ class SoftwareSecureAreaTest {
         val certChain = keyInfo.attestation
         val dataToSign = byteArrayOf(4, 5, 6)
         val signature = try {
-            ks.sign("testKey", dataToSign, null)
+            ks.sign("testKey", dataToSign)
         } catch (e: KeyLockedException) {
             throw AssertionError(e)
         }
@@ -330,7 +324,7 @@ class SoftwareSecureAreaTest {
             assertEquals(algorithm, keyInfo.algorithm)
             val dataToSign = byteArrayOf(4, 5, 6)
             val derSignature = try {
-                ks.sign("testKey", dataToSign, null)
+                ks.sign("testKey", dataToSign)
             } catch (e: KeyLockedException) {
                 throw AssertionError(e)
             }
@@ -373,7 +367,6 @@ class SoftwareSecureAreaTest {
                 ks.keyAgreement(
                     "testKey",
                     otherKey.publicKey,
-                    null
                 )
             } catch (e: KeyLockedException) {
                 throw AssertionError(e)
@@ -397,7 +390,7 @@ class SoftwareSecureAreaTest {
         for (n in 0..9) {
             val keyInfo = batchCreateKeyResult.keyInfos[n]
             val dataToSign = byteArrayOf(4, 5, 6)
-            val signature = sa.sign(keyInfo.alias, dataToSign, null)
+            val signature = sa.sign(keyInfo.alias, dataToSign)
             Crypto.checkSignature(
                 keyInfo.publicKey,
                 dataToSign,
@@ -405,5 +398,15 @@ class SoftwareSecureAreaTest {
                 signature
             )
         }
+    }
+
+    private class MockKeyUnlockDataProvider(
+        val keyUnlockData: KeyUnlockData
+    ): KeyUnlockDataProvider {
+        override suspend fun getKeyUnlockData(
+            secureArea: SecureArea,
+            alias: String,
+            unlockReason: UnlockReason
+        ): KeyUnlockData = keyUnlockData
     }
 }

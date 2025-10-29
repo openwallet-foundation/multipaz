@@ -13,7 +13,6 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.prompt.PromptModel
 import org.multipaz.securearea.KeyLockedException
-import org.multipaz.securearea.KeyUnlockInteractive
 import org.multipaz.securearea.PassphraseConstraints
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
@@ -23,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.multipaz.crypto.Algorithm
+import org.multipaz.securearea.UnlockReason
 
 private val TAG = "SoftwareSecureAreaScreen"
 
@@ -119,11 +119,12 @@ private suspend fun swTestUnguarded(
 
     softwareSecureArea.createKey("testKey", builder.build())
 
-    val interactiveUnlock = KeyUnlockInteractive(
+    val unlockReason = UnlockReason.HumanReadable(
         title = "Enter Knowledge Factor",
         subtitle = "This is used to decrypt the private key material. " +
                 "In this sample the knowledge factor is '1111' but try " +
                 "entering something else to check out error handling",
+        requireConfirmation = false
     )
 
     if (algorithm.isSigning) {
@@ -132,7 +133,7 @@ private suspend fun swTestUnguarded(
             val signature = softwareSecureArea.sign(
                 "testKey",
                 "data".encodeToByteArray(),
-                interactiveUnlock,
+                unlockReason,
             )
             val t1 = Clock.System.now()
             Logger.d(
@@ -152,7 +153,7 @@ private suspend fun swTestUnguarded(
             val Zab = softwareSecureArea.keyAgreement(
                 "testKey",
                 otherKeyPairForEcdh.publicKey,
-                interactiveUnlock,
+                unlockReason,
             )
             val t1 = Clock.System.now()
             Logger.dHex(

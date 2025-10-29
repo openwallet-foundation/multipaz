@@ -32,6 +32,16 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
+import org.multipaz.multipaz_compose.generated.resources.Res
+import org.multipaz.multipaz_compose.generated.resources.passphrase_prompt_too_many_attempts
+import org.multipaz.multipaz_compose.generated.resources.passphrase_prompt_try_again
+import org.multipaz.multipaz_compose.generated.resources.passphrase_prompt_try_again_attempts_remain
+import org.multipaz.multipaz_compose.generated.resources.pin_prompt_too_many_attempts
+import org.multipaz.multipaz_compose.generated.resources.pin_prompt_try_again
+import org.multipaz.multipaz_compose.generated.resources.pin_prompt_try_again_attempts_remain
+import org.multipaz.prompt.PassphraseEvaluation
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -54,7 +64,7 @@ fun PassphrasePromptBottomSheet(
     subtitle: String,
     passphraseConstraints: PassphraseConstraints,
     showKeyboard: StateFlow<Boolean>,
-    onPassphraseEntered: suspend (passphrase: String) -> String?,
+    onPassphraseEntered: suspend (passphrase: String) -> PassphraseEvaluation,
     onDismissed: () -> Unit,
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -67,7 +77,9 @@ fun PassphrasePromptBottomSheet(
         containerColor = MaterialTheme.colorScheme.surface,
         contentWindowInsets = { WindowInsets.ime },
     ) {
-        val wrongPassphraseMessage = remember { mutableStateOf<String>("") }
+        val evaluationResult = remember {
+            mutableStateOf<PassphraseEvaluation>(PassphraseEvaluation.OK)
+        }
         val hideWrongPassphraseMessageJob = remember { mutableStateOf<Job?>(null) }
         Box(
             modifier = Modifier.fillMaxWidth()
@@ -120,7 +132,7 @@ fun PassphrasePromptBottomSheet(
                     onChanged = { passphrase, donePressed ->
                         // Note: onChanged is invoked in a coroutine because onPassphraseEntered
                         // might need to perform suspendable calls when checking the passphrase.
-                        var matchResult: String? = null
+                        var matchResult: PassphraseEvaluation = PassphraseEvaluation.OK
                         if (!passphraseConstraints.isFixedLength()) {
                             // notify of the typed passphrase when user taps 'Done' on the keyboard
                             if (donePressed) {
@@ -132,12 +144,12 @@ fun PassphrasePromptBottomSheet(
                                 matchResult = onPassphraseEntered(passphrase)
                             }
                         }
-                        if (matchResult != null) {
-                            wrongPassphraseMessage.value = matchResult
+                        evaluationResult.value = matchResult
+                        if (matchResult != PassphraseEvaluation.OK) {
                             hideWrongPassphraseMessageJob.value?.cancel()
                             hideWrongPassphraseMessageJob.value = coroutineScope.launch {
                                 delay(3.seconds)
-                                wrongPassphraseMessage.value = ""
+                                evaluationResult.value = PassphraseEvaluation.OK
                                 hideWrongPassphraseMessageJob.value = null
                             }
                             true  // Signals that the input field should be cleared
@@ -147,11 +159,37 @@ fun PassphrasePromptBottomSheet(
                     }
                 )
 
+                val text = when (val ev = evaluationResult.value) {
+                    is PassphraseEvaluation.OK -> ""
+                    is PassphraseEvaluation.TryAgain ->
+                        if (passphraseConstraints.requireNumerical) {
+                            stringResource(Res.string.pin_prompt_try_again)
+                        } else {
+                            stringResource(Res.string.passphrase_prompt_try_again)
+                        }
+                    is PassphraseEvaluation.TryAgainAttemptsRemain ->
+                        pluralStringResource(
+                            if (passphraseConstraints.requireNumerical) {
+                                Res.plurals.pin_prompt_try_again_attempts_remain
+                            } else {
+                                Res.plurals.passphrase_prompt_try_again_attempts_remain
+                            },
+                            ev.remainingAttempts,
+                            ev.remainingAttempts
+                        )
+                    is PassphraseEvaluation.TooManyAttempts ->
+                        if (passphraseConstraints.requireNumerical) {
+                            stringResource(Res.string.pin_prompt_too_many_attempts)
+                        } else {
+                            stringResource(Res.string.passphrase_prompt_too_many_attempts)
+                        }
+                }
+
                 Text(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 8.dp),
-                    text = wrongPassphraseMessage.value,
+                    text = text,
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error

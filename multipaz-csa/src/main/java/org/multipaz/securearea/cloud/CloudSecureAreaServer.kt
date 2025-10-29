@@ -800,8 +800,7 @@ class CloudSecureAreaServer(
             val secureArea = SoftwareSecureArea.create(storage)
             val signature = secureArea.sign(
                 "CloudKey",
-                state.dataToSign!!,
-                null
+                state.dataToSign!!
             )
             Logger.d(TAG, "$remoteHost: SignRequest1: Signed data for client")
             val response1 = CloudSecureAreaProtocol.SignResponse1(
@@ -942,10 +941,9 @@ class CloudSecureAreaServer(
             val storage = EphemeralStorage.deserialize(
                 ByteString(state.keyContext!!.cloudKeyStorage!!))
             val secureArea = SoftwareSecureArea.create(storage)
-            var Zab = secureArea.keyAgreement(
+            val Zab = secureArea.keyAgreement(
                     "CloudKey",
                     state.otherPublicKey!!.ecPublicKey,
-                    null
                 )
             Logger.d(TAG, "$remoteHost: KeyAgreementRequest1: Calculated Zab")
             val response1 = CloudSecureAreaProtocol.KeyAgreementResponse1(

@@ -76,7 +76,20 @@
     <string name="passphrase_pin_screen_delete">Delete</string>
     <string name="passphrase_pin_screen_cancel">Cancel</string>
     <string name="passphrase_pin_screen_done">Done</string>
-    <string name="passphrase_prompt_bottom_sheet_cancel">Cancel</string>
+
+    <!-- PassphrasePromptBottomSheet -->
+    <string name="pin_prompt_try_again">Wrong PIN, try again</string>
+    <plurals name="pin_prompt_try_again_attempts_remain">
+        <item quantity="one">Wrong PIN, try again, last attempt remains</item>
+        <item quantity="other">Wrong PIN, try again, %1$d attempts remain</item>
+    </plurals>
+    <string name="pin_prompt_too_many_attempts">Too many wrong PINs attempted, try again later</string>
+    <string name="passphrase_prompt_try_again">Wrong passphrase, try again</string>
+    <plurals name="passphrase_prompt_try_again_attempts_remain">
+        <item quantity="one">Wrong passphrase, try again, last attempt remains</item>
+        <item quantity="other">Wrong passphrase, try again, %1$d attempts remain</item>
+    </plurals>
+    <string name="passphrase_prompt_too_many_attempts">Too many wrong passphrases attempted, try again later</string>
 
     <!-- Provisioning -->
     <string name="provisioning_authorization_failed">Authorization failed</string>

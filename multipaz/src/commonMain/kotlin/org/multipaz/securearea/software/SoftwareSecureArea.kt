@@ -21,7 +21,6 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
 import org.multipaz.prompt.requestPassphrase
-import org.multipaz.securearea.KeyUnlockInteractive
 import org.multipaz.securearea.KeyAttestation
 import org.multipaz.securearea.KeyLockedException
 import org.multipaz.securearea.KeyUnlockData
@@ -34,6 +33,12 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.crypto.Hkdf
+import org.multipaz.prompt.PassphraseEvaluation
+import org.multipaz.prompt.PromptModel
+import org.multipaz.prompt.PromptModelNotAvailableException
+import org.multipaz.securearea.KeyUnlockDataProvider
+import org.multipaz.securearea.UnlockReason
+import kotlin.coroutines.coroutineContext
 import kotlin.random.Random
 
 /**
@@ -201,59 +206,34 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
 
     private suspend fun<T> interactionHelper(
         alias: String,
-        keyUnlockData: KeyUnlockData?,
+        unlockReason: UnlockReason,
         op: suspend (unlockData: KeyUnlockData?) -> T,
-    ): T {
-        if (keyUnlockData !is KeyUnlockInteractive) {
-            return op(keyUnlockData)
+    ): T =
+        try {
+            op.invoke(null)
+        } catch (_: KeyLockedException) {
+            val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
+                ?: DefaultKeyUnlockDataProvider
+            // DefaultKeyUnlockDataProvider.getKeyUnlockData checks passphrase/PIN before
+            // returning it here, so retry loop is internal to the provider. We expect
+            // other providers to do the same, as we do not want to subject non-interactive
+            // providers to handle repeated calls when unlock data fails to unlock the key.
+            val unlockData = unlockDataProvider.getKeyUnlockData(
+                secureArea = this,
+                alias = alias,
+                unlockReason = unlockReason
+            )
+            op.invoke(unlockData)
         }
-        var softwareKeyUnlockData: SoftwareKeyUnlockData? = null
-        do {
-            try {
-                return op(softwareKeyUnlockData)
-            } catch (_: KeyLockedException) {
-                val keyInfo = getKeyInfo(alias)
-                val constraints = keyInfo.passphraseConstraints ?: PassphraseConstraints.NONE
-                // TODO: translations
-                val defaultSubtitle = if (constraints.requireNumerical) {
-                    "Enter the PIN associated with the document"
-                } else {
-                    "Enter the passphrase associated with the document"
-                }
-                val passphrase = requestPassphrase(
-                    title = keyUnlockData.title ?: "Verify it's you",
-                    subtitle = keyUnlockData.subtitle ?: defaultSubtitle,
-                    passphraseConstraints = constraints,
-                    passphraseEvaluator = { enteredPassphrase: String ->
-                        try {
-                            loadKey(alias, SoftwareKeyUnlockData(enteredPassphrase))
-                            null
-                        } catch (_: Throwable) {
-                            // TODO: translations
-                            if (constraints.requireNumerical) {
-                                "Wrong PIN entered. Try again"
-                            } else {
-                                "Wrong passphrase entered. Try again"
-                            }
-                        }
-                    }
-                )
-                if (passphrase == null) {
-                    throw KeyLockedException("User canceled passphrase prompt")
-                }
-                softwareKeyUnlockData = SoftwareKeyUnlockData(passphrase)
-            }
-        } while (true)
-    }
 
     override suspend fun sign(
         alias: String,
         dataToSign: ByteArray,
-        keyUnlockData: KeyUnlockData?
+        unlockReason: UnlockReason
     ): EcSignature {
         return interactionHelper(
             alias,
-            keyUnlockData,
+            unlockReason,
             op = { unlockData -> signNonInteractive(alias, dataToSign, unlockData) }
         )
     }
@@ -271,11 +251,11 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
     override suspend fun keyAgreement(
         alias: String,
         otherKey: EcPublicKey,
-        keyUnlockData: KeyUnlockData?
+        unlockReason: UnlockReason
     ): ByteArray {
         return interactionHelper(
             alias,
-            keyUnlockData,
+            unlockReason,
             op = { unlockData -> keyAgreementNonInteractive(alias, otherKey, unlockData) }
         )
     }
@@ -308,6 +288,42 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
     override suspend fun getKeyInvalidated(alias: String): Boolean {
         // Software keys are never invalidated.
         return false
+    }
+
+    object DefaultKeyUnlockDataProvider: KeyUnlockDataProvider {
+        override suspend fun getKeyUnlockData(
+            secureArea: SecureArea,
+            alias: String,
+            unlockReason: UnlockReason
+        ): KeyUnlockData {
+            secureArea as SoftwareSecureArea
+            val keyInfo = secureArea.getKeyInfo(alias)
+            val constraints = keyInfo.passphraseConstraints ?: PassphraseConstraints.NONE
+            val promptModel = try {
+                PromptModel.get(coroutineContext)
+            } catch (_: PromptModelNotAvailableException) {
+                throw KeyLockedException("Key is locked and PromptModel is not available to unlock interactively")
+            }
+            val humanReadable = promptModel.toHumanReadable(unlockReason, constraints)
+            val passphrase = promptModel.requestPassphrase(
+                title = humanReadable.title,
+                subtitle = humanReadable.subtitle,
+                passphraseConstraints = constraints,
+                passphraseEvaluator = { enteredPassphrase: String ->
+                    try {
+                        secureArea.loadKey(alias, SoftwareKeyUnlockData(enteredPassphrase))
+                        PassphraseEvaluation.OK
+                    } catch (_: Throwable) {
+                        // TODO: translations
+                        PassphraseEvaluation.TryAgain
+                    }
+                }
+            )
+            if (passphrase == null) {
+                throw KeyLockedException("User canceled passphrase prompt")
+            }
+            return SoftwareKeyUnlockData(passphrase)
+        }
     }
 
     @CborSerializable(schemaHash = "6ifPnbV5Efd5Yf9NLMh4wXHWIVySzLaTeJqnGxrPuzI")

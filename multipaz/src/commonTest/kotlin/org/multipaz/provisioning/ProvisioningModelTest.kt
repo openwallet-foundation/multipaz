@@ -40,6 +40,7 @@ import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
 import org.multipaz.mdoc.mso.StaticAuthDataGenerator
 import org.multipaz.mdoc.util.MdocUtil
+import org.multipaz.prompt.ConvertToHumanReadableFn
 import org.multipaz.prompt.PassphraseRequest
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.SinglePromptModel
@@ -255,6 +256,10 @@ class ProvisioningModelTest {
         override val passphrasePromptModel = SinglePromptModel<PassphraseRequest, String?>()
         override val promptModelScope =
             CoroutineScope(Dispatchers.Default + SupervisorJob() + this)
+
+        override val toHumanReadable: ConvertToHumanReadableFn = { _, _ ->
+            throw IllegalStateException("unexpected state")
+        }
 
         fun onClose() {
             promptModelScope.cancel()

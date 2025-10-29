@@ -35,7 +35,7 @@ import org.multipaz.presentment.SimpleCredentialPresentmentData
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
-import org.multipaz.securearea.KeyUnlockInteractive
+import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.trustmanagement.TrustPoint
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
@@ -316,15 +316,15 @@ private suspend fun calcDocument(
             dataElements = NameSpacedData.Builder().build(),
             secureArea = credential.secureArea,
             keyAlias = credential.alias,
-            keyUnlockData = KeyUnlockInteractive(),
-            eReaderKey = eReaderKey
+            eReaderKey = eReaderKey,
+            unlockReason = PresentmentUnlockReason(credential)
         )
     } else {
         documentGenerator.setDeviceNamespacesSignature(
             NameSpacedData.Builder().build(),
             credential.secureArea,
             credential.alias,
-            KeyUnlockInteractive(),
+            PresentmentUnlockReason(credential),
         )
     }
 

@@ -1,13 +1,9 @@
 <resources>
-    <!-- AndroidKeystoreSecureArea -->
-    <string name="aks_auth_default_title">Verify it\'s you</string>
-    <string name="aks_auth_default_subtitle">Authentication is required to share the document</string>
-
-    <!-- CloudSecureArea -->
-    <string name="csa_auth_default_title">Verify it\'s you</string>
-    <string name="csa_auth_default_subtitle_pin">Enter the PIN associated with the document</string>
-    <string name="csa_auth_default_subtitle_passphrase">Enter the passphrase associated with the document</string>
-    <string name="csa_auth_wrong_pin">Wrong PIN entered. Try again</string>
-    <string name="csa_auth_wrong_passphrase">Wrong passphrase entered. Try again</string>
-    <string name="csa_auth_too_many_attempts">Too many attempts. Try again later</string>
+    <!-- AndroidPromptModel -->
+    <string name="key_unlock_default_title">Verify it\'s you</string>
+    <string name="key_unlock_default_subtitle">Authentication is required</string>
+    <string name="key_unlock_present_title">Verify it\'s you to share the document</string>
+    <string name="key_unlock_present_bio_subtitle">Authentication is required</string>
+    <string name="key_unlock_present_passphrase_subtitle">Enter the passphrase associated with the document</string>
+    <string name="aks_unlock_present_pin_subtitle">Enter the PIN associated with the document</string>
 </resources>

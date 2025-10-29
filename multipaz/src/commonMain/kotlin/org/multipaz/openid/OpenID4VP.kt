@@ -50,7 +50,7 @@ import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
-import org.multipaz.securearea.KeyUnlockInteractive
+import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.trustmanagement.TrustPoint
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
@@ -665,17 +665,11 @@ object OpenID4VP {
                 "Signing is required for W3C DC API but its algorithm ${keyInfo.algorithm.name} is not for signing"
             )
         } else {
-            val authMessage = credential.document.metadata.displayName?.let {
-                "Authentication is required to share $it"
-            } ?: "Authentication is required to share the document"
             documentGenerator.setDeviceNamespacesSignature(
                 dataElements = NameSpacedData.Builder().build(),
                 secureArea = credential.secureArea,
                 keyAlias = credential.alias,
-                keyUnlockData = KeyUnlockInteractive(
-                    title = "Verify it's you",
-                    subtitle = authMessage
-                ),
+                unlockReason = PresentmentUnlockReason(credential),
             )
         }
 
@@ -700,17 +694,11 @@ object OpenID4VP {
 
         (sdjwtVcCredential as Credential).increaseUsageCount()
         return if (sdjwtVcCredential is SecureAreaBoundCredential) {
-            val authMessage = sdjwtVcCredential.document.metadata.displayName?.let {
-                "Authentication is required to share $it"
-            } ?: "Authentication is required to share the document"
             filteredSdJwt.present(
                 signingKey = SigningKey.anonymous(
                     alias = sdjwtVcCredential.alias,
                     secureArea = sdjwtVcCredential.secureArea,
-                    keyUnlockData = KeyUnlockInteractive(
-                        title = "Verify it's you",
-                        subtitle = authMessage
-                    ),
+                    unlockReason = PresentmentUnlockReason(sdjwtVcCredential),
                 ),
                 nonce = nonce,
                 audience = if (version == Version.DRAFT_29) {

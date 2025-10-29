@@ -42,7 +42,6 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.securearea.KeyAttestation
-import org.multipaz.securearea.KeyUnlockInteractive
 import org.multipaz.securearea.PassphraseConstraints
 import org.multipaz.securearea.cloud.CloudCreateKeySettings
 import org.multipaz.securearea.cloud.CloudSecureArea
@@ -460,8 +459,8 @@ private suspend fun csaTestUnguarded(
         val t0 = Clock.System.now()
         val signature = cloudSecureArea!!.sign(
             "testKey",
-            "data".encodeToByteArray(),
-            KeyUnlockInteractive())
+            "data".encodeToByteArray()
+        )
         val t1 = Clock.System.now()
         Logger.d(
             TAG,
@@ -474,8 +473,8 @@ private suspend fun csaTestUnguarded(
         val t0 = Clock.System.now()
         val Zab = cloudSecureArea!!.keyAgreement(
             "testKey",
-            otherKeyPairForEcdh.publicKey,
-            KeyUnlockInteractive())
+            otherKeyPairForEcdh.publicKey
+        )
         val t1 = Clock.System.now()
         Logger.dHex(
             TAG,

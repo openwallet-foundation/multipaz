@@ -36,6 +36,7 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.UnlockReason
 import org.multipaz.securearea.SecureArea
 
 /**
@@ -75,7 +76,7 @@ class DeviceRequestGenerator(
         readerKeySecureArea: SecureArea,
         readerKeyAlias: String,
         readerKeyCertificateChain: X509CertChain,
-        keyUnlockData: KeyUnlockData?,
+        unlockReason: UnlockReason = UnlockReason.Unspecified
     ): DeviceRequestGenerator = apply {
         val encodedItemsRequest = Cbor.encode(
             buildCborMap {
@@ -130,7 +131,7 @@ class DeviceRequestGenerator(
             includeMessageInPayload = false,
             protectedHeaders = protectedHeaders,
             unprotectedHeaders = unprotectedHeaders,
-            keyUnlockData = keyUnlockData
+            unlockReason = unlockReason
         ).toDataItem()
 
         docRequestsBuilder.add(

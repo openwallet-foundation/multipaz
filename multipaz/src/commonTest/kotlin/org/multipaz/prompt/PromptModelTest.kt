@@ -36,12 +36,7 @@ class PromptModelTest {
     @Test
     fun noPromptModel() = runTest {
         val exception = try {
-            requestPassphrase(
-                title = "Title",
-                subtitle = "Subtitle",
-                passphraseConstraints = PassphraseConstraints.NONE,
-                passphraseEvaluator = null
-            )
+            PromptModel.get(coroutineContext)
             null
         } catch (err: Throwable) {
             err
@@ -52,15 +47,13 @@ class PromptModelTest {
     @Test
     fun noPromptUI() = runTest {
         val exception = try {
-            withContext(promptModel) {
-                requestPassphrase(
-                    title = "Title",
-                    subtitle = "Subtitle",
-                    passphraseConstraints = PassphraseConstraints.NONE,
-                    passphraseEvaluator = null
-                )
-                null
-            }
+            promptModel.requestPassphrase(
+                title = "Title",
+                subtitle = "Subtitle",
+                passphraseConstraints = PassphraseConstraints.NONE,
+                passphraseEvaluator = null
+            )
+            null
         } catch (err: Throwable) {
             err
         }
@@ -70,15 +63,13 @@ class PromptModelTest {
     @Test
     fun simplePromptLocalScope() = runTest {
         val dialogState = collectDialogState { "Foo" }
-        withContext(promptModel) {
-            val passphrase = requestPassphrase(
-                title = "Title",
-                subtitle = "Subtitle",
-                passphraseConstraints = PassphraseConstraints.NONE,
-                passphraseEvaluator = null
-            )
-            assertEquals("Foo", passphrase)
-        }
+        val passphrase = promptModel.requestPassphrase(
+            title = "Title",
+            subtitle = "Subtitle",
+            passphraseConstraints = PassphraseConstraints.NONE,
+            passphraseEvaluator = null
+        )
+        assertEquals("Foo", passphrase)
 
         val promptState = dialogState[0] as SinglePromptModel.DialogShownState
         assertEquals("Title", promptState.parameters.title)
@@ -92,7 +83,7 @@ class PromptModelTest {
     fun simplePromptTopScope() = runTest {
         val dialogState = collectDialogState { "Bar" }
         val promptJob = promptModel.promptModelScope.launch {
-            val passphrase = requestPassphrase(
+            val passphrase = PromptModel.get(coroutineContext).requestPassphrase(
                 title = "Title Top",
                 subtitle = "Subtitle Top",
                 passphraseConstraints = PassphraseConstraints.NONE,
@@ -115,7 +106,7 @@ class PromptModelTest {
     fun cancellation() = runTest {
         val dialogState = collectDialogState { IGNORE }
         val promptJob = launch(UnconfinedTestDispatcher(testScheduler) + promptModel) {
-            requestPassphrase(
+            PromptModel.get(coroutineContext).requestPassphrase(
                 title = "Title",
                 subtitle = "Subtitle",
                 passphraseConstraints = PassphraseConstraints.NONE,
@@ -136,7 +127,7 @@ class PromptModelTest {
         collectDialogState { IGNORE }
         val exception = async(UnconfinedTestDispatcher(testScheduler) + promptModel) {
             try {
-                requestPassphrase(
+                PromptModel.get(coroutineContext).requestPassphrase(
                     title = "Title",
                     subtitle = "Subtitle",
                     passphraseConstraints = PassphraseConstraints.NONE,
@@ -193,6 +184,10 @@ class PromptModelTest {
         override val passphrasePromptModel = SinglePromptModel<PassphraseRequest, String?>()
         override val promptModelScope =
             CoroutineScope(Dispatchers.Default + SupervisorJob() + this)
+
+        override val toHumanReadable: ConvertToHumanReadableFn = { _, _ ->
+            throw IllegalStateException("unexpected state")
+        }
 
         fun onClose() {
             promptModelScope.cancel()

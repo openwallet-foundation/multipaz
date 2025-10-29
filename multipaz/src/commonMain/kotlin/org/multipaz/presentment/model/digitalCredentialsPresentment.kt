@@ -33,7 +33,7 @@ import org.multipaz.presentment.CredentialPresentmentData
 import org.multipaz.presentment.CredentialPresentmentSelection
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.Requester
-import org.multipaz.securearea.KeyUnlockInteractive
+import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.trustmanagement.TrustPoint
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
@@ -310,17 +310,11 @@ private suspend fun calcDocument(
             "Signing is required for W3C DC API but its algorithm ${keyInfo.algorithm.name} is not for signing"
         )
     } else {
-        val authMessage = credential.document.metadata.displayName?.let {
-            "Authentication is required to share $it"
-        } ?: "Authentication is required to share the document"
         documentGenerator.setDeviceNamespacesSignature(
             dataElements = NameSpacedData.Builder().build(),
             secureArea = credential.secureArea,
             keyAlias = credential.alias,
-            keyUnlockData = KeyUnlockInteractive(
-                title = "Verify it's you",
-                subtitle = authMessage
-            ),
+            unlockReason = PresentmentUnlockReason(credential),
         )
     }
 

@@ -8,8 +8,7 @@ import org.multipaz.asn1.OID
 import org.multipaz.securearea.KeyInfo
 import org.multipaz.securearea.KeyInvalidatedException
 import org.multipaz.securearea.KeyLockedException
-import org.multipaz.securearea.KeyUnlockData
-import org.multipaz.securearea.KeyUnlockInteractive
+import org.multipaz.securearea.UnlockReason
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaRepository
 
@@ -91,7 +90,7 @@ sealed class SigningKey {
         /** [SecureArea] that holds the private key */
         val secureArea: SecureArea
         /** [KeyUnlockData] that should be used to generate a signature */
-        val keyUnlockData: KeyUnlockData?
+        val unlockReason: UnlockReason
         /** Key data */
         val keyInfo: KeyInfo
     }
@@ -186,7 +185,7 @@ sealed class SigningKey {
         override val alias: String,
         override val secureArea: SecureArea,
         override val keyInfo: KeyInfo,
-        override val keyUnlockData: KeyUnlockData? = KeyUnlockInteractive(),
+        override val unlockReason: UnlockReason = UnlockReason.Unspecified,
         override val algorithm: Algorithm = keyInfo.algorithm
     ): X509Certified(), SecureAreaBased {
         override val publicKey: EcPublicKey get() = keyInfo.publicKey
@@ -200,7 +199,7 @@ sealed class SigningKey {
         override val alias: String,
         override val secureArea: SecureArea,
         override val keyInfo: KeyInfo,
-        override val keyUnlockData: KeyUnlockData? = KeyUnlockInteractive(),
+        override val unlockReason: UnlockReason = UnlockReason.Unspecified,
         override val algorithm: Algorithm = keyInfo.algorithm
     ): Named(), SecureAreaBased {
         override val publicKey: EcPublicKey get() = keyInfo.publicKey
@@ -213,7 +212,7 @@ sealed class SigningKey {
         override val alias: String,
         override val secureArea: SecureArea,
         override val keyInfo: KeyInfo,
-        override val keyUnlockData: KeyUnlockData? = KeyUnlockInteractive(),
+        override val unlockReason: UnlockReason = UnlockReason.Unspecified,
         override val algorithm: Algorithm = keyInfo.algorithm
     ): Anonymous(), SecureAreaBased {
         override val publicKey: EcPublicKey get() = keyInfo.publicKey
@@ -232,7 +231,7 @@ sealed class SigningKey {
             secureAreaBased.secureArea.sign(
                 alias = secureAreaBased.alias,
                 dataToSign = message,
-                keyUnlockData = secureAreaBased.keyUnlockData
+                unlockReason = secureAreaBased.unlockReason
             )
 
         private fun keyAgreement(explicit: Explicit, otherKey: EcPublicKey): ByteArray =
@@ -245,7 +244,7 @@ sealed class SigningKey {
             secureAreaBased.secureArea.keyAgreement(
                 alias = secureAreaBased.alias,
                 otherKey = otherKey,
-                keyUnlockData = secureAreaBased.keyUnlockData
+                unlockReason = secureAreaBased.unlockReason
             )
 
         /**
@@ -258,11 +257,11 @@ sealed class SigningKey {
         suspend fun parse(
             json: String,
             secureAreaRepository: SecureAreaRepository?,
-            keyUnlockData: KeyUnlockData? = KeyUnlockInteractive()
+            unlockReason: UnlockReason = UnlockReason.Unspecified
         ): SigningKey = parse(
             json = Json.parseToJsonElement(json),
             secureAreaRepository = secureAreaRepository,
-            keyUnlockData = keyUnlockData
+            unlockReason = unlockReason
         )
 
         /**
@@ -271,7 +270,7 @@ sealed class SigningKey {
         suspend fun parse(
             json: JsonElement,
             secureAreaRepository: SecureAreaRepository?,
-            keyUnlockData: KeyUnlockData? = KeyUnlockInteractive()
+            unlockReason: UnlockReason = UnlockReason.Unspecified
         ): SigningKey {
             if (json !is JsonObject) {
                 throw IllegalArgumentException("expected json object")
@@ -286,9 +285,9 @@ sealed class SigningKey {
                 val alias = json["alias"]?.jsonPrimitive?.content ?: throw IllegalArgumentException("'alias' is required")
                 val keyInfo = secureArea.getKeyInfo(alias)
                 if (kid != null) {
-                    NamedSecureAreaBased(kid, alias, secureArea, keyInfo, keyUnlockData)
+                    NamedSecureAreaBased(kid, alias, secureArea, keyInfo, unlockReason)
                 } else {
-                    X509CertifiedSecureAreaBased(x5c!!, alias, secureArea, keyInfo, keyUnlockData)
+                    X509CertifiedSecureAreaBased(x5c!!, alias, secureArea, keyInfo, unlockReason)
                 }
             } else {
                 parseExplicit(json)
@@ -328,7 +327,7 @@ sealed class SigningKey {
         suspend fun anonymous(
             secureArea: SecureArea,
             alias: String,
-            keyUnlockData: KeyUnlockData = KeyUnlockInteractive(),
+            unlockReason: UnlockReason = UnlockReason.Unspecified,
             algorithm: Algorithm? = null
         ): SigningKey {
             val keyInfo = secureArea.getKeyInfo(alias)
@@ -336,7 +335,7 @@ sealed class SigningKey {
                 secureArea = secureArea,
                 alias = alias,
                 keyInfo = keyInfo,
-                keyUnlockData = keyUnlockData,
+                unlockReason = unlockReason,
                 algorithm = algorithm ?: keyInfo.algorithm
             )
         }

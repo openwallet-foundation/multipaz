@@ -34,7 +34,7 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.Hkdf
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.securearea.KeyLockedException
-import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.UnlockReason
 import org.multipaz.securearea.SecureArea
 
 /**
@@ -91,7 +91,7 @@ class DocumentGenerator
         dataElements: NameSpacedData,
         secureArea: SecureArea,
         keyAlias: String,
-        keyUnlockData: KeyUnlockData?,
+        unlockReason: UnlockReason,
         useMac: Boolean,
         eReaderKey: EcPublicKey?
     ) = apply {
@@ -127,14 +127,14 @@ class DocumentGenerator
                     false,
                     mapOf(),
                     mapOf(),
-                    keyUnlockData
+                    unlockReason
                 ).toDataItem()
             )
         } else {
             val sharedSecret = secureArea.keyAgreement(
                 keyAlias,
                 eReaderKey!!,
-                keyUnlockData
+                unlockReason
             )
             val sessionTranscriptBytes = Cbor.encode(Tagged(24, Bstr(encodedSessionTranscript)))
             val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
@@ -191,13 +191,13 @@ class DocumentGenerator
         dataElements: NameSpacedData,
         secureArea: SecureArea,
         keyAlias: String,
-        keyUnlockData: KeyUnlockData?
+        unlockReason: UnlockReason
     ) = apply {
         setDeviceNamespaces(
             dataElements,
             secureArea,
             keyAlias,
-            keyUnlockData,
+            unlockReason,
             useMac = false,
             eReaderKey = null
         )
@@ -221,14 +221,14 @@ class DocumentGenerator
         dataElements: NameSpacedData,
         secureArea: SecureArea,
         keyAlias: String,
-        keyUnlockData: KeyUnlockData?,
-        eReaderKey: EcPublicKey
+        eReaderKey: EcPublicKey,
+        unlockReason: UnlockReason = UnlockReason.Unspecified
     ) = apply {
         setDeviceNamespaces(
             dataElements,
             secureArea,
             keyAlias,
-            keyUnlockData,
+            unlockReason,
             useMac = true,
             eReaderKey = eReaderKey
         )

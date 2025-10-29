@@ -9,6 +9,7 @@ import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
 import kotlinx.io.bytestring.ByteString
+import kotlin.coroutines.coroutineContext
 
 /**
  * An implementation of [SecureArea] using the Apple Secure Enclave.
@@ -147,16 +148,15 @@ class SecureEnclaveSecureArea private constructor(
     override suspend fun sign(
         alias: String,
         dataToSign: ByteArray,
-        keyUnlockData: KeyUnlockData?
+        unlockReason: UnlockReason
     ): EcSignature {
         val (keyBlob, keyInfo) = loadKey(alias)
         check(keyInfo.algorithm.isSigning)
-        val unlockData = if (keyUnlockData is KeyUnlockInteractive) {
-            // TODO: create LAContext with title/subtitle from KeyUnlockInteractive
-            null
-        } else {
-            keyUnlockData
-        }
+        val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
+        // TODO: implement default KeyUnlockDataProvider by converting
+        //  OperationReason to OperationReason.HumanReadable using PromptModel
+        //  and the creating LAContext with title/subtitle from OperationReason.HumanReadable
+        val unlockData = unlockDataProvider?.getKeyUnlockData(this, alias, unlockReason)
         check(unlockData is SecureEnclaveKeyUnlockData?)
         return Crypto.secureEnclaveEcSign(keyBlob, dataToSign, unlockData)
     }
@@ -164,17 +164,16 @@ class SecureEnclaveSecureArea private constructor(
     override suspend fun keyAgreement(
         alias: String,
         otherKey: EcPublicKey,
-        keyUnlockData: KeyUnlockData?
+        unlockReason: UnlockReason
     ): ByteArray {
         val (keyBlob, keyInfo) = loadKey(alias)
         check(otherKey.curve == EcCurve.P256)
         check(keyInfo.algorithm.isKeyAgreement)
-        val unlockData = if (keyUnlockData is KeyUnlockInteractive) {
-            // TODO: create LAContext with title/subtitle from KeyUnlockInteractive
-            null
-        } else {
-            keyUnlockData
-        }
+        val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
+        // TODO: implement default KeyUnlockDataProvider by converting
+        //  OperationReason to OperationReason.HumanReadable using PromptModel
+        //  and the creating LAContext with title/subtitle from OperationReason.HumanReadable
+        val unlockData = unlockDataProvider?.getKeyUnlockData(this, alias, unlockReason)
         check(unlockData is SecureEnclaveKeyUnlockData?)
         return Crypto.secureEnclaveEcKeyAgreement(keyBlob, otherKey, unlockData)
     }

@@ -9,6 +9,7 @@ import androidx.lifecycle.Lifecycle
 import org.multipaz.context.getActivity
 import org.multipaz.prompt.BiometricPromptState
 import org.multipaz.prompt.SinglePromptModel
+import androidx.lifecycle.compose.currentStateAsState
 
 /**
  * Displays biometric prompt dialog in Composable UI environment.
@@ -18,7 +19,7 @@ internal fun BiometricPromptDialog(model: SinglePromptModel<BiometricPromptState
     val activity = LocalContext.current.getActivity() as FragmentActivity
     val dialogState = model.dialogState.collectAsState(SinglePromptModel.NoDialogState())
     val dialogStateValue = dialogState.value
-    if (!activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+    if (!activity.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)) {
         // Only currently-running activity should show biometric prompt
         return
     }

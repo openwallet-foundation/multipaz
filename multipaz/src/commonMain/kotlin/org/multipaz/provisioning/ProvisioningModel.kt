@@ -13,13 +13,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.encodeToByteString
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
+import org.multipaz.crypto.SigningKey
 import org.multipaz.document.AbstractDocumentMetadata
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
+import org.multipaz.jwt.buildJwt
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.prompt.PromptModel
 import org.multipaz.provisioning.AuthorizationChallenge
@@ -37,10 +38,10 @@ import org.multipaz.rpc.handler.RpcAuthClientSession
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
+import org.multipaz.provisioning.ProofOfPossessionUnlockReason
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.util.Logger
-import org.multipaz.util.toBase64Url
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.min
 import kotlin.reflect.KClass
@@ -359,24 +360,22 @@ class ProvisioningModel(
             keyProofType: KeyBindingType.OpenidProofOfPossession,
             credential: SecureAreaBoundCredential
         ): String {
-            val publicKeyInfo = credential.secureArea.getKeyInfo(credential.alias)
-            val header = buildJsonObject {
-                put("typ", "openid4vci-proof+jwt")
-                put("alg", "ES256")
-                put("jwk", publicKeyInfo.publicKey.toJwk())
-            }.toString().encodeToByteArray().toBase64Url()
-            val body = buildJsonObject {
+            val signingKey = SigningKey.anonymous(
+                secureArea = credential.secureArea,
+                alias = credential.alias,
+                unlockReason = ProofOfPossessionUnlockReason
+            )
+            return buildJwt(
+                type = "openid4vci-proof+jwt",
+                key = signingKey,
+                header = {
+                    put("jwk", signingKey.publicKey.toJwk())
+                }
+            ) {
                 put("iss", keyProofType.clientId)
                 put("aud", keyProofType.aud)
-                put("iat", Clock.System.now().epochSeconds)
                 put("nonce", challenge)
-            }.toString().encodeToByteArray().toBase64Url()
-            val messageToSign = "$header.$body"
-            val signature = credential.secureArea.sign(
-                alias = credential.alias,
-                dataToSign = messageToSign.encodeToByteArray()
-            )
-            return messageToSign + "." + signature.toCoseEncoded().toBase64Url()
+            }
         }
     }
 }

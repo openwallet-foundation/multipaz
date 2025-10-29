@@ -15,6 +15,7 @@ import org.multipaz.securearea.PassphraseConstraints
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.multipaz.compose.passphrase.PassphrasePromptBottomSheet
+import org.multipaz.prompt.PassphraseEvaluation
 
 @Composable
 fun PassphrasePromptScreen(
@@ -42,7 +43,7 @@ fun PassphrasePromptScreen(
                     } else {
                         showToast("The expected passphrase was entered")
                     }
-                    null
+                    PassphraseEvaluation.OK
                 } else {
                     val numAttemptsLeft = 3 - numWrongTries.value
                     if (numAttemptsLeft == 0) {
@@ -52,19 +53,10 @@ fun PassphrasePromptScreen(
                             showToast("Too many wrong passphrases attempted")
                         }
                         showPrompt.value = null
-                        null
+                        PassphraseEvaluation.OK
                     } else {
                         numWrongTries.value = numWrongTries.value + 1
-                        val attemptsMessage = if (numAttemptsLeft == 1) {
-                            "This is your final attempt before you are locked out"
-                        } else {
-                            "$numAttemptsLeft attempts left before you are locked out"
-                        }
-                        if (constraints.requireNumerical) {
-                            "Wrong PIN entered. $attemptsMessage"
-                        } else {
-                            "Wrong passphrase entered. $attemptsMessage"
-                        }
+                        PassphraseEvaluation.TryAgainAttemptsRemain(numAttemptsLeft)
                     }
                 }
             })
@@ -125,7 +117,7 @@ private fun showPassphrasePrompt(
     constraints: PassphraseConstraints,
     expectedPassphrase: String,
     onDismissRequest: () -> Unit,
-    onPassphraseEntered: (passphrase: String) -> String?
+    onPassphraseEntered: (passphrase: String) -> PassphraseEvaluation
 ) {
     // To avoid jank, we request the keyboard to be shown only when the sheet is fully expanded.
     //

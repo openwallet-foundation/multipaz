@@ -8,16 +8,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
+import org.multipaz.securearea.KeyUnlockDataProvider
+import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.securearea.SecureEnclaveCreateKeySettings
 import org.multipaz.securearea.SecureEnclaveKeyUnlockData
 import org.multipaz.securearea.SecureEnclaveSecureArea
 import org.multipaz.securearea.SecureEnclaveUserAuthType
+import org.multipaz.securearea.UnlockReason
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.Logger
 import org.multipaz.util.toHex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 
 private val TAG = "SecureEnclaveSecureAreaScreen"
@@ -147,11 +152,12 @@ private suspend fun seTestUnguarded(
     if (algorithm.isSigning) {
         val dataToSign = "data".encodeToByteArray()
         val t0 = Clock.System.now()
-        val signature = secureEnclaveSecureArea.sign(
-            "testKey",
-            dataToSign,
-            keyUnlockData
-        )
+        val signature = withContext(TestKeyUnlockDataProvider(keyUnlockData)) {
+            secureEnclaveSecureArea.sign(
+                "testKey",
+                dataToSign,
+            )
+        }
         val t1 = Clock.System.now()
         Logger.d(
             TAG,
@@ -162,11 +168,12 @@ private suspend fun seTestUnguarded(
     } else {
         val otherKeyPairForEcdh = Crypto.createEcPrivateKey(EcCurve.P256)
         val t0 = Clock.System.now()
-        val Zab = secureEnclaveSecureArea.keyAgreement(
-            "testKey",
-            otherKeyPairForEcdh.publicKey,
-            keyUnlockData
-        )
+        val Zab = withContext(TestKeyUnlockDataProvider(keyUnlockData)) {
+            secureEnclaveSecureArea.keyAgreement(
+                "testKey",
+                otherKeyPairForEcdh.publicKey,
+            )
+        }
         val t1 = Clock.System.now()
         Logger.dHex(
             TAG,
@@ -174,4 +181,14 @@ private suspend fun seTestUnguarded(
             Zab)
         showToast("ECDH (${t1 - t0})")
     }
+}
+
+private class TestKeyUnlockDataProvider(
+    val keyUnlockData: KeyUnlockData
+): KeyUnlockDataProvider {
+    override suspend fun getKeyUnlockData(
+        secureArea: SecureArea,
+        alias: String,
+        unlockReason: UnlockReason
+    ): KeyUnlockData = keyUnlockData
 }

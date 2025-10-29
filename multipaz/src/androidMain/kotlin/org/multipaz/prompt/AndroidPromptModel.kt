@@ -7,8 +7,12 @@ import org.multipaz.nfc.NfcIsoTag
 import org.multipaz.securearea.UserAuthenticationType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
+import org.multipaz.R
+import org.multipaz.context.applicationContext
+import org.multipaz.securearea.UnlockReason
+import org.multipaz.securearea.PassphraseConstraints
+import org.multipaz.presentment.PresentmentUnlockReason
 import kotlin.coroutines.CoroutineContext
-import kotlin.coroutines.coroutineContext
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -20,7 +24,10 @@ import kotlin.time.Duration.Companion.seconds
  * In addition to [passphrasePromptModel], Android UI must provide bindings for two more
  * dialog kinds: [biometricPromptModel] and [scanNfcPromptModel].
  */
-class AndroidPromptModel: ViewModel(), PromptModel {
+class AndroidPromptModel(
+    override val toHumanReadable: ConvertToHumanReadableFn = ::defaultConvertToHumanReadable
+): ViewModel(), PromptModel {
+
     override val passphrasePromptModel = SinglePromptModel<PassphraseRequest, String?>()
     val biometricPromptModel = SinglePromptModel<BiometricPromptState, Boolean>()
     val scanNfcPromptModel = SinglePromptModel<NfcDialogParameters<Any>, Any?>(
@@ -48,41 +55,78 @@ class AndroidPromptModel: ViewModel(), PromptModel {
         scope = null
     }
 
+    /**
+     * Prompts user for authentication.
+     *
+     * To dismiss the prompt programmatically, cancel the job the coroutine was launched in.
+     *
+     * @param cryptoObject optional [CryptoObject] to be associated with the authentication.
+     * @param title the title for the authentication prompt.
+     * @param subtitle the subtitle for the authentication prompt.
+     * @param userAuthenticationTypes the set of allowed user authentication types, must contain at least one element.
+     * @param requireConfirmation set to `true` to require explicit user confirmation after presenting passive biometric.
+     * @return `true` if authentication succeed, `false` if the user dismissed the prompt.
+     */
+    suspend fun showBiometricPrompt(
+        cryptoObject: CryptoObject?,
+        title: String,
+        subtitle: String,
+        userAuthenticationTypes: Set<UserAuthenticationType>,
+        requireConfirmation: Boolean
+    ): Boolean {
+        return biometricPromptModel.displayPrompt(
+            BiometricPromptState(
+                cryptoObject,
+                title,
+                subtitle,
+                userAuthenticationTypes,
+                requireConfirmation
+            )
+        )
+    }
+
     companion object {
         fun get(coroutineContext: CoroutineContext) =
             PromptModel.get(coroutineContext) as AndroidPromptModel
-    }
-}
 
-/**
- * Prompts user for authentication.
- *
- * To dismiss the prompt programmatically, cancel the job the coroutine was launched in.
- *
- * @param cryptoObject optional [CryptoObject] to be associated with the authentication.
- * @param title the title for the authentication prompt.
- * @param subtitle the subtitle for the authentication prompt.
- * @param userAuthenticationTypes the set of allowed user authentication types, must contain at least one element.
- * @param requireConfirmation set to `true` to require explicit user confirmation after presenting passive biometric.
- * @return `true` if authentication succeed, `false` if the user dismissed the prompt.
- */
-suspend fun showBiometricPrompt(
-    cryptoObject: CryptoObject?,
-    title: String,
-    subtitle: String,
-    userAuthenticationTypes: Set<UserAuthenticationType>,
-    requireConfirmation: Boolean
-): Boolean {
-    val promptModel = AndroidPromptModel.get(coroutineContext)
-    return promptModel.biometricPromptModel.displayPrompt(
-        BiometricPromptState(
-            cryptoObject,
-            title,
-            subtitle,
-            userAuthenticationTypes,
-            requireConfirmation
-        )
-    )
+        /**
+         * Converts [UnlockReason] to human-readable form.
+         *
+         * This is default implementation of [ConvertToHumanReadableFn].
+         */
+        suspend fun defaultConvertToHumanReadable(
+            unlockReason: UnlockReason,
+            passphraseConstraints: PassphraseConstraints?
+        ): UnlockReason.HumanReadable =
+            if (unlockReason is UnlockReason.HumanReadable) {
+                unlockReason
+            } else {
+                val res = applicationContext.resources
+                when (unlockReason) {
+                    is PresentmentUnlockReason -> {
+                        val subtitleRes = if (passphraseConstraints == null) {
+                            R.string.key_unlock_present_bio_subtitle
+                        } else if (passphraseConstraints.requireNumerical) {
+                            R.string.aks_unlock_present_pin_subtitle
+                        } else {
+                            R.string.key_unlock_present_passphrase_subtitle
+                        }
+                        UnlockReason.HumanReadable(
+                            title = res.getString(R.string.key_unlock_present_title),
+                            subtitle = res.getString(subtitleRes),
+                            requireConfirmation = false
+                        )
+                    }
+                    else -> {
+                        UnlockReason.HumanReadable(
+                            title = res.getString(R.string.key_unlock_default_title),
+                            subtitle = res.getString(R.string.key_unlock_default_subtitle),
+                            requireConfirmation = false
+                        )
+                    }
+                }
+            }
+    }
 }
 
 /**

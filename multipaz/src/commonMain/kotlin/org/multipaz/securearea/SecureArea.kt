@@ -136,7 +136,7 @@ interface SecureArea {
     suspend fun sign(
         alias: String,
         dataToSign: ByteArray,
-        keyUnlockData: KeyUnlockData? = KeyUnlockInteractive()
+        unlockReason: UnlockReason = UnlockReason.Unspecified
     ): EcSignature
 
     /**
@@ -160,7 +160,7 @@ interface SecureArea {
     suspend fun keyAgreement(
         alias: String,
         otherKey: EcPublicKey,
-        keyUnlockData: KeyUnlockData? = KeyUnlockInteractive()
+        unlockReason: UnlockReason = UnlockReason.Unspecified
     ): ByteArray
 
     /**

@@ -160,8 +160,7 @@ class MigrateFromKeystoreICStoreTest {
         val dataToSign = byteArrayOf(1, 2, 3)
         val ecSignature = aksSecureArea.sign(
             credentialKeyAlias,
-            dataToSign,
-            null
+            dataToSign
         )
         val ecCredentialKeyPublic = credentialKeyPublic.toEcPublicKey(EcCurve.P256)
         checkSignature(

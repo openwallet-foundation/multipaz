@@ -13,6 +13,7 @@ import org.multipaz.crypto.EcSignature
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.SigningKey
 import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.UnlockReason
 import org.multipaz.securearea.SecureArea
 
 /**
@@ -246,7 +247,7 @@ object Cose {
         includeMessageInPayload: Boolean,
         protectedHeaders: Map<CoseLabel, DataItem>,
         unprotectedHeaders: Map<CoseLabel, DataItem>,
-        keyUnlockData: KeyUnlockData?
+        unlockReason: UnlockReason = UnlockReason.Unspecified
     ): CoseSign1 {
         val adjustedProtectedHeaders = mutableMapOf<CoseLabel, DataItem>()
         adjustedProtectedHeaders.putAll(protectedHeaders)
@@ -272,7 +273,7 @@ object Cose {
             }
         )
         val toBeSigned = coseBuildToBeSigned(encodedProtectedHeaders, message)
-        val signature = secureArea.sign(alias, toBeSigned, keyUnlockData)
+        val signature = secureArea.sign(alias, toBeSigned, unlockReason)
 
         return CoseSign1(
             protectedHeaders = adjustedProtectedHeaders.toMap(),

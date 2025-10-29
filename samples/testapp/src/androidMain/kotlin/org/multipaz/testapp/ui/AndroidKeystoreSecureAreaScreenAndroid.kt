@@ -55,7 +55,6 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.javaX509Certificate
 import org.multipaz.prompt.PromptModel
-import org.multipaz.securearea.KeyUnlockInteractive
 import org.multipaz.securearea.KeyAttestation
 import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
@@ -66,6 +65,7 @@ import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.crypto.Algorithm
+import org.multipaz.securearea.UnlockReason
 import org.multipaz.util.Platform
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -606,7 +606,12 @@ private suspend fun aksTestUnguarded(
         val signature = androidKeystoreSecureArea.sign(
             "testKey",
             dataToSign,
-            KeyUnlockInteractive(requireConfirmation = biometricConfirmationRequired))
+            unlockReason = UnlockReason.HumanReadable(
+                title = "Test prompt title",
+                subtitle = "Test prompt subtitle",
+                requireConfirmation = biometricConfirmationRequired
+            )
+        )
         val t1 = System.currentTimeMillis()
         Logger.d(
             TAG,
@@ -620,7 +625,12 @@ private suspend fun aksTestUnguarded(
         val Zab = androidKeystoreSecureArea.keyAgreement(
             "testKey",
             otherKeyPairForEcdh.publicKey,
-            KeyUnlockInteractive(requireConfirmation = biometricConfirmationRequired))
+            unlockReason = UnlockReason.HumanReadable(
+                title = "Test prompt title",
+                subtitle = "Test prompt subtitle",
+                requireConfirmation = biometricConfirmationRequired
+            )
+        )
         val t1 = System.currentTimeMillis()
         Logger.dHex(
             TAG,

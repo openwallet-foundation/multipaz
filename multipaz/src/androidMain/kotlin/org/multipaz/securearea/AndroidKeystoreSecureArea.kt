@@ -24,7 +24,6 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
 import android.security.keystore.UserNotAuthenticatedException
-import org.multipaz.R
 import org.multipaz.context.applicationContext
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcCurve
@@ -33,7 +32,6 @@ import org.multipaz.crypto.EcSignature
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.javaPublicKey
-import org.multipaz.prompt.showBiometricPrompt
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
@@ -63,6 +61,7 @@ import java.security.spec.ECGenParameterSpec
 import java.security.spec.InvalidKeySpecException
 import java.sql.Date
 import javax.crypto.KeyAgreement
+import kotlin.coroutines.coroutineContext
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -450,32 +449,16 @@ class AndroidKeystoreSecureArea private constructor(
     override suspend fun sign(
         alias: String,
         dataToSign: ByteArray,
-        keyUnlockData: KeyUnlockData?
-    ): EcSignature {
-        if (keyUnlockData !is KeyUnlockInteractive) {
-            return signNonInteractive(alias, dataToSign, keyUnlockData)
+        unlockReason: UnlockReason
+    ): EcSignature =
+        try {
+            signNonInteractive(alias, dataToSign, null)
+        } catch (_: KeyLockedException) {
+            val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
+                ?: AndroidKeystoreDefaultKeyUnlockDataProvider
+            val unlockData = unlockDataProvider.getKeyUnlockData(this, alias, unlockReason)
+            signNonInteractive(alias, dataToSign, unlockData)
         }
-        var unlockData: AndroidKeystoreKeyUnlockData? = null
-        do {
-            try {
-                return signNonInteractive(alias, dataToSign, unlockData)
-            } catch (_: KeyLockedException) {
-                unlockData = AndroidKeystoreKeyUnlockData(this, alias)
-                val res = applicationContext.resources
-                val keyInfo = getKeyInfo(alias)
-                if (!showBiometricPrompt(
-                        cryptoObject = unlockData.getCryptoObjectForSigning(),
-                        title = keyUnlockData.title ?: res.getString(R.string.aks_auth_default_title),
-                        subtitle = keyUnlockData.subtitle ?: res.getString(R.string.aks_auth_default_subtitle),
-                        userAuthenticationTypes = keyInfo.userAuthenticationTypes,
-                        requireConfirmation = keyUnlockData.requireConfirmation
-                    )
-                ) {
-                    throw KeyLockedException("User canceled authentication")
-                }
-            }
-        } while (true)
-    }
 
     private suspend fun signNonInteractive(
         alias: String,
@@ -527,29 +510,15 @@ class AndroidKeystoreSecureArea private constructor(
     override suspend fun keyAgreement(
         alias: String,
         otherKey: EcPublicKey,
-        keyUnlockData: KeyUnlockData?
+        unlockReason: UnlockReason
     ): ByteArray {
-        if (keyUnlockData !is KeyUnlockInteractive) {
-            return keyAgreementNonInteractive(alias, otherKey)
-        }
-        var unlockData: AndroidKeystoreKeyUnlockData?
         do {
             try {
                 return keyAgreementNonInteractive(alias, otherKey)
             } catch (_: KeyLockedException) {
-                unlockData = AndroidKeystoreKeyUnlockData(this, alias)
-                val res = applicationContext.resources
-                val keyInfo = getKeyInfo(alias)
-                if (!showBiometricPrompt(
-                        cryptoObject = unlockData.cryptoObjectForKeyAgreement,
-                        title = keyUnlockData.title ?: res.getString(R.string.aks_auth_default_title),
-                        subtitle = keyUnlockData.title ?: res.getString(R.string.aks_auth_default_subtitle),
-                        userAuthenticationTypes = keyInfo.userAuthenticationTypes,
-                        requireConfirmation = keyUnlockData.requireConfirmation
-                    )
-                ) {
-                    throw KeyLockedException("User canceled authentication")
-                }
+                val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
+                    ?: AndroidKeystoreDefaultKeyUnlockDataProvider
+                unlockDataProvider.getKeyUnlockData(this, alias, unlockReason)
             }
         } while (true)
     }

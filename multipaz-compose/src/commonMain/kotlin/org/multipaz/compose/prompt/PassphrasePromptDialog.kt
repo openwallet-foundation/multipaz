@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.multipaz.compose.passphrase.PassphrasePromptBottomSheet
+import org.multipaz.prompt.PassphraseEvaluation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,16 +39,12 @@ fun PassphrasePromptDialog(model: SinglePromptModel<PassphraseRequest, String?>)
                 val evaluator = dialogParameters.passphraseEvaluator
                 if (evaluator != null) {
                     val matchResult = evaluator.invoke(enteredPassphrase)
-                    if (matchResult == null) {
-                        dialogStateValue.resultChannel.send(enteredPassphrase)
-                        null
-                    } else {
-                        matchResult
+                    if (matchResult != PassphraseEvaluation.OK) {
+                        return@PassphrasePromptBottomSheet matchResult
                     }
-                } else {
-                    dialogStateValue.resultChannel.send(enteredPassphrase)
-                    null
                 }
+                dialogStateValue.resultChannel.send(enteredPassphrase)
+                PassphraseEvaluation.OK
             },
             onDismissed = {
                 coroutineScope.launch {

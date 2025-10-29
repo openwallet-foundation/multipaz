@@ -31,8 +31,7 @@ actual object DeviceCheck {
         val assertionData = assertion.toCbor()
         val signature = secureArea.sign(
             alias = deviceAttestationId,
-            dataToSign = assertionData,
-            keyUnlockData = null
+            dataToSign = assertionData
         )
         return DeviceAssertion(
             assertionData = ByteString(assertionData),

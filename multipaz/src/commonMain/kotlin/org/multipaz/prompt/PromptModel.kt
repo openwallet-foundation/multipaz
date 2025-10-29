@@ -3,8 +3,23 @@ package org.multipaz.prompt
 import org.multipaz.securearea.PassphraseConstraints
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
+import org.multipaz.securearea.UnlockReason
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
+
+/**
+ * A function that converts arbitrary [UnlockReason] to a human-readable kind
+ * [UnlockReason.HumanReadable].
+ *
+ * The result is then used to create a prompt for the user input. If the expected input
+ * requires user to enter application-defined data (e.g. a PIN or a passphrase),
+ * `passphraseConstraints` describes the required input. When the expected input is determined
+ * by the OS (e.g. biometrics), `passphraseConstraints` is `null`.
+ */
+typealias ConvertToHumanReadableFn = suspend (
+    unlockReason: UnlockReason,
+    passphraseConstraints: PassphraseConstraints?
+) -> UnlockReason.HumanReadable
 
 /**
  * Base model object for prompts.
@@ -38,6 +53,8 @@ interface PromptModel : CoroutineContext.Element {
 
     val promptModelScope: CoroutineScope
 
+    val toHumanReadable: ConvertToHumanReadableFn
+
     companion object {
         fun get(coroutineContext: CoroutineContext): PromptModel {
             return coroutineContext[Key] ?: throw PromptModelNotAvailableException()
@@ -49,9 +66,9 @@ interface PromptModel : CoroutineContext.Element {
  * Requests that the UI layer should ask the user for a passphrase.
  *
  * If [passphraseEvaluator] is not `null`, it is called every time the user inputs a passphrase with
- * the passphrase that was entered. It should return `null` to indicate the passphrase is correct
- * otherwise a short message which is displayed in prompt indicating the user entered the wrong passphrase
- * and optionally how many attempts are remaining.
+ * the passphrase that was entered. It should return [PassphraseEvaluation.OK] to indicate the
+ * passphrase is correct otherwise [PassphraseEvaluation.TryAgain] with optional number of
+ * remaining attempts, or [PassphraseEvaluation.TooManyAttempts] should be returned.
  *
  * To dismiss the prompt programmatically, cancel the job the coroutine was launched in.
  *
@@ -64,14 +81,13 @@ interface PromptModel : CoroutineContext.Element {
  * @throws PromptModelNotAvailableException if [coroutineContext] does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
  */
-suspend fun requestPassphrase(
+suspend fun PromptModel.requestPassphrase(
     title: String,
     subtitle: String,
     passphraseConstraints: PassphraseConstraints,
-    passphraseEvaluator: (suspend (enteredPassphrase: String) -> String?)?
+    passphraseEvaluator: (suspend (enteredPassphrase: String) -> PassphraseEvaluation)?
 ): String? {
-    val promptModel = PromptModel.get(coroutineContext)
-    return promptModel.passphrasePromptModel.displayPrompt(PassphraseRequest(
+    return passphrasePromptModel.displayPrompt(PassphraseRequest(
         title,
         subtitle,
         passphraseConstraints,
@@ -90,5 +106,5 @@ class PassphraseRequest(
     val title: String,
     val subtitle: String,
     val passphraseConstraints: PassphraseConstraints,
-    val passphraseEvaluator: (suspend (enteredPassphrase: String) -> String?)?
+    val passphraseEvaluator: (suspend (enteredPassphrase: String) -> PassphraseEvaluation)?
 )

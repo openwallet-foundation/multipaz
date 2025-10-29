@@ -1,12 +1,12 @@
 package org.multipaz.crypto
 
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.UnlockReason
 import org.multipaz.securearea.SecureArea
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
@@ -72,7 +72,7 @@ object JsonWebSignature {
     suspend fun sign(
         secureArea: SecureArea,
         alias: String,
-        keyUnlockData: KeyUnlockData?,
+        unlockReason: UnlockReason,
         claimsSet: JsonObject,
         type: String?,
         x5c: X509CertChain?
@@ -88,7 +88,7 @@ object JsonWebSignature {
         val signature = secureArea.sign(
             alias = alias,
             dataToSign = toBeSigned,
-            keyUnlockData = keyUnlockData
+            unlockReason = unlockReason
         )
         val signatureStr = (signature.r + signature.s).toBase64Url()
         return "$headerStr.$bodyStr.$signatureStr"

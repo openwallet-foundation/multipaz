@@ -182,8 +182,7 @@ class CoseTests {
             message = message,
             includeMessageInPayload = true,
             protectedHeaders = mapOf(),
-            unprotectedHeaders = mapOf(),
-            keyUnlockData = null
+            unprotectedHeaders = mapOf()
         )
         Cose.coseSign1Check(
             sa.getKeyInfo("testKey").publicKey,
@@ -192,7 +191,7 @@ class CoseTests {
             algorithm
         )
         assertEquals(
-            algorithm.curve!!.defaultSigningAlgorithm.coseAlgorithmIdentifier!!,
+            algorithm.curve.defaultSigningAlgorithm.coseAlgorithmIdentifier!!,
             coseSignNoExplicitHeaderSet.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
         )
 
@@ -207,7 +206,6 @@ class CoseTests {
             includeMessageInPayload = true,
             protectedHeaders = protectedHeaders,
             unprotectedHeaders = mapOf(),
-            keyUnlockData = null
         )
         Cose.coseSign1Check(
             sa.getKeyInfo("testKey").publicKey,
@@ -216,7 +214,7 @@ class CoseTests {
             algorithm
         )
         assertEquals(
-            algorithm.coseAlgorithmIdentifier!!,
+            algorithm.coseAlgorithmIdentifier,
             coseSignExplicitHeaderSet.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
         )
     }
