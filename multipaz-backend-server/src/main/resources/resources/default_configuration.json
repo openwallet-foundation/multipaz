@@ -5,7 +5,11 @@
   "client_requirements": {
     "ios": {
       "release_build": false,
-      "app_identifiers": []
+      "app_identifiers": [
+        "VKE2G3K56V.org.multipaz.testapp",
+        "74HWMG89B3.com.sorotokin.multipaz.testapp",
+        "YW5ANF5L9G.org.multipaz.testapp.koukarine2"
+      ]
     },
     "android": {
       "gms_attestation": true,

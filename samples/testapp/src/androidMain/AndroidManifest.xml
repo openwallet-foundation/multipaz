@@ -105,7 +105,7 @@
                 <!--  OpenId Credential Offer scheme (OID4VCI) -->
                 <data android:scheme="openid-credential-offer"/>
                 <!--  High Assurance Interoperability Profile -->
-                <data android:scheme="haip"/>
+                <data android:scheme="haip-vci"/>
                 <!-- Accept all hosts for any of the defined schemes above -->
                 <data android:host="*"/>
             </intent-filter>

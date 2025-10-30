@@ -6,11 +6,6 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import kotlinx.io.bytestring.ByteString
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.putJsonObject
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.openid4vci.util.IssuanceState
@@ -21,13 +16,10 @@ import org.multipaz.openid4vci.util.generateRandom
 import org.multipaz.openid4vci.util.getSystemOfRecordUrl
 import org.multipaz.server.getBaseUrl
 import org.multipaz.openid4vci.util.idToCode
-import org.multipaz.provisioning.SecretCodeRequest
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.util.Logger
-import kotlin.random.Random
-import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 
 private const val TAG = "finish_authorization"
@@ -90,7 +82,7 @@ suspend fun finishAuthorization(call: ApplicationCall) {
         }
         IssuanceState.updateIssuanceState(id, state)
         if (error == null) {
-            preauthorizedOffer(call, id, txCode, state)
+            preauthorizedOffer(call, id, txCode, state, state.urlSchema ?: "haip-vci")
         } else {
             preauthorizedError(call, error)
         }
@@ -137,9 +129,9 @@ private suspend fun processRedirect(
                     <title>Redirecting...</title>
                     </head>
                     <body>
-                    <p>Redirecting to your app...</p>
+                    <p>Redirecting back to your wallet...</p>
                     <script>
-                        // Automatically trigger the URI redirect
+                        // Attempt to automatically trigger the URI redirect
                         window.location.href = "$parameterizedUri";
                     </script>
                     <p>If you are not redirected automatically, <a href="$parameterizedUri">click here</a>.</p>
@@ -153,14 +145,14 @@ private suspend fun processRedirect(
     }
 }
 
-private const val OFFER_URL_SCHEMA = "openid-credential-offer:"
 private suspend fun preauthorizedOffer(
     call: ApplicationCall,
     id: String,
     txCode: String?,
-    state: IssuanceState
+    state: IssuanceState,
+    urlSchema: String
 ) {
-    val offer = generatePreauthorizedOffer(OFFER_URL_SCHEMA, id, state)
+    val offer = generatePreauthorizedOffer(urlSchema, id, state)
     val resources = BackendEnvironment.getInterface(Resources::class)!!
     val preauthorizedHtml = resources.getStringResource("pre-authorized.html")!!
     call.respondText(

@@ -76,6 +76,7 @@ suspend fun authorizeGet(call: ApplicationCall) {
             txKind = queryParameters["tx_kind"],
             txPrompt = queryParameters["tx_prompt"]
         )
+        val urlSchema = queryParameters["url_schema"]
         // Create a new session
         IssuanceState.createIssuanceState(IssuanceState(
             clientId = null,
@@ -85,7 +86,8 @@ suspend fun authorizeGet(call: ApplicationCall) {
             redirectUri = null,
             codeChallenge = null,
             configurationId = configurationId,
-            txCodeSpec = txCodeSpec
+            txCodeSpec = txCodeSpec,
+            urlSchema = urlSchema
         ))
     } else {
         throw InvalidRequestException("Invalid or missing 'request_uri' parameter")

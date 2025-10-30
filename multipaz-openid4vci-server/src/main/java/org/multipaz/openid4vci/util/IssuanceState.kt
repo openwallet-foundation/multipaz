@@ -30,7 +30,8 @@ data class IssuanceState(
     var systemOfRecordCodeVerifier: ByteString? = null,
     var systemOfRecordAccess: SystemOfRecordAccess? = null,
     var txCodeSpec: SecretCodeRequest? = null,
-    var txCodeHash: ByteString? = null
+    var txCodeHash: ByteString? = null,
+    val urlSchema: String? = null,  // for pre-authorized code generation
 ) {
     companion object {
         private val tableSpec = StorageTableSpec(

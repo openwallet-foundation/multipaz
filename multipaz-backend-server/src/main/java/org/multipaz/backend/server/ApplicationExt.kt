@@ -21,6 +21,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -28,7 +29,6 @@ import org.multipaz.rpc.server.ClientCheckImpl
 import org.multipaz.rpc.server.ClientRegistrationImpl
 import org.multipaz.backend.openid4vci.OpenID4VCIBackendImpl
 import org.multipaz.backend.openid4vci.register
-import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.handler.HttpHandler
 import org.multipaz.rpc.handler.RpcDispatcherLocal
 import org.multipaz.rpc.handler.RpcExceptionMap
@@ -60,6 +60,14 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
                 )
             }
         }
+        get("/.well-known/apple-app-site-association") {
+            withContext(environment.await()) {
+                call.respondText(
+                    contentType = ContentType.Application.Json,
+                    text = generateAppleAppSiteAssociationJson().toString()
+                )
+            }
+        }
         post("/rpc/{endpoint}/{method}") {
             val endpoint = call.parameters["endpoint"]!!
             val method = call.parameters["method"]!!
@@ -81,7 +89,7 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
             } catch (e: IllegalStateException) {
                 Logger.e(TAG, "POST $endpoint/$method status 405", e)
                 call.respond(HttpStatusCode.MethodNotAllowed, "IllegalStateException")
-            } catch (e: HttpTransport.TimeoutException) {
+            } catch (_: HttpTransport.TimeoutException) {
                 Logger.e(TAG, "POST $endpoint/$method status 500 (TimeoutException)")
                 call.respond(HttpStatusCode.InternalServerError, "TimeoutException")
             } catch (e: Throwable) {
@@ -101,27 +109,28 @@ private fun initAndCreateHttpHandler(
         withContext(env) {
             OpenID4VCIBackendImpl.init()
         }
-        val exceptionMapBuilder = RpcExceptionMap.Builder()
-        buildExceptionMap(exceptionMapBuilder)
-        val dispatcherBuilder = RpcDispatcherLocal.Builder()
-        buildDispatcher(dispatcherBuilder)
+        val exceptionMap = buildExceptionMap()
+        val dispatcherBuilder = buildDispatcher()
         val notifications = env.notifications
         val localDispatcher = dispatcherBuilder.build(
             env,
             env.cipher,
-            exceptionMapBuilder.build()
+            exceptionMap
         )
         HttpHandler(localDispatcher, notifications)
     }
 }
 
-private fun buildExceptionMap(exceptionMapBuilder: RpcExceptionMap.Builder) {
+private fun buildExceptionMap(): RpcExceptionMap {
+    return RpcExceptionMap.Builder().build()
 }
 
-private fun buildDispatcher(dispatcherBuilder: RpcDispatcherLocal.Builder) {
+private fun buildDispatcher(): RpcDispatcherLocal.Builder {
+    val dispatcherBuilder = RpcDispatcherLocal.Builder()
     ClientRegistrationImpl.register(dispatcherBuilder)
     ClientCheckImpl.register(dispatcherBuilder)
     OpenID4VCIBackendImpl.register(dispatcherBuilder)
+    return dispatcherBuilder
 }
 
 private suspend fun generateAssetLinksJson(): JsonElement =
@@ -147,8 +156,31 @@ private suspend fun generateAssetLinksJson(): JsonElement =
         }
     }
 
-
 private fun digestToString(digest: ByteString): String =
     digest.toByteArray().joinToString(":") { byte ->
         (byte.toInt() and 0xFF).toString(16).padStart(2, '0')
     }.uppercase(Locale.ROOT)
+
+private suspend fun generateAppleAppSiteAssociationJson(): JsonElement {
+    val clientRequirements = ClientRegistrationImpl.getClientRequirements()
+    val appIds = buildJsonArray {
+        clientRequirements.iosAppIdentifiers.forEach { add(it) }
+    }
+    return buildJsonObject {
+        putJsonObject("applinks") {
+            putJsonArray("details") {
+                addJsonObject {
+                    put("appIDs", appIds)
+                    putJsonArray("components") {
+                        addJsonObject {
+                            put("/", "/landing/")
+                        }
+                    }
+                }
+            }
+        }
+        putJsonObject("webcredentials") {
+            put("appIDs", appIds)
+        }
+    }
+}

@@ -1,11 +1,13 @@
-const configId = new URLSearchParams(window.location.search).get("config_id");
+const params = new URLSearchParams(window.location.search)
+const configId = params.get("config_id");
 if (configId) {
     displayCredentialConfig(configId);
 } else {
     displayCredentialList();
 }
 
-const urlSchema = "openid-credential-offer:"
+// TODO: change default to haip-vci once new clients are pushed
+const urlSchema = params.get("url_schema") || "openid-credential-offer"
 
 async function displayCredentialConfig(configId) {
     let container = document.getElementById("main");
@@ -40,7 +42,7 @@ async function displayCredentialConfig(configId) {
             authorization_code:{}
         }
     };
-    let href = urlSchema + "//?credential_offer=" + encodeURIComponent(JSON.stringify(offer));
+    let href = urlSchema + "://?credential_offer=" + encodeURIComponent(JSON.stringify(offer));
     a.href = href;
     let p2 = document.createElement("p");
     item.appendChild(p2);
@@ -65,6 +67,11 @@ async function displayCredentialConfig(configId) {
     preAuthConfigurationId.name = "configuration_id";
     preAuthConfigurationId.value = configId;
     preAuthForm.appendChild(preAuthConfigurationId);
+    let preAuthUrlSchema = document.createElement("input")
+    preAuthUrlSchema.type = "hidden";
+    preAuthUrlSchema.name = "url_schema";
+    preAuthUrlSchema.value = urlSchema;
+    preAuthForm.appendChild(preAuthUrlSchema);
     let preAuthRequestUri = document.createElement("input")
     preAuthRequestUri.type = "hidden";
     preAuthRequestUri.name = "request_uri";
@@ -137,7 +144,9 @@ async function displayCredentialList() {
         let item = document.createElement("div");
         item.className = "credential_list_item";
         container.appendChild(item);
-        let href = location.href + "?config_id=" + encodeURIComponent(configId);
+        let baseUrl = location.href.replace(/\?.*/, "");
+        let href = baseUrl + "?config_id=" +
+            encodeURIComponent(configId) + "&url_schema=" + encodeURIComponent(urlSchema);
         let display = config.credential_metadata.display[0];
         let a1 = document.createElement("a");
         a1.className = "credential_list_logo_container";

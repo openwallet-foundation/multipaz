@@ -184,7 +184,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				APP_NAME = "Multipaz Test App";
-				BUNDLE_ID = com.android.identity.testapp;
+				BUNDLE_ID = org.multipaz.testapp;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -248,7 +248,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				APP_NAME = "Multipaz Test App";
-				BUNDLE_ID = com.android.identity.testapp;
+				BUNDLE_ID = org.multipaz.testapp;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -307,7 +307,7 @@
 			buildSettings = {
 				APP_NAME = "Multipaz Test App";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				BUNDLE_ID = com.android.identity.testapp;
+				BUNDLE_ID = org.multipaz.testapp;
 				CODE_SIGN_ENTITLEMENTS = TestApp/TestApp.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -342,7 +342,7 @@
 			buildSettings = {
 				APP_NAME = "Multipaz Test App";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				BUNDLE_ID = com.android.identity.testapp;
+				BUNDLE_ID = org.multipaz.testapp;
 				CODE_SIGN_ENTITLEMENTS = TestApp/TestApp.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;

@@ -727,7 +727,7 @@ class App private constructor (val promptModel: PromptModel) {
      */
     fun handleUrl(url: String) {
         if (url.startsWith(OID4VCI_CREDENTIAL_OFFER_URL_SCHEME)
-            || url.startsWith(HAIP_URL_SCHEME)) {
+            || url.startsWith(HAIP_VCI_URL_SCHEME)) {
             val queryIndex = url.indexOf('?')
             if (queryIndex >= 0) {
                 CoroutineScope(Dispatchers.Default).launch {
@@ -746,7 +746,7 @@ class App private constructor (val promptModel: PromptModel) {
 
         // OID4VCI url scheme used for filtering OID4VCI Urls from all incoming URLs (deep links or QR)
         private const val OID4VCI_CREDENTIAL_OFFER_URL_SCHEME = "openid-credential-offer://"
-        private const val HAIP_URL_SCHEME = "haip://"
+        private const val HAIP_VCI_URL_SCHEME = "haip-vci://"
 
         private var app: App? = null
         fun getInstance(): App {
@@ -754,17 +754,6 @@ class App private constructor (val promptModel: PromptModel) {
                 app = App(platformPromptModel)
             }
             return app!!
-        }
-
-        private val testDocumentTableSpec = object: StorageTableSpec(
-            name = "TestAppDocuments",
-            supportExpiration = false,
-            supportPartitions = false,
-            schemaVersion = 1L,           // Bump every time incompatible changes are made
-        ) {
-            override suspend fun schemaUpgrade(oldTable: BaseStorageTable) {
-                oldTable.deleteAll()
-            }
         }
 
         private suspend fun initializeDocumentMetadata(
