@@ -322,6 +322,7 @@ private suspend fun doDcRequestFlow(
     }
 
     Logger.i(TAG, "clientId: $clientId")
+    Logger.i(TAG, "origin: $origin")
     Logger.iJson(TAG, "Request", dcRequestObject)
     val t0 = Clock.System.now()
     val dcResponseObject = DigitalCredentials.Default.request(dcRequestObject)
@@ -344,6 +345,8 @@ private suspend fun doDcRequestFlow(
     )
     when (dcResponse) {
         is MdocApiDcResponse -> {
+            Logger.iCbor(TAG, "deviceResponse", dcResponse.deviceResponse)
+            Logger.iCbor(TAG, "sessionTranscript", dcResponse.sessionTranscript)
             showResponse(
                 /* vpToken = */ null,
                 /* deviceResponse = */ dcResponse.deviceResponse,
@@ -354,6 +357,8 @@ private suspend fun doDcRequestFlow(
             )
         }
         is OpenID4VPDcResponse -> {
+            Logger.iJson(TAG, "vpToken", dcResponse.vpToken)
+            Logger.iCbor(TAG, "sessionTranscript", dcResponse.sessionTranscript)
             showResponse(
                 /* vpToken = */ dcResponse.vpToken,
                 /* deviceResponse = */ null,

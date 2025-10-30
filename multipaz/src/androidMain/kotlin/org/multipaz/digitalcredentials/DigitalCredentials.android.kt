@@ -46,6 +46,7 @@ import org.multipaz.context.AndroidUiContext
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.documenttype.DocumentAttribute
+import org.multipaz.util.toBase64
 import org.multipaz.util.toBase64Url
 import kotlin.time.Duration.Companion.seconds
 import java.io.ByteArrayOutputStream
@@ -470,5 +471,5 @@ internal actual suspend fun defaultRequest(request: JsonObject): JsonObject {
  * @return the origin string of the form "android:apk-key-hash:<sha256_hash-of-apk-signing-cert>"
  */
 fun getAppOrigin(appSigningInfo: ByteArray): String {
-    return "android:apk-key-hash:${Crypto.digest(Algorithm.SHA256, appSigningInfo).toBase64Url()}"
+    return "android:apk-key-hash:${Crypto.digest(Algorithm.SHA256, appSigningInfo).toBase64()}"
 }

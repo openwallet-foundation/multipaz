@@ -101,7 +101,7 @@ object VerificationUtil {
         zkSystemSpecs: List<ZkSystemSpec>
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
-            generateSigleRequest(
+            generateSingleRequest(
                 exchangeProtocol = exchangeProtocol,
                 docType = docType,
                 claims = claims,
@@ -118,7 +118,7 @@ object VerificationUtil {
         }
     }
 
-    private suspend fun generateSigleRequest(
+    private suspend fun generateSingleRequest(
         exchangeProtocol: String,
         docType: String,
         claims: List<MdocRequestedClaim>,
