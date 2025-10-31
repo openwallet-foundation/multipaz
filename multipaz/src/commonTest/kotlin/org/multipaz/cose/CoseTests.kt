@@ -10,7 +10,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
@@ -247,7 +247,7 @@ class CoseTests {
         // First check that coseSign1Sign() puts the EcCurve.defaultSigningAlgorithm in
         // the protected headed as COSE_LABEL_ALG
         val coseSignNoExplicitHeaderSet = Cose.coseSign1Sign(
-            signingKey = SigningKey.anonymous(
+            signingKey = AsymmetricKey.anonymous(
                 secureArea = sa,
                 alias = "testKey"
             ),
@@ -272,7 +272,7 @@ class CoseTests {
             Cose.COSE_LABEL_ALG.toCoseLabel to algorithm.coseAlgorithmIdentifier!!.toDataItem()
         )
         val coseSignExplicitHeaderSet = Cose.coseSign1Sign(
-            signingKey = SigningKey.anonymous(sa, "testKey"),
+            signingKey = AsymmetricKey.anonymous(sa, "testKey"),
             message = message,
             includeMessageInPayload = true,
             protectedHeaders = protectedHeaders,

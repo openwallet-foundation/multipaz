@@ -62,7 +62,7 @@ class HpkeTests {
 
         val decrypter = Hpke.getDecrypter(
             cipherSuite = Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM,
-            receiverPrivateKey = SigningKey.AnonymousExplicit(receiver),
+            receiverPrivateKey = AsymmetricKey.AnonymousExplicit(receiver),
             encapsulatedKey = encrypter.encapsulatedKey.toByteArray(),
             info = info
         )
@@ -594,12 +594,12 @@ class HpkeTests {
             encapsulatedKey = encapsulatedKey,
             psk = td.psk?.fromHex(),
             pskId = td.pskId?.fromHex(),
-            authKey = authKey?.let { SigningKey.AnonymousExplicit(it) }
+            authKey = authKey?.let { AsymmetricKey.AnonymousExplicit(it) }
         )
 
         val decrypter = Hpke.getDecrypter(
             cipherSuite = td.cipherSuite,
-            receiverPrivateKey = SigningKey.AnonymousExplicit(receiverKey),
+            receiverPrivateKey = AsymmetricKey.AnonymousExplicit(receiverKey),
             encapsulatedKey = encapsulatedKey.publicKey.serialize(),
             info = info,
             psk = td.psk?.fromHex(),

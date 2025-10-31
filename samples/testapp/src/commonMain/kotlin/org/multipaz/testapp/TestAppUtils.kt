@@ -33,7 +33,7 @@ import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentCannedRequest
@@ -91,7 +91,7 @@ object TestAppUtils {
     suspend fun generateEncodedDeviceRequest(
         request: DocumentCannedRequest,
         encodedSessionTranscript: ByteArray,
-        readerKey: SigningKey.X509Compatible,
+        readerKey: AsymmetricKey.X509Compatible,
         zkSystemRepository: ZkSystemRepository? = null,
     ): ByteArray {
         val mdocRequest = request.mdocRequest!!
@@ -165,7 +165,7 @@ object TestAppUtils {
             validFrom: Instant,
             validUntil: Instant
         ) -> CreateKeySettings,
-        dsKey: SigningKey.X509Certified,
+        dsKey: AsymmetricKey.X509Certified,
         deviceKeyAlgorithm: Algorithm,
         deviceKeyMacAlgorithm: Algorithm,
         numCredentialsPerDomain: Int,
@@ -423,7 +423,7 @@ object TestAppUtils {
             validFrom: Instant,
             validUntil: Instant
         ) -> CreateKeySettings,
-        dsKey: SigningKey
+        dsKey: AsymmetricKey
     ): Document {
         val cardArt = getDrawableResourceBytes(
             getSystemResourceEnvironment(),
@@ -473,7 +473,7 @@ object TestAppUtils {
             validFrom: Instant,
             validUntil: Instant
         ) -> CreateKeySettings,
-        dsKey: SigningKey,
+        dsKey: AsymmetricKey,
     ) {
         for (domain in listOf(CREDENTIAL_DOMAIN_SDJWT_NO_USER_AUTH, CREDENTIAL_DOMAIN_SDJWT_USER_AUTH)) {
             val credential = KeyBoundSdJwtVcCredential.create(
@@ -527,7 +527,7 @@ object TestAppUtils {
             validFrom: Instant,
             validUntil: Instant
         ) -> CreateKeySettings,
-        dsKey: SigningKey.X509Certified,
+        dsKey: AsymmetricKey.X509Certified,
         deviceKeyAlgorithm: Algorithm,
         deviceKeyMacAlgorithm: Algorithm,
         documentType: DocumentType,
@@ -579,7 +579,7 @@ object TestAppUtils {
             validFrom: Instant,
             validUntil: Instant
         ) -> CreateKeySettings,
-        dsKey: SigningKey.X509Certified,
+        dsKey: AsymmetricKey.X509Certified,
         deviceKeyAlgorithm: Algorithm,
         deviceKeyMacAlgorithm: Algorithm,
         numCredentialsPerDomain: Int,
@@ -654,7 +654,7 @@ object TestAppUtils {
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
-        dsKey: SigningKey.X509Certified,
+        dsKey: AsymmetricKey.X509Certified,
         numCredentialsPerDomain: Int,
         givenNameOverride: String
     ) {
@@ -788,7 +788,7 @@ object TestAppUtils {
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
-        dsKey: SigningKey.X509Certified,
+        dsKey: AsymmetricKey.X509Certified,
         numCredentialsPerDomain: Int,
         givenNameOverride: String
     ): String? {
@@ -924,7 +924,7 @@ object TestAppUtils {
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
-        dsKey: SigningKey,
+        dsKey: AsymmetricKey,
         numCredentialsPerDomain: Int,
         givenNameOverride: String
     ) {

@@ -9,7 +9,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.jwt.buildJwt
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.securearea.CreateKeySettings
@@ -47,7 +47,7 @@ internal object OpenID4VCIUtil {
         val secureArea = BackendEnvironment.getInterface(SecureAreaProvider::class)!!.get()
         val dpopAlias = "dpop:$clientId"
         ensureKey(secureArea, dpopAlias)
-        val dpopKey = SigningKey.anonymous(secureArea, dpopAlias)
+        val dpopKey = AsymmetricKey.anonymous(secureArea, dpopAlias)
         return buildJwt(
             type = "dpop+jwt",
             key = dpopKey,
@@ -83,7 +83,7 @@ internal object OpenID4VCIUtil {
 
     suspend fun createWalletAttestationPoP(
         clientId: String,
-        key: SigningKey,
+        key: AsymmetricKey,
         endpointUrl: Url,
         nonce: String? = null
     ): String = buildJwt(

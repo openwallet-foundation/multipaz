@@ -28,7 +28,7 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.JsonWebEncryption
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentCannedRequest
@@ -71,7 +71,7 @@ class Openid4VpVerifierModel(
         responseUri: String? = null,
     ): String = buildJwt(
             type = "oauth-authz-req+jwt",
-            key = SigningKey.X509CertifiedExplicit(
+            key = AsymmetricKey.X509CertifiedExplicit(
                 privateKey = ephemeralPrivateKey,
                 certChain = createCertificateChain(readerIdentity)
             )
@@ -152,11 +152,17 @@ class Openid4VpVerifierModel(
      * Parses and validates credential presentation for the request that was previously created
      * using [makeRequest].
      */
-    fun processResponse(
+    suspend fun processResponse(
         responseUri: String,
         response: String
     ): Map<String, Presentation> {
-        val decrypted = JsonWebEncryption.decrypt(response, ephemeralPrivateKey)
+        val decrypted = JsonWebEncryption.decrypt(
+            encryptedJwt = response,
+            recipientKey = AsymmetricKey.anonymous(
+                privateKey = ephemeralPrivateKey,
+                algorithm = ephemeralPrivateKey.curve.defaultKeyAgreementAlgorithm
+            )
+        )
         val header = Json.parseToJsonElement(
             response.substring(0, response.indexOf('.')).fromBase64Url().decodeToString()
         ).jsonObject
@@ -193,7 +199,7 @@ class Openid4VpVerifierModel(
         val readerKeySubject = "CN=OWF IC Online Verifier Single-Use Reader Key"
 
         val readerKeyCertificate = MdocUtil.generateReaderCertificate(
-            readerRootKey = SigningKey.X509CertifiedExplicit(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(
                 privateKey = readerIdentity.privateKey,
                 certChain = readerIdentity.certificateChain
             ),

@@ -16,20 +16,13 @@ import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.put
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.AbstractDocumentMetadata
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.jwt.buildJwt
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.prompt.PromptModel
-import org.multipaz.provisioning.AuthorizationChallenge
-import org.multipaz.provisioning.AuthorizationResponse
-import org.multipaz.provisioning.CredentialFormat
-import org.multipaz.provisioning.Display
-import org.multipaz.provisioning.KeyBindingInfo
-import org.multipaz.provisioning.KeyBindingType
-import org.multipaz.provisioning.ProvisioningClient
 import org.multipaz.provisioning.openid4vci.OpenID4VCI
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
 import org.multipaz.provisioning.openid4vci.OpenID4VCIClientPreferences
@@ -38,7 +31,6 @@ import org.multipaz.rpc.handler.RpcAuthClientSession
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
-import org.multipaz.provisioning.ProofOfPossessionUnlockReason
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.util.Logger
@@ -360,7 +352,7 @@ class ProvisioningModel(
             keyProofType: KeyBindingType.OpenidProofOfPossession,
             credential: SecureAreaBoundCredential
         ): String {
-            val signingKey = SigningKey.anonymous(
+            val signingKey = AsymmetricKey.anonymous(
                 secureArea = credential.secureArea,
                 alias = credential.alias,
                 unlockReason = ProofOfPossessionUnlockReason

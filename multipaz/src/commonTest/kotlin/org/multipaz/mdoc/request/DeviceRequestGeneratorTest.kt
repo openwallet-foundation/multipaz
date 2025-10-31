@@ -32,7 +32,7 @@ import kotlin.time.Instant
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
@@ -71,7 +71,7 @@ class DeviceRequestGeneratorTest {
         )
         val readerCert = X509Cert.Builder(
             publicKey = readerKey.publicKey,
-            signingKey = SigningKey.anonymous(readerKey, Algorithm.ES256),
+            signingKey = AsymmetricKey.anonymous(readerKey, Algorithm.ES256),
             serialNumber = ASN1Integer(1),
             subject = X500Name.fromName("CN=Test Key"),
             issuer = X500Name.fromName("CN=Test Key"),
@@ -165,7 +165,7 @@ class DeviceRequestGeneratorTest {
 
         val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val readerRootCert = MdocUtil.generateReaderRootCertificate(
-            readerRootKey = SigningKey.anonymous(readerRootKey),
+            readerRootKey = AsymmetricKey.anonymous(readerRootKey),
             subject = X500Name.fromName("CN=TEST Reader Root,C=XG-US,ST=MA"),
             serial = ASN1Integer(1),
             validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
@@ -173,7 +173,7 @@ class DeviceRequestGeneratorTest {
             crlUrl = "http://www.example.com/issuer/crl"
         )
         val readerCert = MdocUtil.generateReaderCertificate(
-            readerRootKey = SigningKey.X509CertifiedExplicit(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(
                 privateKey = readerRootKey,
                 certChain = X509CertChain(listOf(readerRootCert)),
             ),

@@ -28,7 +28,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
@@ -44,15 +44,6 @@ import org.multipaz.prompt.ConvertToHumanReadableFn
 import org.multipaz.prompt.PassphraseRequest
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.SinglePromptModel
-import org.multipaz.provisioning.AuthorizationChallenge
-import org.multipaz.provisioning.AuthorizationResponse
-import org.multipaz.provisioning.CredentialFormat
-import org.multipaz.provisioning.CredentialMetadata
-import org.multipaz.provisioning.Display
-import org.multipaz.provisioning.KeyBindingInfo
-import org.multipaz.provisioning.KeyBindingType
-import org.multipaz.provisioning.ProvisioningClient
-import org.multipaz.provisioning.ProvisioningMetadata
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
@@ -284,7 +275,7 @@ class ProvisioningModelTest {
                 val dsKey = Crypto.createEcPrivateKey(EcCurve.P256)
                 val dsCert = X509Cert.Builder(
                     publicKey = dsKey.publicKey,
-                    signingKey = SigningKey.anonymous(dsKey),
+                    signingKey = AsymmetricKey.anonymous(dsKey),
                     serialNumber = ASN1Integer(1),
                     subject = X500Name.fromName("CN=State of Utopia DS Key"),
                     issuer = X500Name.fromName("CN=State of Utopia DS Key"),

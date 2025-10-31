@@ -11,7 +11,7 @@ import org.multipaz.crypto.X509KeyUsage
 import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.EcPrivateKey
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.buildX509Cert
 import org.multipaz.mdoc.util.MdocUtil
@@ -51,7 +51,7 @@ class TrustManagerTest {
         caCertificate = runBlocking {
             buildX509Cert(
                 publicKey = caKey.publicKey,
-                signingKey = SigningKey.anonymous(caKey, caKey.curve.defaultSigningAlgorithm),
+                signingKey = AsymmetricKey.anonymous(caKey, caKey.curve.defaultSigningAlgorithm),
                 serialNumber = ASN1Integer(1L),
                 subject = X500Name.fromName("CN=Test TrustManager CA"),
                 issuer = X500Name.fromName("CN=Test TrustManager CA"),
@@ -67,7 +67,7 @@ class TrustManagerTest {
         intermediateCertificate = runBlocking {
             buildX509Cert(
                 publicKey = intermediateKey.publicKey,
-                signingKey = SigningKey.anonymous(caKey, caKey.curve.defaultSigningAlgorithm),
+                signingKey = AsymmetricKey.anonymous(caKey, caKey.curve.defaultSigningAlgorithm),
                 serialNumber = ASN1Integer(1L),
                 subject = X500Name.fromName("CN=Test TrustManager Intermediate CA"),
                 issuer = caCertificate.subject,
@@ -84,7 +84,7 @@ class TrustManagerTest {
         dsCertificate = runBlocking {
             buildX509Cert(
                 publicKey = dsKey.publicKey,
-                signingKey = SigningKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
+                signingKey = AsymmetricKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
                 serialNumber = ASN1Integer(1L),
                 subject = X500Name.fromName("CN=Test TrustManager DS"),
                 issuer = intermediateCertificate.subject,
@@ -101,7 +101,7 @@ class TrustManagerTest {
         dsValidInThePastCertificate = runBlocking {
             buildX509Cert(
                 publicKey = dsValidInThePastKey.publicKey,
-                signingKey = SigningKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
+                signingKey = AsymmetricKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
                 serialNumber = ASN1Integer(1L),
                 subject = X500Name.fromName("CN=Test TrustManager DS Valid In The Past"),
                 issuer = intermediateCertificate.subject,
@@ -118,7 +118,7 @@ class TrustManagerTest {
         dsValidInTheFutureCertificate = runBlocking {
             buildX509Cert(
                 publicKey = dsValidInTheFutureKey.publicKey,
-                signingKey = SigningKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
+                signingKey = AsymmetricKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
                 serialNumber = ASN1Integer(1L),
                 subject = X500Name.fromName("CN=Test TrustManager Valid In The Future"),
                 issuer = intermediateCertificate.subject,
@@ -135,7 +135,7 @@ class TrustManagerTest {
         ca2Certificate = runBlocking {
             buildX509Cert(
                 publicKey = ca2Key.publicKey,
-                signingKey = SigningKey.anonymous(ca2Key, ca2Key.curve.defaultSigningAlgorithm),
+                signingKey = AsymmetricKey.anonymous(ca2Key, ca2Key.curve.defaultSigningAlgorithm),
                 serialNumber = ASN1Integer(1L),
                 subject = X500Name.fromName("CN=Test TrustManager CA2"),
                 issuer = X500Name.fromName("CN=Test TrustManager CA2"),
@@ -151,7 +151,7 @@ class TrustManagerTest {
         ds2Certificate = runBlocking {
             buildX509Cert(
                 publicKey = ds2Key.publicKey,
-                signingKey = SigningKey.anonymous(ca2Key, ca2Key.curve.defaultSigningAlgorithm),
+                signingKey = AsymmetricKey.anonymous(ca2Key, ca2Key.curve.defaultSigningAlgorithm),
                 serialNumber = ASN1Integer(1L),
                 subject = X500Name.fromName("CN=Test TrustManager DS2"),
                 issuer = ca2Certificate.subject,
@@ -318,7 +318,7 @@ class TrustManagerTest {
 
         val elboniaIacaKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val elboniaIaca = MdocUtil.generateIacaCertificate(
-            iacaKey = SigningKey.anonymous(elboniaIacaKey),
+            iacaKey = AsymmetricKey.anonymous(elboniaIacaKey),
             subject = X500Name.fromName("CN=Elbonia TrustManager CA"),
             serial = ASN1Integer.fromRandom(numBits = 128),
             validFrom = validFrom,
@@ -328,7 +328,7 @@ class TrustManagerTest {
         )
         val elboniaDsKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val elboniaDs = MdocUtil.generateDsCertificate(
-            iacaKey = SigningKey.X509CertifiedExplicit(
+            iacaKey = AsymmetricKey.X509CertifiedExplicit(
                 privateKey = elboniaIacaKey,
                 certChain = X509CertChain(listOf(elboniaIaca))
             ),
@@ -341,7 +341,7 @@ class TrustManagerTest {
 
         val atlantisIacaKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val atlantisIaca = MdocUtil.generateIacaCertificate(
-            iacaKey = SigningKey.anonymous(atlantisIacaKey),
+            iacaKey = AsymmetricKey.anonymous(atlantisIacaKey),
             subject = X500Name.fromName("CN=Atlantis TrustManager CA"),
             serial = ASN1Integer.fromRandom(numBits = 128),
             validFrom = validFrom,
@@ -371,7 +371,7 @@ class TrustManagerTest {
         val vicalKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val vicalCert = buildX509Cert(
             publicKey = vicalKey.publicKey,
-            signingKey = SigningKey.anonymous(vicalKey, vicalKey.curve.defaultSigningAlgorithm),
+            signingKey = AsymmetricKey.anonymous(vicalKey, vicalKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1),
             subject = X500Name.fromName("CN=Test VICAL provider"),
             issuer = X500Name.fromName("CN=Test VICAL provider"),
@@ -388,7 +388,7 @@ class TrustManagerTest {
             atlantisIaca = atlantisIaca,
             atlantisIacaKey = atlantisIacaKey,
             encodedSignedVical = ByteString(
-                signedVical.generate(SigningKey.anonymous(vicalKey))
+                signedVical.generate(AsymmetricKey.anonymous(vicalKey))
             ),
             elboniaDs = elboniaDs,
             elboniaDsKey = elboniaDsKey,
@@ -721,7 +721,7 @@ class TrustManagerTest {
         val vicalKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val vicalCert = buildX509Cert(
             publicKey = vicalKey.publicKey,
-            signingKey = SigningKey.anonymous(vicalKey, vicalKey.curve.defaultSigningAlgorithm),
+            signingKey = AsymmetricKey.anonymous(vicalKey, vicalKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1),
             subject = X500Name.fromName("CN=Test VICAL provider"),
             issuer = X500Name.fromName("CN=Test VICAL provider"),

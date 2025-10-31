@@ -22,7 +22,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.NameSpacedData
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.jwt.buildJwt
@@ -102,7 +102,7 @@ suspend fun authorizeGet(call: ApplicationCall) {
 }
 
 internal data class RecordsClient(
-    val signingKey: SigningKey
+    val signingKey: AsymmetricKey
 )
 
 private suspend fun authorizeUsingSystemOfRecord(
@@ -117,7 +117,7 @@ private suspend fun authorizeUsingSystemOfRecord(
                 "config error: 'system_of_record_jwk' parameter must be specified"
             )
         RecordsClient(
-            signingKey = SigningKey.parse(jwkText, secureAreaRepository)
+            signingKey = AsymmetricKey.parse(jwkText, secureAreaRepository)
         )
     }
     val state = IssuanceState.getIssuanceState(id)
@@ -170,7 +170,7 @@ private suspend fun authorizeUsingSystemOfRecord(
 }
 
 private suspend fun createJwtClientAssertion(
-    key: SigningKey,
+    key: AsymmetricKey,
     aud: String
 ): String = buildJwt(
         type = "JWT",

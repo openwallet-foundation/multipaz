@@ -1,6 +1,6 @@
 package org.multipaz.testapp.provisioning
 
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackendUtil
 import org.multipaz.securearea.KeyAttestation
@@ -68,8 +68,8 @@ class OpenID4VCILocalBackend: OpenID4VCIBackend {
             }
            """.trimIndent()
 
-        private val clientAssertionKey = SigningKey.parseExplicit(clientAssertionJwk)
-        private val attestationKey = SigningKey.parseExplicit(attestationJwk)
+        private val clientAssertionKey = AsymmetricKey.parseExplicit(clientAssertionJwk)
+        private val attestationKey = AsymmetricKey.parseExplicit(attestationJwk)
         const val CLIENT_ID = "urn:uuid:418745b8-78a3-4810-88df-7898aff3ffb4"
     }
 }

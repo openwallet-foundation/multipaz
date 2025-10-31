@@ -33,6 +33,7 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.claim.organizeByNamespace
 import org.multipaz.compose.datetime.formattedDateTime
 import org.multipaz.compose.decodeImage
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentAttributeType
@@ -225,7 +226,9 @@ private suspend fun parseResponse(
             now = now,
             deviceResponse = deviceResponse,
             sessionTranscript = sessionTranscript,
-            eReaderKey = eReaderKey,
+            eReaderKey = eReaderKey?.let {
+                AsymmetricKey.anonymous(it, it.curve.defaultKeyAgreementAlgorithm)
+            },
             documentTypeRepository = documentTypeRepository,
             zkSystemRepository = zkSystemRepository
         )

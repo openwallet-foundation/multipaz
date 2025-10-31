@@ -48,7 +48,7 @@ import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import kotlinx.coroutines.test.runTest
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import kotlin.time.Clock
 import kotlin.time.Instant
 import org.multipaz.document.buildDocumentStore
@@ -147,7 +147,7 @@ class DeviceResponseGeneratorTest {
         dsKey = Crypto.createEcPrivateKey(EcCurve.P256)
         dsCert = X509Cert.Builder(
             publicKey = dsKey.publicKey,
-            signingKey = SigningKey.anonymous(dsKey, Algorithm.ES256),
+            signingKey = AsymmetricKey.anonymous(dsKey, Algorithm.ES256),
             serialNumber = ASN1Integer(1),
             subject = X500Name.fromName("CN=State of Utopia DS Key"),
             issuer = X500Name.fromName("CN=State of Utopia DS Key"),
@@ -319,7 +319,10 @@ class DeviceResponseGeneratorTest {
         val encodedSessionTranscript = Cbor.encode(Tstr("Doesn't matter"))
         val staticAuthData = StaticAuthDataParser(mdocCredentialMac.issuerProvidedData)
             .parse()
-        val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val eReaderKey = AsymmetricKey.anonymous(
+            privateKey = Crypto.createEcPrivateKey(EcCurve.P256),
+            algorithm = Algorithm.ECDH_P256
+        )
         val mergedIssuerNamespaces: Map<String, List<ByteArray>> = MdocUtil.mergeIssuerNamesSpaces(
             request,
             document.testMetadata.nameSpacedData,
@@ -364,7 +367,10 @@ class DeviceResponseGeneratorTest {
             DataElement("ns2", "does_not_exist", false, false),
             DataElement("ns_does_not_exist", "boo", false, false)
         )
-        val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val eReaderKey = AsymmetricKey.anonymous(
+            privateKey = Crypto.createEcPrivateKey(EcCurve.P256),
+            algorithm = Algorithm.ECDH_P256
+        )
         val request = DocumentRequest(dataElements)
         val encodedSessionTranscript = Cbor.encode(Tstr("Doesn't matter"))
         val staticAuthData = StaticAuthDataParser(mdocCredentialSign.issuerProvidedData)
@@ -445,7 +451,10 @@ class DeviceResponseGeneratorTest {
             .putEntryString("ns4", "baz2", "bah2")
             .putEntryString("ns4", "baz3", "bah3")
             .build()
-        val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val eReaderKey = AsymmetricKey.anonymous(
+            privateKey = Crypto.createEcPrivateKey(EcCurve.P256),
+            algorithm = Algorithm.ECDH_P256
+        )
         val deviceResponseGenerator = DeviceResponseGenerator(0)
         deviceResponseGenerator.addDocument(
             DocumentGenerator(DOC_TYPE, staticAuthData.issuerAuth, encodedSessionTranscript)

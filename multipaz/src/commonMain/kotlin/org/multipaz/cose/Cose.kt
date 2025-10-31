@@ -11,7 +11,7 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
 import org.multipaz.crypto.SignatureVerificationException
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.UnlockReason
 import org.multipaz.securearea.SecureArea
@@ -175,7 +175,7 @@ object Cose {
      * @param unprotectedHeaders the unprotected headers to include.
      */
     suspend fun coseSign1Sign(
-        signingKey: SigningKey,
+        signingKey: AsymmetricKey,
         message: ByteArray,
         includeMessageInPayload: Boolean,
         protectedHeaders: Map<CoseLabel, DataItem>,
@@ -229,7 +229,7 @@ object Cose {
      * instead.
      *
      * This method remains for compatibility. New code should used
-     * [SigningKey]-based method instead.
+     * [AsymmetricKey]-based method instead.
      *
      * @param secureArea the [SecureArea] holding the private key.
      * @param alias the alias for the private key to use to sign with.
@@ -295,7 +295,7 @@ object Cose {
      * and alias.
      *
      * This method remains for compatibility. New code should used
-     * [SigningKey]-based method instead.
+     * [AsymmetricKey]-based method instead.
      *
      * @param key the private key to sign with.
      * @param dataToSign the data to sign.

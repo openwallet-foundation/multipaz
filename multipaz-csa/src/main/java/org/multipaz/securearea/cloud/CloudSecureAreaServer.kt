@@ -51,7 +51,7 @@ import org.multipaz.certext.CloudKeyAttestation
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.toCbor
 import org.multipaz.crypto.Hkdf
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.device.AndroidKeystoreSecurityLevel
 import org.multipaz.jwt.buildJwt
 import java.nio.ByteBuffer
@@ -93,8 +93,8 @@ import kotlin.random.Random
  */
 class CloudSecureAreaServer(
     private val serverSecureAreaBoundKey: ByteArray,
-    private val attestationKey: SigningKey.X509Certified,
-    private val cloudRootAttestationKey: SigningKey.X509Certified,
+    private val attestationKey: AsymmetricKey.X509Certified,
+    private val cloudRootAttestationKey: AsymmetricKey.X509Certified,
     private val e2eeKeyLimitSeconds: Int,
     private val iosReleaseBuild: Boolean,
     private val iosAppIdentifiers: List<String>,

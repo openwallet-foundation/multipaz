@@ -48,7 +48,7 @@ import org.multipaz.request.Requester
 import org.multipaz.util.Logger
 import kotlin.time.Instant
 import org.multipaz.cbor.buildCborMap
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509Extension
 import kotlin.random.Random
 
@@ -431,7 +431,7 @@ object MdocUtil {
      * @return a [X509Cert] with all the required extensions.
      */
     suspend fun generateIacaCertificate(
-        iacaKey: SigningKey,
+        iacaKey: AsymmetricKey,
         subject: X500Name,
         serial: ASN1Integer,
         validFrom: Instant,
@@ -504,7 +504,7 @@ object MdocUtil {
      * @return a [X509Cert] with all the required extensions.
      */
     suspend fun generateDsCertificate(
-        iacaKey: SigningKey.X509Certified,
+        iacaKey: AsymmetricKey.X509Certified,
         dsKey: EcPublicKey,
         subject: X500Name,
         serial: ASN1Integer,
@@ -563,7 +563,7 @@ object MdocUtil {
      * @return a [X509Cert].
      */
     suspend fun generateReaderRootCertificate(
-        readerRootKey: SigningKey,
+        readerRootKey: AsymmetricKey,
         subject: X500Name,
         serial: ASN1Integer,
         validFrom: Instant,
@@ -619,7 +619,7 @@ object MdocUtil {
      * @return a [X509Cert] with all the required extensions.
      */
     suspend fun generateReaderCertificate(
-        readerRootKey: SigningKey.X509Certified,
+        readerRootKey: AsymmetricKey.X509Certified,
         readerKey: EcPublicKey,
         subject: X500Name,
         serial: ASN1Integer,

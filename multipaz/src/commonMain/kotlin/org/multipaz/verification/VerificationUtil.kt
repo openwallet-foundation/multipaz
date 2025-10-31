@@ -31,7 +31,7 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.JsonWebEncryption
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.ZkRequest
@@ -97,7 +97,7 @@ object VerificationUtil {
         origin: String,
         clientId: String?,
         responseEncryptionKey: EcPublicKey?,
-        readerAuthenticationKey: SigningKey.X509Compatible?,
+        readerAuthenticationKey: AsymmetricKey.X509Compatible?,
         zkSystemSpecs: List<ZkSystemSpec>
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
@@ -126,7 +126,7 @@ object VerificationUtil {
         origin: String,
         clientId: String?,
         responseEncryptionKey: EcPublicKey?,
-        readerAuthenticationKey: SigningKey.X509Compatible?,
+        readerAuthenticationKey: AsymmetricKey.X509Compatible?,
         zkSystemSpecs: List<ZkSystemSpec>
     ): JsonObject = buildJsonObject {
         put("protocol", exchangeProtocol)
@@ -264,7 +264,7 @@ object VerificationUtil {
         origin: String,
         clientId: String?,
         responseEncryptionKey: EcPublicKey?,
-        readerAuthenticationKey: SigningKey?
+        readerAuthenticationKey: AsymmetricKey?
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
             buildJsonObject {
@@ -391,7 +391,7 @@ object VerificationUtil {
         response: JsonObject,
         nonce: ByteString,
         origin: String,
-        responseEncryptionKey: EcPrivateKey?,
+        responseEncryptionKey: AsymmetricKey?,
     ): DcResponse {
         // TODO: Change responseEncryptionKey to be a SigningKey
         val exchangeProtocol = response["protocol"]!!.jsonPrimitive.content
@@ -408,7 +408,10 @@ object VerificationUtil {
                     if (responseEncryptionKey == null) {
                         throw IllegalStateException("Response is encryption but no key was provided for decryption")
                     }
-                    JsonWebEncryption.decrypt(response, responseEncryptionKey)
+                    JsonWebEncryption.decrypt(
+                        encryptedJwt = response,
+                        recipientKey = responseEncryptionKey
+                    )
                 }
                 val vpToken = responseObj["vp_token"]!!.jsonObject
 
@@ -484,7 +487,7 @@ object VerificationUtil {
                 val ciphertext = encryptionParameters[Tstr("cipherText")]!!.asBstr
                 val decrypter = Hpke.getDecrypter(
                     cipherSuite = Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM,
-                    receiverPrivateKey = SigningKey.AnonymousExplicit(responseEncryptionKey),
+                    receiverPrivateKey = responseEncryptionKey,
                     encapsulatedKey = enc,
                     info = Cbor.encode(sessionTranscript),
                 )
@@ -513,7 +516,7 @@ object VerificationUtil {
      * @param zkSystemRepository a [ZkSystemRepository] used for verifying ZKP proofs or `null`.
      * @return a list of [VerifiedPresentation], one for each credential in the response.
      */
-    fun verifyOpenID4VPResponse(
+    suspend fun verifyOpenID4VPResponse(
         now: Instant,
         vpToken: JsonObject,
         sessionTranscript: DataItem,
@@ -645,11 +648,11 @@ object VerificationUtil {
      * @param zkSystemRepository a [ZkSystemRepository] used for verifying ZKP proofs or `null`.
      * @return a list of [VerifiedPresentation], one for each document in the response.
      */
-    fun verifyMdocDeviceResponse(
+    suspend fun verifyMdocDeviceResponse(
         now: Instant,
         deviceResponse: DataItem,
         sessionTranscript: DataItem,
-        eReaderKey: EcPrivateKey?,
+        eReaderKey: AsymmetricKey?,
         documentTypeRepository: DocumentTypeRepository?,
         zkSystemRepository: ZkSystemRepository?,
     ): List<VerifiedPresentation> {

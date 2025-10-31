@@ -24,7 +24,7 @@ import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.mdoc.TestVectors
@@ -155,7 +155,7 @@ class DeviceRequestParserTest {
         )
         val readerCert = X509Cert.Builder(
             publicKey = readerKey.publicKey,
-            signingKey = SigningKey.anonymous(readerKey, curve.defaultSigningAlgorithm),
+            signingKey = AsymmetricKey.anonymous(readerKey, curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1),
             subject = X500Name.fromName("CN=Test Key"),
             issuer = X500Name.fromName("CN=Test Key"),

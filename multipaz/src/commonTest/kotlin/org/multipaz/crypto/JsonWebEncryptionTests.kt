@@ -1,5 +1,6 @@
 package org.multipaz.crypto
 
+import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.append
 import kotlinx.io.bytestring.buildByteString
@@ -56,11 +57,11 @@ class JsonWebEncryptionTests {
 
     @Test fun roundTripCompression() = roundtrip(EcCurve.P256, Algorithm.A128GCM, true)
 
-    fun roundtrip(curve: EcCurve, encAlg: Algorithm, useCompression: Boolean) {
+    fun roundtrip(curve: EcCurve, encAlg: Algorithm, useCompression: Boolean) = runTest {
         // TODO: use assumeTrue() when available in kotlin-test
         if (!Crypto.supportedCurves.contains(curve)) {
             println("Curve $curve not supported on platform")
-            return
+            return@runTest
         }
         val recipientKey = Crypto.createEcPrivateKey(curve)
         val claims = buildJsonObject {
@@ -83,7 +84,10 @@ class JsonWebEncryptionTests {
         )
         val decryptedClaims = JsonWebEncryption.decrypt(
             encryptedJwt = encryptedJwt,
-            recipientKey = recipientKey
+            recipientKey = AsymmetricKey.anonymous(
+                privateKey = recipientKey,
+                algorithm = recipientKey.curve.defaultKeyAgreementAlgorithm
+            )
         )
         assertEquals(decryptedClaims, claims)
 

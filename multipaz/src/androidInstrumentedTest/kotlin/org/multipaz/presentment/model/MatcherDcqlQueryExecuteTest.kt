@@ -15,14 +15,13 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.digitalcredentials.calculateCredentialDatabase
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.openid.OpenID4VP
-import org.multipaz.presentment.model.DocumentStoreTestHarness
 import org.multipaz.util.toBase64Url
 import kotlin.random.Random
 
@@ -71,7 +70,7 @@ class MatcherDcqlQueryExecuteTest {
                 validFrom = readerRootCerts.first().validityNotBefore,
                 validUntil = readerRootCerts.first().validityNotAfter
             )
-            SigningKey.X509CertifiedExplicit(
+            AsymmetricKey.X509CertifiedExplicit(
                 privateKey = key,
                 certChain = X509CertChain(listOf(cert) + readerRootCerts)
             )

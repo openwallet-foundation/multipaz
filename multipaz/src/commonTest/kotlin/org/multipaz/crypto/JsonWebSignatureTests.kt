@@ -41,7 +41,7 @@ class JsonWebSignatureTests {
         val now = Clock.System.now()
         val signingKeyCert = X509Cert.Builder(
             publicKey = privateKey.publicKey,
-            signingKey = SigningKey.anonymous(privateKey, privateKey.curve.defaultSigningAlgorithm),
+            signingKey = AsymmetricKey.anonymous(privateKey, privateKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1L),
             subject = X500Name.fromName("CN=Test Key"),
             issuer = X500Name.fromName("CN=Test Key"),
@@ -50,7 +50,7 @@ class JsonWebSignatureTests {
         ).includeSubjectKeyIdentifier()
             .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
             .build()
-        val signingKey = SigningKey.X509CertifiedExplicit(
+        val signingKey = AsymmetricKey.X509CertifiedExplicit(
             privateKey = privateKey,
             certChain = X509CertChain(listOf(signingKeyCert)),
             algorithm = privateKey.curve.defaultSigningAlgorithmFullySpecified

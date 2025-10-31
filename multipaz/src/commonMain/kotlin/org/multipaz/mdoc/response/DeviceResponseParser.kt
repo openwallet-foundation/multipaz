@@ -35,6 +35,7 @@ import org.multipaz.util.Logger
 import org.multipaz.util.toHex
 import kotlin.time.Instant
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Hkdf
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.mdoc.zkp.ZkDocument
@@ -51,7 +52,7 @@ class DeviceResponseParser(
     val encodedDeviceResponse: ByteArray,
     val encodedSessionTranscript: ByteArray
 ) {
-    private var eReaderKey: EcPrivateKey? = null
+    private var eReaderKey: AsymmetricKey? = null
 
     /**
      * Sets the private part of the ephemeral key used in the session where the
@@ -63,7 +64,7 @@ class DeviceResponseParser(
      * @param eReaderKey the private part of the reader ephemeral key.
      * @return the `DeviceResponseParser`.
      */
-    fun setEphemeralReaderKey(eReaderKey: EcPrivateKey) = apply {
+    fun setEphemeralReaderKey(eReaderKey: AsymmetricKey) = apply {
         this.eReaderKey = eReaderKey
     }
 
@@ -87,7 +88,7 @@ class DeviceResponseParser(
      * @exception IllegalStateException if required data hasn't been set using the setter
      * methods on this class.
      */
-    fun parse(): DeviceResponse =
+    suspend fun parse(): DeviceResponse =
     // mEReaderKey may be omitted if the response is using ECDSA instead of MAC
         // for device authentication.
         DeviceResponse().apply {
@@ -233,12 +234,12 @@ class DeviceResponseParser(
             return deviceKey
         }
 
-        private fun parseDeviceSigned(
+        private suspend fun parseDeviceSigned(
             deviceSigned: DataItem,
             docType: String,
             encodedSessionTranscript: ByteArray,
             deviceKey: EcPublicKey,
-            eReaderKey: EcPrivateKey?,
+            eReaderKey: AsymmetricKey?,
             builder: Document.Builder
         ) {
             val nameSpacesBytes = deviceSigned["nameSpaces"]
@@ -284,7 +285,7 @@ class DeviceResponseParser(
                         "Neither deviceSignature nor deviceMac in deviceAuth"
                     )
                 val tagInResponse = deviceMacDataItem.asCoseMac0.tag
-                val sharedSecret = Crypto.keyAgreement(eReaderKey!!, deviceKey)
+                val sharedSecret = eReaderKey!!.keyAgreement(deviceKey)
                 val sessionTranscriptBytes = Cbor.encode(Tagged(24, Bstr(encodedSessionTranscript)))
                 val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
                 val info = "EMacKey".encodeToByteArray()
@@ -324,10 +325,10 @@ class DeviceResponseParser(
             }
         }
 
-        internal fun parse(
+        internal suspend fun parse(
             encodedDeviceResponse: ByteArray?,
             encodedSessionTranscript: ByteArray,
-            eReaderKey: EcPrivateKey?
+            eReaderKey: AsymmetricKey?
         ) {
             val deviceResponse = Cbor.decode(encodedDeviceResponse!!)
             version = deviceResponse["version"].asTstr

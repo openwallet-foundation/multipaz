@@ -4,7 +4,6 @@ import kotlinx.coroutines.test.runTest
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -18,8 +17,7 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
-import org.multipaz.crypto.SignatureVerificationException
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.toHex
@@ -1519,7 +1517,7 @@ class SdJwtTest {
     fun testCreate() = runTest {
         val issuerKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val sdJwt = SdJwt.create(
-            issuerKey = SigningKey.anonymous(issuerKey, Algorithm.ESP256),
+            issuerKey = AsymmetricKey.anonymous(issuerKey, Algorithm.ESP256),
             kbKey = null,
             random = Random(0),
             claims = Json.parseToJsonElement(
@@ -2365,7 +2363,7 @@ class SdJwtTest {
         val issuerKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val kbKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val sdJwt = SdJwt.create(
-            issuerKey = SigningKey.anonymous(issuerKey, Algorithm.ESP256),
+            issuerKey = AsymmetricKey.anonymous(issuerKey, Algorithm.ESP256),
             kbKey = kbKey.publicKey,
             random = Random(0),
             claims = Json.parseToJsonElement(
@@ -2412,7 +2410,7 @@ class SdJwtTest {
                 )
             )
             .present(
-                signingKey = SigningKey.anonymous(kbKey, Algorithm.ESP256),
+                signingKey = AsymmetricKey.anonymous(kbKey, Algorithm.ESP256),
                 nonce = nonce,
                 audience = "https://verifier.example.org",
                 creationTime = creationTime

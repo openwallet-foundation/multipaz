@@ -17,7 +17,7 @@ import org.multipaz.cose.CoseSign1
 import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.SignatureVerificationException
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.securearea.KeyUnlockData
@@ -242,7 +242,7 @@ data class DeviceRequest private constructor(
             docType: String,
             nameSpaces: Map<String, Map<String, Boolean>>,
             docRequestInfo: DocRequestInfo?,
-            readerKey: SigningKey.X509Compatible,
+            readerKey: AsymmetricKey.X509Compatible,
         ): Builder = addDocRequestInternalSuspend(
             docType = docType,
             nameSpaces = nameSpaces,
@@ -369,7 +369,7 @@ data class DeviceRequest private constructor(
          * @param keyUnlockData a [KeyUnlockData] for unlocking the key in the [SecureArea].
          * @return the builder.
          */
-        suspend fun addReaderAuthAll(readerKey: SigningKey.X509Compatible): Builder =
+        suspend fun addReaderAuthAll(readerKey: AsymmetricKey.X509Compatible): Builder =
             addReaderAuthAllInternalSuspend(
                 signer = { dataToSign, protectedHeaders, unprotectedHeaders ->
                     Cose.coseSign1Sign(

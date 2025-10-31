@@ -396,7 +396,7 @@ class X509Cert(
      */
     class Builder(
         private val publicKey: EcPublicKey,
-        private val signingKey: SigningKey,
+        private val signingKey: AsymmetricKey,
         private val serialNumber: ASN1Integer,
         private val subject: X500Name,
         private val issuer: X500Name,
@@ -768,7 +768,6 @@ private fun generateName(name: X500Name): ASN1Sequence {
  *
  * @param publicKey the public key for the certificate.
  * @param signingKey Tthe key to sign the TBSCertificate with.
- * @param signatureAlgorithm the signature algorithm to sign with.
  * @param serialNumber the serial number in the certificate.
  * @param subject the subject of the certificate.
  * @param issuer the issuer of the certificate.
@@ -779,7 +778,7 @@ private fun generateName(name: X500Name): ASN1Sequence {
  */
 suspend fun buildX509Cert(
     publicKey: EcPublicKey,
-    signingKey: SigningKey,
+    signingKey: AsymmetricKey,
     serialNumber: ASN1Integer,
     subject: X500Name,
     issuer: X500Name,

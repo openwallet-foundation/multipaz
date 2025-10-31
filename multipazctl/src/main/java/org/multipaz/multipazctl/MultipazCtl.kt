@@ -16,7 +16,7 @@ import kotlinx.datetime.plus
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import org.bouncycastle.jce.provider.BouncyCastleProvider
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import java.io.File
 import java.nio.charset.StandardCharsets
@@ -90,7 +90,7 @@ object MultipazCtl {
 
         val iacaCertificate = runBlocking {
             MdocUtil.generateIacaCertificate(
-                SigningKey.anonymous(iacaKey),
+                AsymmetricKey.anonymous(iacaKey),
                 subjectAndIssuer,
                 serial,
                 validFrom,
@@ -153,7 +153,7 @@ object MultipazCtl {
 
         val dsCertificate = runBlocking {
             MdocUtil.generateDsCertificate(
-                SigningKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaPrivateKey),
+                AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaPrivateKey),
                 dsKey.publicKey,
                 subject,
                 serial,
@@ -207,7 +207,7 @@ object MultipazCtl {
 
         val readerRootCertificate = runBlocking {
             MdocUtil.generateReaderRootCertificate(
-                readerRootKey = SigningKey.anonymous(readerRootKey),
+                readerRootKey = AsymmetricKey.anonymous(readerRootKey),
                 subject = subjectAndIssuer,
                 serial = serial,
                 validFrom = validFrom,
@@ -271,7 +271,7 @@ object MultipazCtl {
 
         val readerCertificate = runBlocking {
             MdocUtil.generateReaderCertificate(
-                readerRootKey = SigningKey.X509CertifiedExplicit(
+                readerRootKey = AsymmetricKey.X509CertifiedExplicit(
                     certChain = X509CertChain(listOf(readerRootCert)),
                     privateKey = readerRootPrivateKey
                 ),

@@ -16,7 +16,7 @@ import org.multipaz.cbor.buildCborArray
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
@@ -35,8 +35,8 @@ import kotlin.random.Random
  */
 data class KeyMaterial(
     val serverSecureAreaBoundKey: ByteString,
-    val attestationKey: SigningKey.X509CertifiedExplicit,
-    val cloudBindingKey: SigningKey.X509CertifiedExplicit
+    val attestationKey: AsymmetricKey.X509CertifiedExplicit,
+    val cloudBindingKey: AsymmetricKey.X509CertifiedExplicit
 ) {
     fun toCbor() = Cbor.encode(
         buildCborArray {
@@ -55,14 +55,14 @@ data class KeyMaterial(
     companion object {
         fun fromCbor(encodedCbor: ByteArray): KeyMaterial {
             val array = Cbor.decode(encodedCbor).asArray
-            val attestationKey = SigningKey.X509CertifiedExplicit(
+            val attestationKey = AsymmetricKey.X509CertifiedExplicit(
                 privateKey = array[1].asCoseKey.ecPrivateKey,
                 certChain = array[2].asX509CertChain,
                 algorithm = Algorithm.fromCoseAlgorithmIdentifier(array[3].asNumber.toInt())
             )
             val attestationKeyIssuer = array[4].asTstr
             check(attestationKeyIssuer == attestationKey.getX500Subject().name)
-            val cloudBindingKey = SigningKey.X509CertifiedExplicit(
+            val cloudBindingKey = AsymmetricKey.X509CertifiedExplicit(
                 privateKey = array[5].asCoseKey.ecPrivateKey,
                 certChain = array[6].asX509CertChain,
                 algorithm = Algorithm.fromCoseAlgorithmIdentifier(array[7].asNumber.toInt()),
@@ -109,7 +109,7 @@ data class KeyMaterial(
                 val rootName = X500Name.fromName("CN=csa_dev_root")
                 val certificate = X509Cert.Builder(
                     publicKey = rootKey.publicKey,
-                    signingKey = SigningKey.anonymous(rootKey),
+                    signingKey = AsymmetricKey.anonymous(rootKey),
                     serialNumber = ASN1Integer.fromRandom(128),
                     subject = rootName,
                     issuer = rootName,
@@ -120,14 +120,14 @@ data class KeyMaterial(
                     .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
                     .setBasicConstraints(ca = true, pathLenConstraint = null)
                     .build()
-                SigningKey.X509CertifiedExplicit(
+                AsymmetricKey.X509CertifiedExplicit(
                     privateKey = rootKey,
                     certChain = X509CertChain(listOf(certificate))
                 )
             }
 
             // Only X509-certified keys are acceptable
-            attestationRoot as SigningKey.X509Certified
+            attestationRoot as AsymmetricKey.X509Certified
 
             // Create instance-specific intermediate certificate.
             val attestationKey = Crypto.createEcPrivateKey(EcCurve.P256)
@@ -148,7 +148,7 @@ data class KeyMaterial(
                 .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
                 .setBasicConstraints(ca = true, pathLenConstraint = null)
                 .build()
-            val attestationSigningKey = SigningKey.X509CertifiedExplicit(
+            val attestationSigningKey = AsymmetricKey.X509CertifiedExplicit(
                 privateKey = attestationKey,
                 certChain = X509CertChain(listOf(attestationKeyCertificate, rootCertificate)),
                 algorithm = attestationKeySignatureAlgorithm
@@ -163,7 +163,7 @@ data class KeyMaterial(
                     "CN=Cloud Secure Area Cloud Binding Key Attestation Root"
                 val cloudBindingKeyAttestationCertificate = X509Cert.Builder(
                     publicKey = cloudBindingKeyAttestationKey.publicKey,
-                    signingKey = SigningKey.anonymous(cloudBindingKeyAttestationKey),
+                    signingKey = AsymmetricKey.anonymous(cloudBindingKeyAttestationKey),
                     serialNumber = ASN1Integer(1L),
                     subject = X500Name.fromName(cloudBindingKeySubject),
                     issuer = X500Name.fromName(cloudBindingKeySubject),
@@ -175,7 +175,7 @@ data class KeyMaterial(
                     .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
                     .setBasicConstraints(ca = true, pathLenConstraint = null)
                     .build()
-                SigningKey.X509CertifiedExplicit(
+                AsymmetricKey.X509CertifiedExplicit(
                     privateKey = cloudBindingKeyAttestationKey,
                     certChain = X509CertChain(listOf(cloudBindingKeyAttestationCertificate)),
                     algorithm = cloudBindingKeySignatureAlgorithm
@@ -185,7 +185,7 @@ data class KeyMaterial(
             return KeyMaterial(
                 ByteString(serverSecureAreaBoundKey),
                 attestationSigningKey,
-                bindingRoot as SigningKey.X509CertifiedExplicit
+                bindingRoot as AsymmetricKey.X509CertifiedExplicit
             )
         }
 

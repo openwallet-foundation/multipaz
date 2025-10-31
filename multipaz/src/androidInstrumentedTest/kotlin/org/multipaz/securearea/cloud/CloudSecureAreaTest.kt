@@ -44,7 +44,7 @@ import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.util.fromBase64Url
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.device.AndroidKeystoreSecurityLevel
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.KeyUnlockDataProvider
@@ -111,7 +111,7 @@ class CloudSecureAreaTest {
                 listOf(
                     X509Cert.Builder(
                         publicKey = attestationKeyPrivate.publicKey,
-                        signingKey = SigningKey.anonymous(attestationKeyPrivate),
+                        signingKey = AsymmetricKey.anonymous(attestationKeyPrivate),
                         serialNumber = ASN1Integer(1L),
                         subject = X500Name.fromName(attestationKeySubject),
                         issuer = X500Name.fromName(attestationKeySubject),
@@ -123,7 +123,7 @@ class CloudSecureAreaTest {
                         .build(),
                 )
             )
-            val attestationSigningKey = SigningKey.X509CertifiedExplicit(
+            val attestationSigningKey = AsymmetricKey.X509CertifiedExplicit(
                 privateKey = attestationKeyPrivate,
                 certChain = attestationKeyCertChain
             )
@@ -148,7 +148,7 @@ class CloudSecureAreaTest {
                         .build(),
                 )
             )
-            val cloudBindingKeyAttestationSigningKey = SigningKey.X509CertifiedExplicit(
+            val cloudBindingKeyAttestationSigningKey = AsymmetricKey.X509CertifiedExplicit(
                 privateKey = cloudBindingKeyAttestationKey,
                 certChain = cloudBindingKeyAttestationCertificates
             )

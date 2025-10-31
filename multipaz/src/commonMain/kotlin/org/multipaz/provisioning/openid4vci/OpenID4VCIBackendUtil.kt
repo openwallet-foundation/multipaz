@@ -6,7 +6,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.jwt.buildJwt
 import org.multipaz.securearea.KeyAttestation
 import org.multipaz.util.toBase64Url
@@ -23,7 +23,7 @@ import kotlin.time.Duration.Companion.minutes
  */
 object OpenID4VCIBackendUtil {
     suspend fun createJwtClientAssertion(
-        signingKey: SigningKey,
+        signingKey: AsymmetricKey,
         clientId: String,
         tokenUrl: String,
     ): String = buildJwt(
@@ -59,7 +59,7 @@ object OpenID4VCIBackendUtil {
      * @return signed JWT representing Wallet Attestation
      */
     suspend fun createWalletAttestation(
-        signingKey: SigningKey,
+        signingKey: AsymmetricKey,
         clientId: String,
         attestationIssuer: String,
         attestedKey: EcPublicKey,
@@ -81,7 +81,7 @@ object OpenID4VCIBackendUtil {
     }
 
     suspend fun createJwtKeyAttestation(
-        signingKey: SigningKey,
+        signingKey: AsymmetricKey,
         attestationIssuer: String,
         keysToAttest: List<KeyAttestation>,
         challenge: String,

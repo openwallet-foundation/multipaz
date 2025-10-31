@@ -9,8 +9,7 @@ import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import kotlin.time.Clock
-import kotlinx.io.bytestring.ByteString
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -29,7 +28,7 @@ class VicalGeneratorTest {
 
         return X509Cert.Builder(
             publicKey = key.publicKey,
-            signingKey = SigningKey.anonymous(key, key.curve.defaultSigningAlgorithm),
+            signingKey = AsymmetricKey.anonymous(key, key.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1),
             subject = subjectAndIssuer,
             issuer = subjectAndIssuer,
@@ -79,7 +78,7 @@ class VicalGeneratorTest {
             vicalProviderCertificateChain = X509CertChain(listOf(vicalCert))
         )
         val encodedSignedVical = signedVical.generate(
-            signingKey = SigningKey.anonymous(vicalKey, vicalKey.curve.defaultSigningAlgorithm)
+            signingKey = AsymmetricKey.anonymous(vicalKey, vicalKey.curve.defaultSigningAlgorithm)
         )
 
         val decodedSignedVical = SignedVical.parse(

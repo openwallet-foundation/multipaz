@@ -45,7 +45,7 @@ class JsonWebSignatureTestsNimbus {
         val now = Clock.System.now()
         val signingKeyCert = X509Cert.Builder(
             publicKey = signingKey.publicKey,
-            signingKey = SigningKey.anonymous(signingKey, signingKey.curve.defaultSigningAlgorithm),
+            signingKey = AsymmetricKey.anonymous(signingKey, signingKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1L),
             subject = X500Name.fromName("CN=Test Key"),
             issuer = X500Name.fromName("CN=Test Key"),
@@ -99,7 +99,7 @@ class JsonWebSignatureTestsNimbus {
         val now = Clock.System.now()
         val signingKeyCert = X509Cert.Builder(
             publicKey = signingKey.publicKey,
-            signingKey = SigningKey.anonymous(signingKey, signingKey.curve.defaultSigningAlgorithm),
+            signingKey = AsymmetricKey.anonymous(signingKey, signingKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1L),
             subject = X500Name.fromName("CN=Test Key"),
             issuer = X500Name.fromName("CN=Test Key"),

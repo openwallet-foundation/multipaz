@@ -19,7 +19,7 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.JsonWebEncryption
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
@@ -27,7 +27,6 @@ import org.multipaz.mdoc.response.DeviceResponseParser
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.presentment.CredentialPresentmentData
-import org.multipaz.presentment.model.DocumentStoreTestHarness
 import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.storage.ephemeral.EphemeralStorage
@@ -122,7 +121,7 @@ class DigitalCredentialsPresentmentTest {
                 validFrom = readerRootCerts.first().validityNotBefore,
                 validUntil = readerRootCerts.first().validityNotAfter
             )
-            SigningKey.X509CertifiedExplicit(
+            AsymmetricKey.X509CertifiedExplicit(
                 privateKey = key,
                 certChain = X509CertChain(listOf(cert) + readerRootCerts)
             )
@@ -190,7 +189,10 @@ class DigitalCredentialsPresentmentTest {
 
             JsonWebEncryption.decrypt(
                 jweCompactSerialization,
-                encryptionKey
+                AsymmetricKey.anonymous(
+                    privateKey = encryptionKey,
+                    algorithm = encryptionKey.curve.defaultKeyAgreementAlgorithm
+                )
             )
         } else {
             dcResponseObject

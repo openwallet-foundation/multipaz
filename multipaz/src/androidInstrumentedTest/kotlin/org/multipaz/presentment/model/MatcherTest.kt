@@ -19,7 +19,7 @@ import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.knowntypes.EUPersonalID
@@ -73,7 +73,7 @@ class MatcherTest {
                 validFrom = readerRootCert.validityNotBefore,
                 validUntil = readerRootCert.validityNotAfter
             )
-            SigningKey.X509CertifiedExplicit(
+            AsymmetricKey.X509CertifiedExplicit(
                 privateKey = key,
                 certChain = X509CertChain(listOf(cert) + harness.readerRootKey.certChain.certificates)
             )

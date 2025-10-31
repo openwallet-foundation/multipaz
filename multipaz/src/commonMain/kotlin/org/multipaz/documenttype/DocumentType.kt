@@ -29,7 +29,7 @@ import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.Document
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
@@ -348,7 +348,7 @@ class DocumentType private constructor(
         document: Document,
         secureArea: SecureArea,
         createKeySettings: CreateKeySettings,
-        dsKey: SigningKey.X509Certified,
+        dsKey: AsymmetricKey.X509Certified,
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,

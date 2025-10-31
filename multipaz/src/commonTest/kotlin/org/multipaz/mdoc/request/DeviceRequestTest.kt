@@ -15,7 +15,7 @@ import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.SignatureVerificationException
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.knowntypes.DrivingLicense
@@ -116,21 +116,21 @@ class DeviceRequestTest {
     }
 
     data class ReaderAuth(
-        val readerRootKey: SigningKey.X509Certified,
-        val readerKey: SigningKey.X509Certified,
+        val readerRootKey: AsymmetricKey.X509Certified,
+        val readerKey: AsymmetricKey.X509Certified,
     ) {
         companion object {
             suspend fun generateSoftware(): ReaderAuth {
                 val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P384)
                 val readerRootCert = MdocUtil.generateReaderRootCertificate(
-                    readerRootKey = SigningKey.anonymous(readerRootKey),
+                    readerRootKey = AsymmetricKey.anonymous(readerRootKey),
                     subject = X500Name.fromName("CN=TEST Reader Root,C=XG-US,ST=MA"),
                     serial = ASN1Integer(1),
                     validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
                     validUntil = LocalDateTime(2029, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
                     crlUrl = "http://www.example.com/issuer/crl"
                 )
-                val readerRootSigningKey = SigningKey.X509CertifiedExplicit(
+                val readerRootSigningKey = AsymmetricKey.X509CertifiedExplicit(
                     privateKey = readerRootKey,
                     certChain = X509CertChain(listOf(readerRootCert))
                 )
@@ -145,7 +145,7 @@ class DeviceRequestTest {
                 )
                 return ReaderAuth(
                     readerRootKey = readerRootSigningKey,
-                    readerKey = SigningKey.X509CertifiedExplicit(
+                    readerKey = AsymmetricKey.X509CertifiedExplicit(
                         privateKey = readerKey,
                         certChain = X509CertChain(listOf(readerCert, readerRootCert))
                     )
@@ -155,14 +155,14 @@ class DeviceRequestTest {
             suspend fun generateSecureArea(): ReaderAuth {
                 val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P384)
                 val readerRootCert = MdocUtil.generateReaderRootCertificate(
-                    readerRootKey = SigningKey.anonymous(readerRootKey),
+                    readerRootKey = AsymmetricKey.anonymous(readerRootKey),
                     subject = X500Name.fromName("CN=TEST Reader Root,C=XG-US,ST=MA"),
                     serial = ASN1Integer(1),
                     validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
                     validUntil = LocalDateTime(2029, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
                     crlUrl = "http://www.example.com/issuer/crl"
                 )
-                val readerRootSigningKey = SigningKey.X509CertifiedExplicit(
+                val readerRootSigningKey = AsymmetricKey.X509CertifiedExplicit(
                     privateKey = readerRootKey,
                     certChain = X509CertChain(listOf(readerRootCert))
                 )
@@ -182,7 +182,7 @@ class DeviceRequestTest {
                 )
                 return ReaderAuth(
                     readerRootKey = readerRootSigningKey,
-                    readerKey = SigningKey.X509CertifiedSecureAreaBased(
+                    readerKey = AsymmetricKey.X509CertifiedSecureAreaBased(
                         secureArea = readerKeySecureArea,
                         alias = readerKeyInfo.alias,
                         certChain = X509CertChain(listOf(readerCert, readerRootCert)),

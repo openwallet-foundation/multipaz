@@ -148,7 +148,7 @@ class X509CertTests {
         val issuer = X500Name.fromName("CN=Foobar2")
         val cert = X509Cert.Builder(
             publicKey = key.publicKey,
-            signingKey = SigningKey.anonymous(key, key.curve.defaultSigningAlgorithm),
+            signingKey = AsymmetricKey.anonymous(key, key.curve.defaultSigningAlgorithm),
             serialNumber = serialNumber,
             subject = subject,
             issuer = issuer,
@@ -256,7 +256,7 @@ class X509CertTests {
 
         val cert = buildX509Cert(
             publicKey = key.publicKey,
-            signingKey = SigningKey.anonymous(key, key.curve.defaultSigningAlgorithmFullySpecified),
+            signingKey = AsymmetricKey.anonymous(key, key.curve.defaultSigningAlgorithmFullySpecified),
             serialNumber = ASN1Integer(1L),
             subject = X500Name.fromName("CN=Foo"),
             issuer = X500Name.fromName("CN=Foo"),

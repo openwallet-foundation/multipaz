@@ -76,7 +76,7 @@ import kotlin.time.Instant.Companion.fromEpochMilliseconds
 import org.junit.Assert
 import org.junit.Before
 import org.junit.Test
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.securearea.UnlockReason
@@ -176,7 +176,7 @@ class DeviceRetrievalHelperTest {
         documentSignerKey = createEcPrivateKey(EcCurve.P256)
         documentSignerCert = X509Cert.Builder(
             publicKey = documentSignerKey.publicKey,
-            signingKey = SigningKey.anonymous(documentSignerKey, documentSignerKey.curve.defaultSigningAlgorithm),
+            signingKey = AsymmetricKey.anonymous(documentSignerKey, documentSignerKey.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1L),
             subject = X500Name.fromName("CN=State of Utopia"),
             issuer = X500Name.fromName("CN=State of Utopia"),
@@ -319,12 +319,17 @@ class DeviceRetrievalHelperTest {
                     data!!
                 )
                 Assert.assertNull(second)
-                val dr = DeviceResponseParser(
-                    first!!,
-                    encodedSessionTranscript
-                )
-                    .setEphemeralReaderKey(eReaderKey)
+                val dr = runBlocking {
+                    DeviceResponseParser(
+                        first!!,
+                        encodedSessionTranscript
+                    )
+                    .setEphemeralReaderKey(AsymmetricKey.anonymous(
+                        privateKey = eReaderKey,
+                        algorithm = eReaderKey.curve.defaultKeyAgreementAlgorithm
+                    ))
                     .parse()
+                }
                 Assert.assertEquals(Constants.DEVICE_RESPONSE_STATUS_OK, dr.status)
                 Assert.assertEquals("1.0", dr.version)
                 val documents: Collection<DeviceResponseParser.Document> = dr.documents

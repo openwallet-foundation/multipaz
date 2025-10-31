@@ -40,7 +40,7 @@ import org.multipaz.util.toHex
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import kotlin.random.Random
 import kotlin.test.Test
@@ -308,7 +308,7 @@ class MdocUtilTest {
     fun testGenerateIacaCertificate() = runTest {
         val iacaKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val iacaCert = MdocUtil.generateIacaCertificate(
-            iacaKey = SigningKey.anonymous(iacaKey),
+            iacaKey = AsymmetricKey.anonymous(iacaKey),
             subject = X500Name.fromName("CN=TEST IACA Certificate,C=XG-US,ST=MA"),
             serial = ASN1Integer(1),
             validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
@@ -357,7 +357,7 @@ class MdocUtilTest {
     fun testGenerateDsCertificate() = runTest {
         val iacaKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val iacaCert = MdocUtil.generateIacaCertificate(
-            iacaKey = SigningKey.anonymous(iacaKey),
+            iacaKey = AsymmetricKey.anonymous(iacaKey),
             subject = X500Name.fromName("CN=TEST IACA Certificate,C=XG-US,ST=MA"),
             serial = ASN1Integer(1),
             validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
@@ -367,7 +367,7 @@ class MdocUtilTest {
         )
         val dsKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val dsCert = MdocUtil.generateDsCertificate(
-            iacaKey = SigningKey.X509CertifiedExplicit(
+            iacaKey = AsymmetricKey.X509CertifiedExplicit(
                 privateKey = iacaKey,
                 certChain = X509CertChain(listOf(iacaCert))
             ),
@@ -405,7 +405,7 @@ class MdocUtilTest {
     fun testGenerateReaderAuthCertificate() = runTest {
         val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val rootCert = MdocUtil.generateReaderRootCertificate(
-            readerRootKey = SigningKey.anonymous(readerRootKey),
+            readerRootKey = AsymmetricKey.anonymous(readerRootKey),
             subject = X500Name.fromName("CN=TEST Reader Root,C=XG-US,ST=MA"),
             serial = ASN1Integer(1),
             validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
@@ -414,7 +414,7 @@ class MdocUtilTest {
         )
         val readerKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val readerCert = MdocUtil.generateReaderCertificate(
-            readerRootKey = SigningKey.X509CertifiedExplicit(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(
                 privateKey = readerRootKey,
                 certChain = X509CertChain(listOf(rootCert))
             ),

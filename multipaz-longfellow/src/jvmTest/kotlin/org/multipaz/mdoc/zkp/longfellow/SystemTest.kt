@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.zkp.longfellow
 
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
@@ -45,7 +46,9 @@ class SystemTest {
         responseGenerator.addZkDocument(zkDoc!!)
         val responseBytes = responseGenerator.generate()
         val responseParser = DeviceResponseParser(responseBytes, sessionTranscript.toByteArray())
-        val response = responseParser.parse()
+        val response = runBlocking {
+            responseParser.parse()
+        }
 
         val zkDocResponse = response.zkDocuments[0]
 

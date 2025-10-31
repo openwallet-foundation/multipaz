@@ -6,7 +6,6 @@ import org.multipaz.util.appendInt16
 import org.multipaz.util.appendInt32
 import org.multipaz.util.appendInt64
 import org.multipaz.util.appendString
-import org.multipaz.util.toHex
 import kotlin.experimental.xor
 
 /**
@@ -211,11 +210,11 @@ object Hpke {
         dh: ByteArray,
         info: ByteArray,
         kemContext: ByteArray,
-        receiverKey: SigningKey?,
+        receiverKey: AsymmetricKey?,
         receiverKeyPub: EcPublicKey?,
         psk: ByteArray?,
         pskId: ByteArray?,
-        authKey: SigningKey?,
+        authKey: AsymmetricKey?,
         authKeyPub: EcPublicKey?
     ): HpkeContext {
         if (psk != null) {
@@ -425,7 +424,7 @@ object Hpke {
         info: ByteArray,
         psk: ByteArray? = null,
         pskId: ByteArray? = null,
-        authKey: SigningKey? = null
+        authKey: AsymmetricKey? = null
     ): Encrypter {
         val encapsulatedPublicKey = Crypto.createEcPrivateKey(cipherSuite.kem.curve)
         return getEncrypterInternal(
@@ -475,7 +474,7 @@ object Hpke {
         encapsulatedKey: EcPrivateKey,
         psk: ByteArray?,
         pskId: ByteArray?,
-        authKey: SigningKey?
+        authKey: AsymmetricKey?
     ): Encrypter {
         val dh = Crypto.keyAgreement(encapsulatedKey, receiverPublicKey)
         val enc = encapsulatedKey.publicKey.serialize()
@@ -588,7 +587,7 @@ object Hpke {
      * Creates a [Decrypter] object for HPKE for the given [cipherSuite].
      *
      * @param cipherSuite the cipher suite to use, for example [Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM].
-     * @param receiverPrivateKey a [SigningKey] for the key the data is encrypted against, must be compatible
+     * @param receiverPrivateKey a [AsymmetricKey] for the key the data is encrypted against, must be compatible
      *   with the curve in [cipherSuite] and must support key agreement.
      * @param encapsulatedKey the encapsulated key, received from the sender.
      * @param info data which can be used to influence the generation of keys (e.g., to fold in identity information).
@@ -599,7 +598,7 @@ object Hpke {
      */
     suspend fun getDecrypter(
         cipherSuite: CipherSuite,
-        receiverPrivateKey: SigningKey,
+        receiverPrivateKey: AsymmetricKey,
         encapsulatedKey: ByteArray,
         info: ByteArray,
         psk: ByteArray? = null,

@@ -82,7 +82,7 @@ class HpkeTestsAgainstTink {
 
         val decrypter = Hpke.getDecrypter(
             cipherSuite = Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM,
-            receiverPrivateKey = SigningKey.AnonymousExplicit(receiver),
+            receiverPrivateKey = AsymmetricKey.AnonymousExplicit(receiver),
             encapsulatedKey = enc,
             info = info
         )

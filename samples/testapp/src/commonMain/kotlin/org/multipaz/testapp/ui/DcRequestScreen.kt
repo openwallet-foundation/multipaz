@@ -23,7 +23,7 @@ import org.multipaz.compose.rememberUiBoundCoroutineScope
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.documenttype.DocumentCannedRequest
 import org.multipaz.documenttype.DocumentType
 import org.multipaz.mdoc.zkp.ZkSystemRepository
@@ -232,7 +232,7 @@ fun DcRequestScreen(
 }
 
 private suspend fun doDcRequestFlow(
-    appReaderKey: SigningKey.X509Compatible,
+    appReaderKey: AsymmetricKey.X509Compatible,
     request: DocumentCannedRequest,
     protocol: RequestProtocol,
     format: CredentialFormat,
@@ -332,7 +332,10 @@ private suspend fun doDcRequestFlow(
         response = dcResponseObject,
         nonce = nonce,
         origin = origin,
-        responseEncryptionKey = responseEncryptionKey,
+        responseEncryptionKey = AsymmetricKey.anonymous(
+            privateKey = responseEncryptionKey,
+            algorithm = responseEncryptionKey.curve.defaultKeyAgreementAlgorithm
+        )
     )
     val metadata = ShowResponseMetadata(
         engagementType = "OS-provided CredentialManager API",

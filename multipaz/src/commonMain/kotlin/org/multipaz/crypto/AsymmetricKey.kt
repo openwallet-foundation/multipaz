@@ -13,18 +13,19 @@ import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaRepository
 
 /**
- * Private key that can be used to sign messages, optionally with some kind of identification.
+ * Private key that can be used to sign messages or used for key agreement, optionally with
+ * some kind of identification.
  *
  * A private key can either be a software key [EcPrivateKey] or reside in a [SecureArea]. Keys
  * can either be anonymous or identified either by a certificate chain or using a key id. When
  * reading a key from settings, all six possible variants are potentially useful, yet it makes
- * very little difference for the rest of the code which variant is actually used. [SigningKey]
+ * very little difference for the rest of the code which variant is actually used. [AsymmetricKey]
  * class encapsulates these variants so the code can be written in more generic way.
  *
- * Although strictly speaking not a signing operation, [SigningKey] can also be used for
+ * Although strictly speaking not a signing operation, [AsymmetricKey] can also be used for
  * key exchange operation, provided it was created with that capability.
  */
-sealed class SigningKey {
+sealed class AsymmetricKey {
     /** Signature algorithm */
     abstract val algorithm: Algorithm
     /** Public key that corresponds to the private key used for signing */
@@ -72,7 +73,7 @@ sealed class SigningKey {
     abstract suspend fun keyAgreement(otherKey: EcPublicKey): ByteArray
 
     /**
-     * Implemented by [SigningKey] where the private key is explicitly given.
+     * Implemented by [AsymmetricKey] where the private key is explicitly given.
      *
      * Keys of this type are vulnerable to copying.
      */
@@ -83,13 +84,13 @@ sealed class SigningKey {
         val algorithm: Algorithm
     }
 
-    /** Implemented by [SigningKey] where the private key resides in [SecureArea] */
+    /** Implemented by [AsymmetricKey] where the private key resides in [SecureArea] */
     interface SecureAreaBased {
         /** Alias of the private key that is used for signing */
         val alias: String
         /** [SecureArea] that holds the private key */
         val secureArea: SecureArea
-        /** [KeyUnlockData] that should be used to generate a signature */
+        /** [UnlockReason] that should be used to generate a signature */
         val unlockReason: UnlockReason
         /** Key data */
         val keyInfo: KeyInfo
@@ -102,7 +103,7 @@ sealed class SigningKey {
      * from the context: one example is a newly-minted key for a self-signed certificate before
      * the certificate is actually created.
      */
-    sealed class X509Compatible: SigningKey() {
+    sealed class X509Compatible: AsymmetricKey() {
         /**
          * X509 certificate chain for the key, corresponds to `x5c` header value in JWT.
          *
@@ -130,7 +131,7 @@ sealed class SigningKey {
      * [Named] keys must never be used in X509-certificate based workflows. Use [Anonymous]
      * keys instead.
      */
-    sealed class Named: SigningKey() {
+    sealed class Named: AsymmetricKey() {
         /** Key identifier, corresponds to `kid` header value in JWT */
         abstract val keyId: String
         override val subject: String get() = keyId
@@ -147,7 +148,7 @@ sealed class SigningKey {
         fun getX500Subject(): X500Name = certChain.certificates.first().subject
     }
 
-    /** [SigningKey] which is both [SigningKey.X509Certified] and [SigningKey.Explicit]. */
+    /** [AsymmetricKey] which is both [AsymmetricKey.X509Certified] and [AsymmetricKey.Explicit]. */
     data class X509CertifiedExplicit(
         override val certChain: X509CertChain,
         override val privateKey: EcPrivateKey,
@@ -158,7 +159,7 @@ sealed class SigningKey {
         override suspend fun keyAgreement(otherKey: EcPublicKey) = keyAgreement(this, otherKey)
     }
 
-    /** [SigningKey] which is both [SigningKey.Named] and [SigningKey.Explicit]. */
+    /** [AsymmetricKey] which is both [AsymmetricKey.Named] and [AsymmetricKey.Explicit]. */
     data class NamedExplicit(
         override val keyId: String,
         override val privateKey: EcPrivateKey,
@@ -169,7 +170,7 @@ sealed class SigningKey {
         override suspend fun keyAgreement(otherKey: EcPublicKey) = keyAgreement(this, otherKey)
     }
 
-    /** [SigningKey] which is both [SigningKey.Anonymous] and [SigningKey.Explicit]. */
+    /** [AsymmetricKey] which is both [AsymmetricKey.Anonymous] and [AsymmetricKey.Explicit]. */
     data class AnonymousExplicit(
         override val privateKey: EcPrivateKey,
         override val algorithm: Algorithm = privateKey.curve.defaultSigningAlgorithm
@@ -179,7 +180,7 @@ sealed class SigningKey {
         override suspend fun keyAgreement(otherKey: EcPublicKey) = keyAgreement(this, otherKey)
     }
 
-    /** [SigningKey] which is both [SigningKey.X509Certified] and [SigningKey.SecureAreaBased]. */
+    /** [AsymmetricKey] which is both [AsymmetricKey.X509Certified] and [AsymmetricKey.SecureAreaBased]. */
     data class X509CertifiedSecureAreaBased(
         override val certChain: X509CertChain,
         override val alias: String,
@@ -187,13 +188,14 @@ sealed class SigningKey {
         override val keyInfo: KeyInfo,
         override val unlockReason: UnlockReason = UnlockReason.Unspecified,
         override val algorithm: Algorithm = keyInfo.algorithm
-    ): X509Certified(), SecureAreaBased {
+    ): X509Certified(),
+        SecureAreaBased {
         override val publicKey: EcPublicKey get() = keyInfo.publicKey
         override suspend fun sign(message: ByteArray) = sign(this, message)
         override suspend fun keyAgreement(otherKey: EcPublicKey) = keyAgreement(this, otherKey)
     }
 
-    /** [SigningKey] which is both [SigningKey.Named] and [SigningKey.SecureAreaBased]. */
+    /** [AsymmetricKey] which is both [AsymmetricKey.Named] and [AsymmetricKey.SecureAreaBased]. */
     data class NamedSecureAreaBased(
         override val keyId: String,
         override val alias: String,
@@ -207,7 +209,9 @@ sealed class SigningKey {
         override suspend fun keyAgreement(otherKey: EcPublicKey) = keyAgreement(this, otherKey)
     }
 
-    /** [SigningKey] which is both [SigningKey.Anonymous] and [SigningKey.SecureAreaBased]. */
+    /**
+     * [AsymmetricKey] which is both [AsymmetricKey.Anonymous] and [AsymmetricKey.SecureAreaBased].
+     */
     class AnonymousSecureAreaBased(
         override val alias: String,
         override val secureArea: SecureArea,
@@ -220,7 +224,7 @@ sealed class SigningKey {
         override suspend fun keyAgreement(otherKey: EcPublicKey) = keyAgreement(this, otherKey)
     }
 
-    companion object {
+    companion object Companion {
         private fun sign(explicit: Explicit, message: ByteArray): EcSignature =
             Crypto.sign(explicit.privateKey, explicit.algorithm, message)
 
@@ -258,7 +262,7 @@ sealed class SigningKey {
             json: String,
             secureAreaRepository: SecureAreaRepository?,
             unlockReason: UnlockReason = UnlockReason.Unspecified
-        ): SigningKey = parse(
+        ): AsymmetricKey = parse(
             json = Json.parseToJsonElement(json),
             secureAreaRepository = secureAreaRepository,
             unlockReason = unlockReason
@@ -271,7 +275,7 @@ sealed class SigningKey {
             json: JsonElement,
             secureAreaRepository: SecureAreaRepository?,
             unlockReason: UnlockReason = UnlockReason.Unspecified
-        ): SigningKey {
+        ): AsymmetricKey {
             if (json !is JsonObject) {
                 throw IllegalArgumentException("expected json object")
             }
@@ -300,7 +304,7 @@ sealed class SigningKey {
          * Similar to [parse], but does not handle [SecureArea]-based keys. It is suitable for
          * calling in non-coroutine contexts.
          */
-        fun parseExplicit(json: String): SigningKey =
+        fun parseExplicit(json: String): AsymmetricKey =
             parseExplicit(Json.parseToJsonElement(json))
 
         /**
@@ -309,7 +313,7 @@ sealed class SigningKey {
          * Similar to [parse], but does not handle [SecureArea]-based keys. It is suitable for
          * calling in non-coroutine contexts.
          */
-        fun parseExplicit(json: JsonElement): SigningKey {
+        fun parseExplicit(json: JsonElement): AsymmetricKey {
             if (json !is JsonObject) {
                 throw IllegalArgumentException("expected json object")
             }
@@ -329,7 +333,7 @@ sealed class SigningKey {
             alias: String,
             unlockReason: UnlockReason = UnlockReason.Unspecified,
             algorithm: Algorithm? = null
-        ): SigningKey {
+        ): AsymmetricKey {
             val keyInfo = secureArea.getKeyInfo(alias)
             return AnonymousSecureAreaBased(
                 secureArea = secureArea,
@@ -343,7 +347,7 @@ sealed class SigningKey {
         fun anonymous(
             privateKey: EcPrivateKey,
             algorithm: Algorithm = privateKey.curve.defaultSigningAlgorithmFullySpecified
-        ): SigningKey = AnonymousExplicit(privateKey, algorithm)
+        ): AsymmetricKey = AnonymousExplicit(privateKey, algorithm)
 
         private fun parseIdentifier(json: JsonObject): Pair<String?, X509CertChain?> {
             val kid = json["kid"]?.jsonPrimitive?.content

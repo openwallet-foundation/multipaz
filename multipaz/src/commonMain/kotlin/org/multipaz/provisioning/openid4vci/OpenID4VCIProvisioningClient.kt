@@ -31,7 +31,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.provisioning.AuthorizationChallenge
 import org.multipaz.provisioning.AuthorizationException
 import org.multipaz.provisioning.AuthorizationResponse
@@ -349,7 +349,7 @@ internal class OpenID4VCIProvisioningClient(
         return parsedResponse.string("request_uri")
     }
 
-    private suspend fun obtainWalletAttestation(): SigningKey {
+    private suspend fun obtainWalletAttestation(): AsymmetricKey {
         val secureArea = BackendEnvironment.getInterface(SecureAreaProvider::class)!!.get()
         val endpoint = Url(authorizationConfiguration.pushedAuthorizationRequestEndpoint)
         // https://datatracker.ietf.org/doc/html/draft-ietf-oauth-attestation-based-client-auth-01
@@ -367,7 +367,7 @@ internal class OpenID4VCIProvisioningClient(
         walletAttestationKeyAlias = keyInfo.alias
         val backend = BackendEnvironment.getInterface(OpenID4VCIBackend::class)!!
         walletAttestation = backend.createJwtWalletAttestation(keyInfo.attestation)
-        return SigningKey.anonymous(secureArea, keyInfo.alias)
+        return AsymmetricKey.anonymous(secureArea, keyInfo.alias)
     }
 
     private suspend fun processOauthResponse(parameterizedRedirectUrl: String) {
@@ -421,7 +421,7 @@ internal class OpenID4VCIProvisioningClient(
                     // For pre-authorized code case, this is where the session is initialized.
                     obtainWalletAttestation()
                 } else {
-                    SigningKey.anonymous(
+                    AsymmetricKey.anonymous(
                         secureArea = BackendEnvironment.getInterface(SecureAreaProvider::class)!!.get(),
                         alias = walletAttestationKeyAlias!!
                     )

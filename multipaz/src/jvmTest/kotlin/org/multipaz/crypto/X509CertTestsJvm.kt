@@ -96,7 +96,7 @@ A01EUDAKBggqhkjOPQQDAgNIADBFAiEAnX3+E4E5dQ+5G1rmStJTW79ZAiDTabyL
         val now = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
         val cert = X509Cert.Builder(
             publicKey = key.publicKey,
-            signingKey = SigningKey.anonymous(key, key.curve.defaultSigningAlgorithm),
+            signingKey = AsymmetricKey.anonymous(key, key.curve.defaultSigningAlgorithm),
             serialNumber = ASN1Integer(1L),
             subject = X500Name.fromName("CN=Foobar"),
             issuer = X500Name.fromName("CN=Foobar"),
@@ -138,7 +138,7 @@ A01EUDAKBggqhkjOPQQDAgNIADBFAiEAnX3+E4E5dQ+5G1rmStJTW79ZAiDTabyL
         val caCertificate =
             X509Cert.Builder(
                 publicKey = caKey.publicKey,
-                signingKey = SigningKey.anonymous(caKey, caKey.curve.defaultSigningAlgorithm),
+                signingKey = AsymmetricKey.anonymous(caKey, caKey.curve.defaultSigningAlgorithm),
                 serialNumber = ASN1Integer(112676L),
                 subject = X500Name.fromName("CN=TestCA"),
                 issuer = X500Name.fromName("CN=TestCA"),
@@ -153,7 +153,7 @@ A01EUDAKBggqhkjOPQQDAgNIADBFAiEAnX3+E4E5dQ+5G1rmStJTW79ZAiDTabyL
         val leafKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val leafCertificate = X509Cert.Builder(
             publicKey = leafKey.publicKey,
-            signingKey = SigningKey.X509CertifiedExplicit(
+            signingKey = AsymmetricKey.X509CertifiedExplicit(
                 privateKey = caKey,
                 certChain = X509CertChain(listOf(caCertificate)),
                 algorithm = caKey.curve.defaultSigningAlgorithm

@@ -42,7 +42,7 @@ import org.multipaz.compose.presentment.CredentialPresentmentModalBottomSheet
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X509Extension
@@ -217,14 +217,14 @@ fun ConsentPromptScreen(
         val validUntil = Clock.System.now() + 10.days
         val dsCert = buildX509Cert(
             publicKey = dsPrivateKey.publicKey,
-            signingKey = SigningKey.anonymous(dsPrivateKey),
+            signingKey = AsymmetricKey.anonymous(dsPrivateKey),
             serialNumber = ASN1Integer.fromRandom(numBits = 128),
             subject = X500Name.fromName("CN=Test"),
             issuer = X500Name.fromName("CN=Test"),
             validFrom = validFrom,
             validUntil = validUntil,
         ) {}
-        val dsKey = SigningKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert)), dsPrivateKey)
+        val dsKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert)), dsPrivateKey)
         DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
             document = documentStore!!.createDocument(
                 displayName = "Erika's Driving License",
@@ -482,14 +482,14 @@ private suspend fun calculateRequester(
     // TODO: should it be in SecureArea?
     val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P256)
     val readerRootCert = MdocUtil.generateReaderRootCertificate(
-        readerRootKey = SigningKey.anonymous(readerRootKey),
+        readerRootKey = AsymmetricKey.anonymous(readerRootKey),
         subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST Reader Root"),
         serial = ASN1Integer.fromRandom(128),
         validFrom = validFrom,
         validUntil = validUntil,
         crlUrl = "https://verifier.multipaz.org/crl"
     )
-    val readerRootSigningKey = SigningKey.X509CertifiedExplicit(
+    val readerRootSigningKey = AsymmetricKey.X509CertifiedExplicit(
         certChain = X509CertChain(listOf(readerRootCert)),
         privateKey = readerRootKey
     )
@@ -656,7 +656,7 @@ private suspend fun addCredentialsForOpenID4VPComplexExample(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: SigningKey,
+    dsKey: AsymmetricKey,
 ) {
     addCredPid(
         documentStore = documentStore,
@@ -714,7 +714,7 @@ private suspend fun addCredPid(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: SigningKey,
+    dsKey: AsymmetricKey,
 ) {
     documentStore.provisionSdJwtVc(
         displayName = "my-pid",
@@ -740,7 +740,7 @@ private suspend fun addCredPidMax(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: SigningKey,
+    dsKey: AsymmetricKey,
 ) {
     documentStore.provisionSdJwtVc(
         displayName = "my-pid-max",
@@ -766,7 +766,7 @@ private suspend fun addCredOtherPid(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: SigningKey,
+    dsKey: AsymmetricKey,
 ) {
     documentStore.provisionSdJwtVc(
         displayName = "my-other-pid",
@@ -792,7 +792,7 @@ private suspend fun addCredPidReduced1(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: SigningKey,
+    dsKey: AsymmetricKey,
 ) {
     documentStore.provisionSdJwtVc(
         displayName = "my-pid-reduced1",
@@ -815,7 +815,7 @@ private suspend fun addCredPidReduced2(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: SigningKey,
+    dsKey: AsymmetricKey,
 ) {
     documentStore.provisionSdJwtVc(
         displayName = "my-pid-reduced2",
@@ -839,7 +839,7 @@ private suspend fun addCredCompanyRewards(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: SigningKey,
+    dsKey: AsymmetricKey,
 ) {
     documentStore.provisionSdJwtVc(
         displayName = "my-reward-card",
@@ -863,7 +863,7 @@ private suspend fun DocumentStore.provisionSdJwtVc(
     signedAt: Instant,
     validFrom: Instant,
     validUntil: Instant,
-    dsKey: SigningKey,
+    dsKey: AsymmetricKey,
 ): Document {
     val document = createDocument(
         displayName = displayName,

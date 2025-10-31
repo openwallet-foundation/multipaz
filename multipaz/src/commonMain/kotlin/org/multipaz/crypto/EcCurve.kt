@@ -175,4 +175,20 @@ enum class EcCurve(
             ED448 -> Algorithm.ED448
             X448 -> Algorithm.UNSET
         }
+
+    val defaultKeyAgreementAlgorithm: Algorithm
+        get() = when (this) {
+            P256 -> Algorithm.ECDH_P256
+            P384 -> Algorithm.ECDH_P384
+            P521 -> Algorithm.ECDH_P521
+            BRAINPOOLP256R1 -> Algorithm.ECDH_BRAINPOOLP256R1
+            BRAINPOOLP320R1 -> Algorithm.ECDH_BRAINPOOLP320R1
+            BRAINPOOLP384R1 -> Algorithm.ECDH_BRAINPOOLP384R1
+            BRAINPOOLP512R1 -> Algorithm.ECDH_BRAINPOOLP512R1
+            ED25519 -> Algorithm.UNSET
+            X25519 -> Algorithm.ECDH_X25519
+            ED448 -> Algorithm.UNSET
+            X448 -> Algorithm.ECDH_X448
+        }
+
 }

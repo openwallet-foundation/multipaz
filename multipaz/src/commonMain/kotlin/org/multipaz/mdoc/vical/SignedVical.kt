@@ -15,7 +15,7 @@ import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.cose.CoseSign1
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.SignatureVerificationException
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 
@@ -38,7 +38,7 @@ data class SignedVical(
      * @return the bytes of the CBOR encoded COSE_Sign1 with the VICAL.
      */
     suspend fun generate(
-        signingKey: SigningKey
+        signingKey: AsymmetricKey
     ): ByteArray {
         val encodedVical = Cbor.encode(
             buildCborMap {

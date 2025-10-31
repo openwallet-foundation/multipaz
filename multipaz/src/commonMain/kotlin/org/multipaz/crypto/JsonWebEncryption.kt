@@ -4,11 +4,8 @@ import io.ktor.utils.io.core.toByteArray
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.append
 import kotlinx.io.bytestring.buildByteString
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -18,7 +15,6 @@ import org.multipaz.util.deflate
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.inflate
 import org.multipaz.util.toBase64Url
-import org.multipaz.util.toHex
 import kotlin.math.ceil
 import kotlin.random.Random
 
@@ -118,9 +114,9 @@ object JsonWebEncryption {
      * @param recipientKey the recipients private key corresponding to the public key this was encrypted to.
      * @return the decrypted claims set.
      */
-    fun decrypt(
+    suspend fun decrypt(
         encryptedJwt: String,
-        recipientKey: EcPrivateKey
+        recipientKey: AsymmetricKey
     ): JsonObject {
         val splits = encryptedJwt.split(".")
         require(splits.size == 5)
@@ -142,7 +138,7 @@ object JsonWebEncryption {
         val apu = ByteString(protectedHeader["apu"]?.jsonPrimitive?.content?.fromBase64Url() ?: byteArrayOf())
         val apv = ByteString(protectedHeader["apv"]?.jsonPrimitive?.content?.fromBase64Url() ?: byteArrayOf())
 
-        val sharedSecret = Crypto.keyAgreement(recipientKey, senderEphemeralKey)
+        val sharedSecret = recipientKey.keyAgreement(senderEphemeralKey)
 
         val algId = encAlg.joseAlgorithmIdentifier!!.toByteArray()
         val contentEncryptionKey = concatKDF(

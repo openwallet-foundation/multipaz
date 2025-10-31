@@ -14,6 +14,7 @@ import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.jose.util.Base64URL
 import com.nimbusds.jwt.EncryptedJWT
 import com.nimbusds.jwt.JWTClaimsSet
+import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.buildByteString
 import kotlinx.serialization.json.Json
@@ -76,7 +77,7 @@ class JsonWebEncryptionTestsNimbus {
 
     @Test fun testDecryptEcdhEs_Compression() = testDecryptEcdhEs(Algorithm.A128GCM, true)
 
-    private fun testDecryptEcdhEs(encAlg: Algorithm, useCompression: Boolean) {
+    private fun testDecryptEcdhEs(encAlg: Algorithm, useCompression: Boolean) = runTest {
         val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val claims = buildJsonObject {
             put("vp_token", buildJsonObject {
@@ -107,7 +108,10 @@ class JsonWebEncryptionTestsNimbus {
 
         val decryptedClaims = JsonWebEncryption.decrypt(
             encryptedJwt = encryptedJwt,
-            recipientKey = recipientKey
+            recipientKey = AsymmetricKey.anonymous(
+                privateKey = recipientKey,
+                algorithm = recipientKey.curve.defaultKeyAgreementAlgorithm
+            )
         )
 
         assertEquals(claims, decryptedClaims)

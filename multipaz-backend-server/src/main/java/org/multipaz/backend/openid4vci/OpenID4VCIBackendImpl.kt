@@ -3,7 +3,7 @@ package org.multipaz.backend.openid4vci
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.cbor.annotation.CborSerializable
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.device.DeviceAttestationAndroid
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackendUtil
@@ -94,9 +94,9 @@ class OpenID4VCIBackendImpl: OpenID4VCIBackend, RpcAuthInspector by RpcAuthBacke
             }
         """.trimIndent()
 
-        private lateinit var clientAssertionKey: SigningKey
-        private lateinit var walletAttestationKey: SigningKey
-        private lateinit var keyAttestationKey: SigningKey
+        private lateinit var clientAssertionKey: AsymmetricKey
+        private lateinit var walletAttestationKey: AsymmetricKey
+        private lateinit var keyAttestationKey: AsymmetricKey
         private lateinit var clientId: String
         private lateinit var walletName: String
         private lateinit var walletLink: String
@@ -104,15 +104,15 @@ class OpenID4VCIBackendImpl: OpenID4VCIBackend, RpcAuthInspector by RpcAuthBacke
         suspend fun init() {
             val configuration = BackendEnvironment.getInterface(Configuration::class)!!
             val secureAreaRepository = BackendEnvironment.getInterface(SecureAreaRepository::class)!!
-            clientAssertionKey = SigningKey.parse(
+            clientAssertionKey = AsymmetricKey.parse(
                 json = configuration.getValue("client_assertion_key") ?: defaultClientAssertionKey,
                 secureAreaRepository = secureAreaRepository
             )
-            walletAttestationKey = SigningKey.parse(
+            walletAttestationKey = AsymmetricKey.parse(
                 json = configuration.getValue("wallet_attestation_key") ?: defaultAttestationKey,
                 secureAreaRepository = secureAreaRepository
             )
-            keyAttestationKey = SigningKey.parse(
+            keyAttestationKey = AsymmetricKey.parse(
                 json = configuration.getValue("key_attestation_key") ?: defaultAttestationKey,
                 secureAreaRepository = secureAreaRepository
             )

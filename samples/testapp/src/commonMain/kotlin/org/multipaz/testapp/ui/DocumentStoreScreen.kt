@@ -55,7 +55,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.JsonWebSignature
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.testapp.platformHttpClientEngineFactory
 import org.multipaz.util.Platform
@@ -84,7 +84,7 @@ fun DocumentStoreScreen(
     documentModel: DocumentModel,
     softwareSecureArea: SoftwareSecureArea,
     settingsModel: TestAppSettingsModel,
-    iacaKey: SigningKey.X509Certified,
+    iacaKey: AsymmetricKey.X509Certified,
     showToast: (message: String) -> Unit,
     onViewDocument: (documentId: String) -> Unit,
 ) {
@@ -433,8 +433,8 @@ fun DocumentStoreScreen(
 
 private suspend fun generateDsKeyAndCert(
     algorithm: Algorithm,
-    iacaKey: SigningKey.X509Certified
-): SigningKey.X509Certified {
+    iacaKey: AsymmetricKey.X509Certified
+): AsymmetricKey.X509Certified {
     // The DS cert must not be valid for more than 457 days.
     //
     // Reference: ISO/IEC 18013-5:2021 Annex B.1.4 Document signer certificate
@@ -451,7 +451,7 @@ private suspend fun generateDsKeyAndCert(
         validUntil = dsCertsValidUntil,
     )
     // TODO: should we keep the whole chain here (from iacaKey?)
-    return SigningKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert)), dsKey)
+    return AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert)), dsKey)
 }
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -467,7 +467,7 @@ private suspend fun provisionTestDocuments(
         validFrom: Instant,
         validUntil: Instant
     ) -> CreateKeySettings,
-    dsKey: SigningKey.X509Certified,
+    dsKey: AsymmetricKey.X509Certified,
     deviceKeyAlgorithm: Algorithm,
     deviceKeyMacAlgorithm: Algorithm,
     numCredentialsPerDomain: Int,

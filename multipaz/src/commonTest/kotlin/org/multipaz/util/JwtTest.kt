@@ -11,7 +11,7 @@ import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
@@ -130,7 +130,7 @@ class JwtTest {
         val x5cKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val cert = X509Cert.Builder(
             publicKey = x5cKey.publicKey,
-            signingKey = SigningKey.anonymous(
+            signingKey = AsymmetricKey.anonymous(
                 privateKey = privateTrustedKey,
                 algorithm = privateTrustedKey.curve.defaultSigningAlgorithm
             ),
@@ -142,7 +142,7 @@ class JwtTest {
         ).build()
         val root = X509Cert.Builder(
             publicKey = trustedKey,
-            signingKey = SigningKey.anonymous(
+            signingKey = AsymmetricKey.anonymous(
                 privateKey = Crypto.createEcPrivateKey(EcCurve.P384),
                 algorithm = EcCurve.P384.defaultSigningAlgorithm
             ),
@@ -223,7 +223,7 @@ class JwtTest {
         private val trustedCert = runBlocking {
             X509Cert.Builder(
                 publicKey = trustedKey,
-                signingKey = SigningKey.anonymous(
+                signingKey = AsymmetricKey.anonymous(
                     privateKey = Crypto.createEcPrivateKey(EcCurve.P384),
                     algorithm = EcCurve.P384.defaultSigningAlgorithm
                 ),

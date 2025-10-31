@@ -22,7 +22,7 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.SignatureVerificationException
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.jwt.buildJwt
 import org.multipaz.util.fromBase64Url
@@ -297,7 +297,7 @@ class SdJwt(
      * @param creationTime the time the presentation was made.
      */
     suspend fun present(
-        signingKey: SigningKey,
+        signingKey: AsymmetricKey,
         nonce: String,
         audience: String,
         creationTime: Instant = Clock.System.now()
@@ -338,7 +338,7 @@ class SdJwt(
          * @param saltSizeNumBits number of bits to use for each salt.
          */
         suspend fun create(
-            issuerKey: SigningKey,
+            issuerKey: AsymmetricKey,
             kbKey: EcPublicKey?,
             claims: JsonObject,
             nonSdClaims: JsonObject,

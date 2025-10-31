@@ -3,7 +3,7 @@ package org.multipaz.jwt
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.util.toBase64Url
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -13,7 +13,7 @@ import kotlin.time.Instant
  * Creates a JWT message signed with the given key.
  *
  * JWT header contains type (`typ`), signature algorithm (`alg`) and, unless the key is
- * [SigningKey.Anonymous], key identification (either `kid` or `x5c`). The body of the JWT will
+ * [AsymmetricKey.Anonymous], key identification (either `kid` or `x5c`). The body of the JWT will
  * have issuance time (`iat`) and optionally expiration time (`exp`), unless [creationTime] is
  * set to [Instant.DISTANT_PAST]
  *
@@ -27,7 +27,7 @@ import kotlin.time.Instant
  */
 suspend fun buildJwt(
     type: String,
-    key: SigningKey,
+    key: AsymmetricKey,
     header: suspend JsonObjectBuilder.() -> Unit = {},
     creationTime: Instant = Clock.System.now(),
     expiresIn: Duration? = null,
@@ -55,18 +55,18 @@ suspend fun buildJwt(
     return "$message.$signature"
 }
 
-private fun SigningKey.addToJwtHeader(header: JsonObjectBuilder) {
+private fun AsymmetricKey.addToJwtHeader(header: JsonObjectBuilder) {
     header.put(
         key = "alg",
         value = algorithm.joseAlgorithmIdentifier ?:
             publicKey.curve.defaultSigningAlgorithmFullySpecified.joseAlgorithmIdentifier
     )
     when (this) {
-        is SigningKey.X509CertifiedSecureAreaBased,
-        is SigningKey.X509CertifiedExplicit -> header.put("x5c", certChain.toX5c())
-        is SigningKey.NamedExplicit,
-        is SigningKey.NamedSecureAreaBased -> header.put("kid", keyId)
-        is SigningKey.AnonymousExplicit,
-        is SigningKey.AnonymousSecureAreaBased -> {}
+        is AsymmetricKey.X509CertifiedSecureAreaBased,
+        is AsymmetricKey.X509CertifiedExplicit -> header.put("x5c", certChain.toX5c())
+        is AsymmetricKey.NamedExplicit,
+        is AsymmetricKey.NamedSecureAreaBased -> header.put("kid", keyId)
+        is AsymmetricKey.AnonymousExplicit,
+        is AsymmetricKey.AnonymousSecureAreaBased -> {}
     }
 }

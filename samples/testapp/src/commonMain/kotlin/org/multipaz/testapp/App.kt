@@ -115,7 +115,7 @@ import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.compose.provisioning.Provisioning
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.AbstractDocumentMetadata
 import org.multipaz.document.DocumentMetadata
@@ -132,7 +132,6 @@ import org.multipaz.nfc.NfcTagReader
 import org.multipaz.prompt.PromptModel
 import org.multipaz.provisioning.Display
 import org.multipaz.request.Requester
-import org.multipaz.storage.base.BaseStorageTable
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.testapp.provisioning.ProvisioningSupport
 import org.multipaz.testapp.ui.DcRequestScreen
@@ -181,10 +180,10 @@ class App private constructor (val promptModel: PromptModel) {
     lateinit var documentStore: DocumentStore
     lateinit var documentModel: DocumentModel
 
-    lateinit var iacaKey: SigningKey.X509Certified
+    lateinit var iacaKey: AsymmetricKey.X509Certified
 
-    lateinit var readerRootKey: SigningKey.X509Certified
-    lateinit var readerKey: SigningKey.X509Certified
+    lateinit var readerRootKey: AsymmetricKey.X509Certified
+    lateinit var readerKey: AsymmetricKey.X509Certified
 
     lateinit var issuerTrustManager: CompositeTrustManager
 
@@ -467,7 +466,7 @@ class App private constructor (val promptModel: PromptModel) {
         val iacaCert = keyStorage.get("iacaCert")?.let { X509Cert.fromDataItem(Cbor.decode(it.toByteArray())) }
             ?: run {
                 val bundledIacaCert = MdocUtil.generateIacaCertificate(
-                    iacaKey = SigningKey.anonymous(iacaPrivateKey),
+                    iacaKey = AsymmetricKey.anonymous(iacaPrivateKey),
                     subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST IACA"),
                     serial = ASN1Integer.fromRandom(numBits = 128),
                     validFrom = certsValidFrom,
@@ -478,7 +477,7 @@ class App private constructor (val promptModel: PromptModel) {
                 keyStorage.insert("iacaCert", ByteString(Cbor.encode(bundledIacaCert.toDataItem())))
                 bundledIacaCert
             }
-        iacaKey = SigningKey.X509CertifiedExplicit(
+        iacaKey = AsymmetricKey.X509CertifiedExplicit(
             certChain = X509CertChain(listOf(iacaCert)),
             privateKey = iacaPrivateKey
         )
@@ -493,7 +492,7 @@ class App private constructor (val promptModel: PromptModel) {
         val readerRootCert = keyStorage.get("readerRootCert")?.let { X509Cert.fromDataItem(Cbor.decode(it.toByteArray())) }
             ?: run {
                 val bundledReaderRootCert = MdocUtil.generateReaderRootCertificate(
-                    readerRootKey = SigningKey.anonymous(bundledReaderRootKey),
+                    readerRootKey = AsymmetricKey.anonymous(bundledReaderRootKey),
                     subject = X500Name.fromName("CN=OWF Multipaz TestApp Reader Root"),
                     serial = ASN1Integer.fromRandom(numBits = 128),
                     validFrom = certsValidFrom,
@@ -504,7 +503,7 @@ class App private constructor (val promptModel: PromptModel) {
                 bundledReaderRootCert
             }
         println("readerRootCert: ${readerRootCert.toPem()}")
-        readerRootKey = SigningKey.X509CertifiedExplicit(
+        readerRootKey = AsymmetricKey.X509CertifiedExplicit(
             certChain = X509CertChain(listOf(readerRootCert)),
             privateKey = readerRootPrivateKey
         )
@@ -531,7 +530,7 @@ class App private constructor (val promptModel: PromptModel) {
                 keyStorage.insert("readerCert", ByteString(Cbor.encode(cert.toDataItem())))
                 cert
             }
-        readerKey = SigningKey.X509CertifiedExplicit(
+        readerKey = AsymmetricKey.X509CertifiedExplicit(
             certChain = X509CertChain(listOf(readerCert) + readerRootKey.certChain.certificates),
             privateKey = readerPrivateKey
         )

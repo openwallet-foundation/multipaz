@@ -26,7 +26,7 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.JsonWebEncryption
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
 import org.multipaz.document.NameSpacedData
@@ -92,7 +92,7 @@ object OpenID4VP {
         clientId: String?,
         nonce: String,
         responseEncryptionKey: EcPublicKey?,
-        requestSigningKey: SigningKey?,
+        requestSigningKey: AsymmetricKey?,
         responseMode: ResponseMode,
         responseUri: String?,
         dclqQuery: JsonObject,
@@ -182,7 +182,7 @@ object OpenID4VP {
         clientId: String?,
         nonce: String,
         responseEncryptionKey: EcPublicKey?,
-        requestSigningKey: SigningKey?,
+        requestSigningKey: AsymmetricKey?,
         responseMode: ResponseMode,
         responseUri: String?,
         dclqQuery: JsonObject
@@ -695,7 +695,7 @@ object OpenID4VP {
         (sdjwtVcCredential as Credential).increaseUsageCount()
         return if (sdjwtVcCredential is SecureAreaBoundCredential) {
             filteredSdJwt.present(
-                signingKey = SigningKey.anonymous(
+                signingKey = AsymmetricKey.anonymous(
                     alias = sdjwtVcCredential.alias,
                     secureArea = sdjwtVcCredential.secureArea,
                     unlockReason = PresentmentUnlockReason(sdjwtVcCredential),

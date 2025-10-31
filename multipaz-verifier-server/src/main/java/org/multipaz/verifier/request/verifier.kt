@@ -77,7 +77,7 @@ import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborMap
 import org.multipaz.crypto.Hpke
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.documenttype.knowntypes.AgeVerification
@@ -338,7 +338,7 @@ private suspend fun clientId(): String {
     return "x509_san_dns:$ret"
 }
 
-private suspend fun getReaderIdentity(): SigningKey.X509Certified =
+private suspend fun getReaderIdentity(): AsymmetricKey.X509Certified =
     BackendEnvironment.getServerIdentity("reader_root_identity") {
         val subjectAndIssuer = X500Name.fromName("CN=Multipaz TEST Reader CA")
 
@@ -349,20 +349,20 @@ private suspend fun getReaderIdentity(): SigningKey.X509Certified =
         val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val readerRootCertificate =
             MdocUtil.generateReaderRootCertificate(
-                readerRootKey = SigningKey.anonymous(readerRootKey),
+                readerRootKey = AsymmetricKey.anonymous(readerRootKey),
                 subject = subjectAndIssuer,
                 serial = serial,
                 validFrom = validFrom,
                 validUntil = validUntil,
                 crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
             )
-        SigningKey.X509CertifiedExplicit(
+        AsymmetricKey.X509CertifiedExplicit(
             privateKey = readerRootKey,
             certChain = X509CertChain(listOf(readerRootCertificate))
         )
-    } as SigningKey.X509Certified
+    } as AsymmetricKey.X509Certified
 
-private suspend fun createSingleUseReaderKey(dnsName: String): SigningKey.X509Certified {
+private suspend fun createSingleUseReaderKey(dnsName: String): AsymmetricKey.X509Certified {
     val now = Clock.System.now()
     val validFrom = now.plus(DateTimePeriod(minutes = -10), TimeZone.currentSystemDefault())
     val validUntil = now.plus(DateTimePeriod(minutes = 10), TimeZone.currentSystemDefault())
@@ -400,7 +400,7 @@ private suspend fun createSingleUseReaderKey(dnsName: String): SigningKey.X509Ce
         )
         .build()
 
-    return SigningKey.X509CertifiedExplicit(
+    return AsymmetricKey.X509CertifiedExplicit(
         privateKey = readerKey,
         certChain = X509CertChain(listOf(readerKeyCertificate) + readerIdentity.certChain.certificates)
     )
@@ -720,7 +720,7 @@ private suspend fun handleDcGetDataMdocApi(
     session.responseWasEncrypted = true
     val decrypter = Hpke.getDecrypter(
         cipherSuite = Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM,
-        receiverPrivateKey = SigningKey.AnonymousExplicit(session.encryptionKey),
+        receiverPrivateKey = AsymmetricKey.AnonymousExplicit(session.encryptionKey),
         encapsulatedKey = enc,
         info = session.sessionTranscript!!
     )
@@ -734,7 +734,7 @@ private suspend fun handleDcGetDataMdocApi(
     Logger.iCbor(TAG, "SessionTranscript", session.sessionTranscript!!)
 }
 
-private fun handleDcGetDataOpenID4VP(
+private suspend fun handleDcGetDataOpenID4VP(
     version: Int,
     session: Session,
     credentialResponse: String
@@ -746,7 +746,10 @@ private fun handleDcGetDataOpenID4VP(
         session.responseWasEncrypted = true
         val decryptedResponse = JsonWebEncryption.decrypt(
             encryptedResponse.jsonPrimitive.content,
-            session.encryptionKey
+            AsymmetricKey.anonymous(
+                privateKey = session.encryptionKey,
+                algorithm = session.encryptionKey.curve.defaultKeyAgreementAlgorithm
+            )
         ).jsonObject
         decryptedResponse["vp_token"]!!.jsonObject
     } else {
@@ -974,7 +977,13 @@ private suspend fun handleOpenID4VPResponse(
         Json.decodeFromString(JsonObject.serializer(), splits[1].fromBase64Url().decodeToString())
     } else {
         session.responseWasEncrypted = true
-        JsonWebEncryption.decrypt(responseJwtCs, session.encryptionKey)
+        JsonWebEncryption.decrypt(
+            encryptedJwt = responseJwtCs,
+            recipientKey = AsymmetricKey.anonymous(
+                privateKey = session.encryptionKey,
+                algorithm = session.encryptionKey.curve.defaultKeyAgreementAlgorithm
+            )
+        )
     }
     //Logger.iJson(TAG, "responseObj", responseObj)
 
@@ -1412,7 +1421,7 @@ private suspend fun calcDcRequest(
     origin: String,
     readerKey: EcPrivateKey,
     readerPublicKey: EcPublicKeyDoubleCoordinate,
-    readerAuthKey: SigningKey.X509Certified,
+    readerAuthKey: AsymmetricKey.X509Certified,
     signRequest: Boolean,
     encryptResponse: Boolean,
 ): DCBeginResponse {
@@ -1628,7 +1637,7 @@ private suspend fun calcDcRequestNew(
     origin: String,
     readerKey: EcPrivateKey,
     readerPublicKey: EcPublicKeyDoubleCoordinate,
-    readerAuthKey: SigningKey.X509Certified,
+    readerAuthKey: AsymmetricKey.X509Certified,
     signRequest: Boolean,
     encryptResponse: Boolean,
 ): DCBeginResponse {
@@ -1710,7 +1719,7 @@ private suspend fun calcDcRequestStringOpenID4VPforDCQL(
     session: Session,
     nonce: ByteString,
     readerPublicKey: EcPublicKeyDoubleCoordinate,
-    readerAuthKey: SigningKey.X509Certified,
+    readerAuthKey: AsymmetricKey.X509Certified,
     signRequest: Boolean,
     encryptResponse: Boolean,
     dcql: JsonObject,
@@ -1744,7 +1753,7 @@ private suspend fun calcDcRequestStringOpenID4VP(
     origin: String,
     readerKey: EcPrivateKey,
     readerPublicKey: EcPublicKeyDoubleCoordinate,
-    readerAuthKey: SigningKey.X509Certified,
+    readerAuthKey: AsymmetricKey.X509Certified,
     signRequest: Boolean,
     encryptResponse: Boolean,
     responseMode: OpenID4VP.ResponseMode,
@@ -1843,7 +1852,7 @@ private suspend fun mdocCalcDcRequestStringMdocApi(
     origin: String,
     readerKey: EcPrivateKey,
     readerPublicKey: EcPublicKeyDoubleCoordinate,
-    readerAuthKey: SigningKey.X509Certified
+    readerAuthKey: AsymmetricKey.X509Certified
 ): String {
     val encryptionInfo = buildCborArray {
         add("dcapi")

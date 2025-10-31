@@ -9,7 +9,7 @@ import org.junit.Assert
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.SigningKey
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.jwt.JwtCheck
 import org.multipaz.jwt.validateJwt
 import org.multipaz.rpc.backend.BackendEnvironment
@@ -29,7 +29,7 @@ class OpenIDBackendUtilTest {
         val env = TestBackendEnvironment("client", signingKey.publicKey)
         withContext(env) {
             val assertionJwt = OpenID4VCIBackendUtil.createJwtClientAssertion(
-                signingKey = SigningKey.NamedExplicit("client", signingKey),
+                signingKey = AsymmetricKey.NamedExplicit("client", signingKey),
                 clientId = CLIENT_ID,
                 tokenUrl = "http://example.com",
             )
@@ -55,7 +55,7 @@ class OpenIDBackendUtilTest {
         val env = TestBackendEnvironment("wallet", signingKey.publicKey)
         withContext(env) {
             val attestationJwt = OpenID4VCIBackendUtil.createWalletAttestation(
-                signingKey = SigningKey.NamedExplicit("wallet", signingKey),
+                signingKey = AsymmetricKey.NamedExplicit("wallet", signingKey),
                 clientId = CLIENT_ID,
                 attestationIssuer = "wallet",
                 attestedKey = attestedKey,
@@ -90,7 +90,7 @@ class OpenIDBackendUtilTest {
                 createKeySettings = CreateKeySettings()
             )
             val attestationJwt = OpenID4VCIBackendUtil.createJwtKeyAttestation(
-                signingKey = SigningKey.NamedExplicit("key", signingKey),
+                signingKey = AsymmetricKey.NamedExplicit("key", signingKey),
                 attestationIssuer = "key",
                 keysToAttest = listOf(attestedKeyInfo.attestation),
                 challenge = NONCE
