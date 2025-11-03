@@ -1128,6 +1128,29 @@ private suspend fun getIssuerTrustManager(): TrustManager {
                 testOnly = true,
             )
         )
+        trustManager.addX509Cert(
+            certificate = X509Cert.fromPem("""
+                -----BEGIN CERTIFICATE-----
+                MIICWjCCAd+gAwIBAgIQFD5azm+j9q3XJx+iyhUikTAKBggqhkjOPQQDAzAuMQswCQYDVQQGDAJV
+                UzEfMB0GA1UEAwwWT1dGIE11bHRpcGF6IFRFU1QgSUFDQTAeFw0yNTExMDMyMDE4MjdaFw0zMDEx
+                MDMyMDE4MjdaMC4xCzAJBgNVBAYMAlVTMR8wHQYDVQQDDBZPV0YgTXVsdGlwYXogVEVTVCBJQUNB
+                MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEEGgITePTQxbhn9dlsbNWJMsaaEzvhGLEqiS8CQLCJHQe
+                cOdnYM/gx88WmHK5dw3KkI2DgqCGh7o6OGuHYyR/luBdVtXKPhYsZ41+iiFijd+q6Ug/ym4P1B1E
+                db8HuuUvo4HBMIG+MA4GA1UdDwEB/wQEAwIBBjASBgNVHRMBAf8ECDAGAQH/AgEAMCYGA1UdEgQf
+                MB2GG2h0dHBzOi8vaXNzdWVyLm11bHRpcGF6Lm9yZzAwBgNVHR8EKTAnMCWgI6Ahhh9odHRwczov
+                L2lzc3Vlci5tdWx0aXBhei5vcmcvY3JsMB0GA1UdDgQWBBRmheUDVtnS0563L8L9uS8ufjNjFTAf
+                BgNVHSMEGDAWgBRmheUDVtnS0563L8L9uS8ufjNjFTAKBggqhkjOPQQDAwNpADBmAjEA6heZE6Zj
+                miI2c+EhZlhL8M1hBgQJp26QLFFv0PSNCcNnHJt5dg0TTvwGUA25yel2AjEAiRL2XohP6ZvMky4g
+                e7f/uOfTFanIb9ulwnTVkQ/fJv2N+w9mEm/IgLxcsfsoy2W9
+                -----END CERTIFICATE-----
+            """.trimIndent()),
+            metadata = TrustMetadata(
+                displayName = "Multipaz Test Issuer",
+                displayIcon = null,
+                privacyPolicyUrl = null,
+                testOnly = true,
+            )
+        )
         issuerTrustManager = trustManager
         return issuerTrustManager!!
     }
