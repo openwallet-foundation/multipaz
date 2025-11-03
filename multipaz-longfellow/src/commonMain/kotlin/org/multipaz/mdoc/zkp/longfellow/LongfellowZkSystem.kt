@@ -29,6 +29,7 @@ import kotlin.collections.iterator
 
 private data class CircuitEntry (
     val zkSystemSpec: ZkSystemSpec,
+    val longfellowZkSystemSpec: LongfellowZkSystemSpec,
     val circuitBytes: ByteString,
 )
 
@@ -60,61 +61,82 @@ class LongfellowZkSystem(): ZkSystem {
         return timestamp.toLocalDateTime(TimeZone.UTC).format(LocalDateTime.Formats.ISO)
     }
 
-    private fun getLongfellowZkSystemSpec(zkSystemSpec: ZkSystemSpec): LongfellowZkSystemSpec {
-        val version: Long = zkSystemSpec.getParam("version")
-            ?: throw IllegalArgumentException("Missing or invalid 'version' in systemSpec.params")
-        val numAttributes: Long = zkSystemSpec.getParam("numAttributes")
-            ?: throw IllegalArgumentException("Missing or invalid 'numAttributes' in systemSpec.params")
-        val circuitHash: String = zkSystemSpec.getParam("circuitHash")
-            ?: throw IllegalArgumentException("Missing or invalid 'circuitHash' in systemSpec.params")
-
-        return LongfellowZkSystemSpec(
-            system=name,
-            circuitHash=circuitHash,
-            numAttributes=numAttributes,
-            version=version
-        )
-    }
-
-    private fun getCircuitBytes(longfellowZkSystemSpec: ZkSystemSpec): ByteString? {
+    private fun getLongfellowZkSystemSpec(zkSystemSpec: ZkSystemSpec): LongfellowZkSystemSpec? {
         val entry = circuits.find { circuitEntry ->
             val circuitSpec = circuitEntry.zkSystemSpec
 
-            circuitSpec.getParam<String>("circuitHash") == longfellowZkSystemSpec.getParam<String>("circuitHash") &&
-            circuitSpec.getParam<Long>("version") == longfellowZkSystemSpec.getParam<Long>("version") &&
-            circuitSpec.getParam<Long>("numAttributes") == longfellowZkSystemSpec.getParam<Long>("numAttributes")
+            circuitSpec.getParam<String>("circuitHash") == zkSystemSpec.getParam<String>("circuitHash") &&
+                    circuitSpec.getParam<Long>("version") == zkSystemSpec.getParam<Long>("version") &&
+                    circuitSpec.getParam<Long>("numAttributes") == zkSystemSpec.getParam<Long>("numAttributes")
+        }
+
+        return entry?.longfellowZkSystemSpec
+    }
+
+    private fun getCircuitBytes(zkSystemSpec: ZkSystemSpec): ByteString? {
+        val entry = circuits.find { circuitEntry ->
+            val circuitSpec = circuitEntry.zkSystemSpec
+
+            circuitSpec.getParam<String>("circuitHash") == zkSystemSpec.getParam<String>("circuitHash") &&
+            circuitSpec.getParam<Long>("version") == zkSystemSpec.getParam<Long>("version") &&
+            circuitSpec.getParam<Long>("numAttributes") == zkSystemSpec.getParam<Long>("numAttributes")
         }
 
         return entry?.circuitBytes
     }
 
-    private fun parseCircuitFilename(circuitFileName: String): ZkSystemSpec? {
+    private fun parseCircuitFilename(circuitFileName: String): Pair<ZkSystemSpec, LongfellowZkSystemSpec>? {
         val circuitNameParts = circuitFileName.split("_")
-        if (circuitNameParts.size != 3) {
-            Logger.w(TAG, "$circuitFileName does not match expected <version>_<numAttributes>_<hash>")
+        if (circuitNameParts.size != 5) {
+            Logger.w(TAG, "$circuitFileName does not match expected " +
+                "<version>_<numAttributes>_<blockEncHash>_<blockEncSig>_<hash>")
             return null
         }
 
         val version = circuitNameParts[0].toLongOrNull()
         if (version == null) {
-            Logger.w(TAG, "$circuitFileName does not match expected <version>_<numAttributes>_<hash>, could not find version number.")
+            Logger.w(TAG, "$circuitFileName does not match expected format, could not find version number.")
             return null
         }
 
         val numAttributes = circuitNameParts[1].toLongOrNull()
         if (numAttributes == null) {
-            Logger.w(TAG, "$circuitFileName does not match expected <version>_<numAttributes>_<hash>, could not find number of attributes.")
+            Logger.w(TAG, "$circuitFileName does not match expected format, could not find number of attributes.")
             return null
         }
+
+        val blockEncHash = circuitNameParts[2].toLongOrNull()
+        if (blockEncHash == null) {
+            Logger.w(TAG, "$circuitFileName does not match expected format, could not find blockEncHash.")
+            return null
+        }
+
+        val blockEncSig = circuitNameParts[3].toLongOrNull()
+        if (blockEncSig == null) {
+            Logger.w(TAG, "$circuitFileName does not match expected format, could not find blockEncSig.")
+            return null
+        }
+
+        val circuitHash = circuitNameParts[4]
 
         val spec = ZkSystemSpec(
             id = "${name}_${circuitFileName}",
             system = name,
         )
         spec.addParam("version", version)
-        spec.addParam("circuitHash", circuitNameParts[2])
+        spec.addParam("circuitHash", circuitHash)
         spec.addParam("numAttributes", numAttributes)
-        return spec
+
+        val longfellowSpec = LongfellowZkSystemSpec(
+            system = name,
+            circuitHash = circuitHash,
+            numAttributes = numAttributes,
+            version = version,
+            blockEncHash = blockEncHash,
+            blockEncSig = blockEncSig
+        )
+
+        return Pair(spec, longfellowSpec)
     }
 
     override fun generateProof(
@@ -124,7 +146,9 @@ class LongfellowZkSystem(): ZkSystem {
         timestamp: Instant
     ): ZkDocument {
         val longfellowZkSystemSpec = getLongfellowZkSystemSpec(zkSystemSpec)
-        val circuitBytes = getCircuitBytes(zkSystemSpec) ?: throw IllegalArgumentException("Circuit not found for system spec: $zkSystemSpec")
+            ?: throw IllegalArgumentException("Circuit not found for system spec: $zkSystemSpec")
+        val circuitBytes = getCircuitBytes(zkSystemSpec)
+            ?: throw IllegalArgumentException("Circuit not found for system spec: $zkSystemSpec")
 
         val doc = Cbor.decode(encodedDocument.toByteArray())
         // The Longfellow ZKP library expects this format, and will grab the 1st document
@@ -149,15 +173,16 @@ class LongfellowZkSystem(): ZkSystem {
         val attributes = mutableListOf<NativeAttribute>()
         val issuerSigned = mutableMapOf<String, Map<String, DataItem>>()
         for ((nameSpaceItem, dataElementsItem) in doc["issuerSigned"]["nameSpaces"].asMap) {
+            val namespace = nameSpaceItem.asTstr
             val values = mutableMapOf<String, DataItem>()
             for (encodedIssuerSignedItem in dataElementsItem.asArray) {
                 val issuerSignedItem = encodedIssuerSignedItem.asTaggedEncodedCbor
                 val dataElementName = issuerSignedItem["elementIdentifier"].asTstr
                 val dataElementValue = issuerSignedItem["elementValue"]
                 values.put(dataElementName, dataElementValue)
-                // TODO: prepend nameSpaceName
                 attributes.add(NativeAttribute(
                     key = dataElementName,
+                    namespace = namespace,
                     value = Cbor.encode(dataElementValue)
                 ))
             }
@@ -204,14 +229,16 @@ class LongfellowZkSystem(): ZkSystem {
         val y = getFormattedCoordinate(ecPubKeyCoordinates.y)
 
         val longfellowZkSystemSpec = getLongfellowZkSystemSpec(zkSystemSpec)
-        val circuitBytes = getCircuitBytes(zkSystemSpec) ?: throw IllegalArgumentException("Circuit not found for system spec: $zkSystemSpec")
+            ?: throw IllegalArgumentException("Circuit not found for system spec: $zkSystemSpec")
+        val circuitBytes = getCircuitBytes(zkSystemSpec)
+            ?: throw IllegalArgumentException("Circuit not found for system spec: $zkSystemSpec")
 
         val attributes = mutableListOf<NativeAttribute>()
         for ((nameSpaceName, dataElements) in zkDocument.zkDocumentData.issuerSigned) {
             for ((dataElementName, dataElementValue) in dataElements) {
-                // TODO: prepend nameSpaceName
                 attributes.add(NativeAttribute(
                     key = dataElementName,
+                    namespace = nameSpaceName,
                     value = Cbor.encode(dataElementValue)
                 ))
             }
@@ -262,7 +289,7 @@ class LongfellowZkSystem(): ZkSystem {
             return false
         }
 
-        return circuits.add(CircuitEntry(spec, circuitBytes))
+        return circuits.add(CircuitEntry(spec.first, spec.second, circuitBytes))
     }
 
     /**

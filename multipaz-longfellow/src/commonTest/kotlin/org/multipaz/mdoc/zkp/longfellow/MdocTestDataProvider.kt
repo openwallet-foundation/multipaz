@@ -43,6 +43,7 @@ object MdocTestDataProvider {
         for (attr in dataItemAttributes) {
                 attributes.add(NativeAttribute(
                     key=attr["elementIdentifier"].asTstr,
+                    namespace = "org.iso.18013.5.1",
                     value=Cbor.encode(attr["elementValue"])
                 ))
         }

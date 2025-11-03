@@ -6,15 +6,6 @@ import org.multipaz.cbor.DataItem
 /** Statements for the zk proof. */
 internal data class NativeAttribute(
     val key: String,
+    val namespace: String,
     val value: ByteArray
-) {
-    companion object {
-        fun fromDataItem(dataItem: DataItem): NativeAttribute {
-            val decodedAttr = Cbor.decode(dataItem.asTagged.asBstr)
-            return NativeAttribute(
-                key = decodedAttr["elementIdentifier"].asTstr,
-                value = Cbor.encode(decodedAttr["elementValue"])
-            )
-        }
-    }
-}
+)

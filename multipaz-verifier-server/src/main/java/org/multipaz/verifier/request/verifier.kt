@@ -309,10 +309,10 @@ private suspend fun getZkSystemRepository(): ZkSystemRepository {
     }
     val repo = ZkSystemRepository()
     val circuitsToAdd = listOf(
-        "longfellow-libzk-v1/3_1_bd3168ea0a9096b4f7b9b61d1c210dac1b7126a9ec40b8bc770d4d485efce4e9",
-        "longfellow-libzk-v1/3_2_40b2b68088f1d4c93a42edf01330fed8cac471cdae2b192b198b4d4fc41c9083",
-        "longfellow-libzk-v1/3_3_99a5da3739df68c87c7a380cc904bb275dbd4f1b916c3d297ba9d15ee86dd585",
-        "longfellow-libzk-v1/3_4_5249dac202b61e03361a2857867297ee7b1d96a8a4c477d15a4560bde29f704f",
+        "longfellow-libzk-v1/6_1_4096_2965_137e5a75ce72735a37c8a72da1a8a0a5df8d13365c2ae3d2c2bd6a0e7197c7c6",
+        "longfellow-libzk-v1/6_2_4025_2965_b4bb6f01b7043f4f51d8302a30b36e3d4d2d0efc3c24557ab9212ad524a9764e",
+        "longfellow-libzk-v1/6_3_4121_2965_b2211223b954b34a1081e3fbf71b8ea2de28efc888b4be510f532d6ba76c2010",
+        "longfellow-libzk-v1/6_4_4283_2965_c70b5f44a1365c53847eb8948ad5b4fdc224251a2bc02d958c84c862823c49d6",
     )
     val longfellowSystem = LongfellowZkSystem()
     val resources = BackendEnvironment.getInterface(Resources::class)!!
