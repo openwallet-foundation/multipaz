@@ -18,7 +18,6 @@ import org.multipaz.mdoc.zkp.ZkDocument
 import org.multipaz.mdoc.zkp.ZkDocumentData
 import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
-import org.multipaz.request.MdocRequest
 import kotlin.time.Instant
 import org.multipaz.cbor.putCborArray
 import org.multipaz.request.RequestedClaim
@@ -205,7 +204,7 @@ class LongfellowZkSystem(): ZkSystem {
 
         val zkDocument = ZkDocument(
             proof=ByteString(proof),
-            zkDocumentData = ZkDocumentData (
+            documentData = ZkDocumentData (
                 zkSystemSpecId = zkSystemSpec.id,
                 docType = docType,
                 timestamp = timestamp,
@@ -219,11 +218,11 @@ class LongfellowZkSystem(): ZkSystem {
     }
 
     override fun verifyProof(zkDocument: ZkDocument, zkSystemSpec: ZkSystemSpec, encodedSessionTranscript: ByteString) {
-        if (zkDocument.zkDocumentData.msoX5chain == null || zkDocument.zkDocumentData.msoX5chain!!.certificates.isEmpty()) {
+        if (zkDocument.documentData.msoX5chain == null || zkDocument.documentData.msoX5chain!!.certificates.isEmpty()) {
             throw IllegalArgumentException("zkDocument must contain at least 1 certificate in msoX5chain.")
         }
 
-        val cert = zkDocument.zkDocumentData.msoX5chain!!.certificates[0]
+        val cert = zkDocument.documentData.msoX5chain!!.certificates[0]
         val ecPubKeyCoordinates = cert.ecPublicKey as EcPublicKeyDoubleCoordinate
         val x = getFormattedCoordinate(ecPubKeyCoordinates.x)
         val y = getFormattedCoordinate(ecPubKeyCoordinates.y)
@@ -234,7 +233,7 @@ class LongfellowZkSystem(): ZkSystem {
             ?: throw IllegalArgumentException("Circuit not found for system spec: $zkSystemSpec")
 
         val attributes = mutableListOf<NativeAttribute>()
-        for ((nameSpaceName, dataElements) in zkDocument.zkDocumentData.issuerSigned) {
+        for ((nameSpaceName, dataElements) in zkDocument.documentData.issuerSigned) {
             for ((dataElementName, dataElementValue) in dataElements) {
                 attributes.add(NativeAttribute(
                     key = dataElementName,
@@ -251,10 +250,10 @@ class LongfellowZkSystem(): ZkSystem {
             y,
             encodedSessionTranscript,
             encodedSessionTranscript.size,
-            formatDate(zkDocument.zkDocumentData.timestamp),
+            formatDate(zkDocument.documentData.timestamp),
             zkDocument.proof,
             zkDocument.proof.size,
-            zkDocument.zkDocumentData.docType,
+            zkDocument.documentData.docType,
             longfellowZkSystemSpec,
             attributes.toTypedArray()
         )

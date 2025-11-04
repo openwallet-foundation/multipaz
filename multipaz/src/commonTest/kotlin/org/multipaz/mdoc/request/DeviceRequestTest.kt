@@ -718,7 +718,7 @@ class DeviceRequestTest {
                       "zkRequest": {
                         "systemSpecs": [
                           {
-                            "id": "0",
+                            "zkSystemId": "0",
                             "system": "longfellow-zk",
                             "params": {
                               "circuit": "1234",
@@ -727,7 +727,7 @@ class DeviceRequestTest {
                             }
                           },
                           {
-                            "id": "1",
+                            "zkSystemId": "1",
                             "system": "other-system-zk",
                             "params": {
                               "foo": "bar",

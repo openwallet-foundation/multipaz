@@ -15,7 +15,7 @@ data class ZkRequest(
         putCborArray("systemSpecs") {
             systemSpecs.forEach { systemSpec ->
                 addCborMap {
-                    put("id", systemSpec.id)
+                    put("zkSystemId", systemSpec.id)
                     put("system", systemSpec.system)
                     putCborMap("params") {
                         systemSpec.params.forEach { param ->
@@ -31,7 +31,7 @@ data class ZkRequest(
     companion object {
         internal fun fromDataItem(dataItem: DataItem): ZkRequest {
             val systemSpecs = dataItem["systemSpecs"].asArray.map { spec ->
-                val id = spec["id"].asTstr
+                val id = spec["zkSystemId"].asTstr
                 val system = spec["system"].asTstr
                 val systemSpec = ZkSystemSpec(
                     id = id,

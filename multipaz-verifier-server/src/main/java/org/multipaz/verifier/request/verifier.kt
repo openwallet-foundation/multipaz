@@ -1233,13 +1233,13 @@ private suspend fun handleGetDataMdoc(
 
             try {
                 val zkSystemSpec = zkSystemRepository.getAllZkSystemSpecs().find {
-                    it.id == zkDocument.zkDocumentData.zkSystemSpecId
+                    it.id == zkDocument.documentData.zkSystemSpecId
                 }
                 if (zkSystemSpec == null) {
                     lines.add(
                         ResultLine(
                             "ZK proof",
-                            "ZK System Spec ID ${zkDocument.zkDocumentData.zkSystemSpecId} was not found."
+                            "ZK System Spec ID ${zkDocument.documentData.zkSystemSpecId} was not found."
                         )
                     )
                 } else {
@@ -1259,23 +1259,23 @@ private suspend fun handleGetDataMdoc(
                     )
                 }
 
-                if (zkDocument.zkDocumentData.msoX5chain == null) {
+                if (zkDocument.documentData.msoX5chain == null) {
                     lines.add(ResultLine("Issuer", "No msoX5chain in ZkDocumentData"))
                 } else {
                     val trustResult =
-                        trustManager.verify(zkDocument.zkDocumentData.msoX5chain!!.certificates)
+                        trustManager.verify(zkDocument.documentData.msoX5chain!!.certificates)
                     if (trustResult.isTrusted) {
                         val tp = trustResult.trustPoints[0]
                         val name = tp.metadata.displayName ?: tp.certificate.subject.name
                         lines.add(ResultLine("Issuer", "In trust list ($name)"))
                     } else {
                         val name =
-                            zkDocument.zkDocumentData.msoX5chain!!.certificates.first().subject.name
+                            zkDocument.documentData.msoX5chain!!.certificates.first().subject.name
                         lines.add(ResultLine("Issuer", "Not in trust list ($name)"))
                     }
                 }
 
-                for ((nameSpaceName, dataElements) in zkDocument.zkDocumentData.issuerSigned) {
+                for ((nameSpaceName, dataElements) in zkDocument.documentData.issuerSigned) {
                     lines.add(ResultLine("Namespace", nameSpaceName))
                     for ((dataElementName, dataElementValue) in dataElements) {
                         val valueStr = Cbor.toDiagnostics(

@@ -32,7 +32,7 @@ data class ZkDocumentData (
      * Converts this ZkDocumentData instance to a CBOR DataItem representation.
      *
      * The resulting DataItem will be a CBOR map containing:
-     * - "id": The ZK system specification identifier as a text string
+     * - "zkSystemId": The ZK system specification identifier as a text string
      * - "docType": The document type as a text string
      * - "timestamp": The timestamp as an ISO-8601 formatted string
      * - "issuerSignedItems": An array of issuer-signed data items
@@ -43,7 +43,7 @@ data class ZkDocumentData (
      */
     fun toDataItem(): DataItem {
         return buildCborMap {
-            put("id", zkSystemSpecId)
+            put("zkSystemId", zkSystemSpecId)
             put("docType", docType)
             put("timestamp", timestamp.toString())
             putCborMap("issuerSigned") {
@@ -86,7 +86,7 @@ data class ZkDocumentData (
          * It validates and extracts all required fields from the CBOR map structure.
          *
          * Expected CBOR structure:
-         * - "id": Required text string for the ZK system specification ID
+         * - "zkSystemId": Required text string for the ZK system specification ID
          * - "docType": Required text string for the document type
          * - "timestamp": Required text string in ISO-8601 format
          * - "issuerSignedItems": Optional array of DataItems (defaults to empty list)
@@ -98,8 +98,8 @@ data class ZkDocumentData (
          * @throws IllegalArgumentException if required fields are missing or have invalid types
          */
         fun fromDataItem(dataItem: DataItem): ZkDocumentData {
-            val zkSystemSpecId = dataItem.getOrNull("id")?.asTstr
-                ?: throw IllegalArgumentException("Missing or invalid 'id' field parsing ZkDocumentData.")
+            val zkSystemSpecId = dataItem.getOrNull("zkSystemId")?.asTstr
+                ?: throw IllegalArgumentException("Missing or invalid 'zkSystemId' field parsing ZkDocumentData.")
             val docType = dataItem.getOrNull("docType")?.asTstr
                 ?: throw IllegalArgumentException("Missing or invalid 'docType' field parsing ZkDocumentData.")
             val timestamp = dataItem.getOrNull("timestamp")?.asTstr

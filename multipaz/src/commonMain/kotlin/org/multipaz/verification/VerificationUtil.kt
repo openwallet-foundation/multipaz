@@ -728,8 +728,8 @@ object VerificationUtil {
         }
         for (zkDocument in dr.zkDocuments) {
             val zkSystemSpec = zkSystemRepository?.getAllZkSystemSpecs()?.find {
-                it.id == zkDocument.zkDocumentData.zkSystemSpecId
-            } ?: throw IllegalStateException("Zk System '${zkDocument.zkDocumentData.zkSystemSpecId}' was not found.")
+                it.id == zkDocument.documentData.zkSystemSpecId
+            } ?: throw IllegalStateException("Zk System '${zkDocument.documentData.zkSystemSpecId}' was not found.")
             zkSystemRepository.lookup(zkSystemSpec.system)
                 ?.verifyProof(
                     zkDocument = zkDocument,
@@ -738,13 +738,13 @@ object VerificationUtil {
                 )
                 ?: throw IllegalStateException("Zk System '${zkSystemSpec.system}' was not found.")
 
-            val dt = documentTypeRepository?.getDocumentTypeForMdoc(zkDocument.zkDocumentData.docType)
+            val dt = documentTypeRepository?.getDocumentTypeForMdoc(zkDocument.documentData.docType)
 
-            if (zkDocument.zkDocumentData.msoX5chain == null) {
+            if (zkDocument.documentData.msoX5chain == null) {
                 throw IllegalStateException("Expected x5chain for the issuer")
             }
             val issuerSignedClaims = mutableListOf<MdocClaim>()
-            for ((namespaceName, dataElements) in zkDocument.zkDocumentData.issuerSigned) {
+            for ((namespaceName, dataElements) in zkDocument.documentData.issuerSigned) {
                 for ((dataElementName, value) in dataElements) {
                     val mdocAttr = dt?.mdocDocumentType?.namespaces?.get(namespaceName)?.dataElements?.get(dataElementName)
                     issuerSignedClaims.add(
@@ -760,7 +760,7 @@ object VerificationUtil {
             }
 
             val deviceSignedClaims = mutableListOf<MdocClaim>()
-            for ((namespaceName, dataElements) in zkDocument.zkDocumentData.deviceSigned) {
+            for ((namespaceName, dataElements) in zkDocument.documentData.deviceSigned) {
                 for ((dataElementName, value) in dataElements) {
                     val mdocAttr = dt?.mdocDocumentType?.namespaces?.get(namespaceName)?.dataElements?.get(dataElementName)
                     issuerSignedClaims.add(
@@ -777,7 +777,7 @@ object VerificationUtil {
 
             verifiedPresentations.add(
                 MdocVerifiedPresentation(
-                    documentSignerCertChain = zkDocument.zkDocumentData.msoX5chain!!,
+                    documentSignerCertChain = zkDocument.documentData.msoX5chain!!,
                     issuerSignedClaims = issuerSignedClaims,
                     deviceSignedClaims = deviceSignedClaims,
                     zkpUsed = true,
@@ -785,7 +785,7 @@ object VerificationUtil {
                     validUntil = null,
                     expectedUpdate = null,
                     signedAt = null,
-                    docType = zkDocument.zkDocumentData.docType
+                    docType = zkDocument.documentData.docType
                 )
             )
         }
