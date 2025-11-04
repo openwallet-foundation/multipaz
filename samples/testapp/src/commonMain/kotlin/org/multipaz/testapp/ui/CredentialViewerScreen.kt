@@ -58,9 +58,14 @@ fun CredentialViewerScreen(
             KeyValuePairText("Valid From", formattedDateTime(credentialInfo.credential.validFrom))
             KeyValuePairText("Valid Until", formattedDateTime(credentialInfo.credential.validUntil))
             KeyValuePairText("Certified", if (credentialInfo.credential.isCertified) "Yes" else "No")
+            KeyValuePairText("Issuer provided data", "${credentialInfo.credential.issuerProvidedData.size} bytes")
             KeyValuePairText("Usage Count", credentialInfo.credential.usageCount.toString())
             when (credentialInfo.credential) {
                 is MdocCredential -> {
+                    val issuerSigned = Cbor.decode(credentialInfo.credential.issuerProvidedData)
+                    val issuerAuth = issuerSigned.get("issuerAuth").asCoseSign1
+                    val msoBytes = issuerAuth.payload!!
+                    KeyValuePairText("MSO size", "${msoBytes.size} bytes")
                     KeyValuePairText("ISO mdoc DocType", credentialInfo.credential.docType)
                     KeyValuePairText(
                         keyText = "ISO mdoc DS Key Certificate",
