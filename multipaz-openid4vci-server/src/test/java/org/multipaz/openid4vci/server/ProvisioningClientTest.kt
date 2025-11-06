@@ -32,15 +32,16 @@ import org.junit.Before
 import org.junit.Test
 import org.multipaz.asn1.OID
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X509Cert
-import org.multipaz.openid4vci.request.preauthorizedOffer
 import org.multipaz.provisioning.AuthorizationChallenge
 import org.multipaz.provisioning.AuthorizationResponse
 import org.multipaz.provisioning.KeyBindingInfo
 import org.multipaz.provisioning.openid4vci.OpenID4VCI
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
+import org.multipaz.provisioning.openid4vci.OpenID4VCIBackendUtil
 import org.multipaz.provisioning.openid4vci.OpenID4VCIClientPreferences
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.securearea.CreateKeySettings
@@ -76,10 +77,37 @@ class ProvisioningClientTest {
     @Test
     fun authorizationCodeWithScope() {
         runWithAuthorizationCode(
-            arrayOf(
+            offer = OFFER_MDL,
+            serverArgs = arrayOf(
                 "-param", "base_url=http://localhost",
                 "-param", "database_engine=ephemeral",
-                "-use_scopes", "false"
+                "-param", "use_scopes=true"
+            )
+        )
+    }
+
+    @Test
+    fun authorizationCodeWithScopeNoClientAttestationChallenge() {
+        runWithAuthorizationCode(
+            offer = OFFER_MDL,
+            serverArgs = arrayOf(
+                "-param", "base_url=http://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true",
+                "-param", "use_client_attestation_challenge=false"
+            )
+        )
+    }
+
+    @Test
+    fun authorizationCodeWithScopeWithClientAssertion() {
+        runWithAuthorizationCode(
+            offer = OFFER_NATURALIZATION,
+            serverArgs = arrayOf(
+                "-param", "base_url=http://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true",
+                "-param", "use_client_assertion=true"
             )
         )
     }
@@ -87,15 +115,19 @@ class ProvisioningClientTest {
     @Test
     fun authorizationCodeWithAuthorizationDetails() {
         runWithAuthorizationCode(
-            arrayOf(
+            offer = OFFER_MDL,
+            serverArgs = arrayOf(
                 "-param", "base_url=http://localhost",
                 "-param", "database_engine=ephemeral",
-                "-use_scopes", "false"
+                "-param", "use_scopes=false"
             )
         )
     }
 
-    fun runWithAuthorizationCode(serverArgs: Array<String>) = testApplication {
+    fun runWithAuthorizationCode(
+        offer: String,
+        serverArgs: Array<String>
+    ) = testApplication {
         application {
             configureRouting(ServerConfiguration(serverArgs))
         }
@@ -105,7 +137,7 @@ class ProvisioningClientTest {
         val env = TestBackendEnvironment(httpClient)
         withContext(env) {
             val provisioningClient = OpenID4VCI.createClientFromOffer(
-                offerUri = OFFER,
+                offerUri = offer,
                 clientPreferences = testClientPreferences
             )
             val challenges = provisioningClient.getAuthorizationChallenges()
@@ -239,9 +271,12 @@ class ProvisioningClientTest {
     object TestBackend: OpenID4VCIBackend {
         override suspend fun getClientId(): String = localClientId
 
-        override suspend fun createJwtClientAssertion(tokenUrl: String): String {
-            throw IllegalStateException()
-        }
+        override suspend fun createJwtClientAssertion(authorizationServerIdentifier: String): String =
+            OpenID4VCIBackendUtil.createJwtClientAssertion(
+                signingKey = clientAssertionKey,
+                clientId = CLIENT_ID,
+                authorizationServerIdentifier = authorizationServerIdentifier,
+            )
 
         override suspend fun createJwtWalletAttestation(keyAttestation: KeyAttestation): String {
             // Implements this draft:
@@ -301,7 +336,7 @@ class ProvisioningClientTest {
 
             val alg = localAttestationPrivateKey.curve.defaultSigningAlgorithm.joseAlgorithmIdentifier
             val head = buildJsonObject {
-                put("typ", "keyattestation+jwt")
+                put("typ", "key-attestation+jwt")
                 put("alg", alg)
                 put("x5c", buildJsonArray {
                     add(localAttestationCertificate.encodedCertificate.encodeBase64())
@@ -330,6 +365,38 @@ class ProvisioningClientTest {
 
             return "$message.$signature"
         }
+
+        private val clientAssertionJwk = """
+            {
+                "kty": "EC",
+                "alg": "ES256",
+                "kid": "895b72b9-0808-4fcc-bb19-960d14a9e28f",
+                "crv": "P-256",
+                "x": "nSmAFnZx-SqgTEyqqOSmZyLESdbiSUIYlRlLLoWy5uc",
+                "y": "FN1qcif7nyVX1MHN_YSbo7o7RgG2kPJUjg27YX6AKsQ",
+                "d": "TdQhxDqbAUpzMJN5XXQqLea7-6LvQu2GFKzj5QmFDCw"
+            }            
+        """.trimIndent()
+
+        private val attestationJwk = """
+            {
+                "kty": "EC",
+                "alg": "ES256",
+                "crv": "P-256",
+                "x": "CoLFZ9sJfTqax-GarKIyw7_fX8-L446AoCTSHKJnZGs",
+                "y": "ALEJB1_YQMO_0qSFQb3urFTxRfANN8-MSeWLHYU7MVI",
+                "d": "nJXw7FqLff14yQLBEAwu70mu1gzlfOONh9UuealdsVM",
+                "x5c": [
+                    "MIIBtDCCATugAwIBAgIJAPosC/l8rotwMAoGCCqGSM49BAMCMDgxNjA0BgNVBAMTLXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjAeFw0yNTA5MzAwMjUxNDRaFw0zNTA5MjgwMjUxNDRaMDgxNjA0BgNVBAMMLXVybjp1dWlkOjRjNDY0NzJiLTdlYjItNDRiNi04NTNhLWY3ZGZlMTEzYzU3NTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAqCxWfbCX06msfhmqyiMsO/31/Pi+OOgKAk0hyiZ2RrALEJB1/YQMO/0qSFQb3urFTxRfANN8+MSeWLHYU7MVKjLjAsMB8GA1UdIwQYMBaAFPqAK5EjiQbxFAeWt//DCaWtC57aMAkGA1UdEwQCMAAwCgYIKoZIzj0EAwIDZwAwZAIwfDEviit5J188zK5qKjkzFWkPy3ljshUg650p2kNuQq7CiQvbKyVDIlCGgOhMZyy+AjBm6ehDicFMPVBEHLUEiXO4cHw7Ed6dFpPm/6GknWcADhax62KN1tIzExo6T1l06G4=",
+                    "MIIBxTCCAUugAwIBAgIJAOQTL9qcQopZMAoGCCqGSM49BAMDMDgxNjA0BgNVBAMTLXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjAeFw0yNDA5MjMyMjUxMzFaFw0zNDA5MjMyMjUxMzFaMDgxNjA0BgNVBAMTLXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjB2MBAGByqGSM49AgEGBSuBBAAiA2IABN4D7fpNMAv4EtxyschbITpZ6iNH90rGapa6YEO/uhKnC6VpPt5RUrJyhbvwAs0edCPthRfIZwfwl5GSEOS0mKGCXzWdRv4GGX/Y0m7EYypox+tzfnRTmoVX3v6OxQiapKMhMB8wHQYDVR0OBBYEFPqAK5EjiQbxFAeWt//DCaWtC57aMAoGCCqGSM49BAMDA2gAMGUCMEO01fJKCy+iOTpaVp9LfO7jiXcXksn2BA22reiR9ahDRdGNCrH1E3Q2umQAssSQbQIxAIz1FTHbZPcEbA5uE5lCZlRG/DQxlZhk/rZrkPyXFhqEgfMnQ45IJ6f8Utlg+4Wiiw=="
+                ]
+            }
+           """.trimIndent()
+
+        private val clientAssertionKey = AsymmetricKey.parseExplicit(clientAssertionJwk)
+        private val attestationKey = AsymmetricKey.parseExplicit(attestationJwk)
+        const val CLIENT_ID = "urn:uuid:418745b8-78a3-4810-88df-7898aff3ffb4"
+
 
         private val localAttestationCertificate = X509Cert.fromPem("""
                 -----BEGIN CERTIFICATE-----
@@ -373,7 +440,8 @@ class ProvisioningClientTest {
     }
 
     companion object {
-        const val OFFER = "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22http%3A%2F%2Flocalhost%22%2C%22credential_configuration_ids%22%3A%5B%22mDL%22%5D%2C%22grants%22%3A%7B%22authorization_code%22%3A%7B%7D%7D%7D"
+        const val OFFER_MDL = "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22http%3A%2F%2Flocalhost%22%2C%22credential_configuration_ids%22%3A%5B%22mDL%22%5D%2C%22grants%22%3A%7B%22authorization_code%22%3A%7B%7D%7D%7D"
+        const val OFFER_NATURALIZATION = "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22http%3A%2F%2Flocalhost%22%2C%22credential_configuration_ids%22%3A%5B%22utopia_naturalization%22%5D%2C%22grants%22%3A%7B%22authorization_code%22%3A%7B%7D%7D%7D"
 
         val testClientPreferences = OpenID4VCIClientPreferences(
             clientId = "urn:uuid:418745b8-78a3-4810-88df-7898aff3ffb4",

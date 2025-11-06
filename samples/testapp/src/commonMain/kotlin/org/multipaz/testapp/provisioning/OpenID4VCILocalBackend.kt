@@ -8,11 +8,11 @@ import org.multipaz.securearea.KeyAttestation
 class OpenID4VCILocalBackend: OpenID4VCIBackend {
     override suspend fun getClientId(): String = CLIENT_ID
     
-    override suspend fun createJwtClientAssertion(tokenUrl: String): String =
+    override suspend fun createJwtClientAssertion(authorizationServerIdentifier: String): String =
         OpenID4VCIBackendUtil.createJwtClientAssertion(
             signingKey = clientAssertionKey,
             clientId = CLIENT_ID,
-            tokenUrl = tokenUrl,
+            authorizationServerIdentifier = authorizationServerIdentifier,
         )
 
     override suspend fun createJwtWalletAttestation(keyAttestation: KeyAttestation): String =

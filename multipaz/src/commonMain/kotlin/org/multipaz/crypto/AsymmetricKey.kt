@@ -152,7 +152,7 @@ sealed class AsymmetricKey {
     data class X509CertifiedExplicit(
         override val certChain: X509CertChain,
         override val privateKey: EcPrivateKey,
-        override val algorithm: Algorithm = privateKey.curve.defaultSigningAlgorithm
+        override val algorithm: Algorithm = privateKey.curve.defaultSigningAlgorithmFullySpecified
     ): X509Certified(), Explicit {
         override val publicKey: EcPublicKey get() = privateKey.publicKey
         override suspend fun sign(message: ByteArray) = sign(this, message)
@@ -163,7 +163,7 @@ sealed class AsymmetricKey {
     data class NamedExplicit(
         override val keyId: String,
         override val privateKey: EcPrivateKey,
-        override val algorithm: Algorithm = privateKey.curve.defaultSigningAlgorithm
+        override val algorithm: Algorithm = privateKey.curve.defaultSigningAlgorithmFullySpecified
     ): Named(), Explicit {
         override val publicKey: EcPublicKey get() = privateKey.publicKey
         override suspend fun sign(message: ByteArray) = sign(this, message)
@@ -173,7 +173,7 @@ sealed class AsymmetricKey {
     /** [AsymmetricKey] which is both [AsymmetricKey.Anonymous] and [AsymmetricKey.Explicit]. */
     data class AnonymousExplicit(
         override val privateKey: EcPrivateKey,
-        override val algorithm: Algorithm = privateKey.curve.defaultSigningAlgorithm
+        override val algorithm: Algorithm = privateKey.curve.defaultSigningAlgorithmFullySpecified
     ): Anonymous(), Explicit {
         override val publicKey: EcPublicKey get() = privateKey.publicKey
         override suspend fun sign(message: ByteArray) = sign(this, message)

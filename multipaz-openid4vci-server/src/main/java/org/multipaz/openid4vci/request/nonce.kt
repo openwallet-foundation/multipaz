@@ -8,6 +8,8 @@ import kotlin.time.Clock
 import kotlinx.io.bytestring.buildByteString
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.multipaz.jwt.Challenge
+import org.multipaz.openid4vci.util.addFreshNonceHeaders
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable
 import org.multipaz.rpc.handler.InvalidRequestException
@@ -26,6 +28,7 @@ suspend fun nonce(call: ApplicationCall) {
         expiration = Clock.System.now() + 10.minutes
     )
     call.response.header("Cache-Control", "no-store")
+    addFreshNonceHeaders(call)
     call.respondText(
         text = buildJsonObject {
             put("c_nonce", cNonce)

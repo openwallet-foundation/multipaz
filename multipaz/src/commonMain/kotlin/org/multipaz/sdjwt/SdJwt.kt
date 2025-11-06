@@ -327,8 +327,6 @@ class SdJwt(
          * This implementation uses recursive disclosures for all claims in the [claims] parameter.
          *
          * @param issuerKey the key to sign the issuerSigned JWT with.
-         * @param issuerAlgorithm the algorithm to use for signing, e.g. [Algorithm.ESP256].
-         * @param issuerCertChain if set, this will be included as a `x5c` header element in the Issuer-signed JWT.
          * @param kbKey if set, a `cnf` claim with this public key will be included in the Issuer-signed JWT.
          * @param claims the object with claims that can be selectively disclosed.
          * @param nonSdClaims claims to include in the Issuer-signed JWT which are always disclosed. This must at least

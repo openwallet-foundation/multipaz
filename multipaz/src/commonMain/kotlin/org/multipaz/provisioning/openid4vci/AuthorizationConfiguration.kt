@@ -12,10 +12,13 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.util.Logger
 
 internal data class AuthorizationConfiguration(
+    val identifier: String,
+    val challengeEndpoint: String?,
     val pushedAuthorizationRequestEndpoint: String,
     val authorizationEndpoint: String,
     val tokenEndpoint: String,
     val dpopSigningAlgorithm: Algorithm,
+    val clientAttestationSigningAlgorithm: Algorithm,
     val useClientAssertion: Boolean
 ) {
     companion object: JsonParsing("Authorization server metadata") {
@@ -30,6 +33,8 @@ internal data class AuthorizationConfiguration(
             }
             val metadataText = metadataRequest.readBytes().decodeToString()
             val metadata = Json.parseToJsonElement(metadataText).jsonObject
+            val identifier = metadata.stringOrNull("issuer") ?: url
+            val challengeEndpoint = metadata.stringOrNull("challenge_endpoint")
             val authorizationEndpoint = metadata.string("authorization_endpoint")
             val parEndpoint = metadata.string("pushed_authorization_request_endpoint")
             val tokenEndpoint = metadata.string("token_endpoint")
@@ -64,6 +69,10 @@ internal data class AuthorizationConfiguration(
             val dpopSigningAlgorithm = preferredAlgorithm(
                 available = metadata.arrayOrNull("dpop_signing_alg_values_supported"),
                 clientPreferences = clientPreferences)
+            val clientAttestationSigningAlgorithm = preferredAlgorithm(
+                available = metadata.arrayOrNull("client_attestation_pop_signing_alg_values_supported"),
+                clientPreferences = clientPreferences
+            )
             val authMethods = metadata.arrayOrNull("token_endpoint_auth_methods_supported")
             var requireClientAssertion = false
             if (authMethods != null) {
@@ -85,10 +94,13 @@ internal data class AuthorizationConfiguration(
                 }
             }
             return AuthorizationConfiguration(
+                identifier = identifier,
+                challengeEndpoint = challengeEndpoint,
                 pushedAuthorizationRequestEndpoint = parEndpoint,
                 authorizationEndpoint = authorizationEndpoint,
                 tokenEndpoint = tokenEndpoint,
                 dpopSigningAlgorithm = dpopSigningAlgorithm,
+                clientAttestationSigningAlgorithm = clientAttestationSigningAlgorithm,
                 useClientAssertion = requireClientAssertion
             )
         }

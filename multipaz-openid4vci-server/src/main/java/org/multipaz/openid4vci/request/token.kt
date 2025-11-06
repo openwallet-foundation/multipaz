@@ -3,6 +3,7 @@ package org.multipaz.openid4vci.request
 import io.ktor.client.HttpClient
 import io.ktor.client.request.headers
 import io.ktor.client.request.post
+import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.readBytes
 import io.ktor.http.ContentType
@@ -12,6 +13,7 @@ import io.ktor.http.encodeURLParameter
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.request.receiveParameters
+import io.ktor.server.response.header
 import io.ktor.server.response.respondText
 import kotlin.time.Clock
 import org.multipaz.crypto.Algorithm
@@ -26,15 +28,20 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.jwt.Challenge
+import org.multipaz.jwt.ChallengeInvalidException
 import org.multipaz.openid4vci.util.IssuanceState
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.OpenID4VCIRequestError
 import org.multipaz.openid4vci.util.SystemOfRecordAccess
+import org.multipaz.openid4vci.util.addFreshNonceHeaders
 import org.multipaz.openid4vci.util.authorizeWithDpop
 import org.multipaz.openid4vci.util.codeToId
 import org.multipaz.openid4vci.util.getSystemOfRecordUrl
 import org.multipaz.openid4vci.util.idToCode
 import org.multipaz.openid4vci.util.processInitialDPoP
+import org.multipaz.openid4vci.util.respondWithNewClientAttestationChallenge
+import org.multipaz.openid4vci.util.respondWithNewDPoPNonce
 import org.multipaz.openid4vci.util.validateClientAssertion
 import org.multipaz.openid4vci.util.validateClientAttestation
 import org.multipaz.openid4vci.util.validateClientAttestationPoP
@@ -125,10 +132,24 @@ suspend fun token(call: ApplicationCall) {
     }
     val clientAttestationKey = state.clientAttestationKey
     if (clientAttestationKey != null) {
-        validateClientAttestationPoP(call.request, clientId, clientAttestationKey)
+        try {
+            validateClientAttestationPoP(call.request, clientId, clientAttestationKey)
+        } catch (_: ChallengeInvalidException) {
+            respondWithNewClientAttestationChallenge(call)
+            return
+        }
     }
-    val dpopKey = state.dpopKey ?: establishDPopKey(call.request, parameters, id, state)
-    authorizeWithDpop(call.request, dpopKey, clientId, state.dpopNonce)
+
+    if (state.dpopKey != null) {
+        try {
+            authorizeWithDpop(call.request, state.dpopKey!!, clientId, null)
+        } catch (_: ChallengeInvalidException) {
+            respondWithNewDPoPNonce(call)
+            return
+        }
+    } else {
+        establishDPopKey(call.request, parameters, state)
+    }
     state.redirectUri = null
     state.clientState = null
     val expiresIn = 60.minutes
@@ -144,7 +165,7 @@ suspend fun token(call: ApplicationCall) {
         obtainSystemOfRecordToken(systemOfRecordUrl!!, state)
     }
     IssuanceState.updateIssuanceState(id, state)
-    // Don't use DPoP nonces on authorization server, only on credential issuer.
+    addFreshNonceHeaders(call)
     call.respondText(
         text = buildJsonObject {
                 put("access_token", accessToken)
@@ -159,7 +180,6 @@ suspend fun token(call: ApplicationCall) {
 private suspend fun establishDPopKey(
     request: ApplicationRequest,
     parameters: Parameters,
-    stateId: String,
     state: IssuanceState
 ): EcPublicKey {
     check(state.dpopKey == null)
@@ -167,8 +187,14 @@ private suspend fun establishDPopKey(
         throw InvalidRequestException("clientId must be authenticated")
     }
     val dpopKey = processInitialDPoP(request) ?: throw InvalidRequestException("DPoP is required")
+    authorizeWithDpop(
+        request = request,
+        publicKey = dpopKey,
+        clientId = state.clientId!!,
+        accessToken = null,
+        initial = true  // no nonce, no need to handle ChallengeInvalidException
+    )
     state.dpopKey = dpopKey
-    IssuanceState.updateIssuanceState(stateId, state)
     return dpopKey
 }
 

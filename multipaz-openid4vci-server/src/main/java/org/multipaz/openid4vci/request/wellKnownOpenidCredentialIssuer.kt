@@ -91,11 +91,12 @@ suspend fun wellKnownOpenidCredentialIssuer(call: ApplicationCall) {
                             }
                         }
                         putJsonArray("credential_signing_alg_values_supported") {
-                            val cert = credentialFactory.signingCertificateChain.certificates.first()
-                            add(cert.ecPublicKey.curve.defaultSigningAlgorithmFullySpecified.joseAlgorithmIdentifier)
-                        }
-                        putJsonArray("token_endpoint_auth_methods_supported") {
-                            add("attest_jwt_client_auth")
+                            val signingKey = credentialFactory.signingKey
+                            if (credentialFactory.format is Openid4VciFormatMdoc) {
+                                add(signingKey.algorithm.coseAlgorithmIdentifier)
+                            } else {
+                                add(signingKey.algorithm.joseAlgorithmIdentifier)
+                            }
                         }
                         putJsonObject("credential_metadata") {
                             putJsonArray("display") {

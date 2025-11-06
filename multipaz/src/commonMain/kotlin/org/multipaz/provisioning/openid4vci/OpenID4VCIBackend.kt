@@ -32,7 +32,7 @@ interface OpenID4VCIBackend {
      * Creates fresh OAuth JWT client assertion based on the server-side key.
      */
     @RpcMethod
-    suspend fun createJwtClientAssertion(tokenUrl: String): String
+    suspend fun createJwtClientAssertion(authorizationServerIdentifier: String): String
 
     /**
      * Creates OAuth JWT wallet attestation based on the mobile-platform-specific [KeyAttestation].

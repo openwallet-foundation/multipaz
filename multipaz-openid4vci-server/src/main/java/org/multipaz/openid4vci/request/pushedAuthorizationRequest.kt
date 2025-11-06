@@ -7,9 +7,12 @@ import io.ktor.server.request.receiveParameters
 import io.ktor.server.response.respondText
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.multipaz.jwt.ChallengeInvalidException
 import org.multipaz.openid4vci.util.OpaqueIdType
+import org.multipaz.openid4vci.util.addFreshNonceHeaders
 import org.multipaz.openid4vci.util.createSession
 import org.multipaz.openid4vci.util.idToCode
+import org.multipaz.openid4vci.util.respondWithNewClientAttestationChallenge
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -32,13 +35,19 @@ import kotlin.time.Duration.Companion.seconds
 suspend fun pushedAuthorizationRequest(call: ApplicationCall) {
     val parameters = call.receiveParameters()
 
-    // This is where actual work happens
-    val id = createSession(call.request, parameters)
+    val id = try {
+        // This is where actual work happens
+        createSession(call.request, parameters)
+    } catch (_: ChallengeInvalidException) {
+        respondWithNewClientAttestationChallenge(call)
+        return
+    }
 
     // Format the result (session identifying information).
     val expirationSeconds = 600
     val code = idToCode(OpaqueIdType.PAR_CODE, id, expirationSeconds.seconds)
 
+    addFreshNonceHeaders(call)
     call.respondText(
         text = buildJsonObject {
                 put("request_uri", "urn:ietf:params:oauth:request_uri:$code")

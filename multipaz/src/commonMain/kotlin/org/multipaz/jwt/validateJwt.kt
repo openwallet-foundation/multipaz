@@ -30,13 +30,20 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 
+/**
+ * Defines a specific type of JWT validation.
+ *
+ * @param propertyNameValueCheck checks that the specific property is of the given value
+ * @param headerProperty `true` when the property is in the header rather than the body of JWT
+ */
 enum class JwtCheck(
-    val fieldNameValueCheck: String? = null,
-    val headerFiled: Boolean = false
+    val propertyNameValueCheck: String? = null,
+    val headerProperty: Boolean = false
 ) {
     JTI,  // value is jti partition name (typically clientId)
     TRUST,  // value is the path where to find trusted key
-    NONCE("nonce"),
+    CHALLENGE,  // value is challenge jwt property name (current specs use "nonce" or "challenge")
+    NONCE("nonce"),  // direct nonce value check, prefer CHALLENGE
     TYP("typ", true),
     AUD("aud"),
     ISS("iss"),
@@ -69,8 +76,15 @@ enum class JwtCheck(
  * in the map is derived either from the X509 top certificate subject common name, from `kid`
  * parameter in JWT header or `iss` value in the JWT body.
  *
+ * [JwtCheck.CHALLENGE] defines the nonce/challenge check using the value of the specified property.
+ * The value given to this key in [checks] map is used as a property name in the body part of the
+ * JWT. That property must exist. Its value is passed to [Challenge.validateAndConsume] method.
+ *
  * [maxValidity] determines expiration time for JWTs that have `iat`, but not `exp` parameter
  * un their body and [clock] determines current time to check for expiration.
+ *
+ * @throws ChallengeInvalidException when nonce or challenge check fails (see [JwtCheck.CHALLENGE])
+ * @throws InvalidRequestException when any other validation fails
  */
 suspend fun validateJwt(
     jwt: String,
@@ -115,9 +129,9 @@ suspend fun validateJwt(
     }
 
     for ((check, expectedValue) in checks) {
-        val fieldName = check.fieldNameValueCheck
+        val fieldName = check.propertyNameValueCheck
         if (fieldName != null) {
-            val part = if (check.headerFiled) header else body
+            val part = if (check.headerProperty) header else body
             val fieldValue = part[fieldName]
             if (fieldValue !is JsonPrimitive || fieldValue.content != expectedValue) {
                 throw InvalidRequestException("$jwtName: '$fieldName' is incorrect or missing")
@@ -171,6 +185,18 @@ suspend fun validateJwt(
         Crypto.checkSignature(key, message.encodeToByteArray(), alg, signature)
     } catch (e: SignatureVerificationException) {
         throw IllegalArgumentException("Invalid JWT signature", e)
+    }
+
+    val nonceName = checks[JwtCheck.CHALLENGE]
+    if (nonceName != null) {
+        val nonce = body[nonceName]  // must be given if JwtCheck.CHALLENGE is used
+        if (nonce == null) {
+            throw ChallengeInvalidException()
+        }
+        if (nonce !is JsonPrimitive || !nonce.isString) {
+            throw InvalidRequestException("$jwtName: '$nonceName' is invalid")
+        }
+        Challenge.validateAndConsume(nonce.content)
     }
 
     val jtiPartition = checks[JwtCheck.JTI]

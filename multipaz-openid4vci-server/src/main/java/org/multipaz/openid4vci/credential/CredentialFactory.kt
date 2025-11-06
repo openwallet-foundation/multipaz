@@ -8,6 +8,7 @@ import org.multipaz.rpc.handler.InvalidRequestException
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.DataItem
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.documenttype.knowntypes.EUPersonalID
@@ -32,7 +33,7 @@ internal interface CredentialFactory {
     val cryptographicBindingMethods: List<String>  // must be empty for keyless credentials
     val name: String  // human-readable name
     val logo: String?  // relative URL for the image
-    val signingCertificateChain: X509CertChain  // for the key that is used to sign the credential
+    val signingKey: AsymmetricKey.X509Certified  // the key that is used to sign the credential
 
     /**
      * Ensures that resources are loaded

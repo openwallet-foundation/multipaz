@@ -34,9 +34,10 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.jwt.Challenge
+import org.multipaz.jwt.ChallengeInvalidException
 import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.openid4vci.credential.Openid4VciFormat
-import org.multipaz.openid4vci.util.DPoPNonceException
 import org.multipaz.openid4vci.util.IssuanceState
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.authorizeWithDpop
@@ -47,6 +48,7 @@ import org.multipaz.server.getBaseUrl
 import org.multipaz.jwt.JwtCheck
 import org.multipaz.util.Logger
 import org.multipaz.jwt.validateJwt
+import org.multipaz.openid4vci.util.respondWithNewDPoPNonce
 import kotlin.random.Random
 
 /**
@@ -61,20 +63,12 @@ suspend fun credential(call: ApplicationCall) {
             call.request,
             state.dpopKey!!,
             state.clientId!!,
-            state.dpopNonce,
             accessToken
         )
-    } catch (err: DPoPNonceException) {
-        val dpopNonce = Random.nextBytes(15)
-        state.dpopNonce = ByteString(dpopNonce)
-        IssuanceState.updateIssuanceState(id, state)
-        call.response.header("DPoP-Nonce", dpopNonce.toBase64Url())
-        call.response.header("WWW-Authenticate", "DPoP error=\"use_dpop_nonce\"")
-        call.respondText(status = HttpStatusCode.Unauthorized, text = "")
+    } catch (_: ChallengeInvalidException) {
+        respondWithNewDPoPNonce(call)
         return
     }
-    state.dpopNonce = null
-    IssuanceState.updateIssuanceState(id, state)
     val byOfferId = CredentialFactory.getRegisteredFactories().byOfferId
 
     val requestString = call.receiveText()
@@ -135,22 +129,7 @@ suspend fun credential(call: ApplicationCall) {
     val authenticationKeys = when (proofType) {
         "attestation" -> {
             proofs.flatMap { proof ->
-                val body = try {
-                    // TODO: old 'typ' value (draft 15), remove once clients are up to date
-                    validateJwt(
-                        jwt = proof.jsonPrimitive.content,
-                        jwtName = "Key attestation",
-                        publicKey = null,
-                        checks = mapOf(
-                            JwtCheck.TYP to "keyattestation+jwt",
-                            JwtCheck.TRUST to "trusted_key_attestations"
-                        )
-                    ).also {
-                        Logger.w(TAG, "Outdated value for key attestation 'typ', please update")
-                    }
-                } catch (err: InvalidRequestException) {
-                    // New clients that use up-to-date 'typ' value will get here
-                    validateJwt(
+                val body = validateJwt(
                         jwt = proof.jsonPrimitive.content,
                         jwtName = "Key attestation",
                         publicKey = null,
@@ -159,7 +138,6 @@ suspend fun credential(call: ApplicationCall) {
                             JwtCheck.TRUST to "trusted_key_attestations"
                         )
                     )
-                }
                 validateAndConsumeCredentialChallenge(body["nonce"]!!.jsonPrimitive.content)
                 body["attested_keys"]!!.jsonArray.map { key ->
                     EcPublicKey.fromJwk(key.jsonObject)

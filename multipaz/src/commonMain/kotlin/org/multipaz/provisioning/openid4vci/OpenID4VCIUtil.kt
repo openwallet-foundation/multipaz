@@ -76,25 +76,25 @@ internal object OpenID4VCIUtil {
         }
     }
 
-    suspend fun createClientAssertion(endpoint: String): String {
+    suspend fun createClientAssertion(authorizationServerIdentifier: String): String {
         val backend = BackendEnvironment.getInterface(OpenID4VCIBackend::class)!!
-        return backend.createJwtClientAssertion(endpoint)
+        return backend.createJwtClientAssertion(authorizationServerIdentifier)
     }
 
     suspend fun createWalletAttestationPoP(
         clientId: String,
         key: AsymmetricKey,
-        endpointUrl: Url,
-        nonce: String? = null
+        authenticationServerIdentifier: String,
+        challenge: String?
     ): String = buildJwt(
             type = "oauth-client-attestation-pop+jwt",
             key = key
         ) {
             put("iss", clientId)
-            put("aud", endpointUrl.protocolWithAuthority)
+            put("aud", authenticationServerIdentifier)
             put("jti", Random.Default.nextBytes(15).toBase64Url())
-            if (nonce != null) {
-                put("nonce", nonce)
+            if (challenge != null) {
+                put("challenge", challenge)
             }
         }
 }

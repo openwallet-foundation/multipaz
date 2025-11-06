@@ -63,6 +63,7 @@ internal class OpenID4VCIProvisioningClient(
     var refreshToken: String? = null
     var authorizationDPoPNonce: String? = null
     var issuerDPoPNonce: String? = null
+    var clientAttestationChallenge: String? = null
     var keyChallenge: String? = null
     var redirectState: String? = null
     var txRetry = false
@@ -129,6 +130,8 @@ internal class OpenID4VCIProvisioningClient(
             throw IllegalStateException("Error getting a nonce")
         }
         Logger.i(TAG, "Got successful response for nonce request")
+        // A fresh DPoP nonce might or might not be given
+        nonceResponse.headers["DPoP-Nonce"]?.let { issuerDPoPNonce = it }
         val responseText = nonceResponse.readBytes().decodeToString()
         val cNonce = Json.parseToJsonElement(responseText).jsonObject.string("c_nonce")
         keyChallenge = cNonce
@@ -232,6 +235,8 @@ internal class OpenID4VCIProvisioningClient(
         }
 
     private suspend fun performPushedAuthorizationRequest(): String {
+        maybeObtainClientAttestationChallenge()
+
         pkceCodeVerifier = Random.Default.nextBytes(32).toBase64Url()
         val codeChallenge = Crypto.digest(
             Algorithm.SHA256,
@@ -256,16 +261,15 @@ internal class OpenID4VCIProvisioningClient(
             }
 
         val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
-
-        var dpopNonce: String? = null
         var response: HttpResponse
+        var retryCount = 0
 
         while (true) {
             // retry loop for DPoP nonce
             val dpop = OpenID4VCIUtil.generateDPoP(
                 clientId = clientPreferences.clientId,
                 requestUrl = authorizationConfiguration.pushedAuthorizationRequestEndpoint,
-                dpopNonce = dpopNonce,
+                dpopNonce = authorizationDPoPNonce,
                 accessToken = null
             )
             val walletAttestationPoP = if (authorizationConfiguration.useClientAssertion) {
@@ -273,15 +277,15 @@ internal class OpenID4VCIProvisioningClient(
             } else {
                 // If client assertion is not used, we always send wallet attestation.
                 val key = obtainWalletAttestation()
-                val endpoint = Url(authorizationConfiguration.pushedAuthorizationRequestEndpoint)
                 OpenID4VCIUtil.createWalletAttestationPoP(
                     clientId = clientPreferences.clientId,
                     key = key,
-                    endpointUrl = endpoint,
+                    authenticationServerIdentifier = authorizationConfiguration.identifier,
+                    challenge = clientAttestationChallenge
                 )
             }
             val clientAssertion = if (authorizationConfiguration.useClientAssertion) {
-                OpenID4VCIUtil.createClientAssertion(authorizationConfiguration.tokenEndpoint)
+                OpenID4VCIUtil.createClientAssertion(authorizationConfiguration.identifier)
             } else {
                 null
             }
@@ -324,21 +328,22 @@ internal class OpenID4VCIProvisioningClient(
             ) {
                 headers {
                     append("DPoP", dpop)
-                    //append("Content-Type", "application/x-www-form-urlencoded")
                     if (walletAttestation != null) {
                         append("OAuth-Client-Attestation", walletAttestation!!)
                         append("OAuth-Client-Attestation-PoP", walletAttestationPoP!!)
                     }
                 }
             }
+            response.headers["DPoP-Nonce"]?.let { authorizationDPoPNonce = it }
+            response.headers["OAuth-Client-Attestation-Challenge"]?.let { clientAttestationChallenge = it }
             if (response.status == HttpStatusCode.Created) {
                 break
             }
             val responseText = response.readBytes().decodeToString()
             Logger.e(TAG, "PAR request error: ${response.status}: $responseText")
-            if (dpopNonce == null) {
-                dpopNonce = response.headers["DPoP-Nonce"]
-                if (dpopNonce != null) {
+            if (retryCount == 0) {
+                retryCount++
+                if (authorizationDPoPNonce != null) {
                     continue  // retry the request with the nonce
                 }
             }
@@ -403,6 +408,9 @@ internal class OpenID4VCIProvisioningClient(
         if (refreshToken == null && authorizationCode == null && preauthorizedCode == null) {
             throw IllegalArgumentException("No authorizations provided")
         }
+        if (preauthorizedCode != null) {
+            maybeObtainClientAttestationChallenge()
+        }
         val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
         var retried = false
         // When dpop nonce is null, this loop will run twice, first request will return with error,
@@ -429,11 +437,12 @@ internal class OpenID4VCIProvisioningClient(
                 OpenID4VCIUtil.createWalletAttestationPoP(
                     clientId = clientPreferences.clientId,
                     key = key,
-                    endpointUrl = Url(authorizationConfiguration.tokenEndpoint),
+                    authenticationServerIdentifier = authorizationConfiguration.identifier,
+                    challenge = clientAttestationChallenge
                 )
             }
             val clientAssertion = if (authorizationConfiguration.useClientAssertion) {
-                OpenID4VCIUtil.createClientAssertion(authorizationConfiguration.tokenEndpoint)
+                OpenID4VCIUtil.createClientAssertion(authorizationConfiguration.identifier)
             } else {
                 null
             }
@@ -483,7 +492,8 @@ internal class OpenID4VCIProvisioningClient(
                     }
                 }
             }
-            authorizationDPoPNonce = response.headers["DPoP-Nonce"]
+            response.headers["DPoP-Nonce"]?.let { authorizationDPoPNonce = it }
+            response.headers["OAuth-Client-Attestation-Challenge"]?.let { clientAttestationChallenge = it }
             if (response.status != HttpStatusCode.OK) {
                 val errResponseText = response.readBytes().decodeToString()
                 if (preauthorizedCode != null && txCode != null) {
@@ -525,6 +535,25 @@ internal class OpenID4VCIProvisioningClient(
         }
     }
 
+    private suspend fun maybeObtainClientAttestationChallenge() {
+        if (!authorizationConfiguration.useClientAssertion) {
+            // Using client attestation. Check if we need to get a fresh challenge
+            if (authorizationConfiguration.challengeEndpoint != null) {
+                val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
+                val response = httpClient.post(authorizationConfiguration.challengeEndpoint) {}
+                if (response.status != HttpStatusCode.OK) {
+                    throw IllegalStateException("Error getting a challenge")
+                }
+                Logger.i(TAG, "Got successful response for challenge request")
+                // DPoP nonce might or might not be given
+                authorizationDPoPNonce = response.headers["DPoP-Nonce"]
+                val responseText = response.readBytes().decodeToString()
+                clientAttestationChallenge = Json.parseToJsonElement(responseText)
+                    .jsonObject.string("attestation_challenge")
+            }
+        }
+    }
+
     private suspend fun refreshAccessIfNeeded() {
         if (token == null && refreshToken == null) {
             throw IllegalStateException("Not authorized")
@@ -542,7 +571,7 @@ internal class OpenID4VCIProvisioningClient(
     }
 
     companion object Companion : JsonParsing("Openid4Vci") {
-        private const val TAG = "Openid4VciProvisioningClient"
+        private const val TAG = "OpenID4VCIProvisioningClient"
 
         private val stateLock = Mutex()
         private val states = mutableSetOf<String>()

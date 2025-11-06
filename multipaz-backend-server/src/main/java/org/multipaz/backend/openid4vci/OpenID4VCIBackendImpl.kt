@@ -29,11 +29,11 @@ class OpenID4VCIBackendImpl: OpenID4VCIBackend, RpcAuthInspector by RpcAuthBacke
         return clientId
     }
 
-    override suspend fun createJwtClientAssertion(tokenUrl: String): String =
+    override suspend fun createJwtClientAssertion(authorizationServerIdentifier: String): String =
         OpenID4VCIBackendUtil.createJwtClientAssertion(
             signingKey = clientAssertionKey,
             clientId = clientId,
-            tokenUrl = tokenUrl,
+            authorizationServerIdentifier = authorizationServerIdentifier,
         )
 
     override suspend fun createJwtWalletAttestation(keyAttestation: KeyAttestation): String {

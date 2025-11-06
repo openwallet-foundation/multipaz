@@ -41,7 +41,6 @@ suspend fun authorizeChallenge(call: ApplicationCall) {
             call.request,
             state.dpopKey ?: throw IllegalArgumentException("DPoP is required"),
             state.clientId!!,
-            state.dpopNonce,
             null
         )
     }

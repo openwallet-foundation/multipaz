@@ -1,12 +1,16 @@
 package org.multipaz.openid4vci.util
 
 import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
 import io.ktor.http.Url
 import io.ktor.http.protocolWithAuthority
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.uri
+import io.ktor.server.response.header
+import io.ktor.server.response.respondText
 import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
@@ -21,6 +25,8 @@ import org.multipaz.cbor.Uint
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.jwt.Challenge
+import org.multipaz.jwt.ChallengeInvalidException
 import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.handler.InvalidRequestException
@@ -30,6 +36,8 @@ import org.multipaz.jwt.JwtCheck
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import org.multipaz.jwt.validateJwt
+import org.multipaz.rpc.backend.Configuration
+import org.multipaz.server.baseUrl
 import kotlin.time.Duration
 
 const val OAUTH_REQUEST_URI_PREFIX = "urn:ietf:params:oauth:request_uri:"
@@ -111,8 +119,8 @@ suspend fun authorizeWithDpop(
     request: ApplicationRequest,
     publicKey: EcPublicKey,
     clientId: String,
-    dpopNonce: ByteString?,
-    accessToken: String? = null
+    accessToken: String?,
+    initial: Boolean = false
 ) {
     val auth = request.headers["Authorization"]
     if (accessToken == null) {
@@ -131,8 +139,23 @@ suspend fun authorizeWithDpop(
         }
     }
 
-    val nonce = dpopNonce?.toByteArray()?.toBase64Url()
-    validateDPoPJwt(request, publicKey, clientId, nonce, accessToken)
+    validateDPoPJwt(request, publicKey, clientId, accessToken, initial)
+}
+
+suspend fun addFreshNonceHeaders(call: ApplicationCall) {
+    val configuration = BackendEnvironment.getInterface(Configuration::class)!!
+    val useClientAttestationChallenge =
+        configuration.getValue("use_client_attestation_challenge") != "false"
+    call.response.header("DPoP-Nonce", Challenge.create())
+    if (useClientAttestationChallenge) {
+        call.response.header("OAuth-Client-Attestation-Challenge", Challenge.create())
+    }
+}
+
+suspend fun respondWithNewDPoPNonce(call: ApplicationCall) {
+    addFreshNonceHeaders(call)
+    call.response.header("WWW-Authenticate", "DPoP error=\"use_dpop_nonce\"")
+    call.respondText(status = HttpStatusCode.Unauthorized, text = "")
 }
 
 /**
@@ -164,7 +187,6 @@ suspend fun validateClientAttestation(
 
     return EcPublicKey.fromJwk(attestationBody["cnf"]!!.jsonObject["jwk"]!!.jsonObject)
 }
-
 /**
  * Ensures Oauth client attestation proof-of-possession attached to the given HTTP request is
  * valid.
@@ -177,29 +199,34 @@ suspend fun validateClientAttestationPoP(
     val popJwt = request.headers["OAuth-Client-Attestation-PoP"]
         ?: throw InvalidRequestException("OAuth-Client-Attestation-PoP header required")
 
-    val baseUrl = BackendEnvironment.getBaseUrl()
-    val serverUrl = Url(baseUrl).protocolWithAuthority
+    val configuration = BackendEnvironment.getInterface(Configuration::class)!!
+    val baseUrl = configuration.baseUrl
+    val useClientAttestationChallenge =
+        configuration.getValue("use_client_attestation_challenge") != "false"
 
-    val body = validateJwt(
+    validateJwt(
         jwt = popJwt,
         jwtName = "Client attestation PoP",
         publicKey = attestationKey,
-        checks = mapOf(
-            JwtCheck.JTI to clientId,
-            JwtCheck.TYP to "oauth-client-attestation-pop+jwt",
-            JwtCheck.ISS to clientId,
-        )
+        checks = buildMap {
+            put(JwtCheck.JTI, clientId)
+            put(JwtCheck.TYP, "oauth-client-attestation-pop+jwt")
+            put(JwtCheck.ISS, clientId)
+            put(JwtCheck.AUD, baseUrl)
+            if (useClientAttestationChallenge) {
+                put(JwtCheck.CHALLENGE, "challenge")
+            }
+        }
     )
-    val aud = body["aud"]?.jsonPrimitive?.content
-    if (aud == baseUrl) {
-        // Correct value?
-        return
-    }
-    if (aud == serverUrl) {
-        // Outdated, but acceptable value?
-        return
-    }
-    throw InvalidRequestException("Client attestation PoP: 'aud' is incorrect or missing")
+}
+
+suspend fun respondWithNewClientAttestationChallenge(call: ApplicationCall) {
+    addFreshNonceHeaders(call)
+    call.respondText(
+        status = HttpStatusCode.BadRequest,
+        text = "{\"error\": \"use_attestation_challenge\"}\n",
+        contentType = ContentType.Application.Json
+    )
 }
 
 /**
@@ -214,10 +241,6 @@ suspend fun createSession(
     val clientId = parameters["client_id"]
         ?: throw InvalidRequestException("missing parameter 'client_id'")
     val (scope, configurationId) = getScopeAndCredentialId(parameters)
-    val attestationKey = validateClientAttestation(request, clientId)
-    if (attestationKey != null) {
-        validateClientAttestationPoP(request, clientId, attestationKey)
-    }
     if (parameters["response_type"] != "code") {
         throw InvalidRequestException("invalid parameter 'response_type'")
     }
@@ -235,6 +258,11 @@ suspend fun createSession(
     } catch (err: Exception) {
         throw InvalidRequestException("invalid parameter 'code_challenge'")
     }
+    val attestationKey = validateClientAttestation(request, clientId)
+    if (attestationKey != null) {
+        // this will throw ChallengeInvalidException if no/expired/invalid challenge is given
+        validateClientAttestationPoP(request, clientId, attestationKey)
+    }
     val clientAuthenticated = attestationKey != null || validateClientAssertion(parameters, clientId)
     if (!clientAuthenticated && requireAuthentication) {
         throw InvalidRequestException("client is not authenticated")
@@ -243,7 +271,7 @@ suspend fun createSession(
     // Validate DPoP if any
     val dpopKey = processInitialDPoP(request)
     if (dpopKey != null) {
-        validateDPoPJwt(request, dpopKey, clientId)
+        validateDPoPJwt(request, dpopKey, clientId, null, true)
     } else {
         // DPoP is not supplied. We are OK with that as long as clientId is authenticated
         // one way or the other.
@@ -321,8 +349,8 @@ private suspend fun validateDPoPJwt(
     request: ApplicationRequest,
     publicKey: EcPublicKey,
     clientId: String,
-    dpopNonce: String? = null,
-    accessToken: String? = null
+    accessToken: String?,
+    initial: Boolean = false
 ) {
     val dpop = request.headers["DPoP"] ?: throw InvalidRequestException("DPoP header required")
     val baseUrl = BackendEnvironment.getBaseUrl()
@@ -335,16 +363,15 @@ private suspend fun validateDPoPJwt(
             put(JwtCheck.HTM, request.httpMethod.value)
             // NB: cannot use req.requestURL, as it does not take into account potential frontends.
             put(JwtCheck.HTU, "$baseUrl${request.uri}")
+            if (!initial) {
+                put(JwtCheck.CHALLENGE, "nonce")
+            }
             if (accessToken != null) {
                 val athHash = Crypto.digest(Algorithm.SHA256, accessToken.encodeToByteArray())
                 put(JwtCheck.ATH, athHash.toBase64Url())
             }
         }
     )
-    // validate dpop nonce manually, as we need special handling for the client to retry
-    if (dpopNonce != body["nonce"]?.jsonPrimitive?.content) {
-        throw DPoPNonceException()
-    }
     if (accessToken == null && body.containsKey("ath")) {
         throw InvalidRequestException("DPoP JWT: 'ath' specified, but not expected")
     }

@@ -31,7 +31,7 @@ class OpenIDBackendUtilTest {
             val assertionJwt = OpenID4VCIBackendUtil.createJwtClientAssertion(
                 signingKey = AsymmetricKey.NamedExplicit("client", signingKey),
                 clientId = CLIENT_ID,
-                tokenUrl = "http://example.com",
+                authorizationServerIdentifier = "http://example.com",
             )
             validateJwt(
                 jwt = assertionJwt,
@@ -100,7 +100,7 @@ class OpenIDBackendUtilTest {
                 jwtName = "Key attestation",
                 publicKey = null,
                 checks = mapOf(
-                    JwtCheck.TYP to "keyattestation+jwt",  // TODO: it is now key-attestation+jwt
+                    JwtCheck.TYP to "key-attestation+jwt",
                     JwtCheck.TRUST to "fake_trust"
                 )
             )

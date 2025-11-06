@@ -23,7 +23,6 @@ data class IssuanceState(
     var codeChallenge: ByteString?,
     val configurationId: String?,
     var clientState: String? = null,
-    var dpopNonce: ByteString? = null,
     var authorized: Boolean? = null,
     var openid4VpVerifierModel: Openid4VpVerifierModel? = null,
     var systemOfRecordAuthCode: String? = null,

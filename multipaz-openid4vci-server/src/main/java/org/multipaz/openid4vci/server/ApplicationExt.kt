@@ -29,6 +29,7 @@ import kotlinx.serialization.json.put
 import org.multipaz.openid4vci.request.authorizeChallenge
 import org.multipaz.openid4vci.request.authorizeGet
 import org.multipaz.openid4vci.request.authorizePost
+import org.multipaz.openid4vci.request.challenge
 import org.multipaz.openid4vci.request.credential
 import org.multipaz.openid4vci.request.credentialRequest
 import org.multipaz.openid4vci.request.fetchResource
@@ -117,6 +118,7 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
         get("/authorize") { runRequest { authorizeGet(call) } }
         post("/authorize") { runRequest { authorizePost(call) } }
         post("/authorize_challenge") { runRequest { authorizeChallenge(call) } }
+        post("/challenge") { runRequest { challenge(call) } }
         post("/credential_request") { runRequest { credentialRequest(call) } }
         post("/credential") { runRequest { credential(call) } }
         get("/finish_authorization") { runRequest { finishAuthorization(call) } }

@@ -25,25 +25,16 @@ object OpenID4VCIBackendUtil {
     suspend fun createJwtClientAssertion(
         signingKey: AsymmetricKey,
         clientId: String,
-        tokenUrl: String,
+        authorizationServerIdentifier: String,
     ): String = buildJwt(
         type = "JWT",
         key = signingKey,
         expiresIn = 5.minutes
     ) {
-        // TODO: figure out what should be passed as `aud`.
-        //  per 'https://datatracker.ietf.org/doc/html/rfc7523#page-5' tokenUrl is appropriate,
-        //  but Openid validation suite does not seem to take that.
-        val aud = if (tokenUrl.endsWith("/token")) {
-            // A hack to get authorization url from token url; would not work in general case.
-            tokenUrl.substring(0, tokenUrl.length - 5)
-        } else {
-            tokenUrl
-        }
         put("jti", Random.Default.nextBytes(18).toBase64Url())
         put("iss", clientId)
         put("sub", clientId) // RFC 7523 Section 3, item 2.B
-        put("aud", aud)
+        put("aud", authorizationServerIdentifier)
     }
 
     /**
@@ -88,7 +79,7 @@ object OpenID4VCIBackendUtil {
         userAuthentication: List<String>? = null,
         keyStorage: List<String>? = null
     ): String  = buildJwt(
-        type = "keyattestation+jwt",  // TODO: it is now key-attestation+jwt in the spec
+        type = "key-attestation+jwt",
         key = signingKey,
         expiresIn = 5.minutes
     ) {

@@ -193,7 +193,7 @@ internal class CredentialFactoryMdl : CredentialFactoryBase() {
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                signingCertificateChain.toDataItem()
+                signingKey.certChain.toDataItem()
             )
         )
         val encodedIssuerAuth = Cbor.encode(

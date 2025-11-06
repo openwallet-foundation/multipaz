@@ -19,9 +19,7 @@ import kotlin.time.Clock
  */
 internal abstract class CredentialFactoryBase: CredentialFactory {
 
-    protected lateinit var signingKey: AsymmetricKey.X509Certified
-
-    override val signingCertificateChain: X509CertChain get() = signingKey.certChain
+    override lateinit var signingKey: AsymmetricKey.X509Certified
 
     final override suspend fun initialize() {
         signingKey = BackendEnvironment.getServerIdentity("ds_jwk") {

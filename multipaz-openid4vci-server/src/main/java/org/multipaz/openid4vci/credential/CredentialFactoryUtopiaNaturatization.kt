@@ -56,7 +56,9 @@ internal class CredentialFactoryUtopiaNaturatization : CredentialFactoryBase() {
             put("given_name", coreData["given_name"].asTstr)
             put("family_name", coreData["family_name"].asTstr)
             put("birth_date", coreData["birth_date"].asDateString.toString())
-            put("naturalization_date", nzData["naturalization_date"].asDateString.toString())
+            if (nzData.hasKey("naturalization_date")) {
+                put("naturalization_date", nzData["naturalization_date"].asDateString.toString())
+            }
         }
 
         val now = Clock.System.now()

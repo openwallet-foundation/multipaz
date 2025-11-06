@@ -14,7 +14,7 @@ suspend fun signingCertificate(call: ApplicationCall) {
         ?: throw InvalidRequestException("'credential_id' parameter required")
     val credentialFactory = CredentialFactory.getRegisteredFactories().byOfferId[credentialId]
         ?: throw InvalidRequestException("invalid 'credential_id' parameter value")
-    val certificate = credentialFactory.signingCertificateChain.certificates.last()
+    val certificate = credentialFactory.signingKey.certChain.certificates.last()
     call.respondText(ContentType.Text.Plain) {
         certificate.toPem()
     }
