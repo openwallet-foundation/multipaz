@@ -15,6 +15,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import org.multipaz.context.applicationContext
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.NfcIsoTag
+import org.multipaz.nfc.NfcScanOptions
 import org.multipaz.nfc.NfcTagReader
 import org.multipaz.nfc.ResponseApdu
 import org.multipaz.util.Logger
@@ -73,6 +74,7 @@ class NfcTagReaderUsb(
     override suspend fun <T : Any> scan(
         message: String?,
         tagInteractionFunc: suspend (NfcIsoTag) -> T?,
+        options: NfcScanOptions,
         context: CoroutineContext
     ): T {
         val driver = CcidDriver(

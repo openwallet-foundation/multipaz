@@ -134,6 +134,7 @@ private object NfcTagReaderIos: NfcTagReader {
     override suspend fun <T : Any> scan(
         message: String?,
         tagInteractionFunc: suspend (NfcIsoTag) -> T?,
+        options: NfcScanOptions,
         context: CoroutineContext
     ): T {
         require(message != null) { "Cannot not show the NFC tag scanning dialog on iOS" }

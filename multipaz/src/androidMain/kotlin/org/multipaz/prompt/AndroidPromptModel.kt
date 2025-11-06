@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import org.multipaz.R
 import org.multipaz.context.applicationContext
+import org.multipaz.nfc.NfcScanOptions
 import org.multipaz.securearea.UnlockReason
 import org.multipaz.securearea.PassphraseConstraints
 import org.multipaz.presentment.PresentmentUnlockReason
@@ -135,11 +136,13 @@ class AndroidPromptModel(
  *
  * @param initialMessage the message to initially show in the dialog or `null` to not show a dialog at all.
  * @param interactionFunction the function which is called when the tag is in the field.
+ * @param options a [NfcScanOptions] with options to influence scanning.
  * @param context the [CoroutineContext] to use for calls which blocks the calling thread.
  */
 class NfcDialogParameters<out T>(
     val initialMessage: String?,
     val interactionFunction: suspend (tag: NfcIsoTag) -> T?,
+    val options: NfcScanOptions,
     val context: CoroutineContext
 )
 

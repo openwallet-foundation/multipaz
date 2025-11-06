@@ -17,11 +17,12 @@ private object NfcTagReaderAndroid: NfcTagReader {
     override suspend fun <T : Any> scan(
         message: String?,
         tagInteractionFunc: suspend (NfcIsoTag) -> T?,
+        options: NfcScanOptions,
         context: CoroutineContext
     ): T {
         val promptModel = AndroidPromptModel.get(coroutineContext)
         val result = promptModel.scanNfcPromptModel.displayPrompt(
-            NfcDialogParameters(message, tagInteractionFunc, context)
+            NfcDialogParameters(message, tagInteractionFunc, options, context)
         )
         @Suppress("UNCHECKED_CAST")
         return result as T

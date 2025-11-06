@@ -15,6 +15,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -69,8 +70,10 @@ import org.multipaz.compose.permissions.rememberBluetoothEnabledState
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
+import org.multipaz.nfc.NfcScanOptions
 import org.multipaz.nfc.NfcTagReader
 import org.multipaz.testapp.ShowResponseMetadata
+import org.multipaz.util.fromHex
 import kotlin.time.Clock
 import kotlin.time.Duration
 
@@ -517,6 +520,12 @@ fun IsoMdocProximityReadingScreen(
                                     } else {
                                         NfcTagReader.getReaders().first()
                                     }
+                                    val nfcScanOptions = if (app.settingsModel.observeModeEmitPollingFramesAsReader.value) {
+                                        NfcScanOptions(pollingFrameData = ByteString("6a0281030000".fromHex()))
+                                    } else {
+                                        NfcScanOptions()
+                                    }
+                                    Logger.i(TAG, "nfcScanOptions: $nfcScanOptions")
                                     val scanResult = reader.scanMdocReader(
                                         message = "Hold near credential holder's phone.",
                                         options = MdocTransportOptions(
@@ -537,6 +546,7 @@ fun IsoMdocProximityReadingScreen(
                                             }
                                         },
                                         negotiatedHandoverConnectionMethods = negotiatedHandoverConnectionMethods,
+                                        nfcScanOptions = nfcScanOptions
                                     )
                                     if (scanResult != null) {
                                         val transferProtocol = scanResult.transport.connectionMethod.toString()
@@ -610,6 +620,22 @@ fun IsoMdocProximityReadingScreen(
                         },
                         content = { Text("Request mdoc via NFC") }
                     )
+                }
+                item {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked =  app.settingsModel.observeModeEmitPollingFramesAsReader.collectAsState().value,
+                            onCheckedChange = { value ->
+                                app.settingsModel.observeModeEmitPollingFramesAsReader.value = value
+                            },
+                        )
+                        Text(
+                            text = "Insert polling frames for Observe Mode",
+                        )
+                    }
                 }
             }
         }

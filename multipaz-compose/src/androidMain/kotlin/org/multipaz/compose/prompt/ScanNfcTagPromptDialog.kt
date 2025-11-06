@@ -4,6 +4,7 @@ import android.content.Context
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.tech.IsoDep
+import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.compose.runtime.Composable
@@ -34,6 +35,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.multipaz.compose.R
+import org.multipaz.util.fromHex
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resumeWithException
 import kotlin.time.Duration.Companion.seconds
@@ -106,12 +108,17 @@ private fun ScanNfcTagPromptDialogShown(
                     continuation = continuation,
                     context = dialogStateValue.parameters.context
                 )
+                val extras = dialogStateValue.parameters.options.pollingFrameData?.let {
+                    val extras = Bundle()
+                    extras.putByteArray("android.nfc.extra.READER_TECH_A_POLLING_LOOP_ANNOTATION", it.toByteArray())
+                    extras
+                }
                 adapter.enableReaderMode(
                     activity,
                     nfcCallback,
                     NfcAdapter.FLAG_READER_NFC_A + NfcAdapter.FLAG_READER_NFC_B
                             + NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK + NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS,
-                    null
+                    extras
                 )
             }
             dialogStateValue.resultChannel.send(result)

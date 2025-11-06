@@ -12,6 +12,7 @@ import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.util.Logger
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.mdoc.role.MdocRole
+import org.multipaz.nfc.NfcScanOptions
 import org.multipaz.nfc.NfcTagReader
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Clock
@@ -34,6 +35,7 @@ private const val TAG = "scanMdocReader"
  * @param selectConnectionMethod used to choose a connection method if the remote mdoc is using NFC static handover.
  * @param negotiatedHandoverConnectionMethods the connection methods to offer if the remote mdoc is using NFC
  * Negotiated Handover.
+ * @param nfcScanOptions a [NfcScanOptions] with options to influence scanning.
  * @param context the [CoroutineContext] to use for calls to the tag which blocks the calling thread.
  * @return a [ScanMdocReaderResult] if successful handover was established, `null` if the user dismissed the dialog.
  */
@@ -43,6 +45,7 @@ suspend fun NfcTagReader.scanMdocReader(
     transportFactory: MdocTransportFactory = MdocTransportFactory.Default,
     selectConnectionMethod: suspend (connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod?,
     negotiatedHandoverConnectionMethods: List<MdocConnectionMethod>,
+    nfcScanOptions: NfcScanOptions = NfcScanOptions(),
     context: CoroutineContext = Dispatchers.IO,
 ): ScanMdocReaderResult? {
     // Start creating transports for Negotiated Handover and start advertising these
@@ -117,6 +120,7 @@ suspend fun NfcTagReader.scanMdocReader(
                     processingDuration = Clock.System.now() - t0
                 )
             },
+            options = nfcScanOptions,
             context = context
         )
         return result

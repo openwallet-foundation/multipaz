@@ -1,0 +1,10 @@
+<host-apdu-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/nfc_ndef_service_description"
+    android:requireDeviceUnlock="false"
+    android:requireDeviceScreenOn="false"
+    android:shouldDefaultToObserveMode="true"
+    >
+    <aid-group android:description="@string/nfc_ndef_service_aid_group_description" android:category="payment">
+        <aid-filter android:name="FFFFFFFFFF"/>
+    </aid-group>
+</host-apdu-service>

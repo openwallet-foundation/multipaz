@@ -270,6 +270,7 @@ class App private constructor (val promptModel: PromptModel) {
                 Pair(::trustManagersInit, "trustManagersInit"),
                 Pair(::provisioningModelInit, "provisioningModelInit"),
                 Pair(::zkSystemRepositoryInit, "zkSystemRepositoryInit"),
+                Pair(::observeModeInit, "observeModeInit"),
             )
 
             val begin = Clock.System.now()
@@ -769,6 +770,15 @@ class App private constructor (val promptModel: PromptModel) {
                 issuerLogo = issuerDisplay.logo,
                 other = null
             )
+        }
+    }
+
+    private suspend fun observeModeInit() {
+        NfcObserveModeHelper.isEnabled = settingsModel.observeModeEnabled.value
+        CoroutineScope(Dispatchers.IO).launch {
+            settingsModel.observeModeEnabled.collect { isEnabled ->
+                NfcObserveModeHelper.isEnabled = isEnabled
+            }
         }
     }
 

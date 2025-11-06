@@ -54,6 +54,7 @@ interface NfcTagReader {
      * @param message the message to initially show in the dialog or `null` to not show a dialog. Not all
      *   platforms supports not showing a dialog, use [dialogAlwaysShown] to check at runtime
      *   if the platform supports this.
+     * @param options a [NfcScanOptions] with options to influence scanning.
      * @param tagInteractionFunc the function which is called when the tag is in the field, see above.
      * @param context the [CoroutineContext] to use for calls to the tag which blocks the calling thread.
      * @return return value of [tagInteractionFunc]
@@ -64,6 +65,7 @@ interface NfcTagReader {
     suspend fun<T: Any> scan(
         message: String?,
         tagInteractionFunc: suspend (tag: NfcIsoTag) -> T?,
+        options: NfcScanOptions = NfcScanOptions(),
         context: CoroutineContext = Dispatchers.IO
     ): T
 

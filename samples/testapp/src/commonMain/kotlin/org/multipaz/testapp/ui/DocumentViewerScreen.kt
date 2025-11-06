@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import org.multipaz.testapp.DocumentModel
+import org.multipaz.testapp.rememberInhibitNfcObserveMode
 
 @Composable
 fun DocumentViewerScreen(
@@ -31,6 +32,8 @@ fun DocumentViewerScreen(
     onViewCredential: (documentId: String, credentialId: String) -> Unit,
 ) {
     val documentInfo = documentModel.documentInfos[documentId]
+
+    rememberInhibitNfcObserveMode()
 
     Column(Modifier.padding(8.dp)) {
         if (documentInfo == null) {

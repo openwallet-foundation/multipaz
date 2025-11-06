@@ -164,6 +164,9 @@ class TestAppSettingsModel private constructor(
         bind(dcApiProtocols, "dcApiProtocols", DigitalCredentials.Default.supportedProtocols)
 
         bind(cryptoPreferBouncyCastle, "cryptoForceBouncyCastle", false)
+
+        bind(observeModeEnabled, "observeModeEnabled", false)
+        bind(observeModeEmitPollingFramesAsReader, "observeModeEmitPollingFramesAsReader", false)
     }
 
     val presentmentBleCentralClientModeEnabled = MutableStateFlow<Boolean>(false)
@@ -191,6 +194,9 @@ class TestAppSettingsModel private constructor(
     val dcApiProtocols = MutableStateFlow<Set<String>>(DigitalCredentials.Default.supportedProtocols)
 
     val cryptoPreferBouncyCastle = MutableStateFlow<Boolean>(false)
+
+    val observeModeEnabled = MutableStateFlow<Boolean>(false)
+    val observeModeEmitPollingFramesAsReader = MutableStateFlow<Boolean>(true)
 }
 
 // Default to our open CSA, where "open" means it'll work with even unlocked bootloaders

@@ -311,6 +311,30 @@ fun SettingsScreen(
         }
 
         item {
+            SettingHeadline("NFC Observe Mode")
+        }
+        item {
+            SettingToggle(
+                title = "Transact only when Identity Reader is seen (wallet)",
+                isChecked = app.settingsModel.observeModeEnabled.collectAsState().value,
+                onCheckedChange = { app.settingsModel.observeModeEnabled.value = it },
+            )
+        }
+        item {
+            SettingToggle(
+                title = "Insert Identity Reader polling frames (reader)",
+                isChecked = app.settingsModel.observeModeEmitPollingFramesAsReader.collectAsState().value,
+                onCheckedChange = { app.settingsModel.observeModeEmitPollingFramesAsReader.value = it },
+            )
+        }
+
+        item {
+            HorizontalDivider(
+                modifier = Modifier.padding(8.dp)
+            )
+        }
+
+        item {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally

@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.nfc.NfcAdapter
 import android.nfc.cardemulation.CardEmulation
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
@@ -14,6 +15,8 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import kotlinx.coroutines.launch
 import org.multipaz.applinks.AppLinksCheck
+import org.multipaz.compose.mdoc.MdocNdefService
+import org.multipaz.context.applicationContext
 import org.multipaz.context.initializeApplication
 import org.multipaz.testapp.provisioning.ProvisioningSupport
 import org.multipaz.util.Logger
@@ -26,9 +29,10 @@ class MainActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
-        NfcAdapter.getDefaultAdapter(this)?.let {
-            val cardEmulation = CardEmulation.getInstance(it)
-            if (!cardEmulation.setPreferredService(this, ComponentName(this, TestAppMdocNdefService::class.java))) {
+        NfcAdapter.getDefaultAdapter(this)?.let { adapter ->
+            val cardEmulation = CardEmulation.getInstance(adapter)
+            val componentName = ComponentName(this, TestAppMdocNdefService::class.java)
+            if (!cardEmulation.setPreferredService(this, componentName)) {
                 Logger.w(TAG, "CardEmulation.setPreferredService() returned false")
             }
             if (!cardEmulation.categoryAllowsForegroundPreference(CardEmulation.CATEGORY_OTHER)) {
