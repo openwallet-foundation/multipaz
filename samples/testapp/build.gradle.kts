@@ -100,9 +100,10 @@ kotlin {
                 implementation(libs.semver)
 
                 implementation(project(":multipaz"))
-                implementation(project(":multipaz-longfellow"))
-                implementation(project(":multipaz-doctypes"))
                 implementation(project(":multipaz-compose"))
+                implementation(project(":multipaz-dcapi"))
+                implementation(project(":multipaz-doctypes"))
+                implementation(project(":multipaz-longfellow"))
                 implementation(libs.kotlinx.datetime)
                 implementation(libs.kotlinx.io.core)
                 implementation(libs.ktor.client.core)

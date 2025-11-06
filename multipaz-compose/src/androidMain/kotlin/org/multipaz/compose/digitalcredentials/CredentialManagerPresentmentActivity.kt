@@ -32,9 +32,9 @@ import org.jetbrains.compose.resources.painterResource
 import org.multipaz.compose.presentment.Presentment
 import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.context.initializeApplication
-import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.digitalcredentials.getAppOrigin
 import org.multipaz.digitalcredentials.lookupForCredmanId
+import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.presentment.model.DigitalCredentialsPresentmentMechanism
 import org.multipaz.presentment.model.PresentmentModel
 import org.multipaz.presentment.model.PresentmentSource

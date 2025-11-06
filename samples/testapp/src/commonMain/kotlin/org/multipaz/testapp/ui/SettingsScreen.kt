@@ -26,6 +26,7 @@ import org.multipaz.testapp.Platform
 import org.multipaz.testapp.TestAppSettingsModel
 import org.multipaz.testapp.platform
 import org.multipaz.compose.cards.WarningCard
+import org.multipaz.digitalcredentials.Default
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.testapp.platformRestartApp
 

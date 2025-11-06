@@ -1,4 +1,4 @@
-package org.multipaz.models.presentment
+package org.multipaz.presentment.model
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
@@ -22,13 +22,13 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.digitalcredentials.Default
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.calculateCredentialDatabase
 import org.multipaz.openid.OpenID4VP
-import org.multipaz.presentment.model.DocumentStoreTestHarness
 import org.multipaz.util.toBase64Url
 import kotlin.random.Random
 

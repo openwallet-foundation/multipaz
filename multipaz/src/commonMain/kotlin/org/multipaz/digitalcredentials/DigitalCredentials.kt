@@ -60,9 +60,7 @@ interface DigitalCredentials {
      *
      * @param documentStore the [DocumentStore] passed to [startExportingCredentials]
      */
-    suspend fun stopExportingCredentials(
-        documentStore: DocumentStore
-    )
+    suspend fun stopExportingCredentials(documentStore: DocumentStore)
 
     /**
      * Request credentials from wallet applications.
@@ -87,55 +85,5 @@ interface DigitalCredentials {
      */
     suspend fun request(request: JsonObject): JsonObject
 
-    /**
-     * The default implementation of the [DigitalCredentials] API on the platform.
-     */
-    object Default: DigitalCredentials {
-        override val available: Boolean
-            get() = defaultAvailable
-
-        override val supportedProtocols: Set<String>
-            get() = defaultSupportedProtocols
-
-        override val selectedProtocols: Set<String>
-            get() = defaultSelectedProtocols
-
-        override suspend fun setSelectedProtocols(
-            protocols: Set<String>
-        ) = defaultSetSelectedProtocols(protocols)
-
-        override suspend fun startExportingCredentials(
-            documentStore: DocumentStore,
-            documentTypeRepository: DocumentTypeRepository
-        ) = defaultStartExportingCredentials(documentStore, documentTypeRepository)
-
-        override suspend fun stopExportingCredentials(
-            documentStore: DocumentStore
-        ) = defaultStopExportingCredentials(documentStore)
-
-        override suspend fun request(request: JsonObject): JsonObject = defaultRequest(request)
-    }
+    companion object
 }
-
-internal expect val defaultAvailable: Boolean
-
-internal expect val defaultSupportedProtocols: Set<String>
-
-internal expect val defaultSelectedProtocols: Set<String>
-
-internal expect suspend fun defaultSetSelectedProtocols(
-    protocols: Set<String>
-)
-
-internal expect suspend fun defaultStartExportingCredentials(
-    documentStore: DocumentStore,
-    documentTypeRepository: DocumentTypeRepository
-)
-
-internal expect suspend fun defaultStopExportingCredentials(
-    documentStore: DocumentStore,
-)
-
-internal expect suspend fun defaultRequest(
-    request: JsonObject
-): JsonObject

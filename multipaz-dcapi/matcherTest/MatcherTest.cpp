@@ -19,7 +19,7 @@ static std::string output;
 
 extern "C"
 JNIEXPORT jstring JNICALL
-Java_org_multipaz_models_presentment_MatcherTest_runMatcher(
+Java_org_multipaz_presentment_model_MatcherTest_runMatcher(
         JNIEnv *env,
         jobject thiz,
         jbyteArray request,
