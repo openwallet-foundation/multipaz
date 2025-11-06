@@ -127,7 +127,46 @@ object Hpke {
                 kdf = Kdf.HKDF_SHA512,
                 aead = Aead.AES_256_GCM,
             )
+
+            /**
+             * A cipher suite for HPKE using [Kem.DHKEM_P256_HKDF_SHA256] as the KEM,
+             * [Kdf.HKDF_SHA512] as the KDF, and [Aead.AES_128_GCM] as the AEAD.
+             */
+            val DHKEM_P256_HKDF_SHA256_HKDF_SHA512_AES_128_GCM = CipherSuite(
+                kem = Kem.DHKEM_P256_HKDF_SHA256,
+                kdf = Kdf.HKDF_SHA512,
+                aead = Aead.AES_128_GCM,
+            )
+
+            /**
+             * A cipher suite for HPKE using [Kem.DHKEM_X25519_HKDF_SHA256] as the KEM,
+             * [Kdf.HKDF_SHA256] as the KDF, and [Aead.EXPORT_ONLY] as the AEAD.
+             */
+            val DHKEM_X25519_HKDF_SHA256_EXPORT_ONLY = CipherSuite(
+                kem = Kem.DHKEM_X25519_HKDF_SHA256,
+                kdf = Kdf.HKDF_SHA256,
+                aead = Aead.EXPORT_ONLY,
+            )
         }
+    }
+
+    /**
+     * Returns the KDF algorithm associated with the given KEM
+     * This is distinct from the KDF defined in the overall HPKE cipher suite
+     *
+     * According to [RCF 9180 Section 4.1](https://www.rfc-editor.org/rfc/rfc9180.html#name-dh-based-kem-dhkem)
+     * Each KEM defines a single KDF that must be used with that KEM.
+     * When performing the DH-based key agreement in the KEM layer, we must use the KDF mandated by the KEM
+     *
+     */
+    private fun getKdfFromKem(kem: Kem): Kdf = when(kem) {
+        Kem.DHKEM_P256_HKDF_SHA256,
+        Kem.DHKEM_X25519_HKDF_SHA256 -> Kdf.HKDF_SHA256
+
+        Kem.DHKEM_P384_HKDF_SHA384 -> Kdf.HKDF_SHA384
+
+        Kem.DHKEM_P521_HKDF_SHA512,
+        Kem.DHKEM_X448_HKDF_SHA512 -> Kdf.HKDF_SHA512
     }
 
     private fun getKemSuiteId(cipherSuite: CipherSuite): ByteArray {
@@ -228,31 +267,33 @@ object Hpke {
             }
         }
 
+        val kdf = getKdfFromKem(cipherSuite.kem)
+
         val sharedSecret = if (authKey != null) {
             val dhSum = dh + authKey.keyAgreement(receiverKeyPub!!)
             extractAndExpand(
                 suiteId = getKemSuiteId(cipherSuite),
-                kdf = cipherSuite.kdf,
+                kdf = kdf,
                 dh = dhSum,
                 kemContext = kemContext + authKey.publicKey.serialize(),
-                length = cipherSuite.kdf.nh
+                length = kdf.nh
             )
         } else if (authKeyPub != null) {
             val dhSum = dh + receiverKey!!.keyAgreement(authKeyPub)
             extractAndExpand(
                 suiteId = getKemSuiteId(cipherSuite),
-                kdf = cipherSuite.kdf,
+                kdf = kdf,
                 dh = dhSum,
                 kemContext = kemContext + authKeyPub.serialize(),
-                length = cipherSuite.kdf.nh
+                length = kdf.nh
             )
         } else {
             extractAndExpand(
                 suiteId = getKemSuiteId(cipherSuite),
-                kdf = cipherSuite.kdf,
+                kdf = kdf,
                 dh = dh,
                 kemContext = kemContext,
-                length = cipherSuite.kdf.nh
+                length = kdf.nh
             )
         }
         //println("sharedSecret = ${sharedSecret.toHex()}")
