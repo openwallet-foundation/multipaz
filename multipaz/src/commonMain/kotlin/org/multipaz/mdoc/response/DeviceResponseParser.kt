@@ -61,7 +61,7 @@ class DeviceResponseParser(
      * This is only required if the `DeviceResponse` is using the MAC method for device
      * authentication.
      *
-     * @param eReaderKey the private part of the reader ephemeral key.
+     * @param eReaderKey the reader ephemeral key.
      * @return the `DeviceResponseParser`.
      */
     fun setEphemeralReaderKey(eReaderKey: AsymmetricKey) = apply {

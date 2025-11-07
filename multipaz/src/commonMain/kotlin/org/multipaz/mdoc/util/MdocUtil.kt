@@ -494,8 +494,7 @@ object MdocUtil {
     /**
      * Generates a Document Signing certificate according to ISO/IEC 18013-5:2021 Annex B.1.4.
      *
-     * @param iacaCert the IACA certificate.
-     * @param iacaKey the private key for the IACA certificate.
+     * @param iacaKey IACA certificate and private key.
      * @param dsKey the public part of the DS key.
      * @param subject the value to use for subject, e.g. "CN=Test DS,C=ZZ".
      * @param serial the serial number to use for the certificate.
@@ -608,8 +607,7 @@ object MdocUtil {
     /**
      * Generates a reader auth certificate according to ISO/IEC 18013-5:2021 Annex B.1.7.
      *
-     * @param readerRootCert the reader root certificate.
-     * @param readerRootKey the private key for the reader root certificate.
+     * @param readerRootKey the reader root certificate and the corresponding private key.
      * @param readerKey the public part of the reader key.
      * @param subject the value to use for subject, e.g. "CN=Test Reader,C=ZZ".
      * @param serial the serial number to use for the certificate.

@@ -81,9 +81,9 @@ object OpenID4VP {
      * @param nonce the nonce to use.
      * @param responseEncryptionKey the key to encrypt the response against or `null`.
      * @param requestSigningKey the key to sign the request with or `null`.
-     * @param dclqQuery the DCQL query.
      * @param responseMode the response mode.
      * @param responseUri the response URI or `null`.
+     * @param dclqQuery the DCQL query.
      * @return the OpenID4VP request.
      */
     suspend fun generateRequest(

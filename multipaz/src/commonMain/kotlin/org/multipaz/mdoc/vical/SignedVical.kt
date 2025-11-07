@@ -33,8 +33,7 @@ data class SignedVical(
      * Generates a VICAL
      *
      * @param signingKey the key used to sign the VICAL. This must match the public key in the leaf
-     * certificate in `vicalProviderCertificateChain`.
-     * @param signingAlgorithm the algorithm used to make the signature
+     *    certificate in `vicalProviderCertificateChain`.
      * @return the bytes of the CBOR encoded COSE_Sign1 with the VICAL.
      */
     suspend fun generate(

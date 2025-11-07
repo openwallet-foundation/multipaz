@@ -628,8 +628,8 @@ object Hpke {
      * Creates a [Decrypter] object for HPKE for the given [cipherSuite].
      *
      * @param cipherSuite the cipher suite to use, for example [Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM].
-     * @param receiverPrivateKey a [AsymmetricKey] for the key the data is encrypted against, must be compatible
-     *   with the curve in [cipherSuite] and must support key agreement.
+     * @param receiverPrivateKey an [AsymmetricKey] for the key the data is encrypted against, must
+     *   be compatible with the curve in [cipherSuite] and must support key agreement.
      * @param encapsulatedKey the encapsulated key, received from the sender.
      * @param info data which can be used to influence the generation of keys (e.g., to fold in identity information).
      * @param psk pre-shared key to use or `null`.

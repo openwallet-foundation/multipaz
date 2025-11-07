@@ -386,8 +386,7 @@ class X509Cert(
      * Builder for X.509 certificate.
      *
      * @param publicKey the public key for the certificate.
-     * @param signingKey Tthe key to sign the TBSCertificate with.
-     * @param signatureAlgorithm the signature algorithm to sign with.
+     * @param signingKey the key to sign the TBSCertificate with.
      * @param serialNumber the serial number in the certificate.
      * @param subject the subject of the certificate.
      * @param issuer the issuer of the certificate.
@@ -767,7 +766,7 @@ private fun generateName(name: X500Name): ASN1Sequence {
  * Builds a new [X509Cert].
  *
  * @param publicKey the public key for the certificate.
- * @param signingKey Tthe key to sign the TBSCertificate with.
+ * @param signingKey the key to sign the TBSCertificate with.
  * @param serialNumber the serial number in the certificate.
  * @param subject the subject of the certificate.
  * @param issuer the issuer of the certificate.

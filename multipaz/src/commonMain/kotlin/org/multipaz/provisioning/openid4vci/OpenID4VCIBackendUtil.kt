@@ -22,6 +22,18 @@ import kotlin.time.Duration.Companion.minutes
  * For test environments, these can be invoked directly in the client app for simplicity.
  */
 object OpenID4VCIBackendUtil {
+    /**
+     * Generates Client Assertion JWT to authenticate a client to an OpenID authorization server
+     * using a client's private key.
+     *
+     * NB: this is different from "Client Attestation"! In most cases Client Attestation should
+     * be used instead of the Client Assertion, but we support this for compatibility.
+     *
+     * @param signingKey client's private key
+     * @param clientId OpenID `client_id` value
+     * @param authorizationServerIdentifier authorization server's identifier (URL)
+     * @return client assertion JWT
+     */
     suspend fun createJwtClientAssertion(
         signingKey: AsymmetricKey,
         clientId: String,
@@ -38,10 +50,11 @@ object OpenID4VCIBackendUtil {
     }
 
     /**
-     * Generates JWT implementing OpenID4VCI Appendix E. Wallet Attestations in JWT format.
+     * Generates JWT implementing OpenID4VCI Appendix E. Wallet Attestations in JWT format
+     * (a.k.a Client Attestation).
      *
      * @param signingKey key to sign JWT
-     * @param clientId OpenID client id, used as "sub" claim
+     * @param clientId OpenID `client_id`, used as "sub" claim
      * @param attestationIssuer issuer of the attestation, used as "iss" claim
      * @param attestedKey client's public key that will be attested, stored in "cnf" claim
      * @param nonce nonce if any (not common), used as "nonce" claim if given
@@ -71,6 +84,21 @@ object OpenID4VCIBackendUtil {
         walletLink?.let { put("wallet_link", it) }
     }
 
+    /**
+     * Generates JWT implementing OpenID4VCI Appendix D.1. "Key Attestation in JWT format".
+     *
+     * Unlike platform key attestation in [KeyAttestation], his attestation is standard and
+     * platform-neutral, but it generally cannot be generated on the platform itself in fully
+     * trustworthy manner.
+     *
+     * @param signingKey private key to sign the key attestation
+     * @param attestationIssuer key attestation issuer identifier
+     * @param keysToAttest list of private keys to attests with their platform attestations
+     * @param challenge (a.k.a `c_nonce` in OpenID4VCI spec)
+     * @param userAuthentication list of values for `user_authentication` claim (if any)
+     * @param keyStorage list of values for `key_storage` claim (if any)
+     * @return key attestation in JWT format
+     */
     suspend fun createJwtKeyAttestation(
         signingKey: AsymmetricKey,
         attestationIssuer: String,

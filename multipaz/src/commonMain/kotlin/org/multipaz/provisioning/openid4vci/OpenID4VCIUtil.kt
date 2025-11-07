@@ -81,6 +81,17 @@ internal object OpenID4VCIUtil {
         return backend.createJwtClientAssertion(authorizationServerIdentifier)
     }
 
+    /**
+     * Generates Client Attestation proof-of-possession JWT.
+     *
+     * See OpenID4VCI specification, Appendix E. Wallet Attestations in JWT format.
+     *
+     * @param clientId OpenID `client_id` value
+     * @param key client private key (that was previously attested by Wallet Attestation)
+     * @param authenticationServerIdentifier authentication server identifier (URL)
+     * @param challenge optional value for `challenge` claim
+     * @return client attestation proof-of-possession JWT
+     */
     suspend fun createWalletAttestationPoP(
         clientId: String,
         key: AsymmetricKey,

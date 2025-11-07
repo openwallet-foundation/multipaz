@@ -335,8 +335,7 @@ class DocumentType private constructor(
      * @param document the [Document] to add the credential to.
      * @param secureArea the [SecureArea] to use for `DeviceKey`.
      * @param createKeySettings the [CreateKeySettings] to use.
-     * @param dsKey the key to sign the MSO with.
-     * @param dsCertChain the certification for [dsKey]
+     * @param dsKey the key to sign the MSO with and its certificate chain.
      * @param signedAt the time the MSO was signed.
      * @param validFrom the time at which the credential is valid from.
      * @param validUntil the time at which the credential is valid until.

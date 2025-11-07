@@ -232,10 +232,7 @@ data class DeviceRequest private constructor(
          * @param docType the document type to request.
          * @param nameSpaces the namespaces, data elements, and intent-to-retain values.
          * @param docRequestInfo a [DocRequestInfo] with additional information or `null`.
-         * @param readerKeySecureArea the [SecureArea] that holds the key to sign with.
-         * @param readerKeyAlias the alias for the key to sign with
-         * @param readerKeyCertificateChain the certification for the reader key.
-         * @param keyUnlockData a [KeyUnlockData] for unlocking the key in the [SecureArea].
+         * @param readerKey the key to sign with and its certificate chain
          * @return the builder.
          */
         suspend fun addDocRequest(
@@ -363,10 +360,7 @@ data class DeviceRequest private constructor(
          *
          * After calling this, [addDocRequest] must not be called.
          *
-         * @param readerKeySecureArea the [SecureArea] that holds the key to sign with.
-         * @param readerKeyAlias the alias for the key to sign with
-         * @param readerKeyCertificateChain the certification for the reader key.
-         * @param keyUnlockData a [KeyUnlockData] for unlocking the key in the [SecureArea].
+         * @param readerKey the key to sign with and its certificate chain.
          * @return the builder.
          */
         suspend fun addReaderAuthAll(readerKey: AsymmetricKey.X509Compatible): Builder =

@@ -84,8 +84,8 @@ object VerificationUtil {
      * @param responseEncryptionKey the key to encrypt the response against or `null` to not encrypt the response.
      *   Note that in some protocols encryption of the response is mandatory and this will throw [IllegalArgumentException]
      *   if this is `null` for such protocols
-     * @param readerAuthenticationKey an optional key to use for reader authentication.
-     * @param readerAuthenticationCertChain the certification for [readerAuthenticationKey].
+     * @param readerAuthenticationKey an optional key to use for reader authentication and its
+     *    certificate chain.
      * @param zkSystemSpecs if non-empty, request a ZK proof using these systems.
      * @return a [JsonObject] with the request.
      */
@@ -252,8 +252,8 @@ object VerificationUtil {
      * @param responseEncryptionKey the key to encrypt the response against or `null` to not encrypt the response.
      *   Note that in some protocols encryption of the response is mandatory and this will throw [IllegalArgumentException]
      *   if this is `null` for such protocols
-     * @param readerAuthenticationKey an optional key to use for reader authentication.
-     * @param readerAuthenticationCertChain the certification for [readerAuthenticationKey].
+     * @param readerAuthenticationKey an optional key to use for reader authentication and its
+     *    certificate chain.
      * @return a [JsonObject] with the request.
      */
     suspend fun generateDcRequestSdJwt(
