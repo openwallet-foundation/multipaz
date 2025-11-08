@@ -77,5 +77,6 @@ tasks.named("dokkaHtmlMultiModule") {
     dependsOn(
         ":samples:dokkaHtmlMultiModule",
         ":multipaz:dokkaHtmlMultiModule",
+        ":multipaz-dcapi:dokkaHtmlMultiModule",
     )
 }
