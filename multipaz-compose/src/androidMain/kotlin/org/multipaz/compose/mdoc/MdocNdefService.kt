@@ -12,7 +12,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.DataItem
@@ -33,6 +32,7 @@ import org.multipaz.presentment.model.MdocPresentmentMechanism
 import org.multipaz.presentment.model.PresentmentModel
 import org.multipaz.presentment.model.PresentmentTimeout
 import org.multipaz.nfc.CommandApdu
+import org.multipaz.nfc.Nfc
 import org.multipaz.nfc.ResponseApdu
 import org.multipaz.prompt.PromptModel
 import org.multipaz.util.Logger
@@ -153,7 +153,7 @@ abstract class MdocNdefService: HostApduService() {
 
     private var started = false
 
-    private fun startEngagement() {
+    private suspend fun startEngagement() {
         Logger.i(TAG, "startEngagement")
 
         // Note: Every millisecond literally counts here because we're handling a
@@ -161,7 +161,7 @@ abstract class MdocNdefService: HostApduService() {
         // log how much time the application takes to give us settings.
         //
         val t0 = Clock.System.now()
-        val settings = runBlocking { getSettings() }
+        val settings = getSettings()
         val t1 = Clock.System.now()
         Logger.i(TAG, "Settings provided by application in ${(t1 - t0).inWholeMilliseconds} ms")
 
@@ -317,8 +317,23 @@ abstract class MdocNdefService: HostApduService() {
         }
     }
 
+    private var numApdusReceived = 0
+    private var firstCommandApdu: CommandApdu? = null
+
     // Called by coroutine running in I/O thread, see onCreate() for details
     private suspend fun processCommandApdu(commandApdu: CommandApdu): ResponseApdu? {
+        // Recent Android versions seems to want a super-fast response to the SELECT APPLICATION
+        // command otherwise it may pick the Wallet Role owner instead. Observed this when using
+        // Multipaz Test App on an iOS device to read from Multipaz Test App on an Android
+        // device in the foregroup where Google Wallet is the Wallet Role Owner and has registered
+        // for NDEF AID.
+        //
+        if (numApdusReceived == 0) {
+            numApdusReceived = 1
+            firstCommandApdu = commandApdu
+            return ResponseApdu(status = Nfc.RESPONSE_STATUS_SUCCESS)
+        }
+
         if (!started) {
             started = true
             startEngagement()
@@ -326,6 +341,14 @@ abstract class MdocNdefService: HostApduService() {
 
         try {
             engagement?.let {
+                // Replay the first APDU
+                if (numApdusReceived++ == 1) {
+                    val responseApdu = it.processApdu(firstCommandApdu!!)
+                    if (responseApdu != ResponseApdu(status = Nfc.RESPONSE_STATUS_SUCCESS)) {
+                        Logger.w(TAG, "Expected response 9000 to SELECT APPLICATION, " +
+                                " got ${responseApdu}")
+                    }
+                }
                 val responseApdu = it.processApdu(commandApdu)
                 return responseApdu
             }
@@ -346,6 +369,7 @@ abstract class MdocNdefService: HostApduService() {
     override fun onDeactivated(reason: Int) {
         Logger.i(TAG, "onDeactivated: reason=$reason")
         started = false
+        numApdusReceived = 0
         // If the reader hasn't connected by the time NFC interaction ends, make sure we only
         // wait for a limited amount of time.
         if (presentmentModel.state.value == PresentmentModel.State.CONNECTING) {
