@@ -1,21 +1,29 @@
 package org.multipaz.mdoc.zkp
 
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.format
+import kotlinx.datetime.toLocalDateTime
+import org.multipaz.cbor.Bstr
 import kotlin.time.Instant
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.util.Logger
+import org.multipaz.util.truncateToWholeSeconds
 
 /**
  * ZkDocumentData contains the data the proof will prove.
  *
  * @property zkSystemSpecId the ZK system spec Id from the verifier used to create the proof.
  * @property docType the doc type of doc being represented.
- * @property timestamp the timstamps the proof was generated at.
+ * @property timestamp the timestamp the proof was generated at.
  * @property issuerSigned issuer signed name spaces and values.
  * @property deviceSigned devices signed name spaces and values.
  * @property msoX5chain the issuers certificate chain.
@@ -34,7 +42,7 @@ data class ZkDocumentData (
      * The resulting DataItem will be a CBOR map containing:
      * - "zkSystemId": The ZK system specification identifier as a text string
      * - "docType": The document type as a text string
-     * - "timestamp": The timestamp as an ISO-8601 formatted string
+     * - "timestamp": The timestamp as a `tdate` w/ no fractional seconds and using Zulu timezone.
      * - "issuerSignedItems": An array of issuer-signed data items
      * - "deviceSignedItems": An array of device-signed data items
      * - "msoX5chain": The X.509 certificate chain (only included if non-null)
@@ -45,7 +53,8 @@ data class ZkDocumentData (
         return buildCborMap {
             put("zkSystemId", zkSystemSpecId)
             put("docType", docType)
-            put("timestamp", timestamp.toString())
+            val timestampStr = timestamp.toLocalDateTime(TimeZone.UTC).format(LocalDateTime.Formats.ISO) + "Z"
+            put("timestamp", Tagged(Tagged.DATE_TIME_STRING, Tstr(timestampStr)))
             putCborMap("issuerSigned") {
                 issuerSigned.forEach { (namespaceName, dataElements) ->
                     putCborArray(namespaceName) {
@@ -102,8 +111,14 @@ data class ZkDocumentData (
                 ?: throw IllegalArgumentException("Missing or invalid 'zkSystemId' field parsing ZkDocumentData.")
             val docType = dataItem.getOrNull("docType")?.asTstr
                 ?: throw IllegalArgumentException("Missing or invalid 'docType' field parsing ZkDocumentData.")
-            val timestamp = dataItem.getOrNull("timestamp")?.asTstr
+            val taggedTimestamp = dataItem.getOrNull("timestamp")
                 ?: throw IllegalArgumentException("Missing or invalid 'timestamp' field parsing ZkDocumentData.")
+
+            require(
+                taggedTimestamp is Tagged && taggedTimestamp.tagNumber == Tagged.DATE_TIME_STRING &&
+                        taggedTimestamp.asTagged is Tstr
+            ) { "timestamp is not a tdate" }
+            val timestamp = taggedTimestamp.asTagged.asTstr
 
             val issuerSigned = mutableMapOf<String, Map<String, DataItem>>()
             dataItem.getOrNull("issuerSigned")?.asMap?.forEach { (nameSpaceItem, dateElementsItem) ->

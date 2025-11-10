@@ -13,12 +13,12 @@ import org.multipaz.mdoc.response.DeviceResponseParser
 class SystemTest {
     @Test
     fun testProofFullFlow_success() {
-        val bytes = this::class.java.getResourceAsStream("/circuits/longfellow-libzk-v1/6_1_4096_2965_137e5a75ce72735a37c8a72da1a8a0a5df8d13365c2ae3d2c2bd6a0e7197c7c6")
+        val bytes = this::class.java.getResourceAsStream("/circuits/longfellow-libzk-v1/6_1_4096_2945_137e5a75ce72735a37c8a72da1a8a0a5df8d13365c2ae3d2c2bd6a0e7197c7c6")
             ?.use { it.readBytes() }
             ?: throw IllegalArgumentException("Resource not found")
 
         val system = LongfellowZkSystem().apply {
-            addCircuit("6_1_4096_2965_137e5a75ce72735a37c8a72da1a8a0a5df8d13365c2ae3d2c2bd6a0e7197c7c6", ByteString(bytes))
+            addCircuit("6_1_4096_2945_137e5a75ce72735a37c8a72da1a8a0a5df8d13365c2ae3d2c2bd6a0e7197c7c6", ByteString(bytes))
         }
 
         val testTime = MdocTestDataProvider.getProofGenerationDate().toInstant(TimeZone.UTC)
@@ -30,11 +30,13 @@ class SystemTest {
             system = system.name,
         ).apply {
             addParam(
-                "circuitHash",
+                "circuit_hash",
                 "137e5a75ce72735a37c8a72da1a8a0a5df8d13365c2ae3d2c2bd6a0e7197c7c6"
             )
-            addParam("numAttributes", 1)
+            addParam("num_attributes", 1)
             addParam("version", 6)
+            addParam("block_enc_hash", 4096)
+            addParam("block_enc_sig", 2945)
         }
 
         val sessionTranscript = MdocTestDataProvider.getTranscript()

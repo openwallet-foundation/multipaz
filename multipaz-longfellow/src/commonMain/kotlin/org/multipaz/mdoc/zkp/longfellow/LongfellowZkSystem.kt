@@ -22,6 +22,7 @@ import kotlin.time.Instant
 import org.multipaz.cbor.putCborArray
 import org.multipaz.request.RequestedClaim
 import org.multipaz.util.toHex
+import org.multipaz.util.truncateToWholeSeconds
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
@@ -57,16 +58,16 @@ class LongfellowZkSystem(): ZkSystem {
     }
 
     private fun formatDate(timestamp: Instant): String {
-        return timestamp.toLocalDateTime(TimeZone.UTC).format(LocalDateTime.Formats.ISO)
+        return timestamp.truncateToWholeSeconds().toLocalDateTime(TimeZone.UTC).format(LocalDateTime.Formats.ISO) + "Z"
     }
 
     private fun getLongfellowZkSystemSpec(zkSystemSpec: ZkSystemSpec): LongfellowZkSystemSpec? {
         val entry = circuits.find { circuitEntry ->
             val circuitSpec = circuitEntry.zkSystemSpec
 
-            circuitSpec.getParam<String>("circuitHash") == zkSystemSpec.getParam<String>("circuitHash") &&
+            circuitSpec.getParam<String>("circuit_hash") == zkSystemSpec.getParam<String>("circuit_hash") &&
                     circuitSpec.getParam<Long>("version") == zkSystemSpec.getParam<Long>("version") &&
-                    circuitSpec.getParam<Long>("numAttributes") == zkSystemSpec.getParam<Long>("numAttributes")
+                    circuitSpec.getParam<Long>("num_attributes") == zkSystemSpec.getParam<Long>("num_attributes")
         }
 
         return entry?.longfellowZkSystemSpec
@@ -76,9 +77,9 @@ class LongfellowZkSystem(): ZkSystem {
         val entry = circuits.find { circuitEntry ->
             val circuitSpec = circuitEntry.zkSystemSpec
 
-            circuitSpec.getParam<String>("circuitHash") == zkSystemSpec.getParam<String>("circuitHash") &&
+            circuitSpec.getParam<String>("circuit_hash") == zkSystemSpec.getParam<String>("circuit_hash") &&
             circuitSpec.getParam<Long>("version") == zkSystemSpec.getParam<Long>("version") &&
-            circuitSpec.getParam<Long>("numAttributes") == zkSystemSpec.getParam<Long>("numAttributes")
+            circuitSpec.getParam<Long>("num_attributes") == zkSystemSpec.getParam<Long>("num_attributes")
         }
 
         return entry?.circuitBytes
@@ -123,8 +124,10 @@ class LongfellowZkSystem(): ZkSystem {
             system = name,
         )
         spec.addParam("version", version)
-        spec.addParam("circuitHash", circuitHash)
-        spec.addParam("numAttributes", numAttributes)
+        spec.addParam("circuit_hash", circuitHash)
+        spec.addParam("num_attributes", numAttributes)
+        spec.addParam("block_enc_hash", blockEncHash)
+        spec.addParam("block_enc_sig", blockEncSig)
 
         val longfellowSpec = LongfellowZkSystemSpec(
             system = name,
@@ -188,6 +191,12 @@ class LongfellowZkSystem(): ZkSystem {
             issuerSigned.put(nameSpaceItem.asTstr, values)
         }
 
+        // According to Longfellow-ZK spec, can't have any fractional seconds.
+        if (timestamp.nanosecondsOfSecond != 0) {
+            Logger.w(TAG, "Dropping non-zero fractional seconds for timestamp $timestamp")
+        }
+        val adjustedTimestamp = timestamp.truncateToWholeSeconds()
+
         val proof = LongfellowNatives.runMdocProver(
             circuitBytes,
             circuitBytes.size,
@@ -197,7 +206,7 @@ class LongfellowZkSystem(): ZkSystem {
             y,
             encodedSessionTranscript,
             encodedSessionTranscript.size,
-            formatDate(timestamp),
+            formatDate(adjustedTimestamp),
             longfellowZkSystemSpec,
             attributes
         )
@@ -207,7 +216,7 @@ class LongfellowZkSystem(): ZkSystem {
             documentData = ZkDocumentData (
                 zkSystemSpecId = zkSystemSpec.id,
                 docType = docType,
-                timestamp = timestamp,
+                timestamp = adjustedTimestamp,
                 issuerSigned = issuerSigned,
                 deviceSigned = emptyMap(),     // TODO: support deviceSigned in Longfellow
                 msoX5chain = X509CertChain(listOf(issuerCert)),
@@ -309,7 +318,7 @@ class LongfellowZkSystem(): ZkSystem {
 
         // Get the set of allowed circuit hashes from the input list for efficient lookup.
         val allowedCircuitHashes = zkSystemSpecs
-            .mapNotNull { it.getParam<String>("circuitHash") }
+            .mapNotNull { it.getParam<String>("circuit_hash") }
             .toSet()
 
         // If no valid hashes are provided from the input list, we cannot find a match.
@@ -319,9 +328,9 @@ class LongfellowZkSystem(): ZkSystem {
 
         return this.systemSpecs
             .filter { spec ->
-                val circuitHash = spec.getParam<String>("circuitHash")
+                val circuitHash = spec.getParam<String>("circuit_hash")
                 val hashMatches = (circuitHash != null && circuitHash in allowedCircuitHashes)
-                val numAttributesMatch = spec.getParam<Long>("numAttributes") == numAttributesRequested
+                val numAttributesMatch = spec.getParam<Long>("num_attributes") == numAttributesRequested
                 hashMatches && numAttributesMatch
             }
             .sortedBy { it.getParam<Long>("version") ?: Long.MIN_VALUE }
