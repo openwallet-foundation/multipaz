@@ -5,9 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.95.0] - Not released yet, expected end of Oct 2025
+## [0.95.0] - 2025-11-11
 Changes since Multipaz 0.94.0 include:
-- TODO
+- Longfellow updates to latest version and compliance with latest 18013-5 Second Edition draft
+- Support for Longfellow on MacOS arm64.
+- Support for parsing and generating X.509 CRLs
+- Merge multipaz-models library into multipaz library.
+- Move W3C DC API implementations into multipaz-dcapi library.
+- Support for [Observe Mode](https://github.com/kormax/apple-enhanced-contactless-polling)
+- New AsymmetricKey abstraction for nicer APIs supporting both local and remote keys.
+- OpenID4VCI fixes.
+- Age Verification doctype updates.
+- SecureArea improvements for unlocking.
+- W3C Digital Credentials API app-to-app presentment fixes on Android
+- Improved HKDF and HPKE implementations
+- Move some code to new [Multipaz Extras repository](https://github.com/openwallet-foundation/multipaz-extras), including multipaz-vision library.
+- Support for external NFC readers connected via USB in Multipaz Test App.
+- Bug fixes.
 
 ## [0.94.0] - 2025-09-26
 Changes since Multipaz 0.93.0 include:
