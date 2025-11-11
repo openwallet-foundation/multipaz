@@ -556,14 +556,14 @@ A01EUDAKBggqhkjOPQQDAgNIADBFAiEAnX3+E4E5dQ+5G1rmStJTW79ZAiDTabyL
     @Test
     fun testCertificate() {
         // Check that we encode to exactly the same bits as we decoded...
-        val certificate = ASN1.decode(exampleX509Cert.encodedCertificate)
+        val certificate = ASN1.decode(exampleX509Cert.encoded)
         val reencoded = ASN1.encode(certificate!!)
-        assertEquals(exampleX509Cert.encodedCertificate.toHex(), reencoded.toHex())
+        assertEquals(exampleX509Cert.encoded.toHex(), reencoded.toHex())
     }
 
     @Test
     fun testPrettyPrint() {
-        val certificate = ASN1.decode(exampleX509Cert.encodedCertificate)
+        val certificate = ASN1.decode(exampleX509Cert.encoded)
         assertEquals(
             """
                 SEQUENCE (3 elem)

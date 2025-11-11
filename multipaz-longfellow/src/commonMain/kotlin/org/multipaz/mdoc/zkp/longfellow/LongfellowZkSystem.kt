@@ -164,7 +164,7 @@ class LongfellowZkSystem(): ZkSystem {
 
         val docType = doc["docType"].asTstr
 
-        val issuerCert = X509Cert(doc["issuerSigned"]["issuerAuth"][1][33].asBstr)
+        val issuerCert = X509Cert(ByteString(doc["issuerSigned"]["issuerAuth"][1][33].asBstr))
         val ecPubKeyCoordinates = issuerCert.ecPublicKey as EcPublicKeyDoubleCoordinate
         val x = getFormattedCoordinate(ecPubKeyCoordinates.x)
         val y = getFormattedCoordinate(ecPubKeyCoordinates.y)

@@ -307,7 +307,7 @@ class AndroidKeystoreSecureArea private constructor(
                 ks.load(null)
             }
             ks.getCertificateChain(newKeyAlias).forEach { certificate ->
-                attestationCerts.add(X509Cert(certificate.encoded))
+                attestationCerts.add(X509Cert(ByteString(certificate.encoded)))
             }
         } catch (e: Exception) {
             throw IllegalStateException(e)
@@ -376,7 +376,7 @@ class AndroidKeystoreSecureArea private constructor(
                 keyStore.load(null)
             }
             keyStore.getCertificateChain(existingAlias).forEach { certificate ->
-                attestationCerts.add(X509Cert(certificate.encoded))
+                attestationCerts.add(X509Cert(ByteString(certificate.encoded)))
             }
         } catch (e: Exception) {
             throw IllegalStateException(e)

@@ -28,8 +28,8 @@ import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.fromHex
+import org.multipaz.util.fromHexByteString
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
@@ -67,9 +67,9 @@ class DeviceRequestTest {
         val readerAuth = deviceRequest.docRequests[0].readerAuth
         assertNotNull(readerAuth)
         val readerCertChain = readerAuth.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]!!.asX509CertChain
-        assertContentEquals(
-            TestVectors.ISO_18013_5_ANNEX_D_READER_CERT.fromHex(),
-            readerCertChain.certificates[0].encodedCertificate
+        assertEquals(
+            TestVectors.ISO_18013_5_ANNEX_D_READER_CERT.fromHexByteString(),
+            readerCertChain.certificates[0].encoded
         )
 
         val docRequest = deviceRequest.docRequests.first()

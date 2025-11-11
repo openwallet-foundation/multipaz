@@ -14,6 +14,7 @@ import com.nimbusds.jwt.JWTClaimsSet
 import com.nimbusds.jwt.SignedJWT
 import com.nimbusds.jwt.proc.DefaultJWTProcessor
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.bytestring.ByteString
 import kotlin.time.Clock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
@@ -74,7 +75,7 @@ class JsonWebSignatureTestsNimbus {
         val sjwt = SignedJWT.parse(signedJwt)
         val jwtProcessor = DefaultJWTProcessor<SecurityContext>()
         val x5c = sjwt.header?.x509CertChain ?: throw IllegalArgumentException("Error retrieving x5c")
-        val pubCertChain = x5c.mapNotNull { runCatching { X509Cert(it.decode()) }.getOrNull() }
+        val pubCertChain = x5c.mapNotNull { runCatching { X509Cert(ByteString(it.decode())) }.getOrNull() }
         assertEquals(1, pubCertChain.size)
         assertEquals(signingKeyCert, pubCertChain[0])
 
@@ -125,7 +126,7 @@ class JsonWebSignatureTestsNimbus {
         )
         val builder = JWSHeader.Builder(JWSAlgorithm.ES256)
         builder.x509CertChain(
-            listOf(com.nimbusds.jose.util.Base64.from(signingKeyCert.encodedCertificate.toBase64()))
+            listOf(com.nimbusds.jose.util.Base64.from(signingKeyCert.encoded.toByteArray().toBase64()))
         )
         builder.type(JOSEObjectType("oauth-authz-req+jwt"))
         builder.keyID(ecKey.getKeyID())

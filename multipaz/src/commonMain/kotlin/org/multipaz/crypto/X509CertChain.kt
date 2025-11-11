@@ -1,5 +1,6 @@
 package org.multipaz.crypto
 
+import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
@@ -45,7 +46,7 @@ data class X509CertChain(
      *
      * @return a [JsonElement].
      */
-    fun toX5c() = JsonArray(certificates.map { JsonPrimitive(it.encodedCertificate.toBase64()) }) as JsonElement
+    fun toX5c() = JsonArray(certificates.map { JsonPrimitive(it.encoded.toByteArray().toBase64()) }) as JsonElement
 
     /**
      * Validates that every certificate in the chain is signed by the next one.
@@ -80,7 +81,7 @@ data class X509CertChain(
          */
         fun fromX5c(x5c: JsonElement): X509CertChain {
             require(x5c is JsonArray)
-            return X509CertChain(x5c.map { X509Cert(it.jsonPrimitive.content.fromBase64()) })
+            return X509CertChain(x5c.map { X509Cert(ByteString(it.jsonPrimitive.content.fromBase64())) })
         }
     }
 }

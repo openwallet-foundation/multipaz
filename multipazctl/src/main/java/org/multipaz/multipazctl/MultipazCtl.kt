@@ -18,6 +18,7 @@ import kotlinx.serialization.json.buildJsonObject
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.buildCrl
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.security.Security
@@ -50,6 +51,8 @@ object MultipazCtl {
             getArg(args,"out_certificate", "iaca_certificate.pem")
         val privateKeyOutputFilename =
             getArg(args,"out_private_key", "iaca_private_key.pem")
+        val crlOutputFilename =
+            getArg(args,"out_crl", "iaca_crl.pem")
 
         // Requirements for the IACA certificate is defined in ISO/IEC 18013-5:2021 Annex B
 
@@ -100,6 +103,17 @@ object MultipazCtl {
             )
         }
 
+        val iacaCrl = runBlocking {
+            buildCrl(
+                signingKey = AsymmetricKey.anonymous(iacaKey),
+                issuer = subjectAndIssuer,
+                thisUpdate = validFrom,
+                nextUpdate = null
+            ) {
+                // empty
+            }
+        }
+
         println("- Generated self-signed IACA cert and private key with curve $curve")
 
         File(privateKeyOutputFilename).outputStream().bufferedWriter().let {
@@ -113,6 +127,12 @@ object MultipazCtl {
             it.close()
         }
         println("- Wrote IACA cert to $certificateOutputFilename")
+
+        File(crlOutputFilename).outputStream().bufferedWriter().let {
+            it.write(iacaCrl.toPem())
+            it.close()
+        }
+        println("- Wrote IACA CRL to $crlOutputFilename")
     }
 
     fun generateDs(args: Array<String>) {
@@ -216,10 +236,22 @@ object MultipazCtl {
             )
         }
 
+        val readerRootCrl = runBlocking {
+            buildCrl(
+                signingKey = AsymmetricKey.anonymous(readerRootKey),
+                issuer = subjectAndIssuer,
+                thisUpdate = validFrom,
+                nextUpdate = null,
+            ) {
+                // empty
+            }
+        }
+
         println("- Generated self-signed reader root cert and private key with curve $curve")
 
         val certificateOutputFilename = getArg(args, "out_certificate", "reader_root_certificate.pem")
         val privateKeyOutputFilename = getArg(args, "out_private_key", "reader_root_private_key.pem")
+        val crlOutputFilename = getArg(args, "out_crl", "reader_root_crl.pem")
         File(privateKeyOutputFilename).writer().let {
             it.write(readerRootKey.toPem())
             it.close()
@@ -231,6 +263,12 @@ object MultipazCtl {
             it.close()
         }
         println("- Wrote reader root cert to $certificateOutputFilename")
+
+        File(crlOutputFilename).writer().let {
+            it.write(readerRootCrl.toPem())
+            it.close()
+        }
+        println("- Wrote reader root CRL to $crlOutputFilename")
     }
 
     fun generateReaderCert(args: Array<String>) {
@@ -335,6 +373,7 @@ Generate a IACA certificate and corresponding private key:
     multipazctl generateIaca
         [--out_certificate iaca_certificate.pem]
         [--out_private_key iaca_private_key.pem]
+        [--out_crl iaca_crl.pem]
         [--subject_and_issuer 'CN=OWF Multipaz TEST IACA,C=US']
         [--validity_in_years 5]
         [--curve P-384]
@@ -357,6 +396,7 @@ Generate a reader root and corresponding private key:
     multipazctl generateReaderRoot
         [--out_certificate reader_root_certificate.pem]
         [--out_private_key reader_root_private_key.pem]
+        [--out_crl reader_root_crl.pem]
         [--subject_and_issuer 'CN=OWF Multipaz TEST Reader CA,C=US']
         [--validity_in_years 3]
         [--curve P-384]

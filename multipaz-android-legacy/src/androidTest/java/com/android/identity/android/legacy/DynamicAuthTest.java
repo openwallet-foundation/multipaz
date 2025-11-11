@@ -28,7 +28,6 @@ import android.content.Context;
 import android.icu.util.Calendar;
 import android.os.SystemClock;
 
-import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.LargeTest;
 
 import org.junit.runners.Parameterized;
@@ -47,7 +46,6 @@ import java.security.KeyPair;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
-import java.security.Security;
 import java.security.SignatureException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -65,6 +63,7 @@ import co.nstant.in.cbor.CborBuilder;
 import co.nstant.in.cbor.CborEncoder;
 import co.nstant.in.cbor.CborException;
 import kotlin.Pair;
+import kotlinx.io.bytestring.ByteString;
 
 @LargeTest
 @RunWith(Parameterized.class)
@@ -225,8 +224,9 @@ public class DynamicAuthTest {
         assertEquals(5, certificateChains.size());
 
         for (List<X509Certificate> certificateChain: certificateChains) {
+            byte[] encoded = certificateChain.get(0).getEncoded();
             AndroidAttestationExtensionParser parser = new AndroidAttestationExtensionParser(
-                new X509Cert(certificateChain.get(0).getEncoded()));
+                new X509Cert(new ByteString(encoded, 0, encoded.length)));
             // just testing one element from chain to confirm that the attestation extension is present.
             assertArrayEquals(parser.getAttestationChallenge(), challenge);
         }

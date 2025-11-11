@@ -1004,9 +1004,9 @@ Mbff+DlHy77+wXISb35NiZ8FdVHgC2ut4fDQTRN4
         assertEquals(3, signedVical.vicalProviderCertificateChain.certificates.size)
 
         // Check the root certificate is the AAMVA root
-        assertContentEquals(
-            X509Cert.fromPem(AAMVA_DTS_ROOT_PEM).encodedCertificate,
-            signedVical.vicalProviderCertificateChain.certificates[2].encodedCertificate
+        assertEquals(
+            X509Cert.fromPem(AAMVA_DTS_ROOT_PEM),
+            signedVical.vicalProviderCertificateChain.certificates[2]
         )
 
         // Check VICAL data

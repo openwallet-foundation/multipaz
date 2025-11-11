@@ -287,7 +287,7 @@ class ProvisioningClientTest {
                 put("typ", "oauth-client-attestation+jwt")
                 put("alg", signatureAlgorithm.joseAlgorithmIdentifier)
                 put("x5c", buildJsonArray {
-                    add(localAttestationCertificate.encodedCertificate.encodeBase64())
+                    add(localAttestationCertificate.encoded.toByteArray().encodeBase64())
                 })
             }.toString().encodeToByteArray().toBase64Url()
 
@@ -339,7 +339,7 @@ class ProvisioningClientTest {
                 put("typ", "key-attestation+jwt")
                 put("alg", alg)
                 put("x5c", buildJsonArray {
-                    add(localAttestationCertificate.encodedCertificate.encodeBase64())
+                    add(localAttestationCertificate.encoded.toByteArray().encodeBase64())
                 })
             }.toString().encodeToByteArray().toBase64Url()
 

@@ -2,6 +2,7 @@ package org.multipaz.jwt
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.buildByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -236,7 +237,7 @@ private suspend fun caPublicKey(
                 ?: throw IllegalStateException("'$caName': no trusted keys in config")
             val ca = Json.parseToJsonElement(caConfig).jsonObject[keyId]
             if (ca is JsonPrimitive) {
-                X509Cert(ca.jsonPrimitive.content.fromBase64()).ecPublicKey
+                X509Cert(ByteString(ca.jsonPrimitive.content.fromBase64())).ecPublicKey
             } else if (ca is JsonObject) {
                 EcPublicKey.fromJwk(ca)
             } else {

@@ -243,7 +243,7 @@ class JwtTest {
             }
             if (key == "x5c") {
                 return buildJsonObject {
-                    put("test-$key", trustedCert.encodedCertificate.toBase64())
+                    put("test-$key", trustedCert.encoded.toByteArray().toBase64())
                 }.toString()
             }
             return null

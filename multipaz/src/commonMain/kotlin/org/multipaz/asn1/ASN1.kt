@@ -1,13 +1,12 @@
 package org.multipaz.asn1
 
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.util.toHex
 import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.util.appendUInt8
 import org.multipaz.util.getUInt16
 import org.multipaz.util.getUInt32
-import org.multipaz.util.getUInt64
 import org.multipaz.util.getUInt8
-import org.multipaz.util.putInt32
 import org.multipaz.util.putUInt32
 import kotlin.math.max
 
@@ -177,6 +176,15 @@ object ASN1 {
         }
         return obj
     }
+
+    /**
+     * Decodes a single DER encoded value.
+     *
+     * @param derEncoded the encoded bytes.
+     * @return a [ASN1Object]-derived instance.
+     * @throws IllegalArgumentException if the given bytes are not valid.
+     */
+    fun decode(derEncoded: ByteString): ASN1Object? = decode(derEncoded.toByteArray())
 
     /**
      * Decodes multiple encoded DER values.

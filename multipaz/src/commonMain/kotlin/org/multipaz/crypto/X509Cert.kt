@@ -9,89 +9,31 @@ import org.multipaz.asn1.ASN1Object
 import org.multipaz.asn1.ASN1ObjectIdentifier
 import org.multipaz.asn1.ASN1OctetString
 import org.multipaz.asn1.ASN1Sequence
-import org.multipaz.asn1.ASN1Set
-import org.multipaz.asn1.ASN1String
 import org.multipaz.asn1.ASN1TagClass
 import org.multipaz.asn1.ASN1TaggedObject
 import org.multipaz.asn1.ASN1Time
 import org.multipaz.asn1.OID
-import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.DataItem
 import org.multipaz.util.Logger
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.annotation.CborSerializationImplemented
-import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
- * A data type for a X509 certificate.
+ * A data type for a X.509 certificate.
  *
- * @param encodedCertificate the bytes of the X.509 certificate.
+ * @param encoded the bytes of the X.509 certificate in DER encoding.
  */
 @CborSerializationImplemented(schemaId = "")
-class X509Cert(
-    val encodedCertificate: ByteArray
-) {
-    override fun equals(other: Any?): Boolean = other is X509Cert &&
-            encodedCertificate contentEquals other.encodedCertificate
-
-    override fun hashCode(): Int = encodedCertificate.contentHashCode()
-
-    /**
-     * Gets an [DataItem] with the encoded X.509 certificate.
-     */
-    fun toDataItem(): DataItem = Bstr(encodedCertificate)
-
-    /**
-     * Encode this certificate in PEM format
-     *
-     * @return a PEM encoded string.
-     */
-    @OptIn(ExperimentalEncodingApi::class)
-    fun toPem(): String {
-        val sb = StringBuilder()
-        sb.append("-----BEGIN CERTIFICATE-----\n")
-        sb.append(Base64.Mime.encode(encodedCertificate))
-        sb.append("\n-----END CERTIFICATE-----\n")
-        return sb.toString()
-    }
-
-    /**
-     * Checks if the certificate was signed with a given key.
-     *
-     * @param publicKey the key to check the signature with.
-     * @throws SignatureVerificationException if the signature check fails.
-     */
-    fun verify(publicKey: EcPublicKey) {
-        val ecSignature = when (signatureAlgorithm) {
-            Algorithm.ES256, Algorithm.ESP256, Algorithm.ESB256,
-            Algorithm.ES384, Algorithm.ESP384, Algorithm.ESB384, Algorithm.ESB320,
-            Algorithm.ES512 -> {
-                EcSignature.fromDerEncoded(publicKey.curve.bitSize, signature)
-            }
-            Algorithm.EDDSA, Algorithm.ED25519, Algorithm.ED448 -> {
-                val len = signature.size
-                val r = signature.sliceArray(IntRange(0, len/2 - 1))
-                val s = signature.sliceArray(IntRange(len/2, len - 1))
-                EcSignature(r, s)
-            }
-            else -> throw IllegalArgumentException("Unsupported algorithm $signatureAlgorithm")
-        }
-        Crypto.checkSignature(
-            publicKey,
-            tbsCertificate,
-            signatureAlgorithm,
-            ecSignature
-        )
-    }
-
-    private val parsedCert: ASN1Sequence by lazy {
-        ASN1.decode(encodedCertificate)!! as ASN1Sequence
-    }
+data class X509Cert(
+    override val encoded: ByteString
+): X509Signed() {
+    override val name: String get() = NAME
+    override val extensionTag: Int = EXTENSION_TAG
 
     private val tbsCert: NormalizedTbs by lazy {
-        NormalizedTbs.from(parsedCert.elements[0] as ASN1Sequence)
+        NormalizedTbs.from(parsed.elements[0] as ASN1Sequence)
     }
 
     /**
@@ -136,49 +78,6 @@ class X509Cert(
      */
     val validityNotAfter: Instant
         get() = ((tbsCert.elements[4] as ASN1Sequence).elements[1] as ASN1Time).value
-
-    /**
-     * The bytes of TBSCertificate.
-     */
-    val tbsCertificate: ByteArray
-        get() = ASN1.encode(tbsCert.tbs)
-
-    /**
-     * The certificate signature.
-     */
-    val signature: ByteArray
-        get() = (parsedCert.elements[2] as ASN1BitString).value
-
-    /**
-     * The signature algorithm for the certificate as OID string.
-     */
-    val signatureAlgorithmOid: String
-        get() {
-            val algorithmIdentifier = parsedCert.elements[1] as ASN1Sequence
-            return (algorithmIdentifier.elements[0] as ASN1ObjectIdentifier).oid
-        }
-
-    /**
-     * The signature algorithm for the certificate.
-     *
-     * @throws IllegalArgumentException if the OID for the algorithm doesn't correspond with a signature algorithm
-     *   value in the [Algorithm] enumeration.
-     */
-    val signatureAlgorithm: Algorithm
-        get() {
-            return when (signatureAlgorithmOid) {
-                OID.SIGNATURE_ECDSA_SHA256.oid -> Algorithm.ES256
-                OID.SIGNATURE_ECDSA_SHA384.oid -> Algorithm.ES384
-                OID.SIGNATURE_ECDSA_SHA512.oid -> Algorithm.ES512
-                OID.ED25519.oid, OID.ED448.oid -> Algorithm.EDDSA  // ED25519, ED448
-                OID.SIGNATURE_RS256.oid -> Algorithm.RS256
-                OID.SIGNATURE_RS384.oid -> Algorithm.RS384
-                OID.SIGNATURE_RS512.oid -> Algorithm.RS512
-                else -> throw IllegalArgumentException(
-                    "Unexpected algorithm OID $signatureAlgorithmOid")
-            }
-        }
-
 
     /**
      * The public key in the certificate, as an Elliptic Curve key.
@@ -235,68 +134,6 @@ class X509Cert(
         }
 
     /**
-     * The OIDs for X.509 extensions which are marked as critical.
-     */
-    val criticalExtensionOIDs: Set<String>
-        get() = getExtensionOIDs(true)
-
-    /**
-     * The OIDs for X.509 extensions which are not marked as critical.
-     */
-    val nonCriticalExtensionOIDs: Set<String>
-        get() = getExtensionOIDs(false)
-
-    private fun getExtensionsSeq(): ASN1Sequence? {
-        for (elem in tbsCert.elements) {
-            if (elem is ASN1TaggedObject &&
-                elem.cls == ASN1TagClass.CONTEXT_SPECIFIC &&
-                elem.enc == ASN1Encoding.CONSTRUCTED &&
-                elem.tag == 0x03) {
-                return ASN1.decode(elem.content) as ASN1Sequence
-            }
-        }
-        return null
-    }
-
-    private fun getExtensionOIDs(getCritical: Boolean): Set<String> {
-        val extSeq = getExtensionsSeq() ?: return emptySet()
-        val ret = mutableSetOf<String>()
-        for (ext in extSeq.elements) {
-            ext as ASN1Sequence
-            val isCritical = if (ext.elements.size == 3) {
-                (ext.elements[1] as ASN1Boolean).value
-            } else {
-                false
-            }
-            if ((isCritical && getCritical) || (!isCritical && !getCritical)) {
-                ret.add((ext.elements[0] as ASN1ObjectIdentifier).oid)
-            }
-        }
-        return ret
-    }
-
-    /**
-     * Gets the bytes of a X.509 extension.
-     *
-     * @param oid the OID to get the extension from
-     * @return the bytes of the extension or `null` if no such extension exist.
-     */
-    fun getExtensionValue(oid: String): ByteArray? {
-        val extSeq = getExtensionsSeq() ?: return null
-        for (ext in extSeq.elements) {
-            ext as ASN1Sequence
-            if ((ext.elements[0] as ASN1ObjectIdentifier).oid == oid) {
-                if (ext.elements.size == 3) {
-                    return (ext.elements[2] as ASN1OctetString).value
-                } else {
-                    return (ext.elements[1] as ASN1OctetString).value
-                }
-            }
-        }
-        return null
-    }
-
-    /**
      * The subject key identifier (OID 2.5.29.14), or `null` if not present in the certificate.
      */
     val subjectKeyIdentifier: ByteArray?
@@ -331,30 +168,9 @@ class X509Cert(
             return X509KeyUsage.decodeSet(ASN1.decode(extVal) as ASN1BitString)
         }
 
-    /** The list of decoded extensions information. */
-    val extensions: List<X509Extension>
-        get() {
-            val extSeq = getExtensionsSeq() ?: return emptyList()
-            return buildList {
-                for (ext in extSeq.elements) {
-                    ext as ASN1Sequence
-                    val dataField =
-                        (ext.elements[(if (ext.elements.size == 3) 2 else 1)] as ASN1OctetString)
-                            .value
-                    add(
-                        X509Extension(
-                            oid = (ext.elements[0] as ASN1ObjectIdentifier).oid,
-                            isCritical = (ext.elements.size == 3)
-                                    && (ext.elements[1] as ASN1Boolean).value,
-                            data = ByteString(dataField)
-                        )
-                    )
-                }
-            }
-        }
-
     companion object {
-        private const val TAG = "X509Cert"
+        private const val NAME = "CERTIFICATE"
+        private const val EXTENSION_TAG = 0x3
 
         /**
          * Creates a [X509Cert] from a PEM encoded string.
@@ -363,13 +179,8 @@ class X509Cert(
          * @return a new [X509Cert].
          */
         @OptIn(ExperimentalEncodingApi::class)
-        fun fromPem(pemEncoding: String): X509Cert {
-            val encoded = Base64.Mime.decode(pemEncoding
-                .replace("-----BEGIN CERTIFICATE-----", "")
-                .replace("-----END CERTIFICATE-----", "")
-                .trim())
-            return X509Cert(encoded)
-        }
+        fun fromPem(pemEncoding: String): X509Cert =
+            X509Cert(fromPemHelper(pemEncoding, NAME))
 
         /**
          * Gets a [X509Cert] from a [DataItem].
@@ -378,7 +189,7 @@ class X509Cert(
          * @return the certificate.
          */
         fun fromDataItem(dataItem: DataItem): X509Cert {
-            return X509Cert(dataItem.asBstr)
+            return X509Cert(ByteString(dataItem.asBstr))
         }
     }
 
@@ -395,45 +206,18 @@ class X509Cert(
      */
     class Builder(
         private val publicKey: EcPublicKey,
-        private val signingKey: AsymmetricKey,
+        signingKey: AsymmetricKey,
         private val serialNumber: ASN1Integer,
         private val subject: X500Name,
-        private val issuer: X500Name,
+        issuer: X500Name,
         private val validFrom: Instant,
         private val validUntil: Instant,
-    ) {
-        private data class Extension(
-            val critical: Boolean,
-            val value: ByteString
-        )
-        private val extensions = mutableMapOf<String, Extension>()
+    ): X509SignedBuilder<Builder>(signingKey, issuer) {
+        override val self get() = this
+        override val extensionTag: Int = EXTENSION_TAG
 
         private var includeSubjectKeyIdentifierFlag: Boolean = false
         private var includeAuthorityKeyIdentifierAsSubjectKeyIdentifierFlag: Boolean = false
-
-        /**
-         * Adds an X.509 extension to the certificate
-         *
-         * @param oid the OID for the extension.
-         * @param critical the criticality flag.
-         * @param value the bytes of the extension
-         * @return the builder.
-         */
-        fun addExtension(oid: String, critical: Boolean, value: ByteArray): Builder {
-            extensions.put(oid, Extension(critical, ByteString(value)))
-            return this
-        }
-
-        /**
-         * Adds an X.509 extension to the certificate.
-         *
-         * @param extension a [X509Extension] to add.
-         * @return the builder
-         */
-        fun addExtension(extension: X509Extension): Builder {
-            extensions.put(extension.oid, Extension(extension.isCritical, extension.data))
-            return this
-        }
 
         /**
          * Generate and include the Subject Key Identifier extension .
@@ -536,7 +320,10 @@ class X509Cert(
          *
          * @return the built [X509Cert].
          */
-        suspend fun build(): X509Cert {
+        suspend fun build(): X509Cert =
+            X509Cert(ByteString(ASN1.encode(buildASN1())))
+
+        override fun buildTbs(tbsList: MutableList<ASN1Object>) {
             val signatureAlgorithmSeq =
                 signingKey.algorithm.getSignatureAlgorithmSeq(signingKey.publicKey.curve)
 
@@ -561,18 +348,16 @@ class X509Cert(
             }
             val validFromTruncated = Instant.fromEpochSeconds(validFrom.epochSeconds)
             val validUntilTruncated = Instant.fromEpochSeconds(validUntil.epochSeconds)
-            val tbsCertObjs = mutableListOf(
-                versionObject(2L),
-                serialNumber,
-                signatureAlgorithmSeq,
-                generateName(issuer),
-                ASN1Sequence(listOf(
+            tbsList.add(versionObject(2L))
+            tbsList.add(serialNumber)
+            tbsList.add(signatureAlgorithmSeq)
+            tbsList.add(generateName(issuer))
+            tbsList.add(ASN1Sequence(listOf(
                     ASN1Time(validFromTruncated),
                     ASN1Time(validUntilTruncated)
-                )),
-                generateName(subject),
-                subjectPublicKeyInfoSeq,
-            )
+                )))
+            tbsList.add(generateName(subject))
+            tbsList.add(subjectPublicKeyInfoSeq)
 
             if (includeSubjectKeyIdentifierFlag) {
                 // https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.2
@@ -600,166 +385,34 @@ class X509Cert(
                     )
                 )
             }
+        }
+    }
 
-            if (extensions.size > 0) {
-                val extensionObjs = mutableListOf<ASN1Object>()
-                for ((oid, ext) in extensions) {
-                    extensionObjs.add(
-                        if (ext.critical) {
-                            ASN1Sequence(
-                                listOf(
-                                    ASN1ObjectIdentifier(oid),
-                                    ASN1Boolean(true),
-                                    ASN1OctetString(ext.value.toByteArray())
-                                )
-                            )
-                        } else {
-                            ASN1Sequence(
-                                listOf(
-                                    ASN1ObjectIdentifier(oid),
-                                    ASN1OctetString(ext.value.toByteArray())
-                                )
-                            )
-                        }
-                    )
+    /**
+     * View of the certificate structure without omitted default fields (specifically, version,
+     * which is often omitted for X.509 v1 certificates.
+     *
+     * @param elements TBS sequence with the default fields added
+     */
+    internal class NormalizedTbs private constructor(
+        val elements: List<ASN1Object>
+    ) {
+        companion object Companion {
+            /** Creates [NormalizedTbs] from the actual TBS data in the certificate. */
+            fun from(tbs: ASN1Sequence): NormalizedTbs {
+                val first = tbs.elements.first()
+                // Version is optional and is often omitted for v1 certificates
+                val elements = if (first is ASN1TaggedObject && first.tag == 0) {
+                    tbs.elements
+                } else {
+                    // "insert" omitted version tag, so that the rest of the code does
+                    // not have to worry about it
+                    listOf(versionObject(0L)) + tbs.elements
                 }
-                tbsCertObjs.add(ASN1TaggedObject(
-                    ASN1TagClass.CONTEXT_SPECIFIC,
-                    ASN1Encoding.CONSTRUCTED,
-                    3,
-                    ASN1.encode(ASN1Sequence(extensionObjs))
-                ))
-            }
-
-            val tbsCert = ASN1Sequence(tbsCertObjs)
-
-            val encodedTbsCert = ASN1.encode(tbsCert)
-            val signature = signingKey.sign(encodedTbsCert)
-            val encodedSignature = when (signingKey.algorithm) {
-                Algorithm.ES256, Algorithm.ESP256, Algorithm.ESB256,
-                Algorithm.ES384, Algorithm.ESP384, Algorithm.ESB384, Algorithm.ESB320,
-                Algorithm.ES512, Algorithm.ESP512, Algorithm.ESB512 -> signature.toDerEncoded()
-                Algorithm.EDDSA, Algorithm.ED25519, Algorithm.ED448 -> signature.r + signature.s
-                else -> throw IllegalArgumentException("Unsupported signature algorithm ${signingKey.algorithm}")
-            }
-            val cert = ASN1Sequence(listOf(
-                tbsCert,
-                signatureAlgorithmSeq,
-                ASN1BitString(0, encodedSignature),
-            ))
-            return X509Cert(ASN1.encode(cert))
-        }
-    }
-}
-
-/**
- * View of the certificate structure without omitted default fields (specifically, version,
- * which is often omitted for X.509 v1 certificates.
- */
-private class NormalizedTbs private constructor(
-    /** Raw TBS sequence */
-    val tbs: ASN1Sequence,
-    /** TBS sequence with the default fields added */
-    val elements: List<ASN1Object>
-) {
-    companion object Companion {
-        /** Creates [NormalizedTbs] from the actual TBS data in the certificate. */
-        fun from(tbs: ASN1Sequence): NormalizedTbs {
-            val first = tbs.elements.first()
-            // Version is optional and is often omitted for v1 certificates
-            val elements = if (first is ASN1TaggedObject && first.tag == 0) {
-                tbs.elements
-            } else {
-                // "insert" omitted version tag, so that the rest of the code does
-                // not have to worry about it
-                listOf(versionObject(0L)) + tbs.elements
-            }
-            return NormalizedTbs(
-                tbs = tbs,
-                elements = elements
-            )
-        }
-    }
-}
-
-private fun versionObject(version: Long): ASN1TaggedObject =
-    ASN1TaggedObject(
-        ASN1TagClass.CONTEXT_SPECIFIC,
-        ASN1Encoding.CONSTRUCTED,
-        0,
-        ASN1.encode(ASN1Integer(version))
-    )
-
-private fun Algorithm.getSignatureAlgorithmSeq(signingKeyCurve: EcCurve): ASN1Sequence {
-    val signatureAlgorithmOid = when (this) {
-        Algorithm.ES256, Algorithm.ESP256, Algorithm.ESB256 -> "1.2.840.10045.4.3.2"
-        Algorithm.ES384, Algorithm.ESP384, Algorithm.ESB384, Algorithm.ESB320 -> "1.2.840.10045.4.3.3"
-        Algorithm.ES512, Algorithm.ESP512, Algorithm.ESB512 -> "1.2.840.10045.4.3.4"
-        Algorithm.EDDSA -> {
-            when (signingKeyCurve) {
-                EcCurve.ED25519 -> "1.3.101.112"
-                EcCurve.ED448 -> "1.3.101.113"
-                else -> throw IllegalArgumentException(
-                    "Unsupported curve ${signingKeyCurve} for $this")
+                return NormalizedTbs(elements)
             }
         }
-        else -> {
-            throw IllegalArgumentException("Unsupported signature algorithm $this")
-        }
     }
-    return ASN1Sequence(listOf(ASN1ObjectIdentifier(signatureAlgorithmOid)))
-}
-
-private fun EcCurve.getCurveAlgorithmSeq(): ASN1Sequence {
-    val (algOid, paramOid) = when (this) {
-        EcCurve.P256 -> Pair(OID.EC_PUBLIC_KEY.oid, OID.EC_CURVE_P256.oid)
-        EcCurve.P384 -> Pair(OID.EC_PUBLIC_KEY.oid, OID.EC_CURVE_P384.oid)
-        EcCurve.P521 -> Pair(OID.EC_PUBLIC_KEY.oid, OID.EC_CURVE_P521.oid)
-        EcCurve.BRAINPOOLP256R1 -> Pair(OID.EC_PUBLIC_KEY.oid, OID.EC_CURVE_BRAINPOOLP256R1.oid)
-        EcCurve.BRAINPOOLP320R1 -> Pair(OID.EC_PUBLIC_KEY.oid, OID.EC_CURVE_BRAINPOOLP320R1.oid)
-        EcCurve.BRAINPOOLP384R1 -> Pair(OID.EC_PUBLIC_KEY.oid, OID.EC_CURVE_BRAINPOOLP384R1.oid)
-        EcCurve.BRAINPOOLP512R1 -> Pair(OID.EC_PUBLIC_KEY.oid, OID.EC_CURVE_BRAINPOOLP512R1.oid)
-        EcCurve.X25519 -> Pair(OID.X25519.oid, null)
-        EcCurve.X448 -> Pair(OID.X448.oid, null)
-        EcCurve.ED25519 -> Pair(OID.ED25519.oid, null)
-        EcCurve.ED448 -> Pair(OID.ED448.oid, null)
-    }
-    if (paramOid != null) {
-        return ASN1Sequence(listOf(
-            ASN1ObjectIdentifier(algOid),
-            ASN1ObjectIdentifier(paramOid)
-        ))
-    }
-    return ASN1Sequence(listOf(
-        ASN1ObjectIdentifier(algOid),
-    ))
-}
-
-private fun parseName(obj: ASN1Sequence): X500Name {
-    val components = mutableMapOf<String, ASN1String>()
-    for (elem in obj.elements) {
-        val dnSet = elem as ASN1Set
-        val typeAndValue = dnSet.elements[0] as ASN1Sequence
-        val oidObject = typeAndValue.elements[0] as ASN1ObjectIdentifier
-        val nameObject = typeAndValue.elements[1] as ASN1String
-        components.put(oidObject.oid, nameObject)
-    }
-    return X500Name(components)
-}
-
-private fun generateName(name: X500Name): ASN1Sequence {
-    val objs = mutableListOf<ASN1Object>()
-    for ((oid, value) in name.components) {
-        objs.add(
-            ASN1Set(listOf(
-                ASN1Sequence(listOf(
-                    ASN1ObjectIdentifier(oid),
-                    value
-                ))
-            ))
-        )
-    }
-    return ASN1Sequence(objs)
 }
 
 /**

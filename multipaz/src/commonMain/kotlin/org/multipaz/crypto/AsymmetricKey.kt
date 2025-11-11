@@ -349,6 +349,9 @@ sealed class AsymmetricKey {
             algorithm: Algorithm = privateKey.curve.defaultSigningAlgorithmFullySpecified
         ): AsymmetricKey = AnonymousExplicit(privateKey, algorithm)
 
+        fun ephemeral(algorithm: Algorithm = Algorithm.ESP256): AsymmetricKey =
+            AnonymousExplicit(Crypto.createEcPrivateKey(algorithm.curve!!), algorithm)
+
         private fun parseIdentifier(json: JsonObject): Pair<String?, X509CertChain?> {
             val kid = json["kid"]?.jsonPrimitive?.content
             if (kid != null) {

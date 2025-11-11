@@ -26,6 +26,7 @@ import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.mdoc.TestVectors
 import org.multipaz.util.Constants
 import org.multipaz.util.fromHex
+import org.multipaz.util.fromHexByteString
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -157,9 +158,9 @@ class DeviceResponseParserTest {
         //
         val (certificates) = d.issuerCertificateChain
         assertEquals(1, certificates.size.toLong())
-        assertContentEquals(
-            TestVectors.ISO_18013_5_ANNEX_D_DS_CERT.fromHex(),
-            certificates[0].encodedCertificate
+        assertEquals(
+            TestVectors.ISO_18013_5_ANNEX_D_DS_CERT.fromHexByteString(),
+            certificates[0].encoded
         )
     }
 

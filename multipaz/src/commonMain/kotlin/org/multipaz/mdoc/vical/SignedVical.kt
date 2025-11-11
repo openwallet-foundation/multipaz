@@ -49,7 +49,7 @@ data class SignedVical(
                 putCborArray("certificateInfos") {
                     for (certInfo in vical.certificateInfos) {
                         addCborMap {
-                            put("certificate", certInfo.certificate.encodedCertificate)
+                            put("certificate", certInfo.certificate.encoded.toByteArray())
                             put("serialNumber", Tagged(
                                 Tagged.UNSIGNED_BIGNUM,
                                 Bstr(certInfo.certificate.serialNumber.value)
@@ -141,7 +141,7 @@ data class SignedVical(
                     (it as CborArray).items.map { it.asTstr }
                 }
                 certificateInfos.add(VicalCertificateInfo(
-                    certificate = X509Cert(certBytes),
+                    certificate = X509Cert(ByteString(certBytes)),
                     ski = ski,
                     issuingAuthority = certInfo.getOrNull("issuingAuthority")?.asTstr,
                     issuingCountry = certInfo.getOrNull("issuingCountry")?.asTstr,

@@ -9,6 +9,7 @@ import org.multipaz.util.UUID
 import org.multipaz.util.toByteArray
 import org.multipaz.util.toNSData
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.io.bytestring.toNSData
 import platform.Foundation.NSData
 import platform.Foundation.NSUUID
 
@@ -265,7 +266,7 @@ actual object Crypto {
         for (i in 1..certificates.lastIndex) {
             val toVerify = certificates[i - 1]
             val err = SwiftBridge.verifySignature(
-                certificates[i].encodedCertificate.toNSData(),
+                certificates[i].encoded.toNSData(),
                 toVerify.tbsCertificate.toNSData(),
                 toVerify.signatureAlgorithmOid,
                 toVerify.signature.toNSData()

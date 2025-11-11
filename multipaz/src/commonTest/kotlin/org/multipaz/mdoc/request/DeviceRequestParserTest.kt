@@ -32,6 +32,7 @@ import org.multipaz.util.fromHex
 import kotlin.time.Clock
 import kotlin.time.Instant
 import org.multipaz.testUtilSetupCryptoProvider
+import org.multipaz.util.fromHexByteString
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -66,9 +67,9 @@ class DeviceRequestParserTest {
         )
         val readerCertChain = dr.readerCertificateChain
         assertEquals(1, readerCertChain!!.certificates.size.toLong())
-        assertContentEquals(
-            TestVectors.ISO_18013_5_ANNEX_D_READER_CERT.fromHex(),
-            readerCertChain.certificates[0].encodedCertificate
+        assertEquals(
+            TestVectors.ISO_18013_5_ANNEX_D_READER_CERT.fromHexByteString(),
+            readerCertChain.certificates[0].encoded
         )
         assertContentEquals(
             TestVectors.ISO_18013_5_ANNEX_D_READER_AUTH.fromHex(),
@@ -127,9 +128,9 @@ class DeviceRequestParserTest {
         )
         val readerCertChain = dr.readerCertificateChain
         assertEquals(1, readerCertChain!!.certificates.size.toLong())
-        assertContentEquals(
-            TestVectors.ISO_18013_5_ANNEX_D_READER_CERT.fromHex(),
-            readerCertChain.certificates[0].encodedCertificate
+        assertEquals(
+            TestVectors.ISO_18013_5_ANNEX_D_READER_CERT.fromHexByteString(),
+            readerCertChain.certificates[0].encoded
         )
         assertFalse(dr.readerAuthenticated)
     }
