@@ -84,7 +84,7 @@ data class SignedVical(
         private const val TAG = "SignedVical"
 
         /**
-         * Parses a signed VAL.
+         * Parses a signed VICAL.
          *
          * This takes a `COSE_Sign1` according to ISO/IEC 18013-5:2021 section
          * C.1.7.1 VICAL CDDL profile.

@@ -124,6 +124,7 @@ import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.documenttype.knowntypes.Loyalty
 import org.multipaz.documenttype.knowntypes.IDPass
+import org.multipaz.mdoc.rical.SignedRical
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
 import org.multipaz.presentment.model.PresentmentSource
@@ -141,7 +142,7 @@ import org.multipaz.testapp.ui.ShowResponseScreen
 import org.multipaz.testapp.ui.TrustManagerScreen
 import org.multipaz.testapp.ui.TrustPointViewerScreen
 import org.multipaz.trustmanagement.CompositeTrustManager
-import org.multipaz.util.fromHex
+import org.multipaz.trustmanagement.RicalTrustManager
 import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.trustmanagement.TrustPointAlreadyExistsException
 import org.multipaz.trustmanagement.TrustMetadata
@@ -550,43 +551,23 @@ class App private constructor (val promptModel: PromptModel) {
             certificate = iacaKey.certChain.certificates.first(),
             metadata = TrustMetadata(displayName = "OWF Multipaz TestApp Issuer"),
         )
-        val signedVical = SignedVical.parse(Res.readBytes("files/20250225 RDW Test Vical.vical"))
+        val signedVical = SignedVical.parse(Res.readBytes("files/ISO_SC17WG10_Wellington_Test_Event_Nov_2025.vical"))
         // TODO: validate the Vical is signed by someone we trust, probably force this
         //   by having the caller pass in the public key
         val vicalTrustManager = VicalTrustManager(signedVical)
-        issuerTrustManager = CompositeTrustManager(listOf(vicalTrustManager, builtInIssuerTrustManager))
+        issuerTrustManager = CompositeTrustManager(listOf(builtInIssuerTrustManager, vicalTrustManager))
 
+        val signedRical = SignedRical.parse(Res.readBytes("files/ISO_SC17WG10_Wellington_Test_Event_Nov_2025.rical"))
+        // TODO: validate the Rical is signed by someone we trust, probably force this
+        //   by having the caller pass in the public key
+        val ricalTrustManager = RicalTrustManager(signedRical)
 
-        val readerCertFileNames = listOf(
-            "Animo Reader CA.cer",
-            "Bundesdruckerei Reader CA.cer",
-            "CLR Labs Reader CA.cer",
-            "Credence ID Reader CA.cer",
-            "Fast Enterprises Reader CA.cer",
-            "Fime Reader CA 1.cer",
-            "Fime Reader CA 2.cer",
-            "Google Reader CA.cer",
-            "Idakto Reader CA.cer",
-            "Idemia Reader CA.cer",
-            "LapID Reader CA.cer",
-            "MATTR Reader CA.cer",
-            "Nearform Reader CA.cer",
-            "OGCIO Reader CA.cer",
-            "RDW Test Reader CA.cer",
-            "Scytales Reader CA.cer",
-            "SpruceID Reader CA.cer",
-            "Thales Reader CA 1.cer",
-            "Thales Reader CA 2.cer",
-            "Thales Root CA.cer",
-            "Toppan Reader CA.cer",
-            "Zetes Reader CA.cer"
-        )
         val builtInReaderTrustManager = TrustManagerLocal(
             storage = EphemeralStorage(),
             partitionId = "BuiltInTrustedReaders",
             identifier = "Built-in Trusted Readers"
         )
-        readerTrustManager = CompositeTrustManager(listOf(builtInReaderTrustManager))
+        readerTrustManager = CompositeTrustManager(listOf(builtInReaderTrustManager, ricalTrustManager))
         if (builtInReaderTrustManager.getTrustPoints().isEmpty()) {
             try {
                 builtInReaderTrustManager.addX509Cert(
@@ -599,26 +580,6 @@ class App private constructor (val promptModel: PromptModel) {
                 )
             } catch (e: TrustPointAlreadyExistsException) {
                 // Do nothing, it's possible our certificate is in the list above.
-            }
-            for (readerCertFileName in readerCertFileNames) {
-                val certData = Res.readBytes("files/20250225 Reader CA Certificates/" + readerCertFileName)
-                val readerCert = X509Cert.fromPem(certData.decodeToString())
-                try {
-                    builtInReaderTrustManager.addX509Cert(
-                        certificate = readerCert,
-                        metadata = TrustMetadata(
-                            displayName = readerCertFileName.substringBeforeLast(".")
-                        ),
-                    )
-                } catch (e: TrustPointAlreadyExistsException) {
-                    val existingTrustPoint = builtInIssuerTrustManager.getTrustPoints().first {
-                        it.certificate.subjectKeyIdentifier!!.toHex() == readerCert.subjectKeyIdentifier!!.toHex()
-                    }
-                    Logger.w(TAG, "builtInReaderTrustManager: Error adding certificate with subject " +
-                            "${readerCert.subject.name} - already contains a certificate with " +
-                            "subject ${existingTrustPoint.certificate.subject.name} with the same " +
-                            "Subject Key Identifier", e)
-                }
             }
             // This is for https://verifier.multipaz.org website.
             try {

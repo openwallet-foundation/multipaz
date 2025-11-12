@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.multipaz.compose.datetime.formattedDate
 import org.multipaz.trustmanagement.CompositeTrustManager
+import org.multipaz.trustmanagement.RicalTrustManager
 import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.trustmanagement.TrustPoint
 import org.multipaz.trustmanagement.VicalTrustManager
@@ -62,6 +63,21 @@ fun TrustManagerScreen(
                                 append(" at ")
                                 withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
                                     append(formattedDate(tm.signedVical.vical.date))
+                                }
+                            })
+                        }
+                        is RicalTrustManager -> {
+                            Text(text = buildAnnotatedString {
+                                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
+                                    append("RICAL")
+                                }
+                                append(" by ")
+                                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
+                                    append(tm.signedRical.rical.provider)
+                                }
+                                append(" at ")
+                                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
+                                    append(formattedDate(tm.signedRical.rical.date))
                                 }
                             })
                         }
