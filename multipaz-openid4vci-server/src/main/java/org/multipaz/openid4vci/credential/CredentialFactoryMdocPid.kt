@@ -40,7 +40,7 @@ import kotlin.time.Duration.Companion.days
  */
 internal class CredentialFactoryMdocPid : CredentialFactoryBase() {
     override val offerId: String
-        get() = "mDoc-Pid"
+        get() = "pid_mdoc"
 
     override val scope: String
         get() = "core"

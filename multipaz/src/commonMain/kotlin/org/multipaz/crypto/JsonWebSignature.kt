@@ -41,7 +41,7 @@ object JsonWebSignature {
         val headerStr = buildJsonObject {
             put("alg", JsonPrimitive(signatureAlgorithm.joseAlgorithmIdentifier!!))
             type?.let { put("typ", JsonPrimitive(it)) }
-            x5c?.let { put("x5c", x5c.toX5c()) }
+            x5c?.let { put("x5c", x5c.toX5c(excludeRoot = true)) }
         }.toString().encodeToByteArray().toBase64Url()
         val bodyStr = claimsSet.toString().encodeToByteArray().toBase64Url()
         val toBeSigned = "$headerStr.$bodyStr".encodeToByteArray()
@@ -80,7 +80,7 @@ object JsonWebSignature {
         val headerStr = buildJsonObject {
             put("alg", JsonPrimitive(secureArea.getKeyInfo(alias).algorithm.joseAlgorithmIdentifier!!))
             type?.let { put("typ", JsonPrimitive(it)) }
-            x5c?.let { put("x5c", x5c.toX5c()) }
+            x5c?.let { put("x5c", x5c.toX5c(excludeRoot = true)) }
         }.toString().encodeToByteArray().toBase64Url()
         val bodyStr = claimsSet.toString().encodeToByteArray().toBase64Url()
         val toBeSigned = "$headerStr.$bodyStr".encodeToByteArray()

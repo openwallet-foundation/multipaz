@@ -3,8 +3,6 @@ package org.multipaz.openid4vci.util
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
-import io.ktor.http.Url
-import io.ktor.http.protocolWithAuthority
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.request.httpMethod
@@ -15,7 +13,6 @@ import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -26,7 +23,6 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.jwt.Challenge
-import org.multipaz.jwt.ChallengeInvalidException
 import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.handler.InvalidRequestException
@@ -174,15 +170,23 @@ suspend fun validateClientAttestation(
     val clientAttestationJwt = request.headers["OAuth-Client-Attestation"]
         ?: return null
 
+    val configuration = BackendEnvironment.getInterface(Configuration::class)!!
+    val requireIssuerMatch =
+        configuration.getValue("require_client_attestation_iss_match") == "true"
+
     val attestationBody = validateJwt(
         jwt = clientAttestationJwt,
         jwtName = "Client Attestation",
         publicKey = null,
-        checks = mapOf(
-            JwtCheck.TRUST to "trusted_client_attestations",  // where to find CA
-            JwtCheck.TYP to "oauth-client-attestation+jwt",
-            JwtCheck.SUB to clientId
-        )
+        maxValidity = Duration.INFINITE,
+        checks = buildMap {
+            put(JwtCheck.TRUST, "trusted_client_attestations")  // where to find CA
+            put(JwtCheck.TYP, "oauth-client-attestation+jwt")
+            put(JwtCheck.SUB, clientId)
+            if (requireIssuerMatch) {
+                put(JwtCheck.X5C_CN_ISS_MATCH, "required")
+            }
+        }
     )
 
     return EcPublicKey.fromJwk(attestationBody["cnf"]!!.jsonObject["jwk"]!!.jsonObject)
@@ -255,7 +259,7 @@ suspend fun createSession(
     }
     val codeChallenge = try {
         ByteString(parameters["code_challenge"]!!.fromBase64Url())
-    } catch (err: Exception) {
+    } catch (_: Exception) {
         throw InvalidRequestException("invalid parameter 'code_challenge'")
     }
     val attestationKey = validateClientAttestation(request, clientId)

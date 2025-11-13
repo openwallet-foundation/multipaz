@@ -63,7 +63,7 @@ private fun AsymmetricKey.addToJwtHeader(header: JsonObjectBuilder) {
     )
     when (this) {
         is AsymmetricKey.X509CertifiedSecureAreaBased,
-        is AsymmetricKey.X509CertifiedExplicit -> header.put("x5c", certChain.toX5c())
+        is AsymmetricKey.X509CertifiedExplicit -> header.put("x5c", certChain.toX5c(excludeRoot = true))
         is AsymmetricKey.NamedExplicit,
         is AsymmetricKey.NamedSecureAreaBased -> header.put("kid", keyId)
         is AsymmetricKey.AnonymousExplicit,

@@ -45,6 +45,7 @@ import org.multipaz.util.fromBase64Url
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.buildX509Cert
 import org.multipaz.device.AndroidKeystoreSecurityLevel
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.KeyUnlockDataProvider
@@ -95,6 +96,7 @@ class CloudSecureAreaTest {
         val context = applicationContext
         private lateinit var server: CloudSecureAreaServer
 
+        lateinit var attestationRootKey: AsymmetricKey
         lateinit var attestationKey: EcPublicKey
         lateinit var attestationKeyCertChain: X509CertChain
 
@@ -102,25 +104,40 @@ class CloudSecureAreaTest {
             super.initialize()
             val enclaveBoundKey = Random.nextBytes(32)
 
-            val attestationKeySubject = "CN=Cloud Secure Area Attestation Root"
+            val attestationRootSubject = "CN=Cloud Secure Area Attestation Root"
+            val attestationKeySubject = "CN=Cloud Secure Area Attestation"
             val attestationKeyValidFrom = Clock.System.now()
             val attestationKeyValidUntil = attestationKeyValidFrom + 365.days*5
             val attestationKeyPrivate = Crypto.createEcPrivateKey(EcCurve.P256)
+            attestationRootKey = AsymmetricKey.ephemeral()
+            val attestationRootCert = buildX509Cert(
+                publicKey = attestationRootKey.publicKey,
+                signingKey = attestationRootKey,
+                serialNumber = ASN1Integer(42L),
+                subject = X500Name.fromName(attestationRootSubject),
+                issuer = X500Name.fromName(attestationRootSubject),
+                validFrom = attestationKeyValidFrom,
+                validUntil = attestationKeyValidUntil
+            ) {
+                includeSubjectKeyIdentifier()
+                setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            }
             attestationKey = attestationKeyPrivate.publicKey
             attestationKeyCertChain = X509CertChain(
                 listOf(
                     X509Cert.Builder(
                         publicKey = attestationKeyPrivate.publicKey,
-                        signingKey = AsymmetricKey.anonymous(attestationKeyPrivate),
+                        signingKey = attestationRootKey,
                         serialNumber = ASN1Integer(1L),
                         subject = X500Name.fromName(attestationKeySubject),
-                        issuer = X500Name.fromName(attestationKeySubject),
+                        issuer = X500Name.fromName(attestationRootSubject),
                         validFrom = attestationKeyValidFrom,
                         validUntil = attestationKeyValidUntil
                     )
                         .includeSubjectKeyIdentifier()
                         .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
                         .build(),
+                    attestationRootCert
                 )
             )
             val attestationSigningKey = AsymmetricKey.X509CertifiedExplicit(
@@ -325,7 +342,7 @@ class CloudSecureAreaTest {
                 // First check the certificate chain is well-formed and has the expected root
                 val attestationCertificateChain = keyInfo.attestation.certChain!!
                 Assert.assertTrue(attestationCertificateChain.validate())
-                Assert.assertEquals(csa.attestationKey, attestationCertificateChain.certificates.last().ecPublicKey)
+                Assert.assertEquals(csa.attestationRootKey.publicKey, attestationCertificateChain.certificates.last().ecPublicKey)
 
                 // Then check for the extensions in the leaf certificate
                 val attestationCertificate = attestationCertificateChain.certificates[0]
@@ -338,7 +355,7 @@ class CloudSecureAreaTest {
                 Assert.assertEquals(validUntil, attestationCertificate.validityNotAfter)
                 Assert.assertEquals(1L, attestationCertificate.serialNumber.toLong())
                 Assert.assertEquals("CN=Cloud Secure Area Key", attestationCertificate.subject.name)
-                Assert.assertEquals("CN=Cloud Secure Area Attestation Root", attestationCertificate.issuer.name)
+                Assert.assertEquals("CN=Cloud Secure Area Attestation", attestationCertificate.issuer.name)
             }
         }
     }
@@ -429,7 +446,8 @@ class CloudSecureAreaTest {
 
         // Then that the x5c is set as expected
         val info = JsonWebSignature.getInfo(result.openid4vciKeyAttestationJws)
-        Assert.assertEquals(csa.attestationKeyCertChain, info.x5c)
+        val sansRoot = csa.attestationKeyCertChain.certificates.let { it.subList(0, it.size - 1) }
+        Assert.assertEquals(X509CertChain(sansRoot), info.x5c)
 
         // Finally check the body is as expected
         Assert.assertEquals(VCI_KA_ISSUER, info.claimsSet["iss"]!!.jsonPrimitive.content)

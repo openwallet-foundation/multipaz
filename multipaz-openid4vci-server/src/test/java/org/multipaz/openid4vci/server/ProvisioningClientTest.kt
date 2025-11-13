@@ -107,7 +107,8 @@ class ProvisioningClientTest {
                 "-param", "base_url=http://localhost",
                 "-param", "database_engine=ephemeral",
                 "-param", "use_scopes=true",
-                "-param", "use_client_assertion=true"
+                "-param", "support_client_assertion=true",
+                "-param", "support_client_attestation=false"
             )
         )
     }

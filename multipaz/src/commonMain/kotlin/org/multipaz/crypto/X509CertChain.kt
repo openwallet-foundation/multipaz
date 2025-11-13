@@ -11,7 +11,7 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.annotation.CborSerializationImplemented
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.util.fromBase64
-import org.multipaz.util.toBase64
+import kotlin.io.encoding.Base64
 
 /**
  * A chain of certificates.
@@ -44,9 +44,29 @@ data class X509CertChain(
     /**
      * Encodes the certificate as JSON Array according to RFC 7515 Section 4.1.6.
      *
+     * Current draft of HAIP spec states "The X.509 certificate of the trust anchor MUST NOT be
+     * included in the x5c JOSE header of the Status List Token. The X.509 certificate signing
+     * the request MUST NOT be self-signed.". [excludeRoot] parameter helps to enforce this.
+     * Note that including trust root is always redundant, as both the key and the issuer identity
+     * must be known to the party that validates the certificate chain.
+     *
+     * @param excludeRoot if the last certificate is root (self-signed), exclude it
      * @return a [JsonElement].
      */
-    fun toX5c() = JsonArray(certificates.map { JsonPrimitive(it.encoded.toByteArray().toBase64()) }) as JsonElement
+    fun toX5c(excludeRoot: Boolean = true): JsonElement {
+        val last = certificates.last()
+        val certs = if (excludeRoot && last.subject == last.issuer) {
+            certificates.subList(0, certificates.size - 1)
+        } else {
+            certificates
+        }
+        return JsonArray(
+            // NB: must keep '=' padding at the end!
+            certs.map { certificate ->
+                JsonPrimitive( Base64.encode(certificate.encoded.toByteArray()))
+            }
+        ) as JsonElement
+    }
 
     /**
      * Validates that every certificate in the chain is signed by the next one.
@@ -81,6 +101,8 @@ data class X509CertChain(
          */
         fun fromX5c(x5c: JsonElement): X509CertChain {
             require(x5c is JsonArray)
+            // NB: expected encoding is base64 (not base64url) with '=' padding. We are more lax
+            // and accept base64 with or without padding.
             return X509CertChain(x5c.map { X509Cert(ByteString(it.jsonPrimitive.content.fromBase64())) })
         }
     }

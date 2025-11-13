@@ -19,7 +19,7 @@ internal data class AuthorizationConfiguration(
     val tokenEndpoint: String,
     val dpopSigningAlgorithm: Algorithm,
     val clientAttestationSigningAlgorithm: Algorithm,
-    val useClientAssertion: Boolean
+    val clientAuthentication: ClientAuthenticationType
 ) {
     companion object: JsonParsing("Authorization server metadata") {
         suspend fun get(url: String, clientPreferences: OpenID4VCIClientPreferences): AuthorizationConfiguration {
@@ -73,24 +73,31 @@ internal data class AuthorizationConfiguration(
                 available = metadata.arrayOrNull("client_attestation_pop_signing_alg_values_supported"),
                 clientPreferences = clientPreferences
             )
+            var clientAuthentication = ClientAuthenticationType.CLIENT_ASSERTION
             val authMethods = metadata.arrayOrNull("token_endpoint_auth_methods_supported")
-            var requireClientAssertion = false
             if (authMethods != null) {
                 var walletAttestationSupported = false
                 var clientAssertionSupported = false
+                var noAuthentication = false
                 for (authMethod in authMethods) {
                     if (authMethod is JsonPrimitive) {
                         when (val auth = authMethod.content) {
                             "private_key_jwt" -> clientAssertionSupported = true
                             "attest_jwt_client_auth" -> walletAttestationSupported = true
+                            "none" -> noAuthentication = true
                             else -> Logger.w(TAG, "Unknown auth method: '$auth'")
                         }
                     }
                 }
-                // Normally we send client attestation, but if server requests it, we can do
-                // client assertion too.
-                if (!walletAttestationSupported && clientAssertionSupported) {
-                    requireClientAssertion = true
+                if (noAuthentication) {
+                    Logger.i(TAG, "Will use no client authentication")
+                    clientAuthentication = ClientAuthenticationType.NONE
+                } else if (!walletAttestationSupported && clientAssertionSupported) {
+                    Logger.w(TAG, "Will use client assertion, client attestation is not supported")
+                    clientAuthentication = ClientAuthenticationType.CLIENT_ASSERTION
+                } else {
+                    Logger.i(TAG, "Will use client attestation")
+                    clientAuthentication = ClientAuthenticationType.CLIENT_ATTESTATION
                 }
             }
             return AuthorizationConfiguration(
@@ -101,7 +108,7 @@ internal data class AuthorizationConfiguration(
                 tokenEndpoint = tokenEndpoint,
                 dpopSigningAlgorithm = dpopSigningAlgorithm,
                 clientAttestationSigningAlgorithm = clientAttestationSigningAlgorithm,
-                useClientAssertion = requireClientAssertion
+                clientAuthentication = clientAuthentication
             )
         }
 

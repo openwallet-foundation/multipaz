@@ -43,17 +43,28 @@ fun RenderClaimValue(
         modifier.fillMaxWidth()
     ) {
         if (claim.attribute?.type == DocumentAttributeType.Picture) {
-            val bytes = when (claim) {
-                is MdocClaim -> claim.value.asBstr
-                is JsonClaim -> claim.value.jsonPrimitive.content.fromBase64Url()
+            val img = try {
+                val bytes = when (claim) {
+                    is MdocClaim -> claim.value.asBstr
+                    is JsonClaim -> claim.value.jsonPrimitive.content.fromBase64Url()
+                }
+                decodeImage(bytes)
+            } catch (err: Exception) {
+                Text(
+                    text = "Image decoding: $err",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                null
             }
-            val img = decodeImage(bytes)
-            Image(
-                bitmap = img,
-                contentDescription = null,
-                alignment = Alignment.TopStart,
-                modifier = Modifier.fillMaxWidth().size(imageSize),
-            )
+            if (img != null) {
+                Image(
+                    bitmap = img,
+                    contentDescription = null,
+                    alignment = Alignment.TopStart,
+                    modifier = Modifier.fillMaxWidth().size(imageSize),
+                )
+            }
         } else {
             val str = claim.render(timeZone)
             Text(

@@ -23,8 +23,6 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactoryBase() {
     override val format: Openid4VciFormat
         get() = FORMAT
 
-    override val requireClientAttestation: Boolean get() = false
-
     override val requireKeyAttestation: Boolean get() = false
 
     override val proofSigningAlgorithms: List<String>

@@ -251,7 +251,7 @@ internal class OpenID4VCIProvisioningClient(
         val scope = issuerConfiguration.credentialConfigurations[configurationId]!!.scope
             ?.let { provisionalScope ->
                 for ((id, config) in issuerConfiguration.credentialConfigurations) {
-                    if (provisionalScope == config.scope &&
+                    if (provisionalScope == config.scope && id != configurationId &&
                         credentialMetadata.format.formatId == credentialMap[id]!!.format.formatId) {
                         Logger.w(TAG, "Scope does not uniquely identify credential for configuration id '$configurationId'")
                         return@let null
@@ -272,10 +272,7 @@ internal class OpenID4VCIProvisioningClient(
                 dpopNonce = authorizationDPoPNonce,
                 accessToken = null
             )
-            val walletAttestationPoP = if (authorizationConfiguration.useClientAssertion) {
-                null
-            } else {
-                // If client assertion is not used, we always send wallet attestation.
+            val walletAttestationPoP = if (authorizationConfiguration.clientAuthentication == ClientAuthenticationType.CLIENT_ATTESTATION) {
                 val key = obtainWalletAttestation()
                 OpenID4VCIUtil.createWalletAttestationPoP(
                     clientId = clientPreferences.clientId,
@@ -283,8 +280,10 @@ internal class OpenID4VCIProvisioningClient(
                     authenticationServerIdentifier = authorizationConfiguration.identifier,
                     challenge = clientAttestationChallenge
                 )
+            } else {
+                null
             }
-            val clientAssertion = if (authorizationConfiguration.useClientAssertion) {
+            val clientAssertion = if (authorizationConfiguration.clientAuthentication == ClientAuthenticationType.CLIENT_ASSERTION) {
                 OpenID4VCIUtil.createClientAssertion(authorizationConfiguration.identifier)
             } else {
                 null
@@ -422,9 +421,7 @@ internal class OpenID4VCIProvisioningClient(
                 dpopNonce = authorizationDPoPNonce,
                 accessToken = null
             )
-            val walletAttestationPoP = if (authorizationConfiguration.useClientAssertion) {
-                null
-            } else {
+            val walletAttestationPoP = if (authorizationConfiguration.clientAuthentication == ClientAuthenticationType.CLIENT_ATTESTATION) {
                 val key = if (walletAttestation == null) {
                     // For pre-authorized code case, this is where the session is initialized.
                     obtainWalletAttestation()
@@ -440,8 +437,10 @@ internal class OpenID4VCIProvisioningClient(
                     authenticationServerIdentifier = authorizationConfiguration.identifier,
                     challenge = clientAttestationChallenge
                 )
+            } else {
+                null
             }
-            val clientAssertion = if (authorizationConfiguration.useClientAssertion) {
+            val clientAssertion = if (authorizationConfiguration.clientAuthentication == ClientAuthenticationType.CLIENT_ASSERTION) {
                 OpenID4VCIUtil.createClientAssertion(authorizationConfiguration.identifier)
             } else {
                 null
@@ -536,7 +535,7 @@ internal class OpenID4VCIProvisioningClient(
     }
 
     private suspend fun maybeObtainClientAttestationChallenge() {
-        if (!authorizationConfiguration.useClientAssertion) {
+        if (authorizationConfiguration.clientAuthentication == ClientAuthenticationType.CLIENT_ATTESTATION) {
             // Using client attestation. Check if we need to get a fresh challenge
             if (authorizationConfiguration.challengeEndpoint != null) {
                 val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!

@@ -143,12 +143,12 @@ class JwtTest {
         val root = X509Cert.Builder(
             publicKey = trustedKey,
             signingKey = AsymmetricKey.anonymous(
-                privateKey = Crypto.createEcPrivateKey(EcCurve.P384),
-                algorithm = EcCurve.P384.defaultSigningAlgorithm
+                privateKey = privateTrustedKey,
+                algorithm = privateTrustedKey.curve.defaultSigningAlgorithm
             ),
             serialNumber = ASN1Integer(57),
             subject = X500Name.fromName("CN=test-x5c"),
-            issuer = X500Name.fromName("CN=test-ca"),
+            issuer = X500Name.fromName("CN=test-x5c"),
             validFrom = clock.now() - 10.days,
             validUntil = clock.now() + 100.days
         ).build()
@@ -181,7 +181,7 @@ class JwtTest {
                 put("kid", kid)
             }
             if (x5c != null) {
-                put("x5c", x5c.toX5c())
+                put("x5c", x5c.toX5c(excludeRoot = true))
             }
         }.toString().encodeToByteArray().toBase64Url()
         val body = buildJsonObject {

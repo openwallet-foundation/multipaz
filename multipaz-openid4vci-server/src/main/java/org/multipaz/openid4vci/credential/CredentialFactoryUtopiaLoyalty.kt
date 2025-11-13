@@ -14,10 +14,7 @@ import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.X509Cert
-import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.knowntypes.Loyalty
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
@@ -41,8 +38,6 @@ internal class CredentialFactoryUtopiaLoyalty : CredentialFactoryBase() {
 
     override val format: Openid4VciFormat
         get() = openId4VciFormatLoyalty
-
-    override val requireClientAttestation: Boolean get() = false
 
     override val requireKeyAttestation: Boolean get() = false
 

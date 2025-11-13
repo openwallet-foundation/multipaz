@@ -25,6 +25,40 @@ async function displayCredentialConfig(configId) {
     img.className = "credential_logo";
     img.setAttribute("src", display.logo?.uri);
     item.appendChild(img);
+    let credType = document.createElement("p");
+    credType.className = "credential_type";
+    let credTypeText = "Format: "
+    if (config.format == "mso_mdoc") {
+        credTypeText += " mDoc [" + config.doctype + "]"
+    } else if (config.format == "dc+sd-jwt") {
+        credTypeText += " SD-JWT [" + config.vct + "]"
+    } else {
+        credTypeText += config.format
+    }
+    credType.textContent = credTypeText;
+    item.appendChild(credType);
+    let proofsHeading = document.createElement("h4");
+    proofsHeading.textContent = "OpenID4VCI Proof Types Accepted";
+    item.appendChild(proofsHeading);
+    let proofsList = document.createElement("ul");
+    item.appendChild(proofsList);
+    let proofs = config.proof_types_supported;
+    if (proofs == null || proofs.length == 0) {
+        let li = document.createElement("li");
+        li.textContent = "Not key bound, no proof needed";
+        proofsList.appendChild(li);
+    } else {
+        for (proof in proofs) {
+            let li = document.createElement("li");
+            let text = proof
+            let algs = proofs[proof].proof_signing_alg_values_supported
+            if (algs) {
+                text = text + " [" + algs.join(", ") + "]";
+            }
+            li.textContent = text;
+            proofsList.appendChild(li);
+        }
+    }
 
     let title = document.createElement("h3");
     title.textContent = "Authorization Code Flow";

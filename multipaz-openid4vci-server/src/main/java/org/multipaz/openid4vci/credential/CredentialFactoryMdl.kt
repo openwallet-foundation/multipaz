@@ -52,7 +52,7 @@ internal class CredentialFactoryMdl : CredentialFactoryBase() {
         get() = listOf("cose_key")
 
     override val name: String
-        get() = "Example Driver License (mDL)"
+        get() = "Driver License (mDL)"
 
     override val logo: String
         get() = "card-mdl.png"

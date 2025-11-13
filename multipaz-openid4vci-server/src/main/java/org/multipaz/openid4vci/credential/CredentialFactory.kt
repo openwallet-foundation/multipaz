@@ -9,7 +9,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.DataItem
 import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.Loyalty
@@ -27,7 +26,6 @@ internal interface CredentialFactory {
     val offerId: String
     val scope: String
     val format: Openid4VciFormat
-    val requireClientAttestation: Boolean get() = true
     val requireKeyAttestation: Boolean get() = true
     val proofSigningAlgorithms: List<String>  // must be empty for keyless credentials
     val cryptographicBindingMethods: List<String>  // must be empty for keyless credentials
@@ -60,6 +58,7 @@ internal interface CredentialFactory {
                 val factories = mutableListOf(
                     CredentialFactoryMdl(),
                     CredentialFactoryMdocPid(),
+                    CredentialFactorySdjwtPid(),
                     CredentialFactoryUtopiaNaturatization(),
                     CredentialFactoryUtopiaMovieTicket(),
                     CredentialFactoryAgeVerification(),

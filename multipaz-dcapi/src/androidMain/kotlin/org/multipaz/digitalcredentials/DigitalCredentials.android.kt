@@ -47,10 +47,10 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.documenttype.DocumentAttribute
 import org.multipaz.util.toBase64
-import org.multipaz.util.toBase64Url
 import kotlin.time.Duration.Companion.seconds
 import java.io.ByteArrayOutputStream
 import kotlin.collections.iterator
+import kotlin.let
 
 private const val TAG = "DigitalCredentials"
 
@@ -191,22 +191,7 @@ private suspend fun exportMdocCredential(
     val displayName = documentMetadata.displayName ?: "Unnamed Credential"
     val displayNameSub = documentMetadata.typeDisplayName ?: "Unknown Credential Type"
 
-    val cardArtResized = cardArt?.let {
-        val options = BitmapFactory.Options()
-        options.inMutable = true
-        val credBitmap = BitmapFactory.decodeByteArray(
-            cardArt,
-            0,
-            cardArt.size,
-            options
-        )
-        val scaledIcon = Bitmap.createScaledBitmap(credBitmap, 48, 48, true)
-        val stream = ByteArrayOutputStream()
-        scaledIcon.compress(Bitmap.CompressFormat.PNG, 100, stream)
-        val cardArtResized = stream.toByteArray()
-        Logger.i(TAG, "Resized cardart to 48x48, ${cardArt.size} bytes to ${cardArtResized.size} bytes")
-        cardArtResized
-    }
+    val cardArtResized = resizedCardArt(cardArt)
 
     return buildCborMap {
         put("title", displayName)
@@ -262,22 +247,7 @@ private suspend fun exportSdJwtVcCredential(
     val displayName = documentMetadata.displayName ?: "Unnamed Credential"
     val displayNameSub = documentMetadata.typeDisplayName ?: "Unknown Credential Type"
 
-    val cardArtResized = cardArt?.let {
-        val options = BitmapFactory.Options()
-        options.inMutable = true
-        val credBitmap = BitmapFactory.decodeByteArray(
-            cardArt,
-            0,
-            cardArt.size,
-            options
-        )
-        val scaledIcon = Bitmap.createScaledBitmap(credBitmap, 48, 48, true)
-        val stream = ByteArrayOutputStream()
-        scaledIcon.compress(Bitmap.CompressFormat.PNG, 100, stream)
-        val cardArtResized = stream.toByteArray()
-        Logger.i(TAG, "Resized cardart to 48x48, ${cardArt.size} bytes to ${cardArtResized.size} bytes")
-        cardArtResized
-    }
+    val cardArtResized = resizedCardArt(cardArt)
 
     return buildCborMap {
         put("title", displayName)
@@ -334,8 +304,29 @@ private suspend fun exportSdJwtVcCredential(
     }
 }
 
+private fun resizedCardArt(cardArt: ByteArray?): ByteArray? {
+    return BitmapFactory.decodeByteArray(
+            cardArt ?: return null,
+            0,
+            cardArt.size,
+            BitmapFactory.Options().also { it.inMutable = true }
+        )?.let { bitmap ->
+            val dstHeight = 48
+            val dstWidth = dstHeight * bitmap.width / bitmap.height
+            val scaledIcon = Bitmap.createScaledBitmap(bitmap, dstWidth, dstHeight, true)
+            val stream = ByteArrayOutputStream()
+            scaledIcon.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            val cardArtResized = stream.toByteArray()
+            Logger.i(
+                TAG,
+                "Resized cardart to 48x48, ${cardArt.size} bytes to ${cardArtResized.size} bytes"
+            )
+            cardArtResized
+        }
+}
+
 private fun loadMatcher(context: Context): ByteArray {
-    val stream = context.assets.open("identitycredentialmatcher.wasm");
+    val stream = context.assets.open("identitycredentialmatcher.wasm")
     val matcher = ByteArray(stream.available())
     stream.read(matcher)
     stream.close()

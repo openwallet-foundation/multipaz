@@ -64,6 +64,7 @@ private typealias RequestWrapper =
  * Defines server endpoints for HTTP GET and POST.
  */
 fun Application.configureRouting(configuration: ServerConfiguration) {
+    checkConfiguration(configuration)
     // TODO: when https://youtrack.jetbrains.com/issue/KTOR-8088 is resolved, there
     //  may be a better way to inject our custom wrapper for all request handlers
     //  (instead of doing it for every request like we do today).
@@ -223,5 +224,13 @@ fun Application.traceCalls(configuration: ServerConfiguration) {
         trace.flush()
         traceStream.write(buffer.toString())
         traceStream.flush()
+    }
+}
+
+private fun checkConfiguration(configuration: ServerConfiguration) {
+    val supportClientAssertion = configuration.getValue("support_client_assertion") != "false"
+    val supportClientAttestation = configuration.getValue("support_client_attestation") != "false"
+    if (!supportClientAssertion && !supportClientAttestation) {
+        throw IllegalArgumentException("No client authentication methods supported")
     }
 }

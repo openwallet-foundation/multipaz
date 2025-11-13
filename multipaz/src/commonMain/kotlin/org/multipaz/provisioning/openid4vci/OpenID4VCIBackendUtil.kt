@@ -11,6 +11,7 @@ import org.multipaz.jwt.buildJwt
 import org.multipaz.securearea.KeyAttestation
 import org.multipaz.util.toBase64Url
 import kotlin.random.Random
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 
 /**
@@ -72,7 +73,8 @@ object OpenID4VCIBackendUtil {
         walletLink: String?
     ): String = buildJwt(
         type = "oauth-client-attestation+jwt",
-        key = signingKey
+        key = signingKey,
+        expiresIn = 2000.days  // long-lived
     ) {
         put("iss", attestationIssuer)
         put("sub", clientId)

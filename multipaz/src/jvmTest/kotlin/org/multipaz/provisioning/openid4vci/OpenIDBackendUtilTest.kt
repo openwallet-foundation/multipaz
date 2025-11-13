@@ -21,6 +21,7 @@ import org.multipaz.storage.Storage
 import kotlin.reflect.KClass
 import kotlin.reflect.cast
 import kotlin.test.Test
+import kotlin.time.Duration
 
 class OpenIDBackendUtilTest {
     @Test
@@ -67,6 +68,7 @@ class OpenIDBackendUtilTest {
                 jwt = attestationJwt,
                 jwtName = "Client Attestation",
                 publicKey = null,
+                maxValidity = Duration.INFINITE,
                 checks = mapOf(
                     JwtCheck.TRUST to "fake_trust",
                     JwtCheck.TYP to "oauth-client-attestation+jwt",

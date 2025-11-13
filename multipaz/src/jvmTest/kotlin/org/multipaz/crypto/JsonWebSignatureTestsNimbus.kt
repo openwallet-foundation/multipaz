@@ -42,19 +42,33 @@ class JsonWebSignatureTestsNimbus {
 
     @Test
     fun testSigning() = runTest {
+        val rootKey = AsymmetricKey.anonymous(Crypto.createEcPrivateKey(EcCurve.P256))
         val signingKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val now = Clock.System.now()
+        val rootCert = X509Cert.Builder(
+            publicKey = rootKey.publicKey,
+            signingKey = rootKey,
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Test Root"),
+            issuer = X500Name.fromName("CN=Test Root"),
+            validFrom = now,
+            validUntil = now + 1.days
+        ).includeSubjectKeyIdentifier()
+            .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            .build()
         val signingKeyCert = X509Cert.Builder(
             publicKey = signingKey.publicKey,
-            signingKey = AsymmetricKey.anonymous(signingKey, signingKey.curve.defaultSigningAlgorithm),
+            signingKey = rootKey,
             serialNumber = ASN1Integer(1L),
             subject = X500Name.fromName("CN=Test Key"),
-            issuer = X500Name.fromName("CN=Test Key"),
+            issuer = X500Name.fromName("CN=Test Root"),
             validFrom = now,
             validUntil = now + 1.days
         ).includeSubjectKeyIdentifier()
             .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
             .build()
+        val certChain = X509CertChain(listOf(signingKeyCert, rootCert))
+        certChain.validate()
 
         val claimsSet = buildJsonObject {
             put("vp_token", buildJsonObject {
@@ -69,7 +83,7 @@ class JsonWebSignatureTestsNimbus {
             signatureAlgorithm = signingKey.curve.defaultSigningAlgorithmFullySpecified,
             claimsSet = claimsSet,
             type = "oauth-authz-req+jwt",
-            x5c = X509CertChain(listOf(signingKeyCert))
+            x5c = certChain
         )
 
         val sjwt = SignedJWT.parse(signedJwt)

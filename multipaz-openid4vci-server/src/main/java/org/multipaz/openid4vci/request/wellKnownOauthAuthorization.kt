@@ -10,7 +10,6 @@ import kotlinx.serialization.json.putJsonArray
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.server.baseUrl
-import org.multipaz.server.getBaseUrl
 
 /**
  * Generates `.well-known/oauth-authorization-server` metadata file.
@@ -18,7 +17,8 @@ import org.multipaz.server.getBaseUrl
 suspend fun wellKnownOauthAuthorization(call: ApplicationCall) {
     val configuration = BackendEnvironment.getInterface(Configuration::class)!!
     val baseUrl = configuration.baseUrl
-    val useClientAssertion = configuration.getValue("use_client_assertion") == "true"
+    val supportClientAssertion = configuration.getValue("support_client_assertion") != "false"
+    val supportClientAttestation = configuration.getValue("support_client_attestation") != "false"
     val useClientAttestationChallenge =
         configuration.getValue("use_client_attestation_challenge") != "false"
     call.respondText(
@@ -34,9 +34,10 @@ suspend fun wellKnownOauthAuthorization(call: ApplicationCall) {
             put("pushed_authorization_request_endpoint", "$baseUrl/par")
             put("require_pushed_authorization_requests", true)
             putJsonArray("token_endpoint_auth_methods_supported") {
-                if (useClientAssertion) {
+                if (supportClientAssertion) {
                     add("private_key_jwt")
-                } else {
+                }
+                if (supportClientAttestation) {
                     add("attest_jwt_client_auth")
                 }
             }

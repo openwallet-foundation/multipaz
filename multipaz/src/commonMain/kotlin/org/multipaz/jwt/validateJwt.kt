@@ -44,6 +44,7 @@ enum class JwtCheck(
     JTI,  // value is jti partition name (typically clientId)
     TRUST,  // value is the path where to find trusted key
     CHALLENGE,  // value is challenge jwt property name (current specs use "nonce" or "challenge")
+    X5C_CN_ISS_MATCH,  // "required" to check that 'iss' matched cert's subject 'CN'
     NONCE("nonce"),  // direct nonce value check, prefer CHALLENGE
     TYP("typ", true),
     AUD("aud"),
@@ -125,7 +126,7 @@ suspend fun validateJwt(
     if (expiration < now) {
         throw InvalidRequestException("$jwtName: expired")
     }
-    if (expiration > now + maxValidity.inWholeSeconds) {
+    if (maxValidity != Duration.INFINITE && expiration > now + maxValidity.inWholeSeconds) {
         throw InvalidRequestException("$jwtName: expiration is too far in the future")
     }
 
@@ -153,8 +154,10 @@ suspend fun validateJwt(
             }
             // TODO: check certificate issuance/expiration
             val first = certificateChain.certificates.first()
-            if (issuer != null) {
-                // If 'iss' is specified, it should match leaf certificate subject CN.
+            if (checks[JwtCheck.X5C_CN_ISS_MATCH] == "required") {
+                if (issuer == null) {
+                    throw InvalidRequestException("$jwtName: 'iss' must be specified")
+                }
                 val certificateSubject = first.subject.components[OID.COMMON_NAME.oid]?.value
                     ?: throw InvalidRequestException("$jwtName: no CN entry in 'x5c' certificate")
                 if (issuer != certificateSubject) {
@@ -163,12 +166,14 @@ suspend fun validateJwt(
             }
             val caCertificate = certificateChain.certificates.last()
             val caKey = caPublicKey(
-                keyId = caCertificate.subject.components[OID.COMMON_NAME.oid]?.value
+                keyId = caCertificate.issuer.components[OID.COMMON_NAME.oid]?.value
                     ?: throw InvalidRequestException("$jwtName: No CN entry in 'x5c' CA"),
                 caName = caName
             )
-            if (caCertificate.ecPublicKey != caKey) {
-                throw InvalidRequestException("$jwtName: CA key mismatch")
+            try {
+                caCertificate.verify(caKey)
+            } catch (err: SignatureVerificationException) {
+                throw InvalidRequestException("$jwtName: signature check failed: ${err.message}")
             }
             Pair(first.ecPublicKey, first.signatureAlgorithm)
         } else {

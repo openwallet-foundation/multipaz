@@ -359,7 +359,7 @@ object MultipazCtl {
 
         val json = buildJsonObject {
             put("jwk", privateKey.toJwk())
-            put("x5c", X509CertChain(listOf(certificate)).toX5c())
+            put("x5c", X509CertChain(listOf(certificate)).toX5c(excludeRoot = false))
         }
         println(jsonPrettyPrint.encodeToString(json))
         println("")

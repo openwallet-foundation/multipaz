@@ -9,14 +9,11 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headers
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receiveText
-import io.ktor.server.response.header
 import io.ktor.server.response.respondText
 import kotlinx.datetime.LocalDate
-import kotlinx.io.bytestring.ByteString
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.util.fromBase64Url
-import org.multipaz.util.toBase64Url
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -34,7 +31,6 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.jwt.Challenge
 import org.multipaz.jwt.ChallengeInvalidException
 import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.openid4vci.credential.Openid4VciFormat
@@ -49,7 +45,6 @@ import org.multipaz.jwt.JwtCheck
 import org.multipaz.util.Logger
 import org.multipaz.jwt.validateJwt
 import org.multipaz.openid4vci.util.respondWithNewDPoPNonce
-import kotlin.random.Random
 
 /**
  * Issues a credential based on DPoP authentication with access token.
@@ -80,9 +75,6 @@ suspend fun credential(call: ApplicationCall) {
     if (factory == null) {
         throw IllegalStateException(
             "No credential can be created for scope '${state.scope}' and the given format")
-    }
-    if (state.clientAttestationKey == null && factory.requireClientAttestation) {
-        throw InvalidRequestException("this credential type requires client attestation")
     }
 
     val credentialData = readSystemOfRecord(state)
@@ -121,7 +113,7 @@ suspend fun credential(call: ApplicationCall) {
             throw InvalidRequestException("Unsupported proof type")
         }
         proofs = proofsObj[proofType]!!.jsonArray
-        if (proofs.size == 0) {
+        if (proofs.isEmpty()) {
             throw InvalidRequestException("'proofs' is empty")
         }
     }
