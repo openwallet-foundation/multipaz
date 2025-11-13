@@ -3,6 +3,7 @@ package org.multipaz.mdoc.request
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.buildCborArray
@@ -75,6 +76,14 @@ data class DeviceRequest private constructor(
                 addCborArray {
                     docRequests.forEach { add(it.itemsRequestBytes) }
                 }
+                if (deviceRequestInfo != null) {
+                    add(Tagged(
+                            tagNumber = Tagged.ENCODED_CBOR,
+                            taggedItem = Bstr(Cbor.encode(deviceRequestInfo.toDataItem()))
+                    ))
+                } else {
+                    add(Simple.NULL)
+                }
             }
             val readerAuthenticationAllBytes =
                 Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(readerAuthenticationAll))))
@@ -145,7 +154,10 @@ data class DeviceRequest private constructor(
             }
         }
         deviceRequestInfo?.let {
-            put("deviceRequestInfo", it.toDataItem())
+            put("deviceRequestInfo", Tagged(
+                tagNumber = Tagged.ENCODED_CBOR,
+                taggedItem = Bstr(Cbor.encode(it.toDataItem()))
+            ))
         }
         if (readerAuthAll_.isNotEmpty()) {
             putCborArray("readerAuthAll") {
@@ -169,7 +181,7 @@ data class DeviceRequest private constructor(
             }
             val deviceRequestInfo = dataItem.getOrNull("deviceRequestInfo")?.let {
                 if (version.mdocVersionCompareTo("1.1") >= 0) {
-                    DeviceRequestInfo.fromDataItem(it)
+                    DeviceRequestInfo.fromDataItem(it.asTaggedEncodedCbor)
                 } else {
                     Logger.w(TAG, "Ignoring deviceRequestInfo field since version is less than 1.1")
                     null
@@ -394,6 +406,14 @@ data class DeviceRequest private constructor(
                     docRequests.forEach {
                         add(it.itemsRequestBytes)
                     }
+                }
+                if (deviceRequestInfo != null) {
+                    add(Tagged(
+                        tagNumber = Tagged.ENCODED_CBOR,
+                        taggedItem = Bstr(Cbor.encode(deviceRequestInfo.toDataItem()))
+                    ))
+                } else {
+                    add(Simple.NULL)
                 }
             }
             val readerAuthenticationAllBytes =
