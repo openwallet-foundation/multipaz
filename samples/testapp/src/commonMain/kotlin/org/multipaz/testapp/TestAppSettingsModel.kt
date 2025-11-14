@@ -196,7 +196,7 @@ class TestAppSettingsModel private constructor(
     val cryptoPreferBouncyCastle = MutableStateFlow<Boolean>(false)
 
     val observeModeEnabled = MutableStateFlow<Boolean>(false)
-    val observeModeEmitPollingFramesAsReader = MutableStateFlow<Boolean>(true)
+    val observeModeEmitPollingFramesAsReader = MutableStateFlow<Boolean>(false)
 }
 
 // Default to our open CSA, where "open" means it'll work with even unlocked bootloaders

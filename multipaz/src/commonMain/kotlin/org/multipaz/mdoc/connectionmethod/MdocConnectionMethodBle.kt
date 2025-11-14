@@ -10,11 +10,12 @@ import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.ByteDataReader
 import org.multipaz.util.appendByteArray
 import org.multipaz.util.appendByteString
-import org.multipaz.util.appendUInt32
+import org.multipaz.util.appendUInt16Le
 import org.multipaz.util.appendUInt64Le
 import org.multipaz.util.appendUInt8
 
@@ -160,7 +161,11 @@ data class MdocConnectionMethodBle(
         private const val BLE_LE_COMPLETE_LIST_OF_128_BIT_SERVICE_CLASS_UUIDS: UByte = 0x07u
         private const val BLE_LE_BLUETOOTH_MAC_ADDRESS: UByte = 0x1Bu
         private const val BLE_LE_ROLE: UByte = 0x1Cu
-        private const val BLE_PSM_NOT_YET_ALLOCATED: UByte = 0x77u  // TODO: allocated this number (0x77) with Bluetooth SIG
+        private const val BLE_SERVICE_DATA: UByte = 0x16u
+
+        // TODO: This is the constant used in ISO JTC1 SC17 WG10 Nov 2025 interop event in Wellington
+        //   since we're still waiting for the official UUID
+        private const val BLE_SERVICE_DATA_UUID_ISO_JTC1_SC17 = 0xFF01
 
         // Bluetooth LE role constants
         //
@@ -234,9 +239,21 @@ data class MdocConnectionMethodBle(
                 } else if (type == BLE_LE_BLUETOOTH_MAC_ADDRESS && len == 0x07.toUByte()) {
                     // MAC address
                     macAddress = reader.getByteString(6)
-                } else if (type == BLE_PSM_NOT_YET_ALLOCATED && len == 0x05.toUByte()) {
-                    // PSM
-                    psm = reader.getInt32()
+                } else if (type == BLE_SERVICE_DATA && len > 3.toUByte()) {
+                    // Service Data
+                    val serviceUuid = reader.getUInt16Le().toInt()
+                    if (serviceUuid != BLE_SERVICE_DATA_UUID_ISO_JTC1_SC17) {
+                        Logger.w(TAG, "Unexpected service data UUID $serviceUuid, skipping")
+                        reader.skip((len - 3u).toInt())
+                    } else {
+                        val encodedMdocBleServiceData = reader.getByteString((len - 3u).toInt())
+                        try {
+                            val mdocBleServiceData = Cbor.decode(encodedMdocBleServiceData.toByteArray())
+                            psm = mdocBleServiceData.getOrNull(0)?.asNumber?.toInt()
+                        } catch (e: Throwable) {
+                            Logger.w(TAG, "Error decoding BleServiceData CBOR", e)
+                        }
+                    }
                 } else {
                     Logger.d(TAG, "Skipping unknown type $type of length $len")
                     reader.skip((len - 1u).toInt())
@@ -330,9 +347,13 @@ data class MdocConnectionMethodBle(
             }
             val psm = peripheralServerModePsm
             if (psm != null) {
-                appendUInt8(0x05) // Length
-                appendUInt8(BLE_PSM_NOT_YET_ALLOCATED)
-                appendUInt32(psm)
+                val encodedMdocBleServiceData = Cbor.encode(buildCborMap {
+                    put(0, psm)
+                })
+                appendUInt8(3 + encodedMdocBleServiceData.size)
+                appendUInt8(BLE_SERVICE_DATA)
+                appendUInt16Le(BLE_SERVICE_DATA_UUID_ISO_JTC1_SC17)
+                append(encodedMdocBleServiceData)
             }
         }
 
