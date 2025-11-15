@@ -33,9 +33,10 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.Document
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
-import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
+import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureArea
+import kotlin.random.Random
 
 /**
  * Class representing the metadata of a Document Type.
@@ -353,10 +354,13 @@ class DocumentType private constructor(
         validUntil: Instant,
         expectedUpdate: Instant? = null,
         domain: String = "mdoc",
+        randomProvider: Random = Random,
     ): MdocCredential {
         require(mdocDocumentType != null)
 
-        val issuerNamespaces = buildIssuerNamespaces {
+        val issuerNamespaces = buildIssuerNamespaces(
+            randomProvider = randomProvider
+        ) {
             for ((nsName, ns) in mdocDocumentType.namespaces) {
                 addNamespace(nsName) {
                     for ((deName, de) in ns.dataElements) {
@@ -379,16 +383,21 @@ class DocumentType private constructor(
         )
 
         // Generate an MSO and issuer-signed data for this authentication key.
-        val msoGenerator = MobileSecurityObjectGenerator(
-            Algorithm.SHA256,
-            mdocDocumentType.docType,
-            mdocCredential.getAttestation().publicKey
+        val mso = MobileSecurityObject(
+            version = "1.0",
+            docType = mdocDocumentType.docType,
+            signedAt = signedAt,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
+            deviceKey = mdocCredential.getAttestation().publicKey,
         )
-        msoGenerator.setValidityInfo(signedAt, validFrom, validUntil, expectedUpdate)
-        msoGenerator.addValueDigests(issuerNamespaces)
-
-        val mso = msoGenerator.generate()
-        val taggedEncodedMso = Cbor.encode(Tagged(24, Bstr(mso)))
+        val taggedEncodedMso = Cbor.encode(Tagged(
+            Tagged.ENCODED_CBOR,
+            Bstr(Cbor.encode(mso.toDataItem())))
+        )
 
         // IssuerAuth is a COSE_Sign1 where payload is MobileSecurityObjectBytes
         //

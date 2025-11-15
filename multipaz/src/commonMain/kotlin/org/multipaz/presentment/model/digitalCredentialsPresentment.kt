@@ -1,7 +1,6 @@
 package org.multipaz.presentment.model
 
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -18,24 +17,19 @@ import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
-import org.multipaz.document.NameSpacedData
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
-import org.multipaz.mdoc.issuersigned.IssuerNamespaces
-import org.multipaz.mdoc.mso.MobileSecurityObjectParser
 import org.multipaz.mdoc.request.DeviceRequest
-import org.multipaz.mdoc.response.DeviceResponseGenerator
-import org.multipaz.mdoc.response.DocumentGenerator
+import org.multipaz.mdoc.response.DeviceResponse
+import org.multipaz.mdoc.response.MdocDocument
+import org.multipaz.mdoc.response.buildDeviceResponse
 import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.presentment.CredentialPresentmentData
 import org.multipaz.presentment.CredentialPresentmentSelection
-import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.Requester
-import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.trustmanagement.TrustPoint
-import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
@@ -98,9 +92,9 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
         val jws = Json.parseToJsonElement(signedRequest.jsonPrimitive.content)
         val info = JsonWebSignature.getInfo(jws.jsonPrimitive.content)
         check(info.x5c != null) { "x5c missing in JWS" }
-        JsonWebSignature.verify(jws.jsonPrimitive.content, info.x5c!!.certificates.first().ecPublicKey)
+        JsonWebSignature.verify(jws.jsonPrimitive.content, info.x5c.certificates.first().ecPublicKey)
         requesterCertChain = info.x5c
-        for (cert in requesterCertChain!!.certificates) {
+        for (cert in requesterCertChain.certificates) {
             println("cert: ${cert.toPem()}")
         }
         info.claimsSet
@@ -162,94 +156,95 @@ private suspend fun digitalCredentialsMdocApiProtocol(
     }
     val encodedSessionTranscript = Cbor.encode(sessionTranscript)
 
-    val deviceResponseGenerator = DeviceResponseGenerator(Constants.DEVICE_RESPONSE_STATUS_OK)
+    val deviceResponse = buildDeviceResponse(
+        sessionTranscript = sessionTranscript,
+        status = DeviceResponse.STATUS_OK,
+    ) {
+        val deviceRequest = DeviceRequest.fromDataItem(Cbor.decode(deviceRequestBase64.fromBase64Url()))
+        deviceRequest.verifyReaderAuthentication(sessionTranscript)
+        for (docRequest in deviceRequest.docRequests) {
+            val zkRequested = docRequest.docRequestInfo?.zkRequest != null
 
-    val deviceRequest = DeviceRequest.fromDataItem(Cbor.decode(deviceRequestBase64.fromBase64Url()))
-    deviceRequest.verifyReaderAuthentication(sessionTranscript)
-    for (docRequest in deviceRequest.docRequests) {
-        val zkRequested = docRequest.docRequestInfo?.zkRequest != null
-
-        val request = docRequest.toMdocRequest(
-            documentTypeRepository = documentTypeRepository,
-            mdocCredential = null,
-            requesterOrigin = presentmentMechanism.origin,
-            requesterAppId = presentmentMechanism.appId
-        )
-        val trustPoint = source.findTrustPoint(request.requester)
-
-        val presentmentData = docRequest.getPresentmentData(
-            documentTypeRepository = documentTypeRepository,
-            source = source,
-            keyAgreementPossible = listOf()
-        )
-        if (presentmentData == null) {
-            Logger.w(TAG, "No document found for docType ${docRequest.docType}")
-            // No document was found
-            continue
-        }
-
-        val selection = if (source.skipConsentPrompt) {
-            presentmentData.select(presentmentMechanism.preselectedDocuments)
-        } else {
-            showConsentPrompt(
-                presentmentData,
-                presentmentMechanism.preselectedDocuments,
-                request.requester,
-                trustPoint
+            val request = docRequest.toMdocRequest(
+                documentTypeRepository = documentTypeRepository,
+                mdocCredential = null,
+                requesterOrigin = presentmentMechanism.origin,
+                requesterAppId = presentmentMechanism.appId
             )
-        }
-        if (selection == null) {
-            throw PresentmentCanceled("User canceled at document selection time")
-        }
+            val trustPoint = source.findTrustPoint(request.requester)
 
-        val match = selection.matches[0]
-        val mdocCredential = match.credential as MdocCredential
+            val presentmentData = docRequest.getPresentmentData(
+                documentTypeRepository = documentTypeRepository,
+                source = source,
+                keyAgreementPossible = listOf()
+            )
+            if (presentmentData == null) {
+                Logger.w(TAG, "No document found for docType ${docRequest.docType}")
+                // No document was found
+                continue
+            }
 
-        var zkSystemMatch: ZkSystem? = null
-        var zkSystemSpec: ZkSystemSpec? = null
-        if (zkRequested) {
-            val requesterSupportedZkSpecs = docRequest.docRequestInfo!!.zkRequest!!.systemSpecs
-            val zkSystemRepository = source.zkSystemRepository
-            if (zkSystemRepository != null) {
-                // Find the first ZK System that the requester supports and matches the document
-                for (zkSpec in requesterSupportedZkSpecs) {
-                    val zkSystem = zkSystemRepository.lookup(zkSpec.system)
-                    if (zkSystem == null) {
-                        continue
-                    }
+            val selection = if (source.skipConsentPrompt) {
+                presentmentData.select(presentmentMechanism.preselectedDocuments)
+            } else {
+                showConsentPrompt(
+                    presentmentData,
+                    presentmentMechanism.preselectedDocuments,
+                    request.requester,
+                    trustPoint
+                )
+            }
+            if (selection == null) {
+                throw PresentmentCanceled("User canceled at document selection time")
+            }
 
-                    val matchingZkSystemSpec = zkSystem.getMatchingSystemSpec(
-                        zkSystemSpecs = requesterSupportedZkSpecs,
-                        requestedClaims = request.requestedClaims
-                    )
-                    if (matchingZkSystemSpec != null) {
-                        zkSystemMatch = zkSystem
-                        zkSystemSpec = matchingZkSystemSpec
-                        break
+            val match = selection.matches[0]
+            val mdocCredential = match.credential as MdocCredential
+
+            var zkSystemMatch: ZkSystem? = null
+            var zkSystemSpec: ZkSystemSpec? = null
+            if (zkRequested) {
+                val requesterSupportedZkSpecs = docRequest.docRequestInfo.zkRequest.systemSpecs
+                val zkSystemRepository = source.zkSystemRepository
+                if (zkSystemRepository != null) {
+                    // Find the first ZK System that the requester supports and matches the document
+                    for (zkSpec in requesterSupportedZkSpecs) {
+                        val zkSystem = zkSystemRepository.lookup(zkSpec.system)
+                        if (zkSystem == null) {
+                            continue
+                        }
+
+                        val matchingZkSystemSpec = zkSystem.getMatchingSystemSpec(
+                            zkSystemSpecs = requesterSupportedZkSpecs,
+                            requestedClaims = request.requestedClaims
+                        )
+                        if (matchingZkSystemSpec != null) {
+                            zkSystemMatch = zkSystem
+                            zkSystemSpec = matchingZkSystemSpec
+                            break
+                        }
                     }
                 }
             }
-        }
 
-        val documentBytes = calcDocument(
-            credential = mdocCredential,
-            requestedClaims = request.requestedClaims,
-            encodedSessionTranscript = encodedSessionTranscript,
-        )
-
-        if (zkSystemMatch != null) {
-            val zkDocument = zkSystemMatch.generateProof(
-                zkSystemSpec!!,
-                ByteString(documentBytes),
-                ByteString(encodedSessionTranscript)
+            val document = MdocDocument.fromPresentment(
+                sessionTranscript = sessionTranscript,
+                credential = mdocCredential,
+                requestedClaims = request.requestedClaims,
             )
-            deviceResponseGenerator.addZkDocument(zkDocument)
-        } else {
-            deviceResponseGenerator.addDocument(documentBytes)
+            if (zkSystemMatch != null) {
+                val zkDocument = zkSystemMatch.generateProof(
+                    zkSystemSpec = zkSystemSpec!!,
+                    document = document,
+                    sessionTranscript = sessionTranscript
+                )
+                addZkDocument(zkDocument)
+            } else {
+                addDocument(document)
+            }
+            mdocCredential.increaseUsageCount()
         }
-        mdocCredential.increaseUsageCount()
     }
-    val deviceResponse = deviceResponseGenerator.generate()
 
     val encrypter = Hpke.getEncrypter(
         cipherSuite = Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM,
@@ -257,7 +252,7 @@ private suspend fun digitalCredentialsMdocApiProtocol(
         info = encodedSessionTranscript
     )
     val ciphertext = encrypter.encrypt(
-        plaintext = deviceResponse,
+        plaintext = Cbor.encode(deviceResponse.toDataItem()),
         aad = ByteArray(0),
     )
     val encryptedResponse =
@@ -278,45 +273,4 @@ private suspend fun digitalCredentialsMdocApiProtocol(
         protocol = presentmentMechanism.protocol,
         data = data
     )
-}
-
-private suspend fun calcDocument(
-    credential: MdocCredential,
-    requestedClaims: List<MdocRequestedClaim>,
-    encodedSessionTranscript: ByteArray
-): ByteArray {
-    // TODO: support MAC keys from v1.1 request and use setDeviceNamespacesMac() when possible
-    //   depending on the value of PresentmentSource.preferSignatureToKeyAgreement(). See also
-    //   calcDocument in mdocPresentment.kt.
-    //
-
-    val issuerSigned = Cbor.decode(credential.issuerProvidedData)
-    val issuerNamespaces = IssuerNamespaces.fromDataItem(issuerSigned["nameSpaces"])
-    val issuerAuthCoseSign1 = issuerSigned["issuerAuth"].asCoseSign1
-    val encodedMsoBytes = Cbor.decode(issuerAuthCoseSign1.payload!!)
-    val encodedMso = Cbor.encode(encodedMsoBytes.asTaggedEncodedCbor)
-    val mso = MobileSecurityObjectParser(encodedMso).parse()
-
-    val documentGenerator = DocumentGenerator(
-        mso.docType,
-        Cbor.encode(issuerSigned["issuerAuth"]),
-        encodedSessionTranscript,
-    )
-
-    documentGenerator.setIssuerNamespaces(issuerNamespaces.filter(requestedClaims))
-    val keyInfo = credential.secureArea.getKeyInfo(credential.alias)
-    if (!keyInfo.algorithm.isSigning) {
-        throw IllegalStateException(
-            "Signing is required for W3C DC API but its algorithm ${keyInfo.algorithm.name} is not for signing"
-        )
-    } else {
-        documentGenerator.setDeviceNamespacesSignature(
-            dataElements = NameSpacedData.Builder().build(),
-            secureArea = credential.secureArea,
-            keyAlias = credential.alias,
-            unlockReason = PresentmentUnlockReason(credential),
-        )
-    }
-
-    return documentGenerator.generate()
 }

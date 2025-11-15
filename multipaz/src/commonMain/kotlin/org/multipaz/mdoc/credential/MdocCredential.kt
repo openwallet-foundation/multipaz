@@ -22,10 +22,15 @@ import org.multipaz.cbor.CborBuilder
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.MapBuilder
 import org.multipaz.claim.MdocClaim
+import org.multipaz.cose.Cose
+import org.multipaz.cose.CoseNumberLabel
+import org.multipaz.cose.CoseSign1
 import org.multipaz.credential.SecureAreaBoundCredential
+import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
+import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureArea
@@ -235,7 +240,6 @@ class MdocCredential : SecureAreaBoundCredential {
         documentTypeRepository: DocumentTypeRepository?
     ): List<MdocClaim> {
         val dt = documentTypeRepository?.getDocumentTypeForMdoc(docType)
-        val issuerSigned = Cbor.decode(issuerProvidedData)
         val namespaces = issuerSigned.getOrNull("nameSpaces")
             ?: return emptyList()
         val ret = mutableListOf<MdocClaim>()
@@ -253,5 +257,45 @@ class MdocCredential : SecureAreaBoundCredential {
             }
         }
         return ret
+    }
+
+    /**
+     * The `IssuerSigned` data according to ISO/IEC 18013-5:2021.
+     */
+    val issuerSigned: DataItem by lazy {
+        Cbor.decode(issuerProvidedData)
+    }
+
+    /**
+     * The `IssuerAuth` part of the issuer provided data.
+     *
+     * This contains the signed Mobile Security Object as its payload.
+     */
+    val issuerAuth: CoseSign1 by lazy {
+        issuerSigned["issuerAuth"].asCoseSign1
+    }
+
+    /**
+     * The issuer-signed data elements part of the issuer provided data.
+     */
+    val issuerNamespaces: IssuerNamespaces by lazy {
+        IssuerNamespaces.fromDataItem(issuerSigned["nameSpaces"])
+    }
+
+    /**
+     * Convenience property for accessing the [MobileSecurityObject] from [issuerAuth].
+     */
+    val mso: MobileSecurityObject by lazy {
+        val encodedMobileSecurityObject = Cbor.decode(issuerAuth.payload!!).asTagged.asBstr
+        MobileSecurityObject.fromDataItem(Cbor.decode(encodedMobileSecurityObject))
+    }
+
+    /**
+     * Convenience property for accessing the X.509 certificate chain for the issuer signature from [issuerAuth].
+     */
+    val issuerCertChain: X509CertChain by lazy {
+        issuerAuth.unprotectedHeaders[
+            CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)
+        ]!!.asX509CertChain
     }
 }

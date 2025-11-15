@@ -23,7 +23,7 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
-import org.multipaz.mdoc.response.DeviceResponseParser
+import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.presentment.CredentialPresentmentData
@@ -286,23 +286,20 @@ class DigitalCredentialsPresentmentTest {
             )
         }
         Logger.iCbor(TAG, "handoverInfo", handoverInfo)
-        val encodedSessionTranscript = Cbor.encode(
-            buildCborArray {
-                add(Simple.NULL) // DeviceEngagementBytes
-                add(Simple.NULL) // EReaderKeyBytes
-                addCborArray {
-                    add("OpenID4VPDCAPIHandover")
-                    add(Crypto.digest(Algorithm.SHA256, handoverInfo))
-                }
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL) // DeviceEngagementBytes
+            add(Simple.NULL) // EReaderKeyBytes
+            addCborArray {
+                add("OpenID4VPDCAPIHandover")
+                add(Crypto.digest(Algorithm.SHA256, handoverInfo))
             }
-        )
-        val deviceResponse = DeviceResponseParser(encodedDeviceResponse, encodedSessionTranscript).parse()
-        assertEquals(Constants.DEVICE_RESPONSE_STATUS_OK, deviceResponse.status)
+        }
+
+        val deviceResponse = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
+        deviceResponse.verify(sessionTranscript)
+        assertEquals(DeviceResponse.STATUS_OK, deviceResponse.status)
         assertEquals(1, deviceResponse.documents.size)
         val doc = deviceResponse.documents[0]
-        assertTrue(doc.issuerSignedAuthenticated)
-        assertTrue(doc.deviceSignedAuthenticated)
-        assertEquals(0, doc.numIssuerEntryDigestMatchFailures)
         assertEquals(
             expectedMdocResponse,
             deviceResponse.prettyPrint().trim()
@@ -453,7 +450,7 @@ class DigitalCredentialsPresentmentTest {
 
 }
 
-private fun DeviceResponseParser.DeviceResponse.prettyPrint(): String {
+private fun DeviceResponse.prettyPrint(): String {
     val diagOptions = setOf(DiagnosticOption.BSTR_PRINT_LENGTH)
     val sb = StringBuilder()
     for (n in documents.indices) {
@@ -461,14 +458,12 @@ private fun DeviceResponseParser.DeviceResponse.prettyPrint(): String {
         sb.appendLine("Document $n:")
         sb.appendLine("  DocType: ${doc.docType}")
         sb.appendLine("  IssuerSigned:")
-        for (namespaceName in doc.issuerNamespaces) {
+        doc.issuerNamespaces.data.forEach { (namespaceName, issuerSignedItemsMap) ->
             sb.appendLine("    $namespaceName:")
-            for (dataElementName in doc.getIssuerEntryNames(namespaceName)) {
-                val encodedValue = doc.getIssuerEntryData(namespaceName, dataElementName)
-                sb.appendLine("      $dataElementName: ${Cbor.toDiagnostics(encodedValue, diagOptions)}")
+            issuerSignedItemsMap.forEach { (dataElementName, issuerSignedItem) ->
+                sb.appendLine("      $dataElementName: ${Cbor.toDiagnostics(issuerSignedItem.dataElementValue, diagOptions)}")
             }
         }
-
     }
     return sb.toString()
 }

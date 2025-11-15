@@ -42,10 +42,13 @@ suspend fun openid4VpResponse(call: ApplicationCall) {
     when (presentation) {
         is Openid4VpVerifierModel.MdocPresentation -> {
             for (document in presentation.deviceResponse.documents) {
-                for (namespaceName in document.issuerNamespaces) {
-                    for (dataElementName in document.getIssuerEntryNames(namespaceName)) {
-                        val value = document.getIssuerEntryData(namespaceName, dataElementName)
-                        data.putEntry(namespaceName, dataElementName, value)
+                document.issuerNamespaces.data.forEach { (namespaceName, issuerSignedItemsMap) ->
+                    issuerSignedItemsMap.forEach { (dataElementName, issuerSignedItem) ->
+                        data.putEntry(
+                            namespaceName,
+                            dataElementName,
+                            Cbor.encode(issuerSignedItem.dataElementValue)
+                        )
                     }
                 }
             }

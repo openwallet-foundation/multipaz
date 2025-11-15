@@ -36,6 +36,7 @@ import org.multipaz.mdoc.zkp.ZkDocument
  * [Constants.DEVICE_RESPONSE_STATUS_CBOR_DECODING_ERROR], or
  * [Constants.DEVICE_RESPONSE_STATUS_CBOR_VALIDATION_ERROR].
  */
+@Deprecated(message = "Deprecated, use DeviceResponse instead")
 class DeviceResponseGenerator(private val mStatusCode: Long) {
     private val mDocumentsBuilder = CborArray.builder()
     private val mZkDocumentBuilder = CborArray.builder()

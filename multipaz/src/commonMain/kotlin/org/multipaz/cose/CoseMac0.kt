@@ -24,6 +24,27 @@ data class CoseMac0(
     val tag: ByteArray,
     val payload: ByteArray?
 ) {
+    override fun hashCode(): Int {
+        var result = 31
+        result = 31*result + protectedHeaders.hashCode()
+        result = 31*result + unprotectedHeaders.hashCode()
+        result = 31*result + tag.contentHashCode()
+        payload?.let {
+            result = 31*result + it.contentHashCode()
+        }
+        return result
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is CoseMac0) return false
+        if (protectedHeaders != other.protectedHeaders) return false
+        if (unprotectedHeaders != other.unprotectedHeaders) return false
+        if (!(tag contentEquals other.tag)) return false
+        if (!(payload contentEquals other.payload)) return false
+        return true
+    }
+
     /**
      * Encodes the COSE_Mac0 as a CBOR data item.
      */
@@ -71,7 +92,7 @@ data class CoseMac0(
 
             val protectedHeaders = mutableMapOf<CoseLabel, DataItem>()
             val serializedProtectedHeaders = dataItem.items[0].asBstr
-            if (serializedProtectedHeaders.isEmpty()) {
+            if (!serializedProtectedHeaders.isEmpty()) {
                 val ph = Cbor.decode(serializedProtectedHeaders) as CborMap
                 ph.items.forEach { (key, value) -> protectedHeaders.put(key.asCoseLabel, value) }
             }

@@ -15,6 +15,7 @@
  */
 package org.multipaz.mdoc.mso
 
+import org.multipaz.cbor.Cbor
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -205,6 +206,9 @@ class MobileSecurityObjectGeneratorTest {
         assertEquals(validFromTimestamp, mso.validFrom)
         assertEquals(validUntilTimestamp, mso.validUntil)
         assertEquals(expectedTimestamp, mso.expectedUpdate)
+
+        // Check we can decode with the new MobileSecurityObject class.
+        val msoNew = MobileSecurityObject.fromDataItem(Cbor.decode(encodedMSO))
     }
 
     @Test
@@ -245,6 +249,9 @@ class MobileSecurityObjectGeneratorTest {
         assertEquals(validFromTimestamp, mso.validFrom)
         assertEquals(validUntilTimestamp, mso.validUntil)
         assertNull(mso.expectedUpdate)
+
+        // Check we can decode with the new MobileSecurityObject class.
+        val msoNew = MobileSecurityObject.fromDataItem(Cbor.decode(encodedMSO))
     }
 
     @Test
@@ -385,5 +392,8 @@ class MobileSecurityObjectGeneratorTest {
         assertEquals(validUntilTimestampWholeSeconds, mso.validUntil)
         assertEquals(validFromTimestampWholeSeconds, mso.validFrom)
         assertEquals(expectedUpdateTimestampWholeSeconds, mso.expectedUpdate)
+
+        // Check we can decode with the new MobileSecurityObject class.
+        val msoNew = MobileSecurityObject.fromDataItem(Cbor.decode(encodedMSO))
     }
 }

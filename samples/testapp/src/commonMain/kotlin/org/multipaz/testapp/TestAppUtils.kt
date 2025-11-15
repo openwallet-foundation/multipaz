@@ -47,7 +47,7 @@ import org.multipaz.documenttype.knowntypes.PhotoIDLowercase
 import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
-import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
+import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequest
@@ -745,16 +745,21 @@ object TestAppUtils {
                 )
 
                 // Generate an MSO and issuer-signed data for this authentication key.
-                val msoGenerator = MobileSecurityObjectGenerator(
-                    Algorithm.SHA256,
-                    documentType.mdocDocumentType!!.docType,
-                    mdocCredential.getAttestation().publicKey
+                val mso = MobileSecurityObject(
+                    version = "1.0",
+                    docType = documentType.mdocDocumentType!!.docType,
+                    signedAt = signedAt,
+                    validFrom = validFrom,
+                    validUntil = validUntil,
+                    expectedUpdate = null,
+                    digestAlgorithm = Algorithm.SHA256,
+                    valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
+                    deviceKey = mdocCredential.getAttestation().publicKey,
                 )
-                msoGenerator.setValidityInfo(signedAt, validFrom, validUntil, null)
-                msoGenerator.addValueDigests(issuerNamespaces)
-
-                val mso = msoGenerator.generate()
-                val taggedEncodedMso = Cbor.encode(Tagged(24, Bstr(mso)))
+                val taggedEncodedMso = Cbor.encode(Tagged(
+                    Tagged.ENCODED_CBOR,
+                    Bstr(Cbor.encode(mso.toDataItem())))
+                )
 
                 // IssuerAuth is a COSE_Sign1 where payload is MobileSecurityObjectBytes
                 //
@@ -880,16 +885,21 @@ object TestAppUtils {
 
         for (mdocCredential in credentials) {
             // Generate an MSO and issuer-signed data for this authentication key.
-            val msoGenerator = MobileSecurityObjectGenerator(
-                Algorithm.SHA256,
-                documentType.mdocDocumentType!!.docType,
-                mdocCredential.getAttestation().publicKey
+            val mso = MobileSecurityObject(
+                version = "1.0",
+                docType = documentType.mdocDocumentType!!.docType,
+                signedAt = signedAt,
+                validFrom = validFrom,
+                validUntil = validUntil,
+                expectedUpdate = null,
+                digestAlgorithm = Algorithm.SHA256,
+                valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
+                deviceKey = mdocCredential.getAttestation().publicKey,
             )
-            msoGenerator.setValidityInfo(signedAt, validFrom, validUntil, null)
-            msoGenerator.addValueDigests(issuerNamespaces)
-
-            val mso = msoGenerator.generate()
-            val taggedEncodedMso = Cbor.encode(Tagged(24, Bstr(mso)))
+            val taggedEncodedMso = Cbor.encode(Tagged(
+                Tagged.ENCODED_CBOR,
+                Bstr(Cbor.encode(mso.toDataItem())))
+            )
 
             // IssuerAuth is a COSE_Sign1 where payload is MobileSecurityObjectBytes
             //

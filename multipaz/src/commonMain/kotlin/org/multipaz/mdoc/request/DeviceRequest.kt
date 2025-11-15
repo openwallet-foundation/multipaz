@@ -173,6 +173,9 @@ data class DeviceRequest private constructor(
 
         /**
          * Parses CBOR compliant with the CDDL for `DeviceRequest` according to ISO 18013-5.
+         *
+         * @param dataItem the CBOR with data.
+         * @return a [DeviceRequest].
          */
         fun fromDataItem(dataItem: DataItem): DeviceRequest {
             val version = dataItem["version"].asTstr

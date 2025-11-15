@@ -33,7 +33,7 @@ import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentCannedRequest
 import org.multipaz.jwt.buildJwt
-import org.multipaz.mdoc.response.DeviceResponseParser
+import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
@@ -177,11 +177,13 @@ class Openid4VpVerifierModel(
             val presentationText = encoded.jsonPrimitive.content
             when (requestedFormats[id]) {
                 "mso_mdoc" -> {
-                    val parser = DeviceResponseParser(
-                        presentationText.fromBase64Url(),
-                        sessionTranscript
+                    val deviceResponse = DeviceResponse.fromDataItem(
+                        Cbor.decode(presentationText.fromBase64Url())
                     )
-                    MdocPresentation(parser.parse())
+                    deviceResponse.verify(
+                        sessionTranscript = Cbor.decode(sessionTranscript)
+                    )
+                    MdocPresentation(deviceResponse)
                 }
                 "dc+sd-jwt" -> {
                     SdJwtPresentation(presentationText)
@@ -292,7 +294,7 @@ class Openid4VpVerifierModel(
 
     sealed class Presentation
 
-    class MdocPresentation(val deviceResponse: DeviceResponseParser.DeviceResponse): Presentation()
+    class MdocPresentation(val deviceResponse: DeviceResponse): Presentation()
 
     class SdJwtPresentation(val compactSerialization: String): Presentation()
 

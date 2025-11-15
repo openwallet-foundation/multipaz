@@ -10,7 +10,6 @@ import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
 import org.multipaz.util.toBase64Url
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -19,6 +18,7 @@ import org.multipaz.cbor.Simple
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
+import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.util.Logger
 import kotlin.time.Duration.Companion.days
 
@@ -63,14 +63,6 @@ internal class CredentialFactoryAgeVerification : CredentialFactoryBase() {
         val validFrom = Instant.fromEpochSeconds(now.epochSeconds, 0)
         val validUntil = validFrom + 30.days
 
-        // Generate an MSO and issuer-signed data for this authentication key.
-        val msoGenerator = MobileSecurityObjectGenerator(
-            Algorithm.SHA256,
-            AgeVerification.AV_DOCTYPE,
-            authenticationKey!!
-        )
-        msoGenerator.setValidityInfo(timeSigned, validFrom, validUntil, null)
-
         val mdocType = AgeVerification.getDocumentType()
             .mdocDocumentType!!.namespaces[AgeVerification.AV_NAMESPACE]!!
 
@@ -92,10 +84,22 @@ internal class CredentialFactoryAgeVerification : CredentialFactoryBase() {
             }
         }
 
-        msoGenerator.addValueDigests(issuerNamespaces)
-
-        val mso = msoGenerator.generate()
-        val taggedEncodedMso = Cbor.encode(Tagged(24, Bstr(mso)))
+        // Generate an MSO and issuer-signed data for this authentication key.
+        val mso = MobileSecurityObject(
+            version = "1.0",
+            docType = AgeVerification.AV_DOCTYPE,
+            signedAt = timeSigned,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
+            deviceKey = authenticationKey!!,
+        )
+        val taggedEncodedMso = Cbor.encode(Tagged(
+            Tagged.ENCODED_CBOR,
+            Bstr(Cbor.encode(mso.toDataItem())))
+        )
 
         // IssuerAuth is a COSE_Sign1 where payload is MobileSecurityObjectBytes
         //

@@ -24,6 +24,27 @@ data class CoseSign1(
     val signature: ByteArray,
     val payload: ByteArray?
 ) {
+    override fun hashCode(): Int {
+        var result = 31
+        result = 31*result + protectedHeaders.hashCode()
+        result = 31*result + unprotectedHeaders.hashCode()
+        result = 31*result + signature.contentHashCode()
+        payload?.let {
+            result = 31*result + it.contentHashCode()
+        }
+        return result
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is CoseSign1) return false
+        if (protectedHeaders != other.protectedHeaders) return false
+        if (unprotectedHeaders != other.unprotectedHeaders) return false
+        if (!(signature contentEquals other.signature)) return false
+        if (!(payload contentEquals other.payload)) return false
+        return true
+    }
+
     /**
      * Encodes the COSE_Sign1 as a CBOR data item.
      */

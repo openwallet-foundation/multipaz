@@ -13,7 +13,6 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
-import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
 import org.multipaz.util.toBase64Url
 import kotlin.time.Clock
 import kotlinx.datetime.DateTimeUnit
@@ -29,6 +28,7 @@ import org.multipaz.cbor.Uint
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
+import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.util.Logger
 import kotlin.time.Duration.Companion.days
 
@@ -86,15 +86,6 @@ internal class CredentialFactoryMdl : CredentialFactoryBase() {
         val validUntil = validFrom + 30.days
 
         val resources = BackendEnvironment.getInterface(Resources::class)!!
-
-        // Generate an MSO and issuer-signed data for this authentication key.
-        val docType = DrivingLicense.MDL_DOCTYPE
-        val msoGenerator = MobileSecurityObjectGenerator(
-            Algorithm.SHA256,
-            docType,
-            authenticationKey!!
-        )
-        msoGenerator.setValidityInfo(timeSigned, validFrom, validUntil, null)
 
         // As we do not have driver license database, just make up some data to fill mDL
         // for demo purposes. Take what we can from the PID that was presented as evidence.
@@ -175,10 +166,22 @@ internal class CredentialFactoryMdl : CredentialFactoryBase() {
             }
         }
 
-        msoGenerator.addValueDigests(issuerNamespaces)
-
-        val mso = msoGenerator.generate()
-        val taggedEncodedMso = Cbor.encode(Tagged(24, Bstr(mso)))
+        // Generate an MSO and issuer-signed data for this authentication key.
+        val mso = MobileSecurityObject(
+            version = "1.0",
+            docType = DrivingLicense.MDL_DOCTYPE,
+            signedAt = timeSigned,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
+            deviceKey = authenticationKey!!,
+        )
+        val taggedEncodedMso = Cbor.encode(Tagged(
+            Tagged.ENCODED_CBOR,
+            Bstr(Cbor.encode(mso.toDataItem())))
+        )
 
         // IssuerAuth is a COSE_Sign1 where payload is MobileSecurityObjectBytes
         //

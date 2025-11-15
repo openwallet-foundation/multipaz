@@ -17,7 +17,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.documenttype.knowntypes.Loyalty
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
-import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
+import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
 import org.multipaz.util.toBase64Url
@@ -73,15 +73,6 @@ internal class CredentialFactoryUtopiaLoyalty : CredentialFactoryBase() {
         val validFrom = Instant.fromEpochSeconds(now.epochSeconds, 0)
         val validUntil = validFrom + 30.days
 
-        // Generate an MSO and issuer-signed data for this authentication key.
-        val docType = Loyalty.LOYALTY_DOCTYPE
-        val msoGenerator = MobileSecurityObjectGenerator(
-            Algorithm.SHA256,
-            docType,
-            authenticationKey!!
-        )
-        msoGenerator.setValidityInfo(timeSigned, validFrom, validUntil, null)
-
         val records = data["records"]
         if (!records.hasKey("wholesale")) {
             throw IllegalArgumentException("No wholesale membership card is issued to this person")
@@ -124,10 +115,22 @@ internal class CredentialFactoryUtopiaLoyalty : CredentialFactoryBase() {
             }
         }
 
-        msoGenerator.addValueDigests(issuerNamespaces)
-
-        val mso = msoGenerator.generate()
-        val taggedEncodedMso = Cbor.encode(Tagged(24, Bstr(mso)))
+        // Generate an MSO and issuer-signed data for this authentication key.
+        val mso = MobileSecurityObject(
+            version = "1.0",
+            docType = Loyalty.LOYALTY_DOCTYPE,
+            signedAt = timeSigned,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
+            deviceKey = authenticationKey!!,
+        )
+        val taggedEncodedMso = Cbor.encode(Tagged(
+            Tagged.ENCODED_CBOR,
+            Bstr(Cbor.encode(mso.toDataItem())))
+        )
 
         // IssuerAuth is a COSE_Sign1 where payload is MobileSecurityObjectBytes
         val protectedHeaders = mapOf<CoseLabel, DataItem>(

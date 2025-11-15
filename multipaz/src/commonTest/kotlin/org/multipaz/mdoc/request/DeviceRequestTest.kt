@@ -16,6 +16,7 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.knowntypes.DrivingLicense
@@ -29,6 +30,7 @@ import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.fromHex
 import org.multipaz.util.fromHexByteString
+import org.multipaz.util.toHex
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -650,6 +652,66 @@ class DeviceRequestTest {
                 }
               ]
             }
+            """.trimIndent().trim(),
+            Cbor.toDiagnostics(
+                item =deviceRequest.toDataItem(),
+                options = setOf(DiagnosticOption.EMBEDDED_CBOR, DiagnosticOption.PRETTY_PRINT)
+            )
+        )
+        assertEquals(DeviceRequest.fromDataItem(deviceRequest.toDataItem()), deviceRequest)
+    }
+
+    @Test
+    fun docRequestInfoEncryptionParametersSet() = runTest {
+        val sessionTranscript = buildCborArray { add("Doesn't matter") }
+        val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf(
+                        "age_over_18" to true,
+                        "portrait" to false
+                    )
+                ),
+                docRequestInfo = DocRequestInfo(
+                    docResponseEncryption = EncryptionParameters(
+                        recipientPublicKey = recipientKey.publicKey,
+                    )
+                ),
+            )
+        }
+        assertEquals("1.1", deviceRequest.version)
+        assertEquals(
+            """
+                {
+                  "version": "1.1",
+                  "docRequests": [
+                    {
+                      "itemsRequest": 24(<< {
+                        "docType": "org.iso.18013.5.1.mDL",
+                        "nameSpaces": {
+                          "org.iso.18013.5.1": {
+                            "age_over_18": true,
+                            "portrait": false
+                          }
+                        },
+                        "requestInfo": {
+                          "docResponseEncryption": 24(<< {
+                            "recipientPublicKey": {
+                              1: 2,
+                              -1: 1,
+                              -2: h'${(recipientKey.publicKey as EcPublicKeyDoubleCoordinate).x.toHex()}',
+                              -3: h'${(recipientKey.publicKey as EcPublicKeyDoubleCoordinate).y.toHex()}'
+                            }
+                          } >>)
+                        }
+                      } >>)
+                    }
+                  ]
+                }
             """.trimIndent().trim(),
             Cbor.toDiagnostics(
                 item =deviceRequest.toDataItem(),

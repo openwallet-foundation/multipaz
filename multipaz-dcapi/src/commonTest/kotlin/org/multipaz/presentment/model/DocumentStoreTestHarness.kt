@@ -41,7 +41,7 @@ import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
-import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
+import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
@@ -52,6 +52,7 @@ import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.util.Logger
+import org.multipaz.util.truncateToWholeSeconds
 import kotlin.collections.iterator
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
@@ -147,7 +148,7 @@ class DocumentStoreTestHarness {
             domainKeyBoundSdJwt = "sdjwt"
         )
 
-        val now = Clock.System.now()
+        val now = Clock.System.now().truncateToWholeSeconds()
         signedAt = now - 1.days
         validFrom = now - 1.days
         validUntil = now + 365.days
@@ -470,16 +471,21 @@ class DocumentStoreTestHarness {
         )
 
         // Generate an MSO and issuer-signed data for this authentication key.
-        val msoGenerator = MobileSecurityObjectGenerator(
-            Algorithm.SHA256,
-            docType,
-            mdocCredential.getAttestation().publicKey
+        val mso = MobileSecurityObject(
+            version = "1.0",
+            docType = docType,
+            signedAt = signedAt,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            expectedUpdate = null,
+            digestAlgorithm = Algorithm.SHA256,
+            valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
+            deviceKey = mdocCredential.getAttestation().publicKey,
         )
-        msoGenerator.setValidityInfo(signedAt, validFrom, validUntil, null)
-        msoGenerator.addValueDigests(issuerNamespaces)
-
-        val mso = msoGenerator.generate()
-        val taggedEncodedMso = Cbor.encode(Tagged(24, Bstr(mso)))
+        val taggedEncodedMso = Cbor.encode(Tagged(
+            Tagged.ENCODED_CBOR,
+            Bstr(Cbor.encode(mso.toDataItem())))
+        )
 
         // IssuerAuth is a COSE_Sign1 where payload is MobileSecurityObjectBytes
         //

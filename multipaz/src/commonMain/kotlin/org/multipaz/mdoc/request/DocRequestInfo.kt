@@ -1,7 +1,10 @@
 package org.multipaz.mdoc.request
 
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.Bstr
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.mdoc.zkp.ZkSystem
@@ -14,6 +17,7 @@ import org.multipaz.mdoc.zkp.ZkSystem
  * @property uniqueDocSetRequired whether a unique doc set is required or not or unspecified.
  * @property maximumResponseSize the maximum response size, if available.
  * @property zkRequest optional request for a Zero-Knowledge Proof.
+ * @property docResponseEncryption optional request for encrypting the response.
  * @property otherInfo other request info.
  */
 data class DocRequestInfo(
@@ -22,6 +26,7 @@ data class DocRequestInfo(
     val uniqueDocSetRequired: Boolean? = null,
     val maximumResponseSize: Long? = null,
     val zkRequest: ZkRequest? = null,
+    val docResponseEncryption: EncryptionParameters? = null,
     val otherInfo: Map<String, DataItem> = emptyMap()
 ) {
     internal fun toDataItem() = buildCborMap {
@@ -48,6 +53,12 @@ data class DocRequestInfo(
         zkRequest?.let {
             put("zkRequest", it.toDataItem())
         }
+        docResponseEncryption?.let {
+            put("docResponseEncryption", Tagged(
+                tagNumber = Tagged.ENCODED_CBOR,
+                taggedItem = Bstr(Cbor.encode(it.toDataItem()))
+            ))
+        }
         otherInfo.forEach { (key, value) ->
             put(key, value)
         }
@@ -59,7 +70,8 @@ data class DocRequestInfo(
                 issuerIdentifiers.isNotEmpty() ||
                 uniqueDocSetRequired != null ||
                 maximumResponseSize != null ||
-                zkRequest != null
+                zkRequest != null ||
+                docResponseEncryption != null
     }
 
     companion object {
@@ -75,6 +87,9 @@ data class DocRequestInfo(
             val zkRequest = dataItem.getOrNull("zkRequest")?.let {
                 ZkRequest.fromDataItem(it)
             }
+            val docResponseEncryption = dataItem.getOrNull("docResponseEncryption")?.let {
+                EncryptionParameters.fromDataItem(it.asTaggedEncodedCbor)
+            }
             val otherInfo = mutableMapOf<String, DataItem>()
             for ((otherKeyDataItem, otherValue) in dataItem.asMap) {
                 val otherKey = otherKeyDataItem.asTstr
@@ -83,7 +98,8 @@ data class DocRequestInfo(
                     "issuerIdentifiers",
                     "uniqueDocSetRequired",
                     "maximumResponseSize",
-                    "zkRequest" -> continue
+                    "zkRequest",
+                    "docResponseEncryption" -> continue
                     else -> otherInfo[otherKey] = otherValue
                 }
             }
@@ -93,6 +109,7 @@ data class DocRequestInfo(
                 uniqueDocSetRequired = uniqueDocSetRequired,
                 maximumResponseSize = maximumResponseSize,
                 zkRequest = zkRequest,
+                docResponseEncryption = docResponseEncryption,
                 otherInfo = otherInfo
             )
         }

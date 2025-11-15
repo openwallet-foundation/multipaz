@@ -46,6 +46,7 @@ import org.multipaz.securearea.SecureArea
  * @param encodedSessionTranscript bytes of `SessionTranscript` CBOR as per ISO/IEC 18013-5:2021
  * section 9.1.5.1.
  */
+@Deprecated(message = "Deprecated, use DeviceResponse instead")
 class DocumentGenerator
     (
     private val docType: String,

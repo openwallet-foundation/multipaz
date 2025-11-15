@@ -29,7 +29,6 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.X500Name
 import org.multipaz.mdoc.TestVectors
-import org.multipaz.mdoc.mso.MobileSecurityObjectParser
 import org.multipaz.mdoc.request.DeviceRequestParser
 import org.multipaz.mdoc.util.MdocUtil.calculateDigestsForNameSpace
 import org.multipaz.mdoc.util.MdocUtil.generateDocumentRequest
@@ -42,6 +41,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.mdoc.mso.MobileSecurityObject
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -242,10 +242,8 @@ class MdocUtilTest {
         val issuerSigned = documentDataItem["issuerSigned"]
         val issuerAuthDataItem = issuerSigned["issuerAuth"]
         val (_, _, _, payload) = issuerAuthDataItem.asCoseSign1
-        val mobileSecurityObject = Cbor.decode(payload!!)
-            .asTaggedEncodedCbor
-        val encodedMobileSecurityObject = Cbor.encode(mobileSecurityObject)
-        val mso = MobileSecurityObjectParser(encodedMobileSecurityObject).parse()
+        val mobileSecurityObject = Cbor.decode(payload!!).asTaggedEncodedCbor
+        val mso = MobileSecurityObject.fromDataItem(mobileSecurityObject)
         val nameSpaces = issuerSigned["nameSpaces"]
         val arrayOfIssuerSignedItemBytes = nameSpaces["org.iso.18013.5.1"].asArray
         val issuerNamespacesForMdlNamespace: MutableList<ByteArray> = ArrayList()
@@ -259,7 +257,7 @@ class MdocUtilTest {
             issuerNameSpacesFromTestVector,
             Algorithm.SHA256
         )
-        val digestsListedInMsoInTestVector = mso.getDigestIDs("org.iso.18013.5.1")
+        val digestsListedInMsoInTestVector = mso.valueDigests["org.iso.18013.5.1"]!!
 
         // Note: Because of selective disclosure, the response doesn't contain all the data
         // elements listed in the MSO... and we can only test what's in the response. So we
@@ -267,7 +265,7 @@ class MdocUtilTest {
         //
         for (digestId in digestsCalculatedFromResponseInTestVector.keys) {
             val calculatedDigest = digestsCalculatedFromResponseInTestVector[digestId]
-            val digestInMso = digestsListedInMsoInTestVector!![digestId]
+            val digestInMso = digestsListedInMsoInTestVector[digestId]!!.toByteArray()
             assertContentEquals(calculatedDigest, digestInMso)
         }
     }

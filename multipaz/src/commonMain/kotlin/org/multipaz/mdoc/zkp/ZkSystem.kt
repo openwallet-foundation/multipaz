@@ -3,6 +3,8 @@ package org.multipaz.mdoc.zkp
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.DataItem
+import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.request.MdocRequest
 import org.multipaz.request.RequestedClaim
 
@@ -27,14 +29,14 @@ interface ZkSystem {
      * and session context.
      *
      * @param zkSystemSpec the system spec indicating which ZK circuit or rules to use
-     * @param encodedDocument the encoded mdoc Document CBOR (per ISO 18013-5 section 8.3.2.1.2.2)
-     * @param encodedSessionTranscript the session transcript CBOR (used as public context)
+     * @param document the [MdocDocument] to generate a proof for.
+     * @param sessionTranscript the Session Transcript used for the document.
      * @return a [ZkDocument] containing the resulting proof and metadata
      */
     fun generateProof(
         zkSystemSpec: ZkSystemSpec,
-        encodedDocument: ByteString,
-        encodedSessionTranscript: ByteString,
+        document: MdocDocument,
+        sessionTranscript: DataItem,
         timestamp: Instant = Clock.System.now()
     ): ZkDocument
 
@@ -43,14 +45,13 @@ interface ZkSystem {
      *
      * @param zkDocument the document containing the proof and associated metadata
      * @param zkSystemSpec the system spec used to generate the proof
-     * @param encodedSessionTranscript the same session transcript used during proof generation
-     *
+     * @param sessionTranscript the Session Transcript used for the document.
      * @throws ProofVerificationFailureException if the proof is invalid or cannot be verified
      */
     fun verifyProof(
         zkDocument: ZkDocument,
         zkSystemSpec: ZkSystemSpec,
-        encodedSessionTranscript: ByteString
+        sessionTranscript: DataItem
     )
 
     /**

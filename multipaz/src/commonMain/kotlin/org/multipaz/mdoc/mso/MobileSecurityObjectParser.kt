@@ -30,6 +30,7 @@ import org.multipaz.crypto.Algorithm
  *
  * @param encodedMobileSecurityObject The bytes of `MobileSecurityObject`.
  */
+@Deprecated(message = "Deprecated, use MobileSecurityObject instead")
 class MobileSecurityObjectParser(
     private var encodedMobileSecurityObject: ByteArray
 ) {

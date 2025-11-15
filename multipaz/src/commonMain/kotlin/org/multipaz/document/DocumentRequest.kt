@@ -41,6 +41,7 @@ package org.multipaz.document
  *
  * @param requestedDataElements A list of [DocumentRequest.DataElement] instances.
  */
+@Deprecated(message = "Deprecated, use Request instead")
 class DocumentRequest(
     val requestedDataElements: List<DataElement>
 ) {

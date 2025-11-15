@@ -27,7 +27,6 @@ import org.multipaz.documenttype.knowntypes.UtopiaNaturalization
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable
-import org.multipaz.mdoc.response.DeviceResponseParser
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.Logger
@@ -87,6 +86,7 @@ import org.multipaz.documenttype.knowntypes.PhotoIDLowercase
 import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequestSuspend
+import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
@@ -104,7 +104,6 @@ import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.TrustManager
 import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.trustmanagement.TrustMetadata
-import org.multipaz.util.fromHex
 import org.multipaz.util.fromHexByteString
 import org.multipaz.verification.VerificationUtil
 import java.net.URLEncoder
@@ -1167,7 +1166,7 @@ private suspend fun handleGetDataMdoc(
 
     val trustManager = getIssuerTrustManager()
 
-    for (deviceResponse in session.deviceResponses) {
+    for (encodedDeviceResponse in session.deviceResponses) {
         // TODO: Add more sophistication in how we convey the result to the webpage, for example
         //  support the following value types
         //  - textual string
@@ -1180,47 +1179,58 @@ private suspend fun handleGetDataMdoc(
         }
         lines.add(ResultLine("Response end-to-end encrypted", "${session.responseWasEncrypted}"))
 
-        val parser = DeviceResponseParser(deviceResponse, session.sessionTranscript!!)
-        val deviceResponse = parser.parse()
-        Logger.i(TAG, "Validated DeviceResponse!")
+        val deviceResponse = DeviceResponse.fromDataItem(
+            Cbor.decode(encodedDeviceResponse)
+        )
+        try {
+            deviceResponse.verify(
+                sessionTranscript = Cbor.decode(session.sessionTranscript!!),
+            )
+            lines.add(
+                ResultLine(
+                    "Device Response",
+                    "Verified"
+                )
+            )
+        } catch (e: Throwable) {
+            lines.add(
+                ResultLine(
+                    "Device Response",
+                    "Error verifying: $e"
+                )
+            )
+        }
 
         for (document in deviceResponse.documents) {
-
-            val trustResult = trustManager.verify(document.issuerCertificateChain.certificates)
-
-            lines.add(
-                ResultLine(
-                    "DeviceSigned Authenticated",
-                    "${document.deviceSignedAuthenticated}"
-                )
-            )
-            lines.add(
-                ResultLine(
-                    "IssuerSigned Authenticated", "${document.issuerSignedAuthenticated} " +
-                            "(${document.numIssuerEntryDigestMatchFailures} digest failures)"
-                )
-            )
-            if (trustResult.isTrusted) {
-                val tp = trustResult.trustPoints[0]
-                val name = tp.metadata.displayName ?: tp.certificate.subject.name
-                lines.add(ResultLine("Issuer", "In trust list ($name)"))
-            } else {
-                if (document.issuerCertificateChain.certificates.size > 0) {
-                    val name = document.issuerCertificateChain.certificates.first().subject.name
-                    lines.add(ResultLine("Issuer", "Not in trust list ($name)"))
+            try {
+                val trustResult = trustManager.verify(document.issuerCertChain.certificates)
+                if (trustResult.isTrusted) {
+                    val tp = trustResult.trustPoints[0]
+                    val name = tp.metadata.displayName ?: tp.certificate.subject.name
+                    lines.add(ResultLine("Issuer", "In trust list ($name)"))
                 } else {
-                    lines.add(ResultLine("Issuer", "Not signed by issuer"))
+                    if (document.issuerCertChain.certificates.size > 0) {
+                        val name = document.issuerCertChain.certificates.first().subject.name
+                        lines.add(ResultLine("Issuer", "Not in trust list ($name)"))
+                    } else {
+                        lines.add(ResultLine("Issuer", "Not signed by issuer"))
+                    }
                 }
+            } catch (e: Throwable) {
+                lines.add(
+                    ResultLine(
+                        "Document",
+                        "Verification failed: $e"
+                    )
+                )
             }
 
             lines.add(ResultLine("DocType", document.docType))
-            for (namespaceName in document.issuerNamespaces) {
+            document.issuerNamespaces.data.forEach { (namespaceName, issuerSignedItemsMap) ->
                 lines.add(ResultLine("Namespace", namespaceName))
-                for (dataElementName in document.getIssuerEntryNames(namespaceName)) {
-                    val value = document.getIssuerEntryData(namespaceName, dataElementName)
-                    val dataItem = Cbor.decode(value)
+                issuerSignedItemsMap.forEach { (dataElementName, issuerSignedItem) ->
                     val renderedValue = Cbor.toDiagnostics(
-                        dataItem,
+                        issuerSignedItem.dataElementValue,
                         setOf(
                             DiagnosticOption.PRETTY_PRINT,
                             DiagnosticOption.BSTR_PRINT_LENGTH
@@ -1228,6 +1238,7 @@ private suspend fun handleGetDataMdoc(
                     )
                     lines.add(ResultLine(dataElementName, renderedValue))
                 }
+                // TODO: also iterate over DeviceSigned items
             }
         }
         for (zkDocument in deviceResponse.zkDocuments) {
@@ -1251,7 +1262,7 @@ private suspend fun handleGetDataMdoc(
                         ?.verifyProof(
                             zkDocument,
                             zkSystemSpec,
-                            ByteString(session.sessionTranscript!!)
+                            Cbor.decode(session.sessionTranscript!!)
                         )
                         ?: throw IllegalStateException("Zk System '${zkSystemSpec.system}' was not found.")
                     lines.add(
@@ -1298,7 +1309,6 @@ private suspend fun handleGetDataMdoc(
                     }
                 }
                 // TODO: also iterate over DeviceSigned items
-
             } catch (e: Throwable) {
                 e.printStackTrace()
                 lines.add(

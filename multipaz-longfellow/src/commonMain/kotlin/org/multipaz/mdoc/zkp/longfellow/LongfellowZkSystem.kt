@@ -20,6 +20,8 @@ import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import kotlin.time.Instant
 import org.multipaz.cbor.putCborArray
+import org.multipaz.mdoc.response.DeviceResponse
+import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.request.RequestedClaim
 import org.multipaz.util.toHex
 import org.multipaz.util.truncateToWholeSeconds
@@ -143,8 +145,8 @@ class LongfellowZkSystem(): ZkSystem {
 
     override fun generateProof(
         zkSystemSpec: ZkSystemSpec,
-        encodedDocument: ByteString,
-        encodedSessionTranscript: ByteString,
+        document: MdocDocument,
+        sessionTranscript: DataItem,
         timestamp: Instant
     ): ZkDocument {
         val longfellowZkSystemSpec = getLongfellowZkSystemSpec(zkSystemSpec)
@@ -152,63 +154,54 @@ class LongfellowZkSystem(): ZkSystem {
         val circuitBytes = getCircuitBytes(zkSystemSpec)
             ?: throw IllegalArgumentException("Circuit not found for system spec: $zkSystemSpec")
 
-        val doc = Cbor.decode(encodedDocument.toByteArray())
-        // The Longfellow ZKP library expects this format, and will grab the 1st document
-        // in the array.
+        // The Longfellow ZKP library expects `DeviceResponse` CBOR, and will grab the 1st document in the array.
         val longfellowDocBytes = Cbor.encode(
             buildCborMap {
                 put("version", "1.0")
                 putCborArray("documents") {
-                    add(doc)
+                    add(document.toDataItem())
                 }
-                put("status", Constants.DEVICE_RESPONSE_STATUS_OK)
+                put("status", DeviceResponse.STATUS_OK)
             }
         )
-
-        val docType = doc["docType"].asTstr
-
-        val issuerCert = X509Cert(ByteString(doc["issuerSigned"]["issuerAuth"][1][33].asBstr))
+        val docType = document.docType
+        val issuerCert = document.issuerCertChain.certificates.first()
         val ecPubKeyCoordinates = issuerCert.ecPublicKey as EcPublicKeyDoubleCoordinate
         val x = getFormattedCoordinate(ecPubKeyCoordinates.x)
         val y = getFormattedCoordinate(ecPubKeyCoordinates.y)
 
         val attributes = mutableListOf<NativeAttribute>()
         val issuerSigned = mutableMapOf<String, Map<String, DataItem>>()
-        for ((nameSpaceItem, dataElementsItem) in doc["issuerSigned"]["nameSpaces"].asMap) {
-            val namespace = nameSpaceItem.asTstr
+        document.issuerNamespaces.data.forEach { (namespaceName, issuerSignedItemsMap) ->
             val values = mutableMapOf<String, DataItem>()
-            for (encodedIssuerSignedItem in dataElementsItem.asArray) {
-                val issuerSignedItem = encodedIssuerSignedItem.asTaggedEncodedCbor
-                val dataElementName = issuerSignedItem["elementIdentifier"].asTstr
-                val dataElementValue = issuerSignedItem["elementValue"]
-                values.put(dataElementName, dataElementValue)
+            issuerSignedItemsMap.forEach { (dataElementName, issuerSignedItem) ->
+                values.put(dataElementName, issuerSignedItem.dataElementValue)
                 attributes.add(NativeAttribute(
                     key = dataElementName,
-                    namespace = namespace,
-                    value = Cbor.encode(dataElementValue)
+                    namespace = namespaceName,
+                    value = Cbor.encode(issuerSignedItem.dataElementValue)
                 ))
             }
-            issuerSigned.put(nameSpaceItem.asTstr, values)
+            issuerSigned.put(namespaceName, values)
         }
-
         // According to Longfellow-ZK spec, can't have any fractional seconds.
         if (timestamp.nanosecondsOfSecond != 0) {
             Logger.w(TAG, "Dropping non-zero fractional seconds for timestamp $timestamp")
         }
         val adjustedTimestamp = timestamp.truncateToWholeSeconds()
-
+        val encodedSessionTranscript = ByteString(Cbor.encode(sessionTranscript))
         val proof = LongfellowNatives.runMdocProver(
-            circuitBytes,
-            circuitBytes.size,
-            ByteString(longfellowDocBytes),
-            longfellowDocBytes.size,
-            x,
-            y,
-            encodedSessionTranscript,
-            encodedSessionTranscript.size,
-            formatDate(adjustedTimestamp),
-            longfellowZkSystemSpec,
-            attributes
+            circuit = circuitBytes,
+            circuitSize = circuitBytes.size,
+            mdoc = ByteString(longfellowDocBytes),
+            mdocSize = longfellowDocBytes.size,
+            pkx = x,
+            pky = y,
+            transcript = encodedSessionTranscript,
+            transcriptSize = encodedSessionTranscript.size,
+            now = formatDate(adjustedTimestamp),
+            zkSpec = longfellowZkSystemSpec,
+            statements = attributes
         )
 
         val zkDocument = ZkDocument(
@@ -226,7 +219,7 @@ class LongfellowZkSystem(): ZkSystem {
         return zkDocument
     }
 
-    override fun verifyProof(zkDocument: ZkDocument, zkSystemSpec: ZkSystemSpec, encodedSessionTranscript: ByteString) {
+    override fun verifyProof(zkDocument: ZkDocument, zkSystemSpec: ZkSystemSpec, sessionTranscript: DataItem) {
         if (zkDocument.documentData.msoX5chain == null || zkDocument.documentData.msoX5chain!!.certificates.isEmpty()) {
             throw IllegalArgumentException("zkDocument must contain at least 1 certificate in msoX5chain.")
         }
@@ -252,6 +245,7 @@ class LongfellowZkSystem(): ZkSystem {
             }
         }
 
+        val encodedSessionTranscript = ByteString(Cbor.encode(sessionTranscript))
         val verifierResult = LongfellowNatives.runMdocVerifier(
             circuitBytes,
             circuitBytes.size,

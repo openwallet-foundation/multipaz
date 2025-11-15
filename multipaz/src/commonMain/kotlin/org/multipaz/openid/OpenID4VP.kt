@@ -29,13 +29,12 @@ import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
-import org.multipaz.document.NameSpacedData
 import org.multipaz.jwt.buildJwt
 import org.multipaz.mdoc.credential.MdocCredential
-import org.multipaz.mdoc.issuersigned.IssuerNamespaces
-import org.multipaz.mdoc.mso.MobileSecurityObjectParser
-import org.multipaz.mdoc.response.DeviceResponseGenerator
-import org.multipaz.mdoc.response.DocumentGenerator
+import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
+import org.multipaz.mdoc.response.DeviceResponse
+import org.multipaz.mdoc.response.MdocDocument
+import org.multipaz.mdoc.response.buildDeviceResponse
 import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.dcql.DcqlQuery
@@ -52,7 +51,6 @@ import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.trustmanagement.TrustPoint
-import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
@@ -611,71 +609,30 @@ object OpenID4VP {
         Logger.iCbor(TAG, "encodedSessionTranscript", encodedSessionTranscript)
 
         val mdocCredential = match.credential as MdocCredential
-        val claims = match.credentialQuery.claims as List<MdocRequestedClaim>
-        val documentBytes = calcDocument(
+        val document = MdocDocument.fromPresentment(
+            sessionTranscript = Cbor.decode(encodedSessionTranscript),
             credential = mdocCredential,
-            requestedClaims = claims,
-            encodedSessionTranscript = encodedSessionTranscript,
+            requestedClaims = match.credentialQuery.claims as List<MdocRequestedClaim>,
         )
-
-        val deviceResponseGenerator = DeviceResponseGenerator(Constants.DEVICE_RESPONSE_STATUS_OK)
-        if (zkSystemMatch != null) {
-            val zkDocument = zkSystemMatch.generateProof(
-                zkSystemSpec!!,
-                ByteString(documentBytes),
-                ByteString(encodedSessionTranscript)
-            )
-            Logger.i(TAG, "ZK Proof Size: ${zkDocument.proof.size}")
-            deviceResponseGenerator.addZkDocument(zkDocument)
-        } else {
-            deviceResponseGenerator.addDocument(documentBytes)
+        val deviceResponse = buildDeviceResponse(
+            sessionTranscript = Cbor.decode(encodedSessionTranscript),
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            if (zkSystemMatch != null) {
+                val zkDocument = zkSystemMatch.generateProof(
+                    zkSystemSpec = zkSystemSpec!!,
+                    document = document,
+                    sessionTranscript = sessionTranscript
+                )
+                Logger.i(TAG, "ZK Proof Size: ${zkDocument.proof.size}")
+                addZkDocument(zkDocument)
+            } else {
+                addDocument(document)
+            }
         }
-        val deviceResponse = deviceResponseGenerator.generate()
         mdocCredential.increaseUsageCount()
-        return deviceResponse.toBase64Url()
+        return Cbor.encode(deviceResponse.toDataItem()).toBase64Url()
     }
-
-    private suspend fun calcDocument(
-        credential: MdocCredential,
-        requestedClaims: List<MdocRequestedClaim>,
-        encodedSessionTranscript: ByteArray
-    ): ByteArray {
-        // TODO: support MAC keys from v1.1 request and use setDeviceNamespacesMac() when possible
-        //   depending on the value of PresentmentSource.preferSignatureToKeyAgreement(). See also
-        //   calcDocument in mdocPresentment.kt.
-        //
-
-        val issuerSigned = Cbor.decode(credential.issuerProvidedData)
-        val issuerNamespaces = IssuerNamespaces.fromDataItem(issuerSigned["nameSpaces"])
-        val issuerAuthCoseSign1 = issuerSigned["issuerAuth"].asCoseSign1
-        val encodedMsoBytes = Cbor.decode(issuerAuthCoseSign1.payload!!)
-        val encodedMso = Cbor.encode(encodedMsoBytes.asTaggedEncodedCbor)
-        val mso = MobileSecurityObjectParser(encodedMso).parse()
-
-        val documentGenerator = DocumentGenerator(
-            mso.docType,
-            Cbor.encode(issuerSigned["issuerAuth"]),
-            encodedSessionTranscript,
-        )
-
-        documentGenerator.setIssuerNamespaces(issuerNamespaces.filter(requestedClaims))
-        val keyInfo = credential.secureArea.getKeyInfo(credential.alias)
-        if (!keyInfo.algorithm.isSigning) {
-            throw IllegalStateException(
-                "Signing is required for W3C DC API but its algorithm ${keyInfo.algorithm.name} is not for signing"
-            )
-        } else {
-            documentGenerator.setDeviceNamespacesSignature(
-                dataElements = NameSpacedData.Builder().build(),
-                secureArea = credential.secureArea,
-                keyAlias = credential.alias,
-                unlockReason = PresentmentUnlockReason(credential),
-            )
-        }
-
-        return documentGenerator.generate()
-    }
-
 
     private suspend fun openID4VPSdJwt(
         version: Version,

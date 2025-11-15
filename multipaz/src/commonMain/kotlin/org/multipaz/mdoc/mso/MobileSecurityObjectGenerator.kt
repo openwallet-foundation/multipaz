@@ -41,6 +41,7 @@ import org.multipaz.cbor.putCborMap
  * @throws IllegalArgumentException if the `digestAlgorithm` is not one of
  *     {Algorithm.SHA256, Algorithm.SHA-384, Algorithm.SHA-512}.
  */
+@Deprecated(message = "Deprecated, use MobileSecurityObject instead")
 class MobileSecurityObjectGenerator(
     digestAlgorithm: Algorithm,
     docType: String,
@@ -107,7 +108,7 @@ class MobileSecurityObjectGenerator(
 
     fun addValueDigests(
         issuerNamespaces: IssuerNamespaces
-    ) {
+    ) = apply {
         digestEmpty = false
         for ((namespaceName, innerMap) in issuerNamespaces.data) {
             val valueDigestsInner = mValueDigestsOuter.putMap(namespaceName)

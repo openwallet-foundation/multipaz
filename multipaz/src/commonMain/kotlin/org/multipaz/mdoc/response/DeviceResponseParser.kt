@@ -48,6 +48,7 @@ import org.multipaz.mdoc.zkp.ZkDocument
  * @param encodedDeviceResponse the bytes of the DeviceResponse CBOR.
  * @param encodedSessionTranscript the bytes of the SessionTrancript CBOR.
  */
+@Deprecated(message = "Deprecated, use DeviceResponse instead")
 class DeviceResponseParser(
     val encodedDeviceResponse: ByteArray,
     val encodedSessionTranscript: ByteArray

@@ -27,7 +27,6 @@ import org.multipaz.claim.JsonClaim
 import org.multipaz.claim.MdocClaim
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.JsonWebEncryption
@@ -36,7 +35,7 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequest
-import org.multipaz.mdoc.response.DeviceResponseParser
+import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.OpenID4VP
@@ -393,7 +392,6 @@ object VerificationUtil {
         origin: String,
         responseEncryptionKey: AsymmetricKey?,
     ): DcResponse {
-        // TODO: Change responseEncryptionKey to be a SigningKey
         val exchangeProtocol = response["protocol"]!!.jsonPrimitive.content
         when (exchangeProtocol) {
             "openid4vp",
@@ -656,32 +654,18 @@ object VerificationUtil {
         documentTypeRepository: DocumentTypeRepository?,
         zkSystemRepository: ZkSystemRepository?,
     ): List<VerifiedPresentation> {
-        val parser = DeviceResponseParser(
-            encodedDeviceResponse = Cbor.encode(deviceResponse),
-            encodedSessionTranscript = Cbor.encode(sessionTranscript)
+        val dr = DeviceResponse.fromDataItem(deviceResponse)
+        dr.verify(
+            sessionTranscript = sessionTranscript,
+            eReaderKey = eReaderKey,
+            atTime = now
         )
-        eReaderKey?.let { parser.setEphemeralReaderKey(it) }
-        val dr = parser.parse()
         val verifiedPresentations = mutableListOf<VerifiedPresentation>()
         for (document in dr.documents) {
-            if (!document.issuerSignedAuthenticated) {
-                throw IllegalStateException("Issuer-signed data failed authentication")
-            }
-            if (document.numIssuerEntryDigestMatchFailures > 0) {
-                throw IllegalStateException(
-                    "${document.numIssuerEntryDigestMatchFailures} digest failures in issuer-signed data"
-                )
-            }
-            Logger.iCbor(TAG, "sessionTranscript", Cbor.encode(sessionTranscript))
-            if (!document.deviceSignedAuthenticated) {
-                throw IllegalStateException("Device-signed data failed authentication")
-            }
             val dt = documentTypeRepository?.getDocumentTypeForMdoc(document.docType)
-
             val issuerSignedClaims = mutableListOf<MdocClaim>()
-            for (namespaceName in document.issuerNamespaces) {
-                for (dataElementName in document.getIssuerEntryNames(namespaceName)) {
-                    val value = document.getIssuerEntryData(namespaceName, dataElementName)
+            document.issuerNamespaces.data.forEach { (namespaceName, issuerSignedItemsMap) ->
+                issuerSignedItemsMap.forEach { (dataElementName, issuerSignedItem) ->
                     val mdocAttr = dt?.mdocDocumentType?.namespaces?.get(namespaceName)?.dataElements?.get(dataElementName)
                     issuerSignedClaims.add(
                         MdocClaim(
@@ -689,16 +673,15 @@ object VerificationUtil {
                             attribute = mdocAttr?.attribute,
                             namespaceName = namespaceName,
                             dataElementName = dataElementName,
-                            value = Cbor.decode(value)
+                            value = issuerSignedItem.dataElementValue
                         )
                     )
                 }
             }
 
             val deviceSignedClaims = mutableListOf<MdocClaim>()
-            for (namespaceName in document.deviceNamespaces) {
-                for (dataElementName in document.getDeviceEntryNames(namespaceName)) {
-                    val value = document.getDeviceEntryData(namespaceName, dataElementName)
+            document.deviceNamespaces.data.forEach { (namespaceName, dataElementsMap) ->
+                dataElementsMap.forEach { (dataElementName, dataElementValue) ->
                     val mdocAttr = dt?.mdocDocumentType?.namespaces?.get(namespaceName)?.dataElements?.get(dataElementName)
                     deviceSignedClaims.add(
                         MdocClaim(
@@ -706,25 +689,24 @@ object VerificationUtil {
                             attribute = mdocAttr?.attribute,
                             namespaceName = namespaceName,
                             dataElementName = dataElementName,
-                            value = Cbor.decode(value)
+                            value = dataElementValue
                         )
                     )
                 }
             }
             verifiedPresentations.add(
                 MdocVerifiedPresentation(
-                    documentSignerCertChain = document.issuerCertificateChain,
+                    documentSignerCertChain = document.issuerCertChain,
                     issuerSignedClaims = issuerSignedClaims,
                     deviceSignedClaims = deviceSignedClaims,
                     zkpUsed = false,
-                    validFrom = document.validityInfoValidFrom,
-                    validUntil = document.validityInfoValidUntil,
-                    expectedUpdate = document.validityInfoExpectedUpdate,
-                    signedAt = document.validityInfoSigned,
+                    validFrom = document.mso.validFrom,
+                    validUntil = document.mso.validUntil,
+                    expectedUpdate = document.mso.expectedUpdate,
+                    signedAt = document.mso.signedAt,
                     docType = document.docType
                 )
             )
-
         }
         for (zkDocument in dr.zkDocuments) {
             val zkSystemSpec = zkSystemRepository?.getAllZkSystemSpecs()?.find {
@@ -734,7 +716,7 @@ object VerificationUtil {
                 ?.verifyProof(
                     zkDocument = zkDocument,
                     zkSystemSpec = zkSystemSpec,
-                    encodedSessionTranscript = ByteString(Cbor.encode(sessionTranscript))
+                    sessionTranscript = sessionTranscript,
                 )
                 ?: throw IllegalStateException("Zk System '${zkSystemSpec.system}' was not found.")
 

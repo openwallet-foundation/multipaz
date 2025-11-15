@@ -54,14 +54,6 @@ import kotlin.random.Random
 
 /**
  * Utilities for working with mdoc data structures.
- *
- * On the issuance-side, [generateIssuerNameSpaces] and [stripIssuerNameSpaces] can be used with
- * [org.multipaz.mdoc.mso.MobileSecurityObjectGenerator] and
- * [calculateDigestsForNameSpace] can be used to prepare PII and multiple static authentication
- * data packages (each including signed MSOs).
- *
- * On the device-side, [mergeIssuerNamesSpaces] can be used to generate the `DeviceResponse` CBOR
- * from the above-mentioned PII and static authentication data packages.
  */
 object MdocUtil {
     private const val TAG = "MdocUtil"

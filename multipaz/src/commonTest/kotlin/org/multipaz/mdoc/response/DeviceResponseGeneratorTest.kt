@@ -48,6 +48,7 @@ import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import kotlinx.coroutines.test.runTest
+import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.crypto.AsymmetricKey
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -92,6 +93,8 @@ class DeviceResponseGeneratorTest {
         ) {
             setDocumentMetadataFactory(TestDocumentMetadata::create)
         }
+
+        val randomProvider = Random(42)
 
         // Create the document...
         document = documentStore.createDocument()
@@ -163,7 +166,7 @@ class DeviceResponseGeneratorTest {
             msoGenerator.setValidityInfo(timeSigned, timeValidityBegin, timeValidityEnd, null)
             val issuerNameSpaces = MdocUtil.generateIssuerNameSpaces(
                 nameSpacedData,
-                Random,
+                randomProvider,
                 16,
                 overrides
             )
@@ -298,6 +301,46 @@ class DeviceResponseGeneratorTest {
         assertEquals("ns2", doc.issuerNamespaces[1])
         assertEquals(1, doc.getIssuerEntryNames("ns2").size.toLong())
         assertEquals("foo1", doc.getIssuerEntryString("ns2", "bar1"))
+
+        // Check the new DeviceResponse class can parse the data
+        val dr = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
+        dr.verify(
+            sessionTranscript = Cbor.decode(encodedSessionTranscript),
+            atTime = timeValidityBegin
+        )
+        assertEquals(
+            """
+                {
+                  "ns1": [24(<< {
+                    "digestID": 0,
+                    "random": h'2b714e4520aabd26420972f8d80c48fa',
+                    "elementIdentifier": "foo1",
+                    "elementValue": "bar1"
+                  } >>), 24(<< {
+                    "digestID": 4,
+                    "random": h'46905e101902b697c6132dacdfbf5a4b',
+                    "elementIdentifier": "foo2",
+                    "elementValue": "bar2"
+                  } >>), 24(<< {
+                    "digestID": 2,
+                    "random": h'55b35d23743b5af1e1f2d3976124091d',
+                    "elementIdentifier": "foo3",
+                    "elementValue": "bar3_override"
+                  } >>)],
+                  "ns2": [24(<< {
+                    "digestID": 1,
+                    "random": h'320908313266a9a296f81c7b45ffdecd',
+                    "elementIdentifier": "bar1",
+                    "elementValue": "foo1"
+                  } >>)]
+                }
+            """.trimIndent(),
+            Cbor.toDiagnostics(dr.documents[0].issuerNamespaces.toDataItem(), setOf(DiagnosticOption.PRETTY_PRINT))
+        )
+        assertEquals(
+            "{}",
+            Cbor.toDiagnostics(dr.documents[0].deviceNamespaces.toDataItem(), setOf(DiagnosticOption.PRETTY_PRINT))
+        )
     }
 
     @Test
@@ -353,6 +396,47 @@ class DeviceResponseGeneratorTest {
         val doc = deviceResponse.documents[0]
         assertTrue(doc.deviceSignedAuthenticated)
         assertFalse(doc.deviceSignedAuthenticatedViaSignature)
+
+        // Check the new DeviceResponse class can parse the data
+        val dr = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
+        dr.verify(
+            sessionTranscript = Cbor.decode(encodedSessionTranscript),
+            eReaderKey = eReaderKey as AsymmetricKey.Anonymous,
+            atTime = timeValidityBegin
+        )
+        assertEquals(
+            """
+                {
+                  "ns1": [24(<< {
+                    "digestID": 0,
+                    "random": h'b18c4204e313c872303161e877fa9b38',
+                    "elementIdentifier": "foo1",
+                    "elementValue": "bar1"
+                  } >>), 24(<< {
+                    "digestID": 3,
+                    "random": h'e87d6c40e62fcc6a385acc823a163ac7',
+                    "elementIdentifier": "foo2",
+                    "elementValue": "bar2"
+                  } >>), 24(<< {
+                    "digestID": 2,
+                    "random": h'9c0b3524dc833aaefe8225fa49535898',
+                    "elementIdentifier": "foo3",
+                    "elementValue": "bar3_override"
+                  } >>)],
+                  "ns2": [24(<< {
+                    "digestID": 4,
+                    "random": h'd2f519b1fc0fccc92fdfc1eecf8f02fc',
+                    "elementIdentifier": "bar1",
+                    "elementValue": "foo1"
+                  } >>)]
+                }
+            """.trimIndent(),
+            Cbor.toDiagnostics(dr.documents[0].issuerNamespaces.toDataItem(), setOf(DiagnosticOption.PRETTY_PRINT))
+        )
+        assertEquals(
+            "{}",
+            Cbor.toDiagnostics(dr.documents[0].deviceNamespaces.toDataItem(), setOf(DiagnosticOption.PRETTY_PRINT))
+        )
     }
 
     @Test
@@ -434,6 +518,59 @@ class DeviceResponseGeneratorTest {
         assertEquals(2, doc.getDeviceEntryNames("ns4").size.toLong())
         assertEquals("bah2", doc.getDeviceEntryString("ns4", "baz2"))
         assertEquals("bah3", doc.getDeviceEntryString("ns4", "baz3"))
+
+        // Check the new DeviceResponse class can parse the data
+        val dr = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
+        dr.verify(
+            sessionTranscript = Cbor.decode(encodedSessionTranscript),
+            atTime = timeValidityBegin
+        )
+        assertEquals(
+            """
+                {
+                  "ns1": [24(<< {
+                    "digestID": 0,
+                    "random": h'2b714e4520aabd26420972f8d80c48fa',
+                    "elementIdentifier": "foo1",
+                    "elementValue": "bar1"
+                  } >>), 24(<< {
+                    "digestID": 4,
+                    "random": h'46905e101902b697c6132dacdfbf5a4b',
+                    "elementIdentifier": "foo2",
+                    "elementValue": "bar2"
+                  } >>), 24(<< {
+                    "digestID": 2,
+                    "random": h'55b35d23743b5af1e1f2d3976124091d',
+                    "elementIdentifier": "foo3",
+                    "elementValue": "bar3_override"
+                  } >>)],
+                  "ns2": [24(<< {
+                    "digestID": 1,
+                    "random": h'320908313266a9a296f81c7b45ffdecd',
+                    "elementIdentifier": "bar1",
+                    "elementValue": "foo1"
+                  } >>)]
+                }
+            """.trimIndent(),
+            Cbor.toDiagnostics(dr.documents[0].issuerNamespaces.toDataItem(), setOf(DiagnosticOption.PRETTY_PRINT))
+        )
+        assertEquals(
+            """
+                {
+                  "ns1": {
+                    "foo1": "bar1_override"
+                  },
+                  "ns3": {
+                    "baz1": "bah1"
+                  },
+                  "ns4": {
+                    "baz2": "bah2",
+                    "baz3": "bah3"
+                  }
+                }
+            """.trimIndent(),
+            Cbor.toDiagnostics(dr.documents[0].deviceNamespaces.toDataItem(), setOf(DiagnosticOption.PRETTY_PRINT))
+        )
     }
 
     @Test
@@ -491,6 +628,34 @@ class DeviceResponseGeneratorTest {
         assertEquals(2, doc.getDeviceEntryNames("ns4").size.toLong())
         assertEquals("bah2", doc.getDeviceEntryString("ns4", "baz2"))
         assertEquals("bah3", doc.getDeviceEntryString("ns4", "baz3"))
+
+        // Check the new DeviceResponse class can parse the data
+        val dr = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
+        dr.verify(
+            sessionTranscript = Cbor.decode(encodedSessionTranscript),
+            atTime = timeValidityBegin
+        )
+        assertEquals(
+            "{}",
+            Cbor.toDiagnostics(dr.documents[0].issuerNamespaces.toDataItem(), setOf(DiagnosticOption.PRETTY_PRINT))
+        )
+        assertEquals(
+            """
+                {
+                  "ns1": {
+                    "foo1": "bar1_override"
+                  },
+                  "ns3": {
+                    "baz1": "bah1"
+                  },
+                  "ns4": {
+                    "baz2": "bah2",
+                    "baz3": "bah3"
+                  }
+                }
+            """.trimIndent(),
+            Cbor.toDiagnostics(dr.documents[0].deviceNamespaces.toDataItem(), setOf(DiagnosticOption.PRETTY_PRINT))
+        )
     }
 
     @Test
@@ -573,9 +738,16 @@ class DeviceResponseGeneratorTest {
         assertEquals("ns2", doc.issuerNamespaces[1])
         assertEquals(1, doc.getIssuerEntryNames("ns2").size.toLong())
         assertEquals("foo1", doc.getIssuerEntryString("ns2", "bar1"))
+
+        // Check the new DeviceResponse class can parse the data
+        val dr = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
+        dr.verify(
+            sessionTranscript = Cbor.decode(encodedSessionTranscript),
+            atTime = timeValidityBegin
+        )
     }
 
     companion object {
-        const val DOC_TYPE = "com.example.document_xyz"
+        private const val DOC_TYPE = "com.example.document_xyz"
     }
 }
