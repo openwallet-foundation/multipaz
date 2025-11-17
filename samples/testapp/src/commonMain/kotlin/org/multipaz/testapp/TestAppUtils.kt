@@ -43,6 +43,7 @@ import org.multipaz.documenttype.knowntypes.Loyalty
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
+import org.multipaz.documenttype.knowntypes.PhotoIDLowercase
 import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
@@ -148,6 +149,7 @@ object TestAppUtils {
     val provisionedDocumentTypes = listOf(
         DrivingLicense.getDocumentType(),
         PhotoID.getDocumentType(),
+        PhotoIDLowercase.getDocumentType(),
         EUPersonalID.getDocumentType(),
         UtopiaMovieTicket.getDocumentType(),
         AgeVerification.getDocumentType(),
@@ -323,6 +325,32 @@ object TestAppUtils {
                     PhotoID.getDocumentType(),
                     "Erika #2",
                     "Erika's Photo ID #2",
+                    Res.drawable.photo_id_card_art
+                )
+                provisionDocument(
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain,
+                    PhotoIDLowercase.getDocumentType(),
+                    "Erika",
+                    "Erika's photoid",
+                    Res.drawable.photo_id_card_art
+                )
+                provisionDocument(
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain,
+                    PhotoIDLowercase.getDocumentType(),
+                    "Erika #2",
+                    "Erika's photoid #2",
                     Res.drawable.photo_id_card_art
                 )
                 provisionDocument(

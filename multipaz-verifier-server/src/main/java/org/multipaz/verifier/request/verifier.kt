@@ -83,6 +83,7 @@ import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.documenttype.knowntypes.IDPass
 import org.multipaz.documenttype.knowntypes.Loyalty
+import org.multipaz.documenttype.knowntypes.PhotoIDLowercase
 import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequestSuspend
@@ -292,6 +293,7 @@ private val documentTypeRepo: DocumentTypeRepository by lazy {
     repo.addDocumentType(EUPersonalID.getDocumentType())
     repo.addDocumentType(GermanPersonalID.getDocumentType())
     repo.addDocumentType(PhotoID.getDocumentType())
+    repo.addDocumentType(PhotoIDLowercase.getDocumentType())
     repo.addDocumentType(EUCertificateOfResidence.getDocumentType())
     repo.addDocumentType(UtopiaNaturalization.getDocumentType())
     repo.addDocumentType(UtopiaMovieTicket.getDocumentType())
