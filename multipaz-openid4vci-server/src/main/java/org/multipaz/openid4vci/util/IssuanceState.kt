@@ -4,14 +4,13 @@ import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.storage.StorageTableSpec
 import kotlinx.io.bytestring.ByteString
-import org.multipaz.cbor.Cbor
-import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.Crypto
 import org.multipaz.verifier.Openid4VpVerifierModel
 import org.multipaz.provisioning.SecretCodeRequest
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable
-import org.multipaz.util.toBase64Url
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 @CborSerializable
 data class IssuanceState(
@@ -23,7 +22,7 @@ data class IssuanceState(
     var codeChallenge: ByteString?,
     val configurationId: String?,
     var clientState: String? = null,
-    var authorized: Boolean? = null,
+    var authorized: Instant? = null,  // time of user's authorization
     var openid4VpVerifierModel: Openid4VpVerifierModel? = null,
     var systemOfRecordAuthCode: String? = null,
     var systemOfRecordCodeVerifier: ByteString? = null,
@@ -31,31 +30,49 @@ data class IssuanceState(
     var txCodeSpec: SecretCodeRequest? = null,
     var txCodeHash: ByteString? = null,
     val urlSchema: String? = null,  // for pre-authorized code generation
+    var expiration: Instant = Instant.DISTANT_PAST,  // updated before storage
+    var credentials: MutableList<CredentialData> = mutableListOf()
 ) {
+    @CborSerializable
+    data class CredentialData(
+        val index: Int,
+        val expiration: Instant
+    )
+
+    fun purgeExpiredCredentials() {
+        val now = Clock.System.now()
+        credentials = credentials.filter { it.expiration >= now }.toMutableList()
+    }
+
     companion object {
         private val tableSpec = StorageTableSpec(
-            name = "Openid4VciIssuanceSession",
+            name = "Openid4VciDocument",
             supportPartitions = false,
-            supportExpiration = false
+            supportExpiration = true
         )
 
-        private fun keyHash(dpopKey: EcPublicKey): String {
-            return Crypto.digest(
-                algorithm = Algorithm.SHA256,
-                message = Cbor.encode(dpopKey.toDataItem())
-            ).toBase64Url()
+        suspend fun createIssuanceState(
+            issuanceState: IssuanceState,
+            expiration: Instant
+        ): String {
+            issuanceState.expiration = expiration
+            return BackendEnvironment.getTable(tableSpec).insert(
+                key = null,
+                data = ByteString(issuanceState.toCbor()),
+                expiration = expiration + 10.seconds  // Keep a bit after the actual expiration
+            )
         }
 
-        suspend fun createIssuanceState(issuanceState: IssuanceState): String =
-            BackendEnvironment.getTable(tableSpec).insert(
-                key = null,
-                data = ByteString(issuanceState.toCbor())
-            )
-
-        suspend fun updateIssuanceState(issuanceStateId: String, issuanceState: IssuanceState) {
+        suspend fun updateIssuanceState(
+            issuanceStateId: String,
+            issuanceState: IssuanceState,
+            expiration: Instant?
+        ) {
+            expiration?.let { issuanceState.expiration = it }
             return BackendEnvironment.getTable(tableSpec).update(
                 key = issuanceStateId,
-                data = ByteString(issuanceState.toCbor())
+                data = ByteString(issuanceState.toCbor()),
+                expiration = expiration?.let { it + 10.seconds }  // Keep a bit after the actual expiration
             )
         }
 
@@ -64,5 +81,16 @@ data class IssuanceState(
                 ?: throw IllegalStateException("Unknown or stale issuance session")
             return IssuanceState.fromCbor(data.toByteArray())
         }
+
+        suspend fun listIssuanceStates(
+            afterId: String? = null,
+            limit: Int = Int.MAX_VALUE
+        ): List<Pair<String, IssuanceState>> =
+            BackendEnvironment.getTable(tableSpec).enumerateWithData(
+                afterKey = afterId,
+                limit = limit
+            ).map { (id, data) ->
+                Pair(id, IssuanceState.fromCbor(data.toByteArray()))
+            }
     }
 }

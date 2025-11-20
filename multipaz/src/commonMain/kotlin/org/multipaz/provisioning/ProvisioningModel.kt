@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.encodeToByteString
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
@@ -23,6 +24,7 @@ import org.multipaz.document.DocumentStore
 import org.multipaz.jwt.buildJwt
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.prompt.PromptModel
+import org.multipaz.provisioning.openid4vci.KeyIdAndAttestation
 import org.multipaz.provisioning.openid4vci.OpenID4VCI
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
 import org.multipaz.provisioning.openid4vci.OpenID4VCIClientPreferences
@@ -233,7 +235,11 @@ class ProvisioningModel(
 
                 when (val keyProofType = credentialMetadata.keyBindingType) {
                     is KeyBindingType.Attestation -> {
-                        KeyBindingInfo.Attestation(pendingCredentials.map { it.getAttestation() })
+                        KeyBindingInfo.Attestation(
+                            attestations = pendingCredentials.map {
+                                KeyIdAndAttestation(it.identifier, it.getAttestation())
+                            }
+                        )
                     }
                     is KeyBindingType.OpenidProofOfPossession -> {
                         val jwtList = pendingCredentials.map {
@@ -361,7 +367,9 @@ class ProvisioningModel(
                 type = "openid4vci-proof+jwt",
                 key = signingKey,
                 header = {
-                    put("jwk", signingKey.publicKey.toJwk())
+                    put("jwk", signingKey.publicKey.toJwk(buildJsonObject {
+                        put("kid", credential.identifier)
+                    }))
                 }
             ) {
                 put("iss", keyProofType.clientId)

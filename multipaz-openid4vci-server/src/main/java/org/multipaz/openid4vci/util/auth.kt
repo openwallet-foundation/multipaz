@@ -35,6 +35,7 @@ import org.multipaz.jwt.validateJwt
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.server.baseUrl
 import kotlin.time.Duration
+import kotlin.time.Instant
 
 const val OAUTH_REQUEST_URI_PREFIX = "urn:ietf:params:oauth:request_uri:"
 const val MULTIPAZ_PRE_AUTHORIZE_URI = "https://pre-authorize.multipaz.org/"
@@ -59,6 +60,7 @@ enum class OpaqueIdType {
     OPENID4VP_PRESENTATION,  // for use in presentation_during_issuance_session
     RECORDS_STATE,  // oauth state to authorize with System of Record
     PRE_AUTHORIZED,  // pre-authorized code
+    ADMIN_COOKIE,  // administrative login cookie
 }
 
 /**
@@ -239,6 +241,7 @@ suspend fun respondWithNewClientAttestationChallenge(call: ApplicationCall) {
 suspend fun createSession(
     request: ApplicationRequest,
     parameters: Parameters,
+    expiration: Instant,
     requireAuthentication: Boolean = true
 ): String {
     // Read all parameters
@@ -287,7 +290,8 @@ suspend fun createSession(
     // Create a session
     return IssuanceState.createIssuanceState(
         IssuanceState(clientId, scope, attestationKey,
-            dpopKey, redirectUri, codeChallenge, configurationId, clientState)
+            dpopKey, redirectUri, codeChallenge, configurationId, clientState),
+        expiration
     )
 }
 

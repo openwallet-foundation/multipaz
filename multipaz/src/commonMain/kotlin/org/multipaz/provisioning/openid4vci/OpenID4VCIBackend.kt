@@ -42,11 +42,11 @@ interface OpenID4VCIBackend {
 
     /**
      * Creates OAuth JWT key attestation based on the given list of mobile-platform-specific
-     * [KeyAttestation]s.
+     * [KeyAttestation]s and key ids.
      */
     @RpcMethod
     suspend fun createJwtKeyAttestation(
-        keyAttestations: List<KeyAttestation>,
+        keyIdAndAttestations: List<KeyIdAndAttestation>,
         challenge: String,
         userAuthentication: List<String>? = null,
         keyStorage: List<String>? = null

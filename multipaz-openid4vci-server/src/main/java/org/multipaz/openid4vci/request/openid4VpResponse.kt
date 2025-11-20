@@ -18,6 +18,7 @@ import org.multipaz.openid4vci.util.idToCode
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.server.getBaseUrl
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 
 /**
@@ -58,9 +59,10 @@ suspend fun openid4VpResponse(call: ApplicationCall) {
     // TODO
     //state.credentialData = data.build()
 
-    IssuanceState.updateIssuanceState(id, state)
+    val timeout = 5.minutes
+    IssuanceState.updateIssuanceState(id, state, Clock.System.now() + timeout)
 
-    val presentationCode = idToCode(OpaqueIdType.OPENID4VP_PRESENTATION, id, 5.minutes)
+    val presentationCode = idToCode(OpaqueIdType.OPENID4VP_PRESENTATION, id, timeout)
     call.respondText(
         text = buildJsonObject {
                 put("presentation_during_issuance_session", presentationCode)

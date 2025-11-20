@@ -20,9 +20,13 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.util.Logger
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.hours
 
 private const val TAG = "finish_authorization"
+
+private val PREAUTHORIZED_OFFER_TIMEOUT = 20.hours
 
 /**
  * Finish web-based authorization and hand off the session back to the Wallet App (or
@@ -43,7 +47,7 @@ suspend fun finishAuthorization(call: ApplicationCall) {
     var error: String? = call.request.queryParameters["error"]
 
     if (systemOfRecordUrl == null) {
-        if (state.authorized != true) {
+        if (state.authorized == null) {
             // We only could get there if something was tampering with redirects.
             Logger.e(TAG, "Unexpected state: not authorized, yet no error specified")
             error = "unexpected_state"
@@ -56,16 +60,17 @@ suspend fun finishAuthorization(call: ApplicationCall) {
         // re-encrypted any time a new code is issued) and is not warranted in the sample code.
         state.systemOfRecordAuthCode = call.request.queryParameters["code"]
             ?: throw InvalidRequestException("missing parameter 'code'")
-        state.authorized = true
+        state.authorized = Clock.System.now()
     }
     if (state.clientId != null) {
         // regular authorization flow
-        IssuanceState.updateIssuanceState(id, state)
+        val timeout = 2.minutes
+        IssuanceState.updateIssuanceState(id, state, Clock.System.now() + timeout)
         processRedirect(
             call = call,
             error = error,
             authCode = if (error == null) {
-                idToCode(OpaqueIdType.REDIRECT, id, 2.minutes)
+                idToCode(OpaqueIdType.REDIRECT, id, timeout)
             } else {
                 null
             },
@@ -73,15 +78,11 @@ suspend fun finishAuthorization(call: ApplicationCall) {
         )
     } else {
         // pre-authorized flow
-        val txCode: String? = if (error == null) {
-            state.txCodeSpec?.generateRandom()?.also {
+        if (error == null) {
+            val txCode = state.txCodeSpec?.generateRandom()?.also {
                 state.txCodeHash = ByteString(Crypto.digest(Algorithm.SHA256, it.encodeToByteArray()))
             }
-        } else {
-            null
-        }
-        IssuanceState.updateIssuanceState(id, state)
-        if (error == null) {
+            IssuanceState.updateIssuanceState(id, state, Clock.System.now() + PREAUTHORIZED_OFFER_TIMEOUT)
             preauthorizedOffer(call, id, txCode, state, state.urlSchema ?: "haip-vci")
         } else {
             preauthorizedError(call, error)
@@ -152,7 +153,8 @@ private suspend fun preauthorizedOffer(
     state: IssuanceState,
     urlSchema: String
 ) {
-    val offer = generatePreauthorizedOffer(urlSchema, id, state)
+    val offer = generatePreauthorizedOffer(
+        urlSchema, id, state, expiresIn = PREAUTHORIZED_OFFER_TIMEOUT)
     val resources = BackendEnvironment.getInterface(Resources::class)!!
     val preauthorizedHtml = resources.getStringResource("pre-authorized.html")!!
     call.respondText(

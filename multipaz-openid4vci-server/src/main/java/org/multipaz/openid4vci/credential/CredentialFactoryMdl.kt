@@ -57,10 +57,12 @@ internal class CredentialFactoryMdl : CredentialFactoryBase() {
     override val logo: String
         get() = "card-mdl.png"
 
-    override suspend fun makeCredential(
+    override suspend fun mint(
         data: DataItem,
-        authenticationKey: EcPublicKey?
-    ): String {
+        authenticationKey: EcPublicKey?,
+        credentialIndex: Int,
+        statusListUrl: String
+    ): MintedCredential {
         val now = Clock.System.now()
 
         val coreData = data["core"]
@@ -212,7 +214,11 @@ internal class CredentialFactoryMdl : CredentialFactoryBase() {
             }
         )
 
-        return issuerProvidedAuthenticationData.toBase64Url()
+        return MintedCredential(
+            credential = issuerProvidedAuthenticationData.toBase64Url(),
+            creation = validFrom,
+            expiration = validUntil
+        )
     }
 
     companion object {

@@ -53,10 +53,12 @@ internal class CredentialFactoryUtopiaLoyalty : CredentialFactoryBase() {
     override val logo: String
         get() = "card_utopia_wholesale.png"
 
-    override suspend fun makeCredential(
+    override suspend fun mint(
         data: DataItem,
-        authenticationKey: EcPublicKey?
-    ): String {
+        authenticationKey: EcPublicKey?,
+        credentialIndex: Int,
+        statusListUrl: String
+    ): MintedCredential {
         val now = Clock.System.now()
 
         val resources = BackendEnvironment.getInterface(Resources::class)!!
@@ -158,7 +160,11 @@ internal class CredentialFactoryUtopiaLoyalty : CredentialFactoryBase() {
             }
         )
 
-        return issuerProvidedAuthenticationData.toBase64Url()
+        return MintedCredential(
+            credential = issuerProvidedAuthenticationData.toBase64Url(),
+            creation = validFrom,
+            expiration = validUntil
+        )
     }
 
     companion object Companion {

@@ -26,7 +26,12 @@ import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.testapp.DocumentModel
 import org.multipaz.util.toBase64Url
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.compose.datetime.formattedDateTime
+import org.multipaz.sdjwt.SdJwt
 
 @Composable
 fun CredentialViewerScreen(
@@ -50,7 +55,7 @@ fun CredentialViewerScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         if (credentialInfo == null) {
-            Text("No credential for documentId ${documentId} credentialId ${credentialId}")
+            Text("No credential for documentId $documentId credentialId $credentialId")
         } else {
             KeyValuePairText("Class", credentialInfo.credential::class.simpleName.toString())
             KeyValuePairText("Identifier", credentialInfo.credential.identifier)
@@ -63,7 +68,7 @@ fun CredentialViewerScreen(
             when (credentialInfo.credential) {
                 is MdocCredential -> {
                     val issuerSigned = Cbor.decode(credentialInfo.credential.issuerProvidedData)
-                    val issuerAuth = issuerSigned.get("issuerAuth").asCoseSign1
+                    val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1
                     val msoBytes = issuerAuth.payload!!
                     KeyValuePairText("MSO size", "${msoBytes.size} bytes")
                     KeyValuePairText("ISO mdoc DocType", credentialInfo.credential.docType)
@@ -92,6 +97,14 @@ fun CredentialViewerScreen(
                     // TODO: Show cert chain for key used to sign issuer-signed data. Involves
                     //  getting this over the network as specified in section 5 "JWT VC Issuer Metadata"
                     //  of https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/ ... how annoying
+                    val sdjwt = SdJwt(credentialInfo.credential.issuerProvidedData.decodeToString())
+                    val status = sdjwt.jwtBody["status"]
+                    if (status is JsonObject && status.contains("status_list")) {
+                        val statusList = status["status_list"]!!.jsonObject
+                        val index = statusList["idx"]!!.jsonPrimitive.int
+                        val url = statusList["uri"]!!.jsonPrimitive.content
+                        StatusCheckSection(index, url, sdjwt.x5c!!.certificates.first().ecPublicKey)
+                    }
                 }
             }
 

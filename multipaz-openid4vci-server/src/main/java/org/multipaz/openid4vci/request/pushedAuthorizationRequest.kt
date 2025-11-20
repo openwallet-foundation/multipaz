@@ -13,7 +13,9 @@ import org.multipaz.openid4vci.util.addFreshNonceHeaders
 import org.multipaz.openid4vci.util.createSession
 import org.multipaz.openid4vci.util.idToCode
 import org.multipaz.openid4vci.util.respondWithNewClientAttestationChallenge
-import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * Pushed Authorization Request, which is the first request to be sent to our OpenID4VCI server
@@ -34,24 +36,24 @@ import kotlin.time.Duration.Companion.seconds
  */
 suspend fun pushedAuthorizationRequest(call: ApplicationCall) {
     val parameters = call.receiveParameters()
+    val timeout: Duration = 5.minutes
 
     val id = try {
         // This is where actual work happens
-        createSession(call.request, parameters)
+        createSession(call.request, parameters, Clock.System.now() + timeout)
     } catch (_: ChallengeInvalidException) {
         respondWithNewClientAttestationChallenge(call)
         return
     }
 
     // Format the result (session identifying information).
-    val expirationSeconds = 600
-    val code = idToCode(OpaqueIdType.PAR_CODE, id, expirationSeconds.seconds)
+    val code = idToCode(OpaqueIdType.PAR_CODE, id, timeout)
 
     addFreshNonceHeaders(call)
     call.respondText(
         text = buildJsonObject {
                 put("request_uri", "urn:ietf:params:oauth:request_uri:$code")
-                put("expires_in", expirationSeconds)
+                put("expires_in", timeout.inWholeSeconds)
             }.toString(),
         contentType = ContentType.Application.Json,
         status = HttpStatusCode.Created

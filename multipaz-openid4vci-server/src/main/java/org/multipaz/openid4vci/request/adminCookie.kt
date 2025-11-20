@@ -1,4 +1,4 @@
-package org.multipaz.records.data
+package org.multipaz.openid4vci.request
 
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -10,6 +10,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.multipaz.openid4vci.util.OpaqueIdType
+import org.multipaz.openid4vci.util.codeToId
+import org.multipaz.openid4vci.util.idToCode
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 
@@ -17,21 +20,21 @@ import kotlin.time.Duration.Companion.seconds
 class AdminCookieInvalid: Exception()
 
 /**
- * Ensures the client supplied valid "admin_auth" cookie.
+ * Ensures the client supplied valid "issuance_auth" cookie.
  *
  * Throws [AdminCookieInvalid] exception if no valid cookie is present.
  */
 suspend fun validateAdminCookie(call: ApplicationCall) {
-    val cookie = call.request.cookies["admin_auth"] ?: throw AdminCookieInvalid()
+    val cookie = call.request.cookies["issuance_auth"] ?: throw AdminCookieInvalid()
     try {
-        tokenToId(TokenType.ADMIN_COOKIE, cookie)
+        codeToId(OpaqueIdType.ADMIN_COOKIE, cookie)
     } catch (e: IllegalArgumentException) {
         throw AdminCookieInvalid()
     }
 }
 
 /**
- * Issues "admin_auth" cookie to the client upon successful authentication
+ * Issues "issuance_auth" cookie to the client upon successful authentication
  * (supplied password matching given administrative password).
  */
 suspend fun adminAuth(call: ApplicationCall, adminPassword: String) {
@@ -47,7 +50,7 @@ suspend fun adminAuth(call: ApplicationCall, adminPassword: String) {
         )
     } else {
         val duration = 1.days
-        val cookie = idToToken(TokenType.ADMIN_COOKIE, "", duration + 10.seconds)
+        val cookie = idToCode(OpaqueIdType.ADMIN_COOKIE, "", duration + 10.seconds)
         call.respondText(
             text = buildJsonObject {
                 put("cookie", cookie)

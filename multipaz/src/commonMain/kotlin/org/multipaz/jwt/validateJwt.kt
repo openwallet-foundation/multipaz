@@ -108,12 +108,16 @@ suspend fun validateJwt(
         parts[1].fromBase64Url().decodeToString()
     ).jsonObject
 
+    val now = clock.now().epochSeconds
+
     val expiration = if (body.containsKey("exp")) {
         val exp = body["exp"]
         if (exp !is JsonPrimitive || exp.isString) {
             throw InvalidRequestException("$jwtName: 'exp' is invalid")
         }
         exp.content.toLong()
+    } else if (maxValidity == Duration.INFINITE) {
+        now + 1
     } else {
         val iat = body["iat"]
         if (iat !is JsonPrimitive || iat.isString) {
@@ -122,7 +126,6 @@ suspend fun validateJwt(
         iat.content.toLong() + maxValidity.inWholeSeconds - 5
     }
 
-    val now = clock.now().epochSeconds
     if (expiration < now) {
         throw InvalidRequestException("$jwtName: expired")
     }

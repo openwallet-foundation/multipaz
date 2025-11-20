@@ -7,14 +7,7 @@
 </head>
 <body>
 <div id="main">
-<h1>Verify your identity</h1>
-<h4>Option1: present EU PID</h4>
-<form action="authorize" method="post" id="form">
-    <input type="hidden" name="authorizationCode" value="$authorizationCode"/>
-    <input type="hidden" name="pidData" id="pidData" value=""/>
-    <button id="verify" data-code="$pidReadingCode">Verify PID</button>
-</form>
-<h4>Option2: tell us who you are</h4>
+<h1>Tell us who you are</h1>
 <form action="authorize" method="post">
     <input type="hidden" name="authorizationCode" value="$authorizationCode"/>
     <label for="given_name">First name:</label>
@@ -26,6 +19,5 @@
     <button>Verify</button>
 </form>
 </div>
-<script src="authorize.js"></script>
 </body>
 </html>

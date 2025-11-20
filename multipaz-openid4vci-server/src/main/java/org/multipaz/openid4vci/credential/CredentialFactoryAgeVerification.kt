@@ -1,5 +1,9 @@
 package org.multipaz.openid4vci.credential
 
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.plus
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
@@ -47,13 +51,18 @@ internal class CredentialFactoryAgeVerification : CredentialFactoryBase() {
     override val logo: String
         get() = "card-age-verification.png"
 
-    override suspend fun makeCredential(
+    override suspend fun mint(
         data: DataItem,
-        authenticationKey: EcPublicKey?
-    ): String {
+        authenticationKey: EcPublicKey?,
+        credentialIndex: Int,
+        statusListUrl: String
+    ): MintedCredential {
         val now = Clock.System.now()
 
         val coreData = data["core"]
+        val dateOfBirth = coreData["birth_date"].asDateString
+        val timeZone = TimeZone.currentSystemDefault()
+        val dateOfBirthInstant = dateOfBirth.atStartOfDayIn(timeZone)
 
         // Create AuthKeys and MSOs, make sure they're valid for 30 days. Also make
         // sure to not use fractional seconds as 18013-5 calls for this (clauses 7.1
@@ -74,20 +83,15 @@ internal class CredentialFactoryAgeVerification : CredentialFactoryBase() {
         val mdocType = AgeVerification.getDocumentType()
             .mdocDocumentType!!.namespaces[AgeVerification.AV_NAMESPACE]!!
 
+        val ageThresholdsToProvision = listOf(13, 15, 16, 18, 21, 23, 25, 27, 28, 40, 60, 65, 67)
         val issuerNamespaces = buildIssuerNamespaces {
             addNamespace(AgeVerification.AV_NAMESPACE) {
-                addDataElement("age_over_18", Simple.TRUE)
-                // Add all mandatory elements for completeness if they are missing.
-                for ((elementName, data) in mdocType.dataElements) {
-                    if (!data.mandatory) {
-                        continue
-                    }
-                    val value = data.attribute.sampleValueMdoc
-                    if (value != null) {
-                        addDataElement(elementName, value)
-                    } else {
-                        Logger.e(CredentialFactoryMdl.Companion.TAG, "Could not fill '$elementName': no sample data")
-                    }
+                for (ageNum in ageThresholdsToProvision) {
+                    val age = ageNum.toString().padStart(2, '0')
+                    // age over is calculated purely based on calendar date (not based on the birth
+                    // time zone)
+                    val over = now > dateOfBirthInstant.plus(ageNum, DateTimeUnit.YEAR, timeZone)
+                    addDataElement("age_over_$age", over.toDataItem())
                 }
             }
         }
@@ -129,7 +133,11 @@ internal class CredentialFactoryAgeVerification : CredentialFactoryBase() {
             }
         )
 
-        return issuerProvidedAuthenticationData.toBase64Url()
+        return MintedCredential(
+            credential = issuerProvidedAuthenticationData.toBase64Url(),
+            creation = validFrom,
+            expiration = validUntil
+        )
     }
 
     companion object Companion {

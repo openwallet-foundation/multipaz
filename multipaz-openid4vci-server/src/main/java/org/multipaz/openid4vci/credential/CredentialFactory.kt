@@ -39,10 +39,25 @@ internal interface CredentialFactory {
     suspend fun initialize()
 
     /**
-     * Creates the credential. [authenticationKey] must be non-null for key-bound
-     * credentials and null for keyless ones.
+     * Creates the credential.
+     *
+     * @param data personal data (typically from the System of Record) necessary to create the
+     *    credential
+     * @param authenticationKey public portion of the key to which the credential is bound in the
+     *    wallet; must be non-null for key-bound credentials and null for keyless ones
+     * @param credentialIndex small integer that identifies this credential during its validity
+     *    period; credential index is used in status list to communicate this credential's status
+     *    to support revocation
+     * @param statusListUrl url that can be used to obtain credential status after it is issued
+     *    to support revocation
+     * @return credential and its creation and expiration times
      */
-    suspend fun makeCredential(data: DataItem, authenticationKey: EcPublicKey?): String
+    suspend fun mint(
+        data: DataItem,
+        authenticationKey: EcPublicKey?,
+        credentialIndex: Int,
+        statusListUrl: String,
+    ): MintedCredential
 
     class RegisteredFactories(
         val byOfferId: Map<String, CredentialFactory>,
@@ -64,6 +79,7 @@ internal interface CredentialFactory {
                     CredentialFactoryAgeVerification(),
                     CredentialFactoryUtopiaLoyalty(),
                 )
+                CredentialFactoryBase.initialize()
                 factories.forEach { it.initialize() }
                 registeredFactories = RegisteredFactories(
                     byOfferId = factories.associateBy { it.offerId },

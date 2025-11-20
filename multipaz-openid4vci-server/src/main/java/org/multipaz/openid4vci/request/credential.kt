@@ -30,6 +30,7 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItemFullDate
+import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.jwt.ChallengeInvalidException
 import org.multipaz.openid4vci.credential.CredentialFactory
@@ -44,7 +45,11 @@ import org.multipaz.server.getBaseUrl
 import org.multipaz.jwt.JwtCheck
 import org.multipaz.util.Logger
 import org.multipaz.jwt.validateJwt
+import org.multipaz.openid4vci.util.CredentialState
 import org.multipaz.openid4vci.util.respondWithNewDPoPNonce
+import org.multipaz.util.toBase64Url
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * Issues a credential based on DPoP authentication with access token.
@@ -77,16 +82,34 @@ suspend fun credential(call: ApplicationCall) {
             "No credential can be created for scope '${state.scope}' and the given format")
     }
 
+    state.purgeExpiredCredentials()
+
     val credentialData = readSystemOfRecord(state)
+    val now = Clock.System.now()
+    val credentialPlaceholderExpiration = now + 3.minutes
+    val statusListUrl = BackendEnvironment.getBaseUrl() + "/status_list"
 
     if (factory.cryptographicBindingMethods.isEmpty()) {
+        val credentialState = CredentialState(
+            issuanceStateId = id,
+            keyId = null,
+            creation = now,
+            expiration = credentialPlaceholderExpiration
+        )
+        val credentialIndex = CredentialState.recordNewCredential(credentialState)
         // Keyless credential: no need for proof/proofs parameter.
-        val credential = factory.makeCredential(credentialData, null)
+        val minted = factory.mint(credentialData, null, credentialIndex, statusListUrl)
+        credentialState.creation = minted.creation
+        credentialState.expiration = minted.expiration
+        CredentialState.updateCredential(credentialIndex, credentialState)
+        state.credentials.add(IssuanceState.CredentialData(credentialIndex, minted.expiration))
+        // Do not extend session expiration
+        IssuanceState.updateIssuanceState(id, state, expiration = null)
         call.respondText(
             text = buildJsonObject {
                 putJsonArray("credentials") {
                     addJsonObject {
-                        put("credential", credential)
+                        put("credential", minted.credential)
                     }
                 }
             }.toString(),
@@ -118,7 +141,7 @@ suspend fun credential(call: ApplicationCall) {
         }
     }
 
-    val authenticationKeys = when (proofType) {
+    val authenticationKeysAndIds = when (proofType) {
         "attestation" -> {
             proofs.flatMap { proof ->
                 val body = validateJwt(
@@ -132,7 +155,11 @@ suspend fun credential(call: ApplicationCall) {
                     )
                 validateAndConsumeCredentialChallenge(body["nonce"]!!.jsonPrimitive.content)
                 body["attested_keys"]!!.jsonArray.map { key ->
-                    EcPublicKey.fromJwk(key.jsonObject)
+                    val publicKey = EcPublicKey.fromJwk(key.jsonObject)
+                    KeyAndId(
+                        key = publicKey,
+                        id = key.jsonObject["kid"]?.jsonPrimitive?.content ?: keyHash(publicKey)
+                    )
                 }
             }
         }
@@ -149,7 +176,8 @@ suspend fun credential(call: ApplicationCall) {
                     throw InvalidRequestException("invalid value for 'proof.jwt' parameter")
                 }
                 val head = Json.parseToJsonElement(String(parts[0].fromBase64Url())) as JsonObject
-                val authenticationKey = EcPublicKey.fromJwk(head["jwk"]!!.jsonObject)
+                val jwk = head["jwk"]!!.jsonObject
+                val authenticationKey = EcPublicKey.fromJwk(jwk)
                 val body = validateJwt(
                     jwt = proof.jsonPrimitive.content,
                     jwtName = "Key attestation",
@@ -166,7 +194,12 @@ suspend fun credential(call: ApplicationCall) {
                 } else if (nonce != expectedNonce) {
                     throw InvalidRequestException("nonce mismatch")
                 }
-                authenticationKey
+                KeyAndId(
+                    key = authenticationKey,
+                    id = head["kid"]?.jsonPrimitive?.content
+                        ?: jwk["kid"]?.jsonPrimitive?.content
+                        ?: keyHash(authenticationKey)
+                )
             }
         }
         else -> {
@@ -174,9 +207,25 @@ suspend fun credential(call: ApplicationCall) {
         }
     }
 
-    val credentials = authenticationKeys.map { key ->
-        factory.makeCredential(credentialData, key)
+    val credentials = authenticationKeysAndIds.map { (key, keyId) ->
+        // TODO: in the long run, keys should come with `kid` from the client
+        val credentialState = CredentialState(
+            issuanceStateId = id,
+            keyId = keyId,
+            creation = now,
+            expiration = credentialPlaceholderExpiration
+        )
+        val credentialIndex = CredentialState.recordNewCredential(credentialState)
+        val minted = factory.mint(credentialData, key, credentialIndex, statusListUrl)
+        credentialState.creation = minted.creation
+        credentialState.expiration = minted.expiration
+        CredentialState.updateCredential(credentialIndex, credentialState)
+        state.credentials.add(IssuanceState.CredentialData(credentialIndex, minted.expiration))
+        minted.credential
     }
+
+    // Do not extend session expiration
+    IssuanceState.updateIssuanceState(id, state, expiration = null)
 
     val result =
         buildJsonObject {
@@ -216,6 +265,12 @@ private suspend fun readSystemOfRecord(state: IssuanceState): DataItem {
                 putCborMap("naturalization") {
                     putCborMap("") {}
                 }
+                putCborMap("movie") {
+                    putCborMap("") {}
+                }
+                putCborMap("wholesale") {
+                    putCborMap("") {}
+                }
             }
         }
     } else {
@@ -233,3 +288,8 @@ private suspend fun readSystemOfRecord(state: IssuanceState): DataItem {
         return Cbor.decode(request.readBytes())
     }
 }
+
+private fun keyHash(key: EcPublicKey): String =
+    key.toJwkThumbprint(Algorithm.SHA256).toByteArray().toBase64Url()
+
+private data class KeyAndId(val key: EcPublicKey, val id: String)

@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -94,7 +95,7 @@ class OpenIDBackendUtilTest {
             val attestationJwt = OpenID4VCIBackendUtil.createJwtKeyAttestation(
                 signingKey = AsymmetricKey.NamedExplicit("key", signingKey),
                 attestationIssuer = "key",
-                keysToAttest = listOf(attestedKeyInfo.attestation),
+                keysToAttest = listOf(KeyIdAndAttestation("foo", attestedKeyInfo.attestation)),
                 challenge = NONCE
             )
             val body = validateJwt(
@@ -106,7 +107,9 @@ class OpenIDBackendUtilTest {
                     JwtCheck.TRUST to "fake_trust"
                 )
             )
-            val key = EcPublicKey.fromJwk(body["attested_keys"]!!.jsonArray[0].jsonObject)
+            val jwk = body["attested_keys"]!!.jsonArray[0].jsonObject
+            Assert.assertEquals("foo", jwk["kid"]!!.jsonPrimitive.content)
+            val key = EcPublicKey.fromJwk(jwk)
             Assert.assertEquals(attestedKeyInfo.publicKey, key)
         }
     }

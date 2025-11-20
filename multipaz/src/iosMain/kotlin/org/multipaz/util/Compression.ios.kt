@@ -7,12 +7,12 @@ import platform.Foundation.compressUsingAlgorithm
 import platform.Foundation.decompressedDataUsingAlgorithm
 
 @OptIn(ExperimentalForeignApi::class)
-actual fun deflate(data: ByteArray, compressionLevel: Int): ByteArray {
+actual fun ByteArray.deflate(compressionLevel: Int): ByteArray {
     require(compressionLevel >=0 && compressionLevel <= 9) {
         "Compression level $compressionLevel is invalid, must be between 0 and 9"
     }
     // Note: This API doesn't allow setting the compressionLevel, it's always hardcoded to 5
-    val data = data.toNSData().mutableCopy() as NSMutableData
+    val data = toNSData().mutableCopy() as NSMutableData
     data.compressUsingAlgorithm(
         algorithm = NSDataCompressionAlgorithmZlib,
         error = null
@@ -21,8 +21,8 @@ actual fun deflate(data: ByteArray, compressionLevel: Int): ByteArray {
 }
 
 @OptIn(ExperimentalForeignApi::class)
-actual fun inflate(compressedData: ByteArray): ByteArray {
-    val d = compressedData.toNSData()
+actual fun ByteArray.inflate(): ByteArray {
+    val d = toNSData()
     val ret = d.decompressedDataUsingAlgorithm(
         algorithm = NSDataCompressionAlgorithmZlib,
         error = null

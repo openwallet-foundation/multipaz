@@ -53,9 +53,14 @@ import java.net.URI
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.random.Random
+import kotlin.time.Clock
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
 private const val TAG = "authorize"
+
+/** Amount of time that the user has to authorize themselves */
+private val AUTHORIZATION_TIMEOUT = 20.minutes
 
 suspend fun authorizeGet(call: ApplicationCall) {
     val queryParameters = call.request.queryParameters
@@ -78,17 +83,20 @@ suspend fun authorizeGet(call: ApplicationCall) {
         )
         val urlSchema = queryParameters["url_schema"]
         // Create a new session
-        IssuanceState.createIssuanceState(IssuanceState(
-            clientId = null,
-            scope = factory.scope,
-            clientAttestationKey = null,
-            dpopKey = null,
-            redirectUri = null,
-            codeChallenge = null,
-            configurationId = configurationId,
-            txCodeSpec = txCodeSpec,
-            urlSchema = urlSchema
-        ))
+        IssuanceState.createIssuanceState(
+            issuanceState = IssuanceState(
+                clientId = null,
+                scope = factory.scope,
+                clientAttestationKey = null,
+                dpopKey = null,
+                redirectUri = null,
+                codeChallenge = null,
+                configurationId = configurationId,
+                txCodeSpec = txCodeSpec,
+                urlSchema = urlSchema
+            ),
+            expiration = Clock.System.now() + AUTHORIZATION_TIMEOUT
+        )
     } else {
         throw InvalidRequestException("Invalid or missing 'request_uri' parameter")
     }
@@ -97,7 +105,7 @@ suspend fun authorizeGet(call: ApplicationCall) {
         authorizeUsingSystemOfRecord(id, systemOfRecordUrl, call)
     } else {
         // Create a simple web page for the user to authorize the credential issuance.
-        getHtml(id, call)
+        getHtml(id, AUTHORIZATION_TIMEOUT, call)
     }
 }
 
@@ -159,7 +167,11 @@ private suspend fun authorizeUsingSystemOfRecord(
     }
     val parsedResponse = Json.parseToJsonElement(responseText).jsonObject
     val requestUri = parsedResponse["request_uri"]!!.jsonPrimitive.content
-    IssuanceState.updateIssuanceState(id, state)
+    IssuanceState.updateIssuanceState(
+        issuanceStateId = id,
+        issuanceState = state,
+        expiration = Clock.System.now() + AUTHORIZATION_TIMEOUT
+    )
     call.respondRedirect(buildString {
         append(systemOfRecordUrl)
         append("/authorize?clientId=")
@@ -183,10 +195,10 @@ private suspend fun createJwtClientAssertion(
         put("aud", aud)
     }
 
-private suspend fun getHtml(id: String, call: ApplicationCall) {
+private suspend fun getHtml(id: String, expiresIn: Duration, call: ApplicationCall) {
     val resources = BackendEnvironment.getInterface(Resources::class)!!
-    val authorizationCode = idToCode(OpaqueIdType.AUTHORIZATION_STATE, id, 20.minutes)
-    val pidReadingCode = idToCode(OpaqueIdType.PID_READING, id, 20.minutes)
+    val authorizationCode = idToCode(OpaqueIdType.AUTHORIZATION_STATE, id, expiresIn)
+    val pidReadingCode = idToCode(OpaqueIdType.PID_READING, id, expiresIn)
     val authorizeHtml = resources.getStringResource("authorize.html")!!
     call.respondText(
         text = authorizeHtml
@@ -197,8 +209,9 @@ private suspend fun getHtml(id: String, call: ApplicationCall) {
 }
 
 private suspend fun getOpenid4Vp(code: String, call: ApplicationCall) {
+    val timeout = 5.minutes
     val id = codeToId(OpaqueIdType.OPENID4VP_CODE, code)
-    val stateRef = idToCode(OpaqueIdType.OPENID4VP_STATE, id, 5.minutes)
+    val stateRef = idToCode(OpaqueIdType.OPENID4VP_STATE, id, timeout)
     val baseUrl = BackendEnvironment.getBaseUrl()
     val responseUri = "$baseUrl/openid4vp_response"
     val state = IssuanceState.getIssuanceState(id)
@@ -213,7 +226,7 @@ private suspend fun getOpenid4Vp(code: String, call: ApplicationCall) {
             "pid" to EUPersonalID.getDocumentType().cannedRequests.first { it.id == "full" }
         )
     )
-    IssuanceState.updateIssuanceState(id, state)
+    IssuanceState.updateIssuanceState(id, state, expiration = Clock.System.now() + timeout)
     call.respondText(
         text = jwt,
         contentType = AUTHZ_REQ
@@ -228,7 +241,8 @@ suspend fun authorizePost(call: ApplicationCall)  {
     val code = parameters["authorizationCode"]
         ?: throw InvalidRequestException("'authorizationCode' missing")
     val id = codeToId(OpaqueIdType.AUTHORIZATION_STATE, code)
-    val stateCode = idToCode(OpaqueIdType.ISSUER_STATE, id, 5.minutes)
+    val timeout = 5.minutes
+    val stateCode = idToCode(OpaqueIdType.ISSUER_STATE, id, timeout)
 
     try {
         val state = IssuanceState.getIssuanceState(id)
@@ -266,8 +280,8 @@ suspend fun authorizePost(call: ApplicationCall)  {
             state.systemOfRecordAccess = createFakeSystemOfRecordAccess(parameters)
         }
 
-        state.authorized = true  // OK to issue authorization code
-        IssuanceState.updateIssuanceState(id, state)
+        state.authorized = Clock.System.now()  // OK to issue authorization code
+        IssuanceState.updateIssuanceState(id, state, Clock.System.now() + timeout)
 
         call.respondRedirect("finish_authorization?state=$stateCode")
     } catch (err: CancellationException) {

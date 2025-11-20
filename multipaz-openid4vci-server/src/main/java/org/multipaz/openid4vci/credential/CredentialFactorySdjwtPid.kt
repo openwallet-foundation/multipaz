@@ -60,10 +60,12 @@ internal class CredentialFactorySdjwtPid : CredentialFactoryBase() {
     override val logo: String
         get() = "card-pid.png"
 
-    override suspend fun makeCredential(
+    override suspend fun mint(
         data: DataItem,
-        authenticationKey: EcPublicKey?
-    ): String {
+        authenticationKey: EcPublicKey?,
+        credentialIndex: Int,
+        statusListUrl: String
+    ): MintedCredential {
         check(authenticationKey != null)
 
         val coreData = data["core"]
@@ -160,9 +162,20 @@ internal class CredentialFactorySdjwtPid : CredentialFactoryBase() {
                 put("iat", timeSigned.epochSeconds)
                 put("nbf", validFrom.epochSeconds)
                 put("exp", validUntil.epochSeconds)
+                putJsonObject("status") {
+                    putJsonObject("status_list") {
+                        put("idx", credentialIndex)
+                        put("uri", statusListUrl)
+                    }
+                }
             }
         )
-        return sdJwt.compactSerialization
+
+        return MintedCredential(
+            credential = sdJwt.compactSerialization,
+            creation = validFrom,
+            expiration = validUntil
+        )
     }
 
     companion object {

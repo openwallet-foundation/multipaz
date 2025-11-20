@@ -1,5 +1,6 @@
 package org.multipaz.provisioning
 
+import org.multipaz.provisioning.openid4vci.KeyIdAndAttestation
 import org.multipaz.securearea.KeyAttestation
 
 /**
@@ -16,6 +17,6 @@ sealed class KeyBindingInfo {
 
     /** Keys are supplied using [KeyAttestation] objects */
     data class Attestation(
-        val attestations: List<KeyAttestation>
+        val attestations: List<KeyIdAndAttestation>
     ): KeyBindingInfo()
 }

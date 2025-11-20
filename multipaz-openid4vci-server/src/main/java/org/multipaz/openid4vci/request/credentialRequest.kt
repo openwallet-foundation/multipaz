@@ -17,6 +17,7 @@ import org.multipaz.server.getDomain
 import org.multipaz.openid4vci.util.getReaderIdentity
 import org.multipaz.openid4vci.util.idToCode
 import org.multipaz.rpc.backend.BackendEnvironment
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 
 /**
@@ -24,12 +25,13 @@ import kotlin.time.Duration.Companion.minutes
  */
 suspend fun credentialRequest(call: ApplicationCall) {
     // TODO: unify with AuthorizeServlet.getOpenid4Vp
+    val timeout = 5.minutes
     val requestData = call.receiveText()
     val params = Json.parseToJsonElement(requestData) as JsonObject
     val code = params["code"]?.jsonPrimitive?.content
         ?: throw InvalidRequestException("missing parameter 'code'")
     val id = codeToId(OpaqueIdType.PID_READING, code)
-    val stateRef = idToCode(OpaqueIdType.OPENID4VP_STATE, id, 5.minutes)
+    val stateRef = idToCode(OpaqueIdType.OPENID4VP_STATE, id, timeout)
     val state = IssuanceState.getIssuanceState(id)
     val domain = BackendEnvironment.getDomain()
     val model = Openid4VpVerifierModel("origin:${domain}")
@@ -43,7 +45,7 @@ suspend fun credentialRequest(call: ApplicationCall) {
             "pid" to EUPersonalID.getDocumentType().cannedRequests.first { it.id == "mandatory" }
         )
     )
-    IssuanceState.updateIssuanceState(id, state)
+    IssuanceState.updateIssuanceState(id, state, Clock.System.now() + timeout)
     call.respondText(
         text = credentialRequest,
         contentType = AUTHZ_REQ

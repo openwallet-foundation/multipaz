@@ -83,13 +83,11 @@ object JsonWebEncryption {
         // 96 bits (12 bytes) is a recommended IV size, but AndroidOpenSSL provider requires
         // it, so just go with that recommendation.
         val nonce = random.nextBytes(12)
+        val uncompressed = Json.encodeToString(claimsSet).encodeToByteArray()
         val messageToEncrypt = if (compressionLevel != null) {
-            deflate(
-                data = Json.encodeToString(claimsSet).encodeToByteArray(),
-                compressionLevel = compressionLevel,
-            )
+            uncompressed.deflate(compressionLevel)
         } else {
-            Json.encodeToString(claimsSet).encodeToByteArray()
+            uncompressed
         }
         val cipherTextWithTag = Crypto.encrypt(
             algorithm = encAlg,
@@ -163,8 +161,10 @@ object JsonWebEncryption {
         }
         when (compressionAlgorithm) {
             "DEF" -> {
-                val decompressedClearText = inflate(clearText)
-                return Json.decodeFromString(JsonObject.serializer(), decompressedClearText.decodeToString())
+                return Json.decodeFromString(
+                    deserializer = JsonObject.serializer(),
+                    string = clearText.inflate().decodeToString()
+                )
             }
             else -> throw IllegalArgumentException("Unsupported compression algorithm $compressionAlgorithm")
         }

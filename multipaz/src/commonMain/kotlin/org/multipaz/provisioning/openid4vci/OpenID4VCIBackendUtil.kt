@@ -104,7 +104,7 @@ object OpenID4VCIBackendUtil {
     suspend fun createJwtKeyAttestation(
         signingKey: AsymmetricKey,
         attestationIssuer: String,
-        keysToAttest: List<KeyAttestation>,
+        keysToAttest: List<KeyIdAndAttestation>,
         challenge: String,
         userAuthentication: List<String>? = null,
         keyStorage: List<String>? = null
@@ -115,7 +115,11 @@ object OpenID4VCIBackendUtil {
     ) {
         put("iss", attestationIssuer)
         put("attested_keys", JsonArray(
-            keysToAttest.map { it.publicKey.toJwk() }
+            keysToAttest.map {
+                it.keyAttestation.publicKey.toJwk(buildJsonObject {
+                    put("kid", it.keyId)
+                })
+            }
         ))
         put("nonce", challenge)
         userAuthentication?.let {

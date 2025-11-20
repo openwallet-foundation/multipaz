@@ -15,7 +15,6 @@ import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.request.receiveParameters
 import io.ktor.server.response.header
 import io.ktor.server.response.respondText
-import kotlin.time.Clock
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.rpc.handler.InvalidRequestException
@@ -47,7 +46,9 @@ import org.multipaz.openid4vci.util.validateClientAttestation
 import org.multipaz.openid4vci.util.validateClientAttestationPoP
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.util.Logger
+import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -164,7 +165,9 @@ suspend fun token(call: ApplicationCall) {
         // would not be able to access System of Record.
         obtainSystemOfRecordToken(systemOfRecordUrl!!, state)
     }
-    IssuanceState.updateIssuanceState(id, state)
+    // If no refresh happens in a year, detete the record
+    val refreshExpiration = Clock.System.now() + 365.days
+    IssuanceState.updateIssuanceState(id, state, refreshExpiration)
     addFreshNonceHeaders(call)
     call.respondText(
         text = buildJsonObject {

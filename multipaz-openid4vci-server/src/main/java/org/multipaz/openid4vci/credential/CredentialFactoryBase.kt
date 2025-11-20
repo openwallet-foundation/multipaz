@@ -21,28 +21,36 @@ internal abstract class CredentialFactoryBase: CredentialFactory {
 
     override lateinit var signingKey: AsymmetricKey.X509Certified
 
-    final override suspend fun initialize() {
-        signingKey = BackendEnvironment.getServerIdentity("ds_jwk") {
-            val configuration = BackendEnvironment.getInterface(Configuration::class)!!
-            val secureAreaRepository = BackendEnvironment.getInterface(SecureAreaRepository::class)
-            val iacaKey = AsymmetricKey.parse(
-                json = configuration.getValue("iaca_jwk")!!,
-                secureAreaRepository = secureAreaRepository
-            ) as AsymmetricKey.X509Certified
-            val iacaCert = iacaKey.certChain.certificates.first()
-            val dsPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
-            val dsCert = MdocUtil.generateDsCertificate(
-                iacaKey = iacaKey,
-                dsKey = dsPrivateKey.publicKey,
-                subject = X500Name.fromName("CN=${BackendEnvironment.getBaseUrl()}"),
-                serial = ASN1Integer(Clock.System.now().epochSeconds),
-                validFrom = iacaCert.validityNotBefore,
-                validUntil = iacaCert.validityNotAfter
-            )
-            AsymmetricKey.X509CertifiedExplicit(
-                privateKey = dsPrivateKey,
-                certChain = X509CertChain(listOf(dsCert) + iacaKey.certChain.certificates)
-            )
-        } as AsymmetricKey.X509Certified
+    override suspend fun initialize() {
+        signingKey = serverKey
+    }
+
+    companion object {
+        lateinit var serverKey: AsymmetricKey.X509Certified
+        suspend fun initialize() {
+            serverKey = BackendEnvironment.getServerIdentity("ds_jwk") {
+                val configuration = BackendEnvironment.getInterface(Configuration::class)!!
+                val secureAreaRepository =
+                    BackendEnvironment.getInterface(SecureAreaRepository::class)
+                val iacaKey = AsymmetricKey.parse(
+                    json = configuration.getValue("iaca_jwk")!!,
+                    secureAreaRepository = secureAreaRepository
+                ) as AsymmetricKey.X509Certified
+                val iacaCert = iacaKey.certChain.certificates.first()
+                val dsPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+                val dsCert = MdocUtil.generateDsCertificate(
+                    iacaKey = iacaKey,
+                    dsKey = dsPrivateKey.publicKey,
+                    subject = X500Name.fromName("CN=${BackendEnvironment.getBaseUrl()}"),
+                    serial = ASN1Integer(Clock.System.now().epochSeconds),
+                    validFrom = iacaCert.validityNotBefore,
+                    validUntil = iacaCert.validityNotAfter
+                )
+                AsymmetricKey.X509CertifiedExplicit(
+                    privateKey = dsPrivateKey,
+                    certChain = X509CertChain(listOf(dsCert) + iacaKey.certChain.certificates)
+                )
+            } as AsymmetricKey.X509Certified
+        }
     }
 }

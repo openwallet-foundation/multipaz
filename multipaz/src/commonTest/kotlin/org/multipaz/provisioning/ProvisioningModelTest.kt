@@ -236,7 +236,10 @@ class ProvisioningModelTest {
             obtainCredentialsHook()
             return when (keyInfo) {
                 is KeyBindingInfo.Attestation ->
-                    generateTestMDoc(DOCTYPE, keyInfo.attestations.map { it.publicKey })
+                    generateTestMDoc(
+                        docType = DOCTYPE,
+                        publicKeys = keyInfo.attestations.map { it.keyAttestation.publicKey }
+                    )
 
                 else -> throw IllegalArgumentException()
             }

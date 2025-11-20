@@ -225,7 +225,7 @@ internal class OpenID4VCIProvisioningClient(
             is KeyBindingInfo.Attestation -> buildJsonObject {
                 val backend = BackendEnvironment.getInterface(OpenID4VCIBackend::class)!!
                 val jwtKeyAttestation = backend.createJwtKeyAttestation(
-                    keyAttestations = keyInfo.attestations,
+                    keyIdAndAttestations = keyInfo.attestations,
                     challenge = keyChallenge!!
                 )
                 putJsonArray("attestation") {

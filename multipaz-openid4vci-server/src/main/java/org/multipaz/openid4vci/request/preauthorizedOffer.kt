@@ -27,6 +27,7 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.server.getBaseUrl
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 
 private const val OFFER_URL_SCHEMA = "openid-credential-offer:"
@@ -98,18 +99,23 @@ suspend fun preauthorizedOffer(call: ApplicationCall) {
                 redirectUri = null,
                 codeChallenge = null,
                 configurationId = configId,
-                authorized = true,
+                authorized = Clock.System.now(),
                 systemOfRecordAccess = access,
                 txCodeSpec = txCodeSpec,
                 txCodeHash = txCode?.let {
                     ByteString(Crypto.digest(Algorithm.SHA256, it.encodeToByteArray()))
                 }
             )
-            val id = IssuanceState.createIssuanceState(state)
+            val expiresIn = 20.hours
+            val id = IssuanceState.createIssuanceState(
+                issuanceState = state,
+                expiration = Clock.System.now() + expiresIn
+            )
             val offer = generatePreauthorizedOffer(
                 offerSchema = OFFER_URL_SCHEMA,
                 id = id,
-                state = state
+                state = state,
+                expiresIn = expiresIn
             )
             addJsonObject {
                 put("configuration_id", configId)

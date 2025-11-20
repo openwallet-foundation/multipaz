@@ -23,9 +23,18 @@ import io.ktor.util.AttributeKey
 import io.ktor.util.pipeline.PipelineContext
 import io.ktor.util.pipeline.PipelinePhase
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.multipaz.openid4vci.request.adminAuth
+import org.multipaz.openid4vci.request.adminSessionInfo
+import org.multipaz.openid4vci.request.adminListSessions
+import org.multipaz.openid4vci.request.adminSetCredentialStatus
 import org.multipaz.openid4vci.request.authorizeChallenge
 import org.multipaz.openid4vci.request.authorizeGet
 import org.multipaz.openid4vci.request.authorizePost
@@ -40,7 +49,9 @@ import org.multipaz.openid4vci.request.openid4VpResponse
 import org.multipaz.openid4vci.request.pushedAuthorizationRequest
 import org.multipaz.openid4vci.request.qrCode
 import org.multipaz.openid4vci.request.signingCertificate
+import org.multipaz.openid4vci.request.statusList
 import org.multipaz.openid4vci.request.token
+import org.multipaz.openid4vci.request.validateAdminCookie
 import org.multipaz.openid4vci.request.wellKnownOauthAuthorization
 import org.multipaz.openid4vci.request.wellKnownOpenidCredentialIssuer
 import org.multipaz.openid4vci.util.AUTHZ_REQ
@@ -48,11 +59,15 @@ import org.multipaz.openid4vci.util.OpenID4VCIRequestError
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.server.ServerConfiguration
 import org.multipaz.server.ServerEnvironment
+import org.multipaz.storage.Storage
 import org.multipaz.util.Logger
+import org.multipaz.util.toBase64Url
 import java.io.FileWriter
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
 import java.io.StringWriter
+import kotlin.random.Random
+import kotlin.time.Duration.Companion.hours
 
 private const val TAG = "ApplicationExt"
 
@@ -69,6 +84,11 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
     //  may be a better way to inject our custom wrapper for all request handlers
     //  (instead of doing it for every request like we do today).
     val env = ServerEnvironment.create(configuration)
+    val adminPassword = configuration.getValue("admin_password")
+        ?: Random.nextBytes(15).toBase64Url().also {
+            Logger.e(TAG, "No 'admin_password' in config, generated: '$it'")
+        }
+    launchBackgroundJob(env)
     val runRequest: RequestWrapper = { body ->
         val self = this
         withContext(env.await()) {
@@ -141,6 +161,41 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
         }
         post("/preauthorized_offer") {
             runRequest { preauthorizedOffer(call) }
+        }
+        get("/status_list") {
+            runRequest { statusList(call) }
+        }
+        post("/admin_auth") {
+            runRequest { adminAuth(call, adminPassword) }
+        }
+        get("/admin_list_sessions") {
+            runRequest {
+                validateAdminCookie(call)
+                adminListSessions(call)
+            }
+        }
+        get("/admin_session_info") {
+            runRequest {
+                validateAdminCookie(call)
+                adminSessionInfo(call)
+            }
+        }
+        post("/admin_set_credential_status") {
+            runRequest {
+                validateAdminCookie(call)
+                adminSetCredentialStatus(call)
+            }
+        }
+    }
+}
+
+private fun launchBackgroundJob(env: Deferred<ServerEnvironment>) {
+    CoroutineScope(Dispatchers.IO).launch {
+        while (true) {
+            Logger.i("Background", "purging expired...")
+            env.await().getInterface(Storage::class)!!.purgeExpired()
+            Logger.i("Background", "purging complete")
+            delay(1.hours)
         }
     }
 }

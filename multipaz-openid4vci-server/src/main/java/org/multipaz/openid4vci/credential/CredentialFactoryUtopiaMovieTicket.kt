@@ -7,11 +7,13 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.server.getBaseUrl
+import kotlin.time.Duration.Companion.days
 
 internal class CredentialFactoryUtopiaMovieTicket : CredentialFactoryBase() {
     override val offerId: String
@@ -37,10 +39,12 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactoryBase() {
     override val logo: String
         get() = "movie_ticket.png"
 
-    override suspend fun makeCredential(
+    override suspend fun mint(
         data: DataItem,
-        authenticationKey: EcPublicKey?
-    ): String {
+        authenticationKey: EcPublicKey?,
+        credentialIndex: Int,
+        statusListUrl: String
+    ): MintedCredential {
         check(authenticationKey == null)
         val issuer = BackendEnvironment.getBaseUrl()
 
@@ -53,8 +57,8 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactoryBase() {
         val now = Clock.System.now()
 
         val timeSigned = now
-        val validFrom = Instant.parse("2024-04-01T12:00:00Z")
-        val validUntil = Instant.parse("2034-04-01T12:00:00Z")
+        val validFrom = now
+        val validUntil = now + 30.days
 
         val sdJwt = SdJwt.create(
             issuerKey = signingKey,
@@ -66,9 +70,20 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactoryBase() {
                 put("iat", timeSigned.epochSeconds)
                 put("nbf", validFrom.epochSeconds)
                 put("exp", validUntil.epochSeconds)
+                putJsonObject("status") {
+                    putJsonObject("status_list") {
+                        put("idx", credentialIndex)
+                        put("uri", statusListUrl)
+                    }
+                }
             }
         )
-        return sdJwt.compactSerialization
+
+        return MintedCredential(
+            credential = sdJwt.compactSerialization,
+            creation = validFrom,
+            expiration = validUntil
+        )
     }
 
     companion object {

@@ -39,6 +39,7 @@ import org.multipaz.crypto.X509Cert
 import org.multipaz.provisioning.AuthorizationChallenge
 import org.multipaz.provisioning.AuthorizationResponse
 import org.multipaz.provisioning.KeyBindingInfo
+import org.multipaz.provisioning.openid4vci.KeyIdAndAttestation
 import org.multipaz.provisioning.openid4vci.OpenID4VCI
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackendUtil
@@ -196,7 +197,8 @@ class ProvisioningClientTest {
 
             val keyInfo = secureArea.createKey(null, CreateKeySettings())
 
-            val credentials = provisioningClient.obtainCredentials(KeyBindingInfo.Attestation(listOf(keyInfo.attestation)))
+            val credentials = provisioningClient.obtainCredentials(KeyBindingInfo.Attestation(
+                listOf(KeyIdAndAttestation("foo", keyInfo.attestation))))
 
             Assert.assertEquals(1, credentials.size)
         }
@@ -263,7 +265,8 @@ class ProvisioningClientTest {
 
             val keyInfo = secureArea.createKey(null, CreateKeySettings())
 
-            val credentials = provisioningClient.obtainCredentials(KeyBindingInfo.Attestation(listOf(keyInfo.attestation)))
+            val credentials = provisioningClient.obtainCredentials(KeyBindingInfo.Attestation(
+                    listOf(KeyIdAndAttestation("bar", keyInfo.attestation))))
 
             Assert.assertEquals(1, credentials.size)
         }
@@ -327,13 +330,13 @@ class ProvisioningClientTest {
         }
 
         override suspend fun createJwtKeyAttestation(
-            keyAttestations: List<KeyAttestation>,
+            keyIdAndAttestations: List<KeyIdAndAttestation>,
             challenge: String,
             userAuthentication: List<String>?,
             keyStorage: List<String>?
         ): String {
             // Generate key attestation
-            val keyList = keyAttestations.map { it.publicKey }
+            val keyList = keyIdAndAttestations.map { it.keyAttestation.publicKey }
 
             val alg = localAttestationPrivateKey.curve.defaultSigningAlgorithm.joseAlgorithmIdentifier
             val head = buildJsonObject {

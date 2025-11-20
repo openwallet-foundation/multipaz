@@ -17,7 +17,7 @@ suspend fun generatePreauthorizedOffer(
     offerSchema: String,
     id: String,
     state: IssuanceState,
-    expiresIn: Duration = 100.days
+    expiresIn: Duration
 ): String {
     val preauthCode = idToCode(OpaqueIdType.PRE_AUTHORIZED, id, expiresIn)
     return "$offerSchema://?credential_offer=" + buildJsonObject {

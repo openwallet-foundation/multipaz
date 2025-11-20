@@ -17,6 +17,7 @@ import org.multipaz.openid4vci.util.idToCode
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.server.getBaseUrl
 import java.net.URLEncoder
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -30,7 +31,8 @@ suspend fun authorizeChallenge(call: ApplicationCall) {
     val authSession = parameters["auth_session"]
     val id = if (authSession == null) {
         // Initial call, authSession was not yet established
-        createSession(call.request, parameters)
+        // TODO: when we revive it, think about expiration
+        createSession(call.request, parameters, Clock.System.now() + 10.minutes)
     } else {
         codeToId(OpaqueIdType.AUTH_SESSION, authSession)
     }
