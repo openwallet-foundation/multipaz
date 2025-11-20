@@ -201,7 +201,9 @@ class NfcReaderCallback<T>(
                 } catch (e: NfcTagLostException) {
                     // This is to to properly handle emulated tags - such as on Android - which may be showing
                     // disambiguation UI if multiple applications have registered for the same AID.
-                    dialogMessage.value = initialMessage
+                    if (initialMessage != null) {
+                        dialogMessage.value = initialMessage
+                    }
                     Logger.w(TAG, "Tag lost", e)
                 } catch (e: Throwable) {
                     Logger.e(TAG, "Error in interaction func", e)

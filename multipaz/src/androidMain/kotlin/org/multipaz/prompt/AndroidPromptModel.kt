@@ -31,9 +31,7 @@ class AndroidPromptModel(
 
     override val passphrasePromptModel = SinglePromptModel<PassphraseRequest, String?>()
     val biometricPromptModel = SinglePromptModel<BiometricPromptState, Boolean>()
-    val scanNfcPromptModel = SinglePromptModel<NfcDialogParameters<Any>, Any?>(
-        lingerDuration = 2.seconds
-    )
+    val scanNfcPromptModel = SinglePromptModel<NfcDialogParameters<Any>, Any?>()
 
     @Volatile
     private var scope: CoroutineScope? = null

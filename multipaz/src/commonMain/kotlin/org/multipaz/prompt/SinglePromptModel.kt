@@ -20,9 +20,7 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * A model for an individual prompt dialog.
  */
-class SinglePromptModel<ParametersT, ResultT>(
-    private val lingerDuration: Duration = 0.seconds
-) {
+class SinglePromptModel<ParametersT, ResultT> {
     private val mutableDialogState = MutableSharedFlow<DialogState<ParametersT, ResultT>>()
 
     val dialogState: SharedFlow<DialogState<ParametersT, ResultT>>
@@ -51,7 +49,10 @@ class SinglePromptModel<ParametersT, ResultT>(
         val resultChannel: SendChannel<ResultT>
     ): DialogState<ParametersT, ResultT>()
 
-    suspend fun displayPrompt(parameters: ParametersT): ResultT {
+    suspend fun displayPrompt(
+        parameters: ParametersT,
+        lingerDuration: Duration = 0.seconds
+    ): ResultT {
         if (mutableDialogState.subscriptionCount.value == 0) {
             throw PromptUiNotAvailableException()
         }
@@ -60,22 +61,22 @@ class SinglePromptModel<ParametersT, ResultT>(
         // something that should occur in a well-written app anyway...
         val resultChannel = Channel<ResultT>(Channel.RENDEZVOUS)
         mutableDialogState.emit(DialogShownState(parameters, resultChannel))
-        var lingerDuration = this.lingerDuration
+        var effectiveLingerDuration = lingerDuration
         return try {
             resultChannel.receive()
         } catch (err: PromptDismissedException) {
             // User dismissed, don't linger
-            lingerDuration = 0.seconds
+            effectiveLingerDuration = 0.seconds
             throw err
         } catch (err: CancellationException) {
             // Coroutine cancelled, don't linger
-            lingerDuration = 0.seconds
+            effectiveLingerDuration = 0.seconds
             throw err
         } finally {
-            if (lingerDuration.isPositive() && coroutineContext.isActive) {
+            if (effectiveLingerDuration.isPositive() && coroutineContext.isActive) {
                 CoroutineScope(Dispatchers.Default).launch {
                     try {
-                        delay(lingerDuration)
+                        delay(effectiveLingerDuration)
                     } finally {
                         withContext(NonCancellable) {
                             mutableDialogState.emit(NoDialogState(false))

@@ -6,6 +6,7 @@ import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.prompt.NfcDialogParameters
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
+import kotlin.time.Duration.Companion.seconds
 
 private object NfcTagReaderAndroid: NfcTagReader {
     override val external: Boolean
@@ -22,7 +23,8 @@ private object NfcTagReaderAndroid: NfcTagReader {
     ): T {
         val promptModel = AndroidPromptModel.get(coroutineContext)
         val result = promptModel.scanNfcPromptModel.displayPrompt(
-            NfcDialogParameters(message, tagInteractionFunc, options, context)
+            parameters = NfcDialogParameters(message, tagInteractionFunc, options, context),
+            lingerDuration = if (message != null) 2.seconds else 0.seconds
         )
         @Suppress("UNCHECKED_CAST")
         return result as T
