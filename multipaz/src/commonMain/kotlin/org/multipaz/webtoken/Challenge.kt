@@ -1,9 +1,8 @@
-package org.multipaz.jwt
+package org.multipaz.webtoken
 
 import kotlinx.io.bytestring.buildByteString
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable
-import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.storage.StorageTableSpec
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes

@@ -3,7 +3,6 @@ package org.multipaz.openid4vci.request
 import io.ktor.client.HttpClient
 import io.ktor.client.request.headers
 import io.ktor.client.request.post
-import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.readBytes
 import io.ktor.http.ContentType
@@ -13,7 +12,6 @@ import io.ktor.http.encodeURLParameter
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.request.receiveParameters
-import io.ktor.server.response.header
 import io.ktor.server.response.respondText
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
@@ -27,8 +25,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.jwt.Challenge
-import org.multipaz.jwt.ChallengeInvalidException
+import org.multipaz.webtoken.ChallengeInvalidException
 import org.multipaz.openid4vci.util.IssuanceState
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.OpenID4VCIRequestError

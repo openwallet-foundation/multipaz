@@ -32,8 +32,8 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentCannedRequest
-import org.multipaz.jwt.buildJwt
 import org.multipaz.mdoc.response.DeviceResponse
+import org.multipaz.webtoken.buildJwt
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url

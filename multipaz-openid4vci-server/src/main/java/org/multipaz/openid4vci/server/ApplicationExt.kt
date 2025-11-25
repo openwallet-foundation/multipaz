@@ -43,6 +43,7 @@ import org.multipaz.openid4vci.request.credential
 import org.multipaz.openid4vci.request.credentialRequest
 import org.multipaz.openid4vci.request.fetchResource
 import org.multipaz.openid4vci.request.finishAuthorization
+import org.multipaz.openid4vci.request.identifierList
 import org.multipaz.openid4vci.request.preauthorizedOffer
 import org.multipaz.openid4vci.request.nonce
 import org.multipaz.openid4vci.request.openid4VpResponse
@@ -162,8 +163,11 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
         post("/preauthorized_offer") {
             runRequest { preauthorizedOffer(call) }
         }
-        get("/status_list") {
-            runRequest { statusList(call) }
+        get("/status_list/{bucket}") {
+            runRequest { statusList(call, call.parameters["bucket"]!!) }
+        }
+        get("/identifier_list/{bucket}") {
+            runRequest { identifierList(call, call.parameters["bucket"]!!) }
         }
         post("/admin_auth") {
             runRequest { adminAuth(call, adminPassword) }

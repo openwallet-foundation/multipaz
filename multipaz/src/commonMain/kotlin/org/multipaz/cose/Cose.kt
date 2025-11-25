@@ -90,9 +90,26 @@ object Cose {
     const val COSE_LABEL_ALG = 1L
 
     /**
+     * The COSE label for conveying the token type (tstr or uint) similar to JWT `typ`.
+     *
+     * Note: this is not the content type of the data in COSE body, instead this this the type of
+     * the overall COSE token.
+     *
+     * Reference: https://www.iana.org/assignments/cose/cose.xhtml
+     */
+    const val COSE_LABEL_TYP: Long = 16L
+
+    /**
+     * The COSE label for conveying the key id (bstr) in the COSE header.
+     *
+     * Reference: https://www.iana.org/assignments/cose/cose.xhtml
+     */
+    const val COSE_LABEL_KID: Long = 4L
+
+    /**
      * The COSE label for conveying an X.509 certificate chain.
      *
-     * Reference: https://www.iana.org/assignments/cose/cose.xhtml#header-parameters
+     * Reference: https://www.iana.org/assignments/cose/cose.xhtml
      */
     const val COSE_LABEL_X5CHAIN = 33L
     

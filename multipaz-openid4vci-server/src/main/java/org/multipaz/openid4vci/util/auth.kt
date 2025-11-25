@@ -22,16 +22,16 @@ import org.multipaz.cbor.Uint
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.jwt.Challenge
+import org.multipaz.webtoken.Challenge
 import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.SimpleCipher
 import org.multipaz.server.getBaseUrl
-import org.multipaz.jwt.JwtCheck
+import org.multipaz.webtoken.WebTokenCheck
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
-import org.multipaz.jwt.validateJwt
+import org.multipaz.webtoken.validateJwt
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.server.baseUrl
 import kotlin.time.Duration
@@ -182,11 +182,11 @@ suspend fun validateClientAttestation(
         publicKey = null,
         maxValidity = Duration.INFINITE,
         checks = buildMap {
-            put(JwtCheck.TRUST, "trusted_client_attestations")  // where to find CA
-            put(JwtCheck.TYP, "oauth-client-attestation+jwt")
-            put(JwtCheck.SUB, clientId)
+            put(WebTokenCheck.TRUST, "trusted_client_attestations")  // where to find CA
+            put(WebTokenCheck.TYP, "oauth-client-attestation+jwt")
+            put(WebTokenCheck.SUB, clientId)
             if (requireIssuerMatch) {
-                put(JwtCheck.X5C_CN_ISS_MATCH, "required")
+                put(WebTokenCheck.X5C_CN_ISS_MATCH, "required")
             }
         }
     )
@@ -215,12 +215,12 @@ suspend fun validateClientAttestationPoP(
         jwtName = "Client attestation PoP",
         publicKey = attestationKey,
         checks = buildMap {
-            put(JwtCheck.JTI, clientId)
-            put(JwtCheck.TYP, "oauth-client-attestation-pop+jwt")
-            put(JwtCheck.ISS, clientId)
-            put(JwtCheck.AUD, baseUrl)
+            put(WebTokenCheck.IDENT, clientId)
+            put(WebTokenCheck.TYP, "oauth-client-attestation-pop+jwt")
+            put(WebTokenCheck.ISS, clientId)
+            put(WebTokenCheck.AUD, baseUrl)
             if (useClientAttestationChallenge) {
-                put(JwtCheck.CHALLENGE, "challenge")
+                put(WebTokenCheck.CHALLENGE, "challenge")
             }
         }
     )
@@ -367,16 +367,16 @@ private suspend fun validateDPoPJwt(
         jwtName = "DPoP JWT",
         publicKey = publicKey,
         checks = buildMap {
-            put(JwtCheck.JTI, clientId)
-            put(JwtCheck.HTM, request.httpMethod.value)
+            put(WebTokenCheck.IDENT, clientId)
+            put(WebTokenCheck.HTM, request.httpMethod.value)
             // NB: cannot use req.requestURL, as it does not take into account potential frontends.
-            put(JwtCheck.HTU, "$baseUrl${request.uri}")
+            put(WebTokenCheck.HTU, "$baseUrl${request.uri}")
             if (!initial) {
-                put(JwtCheck.CHALLENGE, "nonce")
+                put(WebTokenCheck.CHALLENGE, "nonce")
             }
             if (accessToken != null) {
                 val athHash = Crypto.digest(Algorithm.SHA256, accessToken.encodeToByteArray())
-                put(JwtCheck.ATH, athHash.toBase64Url())
+                put(WebTokenCheck.ATH, athHash.toBase64Url())
             }
         }
     )
@@ -404,11 +404,11 @@ private suspend fun validateClientAssertionJwt(clientAssertionJwt: String, clien
         jwtName = "client_assertion",
         publicKey = null,
         checks = mapOf(
-            JwtCheck.TRUST to "trusted_client_assertions",  // where to find CA
-            JwtCheck.JTI to clientId,
-            JwtCheck.SUB to clientId,
-            JwtCheck.ISS to clientId,
-            JwtCheck.AUD to BackendEnvironment.getBaseUrl()
+            WebTokenCheck.TRUST to "trusted_client_assertions",  // where to find CA
+            WebTokenCheck.IDENT to clientId,
+            WebTokenCheck.SUB to clientId,
+            WebTokenCheck.ISS to clientId,
+            WebTokenCheck.AUD to BackendEnvironment.getBaseUrl()
         )
     )
 }

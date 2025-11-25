@@ -1,4 +1,4 @@
-package org.multipaz.jwt
+package org.multipaz.webtoken
 
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.buildJsonObject
@@ -22,7 +22,7 @@ import kotlin.time.Instant
  * @param header JSON object builder block to provide additional header fields
  * @param creationTime JWT issuance timestamp (`iat`)
  * @param expiresIn validity duration for the JWT (if any)
- * @param body JSON object builder block for JWT body
+ * @param builderAction JSON object builder block for JWT body
  * @return signed JWT
  */
 suspend fun buildJwt(
@@ -31,7 +31,7 @@ suspend fun buildJwt(
     header: suspend JsonObjectBuilder.() -> Unit = {},
     creationTime: Instant = Clock.System.now(),
     expiresIn: Duration? = null,
-    body: suspend JsonObjectBuilder.() -> Unit
+    builderAction: suspend JsonObjectBuilder.() -> Unit
 ): String {
     val head = buildJsonObject {
         put("typ", type)
@@ -46,7 +46,7 @@ suspend fun buildJwt(
             }
             put("iat", creationTime.epochSeconds)
         }
-        body.invoke(this)
+        builderAction.invoke(this)
     }.toString().encodeToByteArray().toBase64Url()
 
     val message = "$head.$payload"

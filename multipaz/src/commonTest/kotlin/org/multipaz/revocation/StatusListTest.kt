@@ -1,16 +1,23 @@
-package org.multipaz.statuslist
+package org.multipaz.revocation
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.CborArray
+import org.multipaz.cbor.CborMap
+import org.multipaz.cbor.Tagged
 import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.jwt.JwtCheck
+import org.multipaz.crypto.EcPublicKey
+import org.multipaz.util.fromHex
+import org.multipaz.webtoken.WebTokenCheck
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.fail
+import kotlin.time.Duration
 
 class StatusListTest {
     // testSpecVectorN tests use datasets from the spec (see "Test vectors for Status List encoding"
@@ -30,15 +37,27 @@ class StatusListTest {
         status[934534]=1
         status[1000345]=1
 
-        val statusList = StatusList.fromJson(Json.parseToJsonElement("""
+        val statusListJson = StatusList.fromJson(Json.parseToJsonElement("""
         {
             "bits": 1,
             "lst": "eNrt3AENwCAMAEGogklACtKQPg9LugC9k_ACvreiogEAAKkeCQAAAAAAAAAAAAAAAAAAAIBylgQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXG9IAAAAAAAAAPwsJAAAAAAAAAAAAAAAvhsSAAAAAAAAAAAA7KpLAAAAAAAAAAAAAAAAAAAAAJsLCQAAAAAAAAAAADjelAAAAAAAAAAAKjDMAQAAAACAZC8L2AEb"
         }
         """).jsonObject)
 
-        assertEquals(1, statusList.bitsPerItem)
-        assertStatusList(status, statusList)
+        assertEquals(1, statusListJson.bitsPerItem)
+        assertStatusList(status, statusListJson)
+
+        val statusListCbor = StatusList.fromDataItem(Cbor.decode("""
+            a2646269747301636c737458bd78daeddc010dc0200c0041a88249400ad2903e0f4b
+            ba00bd93f002beb7a2a2010000a91e09000000000000000000000000000000807296
+            04000000000000000000000000000000000000000000000000000000000000000000
+            000000000000005c6f4800000000000000fc2c240000000000000000000000be1b12
+            000000000000000000ecaa4b000000000000000000000000000000009b0b09000000
+            00000000000038de9400000000000000002a30cc010000000080642f0bd8011b
+        """.replace(Regex("\\s+"), "").fromHex()))
+
+        assertEquals(1, statusListCbor.bitsPerItem)
+        assertStatusList(status, statusListCbor)
     }
 
     @Test
@@ -65,6 +84,22 @@ class StatusListTest {
 
         assertEquals(2, statusList.bitsPerItem)
         assertStatusList(status, statusList)
+
+        val statusListCbor = StatusList.fromDataItem(Cbor.decode("""
+               a2646269747302636c737459013d78daeddb310d00211000412ea1a04004fe5520ed
+               357c28c81d3312b6df68bc65480000000000406e2101000000000000000000000000
+               0000000000000000000000000000000000000040795b020000000000000000000000
+               00000000000000000000000000000000000000000000000000000000000000000000
+               00000000000000000000000000000000000000000000000000000000000000000000
+               0080f4ba0400000000000000000000000000406d764a000000000000000000000000
+               000000000000000000e0922101000000000000000000000000000000000000fc1312
+               00000000000000000000000000000000000000000000000000000000000000c0912e
+               01000000000000000000000000000000000000c07d4b020000000000000000000000
+               00000000a8614a0000000000000000000000406a1fcd60010c
+        """.replace(Regex("\\s+"), "").fromHex()))
+
+        assertEquals(2, statusListCbor.bitsPerItem)
+        assertStatusList(status, statusListCbor)
     }
 
     @Test
@@ -95,6 +130,30 @@ class StatusListTest {
 
         assertEquals(4, statusList.bitsPerItem)
         assertStatusList(status, statusList)
+
+        val statusListCbor = StatusList.fromDataItem(Cbor.decode("""
+               a2646269747304636c737459024878daedd0410d8030100030081f0226908204244c
+               025290840414111cecb7e4b8b5123a0e40669b020000000000000000000000000000
+               0020b549010000000000000000000000000000000000000000000000000000000000
+               00000000000000000000000000000000000000000000000000000000000000000000
+               00000000000000000000000000000000000000000000000000000000000000000000
+               00000000000000000000000000000000000000000000000000000000000000000000
+               00000000000000000000000000000000000000000000000000000000000000000000
+               00000000000000000000000000000000000000000000000000000000000000000000
+               0000000000400ebb0200000000000000000000000000000000000000000000000000
+               00000000000000000000000000000000000000000000000000000000000000000000
+               000000000000e8c5a100000000000000000000000000000000000000000000000000
+               00000000000000000000000000000000000000000000000000000000000000000000
+               00000000000000000000000000000000000082280a00000000000000000000000000
+               00000000000000000000000000000000000000000000000000000000000080ae9c0a
+               00000000000000000000000000000000000000000000000000000000000000000000
+               000000686a5640339702000000008865510000000000000000000000000000000000
+               00000000000000000000000000000071dc0a0080ba55010000000000000000000000
+               c0cf3daf03000000000000000008ec03dc4c04c0
+        """.replace(Regex("\\s+"), "").fromHex()))
+
+        assertEquals(4, statusListCbor.bitsPerItem)
+        assertStatusList(status, statusListCbor)
     }
 
     @Test
@@ -366,6 +425,71 @@ class StatusListTest {
 
         assertEquals(8, statusList.bitsPerItem)
         assertStatusList(status, statusList)
+
+        val statusListCbor = StatusList.fromDataItem(Cbor.decode("""
+               a2646269747308636c73745907b078daedd1639033691886d1ac6ddbb66ddbb66ddb
+               b66ddbb66ddbb68d59d4d66cbe496626e94e5e9c53d57fbb9ef7ba2b158028ec2401
+               000090bae724000052b6a504000000000000b4deb0120004ef5409000000008af087
+               040000000001db400200000000000022f09004000000000000000000946857090000
+               80789c24010000000000000050bcbe240000005a62700900000000000008c0c01200
+               000074eb2c09a032900404697e09000000000000000000000000000000a8e74b0900
+               000000000000e89171240000000080024d2a0100006db79a04000000000040b0de95
+               0042f7a00400000000000000ddb84e02000000ca34af0400108b0f24a078ef480040
+               6fec2501108e372568c6d31264e77409000000e8d60d129098b7240000000000b2b0
+               b604406727480000000010a28525000048d799120081f94402202c1f4b0010b8fd25
+               2019934800004098ce91a0b6d3248012cc22010040217e970000000000006aba4f02
+               00000000000068997d4afbf304e2020055a69080607d280100000034e82b09000000
+               00000000d2b4af040000b4de00120000000000000000c558550200000032339a0440
+               031e96004230880400ddb85c020000000068ad312488dc151200408e1e9000e881eb
+               250000000000b23795040000291a55028ad6bf040000000000000090a46d24000000
+               00008026dc2c01746d7509000000a05d369180e0ec260100000000407a3694000000
+               00000000000000004af5b90400005d3a560200000000000000a8369e040010aa0324
+               00000000006881032500000000001af3b3040000108b0b2500000000000000000000
+               000032b3b204000089e92ffa172c6344a09dee90000000000020694b490000000000
+               000000000000000000000000000000f0b7ed3bbe3564000000803cbc2a0140504692
+               0000000092f7be040059d85c020000a011c34940e8d69400000088da8e120000599b
+               5e0200ba32bb040000fce719092067074b000010ba472500000000000000000080a6
+               cc2a010000000000000000000000000000409fb696000000000000000000000a7697
+               0400000000e4ee230900000000000000006a7b4d0202719b0411b84c02008050dd2a
+               01405c269600000000000000000000000000a00943047bd976c601000000a021874b
+               0000000000005080ef2400000000000000000000201a3349000000b95b4402008277
+               980400c46c31090000ea785202c8d905120000d11b590200000000689137240080c0
+               0d2a01404856928096985b02200fa748909ca12400000000002004fd4a00000074e9
+               7809000000000000f8cb641200006d7446dacf9bcfc200404c4e96000000000088d0
+               6012fccf94120000000040d83e950000202c8f48000000d09073250008c70f1200d0
+               b83d2500008070ec2d0100000040412e9600000080b8cd16cda5fd180b0080047c21
+               019466590900006881e32400a0b65b24000028cdbd12000000545b5f020000000000
+               00000000000000000000000000a0c3b7120000000055969300a0795b490000d080b1
+               2520274b4bd06a8748d05b2f480065f951020080446d24417366960080062c240100
+               00004076e69200000000000000000000a0587d4b000000000000358d98e4aba6316c
+               12869180329c17d435771b0400000000000000000000000080f67a49020000000000
+               000080284c2e0100000000000000a9995002c2b6a904000000000000f4e975090000
+               00a86f5b09000080b0fd22010000000000000000000000000000404d7b4800000000
+               00000000404f1d210100000094e66d0980387d2f01d06151090028d2021200e4e037
+               0982f38d04000000000000000000000000000000509c9d25f8d73c12000000000000
+               00000000000064e96c09000000000000000000000000a86f1409000080fa4e940000
+               200f37490000356c1cf47523180800000000000080bac69200000000000000000000
+               0000000000000000000000a872950400908f192500000000000000a047c694000000
+               0000204c1349407656940000b2b7bb04000000d0d974120000000000000000000040
+               fbcc2001000000000000a5384a02a052d94102000000000000000080c08c2f0104e7
+               59092027734a00891a5d82b04d2d010000d0bd752500000000000008d43a12000000
+               000000000000000064ea79090000000000000000000028cf121234eb270900000000
+               0000a872a40450b8152400000028c35312542a0b4a000000a9ba51020080d27d2601
+               00000000401b3c260140932e95000000000000000048d93512000000000000000000
+               00000000000000f08faf25a025869400000000007aefce327e3aa0aeb9594b0288cf
+               f01240afbd2c4195432580205d2d01000000000000000000b4c9f212000000000014
+               e34a0900000000000000e8adcd24000000000000803a8e9600000000000000000000
+               c8c2fd120000000000000000000000c1b95d022055434b0000000040008e91000000
+               006230ad0484640b09000068b9172500000000a0c3af12000000346e490980588c2b
+               0100000000007432870464ee1e090000000000000000206ad74a000094623d090000
+               0000000000000042739104b4c5251200000000908683240000009af29e0400000000
+               00000000003df284040000000000000040b6ce9720598f4b40a2f693002018af4800
+               000000f1da4502000000000000000000c8c72a120000000000000000000000d0168b
+               4b0040b3fe04353d7f81
+        """.replace(Regex("\\s+"), "").fromHex()))
+
+        assertEquals(8, statusListCbor.bitsPerItem)
+        assertStatusList(status, statusListCbor)
     }
 
     @Test
@@ -404,18 +528,30 @@ class StatusListTest {
     }
 
     @Test
-    fun roundtrip1() = runTest { testRoundtrip(5000, 1) }
+    fun roundtripJwt1() = runTest { testRoundtrip(5000, 1, true) }
 
     @Test
-    fun roundtrip2() = runTest { testRoundtrip(5000, 2) }
+    fun roundtripCwt1() = runTest { testRoundtrip(5000, 1, false) }
 
     @Test
-    fun roundtrip4() = runTest { testRoundtrip(5000, 4) }
+    fun roundtripJwt2() = runTest { testRoundtrip(5000, 2, true) }
 
     @Test
-    fun roundtrip8() = runTest { testRoundtrip(5000, 8) }
+    fun roundtripCwt2() = runTest { testRoundtrip(5000, 2, false) }
 
-    suspend fun testRoundtrip(size: Int, bits: Int) {
+    @Test
+    fun roundtripJwt4() = runTest { testRoundtrip(5000, 4, true) }
+
+    @Test
+    fun roundtripCwt4() = runTest { testRoundtrip(5000, 4, false) }
+
+    @Test
+    fun roundtripJwt8() = runTest { testRoundtrip(5000, 8, true) }
+
+    @Test
+    fun roundtripCwt8() = runTest { testRoundtrip(5000, 8, false) }
+
+    suspend fun testRoundtrip(size: Int, bits: Int, useJwt: Boolean) {
         val map = mutableMapOf<Int, Int>()
         val statusCount = (1 shl bits)  // number of distinct status values
         repeat (size / 8 + 5) {
@@ -427,9 +563,18 @@ class StatusListTest {
             builder.addStatus(index, status)
         }
         val key = AsymmetricKey.ephemeral()
-        val jwt = builder.build().compress().serializeAsJwt(key, "foo")
-        val statusList = StatusList.fromJwt(jwt, key.publicKey, mapOf(JwtCheck.ISS to "foo"))
-        assertStatusList(map, statusList)
+        val compressed = builder.build().compress()
+        if (useJwt) {
+            val jwt = compressed.serializeAsJwt(key, "foo")
+            val statusList =
+                StatusList.fromJwt(jwt, key.publicKey, mapOf(WebTokenCheck.SUB to "foo"))
+            assertStatusList(map, statusList)
+        } else {
+            val cwt = compressed.serializeAsCwt(key, "foo")
+            val statusList =
+                StatusList.fromCwt(cwt, key.publicKey, mapOf(WebTokenCheck.SUB to "foo"))
+            assertStatusList(map, statusList)
+        }
     }
 
     fun assertStatusList(expected: Map<Int, Int>, statusList: StatusList) {

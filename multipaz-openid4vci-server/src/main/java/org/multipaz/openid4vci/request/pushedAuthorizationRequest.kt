@@ -7,7 +7,7 @@ import io.ktor.server.request.receiveParameters
 import io.ktor.server.response.respondText
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import org.multipaz.jwt.ChallengeInvalidException
+import org.multipaz.webtoken.ChallengeInvalidException
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.addFreshNonceHeaders
 import org.multipaz.openid4vci.util.createSession

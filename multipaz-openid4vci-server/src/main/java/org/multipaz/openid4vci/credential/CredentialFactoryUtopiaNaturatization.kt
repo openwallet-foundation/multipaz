@@ -4,12 +4,13 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.documenttype.knowntypes.UtopiaNaturalization
 import org.multipaz.rpc.backend.BackendEnvironment
 import kotlin.time.Clock
-import kotlin.time.Instant
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonObject
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.openid4vci.util.CredentialId
+import org.multipaz.provisioning.CredentialFormat
+import org.multipaz.revocation.RevocationStatus
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.server.getBaseUrl
 import kotlin.time.Duration.Companion.days
@@ -21,7 +22,7 @@ internal class CredentialFactoryUtopiaNaturatization : CredentialFactoryBase() {
     override val scope: String
         get() = "naturalization"
 
-    override val format: Openid4VciFormat
+    override val format
         get() = FORMAT
 
     override val requireKeyAttestation: Boolean get() = false
@@ -41,8 +42,7 @@ internal class CredentialFactoryUtopiaNaturatization : CredentialFactoryBase() {
     override suspend fun mint(
         data: DataItem,
         authenticationKey: EcPublicKey?,
-        credentialIndex: Int,
-        statusListUrl: String
+        credentialId: CredentialId
     ): MintedCredential {
         check(authenticationKey != null)
         val issuer = BackendEnvironment.getBaseUrl()
@@ -63,6 +63,13 @@ internal class CredentialFactoryUtopiaNaturatization : CredentialFactoryBase() {
             }
         }
 
+        val baseUrl = BackendEnvironment.getBaseUrl()
+        val revocationStatus = RevocationStatus.StatusList(
+            idx = credentialId.index,
+            uri = "$baseUrl/status_list/${credentialId.bucket}",
+            certificate = null
+        )
+
         val now = Clock.System.now()
 
         val timeSigned = now
@@ -79,12 +86,7 @@ internal class CredentialFactoryUtopiaNaturatization : CredentialFactoryBase() {
                 put("iat", timeSigned.epochSeconds)
                 put("nbf", validFrom.epochSeconds)
                 put("exp", validUntil.epochSeconds)
-                putJsonObject("status") {
-                    putJsonObject("status_list") {
-                        put("idx", credentialIndex)
-                        put("uri", statusListUrl)
-                    }
-                }
+                put("status", revocationStatus.toJson())
             }
         )
 
@@ -96,6 +98,6 @@ internal class CredentialFactoryUtopiaNaturatization : CredentialFactoryBase() {
     }
 
     companion object {
-        private val FORMAT = Openid4VciFormatSdJwt(UtopiaNaturalization.VCT)
+        private val FORMAT = CredentialFormat.SdJwt(UtopiaNaturalization.VCT)
     }
 }

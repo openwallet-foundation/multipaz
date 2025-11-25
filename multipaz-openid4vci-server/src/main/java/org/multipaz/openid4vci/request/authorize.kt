@@ -26,7 +26,7 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.NameSpacedData
 import org.multipaz.documenttype.knowntypes.EUPersonalID
-import org.multipaz.jwt.buildJwt
+import org.multipaz.webtoken.buildJwt
 import org.multipaz.verifier.Openid4VpVerifierModel
 import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.openid4vci.util.AUTHZ_REQ

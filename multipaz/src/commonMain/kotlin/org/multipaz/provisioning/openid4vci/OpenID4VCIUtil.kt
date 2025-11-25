@@ -1,7 +1,5 @@
 package org.multipaz.provisioning.openid4vci
 
-import io.ktor.http.Url
-import io.ktor.http.protocolWithAuthority
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonPrimitive
@@ -10,7 +8,7 @@ import kotlinx.serialization.json.put
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.jwt.buildJwt
+import org.multipaz.webtoken.buildJwt
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureArea

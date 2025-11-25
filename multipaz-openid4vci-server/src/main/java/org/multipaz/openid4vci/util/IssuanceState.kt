@@ -12,6 +12,12 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
+/**
+ * Data for a credential issuance session.
+ *
+ * Issuance session maintains data about user authentication and credentials that were obtained
+ * based on that.
+ */
 @CborSerializable
 data class IssuanceState(
     var clientId: String?,
@@ -35,9 +41,12 @@ data class IssuanceState(
 ) {
     @CborSerializable
     data class CredentialData(
+        val bucket: String,
         val index: Int,
         val expiration: Instant
-    )
+    ) {
+        val id get() = CredentialId(bucket, index)
+    }
 
     fun purgeExpiredCredentials() {
         val now = Clock.System.now()
@@ -46,7 +55,7 @@ data class IssuanceState(
 
     companion object {
         private val tableSpec = StorageTableSpec(
-            name = "Openid4VciDocument",
+            name = "OID4VCIDocument",
             supportPartitions = false,
             supportExpiration = true
         )

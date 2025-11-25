@@ -26,12 +26,7 @@ import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.testapp.DocumentModel
 import org.multipaz.util.toBase64Url
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.int
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.compose.datetime.formattedDateTime
-import org.multipaz.sdjwt.SdJwt
 
 @Composable
 fun CredentialViewerScreen(
@@ -65,6 +60,7 @@ fun CredentialViewerScreen(
             KeyValuePairText("Certified", if (credentialInfo.credential.isCertified) "Yes" else "No")
             KeyValuePairText("Issuer provided data", "${credentialInfo.credential.issuerProvidedData.size} bytes")
             KeyValuePairText("Usage Count", credentialInfo.credential.usageCount.toString())
+            RevocationStatusSection(credentialInfo.credential)
             when (credentialInfo.credential) {
                 is MdocCredential -> {
                     val issuerSigned = Cbor.decode(credentialInfo.credential.issuerProvidedData)
@@ -81,10 +77,8 @@ fun CredentialViewerScreen(
                         },
                         modifier = Modifier.clickable {
                             coroutineScope.launch {
-                                val issuerSigned = Cbor.decode(credentialInfo.credential.issuerProvidedData)
-                                val issuerAuthCoseSign1 = issuerSigned["issuerAuth"].asCoseSign1
                                 val certChain =
-                                    issuerAuthCoseSign1.unprotectedHeaders[
+                                    issuerAuth.unprotectedHeaders[
                                         CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)
                                     ]!!.asX509CertChain
                                 onViewCertificateChain(Cbor.encode(certChain.toDataItem()).toBase64Url())
@@ -97,14 +91,6 @@ fun CredentialViewerScreen(
                     // TODO: Show cert chain for key used to sign issuer-signed data. Involves
                     //  getting this over the network as specified in section 5 "JWT VC Issuer Metadata"
                     //  of https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/ ... how annoying
-                    val sdjwt = SdJwt(credentialInfo.credential.issuerProvidedData.decodeToString())
-                    val status = sdjwt.jwtBody["status"]
-                    if (status is JsonObject && status.contains("status_list")) {
-                        val statusList = status["status_list"]!!.jsonObject
-                        val index = statusList["idx"]!!.jsonPrimitive.int
-                        val url = statusList["uri"]!!.jsonPrimitive.content
-                        StatusCheckSection(index, url, sdjwt.x5c!!.certificates.first().ecPublicKey)
-                    }
                 }
             }
 

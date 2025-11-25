@@ -1,7 +1,6 @@
 package org.multipaz.openid
 
 import kotlin.time.Clock
-import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
@@ -29,9 +28,8 @@ import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
-import org.multipaz.jwt.buildJwt
+import org.multipaz.webtoken.buildJwt
 import org.multipaz.mdoc.credential.MdocCredential
-import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.response.buildDeviceResponse
@@ -169,7 +167,7 @@ object OpenID4VP {
                 put("request", buildJwt(
                     key = requestSigningKey,
                     type = "oauth-authz-req+jwt",
-                    body = jsonBuildBlock
+                    builderAction = jsonBuildBlock
                 ))
             }
         }
@@ -247,7 +245,7 @@ object OpenID4VP {
                 put("request", buildJwt(
                     key = requestSigningKey,
                     type = "oauth-authz-req+jwt",
-                    body = jsonBuildBlock
+                    builderAction = jsonBuildBlock
                 ))
             }
         }

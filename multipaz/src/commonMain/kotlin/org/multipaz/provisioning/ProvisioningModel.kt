@@ -21,7 +21,7 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.AbstractDocumentMetadata
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
-import org.multipaz.jwt.buildJwt
+import org.multipaz.webtoken.buildJwt
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.prompt.PromptModel
 import org.multipaz.provisioning.openid4vci.KeyIdAndAttestation

@@ -7,9 +7,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.asn1.ASN1Integer
-import org.multipaz.jwt.JwtCheck
-import org.multipaz.jwt.buildJwt
-import org.multipaz.jwt.validateJwt
+import org.multipaz.webtoken.WebTokenCheck
+import org.multipaz.webtoken.buildJwt
+import org.multipaz.webtoken.validateJwt
 import org.multipaz.testUtilSetupCryptoProvider
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -74,7 +74,7 @@ class JsonWebSignatureTests {
             jwtName = "test jwt",
             publicKey = signingKey.publicKey,
             checks = mapOf(
-                JwtCheck.TYP to "oauth-authz-req+jwt"
+                WebTokenCheck.TYP to "oauth-authz-req+jwt"
             )
         )
         assertEquals(

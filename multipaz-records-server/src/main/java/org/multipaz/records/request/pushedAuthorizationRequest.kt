@@ -16,10 +16,10 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.SimpleCipher
 import org.multipaz.server.getBaseUrl
-import org.multipaz.jwt.JwtCheck
+import org.multipaz.webtoken.WebTokenCheck
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
-import org.multipaz.jwt.validateJwt
+import org.multipaz.webtoken.validateJwt
 import kotlin.time.Duration.Companion.minutes
 
 /**
@@ -67,11 +67,11 @@ suspend fun pushedAuthorizationRequest(call: ApplicationCall) {
         jwtName = "client_assertion",
         publicKey = null,
         checks = mapOf(
-            JwtCheck.TRUST to "trusted_client_assertions",  // where to find CA
-            JwtCheck.JTI to clientId,
-            JwtCheck.SUB to clientId,
-            JwtCheck.ISS to clientId,
-            JwtCheck.AUD to BackendEnvironment.getBaseUrl()
+            WebTokenCheck.TRUST to "trusted_client_assertions",  // where to find CA
+            WebTokenCheck.IDENT to clientId,
+            WebTokenCheck.SUB to clientId,
+            WebTokenCheck.ISS to clientId,
+            WebTokenCheck.AUD to BackendEnvironment.getBaseUrl()
         )
     )
 

@@ -29,6 +29,10 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
+import org.multipaz.openid4vci.util.CredentialId
+import org.multipaz.revocation.RevocationStatus
+import org.multipaz.openid4vci.util.CredentialState
+import org.multipaz.server.getBaseUrl
 import org.multipaz.util.Logger
 import kotlin.time.Duration.Companion.days
 
@@ -42,8 +46,8 @@ internal class CredentialFactoryMdl : CredentialFactoryBase() {
     override val scope: String
         get() = "mDL"
 
-    override val format: Openid4VciFormat
-        get() = openId4VciFormatMdl
+    override val format
+        get() = credentialFormatMdl
 
     override val proofSigningAlgorithms: List<String>
         get() = CredentialFactory.DEFAULT_PROOF_SIGNING_ALGORITHMS
@@ -60,8 +64,7 @@ internal class CredentialFactoryMdl : CredentialFactoryBase() {
     override suspend fun mint(
         data: DataItem,
         authenticationKey: EcPublicKey?,
-        credentialIndex: Int,
-        statusListUrl: String
+        credentialId: CredentialId
     ): MintedCredential {
         val now = Clock.System.now()
 
@@ -168,6 +171,13 @@ internal class CredentialFactoryMdl : CredentialFactoryBase() {
             }
         }
 
+        val baseUrl = BackendEnvironment.getBaseUrl()
+        val revocationStatus = RevocationStatus.IdentifierList(
+            id = CredentialState.indexToIdentifier(credentialId.index),
+            uri = "$baseUrl/identifier_list/${credentialId.bucket}",
+            certificate = null
+        )
+
         // Generate an MSO and issuer-signed data for this authentication key.
         val mso = MobileSecurityObject(
             version = "1.0",
@@ -179,6 +189,7 @@ internal class CredentialFactoryMdl : CredentialFactoryBase() {
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = authenticationKey!!,
+            revocationStatus = revocationStatus
         )
         val taggedEncodedMso = Cbor.encode(Tagged(
             Tagged.ENCODED_CBOR,

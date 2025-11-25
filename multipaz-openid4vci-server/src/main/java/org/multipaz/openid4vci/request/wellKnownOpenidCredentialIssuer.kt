@@ -12,8 +12,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.multipaz.openid4vci.credential.CredentialFactory
-import org.multipaz.openid4vci.credential.Openid4VciFormatMdoc
-import org.multipaz.openid4vci.credential.Openid4VciFormatSdJwt
+import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.server.baseUrl
 
@@ -58,10 +57,10 @@ suspend fun wellKnownOpenidCredentialIssuer(call: ApplicationCall) {
                             put("scope", credentialFactory.scope)
                         }
                         val format = credentialFactory.format
-                        put("format", format.id)
+                        put("format", format.formatId)
                         when (format) {
-                            is Openid4VciFormatMdoc -> put("doctype", format.docType)
-                            is Openid4VciFormatSdJwt -> put("vct", format.vct)
+                            is CredentialFormat.Mdoc -> put("doctype", format.docType)
+                            is CredentialFormat.SdJwt -> put("vct", format.vct)
                         }
                         if (credentialFactory.proofSigningAlgorithms.isNotEmpty()) {
                             putJsonObject("proof_types_supported") {
@@ -92,7 +91,7 @@ suspend fun wellKnownOpenidCredentialIssuer(call: ApplicationCall) {
                         }
                         putJsonArray("credential_signing_alg_values_supported") {
                             val signingKey = credentialFactory.signingKey
-                            if (credentialFactory.format is Openid4VciFormatMdoc) {
+                            if (credentialFactory.format is CredentialFormat.Mdoc) {
                                 add(signingKey.algorithm.coseAlgorithmIdentifier)
                             } else {
                                 add(signingKey.algorithm.joseAlgorithmIdentifier)

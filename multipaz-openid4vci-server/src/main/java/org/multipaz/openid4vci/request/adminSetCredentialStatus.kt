@@ -11,7 +11,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.multipaz.openid4vci.util.CredentialId
 import org.multipaz.openid4vci.util.CredentialState
+import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.rpc.handler.InvalidRequestException
 
 /**
@@ -20,21 +22,31 @@ import org.multipaz.rpc.handler.InvalidRequestException
 suspend fun adminSetCredentialStatus(call: ApplicationCall) {
     val requestString = call.receiveText()
     val json = Json.parseToJsonElement(requestString) as JsonObject
+    val bucket = json["bucket"]?.jsonPrimitive?.content
+        ?: throw InvalidRequestException("missing or malformed parameter 'bucket'")
     val credentialIndex = json["idx"]?.jsonPrimitive?.intOrNull
         ?: throw InvalidRequestException("missing or malformed parameter 'idx'")
     if (credentialIndex < 0) {
         throw InvalidRequestException("'idx' must not be negative")
     }
-    val status = json["status"]?.jsonPrimitive?.content
+    val credentialId = CredentialId(bucket, credentialIndex)
+    val statusStr = json["status"]?.jsonPrimitive?.content
         ?: throw InvalidRequestException("missing parameter 'status'")
-    val credential = CredentialState.getCredentialState(credentialIndex)
+    val status = CredentialState.Status.decode(statusStr)
+    val credential = CredentialState.getCredentialState(credentialId)
         ?: throw InvalidRequestException("no credential '$credentialIndex'")
+    if (credential.format is CredentialFormat.Mdoc) {
+        if (status != CredentialState.Status.VALID && status != CredentialState.Status.INVALID) {
+            throw InvalidRequestException("Only 'valid' or 'invalid' status can be used for mdoc")
+        }
+    }
     CredentialState.setCredentialStatus(
-        credentialIndex = credentialIndex,
-        status = CredentialState.Status.decode(status),
+        credentialId = credentialId,
+        status = status,
         expiration = credential.expiration
     )
     invalidateStatusList()
+    invalidateIdentifierList()
     call.respondText(
         text = buildJsonObject {
             put("success", true)

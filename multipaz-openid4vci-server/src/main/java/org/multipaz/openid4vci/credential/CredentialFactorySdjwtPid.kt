@@ -22,6 +22,9 @@ import org.multipaz.cbor.Tstr
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.knowntypes.EUPersonalID
+import org.multipaz.openid4vci.util.CredentialId
+import org.multipaz.provisioning.CredentialFormat
+import org.multipaz.revocation.RevocationStatus
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
 import org.multipaz.sdjwt.SdJwt
@@ -43,7 +46,7 @@ internal class CredentialFactorySdjwtPid : CredentialFactoryBase() {
     override val scope: String
         get() = "core"
 
-    override val format: Openid4VciFormat
+    override val format
         get() = FORMAT
 
     override val requireKeyAttestation: Boolean get() = true
@@ -63,8 +66,7 @@ internal class CredentialFactorySdjwtPid : CredentialFactoryBase() {
     override suspend fun mint(
         data: DataItem,
         authenticationKey: EcPublicKey?,
-        credentialIndex: Int,
-        statusListUrl: String
+        credentialId: CredentialId,
     ): MintedCredential {
         check(authenticationKey != null)
 
@@ -152,6 +154,13 @@ internal class CredentialFactorySdjwtPid : CredentialFactoryBase() {
         val validUntil = validFrom + 30.days
         val issuer = BackendEnvironment.getBaseUrl()
 
+        val baseUrl = BackendEnvironment.getBaseUrl()
+        val revocationStatus = RevocationStatus.StatusList(
+            idx = credentialId.index,
+            uri = "$baseUrl/status_list/${credentialId.bucket}",
+            certificate = null
+        )
+
         val sdJwt = SdJwt.create(
             issuerKey = signingKey,
             kbKey = authenticationKey,
@@ -162,12 +171,7 @@ internal class CredentialFactorySdjwtPid : CredentialFactoryBase() {
                 put("iat", timeSigned.epochSeconds)
                 put("nbf", validFrom.epochSeconds)
                 put("exp", validUntil.epochSeconds)
-                putJsonObject("status") {
-                    putJsonObject("status_list") {
-                        put("idx", credentialIndex)
-                        put("uri", statusListUrl)
-                    }
-                }
+                put("status", revocationStatus.toJson())
             }
         )
 
@@ -179,7 +183,7 @@ internal class CredentialFactorySdjwtPid : CredentialFactoryBase() {
     }
 
     companion object {
-        private val FORMAT = Openid4VciFormatSdJwt(EUPersonalID.EUPID_VCT)
+        private val FORMAT = CredentialFormat.SdJwt(EUPersonalID.EUPID_VCT)
         private const val TAG = "CredentialFactorySdjwtPid"
     }
 }

@@ -18,7 +18,7 @@ object JsonWebSignature {
     /**
      * Sign a claims set.
      *
-     * Use [org.multipaz.jwt.buildJwt] instead.
+     * Use [org.multipaz.webtoken.buildJwt] instead.
      *
      * @param key the key to sign with.
      * @param signatureAlgorithm a fully-specified signature algorithm to use.
@@ -58,7 +58,7 @@ object JsonWebSignature {
     /**
      * Sign a claims set using a [SecureArea].
      *
-     * Use [org.multipaz.jwt.buildJwt] instead.
+     * Use [org.multipaz.webtoken.buildJwt] instead.
      *
      * @param secureArea the [SecureArea] for the key to sign with.
      * @param alias the alias for key to sign with.

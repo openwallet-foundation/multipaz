@@ -27,8 +27,11 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
+import org.multipaz.openid4vci.util.CredentialId
+import org.multipaz.revocation.RevocationStatus
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
+import org.multipaz.server.getBaseUrl
 import org.multipaz.util.Logger
 import kotlin.collections.component1
 import kotlin.collections.component2
@@ -36,7 +39,7 @@ import kotlin.collections.iterator
 import kotlin.time.Duration.Companion.days
 
 /**
- * Factory for EU Personal ID in mDoc format.
+ * Factory for EU Personal ID in ISO mdoc format.
  */
 internal class CredentialFactoryMdocPid : CredentialFactoryBase() {
     override val offerId: String
@@ -45,8 +48,8 @@ internal class CredentialFactoryMdocPid : CredentialFactoryBase() {
     override val scope: String
         get() = "core"
 
-    override val format: Openid4VciFormat
-        get() = openId4VciFormatPid
+    override val format
+        get() = credentialFormatPid
 
     override val proofSigningAlgorithms: List<String>
         get() = CredentialFactory.DEFAULT_PROOF_SIGNING_ALGORITHMS
@@ -63,8 +66,7 @@ internal class CredentialFactoryMdocPid : CredentialFactoryBase() {
     override suspend fun mint(
         data: DataItem,
         authenticationKey: EcPublicKey?,
-        credentialIndex: Int,
-        statusListUrl: String
+        credentialId: CredentialId
     ): MintedCredential {
         val now = Clock.System.now()
 
@@ -152,6 +154,13 @@ internal class CredentialFactoryMdocPid : CredentialFactoryBase() {
             }
         }
 
+        val baseUrl = BackendEnvironment.getBaseUrl()
+        val revocationStatus = RevocationStatus.StatusList(
+            idx = credentialId.index,
+            uri = "$baseUrl/status_list/${credentialId.bucket}",
+            certificate = null
+        )
+
         // Generate an MSO and issuer-signed data for this authentication key.
         val mso = MobileSecurityObject(
             version = "1.0",
@@ -163,6 +172,7 @@ internal class CredentialFactoryMdocPid : CredentialFactoryBase() {
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = authenticationKey!!,
+            revocationStatus = revocationStatus
         )
         val taggedEncodedMso = Cbor.encode(Tagged(
             Tagged.ENCODED_CBOR,

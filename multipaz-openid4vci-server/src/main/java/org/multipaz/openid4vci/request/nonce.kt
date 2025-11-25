@@ -8,7 +8,6 @@ import kotlin.time.Clock
 import kotlinx.io.bytestring.buildByteString
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import org.multipaz.jwt.Challenge
 import org.multipaz.openid4vci.util.addFreshNonceHeaders
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable

@@ -32,9 +32,8 @@ import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.jwt.ChallengeInvalidException
+import org.multipaz.webtoken.ChallengeInvalidException
 import org.multipaz.openid4vci.credential.CredentialFactory
-import org.multipaz.openid4vci.credential.Openid4VciFormat
 import org.multipaz.openid4vci.util.IssuanceState
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.authorizeWithDpop
@@ -42,14 +41,13 @@ import org.multipaz.openid4vci.util.codeToId
 import org.multipaz.openid4vci.util.extractAccessToken
 import org.multipaz.openid4vci.util.getSystemOfRecordUrl
 import org.multipaz.server.getBaseUrl
-import org.multipaz.jwt.JwtCheck
+import org.multipaz.webtoken.WebTokenCheck
 import org.multipaz.util.Logger
-import org.multipaz.jwt.validateJwt
+import org.multipaz.webtoken.validateJwt
 import org.multipaz.openid4vci.util.CredentialState
 import org.multipaz.openid4vci.util.respondWithNewDPoPNonce
+import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.util.toBase64Url
-import kotlin.time.Clock
-import kotlin.time.Duration.Companion.minutes
 
 /**
  * Issues a credential based on DPoP authentication with access token.
@@ -73,7 +71,7 @@ suspend fun credential(call: ApplicationCall) {
 
     val requestString = call.receiveText()
     val json = Json.parseToJsonElement(requestString) as JsonObject
-    val format = Openid4VciFormat.fromJson(json)
+    val format = CredentialFormat.fromJson(json)
     val factory = byOfferId.values.find { factory ->
         (format == null || factory.format == format) && factory.scope == state.scope
     }
@@ -85,24 +83,27 @@ suspend fun credential(call: ApplicationCall) {
     state.purgeExpiredCredentials()
 
     val credentialData = readSystemOfRecord(state)
-    val now = Clock.System.now()
-    val credentialPlaceholderExpiration = now + 3.minutes
-    val statusListUrl = BackendEnvironment.getBaseUrl() + "/status_list"
 
     if (factory.cryptographicBindingMethods.isEmpty()) {
+        val credentialId = CredentialState.createCredentialId(
+            format = factory.format,
+            cert = factory.signingKey.certChain.certificates.first()
+        )
+        // Keyless credential: no need for proof/proofs parameter.
+        val minted = factory.mint(credentialData, null, credentialId)
         val credentialState = CredentialState(
             issuanceStateId = id,
+            format = factory.format,
             keyId = null,
-            creation = now,
-            expiration = credentialPlaceholderExpiration
+            creation = minted.creation,
+            expiration = minted.expiration
         )
-        val credentialIndex = CredentialState.recordNewCredential(credentialState)
-        // Keyless credential: no need for proof/proofs parameter.
-        val minted = factory.mint(credentialData, null, credentialIndex, statusListUrl)
-        credentialState.creation = minted.creation
-        credentialState.expiration = minted.expiration
-        CredentialState.updateCredential(credentialIndex, credentialState)
-        state.credentials.add(IssuanceState.CredentialData(credentialIndex, minted.expiration))
+        CredentialState.updateCredential(credentialId, credentialState)
+        state.credentials.add(IssuanceState.CredentialData(
+            bucket = credentialId.bucket,
+            index = credentialId.index,
+            expiration = minted.expiration
+        ))
         // Do not extend session expiration
         IssuanceState.updateIssuanceState(id, state, expiration = null)
         call.respondText(
@@ -149,8 +150,8 @@ suspend fun credential(call: ApplicationCall) {
                         jwtName = "Key attestation",
                         publicKey = null,
                         checks = mapOf(
-                            JwtCheck.TYP to "key-attestation+jwt",
-                            JwtCheck.TRUST to "trusted_key_attestations"
+                            WebTokenCheck.TYP to "key-attestation+jwt",
+                            WebTokenCheck.TRUST to "trusted_key_attestations"
                         )
                     )
                 validateAndConsumeCredentialChallenge(body["nonce"]!!.jsonPrimitive.content)
@@ -183,8 +184,8 @@ suspend fun credential(call: ApplicationCall) {
                     jwtName = "Key attestation",
                     publicKey = authenticationKey,
                     checks = mapOf(
-                        JwtCheck.TYP to "openid4vci-proof+jwt",
-                        JwtCheck.AUD to baseUrl
+                        WebTokenCheck.TYP to "openid4vci-proof+jwt",
+                        WebTokenCheck.AUD to baseUrl
                     )
                 )
                 val nonce = body["nonce"]!!.jsonPrimitive.content
@@ -208,19 +209,24 @@ suspend fun credential(call: ApplicationCall) {
     }
 
     val credentials = authenticationKeysAndIds.map { (key, keyId) ->
-        // TODO: in the long run, keys should come with `kid` from the client
+        val credentialId = CredentialState.createCredentialId(
+            format = factory.format,
+            cert = factory.signingKey.certChain.certificates.first()
+        )
+        val minted = factory.mint(credentialData, key, credentialId)
         val credentialState = CredentialState(
             issuanceStateId = id,
+            format = factory.format,
             keyId = keyId,
-            creation = now,
-            expiration = credentialPlaceholderExpiration
+            creation = minted.creation,
+            expiration = minted.expiration
         )
-        val credentialIndex = CredentialState.recordNewCredential(credentialState)
-        val minted = factory.mint(credentialData, key, credentialIndex, statusListUrl)
-        credentialState.creation = minted.creation
-        credentialState.expiration = minted.expiration
-        CredentialState.updateCredential(credentialIndex, credentialState)
-        state.credentials.add(IssuanceState.CredentialData(credentialIndex, minted.expiration))
+        CredentialState.updateCredential(credentialId, credentialState)
+        state.credentials.add(IssuanceState.CredentialData(
+            bucket = credentialId.bucket,
+            index = credentialId.index,
+            expiration =  minted.expiration
+        ))
         minted.credential
     }
 

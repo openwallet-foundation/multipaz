@@ -1,6 +1,7 @@
 package org.multipaz.cbor
 
 import kotlinx.io.bytestring.ByteStringBuilder
+import org.multipaz.cose.Cose
 
 /**
  * Tag (major type 6).
@@ -80,6 +81,16 @@ class Tagged(val tagNumber: Long, val taggedItem: DataItem) : DataItem(MajorType
          * the byte string is to leave out any leading zeroes.
          */
         const val NEGATIVE_BIGNUM = 3L
+
+        /**
+         * Holds COSE signed message with one signer.
+         *
+         * Defined in https://www.rfc-editor.org/rfc/rfc9052.html#name-signing-with-one-signer
+         *
+         * Use [Cose.coseSign1Sign] and [org.multipaz.cose.CoseSign1.fromDataItem] to generate and
+         * parse the content in this [Tagged].
+         */
+        const val COSE_SIGN1 = 18L
 
         /**
          * Encoding hint for base64url.

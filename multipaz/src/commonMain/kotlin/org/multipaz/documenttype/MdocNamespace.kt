@@ -46,7 +46,7 @@ class MdocNamespace private constructor(
          * @param identifier the identifier of this attribute.
          * @param displayName the name suitable for display of the attribute.
          * @param description a description of the attribute.
-         * @param mandatory indication whether the mDoc attribute is mandatory.
+         * @param mandatory indication whether the mdoc attribute is mandatory.
          * @param icon the icon, if available.
          * @param sampleValue a sample value for the attribute, if available.
          */

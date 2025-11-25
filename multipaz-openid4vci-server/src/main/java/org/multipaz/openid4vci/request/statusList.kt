@@ -5,6 +5,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.toHttpDate
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.header
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
 import io.ktor.util.date.GMTDate
 import org.multipaz.openid4vci.credential.CredentialFactory
@@ -12,8 +13,8 @@ import org.multipaz.openid4vci.credential.CredentialFactoryBase
 import org.multipaz.openid4vci.util.CredentialState
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.server.getBaseUrl
-import org.multipaz.statuslist.CompressedStatusList
-import org.multipaz.statuslist.StatusList
+import org.multipaz.revocation.CompressedStatusList
+import org.multipaz.revocation.StatusList
 import org.multipaz.util.Logger
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -24,7 +25,19 @@ private var cachedStatusList: CompressedStatusList? = null
 @Volatile
 private var lastInvalidationTime: Instant = Clock.System.now()
 
-suspend fun statusList(call: ApplicationCall) {
+suspend fun statusList(call: ApplicationCall, bucket: String) {
+    val accept = call.request.headers[HttpHeaders.Accept] ?: ""
+    var useCwt = false  // arbitrary, bias towards text-based format
+    for (acceptedPattern in accept.split(COMMA_SEPARATOR)) {
+        if (STATUSLIST_JWT.match(acceptedPattern)) {
+            useCwt = false
+            break
+        }
+        if (STATUSLIST_CWT.match(acceptedPattern)) {
+            useCwt = true
+            break
+        }
+    }
 
     CredentialFactory.getRegisteredFactories()  // ensure signing key is loaded
 
@@ -33,7 +46,7 @@ suspend fun statusList(call: ApplicationCall) {
         while (true) {
             val started = Clock.System.now()
             // For now, grab the whole list in one shot
-            list = CredentialState.listNonValidCredentials()
+            list = CredentialState.listNonValidCredentials(bucket)
             if (started > lastInvalidationTime) {
                 break
             }
@@ -46,20 +59,32 @@ suspend fun statusList(call: ApplicationCall) {
         statusListBuilder.build().compress().also { cachedStatusList = it }
     }
 
-    val jwt = statusList.serializeAsJwt(
-        key = CredentialFactoryBase.serverKey,
-        issuer = BackendEnvironment.getBaseUrl() + "/status_list"
-    )
-    val creation = GMTDate(statusList.creationTime.toEpochMilliseconds())
-    Logger.i("KMY", "Creation: ${creation.toHttpDate()}")
-    call.response.header(HttpHeaders.LastModified, creation.toHttpDate())
-    call.respondText(
-        text = jwt,
-        contentType = APPLICATION_JWT
-    )
+    val creation = statusList.creationTime.toEpochMilliseconds()
+    call.response.header(HttpHeaders.LastModified, GMTDate(creation).toHttpDate())
+    call.response.header(HttpHeaders.ETag, "W/$creation")
+    if (useCwt) {
+        call.respondBytes(
+            bytes = statusList.serializeAsCwt(
+                key = CredentialFactoryBase.serverKey,
+                subject = BackendEnvironment.getBaseUrl() + "/status_list/$bucket"
+            ),
+            contentType = STATUSLIST_CWT
+        )
+    } else {
+        call.respondText(
+            text = statusList.serializeAsJwt(
+                key = CredentialFactoryBase.serverKey,
+                subject = BackendEnvironment.getBaseUrl() + "/status_list/$bucket"
+            ),
+            contentType = STATUSLIST_JWT
+        )
+    }
 }
 
-private val APPLICATION_JWT = ContentType("application", "jwt")
+private val STATUSLIST_JWT = ContentType("application", "statuslist+jwt")
+private val STATUSLIST_CWT = ContentType("application", "statuslist+cwt")
+
+private val COMMA_SEPARATOR = Regex(",\\s*")
 
 fun invalidateStatusList() {
     lastInvalidationTime = Clock.System.now()

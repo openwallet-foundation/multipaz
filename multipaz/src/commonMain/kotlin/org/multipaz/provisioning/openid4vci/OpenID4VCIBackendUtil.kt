@@ -7,7 +7,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.jwt.buildJwt
+import org.multipaz.webtoken.buildJwt
 import org.multipaz.securearea.KeyAttestation
 import org.multipaz.util.toBase64Url
 import kotlin.random.Random

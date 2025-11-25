@@ -11,8 +11,8 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.jwt.JwtCheck
-import org.multipaz.jwt.validateJwt
+import org.multipaz.webtoken.WebTokenCheck
+import org.multipaz.webtoken.validateJwt
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.securearea.CreateKeySettings
@@ -40,11 +40,11 @@ class OpenIDBackendUtilTest {
                 jwtName = "client_assertion",
                 publicKey = null,
                 checks = mapOf(
-                    JwtCheck.TRUST to "fake_trust",  // where to find CA
-                    JwtCheck.JTI to CLIENT_ID,
-                    JwtCheck.SUB to CLIENT_ID,
-                    JwtCheck.ISS to CLIENT_ID,
-                    JwtCheck.AUD to "http://example.com"
+                    WebTokenCheck.TRUST to "fake_trust",  // where to find CA
+                    WebTokenCheck.IDENT to CLIENT_ID,
+                    WebTokenCheck.SUB to CLIENT_ID,
+                    WebTokenCheck.ISS to CLIENT_ID,
+                    WebTokenCheck.AUD to "http://example.com"
                 )
             )
         }
@@ -71,9 +71,9 @@ class OpenIDBackendUtilTest {
                 publicKey = null,
                 maxValidity = Duration.INFINITE,
                 checks = mapOf(
-                    JwtCheck.TRUST to "fake_trust",
-                    JwtCheck.TYP to "oauth-client-attestation+jwt",
-                    JwtCheck.SUB to CLIENT_ID
+                    WebTokenCheck.TRUST to "fake_trust",
+                    WebTokenCheck.TYP to "oauth-client-attestation+jwt",
+                    WebTokenCheck.SUB to CLIENT_ID
                 )
             )
             val key = EcPublicKey.fromJwk(attestationBody["cnf"]!!.jsonObject["jwk"]!!.jsonObject)
@@ -103,8 +103,8 @@ class OpenIDBackendUtilTest {
                 jwtName = "Key attestation",
                 publicKey = null,
                 checks = mapOf(
-                    JwtCheck.TYP to "key-attestation+jwt",
-                    JwtCheck.TRUST to "fake_trust"
+                    WebTokenCheck.TYP to "key-attestation+jwt",
+                    WebTokenCheck.TRUST to "fake_trust"
                 )
             )
             val jwk = body["attested_keys"]!!.jsonArray[0].jsonObject

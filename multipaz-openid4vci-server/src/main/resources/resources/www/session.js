@@ -27,8 +27,9 @@ async function refreshSession() {
         cred.className = "cred";
         container.appendChild(cred);
         let header = document.createElement("h4");
-        header.textContent = "Credential " + credential.kid;
+        header.textContent = "Credential " + (credential.kid || "[keyless]");
         cred.appendChild(header);
+        addField(cred, "Revocation bucket", credential.bucket);
         addField(cred, "Index", credential.idx);
         let statusRow = document.createElement("div");
         let label = document.createElement("span");
@@ -53,14 +54,14 @@ async function refreshSession() {
         let apply = document.createElement("button");
         apply.textContent = "Apply";
         statusRow.appendChild(apply);
-        apply.addEventListener("click", setStatusHandler(base, credential.idx, status));
+        apply.addEventListener("click", setStatusHandler(base, credential, status));
         cred.appendChild(statusRow);
         addField(cred, "Creation", formatter.format(new Date(credential.creation)));
         addField(cred, "Expiration", formatter.format(new Date(credential.expiration)));
     }
 }
 
-function setStatusHandler(base, index, status) {
+function setStatusHandler(base, credential, status) {
     return async function() {
         let result = await(await fetch(base + "admin_set_credential_status", {
             method: 'POST',
@@ -68,7 +69,8 @@ function setStatusHandler(base, index, status) {
                'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                idx: index,
+                idx: credential.idx,
+                bucket: credential.bucket,
                 status: status.value
             })
         })).json();

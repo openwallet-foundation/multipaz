@@ -4,12 +4,13 @@ import kotlinx.serialization.json.JsonObject
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
 import kotlin.time.Clock
-import kotlin.time.Instant
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonObject
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.openid4vci.util.CredentialId
+import org.multipaz.provisioning.CredentialFormat
+import org.multipaz.revocation.RevocationStatus
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.server.getBaseUrl
@@ -22,7 +23,7 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactoryBase() {
     override val scope: String
         get() = "movie"
 
-    override val format: Openid4VciFormat
+    override val format
         get() = FORMAT
 
     override val requireKeyAttestation: Boolean get() = false
@@ -42,8 +43,7 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactoryBase() {
     override suspend fun mint(
         data: DataItem,
         authenticationKey: EcPublicKey?,
-        credentialIndex: Int,
-        statusListUrl: String
+        credentialId: CredentialId
     ): MintedCredential {
         check(authenticationKey == null)
         val issuer = BackendEnvironment.getBaseUrl()
@@ -60,6 +60,13 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactoryBase() {
         val validFrom = now
         val validUntil = now + 30.days
 
+        val baseUrl = BackendEnvironment.getBaseUrl()
+        val revocationStatus = RevocationStatus.StatusList(
+            idx = credentialId.index,
+            uri = "$baseUrl/status_list/${credentialId.bucket}",
+            certificate = null
+        )
+
         val sdJwt = SdJwt.create(
             issuerKey = signingKey,
             kbKey = null,
@@ -70,12 +77,7 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactoryBase() {
                 put("iat", timeSigned.epochSeconds)
                 put("nbf", validFrom.epochSeconds)
                 put("exp", validUntil.epochSeconds)
-                putJsonObject("status") {
-                    putJsonObject("status_list") {
-                        put("idx", credentialIndex)
-                        put("uri", statusListUrl)
-                    }
-                }
+                put("status", revocationStatus.toJson())
             }
         )
 
@@ -87,6 +89,6 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactoryBase() {
     }
 
     companion object {
-        private val FORMAT = Openid4VciFormatSdJwt(UtopiaMovieTicket.MOVIE_TICKET_VCT)
+        private val FORMAT = CredentialFormat.SdJwt(UtopiaMovieTicket.MOVIE_TICKET_VCT)
     }
 }

@@ -1,4 +1,4 @@
-package org.multipaz.util
+package org.multipaz.webtoken
 
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
@@ -6,24 +6,24 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlin.test.Test
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
-import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
-import org.multipaz.jwt.JwtCheck
-import org.multipaz.jwt.validateJwt
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.util.toBase64
+import org.multipaz.util.toBase64Url
 import kotlin.reflect.KClass
 import kotlin.reflect.cast
+import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlin.time.Clock
@@ -42,12 +42,12 @@ class JwtTest {
         val jwt = makeJwt(privateTrustedKey)
         validateJwt(
             jwt, "test", privateTrustedKey.publicKey, clock = clock, checks = mapOf(
-                JwtCheck.JTI to TEST_JTI,
-                JwtCheck.SUB to TEST_SUB,
-                JwtCheck.ISS to TEST_ISS,
-                JwtCheck.AUD to TEST_AUD,
-                JwtCheck.NONCE to TEST_NONCE,
-                JwtCheck.JTI to "space1"
+                WebTokenCheck.IDENT to TEST_JTI,
+                WebTokenCheck.SUB to TEST_SUB,
+                WebTokenCheck.ISS to TEST_ISS,
+                WebTokenCheck.AUD to TEST_AUD,
+                WebTokenCheck.NONCE to TEST_NONCE,
+                WebTokenCheck.IDENT to "space1"
             )
         )
     }
@@ -84,12 +84,12 @@ class JwtTest {
         val jwt = makeJwt(privateTrustedKey)
         validateJwt(
             jwt, "test", privateTrustedKey.publicKey, clock = clock,
-            checks = mapOf(JwtCheck.JTI to "jti-space1")
+            checks = mapOf(WebTokenCheck.IDENT to "jti-space1")
         )
         try {
             validateJwt(
                 jwt, "test", privateTrustedKey.publicKey, clock = clock,
-                checks = mapOf(JwtCheck.JTI to "jti-space1")
+                checks = mapOf(WebTokenCheck.IDENT to "jti-space1")
             )
             fail()
         } catch (err: InvalidRequestException) {
@@ -97,13 +97,13 @@ class JwtTest {
         }
         validateJwt(
             jwt, "test", privateTrustedKey.publicKey, clock = clock,
-            checks = mapOf(JwtCheck.JTI to "jti-space2")
+            checks = mapOf(WebTokenCheck.IDENT to "jti-space2")
         )
         clock.advance(2.minutes)
         val newJwt = makeJwt(privateTrustedKey)
         validateJwt(
             newJwt, "test", privateTrustedKey.publicKey, clock = clock,
-            checks = mapOf(JwtCheck.JTI to "jti-space1")
+            checks = mapOf(WebTokenCheck.IDENT to "jti-space1")
         )
     }
 
@@ -112,7 +112,7 @@ class JwtTest {
         val jwt = makeJwt(privateTrustedKey)
         validateJwt(
             jwt, "test", publicKey = null, clock = clock,
-            checks = mapOf(JwtCheck.TRUST to "iss")
+            checks = mapOf(WebTokenCheck.TRUST to "iss")
         )
     }
 
@@ -121,7 +121,7 @@ class JwtTest {
         val jwt = makeJwt(privateTrustedKey, iss = null, kid = "test-kid")
         validateJwt(
             jwt, "test", publicKey = null, clock = clock,
-            checks = mapOf(JwtCheck.TRUST to "kid")
+            checks = mapOf(WebTokenCheck.TRUST to "kid")
         )
     }
 
@@ -130,25 +130,25 @@ class JwtTest {
         val x5cKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val cert = X509Cert.Builder(
             publicKey = x5cKey.publicKey,
-            signingKey = AsymmetricKey.anonymous(
+            signingKey = AsymmetricKey.Companion.anonymous(
                 privateKey = privateTrustedKey,
                 algorithm = privateTrustedKey.curve.defaultSigningAlgorithm
             ),
             serialNumber = ASN1Integer(2),
-            subject = X500Name.fromName("CN=test-x5c-leaf"),
-            issuer = X500Name.fromName("CN=test-x5c"),
+            subject = X500Name.Companion.fromName("CN=test-x5c-leaf"),
+            issuer = X500Name.Companion.fromName("CN=test-x5c"),
             validFrom = clock.now() - 1.days,
             validUntil = clock.now() + 1.days
         ).build()
         val root = X509Cert.Builder(
             publicKey = trustedKey,
-            signingKey = AsymmetricKey.anonymous(
+            signingKey = AsymmetricKey.Companion.anonymous(
                 privateKey = privateTrustedKey,
                 algorithm = privateTrustedKey.curve.defaultSigningAlgorithm
             ),
             serialNumber = ASN1Integer(57),
-            subject = X500Name.fromName("CN=test-x5c"),
-            issuer = X500Name.fromName("CN=test-x5c"),
+            subject = X500Name.Companion.fromName("CN=test-x5c"),
+            issuer = X500Name.Companion.fromName("CN=test-x5c"),
             validFrom = clock.now() - 10.days,
             validUntil = clock.now() + 100.days
         ).build()
@@ -156,7 +156,7 @@ class JwtTest {
         val jwt = makeJwt(x5cKey, iss = "test-x5c-leaf", x5c = chain)
         validateJwt(
             jwt, "test", publicKey = null, clock = clock,
-            checks = mapOf(JwtCheck.TRUST to "x5c")
+            checks = mapOf(WebTokenCheck.TRUST to "x5c")
         )
     }
 
@@ -223,13 +223,13 @@ class JwtTest {
         private val trustedCert = runBlocking {
             X509Cert.Builder(
                 publicKey = trustedKey,
-                signingKey = AsymmetricKey.anonymous(
+                signingKey = AsymmetricKey.Companion.anonymous(
                     privateKey = Crypto.createEcPrivateKey(EcCurve.P384),
                     algorithm = EcCurve.P384.defaultSigningAlgorithm
                 ),
                 serialNumber = ASN1Integer(57),
-                subject = X500Name.fromName("CN=test-root"),
-                issuer = X500Name.fromName("CN=test-ca"),
+                subject = X500Name.Companion.fromName("CN=test-root"),
+                issuer = X500Name.Companion.fromName("CN=test-ca"),
                 validFrom = clock.now() - 10.days,
                 validUntil = clock.now() + 100.days
             ).build()
@@ -263,7 +263,7 @@ class JwtTest {
     }
 
     class FakeClock: Clock {
-        private var instant = Instant.parse("2025-06-10T22:30:00Z")
+        private var instant = Instant.Companion.parse("2025-06-10T22:30:00Z")
 
         fun advance(duration: Duration) {
             instant += duration

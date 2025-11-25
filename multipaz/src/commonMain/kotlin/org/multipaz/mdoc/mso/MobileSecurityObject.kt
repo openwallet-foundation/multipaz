@@ -11,6 +11,7 @@ import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.response.DeviceResponse
+import org.multipaz.revocation.RevocationStatus
 import kotlin.time.Instant
 
 /**
@@ -28,6 +29,7 @@ import kotlin.time.Instant
  * @property deviceKeyAuthorizedNamespaces namespaces the mdoc is authorized to returned device signed data elements for.
  * @property deviceKeyAuthorizedDataElements data elements for which the mdoc is authorized to return data elements for.
  * @property deviceKeyInfo additional information about the device key.
+ * @property revocationStatus defines how to check if this document is revoked.
  */
 data class MobileSecurityObject(
     val version: String,
@@ -41,7 +43,8 @@ data class MobileSecurityObject(
     val deviceKey: EcPublicKey,
     val deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
     val deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
-    val deviceKeyInfo: Map<Long, DataItem> = emptyMap()
+    val deviceKeyInfo: Map<Long, DataItem> = emptyMap(),
+    val revocationStatus: RevocationStatus? = null
 ) {
 
     /**
@@ -117,6 +120,9 @@ data class MobileSecurityObject(
                 put("expectedUpdate", it.toDataItemDateTimeString())
             }
         }
+        if (revocationStatus != null) {
+            put("status", revocationStatus.toDataItem())
+        }
     }
 
     companion object {
@@ -162,6 +168,13 @@ data class MobileSecurityObject(
             }
 
             val validityInfo = dataItem["validityInfo"]
+
+            val revocationStatus = if (dataItem.hasKey("status")) {
+                RevocationStatus.fromDataItem(dataItem["status"])
+            } else {
+                null
+            }
+
             return MobileSecurityObject(
                 version = dataItem["version"].asTstr,
                 docType = dataItem["docType"].asTstr,
@@ -182,6 +195,7 @@ data class MobileSecurityObject(
                 deviceKeyAuthorizedNamespaces = deviceKeyAuthorizedNamespaces,
                 deviceKeyAuthorizedDataElements = deviceKeyAuthorizedDataElements,
                 deviceKeyInfo = deviceKeyInfo,
+                revocationStatus = revocationStatus
             )
         }
 

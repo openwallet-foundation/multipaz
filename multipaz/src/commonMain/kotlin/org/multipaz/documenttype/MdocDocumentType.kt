@@ -38,7 +38,7 @@ class MdocDocumentType private constructor(
         internal val namespaces: MutableMap<String, MdocNamespace.Builder> = mutableMapOf(),
     ) {
         /**
-         * Add a data element to a namespace in the mDoc Document Type.
+         * Add a data element to a namespace in the ISO mdoc Document Type.
          *
          * @param namespace the namespace of the ISO mdoc attribute.
          * @param type the datatype of this attribute.

@@ -7,7 +7,6 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.openid4vci.util.CredentialState
 import org.multipaz.openid4vci.util.IssuanceState
 import org.multipaz.rpc.handler.InvalidRequestException
@@ -22,11 +21,13 @@ suspend fun adminSessionInfo(call: ApplicationCall) {
     val state = IssuanceState.getIssuanceState(sessionId)
     val credentials = mutableListOf<JsonElement>()
     state.credentials.forEach { credentialData ->
-        val credentialState = CredentialState.getCredentialState(credentialData.index)
+        val credentialId = credentialData.id
+        val credentialState = CredentialState.getCredentialState(credentialId)
         if (credentialState != null) {
-            val status = CredentialState.getCredentialStatus(credentialData.index)
+            val status = CredentialState.getCredentialStatus(credentialId)
             credentials.add(buildJsonObject {
                 put("idx", credentialData.index)
+                put("bucket", credentialData.bucket)
                 put("kid", credentialState.keyId)
                 put("creation", credentialState.creation.toString())
                 put("expiration", credentialState.expiration.toString())

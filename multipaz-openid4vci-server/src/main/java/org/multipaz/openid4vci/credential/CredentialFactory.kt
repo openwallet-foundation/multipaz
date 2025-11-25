@@ -4,15 +4,14 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.documenttype.knowntypes.DrivingLicense
-import org.multipaz.rpc.handler.InvalidRequestException
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.DataItem
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.Loyalty
 import org.multipaz.openid4vci.request.wellKnownOpenidCredentialIssuer
+import org.multipaz.openid4vci.util.CredentialId
+import org.multipaz.provisioning.CredentialFormat
 
 /**
  * Factory for credentials of a particular type.
@@ -25,7 +24,7 @@ import org.multipaz.openid4vci.request.wellKnownOpenidCredentialIssuer
 internal interface CredentialFactory {
     val offerId: String
     val scope: String
-    val format: Openid4VciFormat
+    val format: CredentialFormat
     val requireKeyAttestation: Boolean get() = true
     val proofSigningAlgorithms: List<String>  // must be empty for keyless credentials
     val cryptographicBindingMethods: List<String>  // must be empty for keyless credentials
@@ -45,18 +44,14 @@ internal interface CredentialFactory {
      *    credential
      * @param authenticationKey public portion of the key to which the credential is bound in the
      *    wallet; must be non-null for key-bound credentials and null for keyless ones
-     * @param credentialIndex small integer that identifies this credential during its validity
-     *    period; credential index is used in status list to communicate this credential's status
-     *    to support revocation
-     * @param statusListUrl url that can be used to obtain credential status after it is issued
-     *    to support revocation
+     * @param credentialId combination of bucket id and credential index, used to communicate this
+     *    credential's status to support revocation
      * @return credential and its creation and expiration times
      */
     suspend fun mint(
         data: DataItem,
         authenticationKey: EcPublicKey?,
-        credentialIndex: Int,
-        statusListUrl: String,
+        credentialId: CredentialId,
     ): MintedCredential
 
     class RegisteredFactories(
@@ -93,30 +88,7 @@ internal interface CredentialFactory {
     }
 }
 
-internal sealed class Openid4VciFormat {
-    abstract val id: String
-
-    companion object {
-        fun fromJson(json: JsonObject): Openid4VciFormat? {
-            return when (val format = json["format"]?.jsonPrimitive?.content) {
-                "dc+sd-jwt" -> Openid4VciFormatSdJwt(json["vct"]!!.jsonPrimitive.content)
-                "mso_mdoc" -> Openid4VciFormatMdoc(json["doctype"]!!.jsonPrimitive.content)
-                null -> null
-                else -> throw InvalidRequestException("Unsupported format '$format'")
-            }
-        }
-    }
-}
-
-internal data class Openid4VciFormatMdoc(val docType: String) : Openid4VciFormat() {
-    override val id: String get() = "mso_mdoc"
-}
-
-internal val openId4VciFormatMdl = Openid4VciFormatMdoc(DrivingLicense.MDL_DOCTYPE)
-internal val openId4VciFormatPid = Openid4VciFormatMdoc(EUPersonalID.EUPID_DOCTYPE)
-internal val openId4VciFormatAv = Openid4VciFormatMdoc(AgeVerification.AV_DOCTYPE)
-internal val openId4VciFormatLoyalty = Openid4VciFormatMdoc(Loyalty.LOYALTY_DOCTYPE)
-
-internal data class Openid4VciFormatSdJwt(val vct: String) : Openid4VciFormat() {
-    override val id: String get() = "dc+sd-jwt"
-}
+internal val credentialFormatMdl = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE)
+internal val credentialFormatPid = CredentialFormat.Mdoc(EUPersonalID.EUPID_DOCTYPE)
+internal val credentialFormatAv = CredentialFormat.Mdoc(AgeVerification.AV_DOCTYPE)
+internal val credentialFormatLoyalty = CredentialFormat.Mdoc(Loyalty.LOYALTY_DOCTYPE)

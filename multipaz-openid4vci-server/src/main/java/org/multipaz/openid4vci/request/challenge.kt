@@ -6,7 +6,7 @@ import io.ktor.server.response.header
 import io.ktor.server.response.respondText
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import org.multipaz.jwt.Challenge
+import org.multipaz.webtoken.Challenge
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.handler.InvalidRequestException

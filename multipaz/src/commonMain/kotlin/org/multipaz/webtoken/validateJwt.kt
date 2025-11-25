@@ -1,4 +1,4 @@
-package org.multipaz.jwt
+package org.multipaz.webtoken
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -25,67 +25,50 @@ import org.multipaz.storage.KeyExistsStorageException
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.fromBase64
 import org.multipaz.util.fromBase64Url
+import org.multipaz.webtoken.WebTokenClaim.Companion.get
 import kotlin.collections.iterator
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
-import kotlin.time.Instant
+import kotlin.time.Duration.Companion.seconds
 
 /**
- * Defines a specific type of JWT validation.
- *
- * @param propertyNameValueCheck checks that the specific property is of the given value
- * @param headerProperty `true` when the property is in the header rather than the body of JWT
- */
-enum class JwtCheck(
-    val propertyNameValueCheck: String? = null,
-    val headerProperty: Boolean = false
-) {
-    JTI,  // value is jti partition name (typically clientId)
-    TRUST,  // value is the path where to find trusted key
-    CHALLENGE,  // value is challenge jwt property name (current specs use "nonce" or "challenge")
-    X5C_CN_ISS_MATCH,  // "required" to check that 'iss' matched cert's subject 'CN'
-    NONCE("nonce"),  // direct nonce value check, prefer CHALLENGE
-    TYP("typ", true),
-    AUD("aud"),
-    ISS("iss"),
-    SUB("sub"),
-    HTU("htu"),
-    HTM("htm"),
-    ATH("ath"),
-}
-
-/**
- * General-purpose JWT [jwt] validation using a set of built-in required checks (expiration
- * and signature validity) and a set of optional checks specified in [checks] parameter, mostly
- * aim to simplify server-side code.
+ * General-purpose JWT validation using a set of built-in required checks (expiration
+ * and signature validity) and a set of optional checks specified in [checks] parameter.
  *
  * JWT signature is verified either using a supplied [publicKey] and [algorithm] or using a
- * trusted key ([JwtCheck.TRUST] check must be specified in this case).
+ * trusted key ([WebTokenCheck.TRUST] check must be specified in this case).
  *
  * Most of the optional checks just validate that a particular field in the JWT header or body
  * has certain value. Special optional checks are:
  *
- * [JwtCheck.JTI] checks that `jti` value is fresh and was not used in any not-yet-unexpired JWT
+ * [WebTokenCheck.IDENT] checks that `jti` value is fresh and was not used in any not-yet-unexpired JWT
  * that was validated before. The value that should be provided with this check id determines
  * JWT "jti namespace". Two identical `jti` values that belong to distinct namespaces are not
  * considered to be in conflict.
  *
- * [JwtCheck.TRUST] specifies that the signature must be checked against a known trusted key
+ * [WebTokenCheck.TRUST] specifies that the signature must be checked against a known trusted key
  * (directly or through the certificate chain specified in `x5c`). The value provided with this
  * check id determines [Configuration] name that holds JSON-formatted object that maps
  * the name to the trusted key as either JWK or Base64-encode CA certificate. The name of the key
  * in the map is derived either from the X509 top certificate subject common name, from `kid`
  * parameter in JWT header or `iss` value in the JWT body.
  *
- * [JwtCheck.CHALLENGE] defines the nonce/challenge check using the value of the specified property.
+ * [WebTokenCheck.CHALLENGE] defines the nonce/challenge check using the value of the specified property.
  * The value given to this key in [checks] map is used as a property name in the body part of the
  * JWT. That property must exist. Its value is passed to [Challenge.validateAndConsume] method.
  *
- * [maxValidity] determines expiration time for JWTs that have `iat`, but not `exp` parameter
- * un their body and [clock] determines current time to check for expiration.
- *
- * @throws ChallengeInvalidException when nonce or challenge check fails (see [JwtCheck.CHALLENGE])
+ * @param jwt JWT to validate
+ * @param jwtName name for the kind of JWT being validated, this is used to generate more meaningful
+ *    exception messages
+ * @param publicKey public key to use to check signature, either publicKey or [WebTokenCheck.TRUST]
+ *    must be used.
+ * @param algorithm algorithm to use to check signature when [publicKey] is specified.
+ * @param checks validation checks to perform.
+ * @param maxValidity when `exp` is not present determines expiration time based on `iat` claim;
+ *     when `exp` claim is present, determines how far in the future it can be.
+ * @param clock clock that determines current time to check for expiration.
+ * @throws ChallengeInvalidException when nonce or challenge check fails (see [WebTokenCheck.CHALLENGE])
  * @throws InvalidRequestException when any other validation fails
  */
 suspend fun validateJwt(
@@ -93,7 +76,7 @@ suspend fun validateJwt(
     jwtName: String,
     publicKey: EcPublicKey?,
     algorithm: Algorithm? = publicKey?.curve?.defaultSigningAlgorithmFullySpecified,
-    checks: Map<JwtCheck, String> = mapOf(),
+    checks: Map<WebTokenCheck, String> = mapOf(),
     maxValidity: Duration = 10.hours,
     clock: Clock = Clock.System
 ): JsonObject {
@@ -108,43 +91,37 @@ suspend fun validateJwt(
         parts[1].fromBase64Url().decodeToString()
     ).jsonObject
 
-    val now = clock.now().epochSeconds
+    val now = clock.now()
 
-    val expiration = if (body.containsKey("exp")) {
-        val exp = body["exp"]
-        if (exp !is JsonPrimitive || exp.isString) {
-            throw InvalidRequestException("$jwtName: 'exp' is invalid")
+    val expiration = body[WebTokenClaim.Exp] ?: run {
+        if (maxValidity == Duration.INFINITE) {
+            now + 1.seconds
+        } else {
+            val iat = body[WebTokenClaim.Iat]
+                ?: throw InvalidRequestException("$jwtName: either 'exp' or 'iat' is required")
+            iat + maxValidity
         }
-        exp.content.toLong()
-    } else if (maxValidity == Duration.INFINITE) {
-        now + 1
-    } else {
-        val iat = body["iat"]
-        if (iat !is JsonPrimitive || iat.isString) {
-            throw InvalidRequestException("$jwtName: 'exp' is missing and 'iat' is missing or invalid")
-        }
-        iat.content.toLong() + maxValidity.inWholeSeconds - 5
     }
 
     if (expiration < now) {
         throw InvalidRequestException("$jwtName: expired")
     }
-    if (maxValidity != Duration.INFINITE && expiration > now + maxValidity.inWholeSeconds) {
+    if (maxValidity != Duration.INFINITE && expiration > now + maxValidity) {
         throw InvalidRequestException("$jwtName: expiration is too far in the future")
     }
 
     for ((check, expectedValue) in checks) {
-        val fieldName = check.propertyNameValueCheck
-        if (fieldName != null) {
-            val part = if (check.headerProperty) header else body
-            val fieldValue = part[fieldName]
-            if (fieldValue !is JsonPrimitive || fieldValue.content != expectedValue) {
-                throw InvalidRequestException("$jwtName: '$fieldName' is incorrect or missing")
+        val claim = check.webTokenClaim
+        if (claim != null) {
+            val part = if (claim.header) header else body
+            val fieldValue = part[claim]
+            if (fieldValue != expectedValue) {
+                throw InvalidRequestException("$jwtName: '${claim.strKey}' is incorrect or missing")
             }
         }
     }
 
-    val caName = checks[JwtCheck.TRUST]
+    val caName = checks[WebTokenCheck.TRUST]
     val (key, alg) = if (caName == null) {
         Pair(publicKey!!, algorithm!!)
     } else {
@@ -157,7 +134,7 @@ suspend fun validateJwt(
             }
             // TODO: check certificate issuance/expiration
             val first = certificateChain.certificates.first()
-            if (checks[JwtCheck.X5C_CN_ISS_MATCH] == "required") {
+            if (checks[WebTokenCheck.X5C_CN_ISS_MATCH] == "required") {
                 if (issuer == null) {
                     throw InvalidRequestException("$jwtName: 'iss' must be specified")
                 }
@@ -193,12 +170,12 @@ suspend fun validateJwt(
         val message = jwt.substring(0, jwt.length - parts[2].length - 1)
         Crypto.checkSignature(key, message.encodeToByteArray(), alg, signature)
     } catch (e: SignatureVerificationException) {
-        throw IllegalArgumentException("Invalid JWT signature", e)
+        throw IllegalArgumentException("$jwtName: invalid JWT signature", e)
     }
 
-    val nonceName = checks[JwtCheck.CHALLENGE]
+    val nonceName = checks[WebTokenCheck.CHALLENGE]
     if (nonceName != null) {
-        val nonce = body[nonceName]  // must be given if JwtCheck.CHALLENGE is used
+        val nonce = body[nonceName]  // must be given if WebTokenCheck.CHALLENGE is used
         if (nonce == null) {
             throw ChallengeInvalidException()
         }
@@ -208,18 +185,16 @@ suspend fun validateJwt(
         Challenge.validateAndConsume(nonce.content)
     }
 
-    val jtiPartition = checks[JwtCheck.JTI]
+    val jtiPartition = checks[WebTokenCheck.IDENT]
     if (jtiPartition != null) {
-        val jti = body["jti"]
-        if (jti !is JsonPrimitive || !jti.isString) {
+        val jti = body[WebTokenClaim.Jti] ?:
             throw InvalidRequestException("$jwtName: 'jti' is missing or invalid")
-        }
         try {
             BackendEnvironment.getTable(jtiTableSpec).insert(
-                key = jti.content,
+                key = jti,
                 data = buildByteString { },
                 partitionId = jtiPartition,
-                expiration = Instant.fromEpochSeconds(expiration)
+                expiration = expiration
             )
         } catch (_: KeyExistsStorageException) {
             throw InvalidRequestException("$jwtName: given 'jti' value was used before")
@@ -231,15 +206,20 @@ suspend fun validateJwt(
 
 private val keyCacheLock = Mutex()
 private val keyCache = mutableMapOf<String, EcPublicKey>()
+private var cachedConfiguration: Configuration? = null
 
-private suspend fun caPublicKey(
+internal suspend fun caPublicKey(
     keyId: String,
     caName: String
 ): EcPublicKey {
     val configuration = BackendEnvironment.getInterface(Configuration::class)
-        ?: throw IllegalStateException("Configuration is required for JwtCheck.TRUST")
+        ?: throw IllegalStateException("Configuration is required for WebTokenCheck.TRUST")
     val caPath = "$caName:$keyId"
     return keyCacheLock.withLock {
+        if (cachedConfiguration != configuration) {
+            keyCache.clear()
+            cachedConfiguration = configuration
+        }
         keyCache.getOrPut(caPath) {
             val caConfig = configuration.getValue(caName)
                 ?: throw IllegalStateException("'$caName': no trusted keys in config")

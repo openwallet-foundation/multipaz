@@ -24,7 +24,8 @@ import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
-import org.multipaz.jwt.buildJwt
+import org.multipaz.revocation.RevocationStatus
+import org.multipaz.webtoken.buildJwt
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import kotlin.random.Random
@@ -113,6 +114,10 @@ class SdJwt(
     /** The value of the `cnf` claim in the issuer-signed JWT, if present. */
     val kbKey: EcPublicKey? by lazy {
         jwtBody["cnf"]?.jsonObject["jwk"]?.jsonObject?.let { EcPublicKey.fromJwk(it) }
+    }
+
+    val revocationStatus: RevocationStatus? by lazy {
+        jwtBody["status"]?.let { RevocationStatus.fromJson(it) }
     }
 
     /**

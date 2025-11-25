@@ -1,14 +1,23 @@
 package org.multipaz.openid4vci.util
 
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.buildByteString
+import kotlinx.io.bytestring.decodeToString
 import org.multipaz.cbor.annotation.CborSerializable
+import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.X509Cert
+import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable
 import org.multipaz.storage.KeyExistsStorageException
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.Logger
+import org.multipaz.util.toBase64Url
 import kotlin.random.Random
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -32,6 +41,7 @@ import kotlin.time.Instant
 class CredentialState(
     val issuanceStateId: String,
     val keyId: String?,
+    val format: CredentialFormat,
     var creation: Instant,
     var expiration: Instant
 ) {
@@ -76,15 +86,28 @@ class CredentialState(
         }
     }
 
+    @CborSerializable
+    data class BucketInfo(val formatId: String, val key: EcPublicKey) {
+        companion object Companion
+    }
+
     companion object {
         private const val TAG = "CredentialState"
+        private val lock = Mutex()
 
         @Volatile
-        private var keySpaceSizeLog = 4
+        private var keySpaceSizeLog = 4  // shared across buckets
+
 
         /** Holds [CredentialState] */
         private val dataTableSpec = StorageTableSpec(
-            name = "Openid4VciCredential",
+            name = "OID4VCICredData",
+            supportPartitions = true,
+            supportExpiration = true
+        )
+
+        private val bucketTableSpec = StorageTableSpec(
+            name = "OID4VCICredBucket",
             supportPartitions = false,
             supportExpiration = true
         )
@@ -94,38 +117,66 @@ class CredentialState(
          * sparse.
          */
         private val statusTableSpec = StorageTableSpec(
-            name = "Openid4VciCredStatus",
-            supportPartitions = false,
+            name = "OID4VCICredRevocation",
+            supportPartitions = true,
             supportExpiration = true
         )
 
         /**
-         * Creates a new credential record.
+         * Creates a new unique credential identifier.
          *
-         * @param state initial credential state, typically a placeholder as the credential itself
-         *   was not yet created (as it requires the credential index).
-         * @return credential index
+         * @param format credential format
+         * @param cert certificate for the key used to sign this new credential
+         * @return new credential identifier (bucket + index), see [CredentialId]
          */
-        suspend fun recordNewCredential(state: CredentialState): Int {
-            val table = BackendEnvironment.getTable(dataTableSpec)
-            val data = ByteString(state.toCbor())
-            // Keep the record around a bit after the actual expiration
-            val expiration = state.expiration + 10.seconds
+        suspend fun createCredentialId(format: CredentialFormat, cert: X509Cert): CredentialId {
+            val bucketInfo = BucketInfo(format.formatId, cert.ecPublicKey).toCbor().toBase64Url()
+            val bucketTable = BackendEnvironment.getTable(bucketTableSpec)
+            val dataTable = BackendEnvironment.getTable(dataTableSpec)
+            val bucketId = bucketTable.get(key = bucketInfo)?.decodeToString()
+                ?: lock.withLock {
+                    // Other thread might have inserted it already
+                    bucketTable.get(key = bucketInfo)?.decodeToString()
+                        ?: run {
+                            var bucketId: String
+                            do {
+                                // We want short bucket id, 24 bits should be plenty, find an unused bucket
+                                bucketId = Random.nextBytes(3).toBase64Url()
+                            } while (dataTable.enumerate(bucketId, limit = 1).isNotEmpty())
+                            // Bucket only exists until the certificate for the key is valid
+                            bucketTable.insert(
+                                key = bucketInfo,
+                                data = ByteString(bucketId.encodeToByteArray()),
+                                expiration = cert.validityNotAfter
+                            )
+                            bucketId
+                        }
+                }
+            val now = Clock.System.now()
+            val expiration = now + 20.minutes
+            val blankState = CredentialState(
+                issuanceStateId = "",
+                keyId = null,
+                creation = now,
+                format = format,
+                expiration = expiration
+            )
             // We want to keep the key space fairly compact yet random to generate revocation list
-            // efficiently. Try to find an unused key. If after 16 tries we still could not,
-            // grow the key space.
+            // efficiently. Try to find an unused key. If after a number of tries we still could
+            // not, grow the key space.
             while (true) {
                 val currentKeySpaceSizeLog = keySpaceSizeLog
                 val currentKeySpaceSize = 1 shl currentKeySpaceSizeLog
                 repeat(currentKeySpaceSizeLog) {
                     try {
                         val index = Random.nextInt(currentKeySpaceSize)
-                        table.insert(
+                        dataTable.insert(
+                            partitionId = bucketId,
                             key = encodeIndexToKey(index),
-                            data = data,
+                            data = ByteString(blankState.toCbor()),
                             expiration = expiration
                         )
-                        return index
+                        return CredentialId(bucketId, index)
                     } catch (_: KeyExistsStorageException) {
                         // try again
                     }
@@ -142,16 +193,17 @@ class CredentialState(
         /**
          * Updates the existing credential record.
          *
-         * @param credentialIndex credential index
+         * @param credentialId credential identifier
          * @param state new credential state
          */
-        suspend fun updateCredential(credentialIndex: Int, state: CredentialState) {
+        suspend fun updateCredential(credentialId: CredentialId, state: CredentialState) {
             val table = BackendEnvironment.getTable(dataTableSpec)
             val data = ByteString(state.toCbor())
             // Keep the record around a bit after the actual expiration
             val expiration = state.expiration + 10.seconds
             table.update(
-                key = encodeIndexToKey(credentialIndex),
+                partitionId = credentialId.bucket,
+                key = encodeIndexToKey(credentialId.index),
                 data = data,
                 expiration = expiration
             )
@@ -160,12 +212,15 @@ class CredentialState(
         /**
          * Queries the credential state
          *
-         * @param credentialIndex credential index
+         * @param credentialId credential identifier
          * @return credential's state or null if it is not found or expired
          */
-        suspend fun getCredentialState(credentialIndex: Int): CredentialState? =
+        suspend fun getCredentialState(credentialId: CredentialId): CredentialState? =
             BackendEnvironment.getTable(dataTableSpec)
-                .get(encodeIndexToKey(credentialIndex))?.let { bytes ->
+                .get(
+                    partitionId = credentialId.bucket,
+                    key = encodeIndexToKey(credentialId.index)
+                )?.let { bytes ->
                     fromCbor(bytes.toByteArray())
                 }
 
@@ -178,16 +233,34 @@ class CredentialState(
          * @return pairs of credential index and its [Status]
          */
         suspend fun listNonValidCredentials(
+            bucketId: String,
             after: Int? = null,
             limit: Int = Int.MAX_VALUE
         ): List<Pair<Int, Status>> =
             BackendEnvironment.getTable(statusTableSpec)
                 .enumerateWithData(
+                    partitionId = bucketId,
                     afterKey = after?.let { encodeIndexToKey(it) },
                     limit = limit
                 ).map { (key, data) ->
                     Pair(decodeKeyToIndex(key), Status.decode(data[0]))
                 }
+
+        fun indexToIdentifier(index: Int): ByteString {
+            require(index >= 0)
+            return buildByteString {
+                if (index > 0xFFFFFF) {
+                    append((index shr 12).toByte())
+                }
+                if (index > 0xFFFF) {
+                    append((index shr 8).toByte())
+                }
+                if (index > 0xFF) {
+                    append((index shr 4).toByte())
+                }
+                append(index.toByte())
+            }
+        }
 
         /**
          * Sets the credential status.
@@ -195,20 +268,30 @@ class CredentialState(
          * Initial credential status is always [Status.VALID] (which is coded as zero)
          */
         suspend fun setCredentialStatus(
-            credentialIndex: Int,
+            credentialId: CredentialId,
             status: Status,
             expiration: Instant
         ) {
-            val credentialStateId = encodeIndexToKey(credentialIndex)
+            val credentialKey = encodeIndexToKey(credentialId.index)
             val table = BackendEnvironment.getTable(statusTableSpec)
             if (status == Status.VALID) {
-                table.delete(credentialStateId)
+                table.delete(partitionId = credentialId.bucket, key = credentialKey)
             } else {
                 val encoded = buildByteString { append(status.encoded.toByte()) }
                 try {
-                    table.insert(credentialStateId, encoded, expiration = expiration)
+                    table.insert(
+                        partitionId = credentialId.bucket,
+                        key = credentialKey,
+                        data = encoded,
+                        expiration = expiration
+                    )
                 } catch (_: KeyExistsStorageException) {
-                    table.update(credentialStateId, encoded, expiration = expiration)
+                    table.update(
+                        partitionId = credentialId.bucket,
+                        key = credentialKey,
+                        data = encoded,
+                        expiration = expiration
+                    )
                 }
             }
         }
@@ -216,12 +299,15 @@ class CredentialState(
         /**
          * Queries the credential status
          *
-         * @param credentialIndex index of the credential
+         * @param credentialId credential identifier
          * @return credential's status
          */
-        suspend fun getCredentialStatus(credentialIndex: Int): Status =
+        suspend fun getCredentialStatus(credentialId: CredentialId): Status =
             BackendEnvironment.getTable(statusTableSpec)
-                .get(encodeIndexToKey(credentialIndex))?.let { Status.decode(it[0]) } ?: Status.VALID
+                .get(
+                    partitionId = credentialId.bucket,
+                    key = encodeIndexToKey(credentialId.index)
+                )?.let { Status.decode(it[0]) } ?: Status.VALID
 
 
         /**

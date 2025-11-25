@@ -53,7 +53,7 @@ import org.multipaz.certext.toCbor
 import org.multipaz.crypto.Hkdf
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.device.AndroidKeystoreSecurityLevel
-import org.multipaz.jwt.buildJwt
+import org.multipaz.webtoken.buildJwt
 import java.nio.ByteBuffer
 import java.util.Locale
 import kotlin.random.Random

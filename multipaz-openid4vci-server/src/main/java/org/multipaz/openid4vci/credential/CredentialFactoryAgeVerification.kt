@@ -18,16 +18,18 @@ import org.multipaz.util.toBase64Url
 import kotlin.time.Clock
 import kotlin.time.Instant
 import org.multipaz.cbor.RawCbor
-import org.multipaz.cbor.Simple
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
-import org.multipaz.util.Logger
+import org.multipaz.openid4vci.util.CredentialId
+import org.multipaz.revocation.RevocationStatus
+import org.multipaz.rpc.backend.BackendEnvironment
+import org.multipaz.server.getBaseUrl
 import kotlin.time.Duration.Companion.days
 
 /**
- * Factory for Age Verification Credential ID in mDoc format.
+ * Factory for Age Verification Credential ID in ISO mdoc format.
  */
 internal class CredentialFactoryAgeVerification : CredentialFactoryBase() {
     override val offerId: String
@@ -36,8 +38,8 @@ internal class CredentialFactoryAgeVerification : CredentialFactoryBase() {
     override val scope: String
         get() = "core"
 
-    override val format: Openid4VciFormat
-        get() = openId4VciFormatAv
+    override val format
+        get() = credentialFormatAv
 
     override val proofSigningAlgorithms: List<String>
         get() = CredentialFactory.DEFAULT_PROOF_SIGNING_ALGORITHMS
@@ -54,8 +56,7 @@ internal class CredentialFactoryAgeVerification : CredentialFactoryBase() {
     override suspend fun mint(
         data: DataItem,
         authenticationKey: EcPublicKey?,
-        credentialIndex: Int,
-        statusListUrl: String
+        credentialId: CredentialId
     ): MintedCredential {
         val now = Clock.System.now()
 
@@ -72,9 +73,6 @@ internal class CredentialFactoryAgeVerification : CredentialFactoryBase() {
         val validFrom = Instant.fromEpochSeconds(now.epochSeconds, 0)
         val validUntil = validFrom + 30.days
 
-        val mdocType = AgeVerification.getDocumentType()
-            .mdocDocumentType!!.namespaces[AgeVerification.AV_NAMESPACE]!!
-
         val ageThresholdsToProvision = listOf(13, 15, 16, 18, 21, 23, 25, 27, 28, 40, 60, 65, 67)
         val issuerNamespaces = buildIssuerNamespaces {
             addNamespace(AgeVerification.AV_NAMESPACE) {
@@ -88,6 +86,13 @@ internal class CredentialFactoryAgeVerification : CredentialFactoryBase() {
             }
         }
 
+        val baseUrl = BackendEnvironment.getBaseUrl()
+        val revocationStatus = RevocationStatus.StatusList(
+            idx = credentialId.index,
+            uri = "$baseUrl/status_list/${credentialId.bucket}",
+            certificate = null
+        )
+
         // Generate an MSO and issuer-signed data for this authentication key.
         val mso = MobileSecurityObject(
             version = "1.0",
@@ -99,6 +104,7 @@ internal class CredentialFactoryAgeVerification : CredentialFactoryBase() {
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = authenticationKey!!,
+            revocationStatus = revocationStatus
         )
         val taggedEncodedMso = Cbor.encode(Tagged(
             Tagged.ENCODED_CBOR,
