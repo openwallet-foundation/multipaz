@@ -1235,7 +1235,7 @@ fun AppBar(
     val title = currentDestination.title?.let { stringResource(it) } ?: platformAppName
     TopAppBar(
         title = { Text(text = title) },
-        colors = TopAppBarDefaults.mediumTopAppBarColors(
+        colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer
         ),
         modifier = modifier,

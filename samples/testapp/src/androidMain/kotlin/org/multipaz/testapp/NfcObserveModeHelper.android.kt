@@ -130,29 +130,34 @@ actual object NfcObserveModeHelper {
         }
 
         val adapter = NfcAdapter.getDefaultAdapter(applicationContext)
-        val isObserveModeEnabledOnAdapter = adapter.isObserveModeEnabled
-        val observeModeShouldBeEnabled = if (isEnabled) {
-            if (observeModeExplicitlyInhibited) {
-                false
+        if (adapter != null) {
+            val isObserveModeEnabledOnAdapter = adapter.isObserveModeEnabled
+            val observeModeShouldBeEnabled = if (isEnabled) {
+                if (observeModeExplicitlyInhibited) {
+                    false
+                } else {
+                    inhbitForTransactionUntil?.let {
+                        val now = Clock.System.now()
+                        if (now < it) {
+                            false
+                        } else {
+                            inhbitForTransactionUntil = null
+                            true
+                        }
+                    } ?: true
+                }
             } else {
-                inhbitForTransactionUntil?.let {
-                    val now = Clock.System.now()
-                    if (now < it) {
-                        false
-                    } else {
-                        inhbitForTransactionUntil = null
-                        true
-                    }
-                } ?: true
+                false
             }
-        } else {
-            false
+            if (isObserveModeEnabledOnAdapter != observeModeShouldBeEnabled) {
+                Logger.i(
+                    TAG,
+                    "isObserveModeEnabled=$isObserveModeEnabledOnAdapter changing to $observeModeShouldBeEnabled"
+                )
+                adapter.isObserveModeEnabled = observeModeShouldBeEnabled
+            }
+            //Logger.i(TAG, "observe mode enabled: ${adapter.isObserveModeEnabled}")
         }
-        if (isObserveModeEnabledOnAdapter != observeModeShouldBeEnabled) {
-            Logger.i(TAG, "isObserveModeEnabled=$isObserveModeEnabledOnAdapter changing to $observeModeShouldBeEnabled")
-            adapter.isObserveModeEnabled = observeModeShouldBeEnabled
-        }
-        //Logger.i(TAG, "observe mode enabled: ${adapter.isObserveModeEnabled}")
     }
 
     actual fun inhibitObserveMode() {
