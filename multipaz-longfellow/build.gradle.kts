@@ -38,6 +38,26 @@ kotlin {
         it.binaries.framework {
             baseName = "longfellow"
         }
+        val zkLibExt = when (it.name) {
+            "iosX64" -> "x86_64-iphonesimulator"
+            "iosArm64" -> "arm64-iphoneos"
+            "iosSimulatorArm64" -> "arm64-iphonesimulator"
+            else -> error("Unsupported target ${it.name}")
+        }
+        it.compilations.getByName("main") {
+            val Longfellow by cinterops.creating {
+                definitionFile.set(project.file("$rootDir/multipaz-longfellow/src/iosMain/MdocZk.def"))
+                includeDirs.headerFilterOnly("$rootDir/multipaz-longfellow/src/iosMain/nativelibs/$zkLibExt/include")
+                extraOpts("-libraryPath", "$rootDir/multipaz-longfellow/src/iosMain/nativelibs/$zkLibExt/lib")
+                packageName = "Longfellow"
+            }
+        }
+        it.binaries.all {
+            linkerOpts(
+                "-L$rootDir/multipaz-longfellow/src/iosMain/nativeLibs/$zkLibExt/lib",
+                "-lmdoc_static"
+            )
+        }
     }
 
     // we want some extra dependsOn calls to create
@@ -55,6 +75,13 @@ kotlin {
         }
 
         val commonTest by getting {
+            dependencies {
+                implementation(libs.kotlin.test)
+                implementation(libs.kotlinx.coroutines.test)
+            }
+        }
+
+        val jvmTest by getting {
             dependencies {
                 implementation(libs.kotlin.test)
                 implementation(libs.kotlinx.coroutines.test)
@@ -88,6 +115,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 
     packaging {
