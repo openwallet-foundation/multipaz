@@ -36,6 +36,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 class CwtTest {
@@ -118,6 +119,26 @@ class CwtTest {
         } catch (err: InvalidRequestException) {
             assertTrue(err.message!!.lowercase().contains("expired"))
         }
+    }
+
+    @Test
+    fun testClockSkewLarge() = runBackendTest {
+        val cwt = makeCwt(privateTrustedKey, exp = null, iat = clock.now() + 30.seconds)
+        try {
+            validateCwt(
+                cwt, "test", privateTrustedKey.publicKey,
+                clock = clock, maxValidity = 1.minutes
+            )
+            fail()
+        } catch (err: InvalidRequestException) {
+            assertTrue(err.message!!.lowercase().contains("future"))
+        }
+    }
+
+    @Test
+    fun testClockSkewSmall() = runBackendTest {
+        val cwt = makeCwt(privateTrustedKey, exp = null, iat = clock.now() + 1.seconds)
+        validateCwt(cwt, "test", privateTrustedKey.publicKey, clock = clock)
     }
 
     @Test

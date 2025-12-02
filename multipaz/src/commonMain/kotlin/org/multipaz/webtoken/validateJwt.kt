@@ -99,7 +99,15 @@ suspend fun validateJwt(
         } else {
             val iat = body[WebTokenClaim.Iat]
                 ?: throw InvalidRequestException("$jwtName: either 'exp' or 'iat' is required")
-            iat + maxValidity
+            if (iat > now) {
+                // Allow no more than 5 seconds clock mismatch
+                if (iat > now + 5.seconds) {
+                    throw InvalidRequestException("$jwtName: 'iat' is in future")
+                }
+                now + maxValidity
+            } else {
+                iat + maxValidity
+            }
         }
     }
 

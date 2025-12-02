@@ -94,7 +94,15 @@ suspend fun validateCwt(
         } else {
             val iat = body[WebTokenClaim.Iat]
                 ?: throw InvalidRequestException("$cwtName: either 'exp' or 'iat' is required")
-            iat + maxValidity - 5.seconds
+            if (iat > now) {
+                // Allow no more than 5 seconds clock mismatch
+                if (iat > now + 5.seconds) {
+                    throw InvalidRequestException("$cwtName: 'iat' is in future")
+                }
+                now + maxValidity
+            } else {
+                iat + maxValidity
+            }
         }
     }
 

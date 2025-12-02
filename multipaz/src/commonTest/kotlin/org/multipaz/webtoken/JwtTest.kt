@@ -30,6 +30,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 class JwtTest {
@@ -67,7 +68,9 @@ class JwtTest {
     @Test
     fun testExpirationIat() = runBackendTest {
         val jwt = makeJwt(privateTrustedKey, exp = null, iat = clock.now())
+        validateJwt(jwt, "test", privateTrustedKey.publicKey, clock = clock)
         clock.advance(2.minutes)
+        validateJwt(jwt, "test", privateTrustedKey.publicKey, clock = clock)
         try {
             validateJwt(
                 jwt, "test", privateTrustedKey.publicKey,
@@ -77,6 +80,26 @@ class JwtTest {
         } catch (err: InvalidRequestException) {
             assertTrue(err.message!!.lowercase().contains("expired"))
         }
+    }
+
+    @Test
+    fun testClockSkewLarge() = runBackendTest {
+        val jwt = makeJwt(privateTrustedKey, exp = null, iat = clock.now() + 30.seconds)
+        try {
+            validateJwt(
+                jwt, "test", privateTrustedKey.publicKey,
+                clock = clock, maxValidity = 1.minutes
+            )
+            fail()
+        } catch (err: InvalidRequestException) {
+            assertTrue(err.message!!.lowercase().contains("future"))
+        }
+    }
+
+    @Test
+    fun testClockSkewSmall() = runBackendTest {
+        val jwt = makeJwt(privateTrustedKey, exp = null, iat = clock.now() + 1.seconds)
+        validateJwt(jwt, "test", privateTrustedKey.publicKey, clock = clock)
     }
 
     @Test
