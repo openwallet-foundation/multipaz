@@ -72,6 +72,7 @@ import org.multipaz.testapp.platformAppName
 import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.trustmanagement.TrustPoint
+import org.multipaz.util.truncateToWholeSeconds
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
@@ -213,8 +214,8 @@ fun ConsentPromptScreen(
         val secureArea = SoftwareSecureArea.create(storage)
         documentStore = buildDocumentStore(storage, secureAreaRepository) {}
         val dsPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        val validFrom = Clock.System.now()
-        val validUntil = Clock.System.now() + 10.days
+        val validFrom = Clock.System.now().truncateToWholeSeconds()
+        val validUntil = validFrom + 10.days
         val dsCert = buildX509Cert(
             publicKey = dsPrivateKey.publicKey,
             signingKey = AsymmetricKey.anonymous(dsPrivateKey),
@@ -476,7 +477,7 @@ private suspend fun calculateRequester(
     utopiaBreweryIcon: ByteString,
     identityReaderIcon: ByteString
 ): Pair<Requester, TrustPoint?> {
-    val now = Clock.System.now()
+    val now = Clock.System.now().truncateToWholeSeconds()
     val validFrom = now - 1.days
     val validUntil = now + 1.days
     // TODO: should it be in SecureArea?

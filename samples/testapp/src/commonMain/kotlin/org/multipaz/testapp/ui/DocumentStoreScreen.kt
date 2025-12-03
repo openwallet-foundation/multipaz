@@ -513,10 +513,8 @@ private suspend fun provisionTestDocuments(
         val provisioningResult = buildAnnotatedString {
             append("Created ${numDocsEnd - numDocsBegin} document(s) in ${timestampEnd - timestampBegin}.")
             if (openid4vciAttestationCompactSerialization != null) {
-                val prettyAttestation = Json {
-                    prettyPrint = true
-                    prettyPrintIndent = "  "
-                }.encodeToString(JsonWebSignature.getInfo(openid4vciAttestationCompactSerialization).claimsSet)
+                val prettyAttestation = prettyJson.encodeToString(JsonWebSignature.getInfo
+                    (openid4vciAttestationCompactSerialization).claimsSet)
                 append("\n\nOpenID4VCI attestation:\n")
                 append(prettyAttestation)
             }
@@ -529,4 +527,8 @@ private suspend fun provisionTestDocuments(
     showDocumentCreationDialog.value = false
 }
 
-
+@OptIn(ExperimentalSerializationApi::class)
+private val prettyJson = Json {
+    prettyPrint = true
+    prettyPrintIndent = "  "
+}

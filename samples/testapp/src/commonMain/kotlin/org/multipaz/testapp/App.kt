@@ -1,6 +1,7 @@
 package org.multipaz.testapp
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,71 +25,22 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import io.ktor.client.HttpClient
+import androidx.navigation.toRoute
 import coil3.ImageLoader
 import coil3.compose.LocalPlatformContext
 import coil3.network.ktor2.KtorNetworkFetcherFactory
-import org.multipaz.testapp.ui.AppTheme
-import org.multipaz.digitalcredentials.DigitalCredentials
-import org.multipaz.presentment.model.PresentmentModel
-import org.multipaz.asn1.ASN1Integer
-import org.multipaz.cbor.Cbor
-import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcCurve
-import org.multipaz.crypto.EcPrivateKey
-import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.X500Name
-import org.multipaz.crypto.X509Cert
-import org.multipaz.document.DocumentStore
-import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.documenttype.knowntypes.DrivingLicense
-import org.multipaz.documenttype.knowntypes.EUPersonalID
-import org.multipaz.documenttype.knowntypes.PhotoID
-import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
-import org.multipaz.mdoc.util.MdocUtil
-import org.multipaz.mdoc.vical.SignedVical
-import org.multipaz.secure_area_test_app.ui.CloudSecureAreaScreen
-import org.multipaz.securearea.SecureAreaRepository
-import org.multipaz.securearea.cloud.CloudSecureArea
-import org.multipaz.securearea.software.SoftwareSecureArea
-import org.multipaz.storage.StorageTable
-import org.multipaz.storage.StorageTableSpec
-import org.multipaz.testapp.ui.AboutScreen
-import org.multipaz.testapp.ui.AndroidKeystoreSecureAreaScreen
-import org.multipaz.testapp.ui.CertificateScreen
-import org.multipaz.testapp.ui.CertificateViewerExamplesScreen
-import org.multipaz.testapp.ui.ConsentPromptScreen
-import org.multipaz.testapp.ui.CredentialClaimsViewerScreen
-import org.multipaz.testapp.ui.CredentialViewerScreen
-import org.multipaz.testapp.ui.DocumentStoreScreen
-import org.multipaz.testapp.ui.DocumentViewerScreen
-import org.multipaz.testapp.ui.IsoMdocMultiDeviceTestingScreen
-import org.multipaz.testapp.ui.IsoMdocProximityReadingScreen
-import org.multipaz.testapp.ui.IsoMdocProximitySharingScreen
-import org.multipaz.testapp.ui.NfcScreen
-import org.multipaz.testapp.ui.NotificationsScreen
-import org.multipaz.testapp.ui.PassphraseEntryFieldScreen
-import org.multipaz.testapp.ui.PassphrasePromptScreen
-import org.multipaz.testapp.ui.QrCodesScreen
-import org.multipaz.testapp.ui.RichTextScreen
-import org.multipaz.testapp.ui.ScreenLockScreen
-import org.multipaz.testapp.ui.SecureEnclaveSecureAreaScreen
-import org.multipaz.testapp.ui.SettingsScreen
-import org.multipaz.testapp.ui.SoftwareSecureAreaScreen
-import org.multipaz.testapp.ui.StartScreen
-import org.multipaz.util.Logger
-import multipazproject.samples.testapp.generated.resources.back_button
+import io.ktor.client.HttpClient
 import io.ktor.http.decodeURLPart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -98,7 +50,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlin.time.Clock
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
@@ -109,50 +60,100 @@ import multipazproject.samples.testapp.generated.resources.Res
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.ui.tooling.preview.Preview
+import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.OID
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.compose.provisioning.Provisioning
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.X500Name
+import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.digitalcredentials.Default
+import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.document.AbstractDocumentMetadata
 import org.multipaz.document.DocumentMetadata
+import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
+import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.AgeVerification
-import org.multipaz.documenttype.knowntypes.Loyalty
+import org.multipaz.documenttype.knowntypes.DrivingLicense
+import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.IDPass
+import org.multipaz.documenttype.knowntypes.Loyalty
+import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.documenttype.knowntypes.PhotoIDLowercase
+import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.rical.SignedRical
+import org.multipaz.mdoc.util.MdocUtil
+import org.multipaz.mdoc.vical.SignedVical
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
+import org.multipaz.nfc.NfcTagReader
+import org.multipaz.presentment.model.PresentmentModel
 import org.multipaz.presentment.model.PresentmentSource
 import org.multipaz.presentment.model.SimplePresentmentSource
-import org.multipaz.provisioning.ProvisioningModel
-import org.multipaz.nfc.NfcTagReader
 import org.multipaz.prompt.PromptModel
 import org.multipaz.provisioning.Display
+import org.multipaz.provisioning.ProvisioningModel
 import org.multipaz.request.Requester
+import org.multipaz.secure_area_test_app.ui.CloudSecureAreaScreen
+import org.multipaz.securearea.SecureAreaRepository
+import org.multipaz.securearea.cloud.CloudSecureArea
+import org.multipaz.securearea.software.SoftwareSecureArea
+import org.multipaz.storage.StorageTable
+import org.multipaz.storage.StorageTableSpec
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.testapp.provisioning.ProvisioningSupport
+import org.multipaz.testapp.ui.AboutScreen
+import org.multipaz.testapp.ui.AndroidKeystoreSecureAreaScreen
+import org.multipaz.testapp.ui.AppTheme
+import org.multipaz.testapp.ui.CertificateScreen
+import org.multipaz.testapp.ui.CertificateViewerExamplesScreen
+import org.multipaz.testapp.ui.ConsentPromptScreen
+import org.multipaz.testapp.ui.CredentialClaimsViewerScreen
+import org.multipaz.testapp.ui.CredentialViewerScreen
 import org.multipaz.testapp.ui.DcRequestScreen
+import org.multipaz.testapp.ui.DocumentStoreScreen
+import org.multipaz.testapp.ui.DocumentViewerScreen
+import org.multipaz.testapp.ui.IsoMdocMultiDeviceTestingScreen
+import org.multipaz.testapp.ui.IsoMdocProximityReadingScreen
+import org.multipaz.testapp.ui.IsoMdocProximitySharingScreen
+import org.multipaz.testapp.ui.NfcScreen
+import org.multipaz.testapp.ui.NotificationsScreen
+import org.multipaz.testapp.ui.PassphraseEntryFieldScreen
+import org.multipaz.testapp.ui.PassphrasePromptScreen
 import org.multipaz.testapp.ui.PickersScreen
-import org.multipaz.util.Platform
+import org.multipaz.testapp.ui.QrCodesScreen
+import org.multipaz.testapp.ui.RichTextScreen
+import org.multipaz.testapp.ui.ScreenLockScreen
+import org.multipaz.testapp.ui.SecureEnclaveSecureAreaScreen
+import org.multipaz.testapp.ui.SettingsScreen
 import org.multipaz.testapp.ui.ShowResponseScreen
+import org.multipaz.testapp.ui.SoftwareSecureAreaScreen
+import org.multipaz.testapp.ui.StartScreen
 import org.multipaz.testapp.ui.TrustManagerScreen
 import org.multipaz.testapp.ui.TrustPointViewerScreen
 import org.multipaz.trustmanagement.CompositeTrustManager
 import org.multipaz.trustmanagement.RicalTrustManager
 import org.multipaz.trustmanagement.TrustManagerLocal
-import org.multipaz.trustmanagement.TrustPointAlreadyExistsException
 import org.multipaz.trustmanagement.TrustMetadata
+import org.multipaz.trustmanagement.TrustPointAlreadyExistsException
 import org.multipaz.trustmanagement.VicalTrustManager
+import org.multipaz.util.Logger
+import org.multipaz.util.Platform
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.fromHexByteString
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.toHex
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -784,13 +785,6 @@ class App private constructor (val promptModel: PromptModel) {
                 .build()
         }
 
-        val backStackEntry by navController.currentBackStackEntryAsState()
-        val routeWithoutArgs = backStackEntry?.destination?.route?.substringBefore('/')
-
-        val currentDestination = appDestinations.find {
-            it.route == routeWithoutArgs
-        } ?: StartDestination
-
         LaunchedEffect(true) {
             while (true) {
                 val credentialOffer = credentialOffers.receive()
@@ -802,78 +796,90 @@ class App private constructor (val promptModel: PromptModel) {
                         clientPreferences = provisioningSupport.getOpenID4VCIClientPreferences(),
                         backend = provisioningSupport.getOpenID4VCIBackend()
                     )
-                    navController.navigate(ProvisioningTestDestination.route)
+                    navController.navigate(ProvisioningTestDestination)
                 }
             }
         }
 
         snackbarHostState = remember { SnackbarHostState() }
+
         AppTheme {
-            // A surface container using the 'background' color from the theme
-            Scaffold(
-                topBar = {
-                    AppBar(
-                        currentDestination = currentDestination,
-                        canNavigateBack = navController.previousBackStackEntry != null,
-                        navigateUp = { navController.navigateUp() },
-                        navigateToSettings = { navController.navigate(SettingsDestination.route) },
-                        includeSettingsIcon = (currentDestination != SettingsDestination)
-                    )
-                },
-                snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            ) { innerPadding ->
+            PromptDialogs(promptModel)
 
-                PromptDialogs(promptModel)
-
-                NavHost(
-                    navController = navController,
-                    startDestination = StartDestination.route,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        //.verticalScroll(rememberScrollState())
-                        .padding(innerPadding)
-                ) {
-                    composable(route = StartDestination.route) {
+            NavHost(
+                navController = navController,
+                startDestination = StartDestination,
+                modifier = Modifier
+                    .fillMaxSize()
+            ) {
+                composable<StartDestination> { backStackEntry ->
+                    WithAppBar(navController) {
                         StartScreen(
                             documentModel = documentModel,
-                            onClickAbout = { navController.navigate(AboutDestination.route) },
-                            onClickDocumentStore = { navController.navigate(DocumentStoreDestination.route) },
-                            onClickTrustedIssuers = { navController.navigate(TrustedIssuersDestination.route) },
-                            onClickTrustedVerifiers = { navController.navigate(TrustedVerifiersDestination.route) },
-                            onClickSoftwareSecureArea = { navController.navigate(SoftwareSecureAreaDestination.route) },
-                            onClickAndroidKeystoreSecureArea = { navController.navigate(AndroidKeystoreSecureAreaDestination.route) },
-                            onClickCloudSecureArea = { navController.navigate(CloudSecureAreaDestination.route) },
-                            onClickSecureEnclaveSecureArea = { navController.navigate(SecureEnclaveSecureAreaDestination.route) },
-                            onClickPassphraseEntryField = { navController.navigate(PassphraseEntryFieldDestination.route) },
-                            onClickPassphrasePrompt = { navController.navigate(PassphrasePromptDestination.route) },
-                            onClickProvisioningTestField = { navController.navigate(ProvisioningTestDestination.route) },
-                            onClickConsentSheetList = { navController.navigate(ConsentPromptDestination.route) },
-                            onClickQrCodes = { navController.navigate(QrCodesDestination.route) },
-                            onClickNfc = { navController.navigate(NfcDestination.route) },
+                            onClickAbout = { navController.navigate(AboutDestination) },
+                            onClickDocumentStore = { navController.navigate(DocumentStoreDestination) },
+                            onClickTrustedIssuers = { navController.navigate(TrustedIssuersDestination) },
+                            onClickTrustedVerifiers = { navController.navigate(TrustedVerifiersDestination) },
+                            onClickSoftwareSecureArea = { navController.navigate(SoftwareSecureAreaDestination) },
+                            onClickAndroidKeystoreSecureArea = {
+                                navController.navigate(
+                                    AndroidKeystoreSecureAreaDestination
+                                )
+                            },
+                            onClickCloudSecureArea = { navController.navigate(CloudSecureAreaDestination) },
+                            onClickSecureEnclaveSecureArea = {
+                                navController.navigate(
+                                    SecureEnclaveSecureAreaDestination
+                                )
+                            },
+                            onClickPassphraseEntryField = { navController.navigate(PassphraseEntryFieldDestination) },
+                            onClickPassphrasePrompt = { navController.navigate(PassphrasePromptDestination) },
+                            onClickProvisioningTestField = { navController.navigate(ProvisioningTestDestination) },
+                            onClickConsentSheetList = { navController.navigate(ConsentPromptDestination) },
+                            onClickQrCodes = { navController.navigate(QrCodesDestination) },
+                            onClickNfc = { navController.navigate(NfcDestination) },
                             onClickIsoMdocProximitySharing = {
                                 presentmentModel.reset()
-                                navController.navigate(IsoMdocProximitySharingDestination.route)
+                                navController.navigate(IsoMdocProximitySharingDestination)
                             },
-                            onClickIsoMdocProximityReading = { navController.navigate(IsoMdocProximityReadingDestination.route) },
-                            onClickDcRequest = { navController.navigate(DcRequestDestination.route) },
-                            onClickMdocTransportMultiDeviceTesting = { navController.navigate(IsoMdocMultiDeviceTestingDestination.route) },
-                            onClickCertificatesViewerExamples = { navController.navigate(CertificatesViewerExamplesDestination.route) },
-                            onClickRichText = { navController.navigate(RichTextDestination.route) },
-                            onClickNotifications = { navController.navigate(NotificationsDestination.route) },
-                            onClickScreenLock = { navController.navigate(ScreenLockDestination.route) },
-                            onClickPickersScreen = { navController.navigate(PickersDestination.route)}
+                            onClickIsoMdocProximityReading = {
+                                navController.navigate(
+                                    IsoMdocProximityReadingDestination
+                                )
+                            },
+                            onClickDcRequest = { navController.navigate(DcRequestDestination) },
+                            onClickMdocTransportMultiDeviceTesting = {
+                                navController.navigate(
+                                    IsoMdocMultiDeviceTestingDestination
+                                )
+                            },
+                            onClickCertificatesViewerExamples = {
+                                navController.navigate(
+                                    CertificatesViewerExamplesDestination
+                                )
+                            },
+                            onClickRichText = { navController.navigate(RichTextDestination) },
+                            onClickNotifications = { navController.navigate(NotificationsDestination) },
+                            onClickScreenLock = { navController.navigate(ScreenLockDestination) },
+                            onClickPickersScreen = { navController.navigate(PickersDestination) }
                         )
                     }
-                    composable(route = SettingsDestination.route) {
+                }
+                composable<SettingsDestination> { backStackEntry ->
+                    WithAppBar(navController, "Settings", false) {
                         SettingsScreen(
                             app = this@App,
                             showToast = { message: String -> showToast(message) }
                         )
                     }
-                    composable(route = AboutDestination.route) {
+                }
+                composable<AboutDestination> { backStackEntry ->
+                    WithAppBar(navController, "About") {
                         AboutScreen()
                     }
-                    composable(route = DocumentStoreDestination.route) {
+                }
+                composable<DocumentStoreDestination> { backStackEntry ->
+                    WithAppBar(navController, "Document Store") {
                         DocumentStoreScreen(
                             documentStore = documentStore,
                             documentModel = documentModel,
@@ -882,98 +888,99 @@ class App private constructor (val promptModel: PromptModel) {
                             iacaKey = iacaKey,
                             showToast = { message: String -> showToast(message) },
                             onViewDocument = { documentId ->
-                                navController.navigate(DocumentViewerDestination.route + "/${documentId}")
+                                navController.navigate(DocumentViewerDestination(documentId))
                             }
                         )
                     }
-                    composable(
-                        route = DocumentViewerDestination.routeWithArgs,
-                        arguments = DocumentViewerDestination.arguments
-                    ) { backStackEntry ->
-                        val documentId = backStackEntry.arguments?.getString(
-                            DocumentViewerDestination.DOCUMENT_ID
-                        )!!
+                }
+                composable<DocumentViewerDestination> { backStackEntry ->
+                    WithAppBar(navController, "Document Viewer") {
+                        val destination = backStackEntry.toRoute<DocumentViewerDestination>()
                         DocumentViewerScreen(
                             documentModel = documentModel,
-                            documentId = documentId,
+                            documentId = destination.documentId,
                             showToast = ::showToast,
                             onViewCredential = { documentId, credentialId ->
-                                navController.navigate(CredentialViewerDestination.route + "/${documentId}/${credentialId}")
+                                navController.navigate(
+                                    CredentialViewerDestination(
+                                        documentId = documentId,
+                                        credentialId = credentialId
+                                    )
+                                )
                             }
                         )
                     }
-                    composable(
-                        route = CredentialViewerDestination.routeWithArgs,
-                        arguments = CredentialViewerDestination.arguments
-                    ) { backStackEntry ->
-                        val documentId = backStackEntry.arguments?.getString(
-                            CredentialViewerDestination.DOCUMENT_ID
-                        )!!
-                        val credentialId = backStackEntry.arguments?.getString(
-                            CredentialViewerDestination.CREDENTIAL_ID
-                        )!!
+                }
+                composable<CredentialViewerDestination> { backStackEntry ->
+                    WithAppBar(navController, "Credential") {
+                        val destination = backStackEntry.toRoute<CredentialViewerDestination>()
                         CredentialViewerScreen(
                             documentModel = documentModel,
-                            documentId = documentId,
-                            credentialId = credentialId,
+                            documentId = destination.documentId,
+                            credentialId = destination.credentialId,
                             showToast = ::showToast,
                             onViewCertificateChain = { encodedCertificateData: String ->
-                                navController.navigate(CertificateViewerDestination.route + "/${encodedCertificateData}")
+                                navController.navigate(CertificateViewerDestination(encodedCertificateData))
                             },
                             onViewCredentialClaims = { documentId, credentialId ->
-                                navController.navigate(CredentialClaimsViewerDestination.route + "/${documentId}/${credentialId}")
+                                navController.navigate(
+                                    CredentialClaimsViewerDestination(
+                                        documentId = documentId,
+                                        credentialId = credentialId
+                                    )
+                                )
                             }
                         )
                     }
-                    composable(
-                        route = CredentialClaimsViewerDestination.routeWithArgs,
-                        arguments = CredentialClaimsViewerDestination.arguments
-                    ) { backStackEntry ->
-                        val documentId = backStackEntry.arguments?.getString(
-                            CredentialViewerDestination.DOCUMENT_ID
-                        )!!
-                        val credentialId = backStackEntry.arguments?.getString(
-                            CredentialViewerDestination.CREDENTIAL_ID
-                        )!!
+                }
+                composable<CredentialClaimsViewerDestination> { backStackEntry ->
+                    WithAppBar(navController, "Credential Claims") {
+                        val destination = backStackEntry.toRoute<CredentialClaimsViewerDestination>()
                         CredentialClaimsViewerScreen(
                             documentModel = documentModel,
                             documentTypeRepository = documentTypeRepository,
-                            documentId = documentId,
-                            credentialId = credentialId,
+                            documentId = destination.documentId,
+                            credentialId = destination.credentialId,
                             showToast = ::showToast,
                         )
                     }
-                    composable(route = TrustedIssuersDestination.route) {
+                }
+                composable<TrustedIssuersDestination> { backStackEntry ->
+                    WithAppBar(navController, "Trusted Issuers") {
                         TrustManagerScreen(
                             compositeTrustManager = issuerTrustManager,
                             onViewTrustPoint = { trustPoint ->
-                                navController.navigate(TrustPointViewerDestination.route +
-                                        "/issuers/${trustPoint.certificate.subjectKeyIdentifier!!.toHex()}")
+                                navController.navigate(
+                                    TrustPointViewerDestination(
+                                        trustManagerId = issuerTrustManager.identifier,
+                                        trustPointId = trustPoint.certificate.subjectKeyIdentifier!!.toHex(),
+                                    )
+                                )
                             },
                             showToast = ::showToast
                         )
                     }
-                    composable(route = TrustedVerifiersDestination.route) {
+                }
+                composable<TrustedVerifiersDestination> { backStackEntry ->
+                    WithAppBar(navController, "Trusted Verifiers") {
                         TrustManagerScreen(
                             compositeTrustManager = readerTrustManager,
                             onViewTrustPoint = { trustPoint ->
-                                navController.navigate(TrustPointViewerDestination.route +
-                                        "/readers/${trustPoint.certificate.subjectKeyIdentifier!!.toHex()}")
+                                navController.navigate(
+                                    TrustPointViewerDestination(
+                                        trustManagerId = readerTrustManager.identifier,
+                                        trustPointId = trustPoint.certificate.subjectKeyIdentifier!!.toHex(),
+                                    )
+                                )
                             },
                             showToast = ::showToast
                         )
                     }
-                    composable(
-                        route = TrustPointViewerDestination.routeWithArgs,
-                        arguments = TrustPointViewerDestination.arguments
-                    ) { backStackEntry ->
-                        val trustManagerId = backStackEntry.arguments?.getString(
-                            TrustPointViewerDestination.TRUST_MANAGER_ID
-                        )!!
-                        val trustPointId = backStackEntry.arguments?.getString(
-                            TrustPointViewerDestination.TRUST_POINT_ID
-                        )!!
-                        val trustManager = when (trustManagerId) {
+                }
+                composable<TrustPointViewerDestination> { backStackEntry ->
+                    WithAppBar(navController, "Trust Point") {
+                        val destination = backStackEntry.toRoute<TrustPointViewerDestination>()
+                        val trustManager = when (destination.trustManagerId) {
                             "issuers" -> issuerTrustManager
                             "readers" -> readerTrustManager
                             else -> throw IllegalStateException()
@@ -981,51 +988,65 @@ class App private constructor (val promptModel: PromptModel) {
                         TrustPointViewerScreen(
                             app = this@App,
                             trustManager = trustManager,
-                            trustPointId = trustPointId,
+                            trustPointId = destination.trustPointId,
                             showToast = ::showToast,
                         )
                     }
-                    composable(route = SoftwareSecureAreaDestination.route) {
+                }
+                composable<SoftwareSecureAreaDestination> { backStackEntry ->
+                    WithAppBar(navController, "Software Secure Area") {
                         SoftwareSecureAreaScreen(
                             softwareSecureArea = softwareSecureArea,
                             promptModel = promptModel,
                             showToast = { message -> showToast(message) }
                         )
                     }
-                    composable(route = AndroidKeystoreSecureAreaDestination.route) {
+                }
+                composable<AndroidKeystoreSecureAreaDestination> { backStackEntry ->
+                    WithAppBar(navController, "Android Keystore Secure Area") {
                         AndroidKeystoreSecureAreaScreen(
                             promptModel = promptModel,
                             showToast = { message -> showToast(message) },
                             onViewCertificate = { encodedCertificateData ->
-                                navController.navigate(CertificateViewerDestination.route + "/${encodedCertificateData}")
+                                navController.navigate(CertificateViewerDestination(encodedCertificateData))
                             }
                         )
                     }
-                    composable(route = SecureEnclaveSecureAreaDestination.route) {
+                }
+                composable<SecureEnclaveSecureAreaDestination> { backStackEntry ->
+                    WithAppBar(navController, "Secure Enclave Secure Area") {
                         SecureEnclaveSecureAreaScreen(showToast = { message -> showToast(message) })
                     }
-                    composable(route = CloudSecureAreaDestination.route) {
+                }
+                composable<CloudSecureAreaDestination> { backStackEntry ->
+                    WithAppBar(navController, "Cloud Secure Area") {
                         CloudSecureAreaScreen(
                             app = this@App,
                             showToast = { message -> showToast(message) },
                             onViewCertificate = { encodedCertificateData ->
-                                navController.navigate(CertificateViewerDestination.route + "/${encodedCertificateData}")
+                                navController.navigate(CertificateViewerDestination(encodedCertificateData))
                             }
                         )
                     }
-                    composable(route = PassphraseEntryFieldDestination.route) {
+                }
+                composable<PassphraseEntryFieldDestination> { backStackEntry ->
+                    WithAppBar(navController, "PassphraseEntryField use-cases") {
                         PassphraseEntryFieldScreen(showToast = { message -> showToast(message) })
                     }
-                    composable(route = PassphrasePromptDestination.route) {
+                }
+                composable<PassphrasePromptDestination> { backStackEntry ->
+                    WithAppBar(navController, "PassphrasePrompt use-cases") {
                         PassphrasePromptScreen(showToast = { message -> showToast(message) })
                     }
-                    composable(route = ProvisioningTestDestination.route) {
+                }
+                composable<ProvisioningTestDestination> { backStackEntry ->
+                    WithAppBar(navController, "Provisioning Test") {
                         val coroutineScope = rememberCoroutineScope()
                         val provisioningState = provisioningModel.state.collectAsState().value
                         LaunchedEffect(provisioningState) {
                             if (provisioningState == ProvisioningModel.CredentialsIssued) {
                                 delay(1.seconds)
-                                navController.navigate(DocumentStoreDestination.route)
+                                navController.navigate(DocumentStoreDestination)
                             }
                         }
                         Column(
@@ -1053,7 +1074,9 @@ class App private constructor (val promptModel: PromptModel) {
                             Spacer(modifier = Modifier.weight(1.0f))
                         }
                     }
-                    composable(route = ConsentPromptDestination.route) {
+                }
+                composable<ConsentPromptDestination> { backStackEntry ->
+                    WithAppBar(navController, "Consent Prompt use-cases") {
                         ConsentPromptScreen(
                             imageLoader = imageLoader,
                             documentTypeRepository = documentTypeRepository,
@@ -1061,19 +1084,25 @@ class App private constructor (val promptModel: PromptModel) {
                             showToast = { message -> showToast(message) },
                         )
                     }
-                    composable(route = QrCodesDestination.route) {
+                }
+                composable<QrCodesDestination> { backStackEntry ->
+                    WithAppBar(navController, "QR Codes") {
                         QrCodesScreen(
                             showToast = { message -> showToast(message) }
                         )
                     }
-                    composable(route = NfcDestination.route) {
+                }
+                composable<NfcDestination> { backStackEntry ->
+                    WithAppBar(navController, "NFC use-cases") {
                         NfcScreen(
                             externalNfcTagReaders = externalNfcTagReaders,
                             promptModel = promptModel,
                             showToast = { message -> showToast(message) }
                         )
                     }
-                    composable(route = IsoMdocProximitySharingDestination.route) {
+                }
+                composable<IsoMdocProximitySharingDestination> { backStackEntry ->
+                    WithAppBar(navController, "ISO mdoc Proximity Presentment") {
                         IsoMdocProximitySharingScreen(
                             presentmentSource = getPresentmentSource(),
                             presentmentModel = presentmentModel,
@@ -1084,66 +1113,73 @@ class App private constructor (val promptModel: PromptModel) {
                             showToast = { message -> showToast(message) },
                         )
                     }
-                    composable(route = IsoMdocProximityReadingDestination.route) {
+                }
+                composable<IsoMdocProximityReadingDestination> { backStackEntry ->
+                    WithAppBar(navController, "ISO mdoc Proximity Reading") {
                         IsoMdocProximityReadingScreen(
                             app = this@App,
                             showToast = { message -> showToast(message) },
-                            showResponse = {
-                                    vpToken: JsonObject?,
-                                    deviceResponse: DataItem?,
-                                    sessionTranscript: DataItem,
-                                    nonce: ByteString?,
-                                    eReaderKey: EcPrivateKey?,
-                                    metadata: ShowResponseMetadata ->
-                                val route = ShowResponseDestination.route +
-                                        "/${vpToken?.let { Json.encodeToString(it) }?.encodeToByteArray()?.toBase64Url() ?: "_"}" +
-                                        "/${deviceResponse?.let { Cbor.encode(it).toBase64Url() } ?: "_"}" +
-                                        "/${Cbor.encode(sessionTranscript).toBase64Url()}" +
-                                        "/${nonce?.let { nonce.toByteArray().toBase64Url() } ?: "_"}" +
-                                        "/${eReaderKey?.let { Cbor.encode(eReaderKey.toCoseKey().toDataItem()).toBase64Url() } ?: "_"}" +
-                                        "/${Cbor.encode(metadata.toDataItem()).toBase64Url()}"
-                                navController.navigate(route)
+                            showResponse = { vpToken: JsonObject?,
+                                             deviceResponse: DataItem?,
+                                             sessionTranscript: DataItem,
+                                             nonce: ByteString?,
+                                             eReaderKey: EcPrivateKey?,
+                                             metadata: ShowResponseMetadata ->
+                                navController.navigate(
+                                    ShowResponseDestination(
+                                        vpResponse = vpToken?.let { Json.encodeToString(it) }?.encodeToByteArray()?.toBase64Url(),
+                                        deviceResponse = deviceResponse?.let { Cbor.encode(it).toBase64Url() },
+                                        sessionTranscript = Cbor.encode(sessionTranscript).toBase64Url(),
+                                        nonce = nonce?.let { nonce.toByteArray().toBase64Url() },
+                                        eReaderKey = eReaderKey?.let { Cbor.encode(eReaderKey.toCoseKey().toDataItem()).toBase64Url() },
+                                        metadata = Cbor.encode(metadata.toDataItem()).toBase64Url()
+                                    )
+                                )
                             }
                         )
                     }
-                    composable(route = DcRequestDestination.route) {
+                }
+                composable<DcRequestDestination> { backStackEntry ->
+                    WithAppBar(navController, "W3C DC Requests") {
                         DcRequestScreen(
                             app = this@App,
                             showToast = { message -> showToast(message) },
-                            showResponse = {
-                                    vpToken: JsonObject?,
-                                    deviceResponse: DataItem?,
-                                    sessionTranscript: DataItem,
-                                    nonce: ByteString?,
-                                    eReaderKey: EcPrivateKey?,
-                                    metadata: ShowResponseMetadata ->
-                                val route = ShowResponseDestination.route +
-                                        "/${vpToken?.let { Json.encodeToString(it) }?.encodeToByteArray()?.toBase64Url() ?: "_"}" +
-                                        "/${deviceResponse?.let { Cbor.encode(it).toBase64Url() } ?: "_"}" +
-                                        "/${Cbor.encode(sessionTranscript).toBase64Url()}" +
-                                        "/${nonce?.let { nonce.toByteArray().toBase64Url() } ?: "_"}" +
-                                        "/${eReaderKey?.let { Cbor.encode(eReaderKey.toCoseKey().toDataItem()).toBase64Url() } ?: "_"}" +
-                                        "/${Cbor.encode(metadata.toDataItem()).toBase64Url()}"
-                                navController.navigate(route)
+                            showResponse = { vpToken: JsonObject?,
+                                             deviceResponse: DataItem?,
+                                             sessionTranscript: DataItem,
+                                             nonce: ByteString?,
+                                             eReaderKey: EcPrivateKey?,
+                                             metadata: ShowResponseMetadata ->
+                                navController.navigate(
+                                    ShowResponseDestination(
+                                        vpResponse = vpToken?.let { Json.encodeToString(it) }?.encodeToByteArray()?.toBase64Url(),
+                                        deviceResponse = deviceResponse?.let { Cbor.encode(it).toBase64Url() },
+                                        sessionTranscript = Cbor.encode(sessionTranscript).toBase64Url(),
+                                        nonce = nonce?.let { nonce.toByteArray().toBase64Url() },
+                                        eReaderKey = eReaderKey?.let { Cbor.encode(eReaderKey.toCoseKey().toDataItem()).toBase64Url() },
+                                        metadata = Cbor.encode(metadata.toDataItem()).toBase64Url()
+                                    )
+                                )
                             }
                         )
                     }
-                    composable(
-                        route = ShowResponseDestination.routeWithArgs,
-                        arguments = ShowResponseDestination.arguments
-                    ) { backStackEntry ->
-                        val vpToken = backStackEntry.arguments?.getString(ShowResponseDestination.VP_TOKEN)
-                            ?.let { if (it != "_") Json.decodeFromString<JsonObject>(it.fromBase64Url().decodeToString()) else null }
-                        val deviceResponse = backStackEntry.arguments?.getString(ShowResponseDestination.DEVICE_RESPONSE)
-                            ?.let { if (it != "_") Cbor.decode(it.fromBase64Url()) else null }
-                        val sessionTranscript = backStackEntry.arguments!!.getString(ShowResponseDestination.SESSION_TRANSCRIPT)!!
-                            .fromBase64Url().let { Cbor.decode(it) }
-                        val nonce = backStackEntry.arguments?.getString(ShowResponseDestination.NONCE)
-                            ?.let { if (it != "_") ByteString(it.fromBase64Url()) else null }
-                        val eReaderKey = backStackEntry.arguments?.getString(ShowResponseDestination.EREADERKEY)
-                            ?.let { if (it != "_") Cbor.decode(it.fromBase64Url()).asCoseKey.ecPrivateKey else null }
-                        val metadata = backStackEntry.arguments!!.getString(ShowResponseDestination.METADATA)!!
-                            .fromBase64Url().let { ShowResponseMetadata.Companion.fromDataItem(Cbor.decode(it)) }
+                }
+                composable<ShowResponseDestination> { backStackEntry ->
+                    WithAppBar(navController, "Received Credentials") {
+                        val destination = backStackEntry.toRoute<ShowResponseDestination>()
+                        val vpToken = destination.vpResponse?.let {
+                            Json.decodeFromString<JsonObject>(
+                                it.fromBase64Url().decodeToString()
+                            )
+                        }
+                        val deviceResponse = destination.deviceResponse?.let { Cbor.decode(it.fromBase64Url()) }
+                        val sessionTranscript = Cbor.decode(destination.sessionTranscript.fromBase64Url())
+                        val nonce = destination.nonce?.let { ByteString(it.fromBase64Url()) }
+                        val eReaderKey = destination.eReaderKey?.let {
+                            Cbor.decode(it.fromBase64Url()).asCoseKey.ecPrivateKey
+                        }
+                        val metadata =
+                            ShowResponseMetadata.fromDataItem(Cbor.decode(destination.metadata.fromBase64Url()))
                         ShowResponseScreen(
                             vpToken = vpToken,
                             deviceResponse = deviceResponse,
@@ -1156,45 +1192,54 @@ class App private constructor (val promptModel: PromptModel) {
                             zkSystemRepository = zkSystemRepository,
                             onViewCertChain = { certChain ->
                                 val encodedCertificateData = Cbor.encode(certChain.toDataItem()).toBase64Url()
-                                navController.navigate(CertificateViewerDestination.route + "/${encodedCertificateData}")
+                                navController.navigate(CertificateViewerDestination(encodedCertificateData))
                             }
                         )
                     }
-                    composable(route = IsoMdocMultiDeviceTestingDestination.route) {
+                }
+                composable<IsoMdocMultiDeviceTestingDestination> { backStackEntry ->
+                    WithAppBar(navController, "ISO mdoc Multi-device Testing") {
                         IsoMdocMultiDeviceTestingScreen(
                             showToast = { message -> showToast(message) }
                         )
                     }
-                    composable(route = CertificatesViewerExamplesDestination.route) {
+                }
+                composable<CertificatesViewerExamplesDestination> { backStackEntry ->
+                    WithAppBar(navController, "CertificateViewer examples") {
                         CertificateViewerExamplesScreen(
                             onViewCertificate = { encodedCertificateData ->
-                                navController.navigate(CertificateViewerDestination.route + "/${encodedCertificateData}")
+                                navController.navigate(CertificateViewerDestination(encodedCertificateData))
                             }
                         )
                     }
-                    composable(
-                        route = CertificateViewerDestination.routeWithArgs,
-                        arguments = CertificateViewerDestination.arguments
-                    ) { backStackEntry ->
-                        val certData = backStackEntry.arguments?.getString(
-                            CertificateViewerDestination.CERTIFICATE_DATA
-                        )!!
-                        CertificateScreen(certData)
+                }
+                composable<CertificateViewerDestination> { backStackEntry ->
+                    WithAppBar(navController, "Certificate") {
+                        val destination = backStackEntry.toRoute<CertificateViewerDestination>()
+                        CertificateScreen(destination.certificateData)
                     }
-                    composable(route = RichTextDestination.route) {
+                }
+                composable<RichTextDestination> { backStackEntry ->
+                    WithAppBar(navController, "Rich Text") {
                         RichTextScreen()
                     }
-                    composable(route = NotificationsDestination.route) {
+                }
+                composable<NotificationsDestination> { backStackEntry ->
+                    WithAppBar(navController, "Notifications") {
                         NotificationsScreen(
                             showToast = { message -> showToast(message) }
                         )
                     }
-                    composable(route = ScreenLockDestination.route) {
+                }
+                composable<ScreenLockDestination> { backStackEntry ->
+                    WithAppBar(navController, "Screenlock") {
                         ScreenLockScreen(
                             showToast = { message -> showToast(message) }
                         )
                     }
-                    composable(route = PickersDestination.route) {
+                }
+                composable<PickersDestination> { backStackEntry ->
+                    WithAppBar(navController, "Picker use-cases") {
                         PickersScreen()
                     }
                 }
@@ -1217,47 +1262,52 @@ class App private constructor (val promptModel: PromptModel) {
             }
         }
     }
-}
 
-/**
- * Composable that displays the topBar and displays back button if back navigation is possible.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AppBar(
-    currentDestination: Destination,
-    canNavigateBack: Boolean,
-    navigateUp: () -> Unit,
-    navigateToSettings: () -> Unit,
-    includeSettingsIcon: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val title = currentDestination.title?.let { stringResource(it) } ?: platformAppName
-    TopAppBar(
-        title = { Text(text = title) },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        ),
-        modifier = modifier,
-        navigationIcon = {
-            if (canNavigateBack) {
-                IconButton(onClick = navigateUp) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(Res.string.back_button)
-                    )
-                }
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun WithAppBar(
+        navController: NavController,
+        title: String? = null,
+        includeSettingsIcon: Boolean = true,
+        content: @Composable () -> Unit,
+    ) {
+        val canGoBack = navController.previousBackStackEntry != null
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(text = title ?: platformAppName) },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    navigationIcon = {
+                        if (canGoBack) {
+                            IconButton(onClick = { navController.navigateUp() }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back"
+                                )
+                            }
+                        }
+                    },
+                    actions = {
+                        if (includeSettingsIcon) {
+                            IconButton(onClick = { navController.navigate(SettingsDestination) }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Settings,
+                                    contentDescription = null
+                                )
+                            }
+                        }
+                    },
+                )
+            },
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier.padding(innerPadding)
+            ) {
+                content()
             }
-        },
-        actions = {
-            if (includeSettingsIcon) {
-                IconButton(onClick = navigateToSettings) {
-                    Icon(
-                        imageVector = Icons.Filled.Settings,
-                        contentDescription = null
-                    )
-                }
-            }
-        },
-    )
+        }
+    }
 }

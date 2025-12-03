@@ -14,30 +14,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import multipazproject.samples.testapp.generated.resources.Res
-import multipazproject.samples.testapp.generated.resources.about_screen_title
-import multipazproject.samples.testapp.generated.resources.android_keystore_secure_area_screen_title
-import multipazproject.samples.testapp.generated.resources.certificate_viewer_examples_title
-import multipazproject.samples.testapp.generated.resources.cloud_secure_area_screen_title
-import multipazproject.samples.testapp.generated.resources.consent_prompt_screen_title
-import multipazproject.samples.testapp.generated.resources.dc_request_title
-import multipazproject.samples.testapp.generated.resources.document_store_screen_title
-import multipazproject.samples.testapp.generated.resources.iso_mdoc_multi_device_testing_title
-import multipazproject.samples.testapp.generated.resources.iso_mdoc_proximity_reading_title
-import multipazproject.samples.testapp.generated.resources.iso_mdoc_proximity_sharing_title
-import multipazproject.samples.testapp.generated.resources.nfc_screen_title
-import multipazproject.samples.testapp.generated.resources.notifications_title
-import multipazproject.samples.testapp.generated.resources.passphrase_entry_field_screen_title
-import multipazproject.samples.testapp.generated.resources.passphrase_prompt_screen_title
-import multipazproject.samples.testapp.generated.resources.pickers_title
-import multipazproject.samples.testapp.generated.resources.qr_codes_screen_title
-import multipazproject.samples.testapp.generated.resources.rich_text_title
-import multipazproject.samples.testapp.generated.resources.screen_lock_title
-import multipazproject.samples.testapp.generated.resources.secure_enclave_secure_area_screen_title
-import multipazproject.samples.testapp.generated.resources.software_secure_area_screen_title
-import multipazproject.samples.testapp.generated.resources.trusted_issuers_screen_title
-import multipazproject.samples.testapp.generated.resources.trusted_verifiers_screen_title
-import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.cards.InfoCard
 import org.multipaz.compose.cards.WarningCard
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
@@ -118,31 +94,31 @@ fun StartScreen(
             LazyColumn {
                 item {
                     TextButton(onClick = onClickAbout) {
-                        Text(stringResource(Res.string.about_screen_title))
+                        Text("About")
                     }
                 }
 
                 item {
                     TextButton(onClick = onClickDocumentStore) {
-                        Text(stringResource(Res.string.document_store_screen_title))
+                        Text("Document store")
                     }
                 }
 
                 item {
                     TextButton(onClick = onClickTrustedIssuers) {
-                        Text(stringResource(Res.string.trusted_issuers_screen_title))
+                        Text("Trusted issuers")
                     }
                 }
 
                 item {
                     TextButton(onClick = onClickTrustedVerifiers) {
-                        Text(stringResource(Res.string.trusted_verifiers_screen_title))
+                        Text("Trusted verifiers")
                     }
                 }
 
                 item {
                     TextButton(onClick = onClickSoftwareSecureArea) {
-                        Text(stringResource(Res.string.software_secure_area_screen_title))
+                        Text("Software Secure Area")
                     }
                 }
 
@@ -150,7 +126,7 @@ fun StartScreen(
                     Platform.ANDROID -> {
                         item {
                             TextButton(onClick = onClickAndroidKeystoreSecureArea) {
-                                Text(stringResource(Res.string.android_keystore_secure_area_screen_title))
+                                Text("Android Keystore Secure Area")
                             }
                         }
                     }
@@ -158,7 +134,7 @@ fun StartScreen(
                     Platform.IOS -> {
                         item {
                             TextButton(onClick = onClickSecureEnclaveSecureArea) {
-                                Text(stringResource(Res.string.secure_enclave_secure_area_screen_title))
+                                Text("Secure Enclave Secure Area")
                             }
                         }
                     }
@@ -166,19 +142,19 @@ fun StartScreen(
 
                 item {
                     TextButton(onClick = onClickCloudSecureArea) {
-                        Text(stringResource(Res.string.cloud_secure_area_screen_title))
+                        Text("Cloud Secure Area")
                     }
                 }
 
                 item {
                     TextButton(onClick = onClickPassphraseEntryField) {
-                        Text(stringResource(Res.string.passphrase_entry_field_screen_title))
+                        Text("PassphraseEntryField use-cases")
                     }
                 }
 
                 item {
                     TextButton(onClick = onClickPassphrasePrompt) {
-                        Text(stringResource(Res.string.passphrase_prompt_screen_title))
+                        Text("PassphrasePrompt use-cases")
                     }
                 }
 
@@ -193,70 +169,70 @@ fun StartScreen(
 
                 item {
                     TextButton(onClick = onClickConsentSheetList) {
-                        Text(stringResource(Res.string.consent_prompt_screen_title))
+                        Text("Consent prompt use-cases")
                     }
                 }
                 item {
                     TextButton(onClick = onClickQrCodes) {
-                        Text(stringResource(Res.string.qr_codes_screen_title))
+                        Text("QR code generation and scanning")
                     }
                 }
                 item {
                     TextButton(onClick = onClickNfc) {
-                        Text(stringResource(Res.string.nfc_screen_title))
+                        Text("NFC sharing and scanning")
                     }
                 }
                 item {
                     TextButton(onClick = onClickIsoMdocProximitySharing) {
-                        Text(stringResource(Res.string.iso_mdoc_proximity_sharing_title))
+                        Text("ISO mdoc Proximity Sharing")
                     }
                 }
 
                 item {
                     TextButton(onClick = onClickIsoMdocProximityReading) {
-                        Text(stringResource(Res.string.iso_mdoc_proximity_reading_title))
+                        Text("ISO mdoc Proximity Reading")
                     }
                 }
 
                 item {
                     TextButton(onClick = onClickDcRequest) {
-                        Text(stringResource(Res.string.dc_request_title))
+                        Text("W3C Digital Credentials requests")
                     }
                 }
 
                 item {
                     TextButton(onClick = onClickMdocTransportMultiDeviceTesting) {
-                        Text(stringResource(Res.string.iso_mdoc_multi_device_testing_title))
+                        Text("ISO mdoc Multi-Device Testing")
                     }
                 }
 
                 item {
                     TextButton(onClick = onClickCertificatesViewerExamples) {
-                        Text(stringResource(Res.string.certificate_viewer_examples_title))
+                        Text("CertificateViewer use-cases")
                     }
                 }
 
                 item {
                     TextButton(onClick = onClickRichText) {
-                        Text(stringResource(Res.string.rich_text_title))
+                        Text("Rich Text")
                     }
                 }
 
                 item {
                     TextButton(onClick = onClickNotifications) {
-                        Text(stringResource(Res.string.notifications_title))
+                        Text("Notifications")
                     }
                 }
 
                 item {
                     TextButton(onClick = onClickScreenLock) {
-                        Text(stringResource(Res.string.screen_lock_title))
+                        Text("Screen lock")
                     }
                 }
 
                 item {
                     TextButton(onClick = onClickPickersScreen) {
-                        Text(stringResource(Res.string.pickers_title))
+                        Text("Pickers")
                     }
                 }
             }
