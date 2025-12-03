@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.response
 
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
@@ -24,6 +25,7 @@ import org.multipaz.mdoc.devicesigned.DeviceAuth
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
+import org.multipaz.mdoc.issuersigned.IssuerSignedItem
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.presentment.PresentmentUnlockReason
@@ -47,8 +49,22 @@ data class MdocDocument(
     val issuerNamespaces: IssuerNamespaces,
     val deviceAuth: DeviceAuth,
     val deviceNamespaces: DeviceNamespaces,
-    val errors: Map<String, Map<String, Int>>
+    val errors: Map<String, Map<String, Int>>,
+    private val issuerNamespaceDigests: Map<String, Map<String, ByteString>>? = null
 ) {
+
+    // Don't include issuerNamespaceDigests in comparison
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is MdocDocument) return false
+        if (docType != other.docType) return false
+        if (issuerAuth != other.issuerAuth) return false
+        if (issuerNamespaces != other.issuerNamespaces) return false
+        if (deviceAuth != other.deviceAuth) return false
+        if (deviceNamespaces != other.deviceNamespaces) return false
+        if (errors != other.errors) return false
+        return true
+    }
 
     /**
      * Convenience property for accessing the [MobileSecurityObject] from [issuerAuth].
@@ -210,7 +226,12 @@ data class MdocDocument(
                 ?: throw IllegalStateException("No digests IDs for namespace $namespace")
             innerMap.forEach { (dataElementName, issuerSignedItem) ->
                 require(dataElementName == issuerSignedItem.dataElementIdentifier)
-                val digest = issuerSignedItem.calculateDigest(mso.digestAlgorithm)
+                // Note: If this instance was created via fromDataItem() use the digest from there.
+                val digest = if (issuerNamespaceDigests != null) {
+                    issuerNamespaceDigests[namespace]!![dataElementName]!!
+                } else {
+                    issuerSignedItem.calculateDigest(mso.digestAlgorithm)
+                }
                 val expectedDigest = digestIds[issuerSignedItem.digestId]
                     ?: throw IllegalStateException("No digests ID for data element $dataElementName in $namespace")
                 if (expectedDigest != digest) {
@@ -231,8 +252,30 @@ data class MdocDocument(
             val docType = dataItem["docType"].asTstr
             val issuerSigned = dataItem["issuerSigned"]
             val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1
-            val issuerNamespaces = issuerSigned.getOrNull("nameSpaces")?.let { IssuerNamespaces.fromDataItem(it) }
-                ?: buildIssuerNamespaces {}
+
+            // Note: for IssuerNamespaces we calculate the digests ahead of time to avoid
+            // having to save the binary representation
+            //
+            val issuerNamespaceDigests = mutableMapOf<String, Map<String, ByteString>>()
+            val issuerNamespaces = issuerSigned.getOrNull("nameSpaces")?.let {
+                val encodedMobileSecurityObject = Cbor.decode(issuerAuth.payload!!).asTagged.asBstr
+                val mso = MobileSecurityObject.fromDataItem(Cbor.decode(encodedMobileSecurityObject))
+                for ((namespaceDataItemKey, namespaceDataItemValue) in it.asMap) {
+                    val namespaceName = namespaceDataItemKey.asTstr
+                    val innerMap = mutableMapOf<String, ByteString>()
+                    for (issuerSignedItemBytes in namespaceDataItemValue.asArray) {
+                        val issuerSignedItem = IssuerSignedItem.fromDataItem(issuerSignedItemBytes.asTaggedEncodedCbor)
+                        val digest = Crypto.digest(
+                            algorithm = mso.digestAlgorithm,
+                            message = Cbor.encode(issuerSignedItemBytes)
+                        )
+                        innerMap.put(issuerSignedItem.dataElementIdentifier, ByteString(digest))
+                    }
+                    issuerNamespaceDigests.put(namespaceName, innerMap)
+                }
+                IssuerNamespaces.fromDataItem(it)
+            } ?: buildIssuerNamespaces {}
+
             val deviceSigned = dataItem["deviceSigned"]
             val deviceAuthDataItem = deviceSigned["deviceAuth"]
             val deviceAuth = if (deviceAuthDataItem.hasKey("deviceSignature")) {
@@ -253,6 +296,7 @@ data class MdocDocument(
                 deviceAuth = deviceAuth,
                 deviceNamespaces = deviceNamespaces,
                 errors = errors ?: emptyMap(),
+                issuerNamespaceDigests = issuerNamespaceDigests
             )
         }
 
@@ -334,7 +378,8 @@ data class MdocDocument(
                 issuerNamespaces = issuerNamespaces,
                 deviceAuth = deviceAuth,
                 deviceNamespaces = deviceNamespaces,
-                errors = errors
+                errors = errors,
+                issuerNamespaceDigests = null
             )
         }
 
