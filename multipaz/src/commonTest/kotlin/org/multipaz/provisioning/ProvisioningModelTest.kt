@@ -40,10 +40,7 @@ import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
 import org.multipaz.mdoc.mso.StaticAuthDataGenerator
 import org.multipaz.mdoc.util.MdocUtil
-import org.multipaz.prompt.ConvertToHumanReadableFn
-import org.multipaz.prompt.PassphraseRequest
 import org.multipaz.prompt.PromptModel
-import org.multipaz.prompt.SinglePromptModel
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
@@ -87,7 +84,7 @@ class ProvisioningModelTest {
             documentStore = documentStore,
             secureArea = secureArea,
             httpClient = HttpClient(mockHttpEngine),
-            promptModel = TestPromptModel(),
+            promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build(),
         ) { metadata, credentialDisplay, issuerDisplay ->
             (metadata as DocumentMetadata).setMetadata(
                 displayName = "Document Title",
@@ -246,17 +243,14 @@ class ProvisioningModelTest {
         }
     }
 
-    class TestPromptModel : PromptModel {
-        override val passphrasePromptModel = SinglePromptModel<PassphraseRequest, String?>()
+    class TestPromptModel private constructor(builder: Builder): PromptModel(builder) {
         override val promptModelScope =
             CoroutineScope(Dispatchers.Default + SupervisorJob() + this)
 
-        override val toHumanReadable: ConvertToHumanReadableFn = { _, _ ->
-            throw IllegalStateException("unexpected state")
-        }
-
-        fun onClose() {
-            promptModelScope.cancel()
+        class Builder: PromptModel.Builder(
+            toHumanReadable = { _, _ -> throw IllegalStateException("unexpected state") }
+        ) {
+            override fun build(): TestPromptModel = TestPromptModel(this)
         }
     }
 

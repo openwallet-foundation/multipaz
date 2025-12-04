@@ -21,10 +21,9 @@ import org.multipaz.nfc.NfcIsoTag
 import org.multipaz.nfc.NfcIsoTagAndroid
 import org.multipaz.nfc.NfcTagLostException
 import org.multipaz.nfc.NfcTagReaderModalBottomSheet
-import org.multipaz.prompt.NfcDialogParameters
 import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.prompt.ScanNfcTagDialogIcon
-import org.multipaz.prompt.SinglePromptModel
+import org.multipaz.prompt.PromptDialogModel
 import org.multipaz.util.Logger
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CancellationException
@@ -35,7 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.multipaz.compose.R
-import org.multipaz.util.fromHex
+import org.multipaz.prompt.ScanNfcPromptDialogModel
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resumeWithException
 import kotlin.time.Duration.Companion.seconds
@@ -46,10 +45,12 @@ const val TAG = "ScanNfcTagPromptDialog"
  * Displays NFC prompt dialog in Composable UI environment and runs NFC interactions.
  */
 @Composable
-internal fun ScanNfcTagPromptDialog(model: SinglePromptModel<NfcDialogParameters<Any>, Any?>) {
-    val dialogState = model.dialogState.collectAsState(SinglePromptModel.NoDialogState())
+internal fun ScanNfcTagPromptDialog(
+    model: PromptDialogModel<ScanNfcPromptDialogModel.NfcDialogParameters<Any>, Any?>
+) {
+    val dialogState = model.dialogState.collectAsState(PromptDialogModel.NoDialogState())
     when (val dialogStateValue = dialogState.value) {
-        is SinglePromptModel.NoDialogState -> if (!dialogStateValue.initial) {
+        is PromptDialogModel.NoDialogState -> if (!dialogStateValue.initial) {
             val activity = LocalContext.current.getActivity() as FragmentActivity
             LaunchedEffect(dialogStateValue) {
                 val adapter = NfcAdapter.getDefaultAdapter(activity)
@@ -61,13 +62,13 @@ internal fun ScanNfcTagPromptDialog(model: SinglePromptModel<NfcDialogParameters
                 }
             }
         }
-        is SinglePromptModel.DialogShownState -> ScanNfcTagPromptDialogShown(dialogStateValue)
+        is PromptDialogModel.DialogShownState -> ScanNfcTagPromptDialogShown(dialogStateValue)
     }
 }
 
 @Composable
 private fun ScanNfcTagPromptDialogShown(
-    dialogStateValue: SinglePromptModel.DialogShownState<NfcDialogParameters<Any>, Any?>
+    dialogStateValue: PromptDialogModel.DialogShownState<ScanNfcPromptDialogModel.NfcDialogParameters<Any>, Any?>
 ) {
     val coroutineScope = rememberCoroutineScope()
     val icon = remember { MutableStateFlow(ScanNfcTagDialogIcon.READY_TO_SCAN) }

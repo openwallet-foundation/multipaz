@@ -65,7 +65,7 @@ import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.crypto.Algorithm
-import org.multipaz.securearea.UnlockReason
+import org.multipaz.prompt.Reason
 import org.multipaz.util.Platform
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -606,7 +606,7 @@ private suspend fun aksTestUnguarded(
         val signature = androidKeystoreSecureArea.sign(
             "testKey",
             dataToSign,
-            unlockReason = UnlockReason.HumanReadable(
+            unlockReason = Reason.HumanReadable(
                 title = "Test prompt title",
                 subtitle = "Test prompt subtitle",
                 requireConfirmation = biometricConfirmationRequired
@@ -625,7 +625,7 @@ private suspend fun aksTestUnguarded(
         val Zab = androidKeystoreSecureArea.keyAgreement(
             "testKey",
             otherKeyPairForEcdh.publicKey,
-            unlockReason = UnlockReason.HumanReadable(
+            unlockReason = Reason.HumanReadable(
                 title = "Test prompt title",
                 subtitle = "Test prompt subtitle",
                 requireConfirmation = biometricConfirmationRequired

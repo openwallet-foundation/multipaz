@@ -1,7 +1,7 @@
 package org.multipaz.presentment
 
 import org.multipaz.credential.Credential
-import org.multipaz.securearea.UnlockReason
+import org.multipaz.prompt.Reason
 import org.multipaz.securearea.SecureArea
 
 /**
@@ -12,4 +12,4 @@ import org.multipaz.securearea.SecureArea
  */
 class PresentmentUnlockReason(
     val credential: Credential
-): UnlockReason
+): Reason

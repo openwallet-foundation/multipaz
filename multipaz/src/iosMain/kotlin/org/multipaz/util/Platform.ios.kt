@@ -47,8 +47,8 @@ private fun openDatabase(filename: String, setExcludedFromBackupFlag: Boolean): 
 actual object Platform {
     actual val name = "${UIDevice.currentDevice.systemName()} ${UIDevice.currentDevice.systemVersion}"
 
-    actual val promptModel by lazy {
-        IosPromptModel() as PromptModel
+    actual val promptModel: PromptModel by lazy {
+        IosPromptModel.Builder().apply { addCommonDialogs() }.build()
     }
 
     actual val storage by lazy {

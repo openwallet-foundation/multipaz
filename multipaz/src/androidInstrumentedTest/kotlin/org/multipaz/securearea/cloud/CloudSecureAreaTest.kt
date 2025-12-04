@@ -49,7 +49,7 @@ import org.multipaz.crypto.buildX509Cert
 import org.multipaz.device.AndroidKeystoreSecurityLevel
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.KeyUnlockDataProvider
-import org.multipaz.securearea.UnlockReason
+import org.multipaz.prompt.Reason
 import org.multipaz.securearea.SecureArea
 import java.io.IOException
 import java.security.MessageDigest
@@ -830,7 +830,7 @@ class CloudSecureAreaTest {
         override suspend fun getKeyUnlockData(
             secureArea: SecureArea,
             alias: String,
-            unlockReason: UnlockReason
+            unlockReason: Reason
         ): KeyUnlockData = keyUnlockData
     }
 

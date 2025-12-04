@@ -1,20 +1,22 @@
 package org.multipaz.securearea
 
+import kotlinx.coroutines.currentCoroutineContext
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.prompt.PromptModelNotAvailableException
-import kotlin.coroutines.coroutineContext
+import org.multipaz.prompt.Reason
+import org.multipaz.prompt.showBiometricPrompt
 
 object AndroidKeystoreDefaultKeyUnlockDataProvider: KeyUnlockDataProvider {
     override suspend fun getKeyUnlockData(
         secureArea: SecureArea,
         alias: String,
-        unlockReason: UnlockReason
+        unlockReason: Reason
     ): KeyUnlockData {
         check(secureArea is AndroidKeystoreSecureArea)
         val unlockData = AndroidKeystoreKeyUnlockData(secureArea, alias)
         val keyInfo = secureArea.getKeyInfo(alias)
         val promptModel = try {
-            AndroidPromptModel.get(coroutineContext)
+            AndroidPromptModel.get()
         } catch (_: PromptModelNotAvailableException) {
             throw KeyLockedException("Key is locked and PromptModel is not available to unlock interactively")
         }

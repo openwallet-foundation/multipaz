@@ -8,7 +8,7 @@ import org.multipaz.asn1.OID
 import org.multipaz.securearea.KeyInfo
 import org.multipaz.securearea.KeyInvalidatedException
 import org.multipaz.securearea.KeyLockedException
-import org.multipaz.securearea.UnlockReason
+import org.multipaz.prompt.Reason
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaRepository
 
@@ -90,8 +90,8 @@ sealed class AsymmetricKey {
         val alias: String
         /** [SecureArea] that holds the private key */
         val secureArea: SecureArea
-        /** [UnlockReason] that should be used to generate a signature */
-        val unlockReason: UnlockReason
+        /** [Reason] that should be used to generate a signature */
+        val unlockReason: Reason
         /** Key data */
         val keyInfo: KeyInfo
     }
@@ -186,7 +186,7 @@ sealed class AsymmetricKey {
         override val alias: String,
         override val secureArea: SecureArea,
         override val keyInfo: KeyInfo,
-        override val unlockReason: UnlockReason = UnlockReason.Unspecified,
+        override val unlockReason: Reason = Reason.Unspecified,
         override val algorithm: Algorithm = keyInfo.algorithm
     ): X509Certified(),
         SecureAreaBased {
@@ -201,7 +201,7 @@ sealed class AsymmetricKey {
         override val alias: String,
         override val secureArea: SecureArea,
         override val keyInfo: KeyInfo,
-        override val unlockReason: UnlockReason = UnlockReason.Unspecified,
+        override val unlockReason: Reason = Reason.Unspecified,
         override val algorithm: Algorithm = keyInfo.algorithm
     ): Named(), SecureAreaBased {
         override val publicKey: EcPublicKey get() = keyInfo.publicKey
@@ -216,7 +216,7 @@ sealed class AsymmetricKey {
         override val alias: String,
         override val secureArea: SecureArea,
         override val keyInfo: KeyInfo,
-        override val unlockReason: UnlockReason = UnlockReason.Unspecified,
+        override val unlockReason: Reason = Reason.Unspecified,
         override val algorithm: Algorithm = keyInfo.algorithm
     ): Anonymous(), SecureAreaBased {
         override val publicKey: EcPublicKey get() = keyInfo.publicKey
@@ -261,7 +261,7 @@ sealed class AsymmetricKey {
         suspend fun parse(
             json: String,
             secureAreaRepository: SecureAreaRepository?,
-            unlockReason: UnlockReason = UnlockReason.Unspecified
+            unlockReason: Reason = Reason.Unspecified
         ): AsymmetricKey = parse(
             json = Json.parseToJsonElement(json),
             secureAreaRepository = secureAreaRepository,
@@ -274,7 +274,7 @@ sealed class AsymmetricKey {
         suspend fun parse(
             json: JsonElement,
             secureAreaRepository: SecureAreaRepository?,
-            unlockReason: UnlockReason = UnlockReason.Unspecified
+            unlockReason: Reason = Reason.Unspecified
         ): AsymmetricKey {
             if (json !is JsonObject) {
                 throw IllegalArgumentException("expected json object")
@@ -331,7 +331,7 @@ sealed class AsymmetricKey {
         suspend fun anonymous(
             secureArea: SecureArea,
             alias: String,
-            unlockReason: UnlockReason = UnlockReason.Unspecified,
+            unlockReason: Reason = Reason.Unspecified,
             algorithm: Algorithm? = null
         ): AsymmetricKey {
             val keyInfo = secureArea.getKeyInfo(alias)

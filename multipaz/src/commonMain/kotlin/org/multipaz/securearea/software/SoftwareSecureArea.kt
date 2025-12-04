@@ -15,6 +15,7 @@
  */
 package org.multipaz.securearea.software
 
+import kotlinx.coroutines.currentCoroutineContext
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
@@ -34,11 +35,11 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.crypto.Hkdf
 import org.multipaz.prompt.PassphraseEvaluation
+import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.PromptModelNotAvailableException
 import org.multipaz.securearea.KeyUnlockDataProvider
-import org.multipaz.securearea.UnlockReason
-import kotlin.coroutines.coroutineContext
+import org.multipaz.prompt.Reason
 import kotlin.random.Random
 
 /**
@@ -206,13 +207,13 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
 
     private suspend fun<T> interactionHelper(
         alias: String,
-        unlockReason: UnlockReason,
+        unlockReason: Reason,
         op: suspend (unlockData: KeyUnlockData?) -> T,
     ): T =
         try {
             op.invoke(null)
         } catch (_: KeyLockedException) {
-            val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
+            val unlockDataProvider = currentCoroutineContext()[KeyUnlockDataProvider.Key]
                 ?: DefaultKeyUnlockDataProvider
             // DefaultKeyUnlockDataProvider.getKeyUnlockData checks passphrase/PIN before
             // returning it here, so retry loop is internal to the provider. We expect
@@ -229,7 +230,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
     override suspend fun sign(
         alias: String,
         dataToSign: ByteArray,
-        unlockReason: UnlockReason
+        unlockReason: Reason
     ): EcSignature {
         return interactionHelper(
             alias,
@@ -251,7 +252,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
     override suspend fun keyAgreement(
         alias: String,
         otherKey: EcPublicKey,
-        unlockReason: UnlockReason
+        unlockReason: Reason
     ): ByteArray {
         return interactionHelper(
             alias,
@@ -294,32 +295,33 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         override suspend fun getKeyUnlockData(
             secureArea: SecureArea,
             alias: String,
-            unlockReason: UnlockReason
+            unlockReason: Reason
         ): KeyUnlockData {
             secureArea as SoftwareSecureArea
             val keyInfo = secureArea.getKeyInfo(alias)
             val constraints = keyInfo.passphraseConstraints ?: PassphraseConstraints.NONE
             val promptModel = try {
-                PromptModel.get(coroutineContext)
+                PromptModel.get()
             } catch (_: PromptModelNotAvailableException) {
                 throw KeyLockedException("Key is locked and PromptModel is not available to unlock interactively")
             }
             val humanReadable = promptModel.toHumanReadable(unlockReason, constraints)
-            val passphrase = promptModel.requestPassphrase(
-                title = humanReadable.title,
-                subtitle = humanReadable.subtitle,
-                passphraseConstraints = constraints,
-                passphraseEvaluator = { enteredPassphrase: String ->
-                    try {
-                        secureArea.loadKey(alias, SoftwareKeyUnlockData(enteredPassphrase))
-                        PassphraseEvaluation.OK
-                    } catch (_: Throwable) {
-                        // TODO: translations
-                        PassphraseEvaluation.TryAgain
+            val passphrase = try {
+                promptModel.requestPassphrase(
+                    title = humanReadable.title,
+                    subtitle = humanReadable.subtitle,
+                    passphraseConstraints = constraints,
+                    passphraseEvaluator = { enteredPassphrase: String ->
+                        try {
+                            secureArea.loadKey(alias, SoftwareKeyUnlockData(enteredPassphrase))
+                            PassphraseEvaluation.OK
+                        } catch (_: Throwable) {
+                            // TODO: translations
+                            PassphraseEvaluation.TryAgain
+                        }
                     }
-                }
-            )
-            if (passphrase == null) {
+                )
+            } catch (_: PromptDismissedException) {
                 throw KeyLockedException("User canceled passphrase prompt")
             }
             return SoftwareKeyUnlockData(passphrase)

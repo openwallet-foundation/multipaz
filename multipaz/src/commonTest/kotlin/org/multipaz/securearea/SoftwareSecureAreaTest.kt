@@ -24,6 +24,7 @@ import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import org.multipaz.prompt.Reason
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -406,7 +407,7 @@ class SoftwareSecureAreaTest {
         override suspend fun getKeyUnlockData(
             secureArea: SecureArea,
             alias: String,
-            unlockReason: UnlockReason
+            unlockReason: Reason
         ): KeyUnlockData = keyUnlockData
     }
 }

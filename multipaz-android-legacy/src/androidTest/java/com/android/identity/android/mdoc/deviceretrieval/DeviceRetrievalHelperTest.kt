@@ -79,7 +79,7 @@ import org.junit.Test
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.mdoc.role.MdocRole
-import org.multipaz.securearea.UnlockReason
+import org.multipaz.prompt.Reason
 import java.util.Calendar
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
@@ -407,7 +407,7 @@ class DeviceRetrievalHelperTest {
                                 deviceSignedData,
                                 secureArea = mdocCredential.secureArea,
                                 keyAlias = mdocCredential.alias,
-                                unlockReason = UnlockReason.Unspecified
+                                unlockReason = Reason.Unspecified
                             )
                             .generate()
                     )

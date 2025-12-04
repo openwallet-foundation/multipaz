@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.multipaz.crypto.Algorithm
-import org.multipaz.securearea.UnlockReason
+import org.multipaz.prompt.Reason
 
 private val TAG = "SoftwareSecureAreaScreen"
 
@@ -119,7 +119,7 @@ private suspend fun swTestUnguarded(
 
     softwareSecureArea.createKey("testKey", builder.build())
 
-    val unlockReason = UnlockReason.HumanReadable(
+    val unlockReason = Reason.HumanReadable(
         title = "Enter Knowledge Factor",
         subtitle = "This is used to decrypt the private key material. " +
                 "In this sample the knowledge factor is '1111' but try " +

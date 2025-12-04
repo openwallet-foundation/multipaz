@@ -4,32 +4,36 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import org.multipaz.presentment.PresentmentUnlockReason
-import org.multipaz.securearea.UnlockReason
 import org.multipaz.securearea.PassphraseConstraints
 
 /**
  * [PromptModel] for iOS platform.
  */
-class IosPromptModel(
-    override val toHumanReadable: ConvertToHumanReadableFn = ::defaultConvertToHumanReadable
-): PromptModel {
-    override val passphrasePromptModel = SinglePromptModel<PassphraseRequest, String?>()
+class IosPromptModel private constructor(builder: Builder): PromptModel(builder) {
 
-    override val promptModelScope: CoroutineScope by lazy {
+    override val promptModelScope =
         CoroutineScope(Dispatchers.Main.immediate + SupervisorJob() + this)
+
+    class Builder(
+        toHumanReadable: ConvertToHumanReadableFn = ::defaultConvertToHumanReadable
+    ): PromptModel.Builder(toHumanReadable) {
+
+        override fun build(): IosPromptModel {
+            return IosPromptModel(this)
+        }
     }
 
     companion object {
         /**
-         * Converts [UnlockReason] to human-readable form.
+         * Converts [Reason] to human-readable form.
          *
          * This is default implementation of [ConvertToHumanReadableFn].
          */
         suspend fun defaultConvertToHumanReadable(
-            unlockReason: UnlockReason,
+            unlockReason: Reason,
             passphraseConstraints: PassphraseConstraints?
-        ): UnlockReason.HumanReadable =
-            unlockReason as? UnlockReason.HumanReadable
+        ): Reason.HumanReadable =
+            unlockReason as? Reason.HumanReadable
                 ?: when (unlockReason) {
                     // TODO: get strings from (localizable) resources or move this functionality
                     //  to a higher level (multipaz-compose?)
@@ -41,7 +45,7 @@ class IosPromptModel(
                         } else {
                             "Enter the passphrase associated with the document"
                         }
-                        UnlockReason.HumanReadable(
+                        Reason.HumanReadable(
                             title = "Verify it's you to share the document",
                             subtitle = subtitle,
                             requireConfirmation = false
@@ -49,7 +53,7 @@ class IosPromptModel(
                     }
 
                     else -> {
-                        UnlockReason.HumanReadable(
+                        Reason.HumanReadable(
                             title = "Verify it's you",
                             subtitle = "Authentication is required",
                             requireConfirmation = false

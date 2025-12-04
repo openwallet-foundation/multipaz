@@ -9,6 +9,7 @@ import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.prompt.Reason
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -148,7 +149,7 @@ class SecureEnclaveSecureArea private constructor(
     override suspend fun sign(
         alias: String,
         dataToSign: ByteArray,
-        unlockReason: UnlockReason
+        unlockReason: Reason
     ): EcSignature {
         val (keyBlob, keyInfo) = loadKey(alias)
         check(keyInfo.algorithm.isSigning)
@@ -164,7 +165,7 @@ class SecureEnclaveSecureArea private constructor(
     override suspend fun keyAgreement(
         alias: String,
         otherKey: EcPublicKey,
-        unlockReason: UnlockReason
+        unlockReason: Reason
     ): ByteArray {
         val (keyBlob, keyInfo) = loadKey(alias)
         check(otherKey.curve == EcCurve.P256)

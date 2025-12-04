@@ -16,6 +16,7 @@ import org.multipaz.compose.notifications.NotificationManagerAndroid
 import org.multipaz.digitalcredentials.getAppOrigin
 import org.multipaz.nfc.NfcTagReader
 import org.multipaz.prompt.AndroidPromptModel
+import org.multipaz.prompt.PromptDialogModel
 import org.multipaz.prompt.PromptModel
 import org.multipaz.testapp.externalnfc.nfcTagReaderUsbCheck
 import org.multipaz.util.Logger
@@ -33,7 +34,36 @@ actual val platformAppIcon = if (platformAppName.endsWith("(Red)")) {
 }
 
 actual val platformPromptModel: PromptModel by lazy {
-    AndroidPromptModel()
+    AndroidPromptModel.Builder(::uiLauncher).apply { addCommonDialogs() }.build()
+}
+
+private suspend fun uiLauncher(dialogModel: PromptDialogModel<*,*>) {
+    // This is how we could start an activity:
+    /*
+    val intent = Intent(
+        applicationContext,
+        TestAppMdocNfcPresentmentActivity::class.java
+    )
+    intent.addFlags(
+        Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_NO_HISTORY or
+                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                Intent.FLAG_ACTIVITY_NO_ANIMATION
+    )
+    Logger.i(TAG, "startActivity on $intent")
+    applicationContext.startActivity(intent)
+    // Poll waiting for the activity to launch (this works for an arbitrary activity).
+    // TODO: we should be able to eliminate this polling by making bound property a flow
+    //  (basically making it listenable).
+    repeat(200) {
+        if (dialogModel.bound) {
+            Logger.i(TAG, "Activity is bound to PromptModel UI")
+            return
+        }
+        delay(20.milliseconds)
+    }
+    Logger.i(TAG, "Failed to bind to PromptModel UI")
+     */
 }
 
 actual val platform = Platform.ANDROID

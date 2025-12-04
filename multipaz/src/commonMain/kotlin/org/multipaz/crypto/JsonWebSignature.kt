@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.securearea.KeyUnlockData
-import org.multipaz.securearea.UnlockReason
+import org.multipaz.prompt.Reason
 import org.multipaz.securearea.SecureArea
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
@@ -72,7 +72,7 @@ object JsonWebSignature {
     suspend fun sign(
         secureArea: SecureArea,
         alias: String,
-        unlockReason: UnlockReason,
+        unlockReason: Reason,
         claimsSet: JsonObject,
         type: String?,
         x5c: X509CertChain?

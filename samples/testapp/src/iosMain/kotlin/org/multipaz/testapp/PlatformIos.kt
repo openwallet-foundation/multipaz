@@ -63,7 +63,7 @@ actual val platformAppName = "Multipaz Test App"
 actual val platformAppIcon = Res.drawable.app_icon
 
 actual val platformPromptModel: PromptModel by lazy {
-    IosPromptModel()
+    IosPromptModel.Builder().apply { addCommonDialogs() }.build()
 }
 
 actual val platform = Platform.IOS

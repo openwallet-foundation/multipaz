@@ -34,7 +34,7 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.Hkdf
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.securearea.KeyLockedException
-import org.multipaz.securearea.UnlockReason
+import org.multipaz.prompt.Reason
 import org.multipaz.securearea.SecureArea
 
 /**
@@ -92,7 +92,7 @@ class DocumentGenerator
         dataElements: NameSpacedData,
         secureArea: SecureArea,
         keyAlias: String,
-        unlockReason: UnlockReason,
+        unlockReason: Reason,
         useMac: Boolean,
         eReaderKey: EcPublicKey?
     ) = apply {
@@ -192,7 +192,7 @@ class DocumentGenerator
         dataElements: NameSpacedData,
         secureArea: SecureArea,
         keyAlias: String,
-        unlockReason: UnlockReason
+        unlockReason: Reason
     ) = apply {
         setDeviceNamespaces(
             dataElements,
@@ -223,7 +223,7 @@ class DocumentGenerator
         secureArea: SecureArea,
         keyAlias: String,
         eReaderKey: EcPublicKey,
-        unlockReason: UnlockReason = UnlockReason.Unspecified
+        unlockReason: Reason = Reason.Unspecified
     ) = apply {
         setDeviceNamespaces(
             dataElements,

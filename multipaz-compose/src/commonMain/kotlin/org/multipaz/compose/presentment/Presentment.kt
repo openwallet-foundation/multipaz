@@ -21,7 +21,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -89,8 +88,7 @@ fun Presentment(
     onlyShowConsentPrompt: Boolean = false,
     showCancelAsBack: Boolean = false,
 ) {
-    val promptModel = remember { PromptModel.get(presentmentModel.presentmentScope.coroutineContext) }
-    val coroutineScope = rememberCoroutineScope { promptModel }
+    val coroutineScope = rememberCoroutineScope { presentmentModel.promptModel!! }
 
     // Make sure we clean up the PresentmentModel when we're done. This is to ensure
     // the mechanism is properly shut down, for example for proximity we need to release

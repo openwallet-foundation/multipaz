@@ -44,6 +44,7 @@ import kotlinx.io.bytestring.buildByteString
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.ASN1Sequence
+import org.multipaz.prompt.Reason
 import java.io.IOException
 import java.security.InvalidAlgorithmParameterException
 import java.security.KeyFactory
@@ -449,7 +450,7 @@ class AndroidKeystoreSecureArea private constructor(
     override suspend fun sign(
         alias: String,
         dataToSign: ByteArray,
-        unlockReason: UnlockReason
+        unlockReason: Reason
     ): EcSignature =
         try {
             signNonInteractive(alias, dataToSign, null)
@@ -510,7 +511,7 @@ class AndroidKeystoreSecureArea private constructor(
     override suspend fun keyAgreement(
         alias: String,
         otherKey: EcPublicKey,
-        unlockReason: UnlockReason
+        unlockReason: Reason
     ): ByteArray {
         do {
             try {

@@ -16,7 +16,7 @@ import org.multipaz.securearea.SecureEnclaveCreateKeySettings
 import org.multipaz.securearea.SecureEnclaveKeyUnlockData
 import org.multipaz.securearea.SecureEnclaveSecureArea
 import org.multipaz.securearea.SecureEnclaveUserAuthType
-import org.multipaz.securearea.UnlockReason
+import org.multipaz.prompt.Reason
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.Logger
 import org.multipaz.util.toHex
@@ -189,6 +189,6 @@ private class TestKeyUnlockDataProvider(
     override suspend fun getKeyUnlockData(
         secureArea: SecureArea,
         alias: String,
-        unlockReason: UnlockReason
+        unlockReason: Reason
     ): KeyUnlockData = keyUnlockData
 }

@@ -120,8 +120,8 @@ class PresentmentModel {
     val error: Throwable?
         get() = _error
 
-    private var promptModel: PromptModel? = null
-
+    var promptModel: PromptModel? = null
+        private set
     /**
      * Resets the model to [State.IDLE].
      */

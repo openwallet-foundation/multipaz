@@ -13,7 +13,7 @@ import org.multipaz.crypto.EcSignature
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.securearea.KeyUnlockData
-import org.multipaz.securearea.UnlockReason
+import org.multipaz.prompt.Reason
 import org.multipaz.securearea.SecureArea
 
 /**
@@ -264,7 +264,7 @@ object Cose {
         includeMessageInPayload: Boolean,
         protectedHeaders: Map<CoseLabel, DataItem>,
         unprotectedHeaders: Map<CoseLabel, DataItem>,
-        unlockReason: UnlockReason = UnlockReason.Unspecified
+        unlockReason: Reason = Reason.Unspecified
     ): CoseSign1 {
         val adjustedProtectedHeaders = mutableMapOf<CoseLabel, DataItem>()
         adjustedProtectedHeaders.putAll(protectedHeaders)

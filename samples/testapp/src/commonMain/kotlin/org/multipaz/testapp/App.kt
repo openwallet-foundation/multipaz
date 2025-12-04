@@ -751,7 +751,7 @@ class App private constructor (val promptModel: PromptModel) {
     private lateinit var snackbarHostState: SnackbarHostState
 
     private val presentmentModel = PresentmentModel().apply {
-        setPromptModel(promptModel)
+        setPromptModel(this@App.promptModel)
     }
 
     @Composable

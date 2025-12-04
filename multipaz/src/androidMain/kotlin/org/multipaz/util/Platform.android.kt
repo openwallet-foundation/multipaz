@@ -16,8 +16,8 @@ import java.io.File
 actual object Platform {
     actual val name = "Android ${Build.VERSION.SDK_INT}"
 
-    actual val promptModel by lazy {
-        AndroidPromptModel() as PromptModel
+    actual val promptModel: PromptModel by lazy {
+        AndroidPromptModel.Builder().apply { addCommonDialogs() }.build()
     }
 
     actual val storage by lazy {

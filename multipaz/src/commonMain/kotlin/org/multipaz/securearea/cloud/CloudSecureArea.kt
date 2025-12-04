@@ -11,6 +11,7 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
@@ -79,11 +80,11 @@ import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.crypto.Hkdf
 import org.multipaz.prompt.PassphraseEvaluation
+import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.PromptModelNotAvailableException
 import org.multipaz.securearea.KeyUnlockDataProvider
-import org.multipaz.securearea.UnlockReason
-import kotlin.coroutines.coroutineContext
+import org.multipaz.prompt.Reason
 import kotlin.random.Random
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -689,7 +690,7 @@ open class CloudSecureArea protected constructor(
 
     private suspend fun<T> interactionHelper(
         alias: String,
-        unlockReason: UnlockReason,
+        unlockReason: Reason,
         op: suspend (unlockData: KeyUnlockData?) -> T,
     ): T {
         return try {
@@ -697,7 +698,7 @@ open class CloudSecureArea protected constructor(
         } catch (e: CloudKeyLockedException) {
             when (e.reason) {
                 CloudKeyLockedException.Reason.WRONG_PASSPHRASE -> {
-                    val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
+                    val unlockDataProvider = currentCoroutineContext()[KeyUnlockDataProvider.Key]
                         ?: DefaultKeyUnlockDataProvider
                     // DefaultKeyUnlockDataProvider.getKeyUnlockData checks passphrase/PIN before
                     // returning it here, so retry loop is internal to the provider. We expect
@@ -721,7 +722,7 @@ open class CloudSecureArea protected constructor(
     override suspend fun sign(
         alias: String,
         dataToSign: ByteArray,
-        unlockReason: UnlockReason
+        unlockReason: Reason
     ): EcSignature {
         return interactionHelper(
             alias,
@@ -802,7 +803,7 @@ open class CloudSecureArea protected constructor(
     override suspend fun keyAgreement(
         alias: String,
         otherKey: EcPublicKey,
-        unlockReason: UnlockReason
+        unlockReason: Reason
     ): ByteArray {
         return interactionHelper(
             alias,
@@ -961,40 +962,41 @@ open class CloudSecureArea protected constructor(
         override suspend fun getKeyUnlockData(
             secureArea: SecureArea,
             alias: String,
-            unlockReason: UnlockReason
+            unlockReason: Reason
         ): KeyUnlockData {
             check(secureArea is CloudSecureArea)
             val unlockData = CloudKeyUnlockData(secureArea, alias)
             val promptModel = try {
-                PromptModel.get(coroutineContext)
+                PromptModel.get()
             } catch (_: PromptModelNotAvailableException) {
                 throw KeyLockedException("Key is locked and PromptModel is not available to unlock interactively")
             }
             val passphraseConstraints = secureArea.getPassphraseConstraints()
             val humanReadable = promptModel.toHumanReadable(unlockReason, passphraseConstraints)
-            unlockData.passphrase = promptModel.requestPassphrase(
-                title = humanReadable.title,
-                subtitle = humanReadable.subtitle,
-                passphraseConstraints = passphraseConstraints,
-                passphraseEvaluator = { enteredPassphrase: String ->
-                    when (val result = secureArea.checkPassphrase(enteredPassphrase)) {
-                        CloudSecureAreaProtocol.RESULT_WRONG_PASSPHRASE ->
-                            PassphraseEvaluation.TryAgain
+            unlockData.passphrase = try {
+                promptModel.requestPassphrase(
+                    title = humanReadable.title,
+                    subtitle = humanReadable.subtitle,
+                    passphraseConstraints = passphraseConstraints,
+                    passphraseEvaluator = { enteredPassphrase: String ->
+                        when (val result = secureArea.checkPassphrase(enteredPassphrase)) {
+                            CloudSecureAreaProtocol.RESULT_WRONG_PASSPHRASE ->
+                                PassphraseEvaluation.TryAgain
 
-                        CloudSecureAreaProtocol.RESULT_TOO_MANY_PASSPHRASE_ATTEMPTS ->
-                            PassphraseEvaluation.TooManyAttempts
+                            CloudSecureAreaProtocol.RESULT_TOO_MANY_PASSPHRASE_ATTEMPTS ->
+                                PassphraseEvaluation.TooManyAttempts
 
-                        CloudSecureAreaProtocol.RESULT_OK ->
-                            PassphraseEvaluation.OK
+                            CloudSecureAreaProtocol.RESULT_OK ->
+                                PassphraseEvaluation.OK
 
-                        else -> {
-                            Logger.w(TAG, "Unexpected result $result when checking passphrase")
-                            PassphraseEvaluation.OK
+                            else -> {
+                                Logger.w(TAG, "Unexpected result $result when checking passphrase")
+                                PassphraseEvaluation.OK
+                            }
                         }
                     }
-                }
-            )
-            if (unlockData.passphrase == null) {
+                )
+            } catch (_: PromptDismissedException) {
                 throw KeyLockedException("User canceled passphrase prompt")
             }
             return unlockData

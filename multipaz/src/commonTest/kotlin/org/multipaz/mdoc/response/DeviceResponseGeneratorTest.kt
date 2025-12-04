@@ -53,7 +53,7 @@ import org.multipaz.crypto.AsymmetricKey
 import kotlin.time.Clock
 import kotlin.time.Instant
 import org.multipaz.document.buildDocumentStore
-import org.multipaz.securearea.UnlockReason
+import org.multipaz.prompt.Reason
 import kotlin.random.Random
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -254,7 +254,7 @@ class DeviceResponseGeneratorTest {
                     NameSpacedData.Builder().build(),
                     mdocCredentialSign.secureArea,
                     mdocCredentialSign.alias,
-                    UnlockReason.Unspecified
+                    Reason.Unspecified
                 )
                 .generate()
         )
@@ -380,7 +380,7 @@ class DeviceResponseGeneratorTest {
                     mdocCredentialMac.secureArea,
                     mdocCredentialMac.alias,
                     eReaderKey.publicKey,
-                    UnlockReason.Unspecified
+                    Reason.Unspecified
                 )
                 .generate()
         )
@@ -480,7 +480,7 @@ class DeviceResponseGeneratorTest {
                     deviceSignedData,
                     mdocCredentialSign.secureArea,
                     mdocCredentialSign.alias,
-                    UnlockReason.Unspecified
+                    Reason.Unspecified
                 )
                 .generate()
         )
@@ -599,7 +599,7 @@ class DeviceResponseGeneratorTest {
                     deviceSignedData,
                     mdocCredentialSign.secureArea,
                     mdocCredentialSign.alias,
-                    UnlockReason.Unspecified
+                    Reason.Unspecified
                 )
                 .generate()
         )
@@ -691,7 +691,7 @@ class DeviceResponseGeneratorTest {
                     NameSpacedData.Builder().build(),
                     mdocCredentialSign.secureArea,
                     mdocCredentialSign.alias,
-                    UnlockReason.Unspecified
+                    Reason.Unspecified
                 )
                 .generate()
         )

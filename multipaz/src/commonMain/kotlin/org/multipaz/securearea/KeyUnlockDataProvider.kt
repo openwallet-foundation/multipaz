@@ -3,6 +3,7 @@ package org.multipaz.securearea
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
 import org.multipaz.prompt.PromptModel
+import org.multipaz.prompt.Reason
 
 /**
  * An object that provides [KeyUnlockData] when a key is [SecureArea] is locked.
@@ -37,6 +38,6 @@ interface KeyUnlockDataProvider : CoroutineContext.Element {
     suspend fun getKeyUnlockData(
         secureArea: SecureArea,
         alias: String,
-        unlockReason: UnlockReason
+        unlockReason: Reason
     ): KeyUnlockData
 }
