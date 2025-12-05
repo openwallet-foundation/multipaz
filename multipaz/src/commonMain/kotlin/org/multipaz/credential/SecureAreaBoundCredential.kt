@@ -122,9 +122,9 @@ abstract class SecureAreaBoundCredential : Credential {
      */
     suspend fun getAttestation(): KeyAttestation = secureArea.getKeyInfo(alias).attestation
 
-    override suspend fun delete() {
+    override suspend fun clear() {
         secureArea.deleteKey(alias)
-        super.delete()
+        super.clear()
     }
 
     override fun addSerializedData(builder: MapBuilder<CborBuilder>) {

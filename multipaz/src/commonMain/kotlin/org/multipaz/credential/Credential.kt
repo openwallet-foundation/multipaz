@@ -17,7 +17,6 @@ package org.multipaz.credential
 
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborBuilder
-import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.MapBuilder
 import org.multipaz.claim.Claim
@@ -29,7 +28,6 @@ import org.multipaz.securearea.SecureArea
 import org.multipaz.storage.StorageTableSpec
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.buildCborMap
@@ -178,13 +176,6 @@ abstract class Credential {
         replacementForIdentifier = dataItem.getOrNull("replacementForAlias")?.asTstr
     }
 
-    // Creates an alias which is guaranteed to be unique for all time (assuming the system clock
-    // only goes forwards)
-    private fun createUniqueIdentifier(): String {
-        val now = Clock.System.now()
-        return "${CREDENTIAL_ID_PREFIX}_${now.epochSeconds}_${now.nanosecondsOfSecond}_${uniqueIdentifierCounter++}"
-    }
-
     /**
      * Indicates whether the credential has been invalidated.
      */
@@ -233,19 +224,34 @@ abstract class Credential {
         private set
 
     /**
-     * Deletes the credential.
+     * Cleans up additional credential data, such as a [SecureArea] key.
+     *
+     * NB: credential is deleted from [DocumentStore]-managed storage separately either
+     * using [deleteFromStorage] or more efficient [deleteAllFromStorage].
+     *
+     * After a credential is cleared, it should no longer be used.
+     */
+    protected open suspend fun clear() {
+    }
+
+    /**
+     * Deletes the credential from [DocumentStore]-managed storage.
      *
      * After deletion, this object should no longer be used.
      */
-    protected open suspend fun delete() {
+    private suspend fun deleteFromStorage() {
         val table = document.store.storage.getTable(credentialTableSpec)
         table.delete(partitionId = document.identifier, key = identifier)
     }
 
     // Called by Document.deleteCredential
     internal suspend fun deleteCredential() {
-        delete()
+        clear()
+        deleteFromStorage()
     }
+
+    // Called by Document.deleteDocument
+    internal suspend fun clearCredential() = clear()
 
     /**
      * Increases usage count of the credential.
@@ -351,15 +357,18 @@ abstract class Credential {
 
     companion object {
         private const val TAG = "Credential"
-        private const val CREDENTIAL_ID_PREFIX = "Credential"
-
-        private var uniqueIdentifierCounter = 0
 
         private val credentialTableSpec = StorageTableSpec(
             name = "Credentials",
             supportPartitions = true,  // partition id is document id
             supportExpiration = false
         )
+
+
+        internal suspend fun deleteAllFromStorage(document: Document) {
+            val table = document.store.storage.getTable(credentialTableSpec)
+            table.deletePartition(partitionId = document.identifier)
+        }
 
         // Only for use in Document
         internal suspend fun enumerate(document: Document): List<String> {

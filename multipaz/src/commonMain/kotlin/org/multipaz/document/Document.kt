@@ -205,8 +205,9 @@ class Document internal constructor(
         deleted = true
         store.emitOnDocumentDeleted(identifier)
         for (credential in getCredentials()) {
-            credential.deleteCredential()
+            credential.clearCredential()
         }
+        Credential.deleteAllFromStorage(this)
         val documentTable = store.getDocumentTable()
         lock.withLock {
             credentialCache.clear()

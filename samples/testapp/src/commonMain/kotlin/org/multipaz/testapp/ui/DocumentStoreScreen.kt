@@ -47,6 +47,8 @@ import org.multipaz.testapp.TestAppSettingsModel
 import org.multipaz.testapp.TestAppUtils
 import org.multipaz.testapp.platformSecureAreaHasKeyAgreement
 import io.ktor.http.encodeURLParameter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -58,6 +60,7 @@ import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.testapp.platformHttpClientEngineFactory
+import org.multipaz.util.Logger
 import org.multipaz.util.Platform
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -88,7 +91,9 @@ fun DocumentStoreScreen(
     showToast: (message: String) -> Unit,
     onViewDocument: (documentId: String) -> Unit,
 ) {
-    val coroutineScope = rememberCoroutineScope()
+    // NB: we do not have to use Dispatchers.IO, but DocumentStore works faster if we call from the
+    // same coroutine scope as what the storage layer uses.
+    val coroutineScope = rememberCoroutineScope { Dispatchers.IO }
     val numCredentialsPerDomain = remember { mutableIntStateOf(2) }
     val deviceKeyAlgorithm = remember { mutableStateOf<Algorithm>(Algorithm.ESP256) }
     val deviceKeyMacAlgorithm = remember { mutableStateOf<Algorithm>(Algorithm.ECDH_P256) }
@@ -206,9 +211,12 @@ fun DocumentStoreScreen(
         item {
             TextButton(onClick = {
                 coroutineScope.launch {
+                    val timestampBegin = Clock.System.now()
                     documentStore.listDocuments().forEach { documentId ->
                         documentStore.deleteDocument(documentId)
                     }
+                    val timestampEnd = Clock.System.now()
+                    Logger.e(TAG, "Deleted all docs in ${timestampEnd - timestampBegin}")
                 }
             }) {
                 Text(text = "Delete all Documents")
@@ -511,6 +519,7 @@ private suspend fun provisionTestDocuments(
         val numDocsEnd = documentStore.listDocuments().size
 
         val provisioningResult = buildAnnotatedString {
+            Logger.i(TAG, "Created ${numDocsEnd - numDocsBegin} document(s) in ${timestampEnd - timestampBegin}.")
             append("Created ${numDocsEnd - numDocsBegin} document(s) in ${timestampEnd - timestampBegin}.")
             if (openid4vciAttestationCompactSerialization != null) {
                 val prettyAttestation = prettyJson.encodeToString(JsonWebSignature.getInfo
