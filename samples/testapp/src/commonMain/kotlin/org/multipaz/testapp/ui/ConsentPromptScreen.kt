@@ -46,7 +46,6 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X509Extension
-import org.multipaz.crypto.buildX509Cert
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
@@ -95,8 +94,8 @@ private enum class Origin(
     val origin: String?
 ) {
     NONE("No Web Origin", null),
-    VERIFIER_MULTIPAZ_ORG("verifier.multipaz.org", "verifier.multipaz.org"),
-    OTHER_EXAMPLE_COM("other.example.com", "other.example.com"),
+    VERIFIER_MULTIPAZ_ORG("verifier.multipaz.org", "https://verifier.multipaz.org"),
+    OTHER_EXAMPLE_COM("other.example.com", "https://other.example.com"),
 }
 
 private enum class AppId(
@@ -135,10 +134,113 @@ fun ConsentPromptScreen(
     var origin by remember { mutableStateOf(Origin.entries.first()) }
     var appId by remember { mutableStateOf(AppId.entries.first()) }
     var showCancelAsBack by remember { mutableStateOf(false) }
-    val showCredentialPresentmentBottomSheetState = rememberModalBottomSheetState(
+    val queryResult = remember { mutableStateOf<QueryResult?>(null) }
+    val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true
     )
 
+    var cardArt by remember { mutableStateOf(ByteArray(0)) }
+    var utopiaBreweryIcon by remember { mutableStateOf(ByteString()) }
+    var identityReaderIcon by remember { mutableStateOf(ByteString()) }
+    var documentStore by remember { mutableStateOf<DocumentStore?>(null) }
+    LaunchedEffect(Unit) {
+        cardArt = Res.readBytes("files/utopia_driving_license_card_art.png")
+        utopiaBreweryIcon = ByteString(Res.readBytes("files/utopia-brewery.png"))
+        identityReaderIcon = ByteString(Res.readBytes("drawable/app_icon.webp"))
+
+        val storage = EphemeralStorage()
+        val secureArea = SoftwareSecureArea.create(storage)
+        documentStore = buildDocumentStore(storage, secureAreaRepository) {}
+
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val iacaCertValidFrom = now - 1.days
+        val iacaCertsValidUntil = iacaCertValidFrom + 455.days
+        val iacaPrivateKey = Crypto.createEcPrivateKey(EcCurve.P521)
+        val iacaCert = MdocUtil.generateIacaCertificate(
+            iacaKey = AsymmetricKey.anonymous(iacaPrivateKey),
+            subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST IACA"),
+            serial = ASN1Integer.fromRandom(numBits = 128),
+            validFrom = iacaCertValidFrom,
+            validUntil = iacaCertsValidUntil,
+            issuerAltNameUrl = "https://apps.multipaz.org/",
+            crlUrl = "https://apps.multipaz.org/crl"
+        )
+        val iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaPrivateKey)
+
+        // The DS cert must not be valid for more than 457 days.
+        //
+        // Reference: ISO/IEC 18013-5:2021 Annex B.1.4 Document signer certificate
+        //
+        val dsCertValidFrom = now - 1.days
+        val dsCertsValidUntil = dsCertValidFrom + 455.days
+        val dsPrivateKey = Crypto.createEcPrivateKey(EcCurve.P384)
+        val dsCert = MdocUtil.generateDsCertificate(
+            iacaKey = iacaKey,
+            dsKey = dsPrivateKey.publicKey,
+            subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST DS"),
+            serial = ASN1Integer.fromRandom(numBits = 128),
+            validFrom = dsCertValidFrom,
+            validUntil = dsCertsValidUntil,
+        )
+        val dsKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert, iacaCert)), dsPrivateKey)
+
+        val credsValidFrom = now - 0.5.days
+        val credsValidUntil = dsCertValidFrom + 30.days
+
+        DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = documentStore!!.createDocument(
+                displayName = "Erika's Driving License",
+                typeDisplayName = "Utopia Driving License",
+                cardArt = ByteString(cardArt)
+            ),
+            secureArea = secureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = dsKey,
+            signedAt = credsValidFrom,
+            validFrom = credsValidFrom,
+            validUntil = credsValidUntil,
+            expectedUpdate = null,
+            domain = "mdoc"
+        )
+        PhotoID.getDocumentType().createMdocCredentialWithSampleData(
+            document = documentStore!!.createDocument(
+                displayName = "Erika's Photo ID",
+                typeDisplayName = "Utopia Photo ID",
+                cardArt = ByteString(cardArt)
+            ),
+            secureArea = secureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = dsKey,
+            signedAt = credsValidFrom,
+            validFrom = credsValidFrom,
+            validUntil = credsValidUntil,
+            expectedUpdate = null,
+            domain = "mdoc"
+        )
+        PhotoID.getDocumentType().createMdocCredentialWithSampleData(
+            document = documentStore!!.createDocument(
+                displayName = "Erika's Photo ID #2",
+                typeDisplayName = "Utopia Photo ID",
+                cardArt = ByteString(cardArt)
+            ),
+            secureArea = secureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = dsKey,
+            signedAt = credsValidFrom,
+            validFrom = credsValidFrom,
+            validUntil = credsValidUntil,
+            expectedUpdate = null,
+            domain = "mdoc"
+        )
+        addCredentialsForOpenID4VPComplexExample(
+            documentStore = documentStore!!,
+            secureArea = secureArea,
+            signedAt = credsValidFrom,
+            validFrom = credsValidFrom,
+            validUntil = credsValidUntil,
+            dsKey = dsKey,
+        )
+    }
 
     LazyColumn(
         modifier = Modifier.padding(8.dp),
@@ -192,7 +294,22 @@ fun ConsentPromptScreen(
             Button(
                 onClick = {
                     coroutineScope.launch {
-                        showCredentialPresentmentBottomSheetState.show()
+                        try {
+                            queryResult.value = getQueryResult(
+                                useCase = useCase,
+                                certChain = certChain,
+                                origin = origin,
+                                appId = appId,
+                                utopiaBreweryIcon = utopiaBreweryIcon,
+                                identityReaderIcon = identityReaderIcon,
+                                documentStore = documentStore,
+                                documentTypeRepository = documentTypeRepository
+                            )
+                            sheetState.show()
+                        } catch (e: Throwable) {
+                            e.printStackTrace()
+                            showToast("Error evaluating query: $e")
+                        }
                     }
                 }
             ) {
@@ -201,108 +318,13 @@ fun ConsentPromptScreen(
         }
     }
 
-    var cardArt by remember { mutableStateOf(ByteArray(0)) }
-    var utopiaBreweryIcon by remember { mutableStateOf(ByteString()) }
-    var identityReaderIcon by remember { mutableStateOf(ByteString()) }
-    var documentStore by remember { mutableStateOf<DocumentStore?>(null) }
-    LaunchedEffect(Unit) {
-        cardArt = Res.readBytes("files/utopia_driving_license_card_art.png")
-        utopiaBreweryIcon = ByteString(Res.readBytes("files/utopia-brewery.png"))
-        identityReaderIcon = ByteString(Res.readBytes("drawable/app_icon.webp"))
-
-        val storage = EphemeralStorage()
-        val secureArea = SoftwareSecureArea.create(storage)
-        documentStore = buildDocumentStore(storage, secureAreaRepository) {}
-        val dsPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        val validFrom = Clock.System.now().truncateToWholeSeconds()
-        val validUntil = validFrom + 10.days
-        val dsCert = buildX509Cert(
-            publicKey = dsPrivateKey.publicKey,
-            signingKey = AsymmetricKey.anonymous(dsPrivateKey),
-            serialNumber = ASN1Integer.fromRandom(numBits = 128),
-            subject = X500Name.fromName("CN=Test"),
-            issuer = X500Name.fromName("CN=Test"),
-            validFrom = validFrom,
-            validUntil = validUntil,
-        ) {}
-        val dsKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert)), dsPrivateKey)
-        DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
-            document = documentStore!!.createDocument(
-                displayName = "Erika's Driving License",
-                typeDisplayName = "Utopia Driving License",
-                cardArt = ByteString(cardArt)
-            ),
-            secureArea = secureArea,
-            createKeySettings = CreateKeySettings(),
-            dsKey = dsKey,
-            signedAt = validFrom,
-            validFrom = validFrom,
-            validUntil = validUntil,
-            expectedUpdate = null,
-            domain = "mdoc"
-        )
-        PhotoID.getDocumentType().createMdocCredentialWithSampleData(
-            document = documentStore!!.createDocument(
-                displayName = "Erika's Photo ID",
-                typeDisplayName = "Utopia Photo ID",
-                cardArt = ByteString(cardArt)
-            ),
-            secureArea = secureArea,
-            createKeySettings = CreateKeySettings(),
-            dsKey = dsKey,
-            signedAt = validFrom,
-            validFrom = validFrom,
-            validUntil = validUntil,
-            expectedUpdate = null,
-            domain = "mdoc"
-        )
-        PhotoID.getDocumentType().createMdocCredentialWithSampleData(
-            document = documentStore!!.createDocument(
-                displayName = "Erika's Photo ID #2",
-                typeDisplayName = "Utopia Photo ID",
-                cardArt = ByteString(cardArt)
-            ),
-            secureArea = secureArea,
-            createKeySettings = CreateKeySettings(),
-            dsKey = dsKey,
-            signedAt = validFrom,
-            validFrom = validFrom,
-            validUntil = validUntil,
-            expectedUpdate = null,
-            domain = "mdoc"
-        )
-        addCredentialsForOpenID4VPComplexExample(
-            documentStore = documentStore!!,
-            secureArea = secureArea,
-            signedAt = validFrom,
-            validFrom = validFrom,
-            validUntil = validUntil,
-            dsKey = dsKey,
-        )
-    }
-
-
-    if (showCredentialPresentmentBottomSheetState.isVisible) {
-        val queryResult = mutableStateOf<QueryResult?>(null)
-        LaunchedEffect(useCase, certChain, origin, appId) {
-            queryResult.value = getQueryResult(
-                useCase = useCase,
-                certChain = certChain,
-                origin = origin,
-                appId = appId,
-                utopiaBreweryIcon = utopiaBreweryIcon,
-                identityReaderIcon = identityReaderIcon,
-                documentStore = documentStore,
-                documentTypeRepository = documentTypeRepository
-            )
-        }
-        val result = queryResult.value
-        if (result != null) {
+    if (sheetState.isVisible) {
+        queryResult.value?.let {
             CredentialPresentmentModalBottomSheet(
-                sheetState = showCredentialPresentmentBottomSheetState,
-                requester = result.requester,
-                trustPoint = result.trustPoint,
-                credentialPresentmentData = result.dcqlResponse,
+                sheetState = sheetState,
+                requester = it.requester,
+                trustPoint = it.trustPoint,
+                credentialPresentmentData = it.dcqlResponse,
                 preselectedDocuments = emptyList(),
                 imageLoader = imageLoader,
                 dynamicMetadataResolver = { requester ->
@@ -322,12 +344,14 @@ fun ConsentPromptScreen(
                 appIconPainter = painterResource(platformAppIcon),
                 onConfirm = { selection ->
                     coroutineScope.launch {
-                        showCredentialPresentmentBottomSheetState.hide()
+                        sheetState.hide()
+                        queryResult.value = null
                     }
                 },
                 onCancel = {
                     coroutineScope.launch {
-                        showCredentialPresentmentBottomSheetState.hide()
+                        sheetState.hide()
+                        queryResult.value = null
                     }
                 },
                 showCancelAsBack = showCancelAsBack

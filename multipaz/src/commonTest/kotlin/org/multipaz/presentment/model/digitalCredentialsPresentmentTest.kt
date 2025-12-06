@@ -1,6 +1,7 @@
 package org.multipaz.presentment.model
 
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
@@ -15,11 +16,11 @@ import org.multipaz.cbor.Simple
 import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.JsonWebEncryption
-import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
@@ -32,14 +33,14 @@ import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.trustmanagement.TrustPoint
-import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import kotlin.io.encoding.Base64
 import kotlin.random.Random
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class DigitalCredentialsPresentmentTest {
     companion object {
@@ -51,6 +52,12 @@ class DigitalCredentialsPresentmentTest {
     }
 
     val documentStoreTestHarness = DocumentStoreTestHarness()
+
+    @BeforeTest
+    fun setup() = runBlocking {
+        documentStoreTestHarness.initialize()
+        documentStoreTestHarness.provisionStandardDocuments()
+    }
 
     class TestPresentmentMechanism(
         protocol: String,
@@ -95,9 +102,6 @@ class DigitalCredentialsPresentmentTest {
         encryptionKey: EcPrivateKey?,
         dcql: JsonObject
     ): TestOpenID4VPResponse {
-        documentStoreTestHarness.initialize()
-        documentStoreTestHarness.provisionStandardDocuments()
-
         val readerTrustManager = TrustManagerLocal(EphemeralStorage())
         val presentmentSource = SimplePresentmentSource(
             documentStore = documentStoreTestHarness.documentStore,
@@ -416,6 +420,9 @@ class DigitalCredentialsPresentmentTest {
             expectedSdJwtResponse =
                 """
                     {
+                      "x5c": [
+                        "${Base64.encode(documentStoreTestHarness.dsKey.certChain.certificates[0].encoded.toByteArray())}"
+                      ],
                       "iss": "https://example-issuer.com",
                       "vct": "urn:eudi:pid:1",
                       "family_name": "Mustermann",

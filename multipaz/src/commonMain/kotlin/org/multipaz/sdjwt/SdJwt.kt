@@ -331,7 +331,8 @@ class SdJwt(
          *
          * This implementation uses recursive disclosures for all claims in the [claims] parameter.
          *
-         * @param issuerKey the key to sign the issuerSigned JWT with.
+         * @param issuerKey the key to sign the issuerSigned JWT with. If this is a [AsymmetricKey.X509Certified]
+         *   the certificate chain will be included in the `x5c` claim and always be disclosed.
          * @param kbKey if set, a `cnf` claim with this public key will be included in the Issuer-signed JWT.
          * @param claims the object with claims that can be selectively disclosed.
          * @param nonSdClaims claims to include in the Issuer-signed JWT which are always disclosed. This must at least
@@ -363,7 +364,15 @@ class SdJwt(
                 creationTime = creationTime,
                 expiresIn = expiresIn
             ) {
+                if (issuerKey is AsymmetricKey.X509Certified) {
+                    put("x5c", issuerKey.certChain.toX5c())
+                }
                 for (claim in nonSdClaims) {
+                    if (claim.key == "x5c" && issuerKey is AsymmetricKey.X509Certified) {
+                        throw IllegalArgumentException(
+                            "Claim x5c is already included because `issuerKey` is X509Certified"
+                        )
+                    }
                     put(claim.key, claim.value)
                 }
 
