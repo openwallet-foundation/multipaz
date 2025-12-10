@@ -559,7 +559,10 @@ class App private constructor (val promptModel: PromptModel) {
         // TODO: validate the Vical is signed by someone we trust, probably force this
         //   by having the caller pass in the public key
         val vicalTrustManager = VicalTrustManager(signedVical)
-        issuerTrustManager = CompositeTrustManager(listOf(builtInIssuerTrustManager, vicalTrustManager))
+        issuerTrustManager = CompositeTrustManager(
+            trustManagers = listOf(builtInIssuerTrustManager, vicalTrustManager),
+            identifier = "issuers"
+        )
 
         val signedRical = SignedRical.parse(Res.readBytes("files/ISO_SC17WG10_Wellington_Test_Event_Nov_2025.rical"))
         // TODO: validate the Rical is signed by someone we trust, probably force this
@@ -571,7 +574,10 @@ class App private constructor (val promptModel: PromptModel) {
             partitionId = "BuiltInTrustedReaders",
             identifier = "Built-in Trusted Readers"
         )
-        readerTrustManager = CompositeTrustManager(listOf(builtInReaderTrustManager, ricalTrustManager))
+        readerTrustManager = CompositeTrustManager(
+            trustManagers = listOf(builtInReaderTrustManager, ricalTrustManager),
+            identifier = "readers"
+        )
         if (builtInReaderTrustManager.getTrustPoints().isEmpty()) {
             try {
                 builtInReaderTrustManager.addX509Cert(
@@ -983,7 +989,7 @@ class App private constructor (val promptModel: PromptModel) {
                         val trustManager = when (destination.trustManagerId) {
                             "issuers" -> issuerTrustManager
                             "readers" -> readerTrustManager
-                            else -> throw IllegalStateException()
+                            else -> throw IllegalStateException("Unexpected id ${destination.trustManagerId}")
                         }
                         TrustPointViewerScreen(
                             app = this@App,
