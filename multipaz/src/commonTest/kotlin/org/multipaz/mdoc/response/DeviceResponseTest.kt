@@ -683,13 +683,13 @@ class DeviceResponseTest {
             """
                 {
                   "org.iso.23220.1": [24(<< {
-                    "digestID": 25,
-                    "random": h'e4e4c755d0ae57496bdb42b9c9679178',
+                    "digestID": 19,
+                    "random": h'6bdb42b9c96791786c53065c4e2b0087',
                     "elementIdentifier": "family_name",
                     "elementValue": "Mustermann"
                   } >>), 24(<< {
-                    "digestID": 17,
-                    "random": h'4e2b0087715aae6d958c6a14e03a4eeb',
+                    "digestID": 5,
+                    "random": h'cefe6fd6870424a75d181025d4dcf210',
                     "elementIdentifier": "given_name",
                     "elementValue": "Erika"
                   } >>)]
@@ -729,7 +729,7 @@ class DeviceResponseTest {
                       "org.iso.18013.5.1.mDL": 0
                     },
                     {
-                      "org.iso.23220.photoID.1": -42
+                      "org.iso.23220.photoid.1": -42
                     }
                   ]
                 }

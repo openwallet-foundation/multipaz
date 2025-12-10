@@ -10,7 +10,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.documenttype.knowntypes.DrivingLicense
-import org.multipaz.documenttype.knowntypes.PhotoIDLowercase
+import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.mdoc.TestVectors
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.util.fromHex
@@ -74,11 +74,11 @@ class MobileSecurityObjectTest {
     fun testComplex() {
         val randomProvider = Random(42)
         val issuerNamespaces = buildIssuerNamespaces(randomProvider = randomProvider) {
-            addNamespace(PhotoIDLowercase.ISO_23220_2_NAMESPACE) {
+            addNamespace(PhotoID.ISO_23220_2_NAMESPACE) {
                 addDataElement("family_name", "Doe".toDataItem())
                 addDataElement("given_name", "John".toDataItem())
             }
-            addNamespace(PhotoIDLowercase.PHOTO_ID_DOCTYPE_LOWERCASE) {
+            addNamespace(PhotoID.PHOTO_ID_DOCTYPE) {
                 addDataElement("person_id", "1234567890".toDataItem())
             }
         }
@@ -90,7 +90,7 @@ class MobileSecurityObjectTest {
         )
         val mso = MobileSecurityObject(
             version = "1.0",
-            docType = PhotoIDLowercase.PHOTO_ID_DOCTYPE_LOWERCASE,
+            docType = PhotoID.PHOTO_ID_DOCTYPE,
             signedAt = d,
             validFrom = d,
             validUntil = d + 30.days,
@@ -98,13 +98,13 @@ class MobileSecurityObjectTest {
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = deviceKey,
-            deviceKeyAuthorizedNamespaces = listOf(PhotoIDLowercase.PHOTO_ID_DOCTYPE_LOWERCASE),
+            deviceKeyAuthorizedNamespaces = listOf(PhotoID.PHOTO_ID_DOCTYPE),
             deviceKeyAuthorizedDataElements = mapOf(
-                PhotoIDLowercase.ISO_23220_2_NAMESPACE to listOf(
+                PhotoID.ISO_23220_2_NAMESPACE to listOf(
                     "age_over_18",
                     "age_over_19"
                 ),
-                PhotoIDLowercase.DTC_NAMESPACE to listOf(
+                PhotoID.DTC_NAMESPACE to listOf(
                     "dg1",
                     "dg2",
                     "dg3"

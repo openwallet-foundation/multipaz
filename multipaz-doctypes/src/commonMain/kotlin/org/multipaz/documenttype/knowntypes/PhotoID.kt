@@ -13,12 +13,12 @@ import org.multipaz.documenttype.knowntypes.DrivingLicense.MDL_NAMESPACE
 /**
  * PhotoID according to ISO/IEC 23220-4 Annex C.
  *
- * (This is based on ISO/IEC JTC 1/SC 17/WG 4 N 4770 from 2025-08-20)
+ * (This is based on ISO/IEC JTC 1/SC 17/WG 4 N 4862 from 2025-12-04)
  */
 object PhotoID {
-    const val PHOTO_ID_DOCTYPE = "org.iso.23220.photoID.1"
+    const val PHOTO_ID_DOCTYPE = "org.iso.23220.photoid.1"
     const val ISO_23220_2_NAMESPACE = "org.iso.23220.1"
-    const val PHOTO_ID_NAMESPACE = "org.iso.23220.photoID.1"
+    const val PHOTO_ID_NAMESPACE = "org.iso.23220.photoid.1"
     const val DTC_NAMESPACE = "org.iso.23220.dtc.1"
 
     /**
@@ -41,10 +41,30 @@ object PhotoID {
         )
         addMdocAttribute(
             DocumentAttributeType.String,
+            "family_name_viz",
+            "Family Name (VIZ)",
+            "Family name as defined for VIZ (visual inspection zone) in ICAO 9303",
+            false,
+            ISO_23220_2_NAMESPACE,
+            Icon.PERSON,
+            SampleData.FAMILY_NAME.toDataItem()
+        )
+        addMdocAttribute(
+            DocumentAttributeType.String,
             "given_name",
             "Given Names",
             "First name(s), other name(s), or secondary identifier, of the document holder",
             true,
+            ISO_23220_2_NAMESPACE,
+            Icon.PERSON,
+            SampleData.GIVEN_NAME.toDataItem()
+        )
+        addMdocAttribute(
+            DocumentAttributeType.String,
+            "given_name_viz",
+            "Given Name (VIZ)",
+            "Given name as defined for VIZ (visual inspection zone) in ICAO 9303",
+            false,
             ISO_23220_2_NAMESPACE,
             Icon.PERSON,
             SampleData.GIVEN_NAME.toDataItem()
@@ -380,10 +400,30 @@ object PhotoID {
         )
         addMdocAttribute(
             DocumentAttributeType.String,
+            "travel_document_type",
+            "Travel Document Type",
+            "Identifier of the type of source document, (if associated to or derived from a travel document)",
+            false,
+            PHOTO_ID_NAMESPACE,
+            Icon.NUMBERS,
+            null
+        )
+        addMdocAttribute(
+            DocumentAttributeType.String,
             "travel_document_number",
             "Travel Document Number",
             "The number of the travel document to which the Photo ID is associated (if associated to or " +
                     "derived from a travel document)",
+            false,
+            PHOTO_ID_NAMESPACE,
+            Icon.NUMBERS,
+            null
+        )
+        addMdocAttribute(
+            DocumentAttributeType.String,
+            "travel_document_mrz",
+            "Travel Document MRZ",
+            "Machine readable zone as the text printed on the physical document",
             false,
             PHOTO_ID_NAMESPACE,
             Icon.NUMBERS,

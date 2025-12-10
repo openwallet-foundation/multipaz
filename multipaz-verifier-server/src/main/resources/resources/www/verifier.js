@@ -240,7 +240,7 @@ function rawDcqlReset_age_mdocs() {
       "id": "photoid",
       "format": "mso_mdoc",
       "meta": {
-        "doctype_value": "org.iso.23220.photoID.1"
+        "doctype_value": "org.iso.23220.photoid.1"
       },
       "claims": [
         {
@@ -463,7 +463,7 @@ function rawDcqlReset_mdl_pid_photoid_mandatory() {
       "id": "photoid",
       "format": "mso_mdoc",
       "meta": {
-        "doctype_value": "org.iso.23220.photoID.1"
+        "doctype_value": "org.iso.23220.photoid.1"
       },
       "claims": [
         { "path": ["org.iso.23220.1", "family_name" ] },
@@ -528,7 +528,7 @@ function rawDcqlReset_movie_and_id() {
       "id": "photoid",
       "format": "mso_mdoc",
       "meta": {
-        "doctype_value": "org.iso.23220.photoID.1"
+        "doctype_value": "org.iso.23220.photoid.1"
       },
       "claims": [
         { "path": ["org.iso.23220.1", "family_name" ] },
@@ -593,7 +593,7 @@ function rawDcqlReset_movie_and_id_alt() {
       "id": "photoid",
       "format": "mso_mdoc",
       "meta": {
-        "doctype_value": "org.iso.23220.photoID.1"
+        "doctype_value": "org.iso.23220.photoid.1"
       },
       "claims": [
         { "path": ["org.iso.23220.1", "family_name" ] },

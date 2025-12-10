@@ -343,7 +343,7 @@ class MatcherTest {
                           "id": "photoid",
                           "format": "mso_mdoc",
                           "meta": {
-                            "doctype_value": "org.iso.23220.photoID.1"
+                            "doctype_value": "org.iso.23220.photoid.1"
                           },
                           "claims": [
                             {
@@ -454,7 +454,7 @@ class MatcherTest {
                           "id": "photoid",
                           "format": "mso_mdoc",
                           "meta": {
-                            "doctype_value": "org.iso.23220.photoID.1"
+                            "doctype_value": "org.iso.23220.photoid.1"
                           },
                           "claims": [
                             { "path": ["org.iso.23220.1", "family_name" ] },
@@ -608,7 +608,7 @@ class MatcherTest {
                           "id": "photoid",
                           "format": "mso_mdoc",
                           "meta": {
-                            "doctype_value": "org.iso.23220.photoID.1"
+                            "doctype_value": "org.iso.23220.photoid.1"
                           },
                           "claims": [
                             { "path": ["org.iso.23220.1", "family_name" ] },
@@ -1128,7 +1128,7 @@ class MatcherTest {
                       "id": "photoid",
                       "format": "mso_mdoc",
                       "meta": {
-                        "doctype_value": "org.iso.23220.photoID.1"
+                        "doctype_value": "org.iso.23220.photoid.1"
                       },
                       "claims": [
                         {"path": ["org.iso.23220.1", "given_name"], "values": ["Erika"]},
@@ -1173,7 +1173,7 @@ class MatcherTest {
                       "id": "photoid",
                       "format": "mso_mdoc",
                       "meta": {
-                        "doctype_value": "org.iso.23220.photoID.1"
+                        "doctype_value": "org.iso.23220.photoid.1"
                       },
                       "claims": [
                         {"path": ["org.iso.23220.1", "given_name"]},
@@ -1218,7 +1218,7 @@ class MatcherTest {
                       "id": "photoid",
                       "format": "mso_mdoc",
                       "meta": {
-                        "doctype_value": "org.iso.23220.photoID.1"
+                        "doctype_value": "org.iso.23220.photoid.1"
                       },
                       "claims": [
                         {"path": ["org.iso.23220.1", "given_name"]},
@@ -1263,7 +1263,7 @@ class MatcherTest {
                       "id": "photoid",
                       "format": "mso_mdoc",
                       "meta": {
-                        "doctype_value": "org.iso.23220.photoID.1"
+                        "doctype_value": "org.iso.23220.photoid.1"
                       },
                       "claims": [
                         {"path": ["org.iso.23220.1", "given_name"]},

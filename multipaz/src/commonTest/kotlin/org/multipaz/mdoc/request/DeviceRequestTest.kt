@@ -888,7 +888,7 @@ class DeviceRequestTest {
                 },
                 {
                   "itemsRequest": 24(<< {
-                    "docType": "org.iso.23220.photoID.1",
+                    "docType": "org.iso.23220.photoid.1",
                     "nameSpaces": {
                       "org.iso.23220.1": {
                         "age_over_18": true,
@@ -1009,7 +1009,7 @@ class DeviceRequestTest {
                 },
                 {
                   "itemsRequest": 24(<< {
-                    "docType": "org.iso.23220.photoID.1",
+                    "docType": "org.iso.23220.photoid.1",
                     "nameSpaces": {
                       "org.iso.23220.1": {
                         "age_over_18": true,
