@@ -5,9 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.96.0] - Not released yet, expected early Dec 2025
+## [0.96.0] - 2025-12-11
 Changes since Multipaz 0.95.0 include:
-- TODO
+- Longfellow support for iOS, see https://youtu.be/pJPrjxGb9Ro
+- Support for RICAL according to 18013-5 Second Edition drafts.
+- Support for 18013-5 Second Edition in `DeviceResponse`, `MobileSecurityObject`
+  including support for encrypted documents. Additional 18013-5 Second Edition
+  features (mainly just the new Query Language) will be added in a future
+  release.
+- Update PhotoID doctype according to latest 23220-4 draft, in particular change
+  to the lowercase doctype and namespace name.
+- OpenID4VCI fixes in response to OpenID interop event.
+- ISO 18013-5 fixes in response to ISO SC17 WG10 interop event in New Zealand.
+- Support for IETF Status List, Identifier List, and CRLs.
+- Multiplatform file and image picker dialogs in multipaz-compose.
+- DocumentCarousel composable in multipaz-compose.
+- PromptModel improvements.
+- DocumentStore optimizations.
+- Update to Kotlin 2.2.21 and XCode 26.1.1.
 
 ## [0.95.0] - 2025-11-11
 Changes since Multipaz 0.94.0 include:
