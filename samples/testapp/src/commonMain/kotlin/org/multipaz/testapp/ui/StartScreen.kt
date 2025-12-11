@@ -10,6 +10,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -17,7 +18,7 @@ import kotlinx.coroutines.launch
 import org.multipaz.compose.cards.InfoCard
 import org.multipaz.compose.cards.WarningCard
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
-import org.multipaz.testapp.DocumentModel
+import org.multipaz.compose.document.DocumentModel
 import org.multipaz.testapp.Platform
 import org.multipaz.testapp.platform
 
@@ -47,9 +48,11 @@ fun StartScreen(
     onClickNotifications: () -> Unit = {},
     onClickScreenLock: () -> Unit = {},
     onClickPickersScreen: () -> Unit = {},
+    onClickDocumentCarouselScreen: () -> Unit = {},
 ) {
     val blePermissionState = rememberBluetoothPermissionState()
     val coroutineScope = rememberCoroutineScope()
+    val documentInfos = documentModel.documentInfos.collectAsState().value
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -60,7 +63,7 @@ fun StartScreen(
         ) {
             Column {
                 AppUpdateCard()
-                if (documentModel.documentInfos.isEmpty()) {
+                if (documentInfos.isEmpty()) {
                     WarningCard(
                         modifier = Modifier.padding(8.dp).clickable() {
                             onClickDocumentStore()
@@ -69,7 +72,7 @@ fun StartScreen(
                         Text("Document Store is empty so proximity and W3C DC presentment won't work. Click to fix.")
                     }
                 } else {
-                    val numDocs = documentModel.documentInfos.size
+                    val numDocs = documentInfos.size
                     InfoCard(
                         modifier = Modifier.padding(8.dp)
                     ) {
@@ -77,7 +80,7 @@ fun StartScreen(
                                 "For W3C DC API, go to a reader website in a supported browser.")
                     }
                 }
-                if (!documentModel.documentInfos.isEmpty()) {
+                if (!documentInfos.isEmpty()) {
                     if (!blePermissionState.isGranted) {
                         WarningCard(
                             modifier = Modifier.padding(8.dp).clickable() {
@@ -233,6 +236,12 @@ fun StartScreen(
                 item {
                     TextButton(onClick = onClickPickersScreen) {
                         Text("Pickers")
+                    }
+                }
+
+                item {
+                    TextButton(onClick = onClickDocumentCarouselScreen) {
+                        Text("Document Carousel")
                     }
                 }
             }

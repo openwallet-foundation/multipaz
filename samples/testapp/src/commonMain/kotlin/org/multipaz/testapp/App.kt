@@ -30,7 +30,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -58,7 +57,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import multipazproject.samples.testapp.generated.resources.Res
 import org.jetbrains.compose.resources.ExperimentalResourceApi
-import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.OID
@@ -66,6 +64,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
+import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.compose.provisioning.Provisioning
 import org.multipaz.crypto.AsymmetricKey
@@ -121,6 +120,7 @@ import org.multipaz.testapp.ui.ConsentPromptScreen
 import org.multipaz.testapp.ui.CredentialClaimsViewerScreen
 import org.multipaz.testapp.ui.CredentialViewerScreen
 import org.multipaz.testapp.ui.DcRequestScreen
+import org.multipaz.testapp.ui.DocumentCarouselScreen
 import org.multipaz.testapp.ui.DocumentStoreScreen
 import org.multipaz.testapp.ui.DocumentViewerScreen
 import org.multipaz.testapp.ui.IsoMdocMultiDeviceTestingScreen
@@ -354,11 +354,7 @@ class App private constructor (val promptModel: PromptModel) {
     }
 
     private suspend fun documentModelInit() {
-        documentModel = DocumentModel(
-            scope = CoroutineScope(Dispatchers.IO),
-            documentStore = documentStore
-        )
-        documentModel.initialize()
+        documentModel = DocumentModel(documentStore = documentStore)
     }
 
     private suspend fun trustManagersInit() {
@@ -861,7 +857,10 @@ class App private constructor (val promptModel: PromptModel) {
                             onClickRichText = { navController.navigate(RichTextDestination) },
                             onClickNotifications = { navController.navigate(NotificationsDestination) },
                             onClickScreenLock = { navController.navigate(ScreenLockDestination) },
-                            onClickPickersScreen = { navController.navigate(PickersDestination) }
+                            onClickPickersScreen = { navController.navigate(PickersDestination) },
+                            onClickDocumentCarouselScreen = {
+                                navController.navigate(DocumentCarouselDestination)
+                            }
                         )
                     }
                 }
@@ -1241,6 +1240,11 @@ class App private constructor (val promptModel: PromptModel) {
                 composable<PickersDestination> { backStackEntry ->
                     WithAppBar(navController, "Picker use-cases") {
                         PickersScreen()
+                    }
+                }
+                composable<DocumentCarouselDestination> { backStackEntry ->
+                    WithAppBar(navController, "Document Carousel") {
+                        DocumentCarouselScreen(documentModel)
                     }
                 }
             }

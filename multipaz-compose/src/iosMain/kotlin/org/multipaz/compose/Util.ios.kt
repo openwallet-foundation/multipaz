@@ -159,3 +159,4 @@ actual fun ImageBitmap.cropRotateScaleImage(
 actual fun rememberUiBoundCoroutineScope(
     getContext: @DisallowComposableCalls () -> CoroutineContext
 ): CoroutineScope = rememberCoroutineScope(getContext)
+

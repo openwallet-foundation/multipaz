@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import org.multipaz.testapp.platformSecureAreaHasKeyAgreement
 import androidx.compose.ui.unit.dp
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
@@ -42,10 +44,9 @@ import org.multipaz.securearea.cloud.CloudSecureArea
 import org.multipaz.securearea.cloud.CloudUserAuthType
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
-import org.multipaz.testapp.DocumentModel
+import org.multipaz.compose.document.DocumentModel
 import org.multipaz.testapp.TestAppSettingsModel
 import org.multipaz.testapp.TestAppUtils
-import org.multipaz.testapp.platformSecureAreaHasKeyAgreement
 import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -100,6 +101,7 @@ fun DocumentStoreScreen(
     val documentSigningAlgorithm = remember { mutableStateOf<Algorithm>(Algorithm.ESP256) }
     val showProvisioningResult = remember { mutableStateOf<AnnotatedString?>(null) }
     val userAuthenticationTimeout = remember { mutableStateOf<Duration>(10.seconds) }
+    val documentInfos = documentModel.documentInfos.collectAsState().value
 
     val showDocumentCreationDialog = remember { mutableStateOf(false) }
     if (showDocumentCreationDialog.value) {
@@ -402,7 +404,7 @@ fun DocumentStoreScreen(
         item {
             SettingHeadline("Current Documents in DocumentStore")
         }
-        if (documentModel.documentInfos.isEmpty()) {
+        if (documentInfos.isEmpty()) {
             item {
                 Text(
                     modifier = Modifier.padding(horizontal = 16.dp),
@@ -411,7 +413,7 @@ fun DocumentStoreScreen(
                 )
             }
         } else {
-            for ((_, documentInfo) in documentModel.documentInfos) {
+            for ((_, documentInfo) in documentInfos) {
                 item {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp),

@@ -117,3 +117,6 @@ data object ScreenLockDestination: Destination()
 
 @Serializable
 data object PickersDestination: Destination()
+
+@Serializable
+data object DocumentCarouselDestination: Destination()

@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.SpanStyle
@@ -23,7 +24,7 @@ import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
-import org.multipaz.testapp.DocumentModel
+import org.multipaz.compose.document.DocumentModel
 import org.multipaz.util.toBase64Url
 import kotlinx.coroutines.launch
 import org.multipaz.compose.datetime.formattedDateTime
@@ -38,7 +39,8 @@ fun CredentialViewerScreen(
     onViewCredentialClaims: (documentId: String, credentialId: String) -> Unit,
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val documentInfo = documentModel.documentInfos[documentId]
+    val documentInfos = documentModel.documentInfos.collectAsState().value
+    val documentInfo = documentInfos[documentId]
     val credentialInfo = documentInfo?.credentialInfos?.find { it.credential.identifier == credentialId  }
 
     val scrollState = rememberScrollState()
@@ -67,7 +69,7 @@ fun CredentialViewerScreen(
                     val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1
                     val msoBytes = issuerAuth.payload!!
                     KeyValuePairText("MSO size", "${msoBytes.size} bytes")
-                    KeyValuePairText("ISO mdoc DocType", credentialInfo.credential.docType)
+                    KeyValuePairText("ISO mdoc DocType", (credentialInfo.credential as MdocCredential).docType)
                     KeyValuePairText(
                         keyText = "ISO mdoc DS Key Certificate",
                         valueText = buildAnnotatedString {
@@ -87,7 +89,7 @@ fun CredentialViewerScreen(
                     )
                 }
                 is SdJwtVcCredential -> {
-                    KeyValuePairText("Verifiable Credential Type", credentialInfo.credential.vct)
+                    KeyValuePairText("Verifiable Credential Type", (credentialInfo.credential as SdJwtVcCredential).vct)
                     // TODO: Show cert chain for key used to sign issuer-signed data. Involves
                     //  getting this over the network as specified in section 5 "JWT VC Issuer Metadata"
                     //  of https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/ ... how annoying
@@ -95,9 +97,18 @@ fun CredentialViewerScreen(
             }
 
             if (credentialInfo.credential is SecureAreaBoundCredential) {
-                KeyValuePairText("Secure Area", credentialInfo.credential.secureArea.displayName)
-                KeyValuePairText("Secure Area Identifier", credentialInfo.credential.secureArea.identifier)
-                KeyValuePairText("Device Key Algorithm", credentialInfo.keyInfo!!.algorithm.description)
+                KeyValuePairText(
+                    "Secure Area",
+                    (credentialInfo.credential as SecureAreaBoundCredential).secureArea.displayName
+                )
+                KeyValuePairText(
+                    "Secure Area Identifier",
+                    (credentialInfo.credential as SecureAreaBoundCredential).secureArea.identifier
+                )
+                KeyValuePairText(
+                    "Device Key Algorithm",
+                    credentialInfo.keyInfo!!.algorithm.description
+                )
                 KeyValuePairText("Device Key Invalidated",
                     buildAnnotatedString {
                         if (credentialInfo.keyInvalidated) {
@@ -120,7 +131,7 @@ fun CredentialViewerScreen(
                     },
                     modifier = Modifier.clickable {
                         coroutineScope.launch {
-                            val attestation = credentialInfo.credential.getAttestation()
+                            val attestation = (credentialInfo.credential as SecureAreaBoundCredential).getAttestation()
                             if (attestation.certChain != null) {
                                 onViewCertificateChain(Cbor.encode(attestation.certChain!!.toDataItem()).toBase64Url())
                             } else {

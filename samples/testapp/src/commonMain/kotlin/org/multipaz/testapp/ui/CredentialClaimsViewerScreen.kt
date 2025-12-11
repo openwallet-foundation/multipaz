@@ -9,12 +9,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.testapp.DocumentModel
+import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.claim.RenderClaimValue
 
 @Composable
@@ -26,7 +27,8 @@ fun CredentialClaimsViewerScreen(
     showToast: (message: String) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val documentInfo = documentModel.documentInfos[documentId]
+    val documentInfos = documentModel.documentInfos.collectAsState().value
+    val documentInfo = documentInfos[documentId]
     val credentialInfo = documentInfo?.credentialInfos?.find { it.credential.identifier == credentialId  }
 
     val scrollState = rememberScrollState()

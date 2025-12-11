@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
@@ -21,7 +22,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import org.multipaz.testapp.DocumentModel
+import org.multipaz.compose.document.DocumentModel
 import org.multipaz.testapp.rememberInhibitNfcObserveMode
 
 @Composable
@@ -31,7 +32,8 @@ fun DocumentViewerScreen(
     showToast: (message: String) -> Unit,
     onViewCredential: (documentId: String, credentialId: String) -> Unit,
 ) {
-    val documentInfo = documentModel.documentInfos[documentId]
+    val documentInfos = documentModel.documentInfos.collectAsState().value
+    val documentInfo = documentInfos[documentId]
 
     rememberInhibitNfcObserveMode()
 
