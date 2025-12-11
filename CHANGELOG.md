@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.97.0] - Not yet released, expected in January 2026
+Changes since Multipaz 0.96.0 include:
+- TODO
+
 ## [0.96.0] - 2025-12-11
 Changes since Multipaz 0.95.0 include:
 - Longfellow support for iOS, see https://youtu.be/pJPrjxGb9Ro
