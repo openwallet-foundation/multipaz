@@ -24,6 +24,7 @@ import org.multipaz.compose.cards.InfoCard
 import org.multipaz.testapp.BuildConfig
 import org.multipaz.testapp.platformHttpClientEngineFactory
 import org.multipaz.util.Logger
+import org.multipaz.util.Platform
 
 private const val TAG = "AppUpdateCard"
 
@@ -36,7 +37,7 @@ fun AppUpdateCard() {
     //val currentVersion = "0.91.0-pre.48.574b479c"
     val updateUrl = BuildConfig.TEST_APP_UPDATE_URL
     val updateWebsiteUrl = BuildConfig.TEST_APP_UPDATE_WEBSITE_URL
-    val currentVersion = BuildConfig.VERSION
+    val currentVersion = Platform.version
 
     if (updateUrl.isEmpty()) {
         return

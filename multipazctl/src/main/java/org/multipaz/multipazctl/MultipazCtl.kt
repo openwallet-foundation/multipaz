@@ -19,6 +19,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.buildCrl
+import org.multipaz.util.Platform
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.security.Security
@@ -426,7 +427,7 @@ Prints out version:
     }
 
     fun version(args: Array<String>) {
-        println(BuildConfig.VERSION)
+        println(Platform.version)
     }
 
     @JvmStatic

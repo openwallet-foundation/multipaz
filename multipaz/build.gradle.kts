@@ -10,11 +10,18 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.buildconfig)
     id("maven-publish")
 }
 
 val projectVersionCode: Int by rootProject.extra
 val projectVersionName: String by rootProject.extra
+
+buildConfig {
+    packageName("org.multipaz.util")
+    buildConfigField("VERSION", projectVersionName)
+    useKotlinOutput { internalVisibility = true }
+}
 
 kotlin {
     jvmToolchain(17)

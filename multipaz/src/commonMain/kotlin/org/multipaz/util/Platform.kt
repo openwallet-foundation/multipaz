@@ -19,6 +19,13 @@ expect object Platform {
     val name: String
 
     /**
+     * The version of the Multipaz library, for example `0.96.0` or `0.97.0-pre.1.aaf8d71e`.
+     *
+     * This string adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+     */
+    val version: String
+
+    /**
      * A [PromptModel] implementation suitable for the platform.
      */
     val promptModel: PromptModel

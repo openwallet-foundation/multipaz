@@ -51,6 +51,8 @@ actual object Platform {
         IosPromptModel.Builder().apply { addCommonDialogs() }.build()
     }
 
+    actual val version = BuildConfig.VERSION
+
     actual val storage by lazy {
         SqliteStorage(
             connection = openDatabase(

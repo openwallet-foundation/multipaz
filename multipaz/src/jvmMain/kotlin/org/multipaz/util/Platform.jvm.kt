@@ -8,6 +8,8 @@ import org.multipaz.storage.ephemeral.EphemeralStorage
 actual object Platform {
     actual val name = "JVM ${System.getProperty("java.vm.version")} / Java ${System.getProperty("java.version")}"
 
+    actual val version = BuildConfig.VERSION
+
     actual val promptModel: PromptModel
         get() = throw NotImplementedError()
 

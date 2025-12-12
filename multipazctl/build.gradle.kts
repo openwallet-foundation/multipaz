@@ -1,16 +1,7 @@
 plugins {
     id("java-library")
     id("org.jetbrains.kotlin.jvm")
-    alias(libs.plugins.buildconfig)
     alias(libs.plugins.ktor)
-}
-
-val projectVersionCode: Int by rootProject.extra
-val projectVersionName: String by rootProject.extra
-
-buildConfig {
-    packageName("org.multipaz.multipazctl")
-    buildConfigField("VERSION", projectVersionName)
 }
 
 kotlin {

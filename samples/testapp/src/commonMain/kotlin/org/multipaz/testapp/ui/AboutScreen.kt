@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.multipaz.testapp.BuildConfig
+import org.multipaz.util.Platform
 
 @Composable
 fun AboutScreen() {
@@ -22,7 +23,7 @@ fun AboutScreen() {
                     "tests for.")
         }
         item {
-            Text("Version ${BuildConfig.VERSION}")
+            Text("Version ${Platform.version}")
         }
     }
 }
