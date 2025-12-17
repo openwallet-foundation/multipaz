@@ -27,13 +27,15 @@ import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.SimpleCipher
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import org.multipaz.webtoken.WebTokenCheck
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import org.multipaz.webtoken.validateJwt
 import org.multipaz.rpc.backend.Configuration
-import org.multipaz.server.baseUrl
+import org.multipaz.server.common.baseUrl
+import org.multipaz.server.enrollment.ServerIdentity
+import org.multipaz.server.enrollment.validateServerIdentityCertificateChain
 import kotlin.time.Duration
 import kotlin.time.Instant
 
@@ -129,7 +131,7 @@ suspend fun authorizeWithDpop(
         if (auth == null) {
             throw InvalidRequestException("Authorization header required")
         }
-        if (auth.substring(0, 5).lowercase() != "dpop ") {
+        if (auth.take(5).lowercase() != "dpop ") {
             throw InvalidRequestException("DPoP authorization required")
         }
         if (auth.substring(5) != accessToken) {
@@ -188,6 +190,10 @@ suspend fun validateClientAttestation(
             if (requireIssuerMatch) {
                 put(WebTokenCheck.X5C_CN_ISS_MATCH, "required")
             }
+        },
+        certificateChainValidator = { chain, instant ->
+            validateServerIdentityCertificateChain(
+                ServerIdentity.WALLET_ATTESTATION, chain, instant)
         }
     )
 
@@ -392,7 +398,7 @@ private suspend fun validateDPoPJwt(
  */
 fun extractAccessToken(request: ApplicationRequest): String {
     val authorization = request.headers["Authorization"]
-    if (authorization == null || authorization.substring(0, 5).lowercase() != "dpop ") {
+    if (authorization == null || authorization.take(5).lowercase() != "dpop ") {
         throw InvalidRequestException("Authorization header invalid or missing")
     }
     return authorization.substring(5)
@@ -409,7 +415,11 @@ private suspend fun validateClientAssertionJwt(clientAssertionJwt: String, clien
             WebTokenCheck.SUB to clientId,
             WebTokenCheck.ISS to clientId,
             WebTokenCheck.AUD to BackendEnvironment.getBaseUrl()
-        )
+        ),
+        certificateChainValidator = { chain, instant ->
+            validateServerIdentityCertificateChain(
+                ServerIdentity.CLIENT_ASSERTION, chain, instant)
+        }
     )
 }
 

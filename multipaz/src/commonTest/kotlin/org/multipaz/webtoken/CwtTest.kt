@@ -17,6 +17,8 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.X509KeyUsage
+import org.multipaz.crypto.buildX509Cert
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.handler.InvalidRequestException
@@ -170,51 +172,32 @@ class CwtTest {
     }
 
     @Test
-    fun testTrustIss() = runBackendTest {
-        val cwt = makeCwt(privateTrustedKey)
+    fun testTrustIssKid() = runBackendTest {
+        val cwt = makeCwt(privateTrustedKey, iss = "test-iss", kid = "test-kid")
         validateCwt(
             cwt, "test", publicKey = null, clock = clock,
-            checks = mapOf(WebTokenCheck.TRUST to "iss")
-        )
-    }
-
-    @Test
-    fun testTrustKid() = runBackendTest {
-        val cwt = makeCwt(privateTrustedKey, iss = null, kid = "test-kid")
-        validateCwt(
-            cwt, "test", publicKey = null, clock = clock,
-            checks = mapOf(WebTokenCheck.TRUST to "kid")
+            checks = mapOf(WebTokenCheck.TRUST to "iss_kid")
         )
     }
 
     @Test
     fun testTrustX5Chain() = runBackendTest {
         val x5cKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        val cert = X509Cert.Builder(
+        val cert = buildX509Cert(
             publicKey = x5cKey.publicKey,
-            signingKey = AsymmetricKey.Companion.anonymous(
+            signingKey = AsymmetricKey.anonymous(
                 privateKey = privateTrustedKey,
                 algorithm = privateTrustedKey.curve.defaultSigningAlgorithm
             ),
             serialNumber = ASN1Integer(2),
-            subject = X500Name.Companion.fromName("CN=test-x5c-leaf"),
-            issuer = X500Name.Companion.fromName("CN=test-x5c"),
+            subject = X500Name.fromName("CN=test-x5c-leaf"),
+            issuer = X500Name.fromName("CN=test-x5c"),
             validFrom = clock.now() - 1.days,
             validUntil = clock.now() + 1.days
-        ).build()
-        val root = X509Cert.Builder(
-            publicKey = trustedKey,
-            signingKey = AsymmetricKey.Companion.anonymous(
-                privateKey = privateTrustedKey,
-                algorithm = privateTrustedKey.curve.defaultSigningAlgorithm
-            ),
-            serialNumber = ASN1Integer(57),
-            subject = X500Name.Companion.fromName("CN=test-x5c"),
-            issuer = X500Name.Companion.fromName("CN=test-x5c"),
-            validFrom = clock.now() - 10.days,
-            validUntil = clock.now() + 100.days
-        ).build()
-        val chain = X509CertChain(listOf(cert, root))
+        ) {
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+        val chain = X509CertChain(listOf(cert))
         val cwt = makeCwt(x5cKey, iss = "test-x5c-leaf", x5c = chain)
         validateCwt(
             cwt, "test", publicKey = null, clock = clock,
@@ -292,9 +275,9 @@ class CwtTest {
         }
 
         override fun getValue(key: String): String? {
-            if (key == "iss" || key == "kid") {
+            if (key == "iss_kid") {
                 return buildJsonObject {
-                    put("test-$key", trustedKey.toJwk())
+                    put("test-iss#test-kid", trustedKey.toJwk())
                 }.toString()
             }
             if (key == "x5c") {

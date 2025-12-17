@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.multipaz.server.common.getAdminPassword
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 
@@ -25,16 +26,17 @@ suspend fun validateAdminCookie(call: ApplicationCall) {
     val cookie = call.request.cookies["admin_auth"] ?: throw AdminCookieInvalid()
     try {
         tokenToId(TokenType.ADMIN_COOKIE, cookie)
-    } catch (e: IllegalArgumentException) {
+    } catch (_: IllegalArgumentException) {
         throw AdminCookieInvalid()
     }
 }
 
 /**
  * Issues "admin_auth" cookie to the client upon successful authentication
- * (supplied password matching given administrative password).
+ * (supplied password matching administrative password).
  */
-suspend fun adminAuth(call: ApplicationCall, adminPassword: String) {
+suspend fun adminAuth(call: ApplicationCall) {
+    val adminPassword = getAdminPassword()
     val request = Json.parseToJsonElement(call.receiveText()) as JsonObject
     if (request["password"]?.jsonPrimitive?.content != adminPassword) {
         call.respondText(

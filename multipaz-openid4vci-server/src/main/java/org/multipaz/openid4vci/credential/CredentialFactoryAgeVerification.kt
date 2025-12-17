@@ -25,13 +25,13 @@ import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.openid4vci.util.CredentialId
 import org.multipaz.revocation.RevocationStatus
 import org.multipaz.rpc.backend.BackendEnvironment
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import kotlin.time.Duration.Companion.days
 
 /**
  * Factory for Age Verification Credential ID in ISO mdoc format.
  */
-internal class CredentialFactoryAgeVerification : CredentialFactoryBase() {
+internal class CredentialFactoryAgeVerification : CredentialFactory {
     override val offerId: String
         get() = "mDoc-AgeVerification"
 
@@ -121,6 +121,7 @@ internal class CredentialFactoryAgeVerification : CredentialFactoryBase() {
                 Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
             )
         )
+        val signingKey = getSigningKey()
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
@@ -151,6 +152,6 @@ internal class CredentialFactoryAgeVerification : CredentialFactoryBase() {
     }
 
     companion object Companion {
-        const val TAG = "CredentialFactoryAgeVerification"
+        private const val TAG = "CredentialFactoryAgeVerification"
     }
 }

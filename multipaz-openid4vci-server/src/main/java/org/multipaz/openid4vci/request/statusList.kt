@@ -9,13 +9,13 @@ import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
 import io.ktor.util.date.GMTDate
 import org.multipaz.openid4vci.credential.CredentialFactory
-import org.multipaz.openid4vci.credential.CredentialFactoryBase
 import org.multipaz.openid4vci.util.CredentialState
 import org.multipaz.rpc.backend.BackendEnvironment
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import org.multipaz.revocation.CompressedStatusList
 import org.multipaz.revocation.StatusList
-import org.multipaz.util.Logger
+import org.multipaz.server.enrollment.ServerIdentity
+import org.multipaz.server.enrollment.getServerIdentity
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -62,10 +62,11 @@ suspend fun statusList(call: ApplicationCall, bucket: String) {
     val creation = statusList.creationTime.toEpochMilliseconds()
     call.response.header(HttpHeaders.LastModified, GMTDate(creation).toHttpDate())
     call.response.header(HttpHeaders.ETag, "W/$creation")
+    val serverKey = getServerIdentity(ServerIdentity.CREDENTIAL_SIGNING)
     if (useCwt) {
         call.respondBytes(
             bytes = statusList.serializeAsCwt(
-                key = CredentialFactoryBase.serverKey,
+                key = serverKey,
                 subject = BackendEnvironment.getBaseUrl() + "/status_list/$bucket"
             ),
             contentType = STATUSLIST_CWT
@@ -73,7 +74,7 @@ suspend fun statusList(call: ApplicationCall, bucket: String) {
     } else {
         call.respondText(
             text = statusList.serializeAsJwt(
-                key = CredentialFactoryBase.serverKey,
+                key = serverKey,
                 subject = BackendEnvironment.getBaseUrl() + "/status_list/$bucket"
             ),
             contentType = STATUSLIST_JWT

@@ -39,7 +39,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resumeWithException
 import kotlin.time.Duration.Companion.seconds
 
-const val TAG = "ScanNfcTagPromptDialog"
+private const val TAG = "ScanNfcTagPromptDialog"
 
 /**
  * Displays NFC prompt dialog in Composable UI environment and runs NFC interactions.

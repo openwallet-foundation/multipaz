@@ -131,20 +131,11 @@ class JwtTest {
     }
 
     @Test
-    fun testTrustIss() = runBackendTest {
-        val jwt = makeJwt(privateTrustedKey)
+    fun testTrustIssKid() = runBackendTest {
+        val jwt = makeJwt(privateTrustedKey, iss = "test-iss", kid = "test-kid")
         validateJwt(
             jwt, "test", publicKey = null, clock = clock,
-            checks = mapOf(WebTokenCheck.TRUST to "iss")
-        )
-    }
-
-    @Test
-    fun testTrustKid() = runBackendTest {
-        val jwt = makeJwt(privateTrustedKey, iss = null, kid = "test-kid")
-        validateJwt(
-            jwt, "test", publicKey = null, clock = clock,
-            checks = mapOf(WebTokenCheck.TRUST to "kid")
+            checks = mapOf(WebTokenCheck.TRUST to "iss_kid")
         )
     }
 
@@ -153,25 +144,25 @@ class JwtTest {
         val x5cKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val cert = X509Cert.Builder(
             publicKey = x5cKey.publicKey,
-            signingKey = AsymmetricKey.Companion.anonymous(
+            signingKey = AsymmetricKey.anonymous(
                 privateKey = privateTrustedKey,
                 algorithm = privateTrustedKey.curve.defaultSigningAlgorithm
             ),
             serialNumber = ASN1Integer(2),
-            subject = X500Name.Companion.fromName("CN=test-x5c-leaf"),
-            issuer = X500Name.Companion.fromName("CN=test-x5c"),
+            subject = X500Name.fromName("CN=test-x5c-leaf"),
+            issuer = X500Name.fromName("CN=test-x5c"),
             validFrom = clock.now() - 1.days,
             validUntil = clock.now() + 1.days
         ).build()
         val root = X509Cert.Builder(
             publicKey = trustedKey,
-            signingKey = AsymmetricKey.Companion.anonymous(
+            signingKey = AsymmetricKey.anonymous(
                 privateKey = privateTrustedKey,
                 algorithm = privateTrustedKey.curve.defaultSigningAlgorithm
             ),
             serialNumber = ASN1Integer(57),
-            subject = X500Name.Companion.fromName("CN=test-x5c"),
-            issuer = X500Name.Companion.fromName("CN=test-x5c"),
+            subject = X500Name.fromName("CN=test-x5c"),
+            issuer = X500Name.fromName("CN=test-x5c"),
             validFrom = clock.now() - 10.days,
             validUntil = clock.now() + 100.days
         ).build()
@@ -246,22 +237,22 @@ class JwtTest {
         private val trustedCert = runBlocking {
             X509Cert.Builder(
                 publicKey = trustedKey,
-                signingKey = AsymmetricKey.Companion.anonymous(
+                signingKey = AsymmetricKey.anonymous(
                     privateKey = Crypto.createEcPrivateKey(EcCurve.P384),
                     algorithm = EcCurve.P384.defaultSigningAlgorithm
                 ),
                 serialNumber = ASN1Integer(57),
-                subject = X500Name.Companion.fromName("CN=test-root"),
-                issuer = X500Name.Companion.fromName("CN=test-ca"),
+                subject = X500Name.fromName("CN=test-root"),
+                issuer = X500Name.fromName("CN=test-ca"),
                 validFrom = clock.now() - 10.days,
                 validUntil = clock.now() + 100.days
             ).build()
         }
 
         override fun getValue(key: String): String? {
-            if (key == "iss" || key == "kid") {
+            if (key == "iss_kid") {
                 return buildJsonObject {
-                    put("test-$key", trustedKey.toJwk())
+                    put("test-iss#test-kid", trustedKey.toJwk())
                 }.toString()
             }
             if (key == "x5c") {

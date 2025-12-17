@@ -28,7 +28,7 @@ import org.multipaz.revocation.RevocationStatus
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
 import org.multipaz.sdjwt.SdJwt
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
 import kotlin.collections.List
@@ -39,7 +39,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
 /** EU PID credential */
-internal class CredentialFactorySdjwtPid : CredentialFactoryBase() {
+internal class CredentialFactorySdjwtPid : CredentialFactory {
     override val offerId: String
         get() = "pid_sd_jwt"
 
@@ -162,7 +162,7 @@ internal class CredentialFactorySdjwtPid : CredentialFactoryBase() {
         )
 
         val sdJwt = SdJwt.create(
-            issuerKey = signingKey,
+            issuerKey = getSigningKey(),
             kbKey = authenticationKey,
             claims = identityAttributes,
             nonSdClaims = buildJsonObject {

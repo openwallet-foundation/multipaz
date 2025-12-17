@@ -54,6 +54,8 @@ enum class OID(
     ISO_18013_5_MDL_DS("1.0.18013.5.1.2", "Mobile Driving Licence (mDL) Document Signer (DS)"),
     ISO_18013_5_MDL_READER_AUTH("1.0.18013.5.1.6", "Mobile Driving Licence (mDL) Reader Auth"),
 
+    ISO_23220_4_MDOC_DS("1.0.23220.4.1.2", "mDoc Document Signer (DS)"),
+    ISO_23220_4_MDOC_READER_AUTH("1.0.23220.4.1.6", "mDoc Reader Auth"),
     ;
 
     companion object {

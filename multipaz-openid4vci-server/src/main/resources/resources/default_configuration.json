@@ -1,7 +1,11 @@
 {
   "server_port": 8007,
+  "ca_trust_servers": [
+    "*.multipaz.org/**",
+    "sorotokin.com/**"
+  ],
   "trusted_client_assertions": {
-    "895b72b9-0808-4fcc-bb19-960d14a9e28f": {
+    "urn:uuid:418745b8-78a3-4810-88df-7898aff3ffb4#895b72b9-0808-4fcc-bb19-960d14a9e28f": {
       "kty": "EC",
       "alg": "ES256",
       "crv": "P-256",
@@ -29,24 +33,5 @@
       "y": "rmzbybii_BwR2sa9C6YwREFf2hRBFURBejRiod1n1RI",
       "alg": "ES256"
     }
-  },
-  "iaca_jwk": {
-    "kty": "EC",
-    "crv": "P-384",
-    "d": "C_QfGfkQYxaTGJ4pzz9mKh_8-elK4nQHq72QBLkwxDrmnUTFhCmw89SFOF9nuJ4P",
-    "x": "EGgITePTQxbhn9dlsbNWJMsaaEzvhGLEqiS8CQLCJHQecOdnYM_gx88WmHK5dw3K",
-    "y": "kI2DgqCGh7o6OGuHYyR_luBdVtXKPhYsZ41-iiFijd-q6Ug_ym4P1B1Edb8HuuUv",
-    "x5c": [
-      "MIICWjCCAd+gAwIBAgIQFD5azm+j9q3XJx+iyhUikTAKBggqhkjOPQQDAzAuMQswCQYDVQQGDAJVUzEfMB0GA1UEAwwWT1dGIE11bHRpcGF6IFRFU1QgSUFDQTAeFw0yNTExMDMyMDE4MjdaFw0zMDExMDMyMDE4MjdaMC4xCzAJBgNVBAYMAlVTMR8wHQYDVQQDDBZPV0YgTXVsdGlwYXogVEVTVCBJQUNBMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEEGgITePTQxbhn9dlsbNWJMsaaEzvhGLEqiS8CQLCJHQecOdnYM/gx88WmHK5dw3KkI2DgqCGh7o6OGuHYyR/luBdVtXKPhYsZ41+iiFijd+q6Ug/ym4P1B1Edb8HuuUvo4HBMIG+MA4GA1UdDwEB/wQEAwIBBjASBgNVHRMBAf8ECDAGAQH/AgEAMCYGA1UdEgQfMB2GG2h0dHBzOi8vaXNzdWVyLm11bHRpcGF6Lm9yZzAwBgNVHR8EKTAnMCWgI6Ahhh9odHRwczovL2lzc3Vlci5tdWx0aXBhei5vcmcvY3JsMB0GA1UdDgQWBBRmheUDVtnS0563L8L9uS8ufjNjFTAfBgNVHSMEGDAWgBRmheUDVtnS0563L8L9uS8ufjNjFTAKBggqhkjOPQQDAwNpADBmAjEA6heZE6ZjmiI2c+EhZlhL8M1hBgQJp26QLFFv0PSNCcNnHJt5dg0TTvwGUA25yel2AjEAiRL2XohP6ZvMky4ge7f/uOfTFanIb9ulwnTVkQ/fJv2N+w9mEm/IgLxcsfsoy2W9"
-    ]
-  },
-  "system_of_record_jwk": {
-    "kty": "EC",
-    "alg": "ES256",
-    "kid": "bdbb8887-7cb7-4457-8a3f-1216924ed543",
-    "crv": "P-256",
-    "x": "tvNovlSdvTIjUW4okuSmeMiM7egvRLaj8W45MVXEM8Y",
-    "y": "L0AQ7DU9f6kyYdrJZlCfD0LjhoXQtX7lmfubjjIdLCg",
-    "d": "lYmbuSV3m7XwvDfU8xAkWRlNUPd_lWGXMEtslR_fFxI"
   }
 }

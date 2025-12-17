@@ -183,13 +183,13 @@ sealed class AsymmetricKey {
     /** [AsymmetricKey] which is both [AsymmetricKey.X509Certified] and [AsymmetricKey.SecureAreaBased]. */
     data class X509CertifiedSecureAreaBased(
         override val certChain: X509CertChain,
-        override val alias: String,
         override val secureArea: SecureArea,
         override val keyInfo: KeyInfo,
         override val unlockReason: Reason = Reason.Unspecified,
         override val algorithm: Algorithm = keyInfo.algorithm
     ): X509Certified(),
         SecureAreaBased {
+        override val alias: String = keyInfo.alias
         override val publicKey: EcPublicKey get() = keyInfo.publicKey
         override suspend fun sign(message: ByteArray) = sign(this, message)
         override suspend fun keyAgreement(otherKey: EcPublicKey) = keyAgreement(this, otherKey)
@@ -291,7 +291,7 @@ sealed class AsymmetricKey {
                 if (kid != null) {
                     NamedSecureAreaBased(kid, alias, secureArea, keyInfo, unlockReason)
                 } else {
-                    X509CertifiedSecureAreaBased(x5c!!, alias, secureArea, keyInfo, unlockReason)
+                    X509CertifiedSecureAreaBased(x5c!!, secureArea, keyInfo, unlockReason)
                 }
             } else {
                 parseExplicit(json)

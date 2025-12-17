@@ -10,7 +10,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackendStub
 import org.multipaz.provisioning.openid4vci.OpenID4VCIClientPreferences
-import org.multipaz.rpc.client.RpcAuthorizedClient
+import org.multipaz.rpc.client.RpcAuthorizedDeviceClient
 import org.multipaz.rpc.handler.RpcAuthClientSession
 import org.multipaz.rpc.handler.RpcExceptionMap
 import org.multipaz.rpc.transport.HttpTransport
@@ -35,7 +35,7 @@ class ProvisioningSupport(
         const val APP_LINK_SERVER = "https://apps.multipaz.org"
         const val APP_LINK_BASE_URL = "$APP_LINK_SERVER/landing/"
 
-        const val TAG = "ProvisioningSupport"
+        private const val TAG = "ProvisioningSupport"
 
         val BACKEND_SERVER_URL: String? = null
     }
@@ -50,10 +50,10 @@ class ProvisioningSupport(
         var backend: OpenID4VCIBackend? = null
         if (BACKEND_SERVER_URL != null) {
             try {
-                val rpcAuthorizedClient = RpcAuthorizedClient.connect(
+                val rpcAuthorizedClient = RpcAuthorizedDeviceClient.connect(
                     exceptionMap = RpcExceptionMap.Builder().build(),
                     httpClientEngine = platformHttpClientEngineFactory(),
-                    url = BACKEND_SERVER_URL,
+                    url = "$BACKEND_SERVER_URL/rpc",
                     secureArea = secureArea,
                     storage = storage
                 )

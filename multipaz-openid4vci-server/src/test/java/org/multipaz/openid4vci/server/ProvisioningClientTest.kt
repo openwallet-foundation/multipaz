@@ -50,7 +50,9 @@ import org.multipaz.securearea.KeyAttestation
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.securearea.software.SoftwareSecureArea
-import org.multipaz.server.ServerConfiguration
+import org.multipaz.server.common.ServerConfiguration
+import org.multipaz.server.common.ServerEnvironment
+import org.multipaz.server.common.installServerEnvironment
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.toBase64Url
 import kotlin.IllegalStateException
@@ -130,8 +132,11 @@ class ProvisioningClientTest {
         offer: String,
         serverArgs: Array<String>
     ) = testApplication {
+        val configuration = ServerConfiguration(serverArgs)
+        val serverEnvironment = ServerEnvironment.create(configuration)
         application {
-            configureRouting(ServerConfiguration(serverArgs))
+            installServerEnvironment(serverEnvironment)
+            configureRouting(serverEnvironment)
         }
         val httpClient = createClient {
             followRedirects = false
@@ -210,8 +215,11 @@ class ProvisioningClientTest {
             "-param", "base_url=http://localhost",
             "-param", "database_engine=ephemeral",
         )
+        val configuration = ServerConfiguration(serverArgs)
+        val serverEnvironment = ServerEnvironment.create(configuration)
         application {
-            configureRouting(ServerConfiguration(serverArgs))
+            installServerEnvironment(serverEnvironment)
+            configureRouting(serverEnvironment)
         }
         val httpClient = createClient {
             followRedirects = false
@@ -338,7 +346,7 @@ class ProvisioningClientTest {
             // Generate key attestation
             val keyList = keyIdAndAttestations.map { it.keyAttestation.publicKey }
 
-            val alg = localAttestationPrivateKey.curve.defaultSigningAlgorithm.joseAlgorithmIdentifier
+            val alg = localAttestationPrivateKey.curve.defaultSigningAlgorithmFullySpecified.joseAlgorithmIdentifier
             val head = buildJsonObject {
                 put("typ", "key-attestation+jwt")
                 put("alg", alg)
@@ -373,7 +381,7 @@ class ProvisioningClientTest {
         private val clientAssertionJwk = """
             {
                 "kty": "EC",
-                "alg": "ES256",
+                "alg": "ESP256",
                 "kid": "895b72b9-0808-4fcc-bb19-960d14a9e28f",
                 "crv": "P-256",
                 "x": "nSmAFnZx-SqgTEyqqOSmZyLESdbiSUIYlRlLLoWy5uc",
@@ -385,7 +393,7 @@ class ProvisioningClientTest {
         private val attestationJwk = """
             {
                 "kty": "EC",
-                "alg": "ES256",
+                "alg": "ESP256",
                 "crv": "P-256",
                 "x": "CoLFZ9sJfTqax-GarKIyw7_fX8-L446AoCTSHKJnZGs",
                 "y": "ALEJB1_YQMO_0qSFQb3urFTxRfANN8-MSeWLHYU7MVI",

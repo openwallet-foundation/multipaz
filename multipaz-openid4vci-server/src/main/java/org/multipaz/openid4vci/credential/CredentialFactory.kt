@@ -12,6 +12,8 @@ import org.multipaz.documenttype.knowntypes.Loyalty
 import org.multipaz.openid4vci.request.wellKnownOpenidCredentialIssuer
 import org.multipaz.openid4vci.util.CredentialId
 import org.multipaz.provisioning.CredentialFormat
+import org.multipaz.server.enrollment.ServerIdentity
+import org.multipaz.server.enrollment.getServerIdentity
 
 /**
  * Factory for credentials of a particular type.
@@ -30,12 +32,15 @@ internal interface CredentialFactory {
     val cryptographicBindingMethods: List<String>  // must be empty for keyless credentials
     val name: String  // human-readable name
     val logo: String?  // relative URL for the image
-    val signingKey: AsymmetricKey.X509Certified  // the key that is used to sign the credential
+
+    suspend fun getSigningKey(): AsymmetricKey.X509Certified =
+        getServerIdentity(ServerIdentity.CREDENTIAL_SIGNING)
+     // the key that is used to sign the credential
 
     /**
      * Ensures that resources are loaded
      */
-    suspend fun initialize()
+    suspend fun initialize() {}
 
     /**
      * Creates the credential.
@@ -69,12 +74,11 @@ internal interface CredentialFactory {
                     CredentialFactoryMdl(),
                     CredentialFactoryMdocPid(),
                     CredentialFactorySdjwtPid(),
-                    CredentialFactoryUtopiaNaturatization(),
+                    CredentialFactoryUtopiaNaturalization(),
                     CredentialFactoryUtopiaMovieTicket(),
                     CredentialFactoryAgeVerification(),
                     CredentialFactoryUtopiaLoyalty(),
                 )
-                CredentialFactoryBase.initialize()
                 factories.forEach { it.initialize() }
                 registeredFactories = RegisteredFactories(
                     byOfferId = factories.associateBy { it.offerId },

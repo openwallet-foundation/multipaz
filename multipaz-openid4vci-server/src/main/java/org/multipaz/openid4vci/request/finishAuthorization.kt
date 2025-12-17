@@ -14,7 +14,7 @@ import org.multipaz.openid4vci.util.codeToId
 import org.multipaz.openid4vci.util.generatePreauthorizedOffer
 import org.multipaz.openid4vci.util.generateRandom
 import org.multipaz.openid4vci.util.getSystemOfRecordUrl
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import org.multipaz.openid4vci.util.idToCode
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources

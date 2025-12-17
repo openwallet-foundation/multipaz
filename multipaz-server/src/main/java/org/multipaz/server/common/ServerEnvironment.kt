@@ -1,12 +1,12 @@
-package org.multipaz.server
+package org.multipaz.server.common
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.java.Java
+import io.ktor.client.plugins.HttpTimeout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.io.bytestring.ByteString
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.backend.Resources
@@ -21,11 +21,9 @@ import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
-import org.multipaz.storage.StorageTableSpec
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.storage.jdbc.JdbcStorage
 import java.io.File
-import kotlin.random.Random
 import kotlin.reflect.KClass
 import kotlin.reflect.cast
 
@@ -56,14 +54,8 @@ class ServerEnvironment(
             else -> return null
         })
     }
-    
-    companion object {
-        private val flowRootStateTableSpec = StorageTableSpec(
-            name = "RpcRootState",
-            supportPartitions = false,
-            supportExpiration = false
-        )
 
+    companion object {
         fun create(configuration: Configuration): Deferred<ServerEnvironment> {
             return CoroutineScope(Dispatchers.Default).async {
                 initialize(configuration)
@@ -86,6 +78,7 @@ class ServerEnvironment(
             }
 
             val httpClient = HttpClient(Java) {
+                install(HttpTimeout.Plugin)
                 followRedirects = false
             }
 
@@ -102,19 +95,9 @@ class ServerEnvironment(
                 }
                 .build()
 
-            val table = storage.getTable(flowRootStateTableSpec)
-            val key = table.get("messageEncryptionKey")
-            val messageEncryptionKey = if (key != null) {
-                key.toByteArray()
-            } else {
-                val newKey = Random.nextBytes(16)
-                table.insert(
-                    key = "messageEncryptionKey",
-                    data = ByteString(newKey),
-                )
-                newKey
-            }
-            val cipher = AesGcmCipher(messageEncryptionKey)
+            // Need to pass storage explicitly as ServerEnvironment is not yet set up
+            val messageEncryptionKey = persistentServerKey(name = "rpc", storage = storage)
+            val cipher = AesGcmCipher(messageEncryptionKey.toByteArray())
 
             val localPoll = RpcNotificationsLocalPoll(cipher)
 
@@ -125,7 +108,7 @@ class ServerEnvironment(
                 secureAreaProvider,
                 secureAreaRepository,
                 localPoll,
-                cipher
+                cipher,
             )
 
             return env

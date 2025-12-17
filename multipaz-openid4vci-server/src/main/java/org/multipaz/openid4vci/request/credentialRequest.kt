@@ -13,7 +13,7 @@ import org.multipaz.openid4vci.util.AUTHZ_REQ
 import org.multipaz.openid4vci.util.IssuanceState
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.codeToId
-import org.multipaz.server.getDomain
+import org.multipaz.server.common.getDomain
 import org.multipaz.openid4vci.util.getReaderIdentity
 import org.multipaz.openid4vci.util.idToCode
 import org.multipaz.rpc.backend.BackendEnvironment

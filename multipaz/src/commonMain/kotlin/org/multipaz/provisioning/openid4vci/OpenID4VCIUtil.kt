@@ -17,7 +17,7 @@ import org.multipaz.util.toBase64Url
 import kotlin.random.Random
 
 internal object OpenID4VCIUtil {
-    const val TAG = "OpenidUtil"
+    private const val TAG = "OpenidUtil"
 
     private val keyCreationMutex = Mutex()
 

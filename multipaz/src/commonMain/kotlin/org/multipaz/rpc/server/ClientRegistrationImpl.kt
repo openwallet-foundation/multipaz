@@ -36,19 +36,17 @@ class ClientRegistrationImpl(
     var registrationChallenge: ByteString? = null,
 ): ClientRegistration {
     override suspend fun challenge(): ByteString {
-        return buildByteString { Random.Default.nextBytes(16) }.also {
+        return buildByteString { Random.nextBytes(16) }.also {
             registrationChallenge = it
         }
     }
 
     override suspend fun register(deviceAttestation: DeviceAttestation): String {
         val registrationNonce = this.registrationChallenge
-        if (registrationNonce == null) {
-            throw InvalidRequestException("registrationNonce was not called")
-        }
+            ?: throw InvalidRequestException("registrationNonce was not called")
         val validationData = getClientRequirements().withChallenge(registrationNonce)
         this.registrationChallenge = null
-        val clientTable = BackendEnvironment.Companion.getTable(RpcAuthInspectorAssertion.Companion.rpcClientTableSpec)
+        val clientTable = BackendEnvironment.getTable(RpcAuthInspectorAssertion.rpcClientTableSpec)
         try {
             deviceAttestation.validate(validationData)
         } catch (err: DeviceAttestationException) {

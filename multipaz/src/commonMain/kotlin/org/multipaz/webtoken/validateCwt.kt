@@ -3,7 +3,6 @@ package org.multipaz.webtoken
 import kotlinx.io.bytestring.buildByteString
 import org.multipaz.asn1.OID
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
@@ -27,6 +26,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /**
  * General-purpose CWT validation using a set of built-in required checks (expiration
@@ -63,6 +63,10 @@ import kotlin.time.Duration.Companion.seconds
  * @param checks validation checks to perform.
  * @param maxValidity when `exp` is not present determines expiration time based on `iat` claim;
  *     when `exp` claim is present, determines how far in the future it can be.
+ * @param certificateChainValidator optional function to validate certificate chain in CWT; if
+ *     the certificate chain is not valid it should throw [InvalidRequestException] exception,
+ *     the returned value should indicate if the chain is trusted (in which case
+ *     [WebTokenCheck.TRUST] check is not performed) or not ([WebTokenCheck.TRUST] still applies).
  * @param clock clock that determines current time to check for expiration.
  * @throws ChallengeInvalidException when nonce or challenge check fails (see [WebTokenCheck.CHALLENGE])
  * @throws InvalidRequestException when any other validation fails
@@ -73,6 +77,7 @@ suspend fun validateCwt(
     publicKey: EcPublicKey?,
     checks: Map<WebTokenCheck, String> = mapOf(),
     maxValidity: Duration = 10.hours,
+    certificateChainValidator: (suspend (chain: X509CertChain, atTime: Instant) -> Boolean)? = null,
     clock: Clock = Clock.System
 ): CborMap {
     val cbor = Cbor.decode(cwt)
@@ -132,19 +137,25 @@ suspend fun validateCwt(
         }
     }
 
+    val certificateChain = (sign1.protectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel] ?:
+            sign1.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel])?.let {
+        X509CertChain.fromDataItem(it)
+    }
+    val caValidated = try {
+        certificateChain != null &&
+            (certificateChainValidator ?: ::basicCertificateChainValidator)
+                .invoke(certificateChain, now)
+    } catch (err: InvalidRequestException) {
+        throw InvalidRequestException("$cwtName: ${err.message}")
+    }
+
     val caName = checks[WebTokenCheck.TRUST]
     val key = if (caName == null) {
-        publicKey!!
+        require(publicKey != null || caValidated)
+        publicKey ?: certificateChain!!.certificates.first().ecPublicKey
     } else {
         val issuer = body[WebTokenClaim.Iss]
-        val x5chain = sign1.protectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel] ?:
-                sign1.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
-        if (x5chain != null) {
-            val certificateChain = X509CertChain.fromDataItem(x5chain)
-            if (!certificateChain.validate()) {
-                throw InvalidRequestException("$cwtName: 'x5c' certificate chain")
-            }
-            // TODO: check certificate issuance/expiration
+        if (certificateChain != null) {
             val first = certificateChain.certificates.first()
             if (checks[WebTokenCheck.X5C_CN_ISS_MATCH] == "required") {
                 if (issuer == null) {
@@ -156,24 +167,25 @@ suspend fun validateCwt(
                     throw InvalidRequestException("$cwtName: 'iss' does not match 'x5chain' certificate subject CN")
                 }
             }
-            val caCertificate = certificateChain.certificates.last()
-            val caKey = caPublicKey(
-                keyId = caCertificate.issuer.components[OID.COMMON_NAME.oid]?.value
-                    ?: throw InvalidRequestException("$cwtName: No CN entry in 'x5chain' CA"),
-                caName = caName
-            )
-            try {
-                caCertificate.verify(caKey)
-            } catch (err: SignatureVerificationException) {
-                throw InvalidRequestException("$cwtName: signature check failed: ${err.message}")
+            if (!caValidated) {
+                val caCertificate = certificateChain.certificates.last()
+                val caKey = caPublicKey(
+                    issuer = caCertificate.issuer.components[OID.COMMON_NAME.oid]?.value
+                        ?: throw InvalidRequestException("$cwtName: No CN entry in 'x5chain' CA"),
+                    caName = caName
+                )
+                try {
+                    caCertificate.verify(caKey)
+                } catch (err: SignatureVerificationException) {
+                    throw InvalidRequestException("$cwtName: signature check failed: ${err.message}")
+                }
             }
             first.ecPublicKey
         } else {
-            val keyId = sign1.protectedHeaders[Cose.COSE_LABEL_KID.toCoseLabel]?.asBstr?.decodeToString()
+            val kid = sign1.protectedHeaders[Cose.COSE_LABEL_KID.toCoseLabel]?.asBstr?.decodeToString()
                 ?: sign1.unprotectedHeaders[Cose.COSE_LABEL_KID.toCoseLabel]?.asBstr?.decodeToString()
-                ?: issuer
-                ?: throw InvalidRequestException("$cwtName: either 'iss', 'kid', or 'x5chain' must be specified")
-            caPublicKey(keyId, caName)
+                ?: throw InvalidRequestException("$cwtName: either 'iss' and 'kid', or 'x5chain' must be specified")
+            caPublicKey("$issuer#$kid", caName)
         }
     }
 
@@ -186,7 +198,7 @@ suspend fun validateCwt(
             signatureAlgorithm = Algorithm.fromCoseAlgorithmIdentifier(algId)
         )
     } catch (err: SignatureVerificationException) {
-        throw IllegalArgumentException("$cwtName: signature verification failed")
+        throw IllegalArgumentException("$cwtName: signature verification failed", err)
     }
 
     val nonceName = checks[WebTokenCheck.CHALLENGE]

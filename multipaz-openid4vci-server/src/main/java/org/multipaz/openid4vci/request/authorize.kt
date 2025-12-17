@@ -37,19 +37,18 @@ import org.multipaz.openid4vci.util.OPENID4VP_REQUEST_URI_PREFIX
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.SystemOfRecordAccess
 import org.multipaz.openid4vci.util.codeToId
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import org.multipaz.openid4vci.util.getReaderIdentity
 import org.multipaz.openid4vci.util.getSystemOfRecordUrl
 import org.multipaz.openid4vci.util.idToCode
 import org.multipaz.openid4vci.util.parseTxKind
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
-import org.multipaz.rpc.cache
 import org.multipaz.rpc.handler.InvalidRequestException
-import org.multipaz.securearea.SecureAreaRepository
+import org.multipaz.server.enrollment.ServerIdentity
+import org.multipaz.server.enrollment.getServerIdentity
 import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
-import java.lang.IllegalArgumentException
 import java.net.URI
 import kotlin.collections.component1
 import kotlin.collections.component2
@@ -119,28 +118,16 @@ private suspend fun authorizeUsingSystemOfRecord(
     systemOfRecordUrl: String,
     call: ApplicationCall
 ) {
-    val secureAreaRepository = BackendEnvironment.getInterface(SecureAreaRepository::class)
-    val recordsClient = BackendEnvironment.cache(RecordsClient::class) { config, _ ->
-        val jwkText = config.getValue("system_of_record_jwk")
-            ?: throw IllegalArgumentException(
-                "config error: 'system_of_record_jwk' parameter must be specified"
-            )
-        RecordsClient(
-            signingKey = AsymmetricKey.parse(jwkText, secureAreaRepository)
-        )
-    }
     val state = IssuanceState.getIssuanceState(id)
-    val codeVerifier = Random.Default.nextBytes(32)
+    val codeVerifier = Random.nextBytes(32)
     state.systemOfRecordCodeVerifier = ByteString(codeVerifier)
     val codeChallenge = Crypto.digest(
         Algorithm.SHA256,
         codeVerifier.toBase64Url().encodeToByteArray()
     ).toBase64Url()
     val redirectUrl = BackendEnvironment.getBaseUrl() + "/finish_authorization"
-    val clientAssertion = createJwtClientAssertion(
-        recordsClient.signingKey,
-        systemOfRecordUrl
-    )
+    val baseUrl = BackendEnvironment.getBaseUrl()
+    val clientAssertion = createJwtClientAssertion(systemOfRecordUrl, baseUrl)
     val req = buildMap {
         put("scope", state.scope)
         put("client_assertion", clientAssertion)
@@ -149,7 +136,7 @@ private suspend fun authorizeUsingSystemOfRecord(
         put("code_challenge_method", "S256")
         put("redirect_uri", redirectUrl)
         put("code_challenge", codeChallenge)
-        put("client_id", recordsClient.signingKey.subject)
+        put("client_id", baseUrl)
         put("state", idToCode(OpaqueIdType.RECORDS_STATE, id, 10.minutes))
     }
     val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
@@ -176,23 +163,23 @@ private suspend fun authorizeUsingSystemOfRecord(
     call.respondRedirect(buildString {
         append(systemOfRecordUrl)
         append("/authorize?clientId=")
-        append(recordsClient.signingKey.subject)
+        append(baseUrl.encodeURLParameter())
         append("&request_uri=")
         append(requestUri.encodeURLParameter())
     })
 }
 
 private suspend fun createJwtClientAssertion(
-    key: AsymmetricKey,
-    aud: String
+    aud: String,
+    clientId: String
 ): String = buildJwt(
         type = "JWT",
-        key = key,
+        key = getServerIdentity(ServerIdentity.RECORDS_CLIENT),
         expiresIn = 5.minutes
     ) {
-        put("jti", Random.Default.nextBytes(18).toBase64Url())
-        put("iss", key.subject)
-        put("sub", key.subject) // RFC 7523 Section 3, item 2.B
+        put("jti", Random.nextBytes(18).toBase64Url())
+        put("iss", clientId)
+        put("sub", clientId) // RFC 7523 Section 3, item 2.B
         put("aud", aud)
     }
 

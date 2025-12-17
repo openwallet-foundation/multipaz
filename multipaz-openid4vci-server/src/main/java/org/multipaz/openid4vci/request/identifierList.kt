@@ -8,11 +8,12 @@ import io.ktor.server.response.header
 import io.ktor.server.response.respondBytes
 import io.ktor.util.date.GMTDate
 import org.multipaz.openid4vci.credential.CredentialFactory
-import org.multipaz.openid4vci.credential.CredentialFactoryBase
 import org.multipaz.openid4vci.util.CredentialState
 import org.multipaz.revocation.IdentifierList
 import org.multipaz.rpc.backend.BackendEnvironment
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
+import org.multipaz.server.enrollment.ServerIdentity
+import org.multipaz.server.enrollment.getServerIdentity
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -47,7 +48,7 @@ suspend fun identifierList(call: ApplicationCall, bucket: String) {
     call.response.header(HttpHeaders.ETag, "W/$creation")
     call.respondBytes(
         bytes = identifierList.serializeAsCwt(
-            key = CredentialFactoryBase.serverKey,
+            key = getServerIdentity(ServerIdentity.CREDENTIAL_SIGNING),
             subject = BackendEnvironment.getBaseUrl() + "/identifier_list/$bucket"
         ),
         contentType = IDENTIFIER_LIST_CWT

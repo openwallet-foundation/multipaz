@@ -69,7 +69,7 @@ import kotlin.time.Instant
  */
 class DocumentStoreTestHarness {
     companion object {
-        const val TAG = "TestDocumentStore"
+        private const val TAG = "TestDocumentStore"
     }
 
     lateinit var presentmentSource: PresentmentSource

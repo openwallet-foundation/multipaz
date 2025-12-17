@@ -388,7 +388,7 @@ class DeviceResponseParser(
             private set
 
         companion object {
-            const val TAG = "DeviceResponse"
+            private const val TAG = "DeviceResponse"
         }
     }
 
@@ -793,7 +793,7 @@ class DeviceResponseParser(
         }
 
         companion object {
-            const val TAG = "Document"
+            private const val TAG = "Document"
         }
     }
 }

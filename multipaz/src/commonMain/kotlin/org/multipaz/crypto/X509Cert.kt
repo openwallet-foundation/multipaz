@@ -168,6 +168,26 @@ data class X509Cert(
             return X509KeyUsage.decodeSet(ASN1.decode(extVal) as ASN1BitString)
         }
 
+    /**
+     * Certificate basic constraints (if defined).
+     *
+     * @return a pair of the CA flag and the path length constraint value if defined.
+     */
+    val basicConstraints: Pair<Boolean, Long?>?
+        get() {
+            val extVal = getExtensionValue(OID.X509_EXTENSION_BASIC_CONSTRAINTS.oid)
+                ?: return null
+            val seq = ASN1.decode(extVal) as ASN1Sequence
+            return Pair(
+                (seq.elements.first() as ASN1Boolean).value,
+                if (seq.elements.size == 1) {
+                    null
+                } else {
+                    (seq.elements[1] as ASN1Integer).toLong()
+                }
+            )
+        }
+
     companion object {
         private const val NAME = "CERTIFICATE"
         private const val EXTENSION_TAG = 0x3
@@ -385,6 +405,10 @@ data class X509Cert(
                     )
                 )
             }
+        }
+
+        companion object {
+            private const val TAG = "X509CertBuilder"
         }
     }
 

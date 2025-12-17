@@ -1,4 +1,4 @@
-package org.multipaz.server
+package org.multipaz.server.common
 
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.rpc.backend.Resources

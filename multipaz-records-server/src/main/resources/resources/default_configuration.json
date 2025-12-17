@@ -1,12 +1,11 @@
 {
   "server_port": 8004,
-  "trusted_client_assertions": {
-    "bdbb8887-7cb7-4457-8a3f-1216924ed543": {
-      "kty": "EC",
-      "alg": "ES256",
-      "crv": "P-256",
-      "x": "tvNovlSdvTIjUW4okuSmeMiM7egvRLaj8W45MVXEM8Y",
-      "y": "L0AQ7DU9f6kyYdrJZlCfD0LjhoXQtX7lmfubjjIdLCg"
-    }
-  }
+  "ca_allow_enrollment": [
+      "*.multipaz.org/**",
+      "sorotokin.com/**"
+  ],
+  "ca_trust_servers": [
+      "*.multipaz.org/**",
+      "sorotokin.com/**"
+  ]
 }

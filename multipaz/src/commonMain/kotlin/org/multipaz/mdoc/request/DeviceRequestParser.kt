@@ -237,7 +237,7 @@ class DeviceRequestParser(
         }
 
         companion object {
-            const val TAG = "DeviceRequest"
+            private const val TAG = "DeviceRequest"
         }
     }
 

@@ -27,7 +27,6 @@ import org.multipaz.documenttype.knowntypes.UtopiaNaturalization
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable
-import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
@@ -42,7 +41,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
 import kotlinx.datetime.DateTimePeriod
-import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
 import kotlinx.io.bytestring.ByteString
@@ -96,9 +94,10 @@ import org.multipaz.rpc.backend.Resources
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.SdJwtKb
-import org.multipaz.server.baseUrl
-import org.multipaz.server.getBaseUrl
-import org.multipaz.server.getServerIdentity
+import org.multipaz.server.common.baseUrl
+import org.multipaz.server.common.getBaseUrl
+import org.multipaz.server.enrollment.ServerIdentity
+import org.multipaz.server.enrollment.getServerIdentity
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.TrustManager
 import org.multipaz.trustmanagement.TrustManagerLocal
@@ -339,28 +338,7 @@ private suspend fun clientId(): String {
 }
 
 private suspend fun getReaderIdentity(): AsymmetricKey.X509Certified =
-    BackendEnvironment.getServerIdentity("reader_root_identity") {
-        val subjectAndIssuer = X500Name.fromName("CN=Multipaz TEST Reader CA")
-
-        val validFrom = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
-        val validUntil = validFrom.plus(DateTimePeriod(years = 5), TimeZone.currentSystemDefault())
-        val serial = ASN1Integer.fromRandom(128)
-
-        val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P384)
-        val readerRootCertificate =
-            MdocUtil.generateReaderRootCertificate(
-                readerRootKey = AsymmetricKey.anonymous(readerRootKey),
-                subject = subjectAndIssuer,
-                serial = serial,
-                validFrom = validFrom,
-                validUntil = validUntil,
-                crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
-            )
-        AsymmetricKey.X509CertifiedExplicit(
-            privateKey = readerRootKey,
-            certChain = X509CertChain(listOf(readerRootCertificate))
-        )
-    } as AsymmetricKey.X509Certified
+    getServerIdentity(ServerIdentity.VERIFIER)
 
 private suspend fun createSingleUseReaderKey(dnsName: String): AsymmetricKey.X509Certified {
     val now = Clock.System.now()

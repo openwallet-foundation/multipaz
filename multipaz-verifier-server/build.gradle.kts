@@ -27,6 +27,7 @@ dependencies {
     implementation(project(":multipaz"))
     implementation(project(":multipaz-doctypes"))
     implementation(project(":multipaz-longfellow"))
+    implementation(project(":multipaz-server"))
 
     implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.serialization.json)

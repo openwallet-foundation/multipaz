@@ -1,4 +1,4 @@
-package org.multipaz.server
+package org.multipaz.server.common
 
 import org.multipaz.rpc.backend.Configuration
 
@@ -14,3 +14,5 @@ val Configuration.serverPort: Int get() =
 val Configuration.baseUrl: String get() = getValue("base_url")
         ?: ("http://" + (serverHost ?: "localhost") + ":" + serverPort)
 
+val Configuration.enrollmentServerUrl: String get() =
+    getValue("enrollment_server_url") ?: "https://issuer.multipaz.org/records"

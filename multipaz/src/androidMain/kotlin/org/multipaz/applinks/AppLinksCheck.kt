@@ -28,7 +28,7 @@ import java.util.Locale
  * Utility to verify that app links work correctly in the hosting app environment.
  */
 object AppLinksCheck {
-    const val TAG = "AppLinksCheck"
+    private const val TAG = "AppLinksCheck"
 
     /**
      * Checks that the server setup for the Android app links is valid for the app instance

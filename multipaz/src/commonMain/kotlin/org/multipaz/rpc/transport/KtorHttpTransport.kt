@@ -13,22 +13,47 @@ import kotlinx.io.bytestring.ByteString
 
 /**
  * [HttpTransport] implemented using ktor http client library.
- *
- * @param engine HTTP engine to use
- * @param baseUrl RPC server endpoint
  */
-class KtorHttpTransport(
-    engine: HttpClientEngineFactory<*>,
-    private val baseUrl: String
-): HttpTransport {
-    companion object Companion {
+class KtorHttpTransport: HttpTransport {
+    companion object {
         // TODO: make it possible to set the requestTimeout for each post call individually,
         //   so timeout for notification polling can be different from regular RPC calls.
         private const val REQUEST_TIMEOUT_SECONDS = 5*60
     }
 
-    val client = HttpClient(engine) {
-        install(HttpTimeout.Plugin)
+    private val baseUrl: String
+    private val httpClient: HttpClient
+
+    /**
+     * Creates [KtorHttpTransport] using HTTP engine (creating its own [HttpClient] internally.
+     *
+     * @param engine HTTP engine to use
+     * @param baseUrl RPC server endpoint
+     */
+    constructor(
+        engine: HttpClientEngineFactory<*>,
+        baseUrl: String
+    ) {
+        httpClient = HttpClient(engine) {
+            install(HttpTimeout.Plugin)
+        }
+        this.baseUrl = baseUrl
+    }
+
+    /**
+     * Creates [KtorHttpTransport] using existing HTTP client.
+     *
+     * Note that [HttpClient] must have timeout plug-in installed.
+     *
+     * @param httpClient HTTP client to use
+     * @param baseUrl RPC server endpoint
+     */
+    constructor(
+        httpClient: HttpClient,
+        baseUrl: String
+    ) {
+        this.httpClient = httpClient
+        this.baseUrl = baseUrl
     }
 
     override suspend fun post(
@@ -36,7 +61,7 @@ class KtorHttpTransport(
         data: ByteString
     ): ByteString {
         val response = try {
-            client.post("$baseUrl/rpc/$url") {
+            httpClient.post("$baseUrl/$url") {
                 timeout {
                     requestTimeoutMillis = REQUEST_TIMEOUT_SECONDS.toLong()*1000
                 }
@@ -49,7 +74,7 @@ class KtorHttpTransport(
         } catch (e: Throwable) {
             throw HttpTransport.ConnectionException("Error", e)
         }
-        HttpTransport.Companion.processStatus(url, response.status.value, response.status.description)
+        HttpTransport.processStatus(url, response.status.value, response.status.description)
         return ByteString(response.readBytes())
     }
 }

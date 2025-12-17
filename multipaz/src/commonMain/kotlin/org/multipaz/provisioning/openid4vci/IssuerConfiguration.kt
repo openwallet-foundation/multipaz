@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.multipaz.openid.wellKnown
 import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.provisioning.CredentialMetadata
 import org.multipaz.provisioning.Display
@@ -26,7 +27,7 @@ internal data class IssuerConfiguration(
     val credentialConfigurations: Map<String, CredentialConfiguration>
 ) {
     companion object: JsonParsing("Issuer metadata") {
-        const val TAG = "IssuerConfiguration"
+        private const val TAG = "IssuerConfiguration"
 
         suspend fun get(url: String, clientPreferences: OpenID4VCIClientPreferences): IssuerConfiguration {
             val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
@@ -160,9 +161,7 @@ internal data class IssuerConfiguration(
             clientPreferences: OpenID4VCIClientPreferences
         ): KeyBindingType {
             val proofTypes = config.objOrNull("proof_types_supported")
-            if (proofTypes == null) {
-                return KeyBindingType.Keyless
-            }
+                ?: return KeyBindingType.Keyless
             val attestation = proofTypes.objOrNull("attestation")
             val jwt = proofTypes.objOrNull("jwt")
             val proof = attestation ?: jwt

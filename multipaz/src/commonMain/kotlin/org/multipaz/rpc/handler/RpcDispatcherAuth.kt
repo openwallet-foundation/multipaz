@@ -1,12 +1,12 @@
 package org.multipaz.rpc.handler
 
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Simple
 import org.multipaz.util.Logger
-import kotlin.coroutines.coroutineContext
 
 /**
  * [RpcDispatcher] implementation that dispatches RPC call to a [base] dispatcher
@@ -31,8 +31,8 @@ class RpcDispatcherAuth(
             val result = base.dispatch(target, method, message)
             val nonce = result[1]
             if (nonce != Simple.NULL) {
-                val sessionContext = coroutineContext[RpcAuthClientSession.Key]
-                    ?: throw IllegalStateException("RpcAuthClientSessionContext must be provided")
+                val sessionContext = currentCoroutineContext()[RpcAuthClientSession.Key]
+                    ?: throw IllegalStateException("RpcAuthClientSession must be provided")
                 sessionContext.nonce = ByteString(nonce.asBstr)
                 if (result[2].asNumber == RpcReturnCode.NONCE_RETRY.ordinal.toLong()) {
                     if (retried) {
@@ -48,7 +48,7 @@ class RpcDispatcherAuth(
     }
 
     companion object {
-        const val TAG = "RpcDispatchAuth"
+        private const val TAG = "RpcDispatchAuth"
     }
 
 }

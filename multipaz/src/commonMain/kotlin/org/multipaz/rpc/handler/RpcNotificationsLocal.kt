@@ -18,7 +18,7 @@ class RpcNotificationsLocal(
     private val targetMap = mutableMapOf<RpcNotificationKey, Target<*>>()
 
     companion object {
-        const val TAG = "RpcNotificationsLocal"
+        private const val TAG = "RpcNotificationsLocal"
     }
 
     override suspend fun emit(target: String, state: DataItem, notification: DataItem) {

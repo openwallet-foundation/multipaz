@@ -1,10 +1,11 @@
-package org.multipaz.server
+package org.multipaz.server.common
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.multipaz.rpc.backend.Configuration
 import java.io.File
+import kotlin.collections.iterator
 
 /**
  * Server-side configuration implementation.
@@ -30,7 +31,7 @@ class ServerConfiguration(args: Array<String>) : Configuration {
                     if (index < 0) {
                         throw IllegalArgumentException("No '=' in param: '$value'")
                     }
-                    map[value.substring(0, index)] = value.substring(index + 1)
+                    map[value.take(index)] = value.substring(index + 1)
                 }
                 else -> {
                     println("Unknown command-line argument: $arg")

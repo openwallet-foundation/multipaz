@@ -7,17 +7,14 @@ import io.ktor.server.response.respondText
 import org.multipaz.cbor.Cbor
 import org.multipaz.document.NameSpacedData
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import org.multipaz.cbor.Tstr
 import org.multipaz.verifier.Openid4VpVerifierModel
 import org.multipaz.openid4vci.util.IssuanceState
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.codeToId
 import org.multipaz.openid4vci.util.idToCode
 import org.multipaz.rpc.backend.BackendEnvironment
-import org.multipaz.rpc.backend.Configuration
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 

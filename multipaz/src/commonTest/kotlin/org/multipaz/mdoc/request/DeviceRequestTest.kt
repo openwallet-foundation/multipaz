@@ -190,7 +190,6 @@ class DeviceRequestTest {
                     readerRootKey = readerRootSigningKey,
                     readerKey = AsymmetricKey.X509CertifiedSecureAreaBased(
                         secureArea = readerKeySecureArea,
-                        alias = readerKeyInfo.alias,
                         certChain = X509CertChain(listOf(readerCert, readerRootCert)),
                         keyInfo = readerKeyInfo
                     )

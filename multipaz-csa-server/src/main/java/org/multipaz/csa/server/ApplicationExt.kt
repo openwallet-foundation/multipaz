@@ -12,74 +12,55 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
-import io.ktor.util.pipeline.PipelineContext
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.multipaz.asn1.ASN1
 import org.multipaz.device.AndroidKeystoreSecurityLevel
-import org.multipaz.server.ServerConfiguration
-import org.multipaz.server.ServerEnvironment
-import org.multipaz.util.Logger
+import org.multipaz.server.common.ServerEnvironment
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.securearea.cloud.CloudSecureAreaServer
 import org.multipaz.securearea.cloud.SimplePassphraseFailureEnforcer
+import org.multipaz.server.request.certificateAuthority
+import org.multipaz.server.request.push
 import java.security.Security
 import kotlin.time.Duration.Companion.seconds
-
-private const val TAG = "ApplicationExt"
-
-private typealias RequestWrapper =
-        suspend PipelineContext<*,ApplicationCall>.(
-            suspend PipelineContext<*,ApplicationCall>.() -> Unit) -> Unit
 
 /**
  * Defines server endpoints for HTTP GET and POST.
  */
-fun Application.configureRouting(configuration: ServerConfiguration) {
-    // TODO: when https://youtrack.jetbrains.com/issue/KTOR-8088 is resolved, there
-    //  may be a better way to inject our custom wrapper for all request handlers
-    //  (instead of doing it for every request like we do today).
+fun Application.configureRouting(serverEnvironment: Deferred<ServerEnvironment>) {
     Security.addProvider(BouncyCastleProvider())
-    val env = ServerEnvironment.create(configuration)
-    val keyMaterial = KeyMaterial.create(env)
-    val cloudSecureArea = createCloudSecureArea(env, keyMaterial)
-    val runRequest: RequestWrapper = { body ->
-        val self = this
-        withContext(env.await()) {
-            try {
-                body.invoke(self)
-            } catch (err: CancellationException) {
-                throw err
-            } catch (err: Throwable) {
-                Logger.e(TAG, "Error", err)
-                err.printStackTrace()
-                call.respondText(
-                    status = HttpStatusCode.InternalServerError,
-                    text = err::class.simpleName + ": " + err.message,
-                    contentType = ContentType.Text.Plain
-                )
-            }
+    val keyMaterial = lazy {
+        KeyMaterial.create(serverEnvironment)
+    }
+    val cloudSecureArea = lazy {
+        createCloudSecureArea(serverEnvironment, keyMaterial.value)
+    }
+    CoroutineScope(Dispatchers.IO).launch {
+        withContext(serverEnvironment.await()) {
+            keyMaterial.value.await()
+            cloudSecureArea.value.await()
         }
     }
     routing {
+        push(serverEnvironment)
+        certificateAuthority()
         post("/") {
-            runRequest { ->
-                handlePost(call, cloudSecureArea.await())
-            }
+            handlePost(call, cloudSecureArea.value.await())
         }
         get("/") {
-            runRequest { ->
-                handleGet(call, keyMaterial.await())
-            }
+            handleGet(call, keyMaterial.value.await())
         }
     }
 }
+
+private const val TAG = "ApplicationExt"
 
 private suspend fun handleGet(
     call: ApplicationCall,

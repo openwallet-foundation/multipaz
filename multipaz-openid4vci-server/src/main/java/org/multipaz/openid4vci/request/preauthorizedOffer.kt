@@ -25,7 +25,7 @@ import org.multipaz.openid4vci.util.generateRandom
 import org.multipaz.openid4vci.util.parseTxKind
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds

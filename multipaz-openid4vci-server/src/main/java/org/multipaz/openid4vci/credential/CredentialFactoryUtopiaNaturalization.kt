@@ -12,10 +12,10 @@ import org.multipaz.openid4vci.util.CredentialId
 import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.revocation.RevocationStatus
 import org.multipaz.sdjwt.SdJwt
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import kotlin.time.Duration.Companion.days
 
-internal class CredentialFactoryUtopiaNaturatization : CredentialFactoryBase() {
+internal class CredentialFactoryUtopiaNaturalization : CredentialFactory {
     override val offerId: String
         get() = "utopia_naturalization"
 
@@ -77,7 +77,7 @@ internal class CredentialFactoryUtopiaNaturatization : CredentialFactoryBase() {
         val validUntil = now + 30.days
 
         val sdJwt = SdJwt.create(
-            issuerKey = signingKey,
+            issuerKey = getSigningKey(),
             kbKey = authenticationKey,
             claims = identityAttributes,
             nonSdClaims = buildJsonObject {

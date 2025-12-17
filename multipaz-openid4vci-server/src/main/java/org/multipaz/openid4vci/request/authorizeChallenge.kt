@@ -15,7 +15,7 @@ import org.multipaz.openid4vci.util.codeToId
 import org.multipaz.openid4vci.util.createSession
 import org.multipaz.openid4vci.util.idToCode
 import org.multipaz.rpc.backend.BackendEnvironment
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import java.net.URLEncoder
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes

@@ -1,16 +1,11 @@
 package org.multipaz.backend.server
 
 import io.ktor.http.ContentType
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
-import io.ktor.server.request.receive
-import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
-import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -32,72 +27,39 @@ import org.multipaz.backend.openid4vci.register
 import org.multipaz.rpc.handler.HttpHandler
 import org.multipaz.rpc.handler.RpcDispatcherLocal
 import org.multipaz.rpc.handler.RpcExceptionMap
-import org.multipaz.rpc.handler.SimpleCipher
 import org.multipaz.rpc.server.register
-import org.multipaz.rpc.transport.HttpTransport
-import org.multipaz.server.ServerConfiguration
-import org.multipaz.server.ServerEnvironment
-import org.multipaz.util.Logger
+import org.multipaz.server.common.ServerEnvironment
+import org.multipaz.server.request.certificateAuthority
+import org.multipaz.server.request.push
+import org.multipaz.server.request.rpc
 import java.util.Locale
 
-const val TAG = "ApplicationExt"
+private const val TAG = "ApplicationExt"
 
 /**
  * Defines server entry points for HTTP GET and POST.
  */
-fun Application.configureRouting(configuration: ServerConfiguration) {
-    val environment = ServerEnvironment.create(configuration)
-    val httpHandler = initAndCreateHttpHandler(environment)
+fun Application.configureRouting(serverEnvironment: Deferred<ServerEnvironment>) {
+    val httpHandler = initAndCreateHttpHandler(serverEnvironment)
     routing {
+        push(serverEnvironment)
+        certificateAuthority()
         get ("/") {
             call.respondText("Multipaz back-end server is running")
         }
         get("/.well-known/assetlinks.json") {
-            withContext(environment.await()) {
-                call.respondText(
-                    contentType = ContentType.Application.Json,
-                    text = generateAssetLinksJson().toString()
-                )
-            }
+            call.respondText(
+                contentType = ContentType.Application.Json,
+                text = generateAssetLinksJson().toString()
+            )
         }
         get("/.well-known/apple-app-site-association") {
-            withContext(environment.await()) {
-                call.respondText(
-                    contentType = ContentType.Application.Json,
-                    text = generateAppleAppSiteAssociationJson().toString()
-                )
-            }
+            call.respondText(
+                contentType = ContentType.Application.Json,
+                text = generateAppleAppSiteAssociationJson().toString()
+            )
         }
-        post("/rpc/{endpoint}/{method}") {
-            val endpoint = call.parameters["endpoint"]!!
-            val method = call.parameters["method"]!!
-            val request = call.receive<ByteArray>()
-            val handler = httpHandler.await()
-            try {
-                val response = handler.post("$endpoint/$method", ByteString(request))
-                Logger.i(TAG, "POST $endpoint/$method status 200")
-                call.respond(response.toByteArray())
-            } catch (e: CancellationException) {
-                Logger.e(TAG, "POST $endpoint/$method, request cancelled", e)
-                throw e
-            } catch (e: UnsupportedOperationException) {
-                Logger.e(TAG, "POST $endpoint/$method status 404", e)
-                call.respond(HttpStatusCode.NotFound, e.message ?: "")
-            } catch (e: SimpleCipher.DataTamperedException) {
-                Logger.e(TAG, "POST $endpoint/$method status 405", e)
-                call.respond(HttpStatusCode.MethodNotAllowed, "State tampered")
-            } catch (e: IllegalStateException) {
-                Logger.e(TAG, "POST $endpoint/$method status 405", e)
-                call.respond(HttpStatusCode.MethodNotAllowed, "IllegalStateException")
-            } catch (_: HttpTransport.TimeoutException) {
-                Logger.e(TAG, "POST $endpoint/$method status 500 (TimeoutException)")
-                call.respond(HttpStatusCode.InternalServerError, "TimeoutException")
-            } catch (e: Throwable) {
-                Logger.e(TAG, "POST $endpoint/$method status 500", e)
-                e.printStackTrace()
-                call.respond(HttpStatusCode.InternalServerError, e.message ?: "")
-            }
-        }
+        rpc("/rpc", httpHandler)
     }
 }
 

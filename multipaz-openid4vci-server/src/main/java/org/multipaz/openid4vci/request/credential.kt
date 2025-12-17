@@ -40,13 +40,15 @@ import org.multipaz.openid4vci.util.authorizeWithDpop
 import org.multipaz.openid4vci.util.codeToId
 import org.multipaz.openid4vci.util.extractAccessToken
 import org.multipaz.openid4vci.util.getSystemOfRecordUrl
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import org.multipaz.webtoken.WebTokenCheck
 import org.multipaz.util.Logger
 import org.multipaz.webtoken.validateJwt
 import org.multipaz.openid4vci.util.CredentialState
 import org.multipaz.openid4vci.util.respondWithNewDPoPNonce
 import org.multipaz.provisioning.CredentialFormat
+import org.multipaz.server.enrollment.ServerIdentity
+import org.multipaz.server.enrollment.validateServerIdentityCertificateChain
 import org.multipaz.util.toBase64Url
 
 /**
@@ -84,10 +86,11 @@ suspend fun credential(call: ApplicationCall) {
 
     val credentialData = readSystemOfRecord(state)
 
+    val signingKey = factory.getSigningKey()
     if (factory.cryptographicBindingMethods.isEmpty()) {
         val credentialId = CredentialState.createCredentialId(
             format = factory.format,
-            cert = factory.signingKey.certChain.certificates.first()
+            cert = signingKey.certChain.certificates.first()
         )
         // Keyless credential: no need for proof/proofs parameter.
         val minted = factory.mint(credentialData, null, credentialId)
@@ -152,7 +155,11 @@ suspend fun credential(call: ApplicationCall) {
                         checks = mapOf(
                             WebTokenCheck.TYP to "key-attestation+jwt",
                             WebTokenCheck.TRUST to "trusted_key_attestations"
-                        )
+                        ),
+                        certificateChainValidator = { chain, instant ->
+                            validateServerIdentityCertificateChain(
+                                ServerIdentity.KEY_ATTESTATION, chain, instant)
+                        }
                     )
                 validateAndConsumeCredentialChallenge(body["nonce"]!!.jsonPrimitive.content)
                 body["attested_keys"]!!.jsonArray.map { key ->
@@ -181,7 +188,7 @@ suspend fun credential(call: ApplicationCall) {
                 val authenticationKey = EcPublicKey.fromJwk(jwk)
                 val body = validateJwt(
                     jwt = proof.jsonPrimitive.content,
-                    jwtName = "Key attestation",
+                    jwtName = "Proof of Possession",
                     publicKey = authenticationKey,
                     checks = mapOf(
                         WebTokenCheck.TYP to "openid4vci-proof+jwt",
@@ -211,7 +218,7 @@ suspend fun credential(call: ApplicationCall) {
     val credentials = authenticationKeysAndIds.map { (key, keyId) ->
         val credentialId = CredentialState.createCredentialId(
             format = factory.format,
-            cert = factory.signingKey.certChain.certificates.first()
+            cert = signingKey.certChain.certificates.first()
         )
         val minted = factory.mint(credentialData, key, credentialId)
         val credentialState = CredentialState(

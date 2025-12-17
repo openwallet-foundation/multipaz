@@ -34,10 +34,13 @@ import org.multipaz.storage.StorageTableSpec
  * Helper class to create an RPC connection to a server that authenticates the app that makes
  * a connection.
  *
+ * This class is intended for device-to-server RPC and it uses authentication based on
+ * [org.multipaz.device.DeviceAttestation] and [org.multipaz.device.DeviceAssertion].
+ *
  * Once a connection is created, [dispatcher] and [notifier] can be used to create client
  * RPC stubs. [rpcClientId] uniquely identifies this app instance to an RPC server.
  */
-class RpcAuthorizedClient private constructor(
+class RpcAuthorizedDeviceClient private constructor(
     val dispatcher: RpcDispatcher,
     val notifier: RpcNotifier,
     val rpcClientId: String,
@@ -64,7 +67,7 @@ class RpcAuthorizedClient private constructor(
             url: String,
             secureArea: SecureArea,
             storage: Storage
-        ): RpcAuthorizedClient = connect(
+        ): RpcAuthorizedDeviceClient = connect(
             exceptionMap,
             KtorHttpTransport(httpClientEngine, url),
             url,
@@ -81,7 +84,7 @@ class RpcAuthorizedClient private constructor(
             transportUri: String,
             secureArea: SecureArea,
             storage: Storage
-        ): RpcAuthorizedClient {
+        ): RpcAuthorizedDeviceClient {
             val poll = RpcPollHttp(httpTransport)
             val notifier = RpcNotifierPoll(poll)
             val notificationJob = CoroutineScope(Dispatchers.IO).launch {
@@ -93,7 +96,7 @@ class RpcAuthorizedClient private constructor(
             val (clientId, authorizedDispatcher) = createAuthorizedDispatcher(
                 dispatcher, notifier, transportUri, secureArea, hostsTable)
 
-            return RpcAuthorizedClient(
+            return RpcAuthorizedDeviceClient(
                 dispatcher = authorizedDispatcher,
                 notifier = notifier,
                 rpcClientId = clientId,
@@ -144,7 +147,7 @@ class RpcAuthorizedClient private constructor(
                 }
             } catch (err: RpcAuthException) {
                 if (err.rpcAuthError != RpcAuthError.UNKNOWN_CLIENT_ID) {
-                    throw err;
+                    throw err
                 }
                 // Client was removed/purged by the server. Remove the record for this
                 // server and try again.
@@ -194,6 +197,4 @@ class RpcAuthorizedClient private constructor(
     internal data class HostData(val clientId: String, val deviceAttestationId: String) {
         companion object Companion
     }
-
-
 }

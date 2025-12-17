@@ -15,7 +15,7 @@ class RpcNotifierPoll(private val poll: RpcPoll) : RpcNotifier {
     private val pollSetFlow = MutableSharedFlow<PollItem>()
 
     companion object {
-        const val TAG = "FlowNotifierPoll"
+        private const val TAG = "FlowNotifierPoll"
     }
 
     override suspend fun<NotificationT: Any> register(

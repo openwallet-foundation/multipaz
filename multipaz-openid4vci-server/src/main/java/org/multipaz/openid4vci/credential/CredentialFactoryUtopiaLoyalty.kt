@@ -22,7 +22,7 @@ import org.multipaz.openid4vci.util.CredentialId
 import org.multipaz.revocation.RevocationStatus
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.toBase64Url
 import kotlin.random.Random
 import kotlin.time.Clock
@@ -32,7 +32,7 @@ import kotlin.time.Instant
 /**
  * Factory for LoyaltyID credentials according to ISO/IEC TS 23220-4 (E) operational phase - Annex C Photo ID v2
  */
-internal class CredentialFactoryUtopiaLoyalty : CredentialFactoryBase() {
+internal class CredentialFactoryUtopiaLoyalty : CredentialFactory {
     override val offerId: String
         get() = "utopia_wholesale"
 
@@ -151,6 +151,7 @@ internal class CredentialFactoryUtopiaLoyalty : CredentialFactoryBase() {
                 Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
             )
         )
+        val signingKey = getSigningKey()
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
@@ -181,6 +182,6 @@ internal class CredentialFactoryUtopiaLoyalty : CredentialFactoryBase() {
     }
 
     companion object Companion {
-        const val TAG = "CredentialFactoryUtopiaLoyalty"
+        private const val TAG = "CredentialFactoryUtopiaLoyalty"
     }
 }

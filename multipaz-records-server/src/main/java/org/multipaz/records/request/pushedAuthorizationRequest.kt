@@ -15,7 +15,9 @@ import org.multipaz.records.data.toCbor
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.SimpleCipher
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
+import org.multipaz.server.enrollment.ServerIdentity
+import org.multipaz.server.enrollment.validateServerIdentityCertificateChain
 import org.multipaz.webtoken.WebTokenCheck
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
@@ -53,7 +55,7 @@ suspend fun pushedAuthorizationRequest(call: ApplicationCall) {
     }
     val codeChallenge = try {
         ByteString(parameters["code_challenge"]!!.fromBase64Url())
-    } catch (err: Exception) {
+    } catch (_: Exception) {
         throw InvalidRequestException("invalid parameter 'code_challenge'")
     }
     if (parameters["client_assertion_type"] != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer") {
@@ -67,12 +69,16 @@ suspend fun pushedAuthorizationRequest(call: ApplicationCall) {
         jwtName = "client_assertion",
         publicKey = null,
         checks = mapOf(
-            WebTokenCheck.TRUST to "trusted_client_assertions",  // where to find CA
+            WebTokenCheck.TRUST to "records_client_assertions",  // where to find CA
             WebTokenCheck.IDENT to clientId,
             WebTokenCheck.SUB to clientId,
             WebTokenCheck.ISS to clientId,
             WebTokenCheck.AUD to BackendEnvironment.getBaseUrl()
-        )
+        ),
+        certificateChainValidator = { chain, instant ->
+            validateServerIdentityCertificateChain(
+                ServerIdentity.RECORDS_CLIENT, chain, instant)
+        }
     )
 
     val cipher = BackendEnvironment.getInterface(SimpleCipher::class)!!

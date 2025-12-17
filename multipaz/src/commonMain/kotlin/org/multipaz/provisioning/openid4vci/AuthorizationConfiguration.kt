@@ -8,6 +8,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import org.multipaz.crypto.Algorithm
+import org.multipaz.openid.wellKnown
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.util.Logger
 

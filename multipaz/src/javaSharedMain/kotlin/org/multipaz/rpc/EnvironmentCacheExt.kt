@@ -1,10 +1,10 @@
 package org.multipaz.rpc
 
+import kotlinx.coroutines.currentCoroutineContext
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
 import java.util.WeakHashMap
-import kotlin.coroutines.coroutineContext
 import kotlin.reflect.KClass
 import kotlin.reflect.cast
 
@@ -38,7 +38,7 @@ suspend fun<ResourceT : Any> BackendEnvironment.Companion.cache(
     clazz: KClass<ResourceT>,
     key: Any = "",
     factory: suspend (Configuration, Resources) -> ResourceT): ResourceT =
-        get(coroutineContext).cache(clazz, key, factory)
+        get(currentCoroutineContext()).cache(clazz, key, factory)
 
 private val cache = WeakHashMap<Configuration, WeakHashMap<Resources, EnvironmentCache>>()
 

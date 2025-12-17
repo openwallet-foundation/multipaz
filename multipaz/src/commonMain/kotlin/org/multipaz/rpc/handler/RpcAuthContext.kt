@@ -1,9 +1,9 @@
 package org.multipaz.rpc.handler
 
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.device.DeviceAttestation
 import kotlin.coroutines.CoroutineContext
-import kotlin.coroutines.coroutineContext
 
 /**
  * An object added to the current coroutine context based on the successful processing of RPC
@@ -29,14 +29,14 @@ class RpcAuthContext(
 
     companion object {
         suspend fun getClientId(): String {
-            return coroutineContext[Key]!!.clientId
+            return currentCoroutineContext()[Key]!!.clientId
         }
 
         suspend fun getClientDeviceAttestation(): DeviceAttestation? =
             RpcAuthInspectorAssertion.getClientDeviceAttestation(getClientId())
 
         suspend fun getSessionId(): String {
-            return coroutineContext[Key]!!.sessionId
+            return currentCoroutineContext()[Key]!!.sessionId
         }
     }
 }

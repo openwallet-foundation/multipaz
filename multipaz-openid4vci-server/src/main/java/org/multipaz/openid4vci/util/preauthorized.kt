@@ -8,10 +8,9 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.multipaz.provisioning.SecretCodeRequest
 import org.multipaz.rpc.backend.BackendEnvironment
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import kotlin.random.Random
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.days
 
 suspend fun generatePreauthorizedOffer(
     offerSchema: String,
@@ -62,7 +61,7 @@ fun SecretCodeRequest.generateRandom(): String {
     val code = StringBuilder()
     val length = this.length ?: 6
     for (i in 0..<length) {
-        code.append(alphabet[Random.Default.nextInt(alphabet.length)])
+        code.append(alphabet[Random.nextInt(alphabet.length)])
     }
     return code.toString()
 }

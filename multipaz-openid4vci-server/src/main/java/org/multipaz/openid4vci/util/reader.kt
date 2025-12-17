@@ -17,7 +17,7 @@ import org.multipaz.verifier.toCbor
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable
 import org.multipaz.rpc.cache
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import org.multipaz.storage.StorageTableSpec
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds

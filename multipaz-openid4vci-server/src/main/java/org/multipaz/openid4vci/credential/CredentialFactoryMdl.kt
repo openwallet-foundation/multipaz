@@ -32,14 +32,14 @@ import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.openid4vci.util.CredentialId
 import org.multipaz.revocation.RevocationStatus
 import org.multipaz.openid4vci.util.CredentialState
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.Logger
 import kotlin.time.Duration.Companion.days
 
 /**
  * Factory for Driver's License credentials.
  */
-internal class CredentialFactoryMdl : CredentialFactoryBase() {
+internal class CredentialFactoryMdl : CredentialFactory {
     override val offerId: String
         get() = "mDL"
 
@@ -206,6 +206,7 @@ internal class CredentialFactoryMdl : CredentialFactoryBase() {
                 Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
             )
         )
+        val signingKey = getSigningKey()
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
@@ -236,6 +237,6 @@ internal class CredentialFactoryMdl : CredentialFactoryBase() {
     }
 
     companion object {
-        const val TAG = "CredentialFactoryMdl"
+        private const val TAG = "CredentialFactoryMdl"
     }
 }

@@ -1,3 +1,7 @@
 {
-  "server_port": 8006
+  "server_port": 8006,
+  "ca_trust_servers": [
+    "*.multipaz.org/**",
+    "sorotokin.com/**"
+  ]
 }

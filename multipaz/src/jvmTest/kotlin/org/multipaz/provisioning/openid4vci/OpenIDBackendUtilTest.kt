@@ -28,10 +28,10 @@ class OpenIDBackendUtilTest {
     @Test
     fun testClientAssertion() = runTest {
         val signingKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        val env = TestBackendEnvironment("client", signingKey.publicKey)
+        val env = TestBackendEnvironment("$CLIENT_ID#my-kid", signingKey.publicKey)
         withContext(env) {
             val assertionJwt = OpenID4VCIBackendUtil.createJwtClientAssertion(
-                signingKey = AsymmetricKey.NamedExplicit("client", signingKey),
+                signingKey = AsymmetricKey.NamedExplicit("my-kid", signingKey),
                 clientId = CLIENT_ID,
                 authorizationServerIdentifier = "http://example.com",
             )
@@ -54,12 +54,12 @@ class OpenIDBackendUtilTest {
     fun testWalletAttestation() = runTest {
         val signingKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val attestedKey = Crypto.createEcPrivateKey(EcCurve.P256).publicKey
-        val env = TestBackendEnvironment("wallet", signingKey.publicKey)
+        val env = TestBackendEnvironment("wallet-iss#wallet-kid", signingKey.publicKey)
         withContext(env) {
             val attestationJwt = OpenID4VCIBackendUtil.createWalletAttestation(
-                signingKey = AsymmetricKey.NamedExplicit("wallet", signingKey),
+                signingKey = AsymmetricKey.NamedExplicit("wallet-kid", signingKey),
                 clientId = CLIENT_ID,
-                attestationIssuer = "wallet",
+                attestationIssuer = "wallet-iss",
                 attestedKey = attestedKey,
                 nonce = NONCE,
                 walletName = "test",
@@ -84,7 +84,7 @@ class OpenIDBackendUtilTest {
     @Test
     fun testKeyAttestation() = runTest {
         val signingKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        val env = TestBackendEnvironment("key", signingKey.publicKey)
+        val env = TestBackendEnvironment("my-iss#my-kid", signingKey.publicKey)
         withContext(env) {
             val ephemeralStorage = EphemeralStorage()
             val softwareSecureArea = SoftwareSecureArea.create(ephemeralStorage)
@@ -93,8 +93,8 @@ class OpenIDBackendUtilTest {
                 createKeySettings = CreateKeySettings()
             )
             val attestationJwt = OpenID4VCIBackendUtil.createJwtKeyAttestation(
-                signingKey = AsymmetricKey.NamedExplicit("key", signingKey),
-                attestationIssuer = "key",
+                signingKey = AsymmetricKey.NamedExplicit("my-kid", signingKey),
+                attestationIssuer = "my-iss",
                 keysToAttest = listOf(KeyIdAndAttestation("foo", attestedKeyInfo.attestation)),
                 challenge = NONCE
             )

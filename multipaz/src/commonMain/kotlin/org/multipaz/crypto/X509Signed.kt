@@ -360,7 +360,7 @@ sealed class X509SignedBuilder<BuilderT: X509SignedBuilder<BuilderT>>(
     )
 
     companion object {
-        const val TAG = "X509SignedBuilder"
+        private const val TAG = "X509SignedBuilder"
 
         internal fun Algorithm.getSignatureAlgorithmSeq(signingKeyCurve: EcCurve): ASN1Sequence {
             val signatureAlgorithmOid = when (this) {

@@ -13,10 +13,10 @@ import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.revocation.RevocationStatus
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.sdjwt.SdJwt
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import kotlin.time.Duration.Companion.days
 
-internal class CredentialFactoryUtopiaMovieTicket : CredentialFactoryBase() {
+internal class CredentialFactoryUtopiaMovieTicket : CredentialFactory {
     override val offerId: String
         get() = "utopia_movie_ticket"
 
@@ -68,7 +68,7 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactoryBase() {
         )
 
         val sdJwt = SdJwt.create(
-            issuerKey = signingKey,
+            issuerKey = getSigningKey(),
             kbKey = null,
             claims = ticket.toJson() as JsonObject,
             nonSdClaims = buildJsonObject {

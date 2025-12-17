@@ -14,7 +14,7 @@ import kotlinx.serialization.json.putJsonObject
 import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.rpc.backend.BackendEnvironment
-import org.multipaz.server.baseUrl
+import org.multipaz.server.common.baseUrl
 
 const val PREFIX = "openid4vci.issuer"
 
@@ -28,6 +28,7 @@ suspend fun wellKnownOpenidCredentialIssuer(call: ApplicationCall) {
     val name = configuration.getValue("issuer_name") ?: "Multipaz Sample Issuer"
     val locale = configuration.getValue("issuer_locale") ?: "en-US"
     val byOfferId = CredentialFactory.getRegisteredFactories().byOfferId
+    val signingKeys = byOfferId.mapValues { (_, factory) -> factory.getSigningKey() }
     call.respondText(
         text = buildJsonObject {
             put("credential_issuer", baseUrl)
@@ -52,6 +53,7 @@ suspend fun wellKnownOpenidCredentialIssuer(call: ApplicationCall) {
             }
             putJsonObject("credential_configurations_supported") {
                 for (credentialFactory in byOfferId.values) {
+                    val signingKey = signingKeys[credentialFactory.offerId]!!
                     putJsonObject(credentialFactory.offerId) {
                         if (useScopes) {
                             put("scope", credentialFactory.scope)
@@ -90,7 +92,6 @@ suspend fun wellKnownOpenidCredentialIssuer(call: ApplicationCall) {
                             }
                         }
                         putJsonArray("credential_signing_alg_values_supported") {
-                            val signingKey = credentialFactory.signingKey
                             if (credentialFactory.format is CredentialFormat.Mdoc) {
                                 add(signingKey.algorithm.coseAlgorithmIdentifier)
                             } else {

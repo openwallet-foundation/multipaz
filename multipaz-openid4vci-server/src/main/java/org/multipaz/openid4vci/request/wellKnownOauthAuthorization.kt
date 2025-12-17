@@ -9,7 +9,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
-import org.multipaz.server.baseUrl
+import org.multipaz.server.common.baseUrl
 
 /**
  * Generates `.well-known/oauth-authorization-server` metadata file.

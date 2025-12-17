@@ -1,7 +1,9 @@
 {
   "server_port": 8008,
-  "developerMode": true,
-  "waitForNotificationSupported": true,
+  "ca_trust_servers": [
+    "*.multipaz.org/**",
+    "sorotokin.com/**"
+  ],
   "client_requirements": {
     "ios": {
       "release_build": false,
@@ -17,7 +19,9 @@
       "app_signature_certificate_digests": [
         "9D:63:92:0E:03:F6:15:28:26:39:00:FF:E5:1D:03:3E:E2:2C:4B:77:5C:AA:CF:E2:93:78:AA:3E:1C:F7:BE:F4",
         "54:4A:71:AD:63:1F:D8:61:4B:CB:6F:C7:1D:3B:8D:EF:19:56:E5:FC:BA:98:A8:55:02:64:40:0E:8E:1A:2E:1D",
-        "AC:7F:F2:B8:77:D0:9A:9C:5F:29:1A:E4:28:1F:E9:17:8F:1B:74:A6:8E:B8:0C:61:69:D0:18:EA:CE:CA:4A:88"
+        "AC:7F:F2:B8:77:D0:9A:9C:5F:29:1A:E4:28:1F:E9:17:8F:1B:74:A6:8E:B8:0C:61:69:D0:18:EA:CE:CA:4A:88",
+        "88:11:E4:48:B6:94:3C:B4:27:27:D7:E7:CF:53:CA:C2:24:68:65:80:EA:BA:91:F5:AD:DF:62:CF:94:8D:7C:58",
+        "E1:80:E5:8C:9E:4B:FB:40:D5:E6:8E:52:8B:E1:A6:68:E7:03:61:53:75:28:B8:ED:A1:9B:F9:00:86:3F:11:22"
       ],
       "app_packages": [
         "org.multipaz.testapp",

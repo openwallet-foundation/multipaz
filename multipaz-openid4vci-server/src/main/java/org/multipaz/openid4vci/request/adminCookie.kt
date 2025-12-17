@@ -13,6 +13,7 @@ import kotlinx.serialization.json.put
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.codeToId
 import org.multipaz.openid4vci.util.idToCode
+import org.multipaz.server.common.getAdminPassword
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 
@@ -28,7 +29,7 @@ suspend fun validateAdminCookie(call: ApplicationCall) {
     val cookie = call.request.cookies["issuance_auth"] ?: throw AdminCookieInvalid()
     try {
         codeToId(OpaqueIdType.ADMIN_COOKIE, cookie)
-    } catch (e: IllegalArgumentException) {
+    } catch (_: IllegalArgumentException) {
         throw AdminCookieInvalid()
     }
 }
@@ -37,7 +38,8 @@ suspend fun validateAdminCookie(call: ApplicationCall) {
  * Issues "issuance_auth" cookie to the client upon successful authentication
  * (supplied password matching given administrative password).
  */
-suspend fun adminAuth(call: ApplicationCall, adminPassword: String) {
+suspend fun adminAuth(call: ApplicationCall) {
+    val adminPassword = getAdminPassword()
     val request = Json.parseToJsonElement(call.receiveText()) as JsonObject
     if (request["password"]?.jsonPrimitive?.content != adminPassword) {
         call.respondText(

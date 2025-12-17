@@ -31,7 +31,7 @@ import org.multipaz.openid4vci.util.CredentialId
 import org.multipaz.revocation.RevocationStatus
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
-import org.multipaz.server.getBaseUrl
+import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.Logger
 import kotlin.collections.component1
 import kotlin.collections.component2
@@ -41,7 +41,7 @@ import kotlin.time.Duration.Companion.days
 /**
  * Factory for EU Personal ID in ISO mdoc format.
  */
-internal class CredentialFactoryMdocPid : CredentialFactoryBase() {
+internal class CredentialFactoryMdocPid : CredentialFactory {
     override val offerId: String
         get() = "pid_mdoc"
 
@@ -189,6 +189,7 @@ internal class CredentialFactoryMdocPid : CredentialFactoryBase() {
                 Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
             )
         )
+        val signingKey = getSigningKey()
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
@@ -219,6 +220,6 @@ internal class CredentialFactoryMdocPid : CredentialFactoryBase() {
     }
 
     companion object {
-        const val TAG = "CredentialFactoryMdocPid"
+        private const val TAG = "CredentialFactoryMdocPid"
     }
 }

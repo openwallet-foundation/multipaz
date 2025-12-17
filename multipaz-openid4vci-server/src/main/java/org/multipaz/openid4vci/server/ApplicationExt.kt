@@ -1,34 +1,15 @@
 package org.multipaz.openid4vci.server
 
 import io.ktor.http.ContentType
-import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.content.OutgoingContent
 import io.ktor.server.application.Application
-import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.call
-import io.ktor.server.application.install
-import io.ktor.server.plugins.doublereceive.DoubleReceive
-import io.ktor.server.request.contentType
-import io.ktor.server.request.httpMethod
-import io.ktor.server.request.receiveText
-import io.ktor.server.request.uri
-import io.ktor.server.response.ApplicationSendPipeline
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
-import io.ktor.util.AttributeKey
-import io.ktor.util.pipeline.PipelineContext
-import io.ktor.util.pipeline.PipelinePhase
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.multipaz.openid4vci.request.adminAuth
@@ -41,7 +22,6 @@ import org.multipaz.openid4vci.request.authorizePost
 import org.multipaz.openid4vci.request.challenge
 import org.multipaz.openid4vci.request.credential
 import org.multipaz.openid4vci.request.credentialRequest
-import org.multipaz.openid4vci.request.fetchResource
 import org.multipaz.openid4vci.request.finishAuthorization
 import org.multipaz.openid4vci.request.identifierList
 import org.multipaz.openid4vci.request.preauthorizedOffer
@@ -55,241 +35,70 @@ import org.multipaz.openid4vci.request.token
 import org.multipaz.openid4vci.request.validateAdminCookie
 import org.multipaz.openid4vci.request.wellKnownOauthAuthorization
 import org.multipaz.openid4vci.request.wellKnownOpenidCredentialIssuer
-import org.multipaz.openid4vci.util.AUTHZ_REQ
 import org.multipaz.openid4vci.util.OpenID4VCIRequestError
-import org.multipaz.rpc.handler.InvalidRequestException
-import org.multipaz.server.ServerConfiguration
-import org.multipaz.server.ServerEnvironment
-import org.multipaz.storage.Storage
+import org.multipaz.server.common.ServerEnvironment
+import org.multipaz.server.request.push
+import org.multipaz.server.common.serveResources
+import org.multipaz.server.request.certificateAuthority
 import org.multipaz.util.Logger
-import org.multipaz.util.toBase64Url
-import java.io.FileWriter
-import java.io.OutputStreamWriter
-import java.io.PrintWriter
-import java.io.StringWriter
-import kotlin.random.Random
-import kotlin.time.Duration.Companion.hours
 
 private const val TAG = "ApplicationExt"
-
-private typealias RequestWrapper =
-        suspend PipelineContext<*,ApplicationCall>.(
-            suspend PipelineContext<*,ApplicationCall>.() -> Unit) -> Unit
 
 /**
  * Defines server endpoints for HTTP GET and POST.
  */
-fun Application.configureRouting(configuration: ServerConfiguration) {
-    checkConfiguration(configuration)
-    // TODO: when https://youtrack.jetbrains.com/issue/KTOR-8088 is resolved, there
-    //  may be a better way to inject our custom wrapper for all request handlers
-    //  (instead of doing it for every request like we do today).
-    val env = ServerEnvironment.create(configuration)
-    val adminPassword = configuration.getValue("admin_password")
-        ?: Random.nextBytes(15).toBase64Url().also {
-            Logger.e(TAG, "No 'admin_password' in config, generated: '$it'")
-        }
-    launchBackgroundJob(env)
-    val runRequest: RequestWrapper = { body ->
-        val self = this
-        withContext(env.await()) {
-            try {
-                body.invoke(self)
-            } catch (err: CancellationException) {
-                throw err
-            } catch (err: InvalidRequestException) {
-                // TODO: migrate to OpenID4VCIRequestError for cases when error must be set to
-                //  anything other than "invalid_request".
-                Logger.e(TAG, "Error", err)
-                err.printStackTrace()
-                call.respondText(
-                    status = HttpStatusCode.BadRequest,
-                    text = buildJsonObject {
-                        put("error", "invalid_request")
-                        put("error_description", err.message ?: "")
-                    }.toString(),
-                    contentType = ContentType.Application.Json
-                )
-            } catch (err: OpenID4VCIRequestError) {
-                Logger.e(TAG, "OpenID4VCI Error", err)
-                err.printStackTrace()
-                call.respondText(
-                    status = HttpStatusCode.BadRequest,
-                    text = buildJsonObject {
-                        put("error", err.code)
-                        put("error_description", err.description)
-                    }.toString(),
-                    contentType = ContentType.Application.Json
-                )
-            } catch (err: Throwable) {
-                Logger.e(TAG, "Error", err)
-                err.printStackTrace()
-                call.respondText(
-                    status = HttpStatusCode.InternalServerError,
-                    text = err::class.simpleName + ": " + err.message,
-                    contentType = ContentType.Text.Plain
-                )
-            }
+fun Application.configureRouting(serverEnvironment: Deferred<ServerEnvironment>) {
+    intercept(ApplicationCallPipeline.Plugins) {
+        // Customize error handling for OpenId4VCI-specific exceptions
+        try {
+            proceed()
+        } catch (err: OpenID4VCIRequestError) {
+            Logger.e(TAG, "OpenID4VCI Error", err)
+            err.printStackTrace()
+            call.respondText(
+                status = HttpStatusCode.BadRequest,
+                text = buildJsonObject {
+                    put("error", err.code)
+                    put("error_description", err.description)
+                }.toString(),
+                contentType = ContentType.Application.Json
+            )
         }
     }
     routing {
-        get("/") { runRequest { fetchResource(call, "index.html") } }
-        get("/{path...}") {
-            runRequest { fetchResource(call, call.parameters["path"]!!) }
-        }
-        get("/authorize") { runRequest { authorizeGet(call) } }
-        post("/authorize") { runRequest { authorizePost(call) } }
-        post("/authorize_challenge") { runRequest { authorizeChallenge(call) } }
-        post("/challenge") { runRequest { challenge(call) } }
-        post("/credential_request") { runRequest { credentialRequest(call) } }
-        post("/credential") { runRequest { credential(call) } }
-        get("/finish_authorization") { runRequest { finishAuthorization(call) } }
-        post("/nonce") { runRequest { nonce(call) } }
-        post("/openid4vp_response") {
-            runRequest { openid4VpResponse(call) }
-        }
-        post("/par") { runRequest { pushedAuthorizationRequest(call) } }
-        get("/qr") { runRequest { qrCode(call) } }
-        post("/token") { runRequest { token(call) } }
-        get("/.well-known/openid-credential-issuer") {
-            runRequest { wellKnownOpenidCredentialIssuer(call) }
-        }
-        get("/.well-known/oauth-authorization-server") {
-            runRequest { wellKnownOauthAuthorization(call) }
-        }
-        get("/signing_certificate") {
-            runRequest { signingCertificate(call) }
-        }
-        post("/preauthorized_offer") {
-            runRequest { preauthorizedOffer(call) }
-        }
-        get("/status_list/{bucket}") {
-            runRequest { statusList(call, call.parameters["bucket"]!!) }
-        }
-        get("/identifier_list/{bucket}") {
-            runRequest { identifierList(call, call.parameters["bucket"]!!) }
-        }
-        post("/admin_auth") {
-            runRequest { adminAuth(call, adminPassword) }
-        }
+        push(serverEnvironment)
+        certificateAuthority()
+        serveResources()
+        get("/authorize") { authorizeGet(call) }
+        post("/authorize") { authorizePost(call) }
+        post("/authorize_challenge") { authorizeChallenge(call) }
+        post("/challenge") { challenge(call) }
+        post("/credential_request") { credentialRequest(call) }
+        post("/credential") { credential(call) }
+        get("/finish_authorization") { finishAuthorization(call) }
+        post("/nonce") { nonce(call) }
+        post("/openid4vp_response") { openid4VpResponse(call) }
+        post("/par") { pushedAuthorizationRequest(call) }
+        get("/qr") { qrCode(call) }
+        post("/token") { token(call) }
+        get("/.well-known/openid-credential-issuer") { wellKnownOpenidCredentialIssuer(call) }
+        get("/.well-known/oauth-authorization-server") { wellKnownOauthAuthorization(call) }
+        get("/signing_certificate") { signingCertificate(call) }
+        post("/preauthorized_offer") { preauthorizedOffer(call) }
+        get("/status_list/{bucket}") { statusList(call, call.parameters["bucket"]!!) }
+        get("/identifier_list/{bucket}") { identifierList(call, call.parameters["bucket"]!!) }
+        post("/admin_auth") { adminAuth(call) }
         get("/admin_list_sessions") {
-            runRequest {
-                validateAdminCookie(call)
-                adminListSessions(call)
-            }
+            validateAdminCookie(call)
+            adminListSessions(call)
         }
         get("/admin_session_info") {
-            runRequest {
-                validateAdminCookie(call)
-                adminSessionInfo(call)
-            }
+            validateAdminCookie(call)
+            adminSessionInfo(call)
         }
         post("/admin_set_credential_status") {
-            runRequest {
-                validateAdminCookie(call)
-                adminSetCredentialStatus(call)
-            }
+            validateAdminCookie(call)
+            adminSetCredentialStatus(call)
         }
-    }
-}
-
-private fun launchBackgroundJob(env: Deferred<ServerEnvironment>) {
-    CoroutineScope(Dispatchers.IO).launch {
-        while (true) {
-            Logger.i("Background", "purging expired...")
-            env.await().getInterface(Storage::class)!!.purgeExpired()
-            Logger.i("Background", "purging complete")
-            delay(1.hours)
-        }
-    }
-}
-
-// record requests and responses, if configured.
-
-val RESPONSE_COPY_KEY = AttributeKey<String>("RESPONSE_COPY_KEY")
-
-fun Application.traceCalls(configuration: ServerConfiguration) {
-    val traceFile = configuration.getValue("server_trace_file") ?: return
-    install(DoubleReceive)
-    val traceStream = if (traceFile == "-") {
-        OutputStreamWriter(System.out)
-    } else {
-        FileWriter(traceFile, true)
-    }
-    val before = PipelinePhase("before")
-    insertPhaseBefore(ApplicationCallPipeline.Call, before)
-    intercept(before) {
-        val attributes = call.attributes
-        val traceResponse = PipelinePhase("traceResponse")
-        call.response.pipeline.insertPhaseAfter(ApplicationSendPipeline.Engine, traceResponse)
-        call.response.pipeline.intercept(traceResponse) { response ->
-            when (response) {
-                is OutgoingContent.ByteArrayContent -> {
-                    if (response.contentType == ContentType.Application.Json ||
-                        response.contentType == AUTHZ_REQ
-                    ) {
-                        attributes.put(RESPONSE_COPY_KEY,
-                            response.bytes().decodeToString())
-                    }
-                }
-                else -> {}
-            }
-        }
-    }
-    insertPhaseAfter(ApplicationCallPipeline.Call, before)
-    val after = PipelinePhase("after")
-    insertPhaseAfter(ApplicationCallPipeline.Call, after)
-    intercept(after) {
-        val buffer = StringWriter()
-        val trace = PrintWriter(buffer)
-        trace.println("============================")
-        trace.println("${call.request.httpMethod.value} ${call.request.uri}")
-        for (name in call.request.headers.names()) {
-            trace.println("$name: ${call.request.headers[name]}")
-        }
-        if (call.request.httpMethod == HttpMethod.Post || call.request.httpMethod == HttpMethod.Put) {
-            val contentType = call.request.contentType()
-            if (contentType == ContentType.Application.Json ||
-                contentType == ContentType.Application.FormUrlEncoded ||
-                contentType == ContentType.Application.FormUrlEncoded.withParameter("charset", "UTF-8")) {
-                trace.println()
-                trace.println(call.receiveText())
-            } else {
-                trace.println("*** body not logged ***")
-            }
-        }
-
-        trace.println("----------------------------")
-        val response = call.response
-        val status = response.status() ?: HttpStatusCode.OK
-        trace.println("${status.value} ${status.description}")
-        for (name in response.headers.allValues().names()) {
-            for (value in response.headers.values(name)) {
-                trace.println("$name: $value")
-            }
-        }
-
-        if (call.attributes.contains(RESPONSE_COPY_KEY)) {
-            val body = call.attributes[RESPONSE_COPY_KEY]
-            trace.println()
-            if (body.endsWith('\n')) {
-                trace.print(body)
-            } else {
-                trace.println(body)
-            }
-        } else {
-            trace.println("*** body not logged ***")
-        }
-        trace.flush()
-        traceStream.write(buffer.toString())
-        traceStream.flush()
-    }
-}
-
-private fun checkConfiguration(configuration: ServerConfiguration) {
-    val supportClientAssertion = configuration.getValue("support_client_assertion") != "false"
-    val supportClientAttestation = configuration.getValue("support_client_attestation") != "false"
-    if (!supportClientAssertion && !supportClientAttestation) {
-        throw IllegalArgumentException("No client authentication methods supported")
     }
 }

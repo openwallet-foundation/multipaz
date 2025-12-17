@@ -1084,7 +1084,7 @@ class CloudSecureAreaServer(
     }
 
     companion object {
-        const val TAG = "CloudSecureAreaServer"
+        private const val TAG = "CloudSecureAreaServer"
 
         // Really important these counters are never reused. We rely on the system
         // clock always going forward to achieve this.
