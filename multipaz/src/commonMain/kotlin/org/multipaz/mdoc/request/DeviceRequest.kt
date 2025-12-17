@@ -235,11 +235,40 @@ data class DeviceRequest private constructor(
             docType: String,
             nameSpaces: Map<String, Map<String, Boolean>>,
             docRequestInfo: DocRequestInfo?,
-        ): Builder = addDocRequestInternal(
-            docType = docType,
-            nameSpaces = nameSpaces,
-            docRequestInfo = docRequestInfo
-        )
+        ): Builder {
+            check(readerAuthAll.isEmpty()) {
+                "Cannot call addDocRequest() after addReaderAuthAll()"
+            }
+            val itemsRequest = buildCborMap {
+                put("docType", docType)
+                putCborMap("nameSpaces") {
+                    for ((namespaceName, dataElementMap) in nameSpaces) {
+                        putCborMap(namespaceName) {
+                            for ((dataElementName, intentToRetain) in dataElementMap) {
+                                put(dataElementName, intentToRetain)
+                            }
+                        }
+                    }
+                }
+                docRequestInfo?.let {
+                    val docRequestInfoDataItem = it.toDataItem()
+                    if (docRequestInfoDataItem.asMap.isNotEmpty()) {
+                        put("requestInfo", docRequestInfoDataItem)
+                    }
+                }
+            }
+            val itemsRequestBytes = Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(itemsRequest)))
+            docRequests.add(
+                DocRequest(
+                    docType = docType,
+                    nameSpaces = nameSpaces,
+                    docRequestInfo = docRequestInfo,
+                    readerAuth_ = null,
+                    itemsRequestBytes = itemsRequestBytes
+                )
+            )
+            return this
+        }
 
         /**
          * Adds a document request to the builder.
@@ -255,88 +284,6 @@ data class DeviceRequest private constructor(
             nameSpaces: Map<String, Map<String, Boolean>>,
             docRequestInfo: DocRequestInfo?,
             readerKey: AsymmetricKey.X509Compatible,
-        ): Builder = addDocRequestInternalSuspend(
-            docType = docType,
-            nameSpaces = nameSpaces,
-            docRequestInfo = docRequestInfo,
-            signer = { dataToSign, protectedHeaders, unprotectedHeaders ->
-                Cose.coseSign1Sign(
-                    signingKey = readerKey,
-                    message = dataToSign,
-                    includeMessageInPayload = false,
-                    protectedHeaders = protectedHeaders,
-                    unprotectedHeaders = unprotectedHeaders,
-                )
-            },
-            readerKeyCertificateChain = readerKey.certChain,
-            signatureAlgorithm = readerKey.algorithm
-        )
-
-        private suspend fun addDocRequestInternalSuspend(
-            docType: String,
-            nameSpaces: Map<String, Map<String, Boolean>>,
-            docRequestInfo: DocRequestInfo?,
-            signer: (suspend (
-                dataToSign: ByteArray,
-                protectedHeaders: Map<CoseLabel, DataItem>,
-                unprotectedHeaders: Map<CoseLabel, DataItem>
-            ) -> CoseSign1?)?,
-            readerKeyCertificateChain: X509CertChain?,
-            signatureAlgorithm: Algorithm,
-            ): Builder {
-            check(readerAuthAll.isEmpty()) {
-                "Cannot call addDocRequest() after addReaderAuthAll()"
-            }
-            val itemsRequest = buildCborMap {
-                put("docType", docType)
-                putCborMap("nameSpaces") {
-                    for ((namespaceName, dataElementMap) in nameSpaces) {
-                        putCborMap(namespaceName) {
-                            for ((dataElementName, intentToRetain) in dataElementMap) {
-                                put(dataElementName, intentToRetain)
-                            }
-                        }
-                    }
-                }
-                docRequestInfo?.let {
-                    val docRequestInfoDataItem = it.toDataItem()
-                    if (docRequestInfoDataItem.asMap.isNotEmpty()) {
-                        put("requestInfo", docRequestInfoDataItem)
-                    }
-                }
-            }
-            val itemsRequestBytes = Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(itemsRequest)))
-            val readerAuth = signer?.let {
-                val readerAuthentication = buildCborArray {
-                    add("ReaderAuthentication")
-                    add(sessionTranscript)
-                    add(itemsRequestBytes)
-                }
-                val readerAuthenticationBytes =
-                    Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(readerAuthentication))))
-                // TODO: include x5chain in protected header for v1.1?
-                val protectedHeaders = mutableMapOf<CoseLabel, DataItem>()
-                protectedHeaders.put(Cose.COSE_LABEL_ALG.toCoseLabel, signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem())
-                val unprotectedHeaders = mutableMapOf<CoseLabel, DataItem>()
-                if (readerKeyCertificateChain != null) {
-                    unprotectedHeaders.put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, readerKeyCertificateChain.toDataItem())
-                }
-                it(readerAuthenticationBytes, protectedHeaders, unprotectedHeaders)
-            }
-            docRequests.add(DocRequest(
-                docType = docType,
-                nameSpaces = nameSpaces,
-                docRequestInfo = docRequestInfo,
-                readerAuth_ = readerAuth,
-                itemsRequestBytes = itemsRequestBytes
-            ))
-            return this
-        }
-
-        private fun addDocRequestInternal(
-            docType: String,
-            nameSpaces: Map<String, Map<String, Boolean>>,
-            docRequestInfo: DocRequestInfo?,
         ): Builder {
             check(readerAuthAll.isEmpty()) {
                 "Cannot call addDocRequest() after addReaderAuthAll()"
@@ -360,11 +307,35 @@ data class DeviceRequest private constructor(
                 }
             }
             val itemsRequestBytes = Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(itemsRequest)))
+
+            val readerAuthentication = buildCborArray {
+                add("ReaderAuthentication")
+                add(sessionTranscript)
+                add(itemsRequestBytes)
+            }
+            val readerAuthenticationBytes =
+                Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(readerAuthentication))))
+            // TODO: include x5chain in protected header for v1.1?
+            val protectedHeaders = mutableMapOf<CoseLabel, DataItem>()
+            // ISO 18013-5 requires use of non-fully-specified algorithms, e.g. -7 instead of -9
+            val signatureAlgorithm = readerKey.algorithm.curve!!.defaultSigningAlgorithm
+            protectedHeaders.put(Cose.COSE_LABEL_ALG.toCoseLabel, signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem())
+            val unprotectedHeaders = mutableMapOf<CoseLabel, DataItem>()
+            readerKey.certChain?.let {
+                unprotectedHeaders.put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, it.toDataItem())
+            }
+            val readerAuth = Cose.coseSign1Sign(
+                signingKey = readerKey,
+                message = readerAuthenticationBytes,
+                includeMessageInPayload = false,
+                protectedHeaders = protectedHeaders,
+                unprotectedHeaders = unprotectedHeaders,
+            )
             docRequests.add(DocRequest(
                 docType = docType,
                 nameSpaces = nameSpaces,
                 docRequestInfo = docRequestInfo,
-                readerAuth_ = null,
+                readerAuth_ = readerAuth,
                 itemsRequestBytes = itemsRequestBytes
             ))
             return this
@@ -378,30 +349,7 @@ data class DeviceRequest private constructor(
          * @param readerKey the key to sign with and its certificate chain.
          * @return the builder.
          */
-        suspend fun addReaderAuthAll(readerKey: AsymmetricKey.X509Compatible): Builder =
-            addReaderAuthAllInternalSuspend(
-                signer = { dataToSign, protectedHeaders, unprotectedHeaders ->
-                    Cose.coseSign1Sign(
-                        signingKey = readerKey,
-                        message = dataToSign,
-                        includeMessageInPayload = false,
-                        protectedHeaders = protectedHeaders,
-                        unprotectedHeaders = unprotectedHeaders,
-                    )
-                },
-                readerKeyCertificateChain = readerKey.certChain,
-                signatureAlgorithm = readerKey.algorithm
-            )
-
-        private suspend fun addReaderAuthAllInternalSuspend(
-            signer: suspend (
-                dataToSign: ByteArray,
-                protectedHeaders: Map<CoseLabel, DataItem>,
-                unprotectedHeaders: Map<CoseLabel, DataItem>
-            ) -> CoseSign1,
-            readerKeyCertificateChain: X509CertChain?,
-            signatureAlgorithm: Algorithm,
-        ): Builder {
+        suspend fun addReaderAuthAll(readerKey: AsymmetricKey.X509Compatible): Builder {
             val readerAuthenticationAll = buildCborArray {
                 add("ReaderAuthenticationAll")
                 add(sessionTranscript)
@@ -423,12 +371,20 @@ data class DeviceRequest private constructor(
                 Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(readerAuthenticationAll))))
             // TODO: include x5chain in protected header for v1.1?
             val protectedHeaders = mutableMapOf<CoseLabel, DataItem>()
+            // ISO 18013-5 requires use of non-fully-specified algorithms, e.g. -7 instead of -9
+            val signatureAlgorithm = readerKey.algorithm.curve!!.defaultSigningAlgorithm
             protectedHeaders.put(Cose.COSE_LABEL_ALG.toCoseLabel, signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem())
             val unprotectedHeaders = mutableMapOf<CoseLabel, DataItem>()
-            if (readerKeyCertificateChain != null) {
-                unprotectedHeaders.put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, readerKeyCertificateChain.toDataItem())
+            readerKey.certChain?.let {
+                unprotectedHeaders.put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, it.toDataItem())
             }
-            val signature = signer(readerAuthenticationAllBytes, protectedHeaders, unprotectedHeaders)
+            val signature = Cose.coseSign1Sign(
+                signingKey = readerKey,
+                message = readerAuthenticationAllBytes,
+                includeMessageInPayload = false,
+                protectedHeaders = protectedHeaders,
+                unprotectedHeaders = unprotectedHeaders,
+            )
             readerAuthAll.add(signature)
             return this
         }

@@ -32,6 +32,8 @@ import kotlin.time.Instant
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import org.multipaz.cose.Cose
+import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
@@ -143,6 +145,14 @@ class DeviceRequestGeneratorTest {
         assertEquals(1, docRequest.readerCertificateChain!!.certificates.size.toLong())
         assertEquals(readerCertChain, docRequest.readerCertificateChain)
         assertEquals(0, docRequest.requestInfo.size.toLong())
+
+        // Check that we use the right COSE algorithm identifier...
+        val newDeviceRequest = DeviceRequest.fromDataItem(Cbor.decode(encodedDeviceRequest))
+        newDeviceRequest.verifyReaderAuthentication(Cbor.decode(encodedSessionTranscript))
+        assertEquals(
+            Algorithm.ES256.coseAlgorithmIdentifier!!,
+            newDeviceRequest.docRequests[0].readerAuth!!.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
+        )
     }
 
     @Test
@@ -200,9 +210,17 @@ class DeviceRequestGeneratorTest {
             encodedSessionTranscript
         )
             .parse()
-        var docRequest = deviceRequest.docRequests[0]
+        val docRequest = deviceRequest.docRequests[0]
         assertTrue(docRequest.readerAuthenticated)
         assertEquals(readerCertChain, docRequest.readerCertificateChain)
+
+        // Check that we use the right COSE algorithm identifier...
+        val newDeviceRequest = DeviceRequest.fromDataItem(Cbor.decode(encodedDeviceRequest))
+        newDeviceRequest.verifyReaderAuthentication(Cbor.decode(encodedSessionTranscript))
+        assertEquals(
+            Algorithm.ES256.coseAlgorithmIdentifier!!,
+            newDeviceRequest.docRequests[0].readerAuth!!.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
+        )
     }
 
     companion object {

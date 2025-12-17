@@ -12,6 +12,7 @@ import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cose.Cose
 import org.multipaz.cose.toCoseLabel
+import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.SignatureVerificationException
@@ -73,6 +74,10 @@ class DeviceRequestTest {
             TestVectors.ISO_18013_5_ANNEX_D_READER_CERT.fromHexByteString(),
             readerCertChain.certificates[0].encoded
         )
+        assertEquals(
+            Algorithm.ES256.coseAlgorithmIdentifier!!,
+            readerAuth.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
+        )
 
         val docRequest = deviceRequest.docRequests.first()
         assertEquals(DrivingLicense.MDL_DOCTYPE, docRequest.docType)
@@ -90,7 +95,6 @@ class DeviceRequestTest {
         )
     }
 
-    // Test against the test vector in Annex D of 18013-5:2021
     @Test
     fun testAgainstMalformedReaderSignature() {
         val encodedSessionTranscriptBytes =
@@ -237,7 +241,10 @@ class DeviceRequestTest {
 
         // Now we can access readerAuthAll and readerAuth
         assertEquals(0, parsedDeviceRequest.readerAuthAll.size)
-        val unused = parsedDeviceRequest.docRequests[0].readerAuth
+        assertEquals(
+            Algorithm.ES384.coseAlgorithmIdentifier!!,
+            parsedDeviceRequest.docRequests[0].readerAuth!!.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
+        )
 
         assertEquals(parsedDeviceRequest, deviceRequest)
     }
@@ -284,7 +291,10 @@ class DeviceRequestTest {
 
         // Now we can access readerAuthAll and readerAuth
         assertEquals(0, parsedDeviceRequest.readerAuthAll.size)
-        val unused = parsedDeviceRequest.docRequests[0].readerAuth
+        assertEquals(
+            Algorithm.ES256.coseAlgorithmIdentifier!!,
+            parsedDeviceRequest.docRequests[0].readerAuth!!.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
+        )
 
         assertEquals(parsedDeviceRequest, deviceRequest)
     }
@@ -333,6 +343,10 @@ class DeviceRequestTest {
         // Now we can access readerAuthAll and readerAuth
         assertEquals(1, parsedDeviceRequest.readerAuthAll.size)
         assertNull(parsedDeviceRequest.docRequests[0].readerAuth)
+        assertEquals(
+            Algorithm.ES384.coseAlgorithmIdentifier!!,
+            parsedDeviceRequest.readerAuthAll[0].protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
+        )
 
         assertEquals(parsedDeviceRequest, deviceRequest)
     }
@@ -380,6 +394,10 @@ class DeviceRequestTest {
         // Now we can access readerAuthAll and readerAuth
         assertEquals(1, parsedDeviceRequest.readerAuthAll.size)
         assertNull(parsedDeviceRequest.docRequests[0].readerAuth)
+        assertEquals(
+            Algorithm.ES256.coseAlgorithmIdentifier!!,
+            parsedDeviceRequest.readerAuthAll[0].protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
+        )
 
         assertEquals(parsedDeviceRequest, deviceRequest)
     }

@@ -113,9 +113,10 @@ class DeviceRequestGenerator(
         val readerAuthenticationBytes =
             Cbor.encode(Tagged(24, Bstr(encodedReaderAuthentication)))
         val protectedHeaders = mapOf<CoseLabel, DataItem>(
+            // Make sure we use non-fully-specified algorithm since 18013-5 requires that.
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_ALG),
-                keyInfo.algorithm.coseAlgorithmIdentifier!!.toDataItem()
+                keyInfo.algorithm.curve!!.defaultSigningAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
             )
         )
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
