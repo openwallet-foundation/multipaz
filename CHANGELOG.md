@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.97.0] - Not yet released, expected in January 2026
 Changes since Multipaz 0.96.0 include:
-- TODO
+- Allow DigitalCredentialsPresentmentMechanism to be set from intent without specialized activity
 
 ## [0.96.0] - 2025-12-11
 Changes since Multipaz 0.95.0 include:
