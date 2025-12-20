@@ -24,6 +24,7 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.yearsUntil
 import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Simple
+import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.Uint
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItemFullDate
@@ -34,6 +35,7 @@ import org.multipaz.revocation.RevocationStatus
 import org.multipaz.openid4vci.util.CredentialState
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.Logger
+import org.multipaz.util.truncateToWholeSeconds
 import kotlin.time.Duration.Companion.days
 
 /**
@@ -70,12 +72,6 @@ internal class CredentialFactoryMdl : CredentialFactory {
 
         val coreData = data["core"]
         val dateOfBirth = coreData["birth_date"].asDateString
-        val address = if (coreData.hasKey("address")) {
-            val addressObject = coreData["address"]
-            if (addressObject.hasKey("formatted")) addressObject["formatted"] else null
-        } else {
-            null
-        }
         val records = data["records"]
         if (!records.hasKey("mDL")) {
             throw IllegalArgumentException("No driver's license was issued to this person")
@@ -86,14 +82,12 @@ internal class CredentialFactoryMdl : CredentialFactory {
         // sure to not use fractional seconds as 18013-5 calls for this (clauses 7.1
         // and 9.1.2.4)
         //
-        val timeSigned = Instant.fromEpochSeconds(now.epochSeconds, 0)
-        val validFrom = Instant.fromEpochSeconds(now.epochSeconds, 0)
+        val timeSigned = now.truncateToWholeSeconds()
+        val validFrom = now.truncateToWholeSeconds()
         val validUntil = validFrom + 30.days
 
         val resources = BackendEnvironment.getInterface(Resources::class)!!
 
-        // As we do not have driver license database, just make up some data to fill mDL
-        // for demo purposes. Take what we can from the PID that was presented as evidence.
         val mdocType = DrivingLicense.getDocumentType()
             .mdocDocumentType!!.namespaces[DrivingLicense.MDL_NAMESPACE]!!
 
@@ -127,9 +121,48 @@ internal class CredentialFactoryMdl : CredentialFactory {
                     added.add("family_name_national_character")
                 }
 
-                if (address != null) {
-                    addDataElement("resident_address", address)
-                    added.add("resident_address")
+                if (coreData.hasKey("address")) {
+                    val addressObject = coreData["address"]
+                    if (addressObject.hasKey("formatted")) {
+                        addDataElement("resident_address", addressObject["formatted"])
+                        added.add("resident_address")
+                    }
+                    if (addressObject.hasKey("country")) {
+                        addDataElement("resident_country", addressObject["country"])
+                        added.add("resident_country")
+                    }
+                    if (addressObject.hasKey("region")) {
+                        addDataElement("resident_state", addressObject["region"])
+                        added.add("resident_state")
+                    }
+                    if (addressObject.hasKey("locality")) {
+                        addDataElement("resident_city", addressObject["locality"])
+                        added.add("resident_city")
+                    }
+                    if (addressObject.hasKey("postal_code")) {
+                        addDataElement("resident_postal_code", addressObject["postal_code"])
+                        added.add("postal_code")
+                    }
+                    // TODO: enable this once resident_street is added to mDL
+                    /*
+                    if (addressObject.hasKey("street")) {
+                        // For mDL this is street address, format is using American conventions
+                        // for now
+                        val value = buildString {
+                            if (addressObject.hasKey("house_number")) {
+                                append(addressObject["house_number"].asTstr)
+                                append(' ')
+                            }
+                            append(addressObject["street"].asTstr)
+                            if (addressObject.hasKey("unit")) {
+                                append(" #")
+                                append(addressObject["unit"].asTstr)
+                            }
+                        }
+                        addDataElement("resident_street", value.toDataItem())
+                        added.add("resident_street")
+                    }
+                     */
                 }
 
                 // Transfer core fields that have counterparts in the mDL credential
@@ -167,6 +200,19 @@ internal class CredentialFactoryMdl : CredentialFactory {
                     } else {
                         Logger.e(TAG, "Could not fill '$elementName': no sample data")
                     }
+                }
+            }
+            if (mdlData.hasKey("issuing_country") && mdlData["issuing_country"].asTstr == "US") {
+                addNamespace(DrivingLicense.AAMVA_NAMESPACE) {
+                    if (coreData.hasKey("address")) {
+                        val addressObject = coreData["address"]
+                        if (addressObject.hasKey("us_county_code")) {
+                            addDataElement("resident_county", addressObject["us_county_code"])
+                        }
+                    }
+                    // Add other US-specific values, just make them up for now
+                    addDataElement("DHS_compliance", Tstr("F"))
+                    addDataElement("EDL_credential", 1.toDataItem())
                 }
             }
         }

@@ -108,6 +108,12 @@ val recordTypes = RecordType.buildMap {
                 description = "Apartment/Unit Number",
                 icon = Icon.APARTMENT,
             )
+            addString(
+                identifier = "us_county_code",
+                displayName = "If in US, County Code",
+                description = "Three-digit code",
+                icon = Icon.NUMBERS,
+            )
         }
         addString(
             identifier = "family_name_national_character",
