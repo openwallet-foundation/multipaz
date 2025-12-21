@@ -1,7 +1,6 @@
 package org.multipaz.mdoc.nfc
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import org.multipaz.cbor.DataItem
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.transport.MdocTransport
@@ -46,7 +45,7 @@ suspend fun NfcTagReader.scanMdocReader(
     selectConnectionMethod: suspend (connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod?,
     negotiatedHandoverConnectionMethods: List<MdocConnectionMethod>,
     nfcScanOptions: NfcScanOptions = NfcScanOptions(),
-    context: CoroutineContext = Dispatchers.IO,
+    context: CoroutineContext = Dispatchers.Default,
 ): ScanMdocReaderResult? {
     // Start creating transports for Negotiated Handover and start advertising these
     // immediately. This helps with connection time because the holder's device will

@@ -4,7 +4,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.headers
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
@@ -215,7 +215,7 @@ private suspend fun obtainSystemOfRecordToken(systemOfRecordUrl: String, state: 
             name.encodeURLParameter() + "=" + value.encodeURLParameter()
         }.joinToString("&"))
     }
-    val responseText = response.readBytes().decodeToString()
+    val responseText = response.readRawBytes().decodeToString()
     if (response.status != HttpStatusCode.OK) {
         Logger.e(TAG, "token request error: ${response.status}: $responseText")
     }

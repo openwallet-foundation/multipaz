@@ -92,7 +92,7 @@ class RpcDispatcherLocal private constructor(
 
     fun encodeStateResult(result: Any): DataItem {
         val target = stateMap[result::class]
-            ?: throw IllegalStateException("${result::class.qualifiedName} was not registered")
+            ?: throw IllegalStateException("${result::class.simpleName} was not registered")
         return CborArray(mutableListOf(
             Tstr(target),
             Bstr(cipher.encrypt(Cbor.encode(targetMap[target]!!.serialize(result))))
@@ -141,7 +141,7 @@ class RpcDispatcherLocal private constructor(
                 val authContext = try {
                     if (state !is RpcAuthInspector) {
                         throw RpcAuthException(
-                            message = "${state::class.qualifiedName} must implement RpcAuthChecker",
+                            message = "${state::class.simpleName} must implement RpcAuthChecker",
                             rpcAuthError = RpcAuthError.NOT_SUPPORTED
                         )
                     }
@@ -186,7 +186,7 @@ class RpcDispatcherLocal private constructor(
             } else {
                 if (state is RpcAuthInspector) {
                     throw RpcAuthException(
-                        message = "${state::class.qualifiedName} requires authorization",
+                        message = "${state::class.simpleName} requires authorization",
                         rpcAuthError = RpcAuthError.REQUIRED
                     )
                 }

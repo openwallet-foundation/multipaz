@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import io.github.z4kn4fein.semver.Version
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
 import org.multipaz.compose.cards.InfoCard
 import org.multipaz.testapp.BuildConfig
@@ -50,7 +50,7 @@ fun AppUpdateCard() {
             val httpClient = HttpClient(platformHttpClientEngineFactory().create())
             val response = httpClient.get(updateUrl)
             if (response.status == HttpStatusCode.OK) {
-                latestVersionString.value = response.readBytes().decodeToString().trim()
+                latestVersionString.value = response.readRawBytes().decodeToString().trim()
                 Logger.i(TAG, "Latest available version from $updateWebsiteUrl is ${latestVersionString.value} " +
                         "and our version is $currentVersion")
             }

@@ -2,6 +2,8 @@ package org.multipaz.mdoc.transport
 
 import io.ktor.client.utils.unwrapCancellationException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
@@ -9,7 +11,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.multipaz.crypto.EcPublicKey
@@ -63,7 +64,7 @@ internal class BleTransportCentralMdocReader(
         )
         peripheralManager.setCallbacks(
             onError = { error ->
-                runBlocking {
+                CoroutineScope(Dispatchers.Default).launch {
                     currentJob?.cancel("onError was called", error)
                     mutex.withLock {
                         failTransport(error)
@@ -71,7 +72,7 @@ internal class BleTransportCentralMdocReader(
                 }
             },
             onClosed = {
-                runBlocking {
+                CoroutineScope(Dispatchers.Default).launch {
                     mutex.withLock {
                         closeWithoutDelay()
                     }

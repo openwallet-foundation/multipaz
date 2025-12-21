@@ -42,6 +42,14 @@ kotlin {
         publishLibraryVariants("release")
     }
 
+    js {
+        browser {
+            // Disable tests until fully implemented
+            testTask { enabled = false }
+        }
+        binaries.executable()
+    }
+
     listOf(
         iosX64(),
         iosArm64(),
@@ -199,7 +207,7 @@ tasks.all {
     if (name == "compileDebugKotlinAndroid" || name == "compileReleaseKotlinAndroid" ||
         name == "androidReleaseSourcesJar" || name == "iosArm64SourcesJar" ||
         name == "iosSimulatorArm64SourcesJar" || name == "iosX64SourcesJar" ||
-        name == "jvmSourcesJar" || name == "sourcesJar") {
+        name == "jsSourcesJar" || name == "jvmSourcesJar" || name == "sourcesJar") {
         dependsOn("kspCommonMainKotlinMetadata")
     }
 }
@@ -208,6 +216,7 @@ tasks["compileKotlinIosX64"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinIosArm64"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinIosSimulatorArm64"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinJvm"].dependsOn("kspCommonMainKotlinMetadata")
+tasks["compileKotlinJs"].dependsOn("kspCommonMainKotlinMetadata")
 
 tasks.withType<Test> {
     testLogging {

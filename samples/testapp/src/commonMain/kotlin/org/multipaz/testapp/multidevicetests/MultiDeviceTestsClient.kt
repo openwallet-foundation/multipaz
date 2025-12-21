@@ -12,6 +12,7 @@ import org.multipaz.util.fromBase64Url
 import io.ktor.network.sockets.Socket
 import io.ktor.network.sockets.openReadChannel
 import io.ktor.network.sockets.openWriteChannel
+import io.ktor.utils.io.readUTF8Line
 import io.ktor.utils.io.writeStringUtf8
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException

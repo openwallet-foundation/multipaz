@@ -31,7 +31,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
@@ -60,7 +59,7 @@ class DocumentStoreTest {
     private val CREDENTIAL_DOMAIN = "domain"
 
     @BeforeTest
-    fun setup() = runBlocking {
+    fun setup() = runTest {
         storage = EphemeralStorage()
         secureAreaRepository = SecureAreaRepository.Builder()
             .add(SoftwareSecureArea.create(storage))

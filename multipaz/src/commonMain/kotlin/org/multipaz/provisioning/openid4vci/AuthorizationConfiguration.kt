@@ -2,7 +2,7 @@ package org.multipaz.provisioning.openid4vci
 
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
@@ -32,7 +32,7 @@ internal data class AuthorizationConfiguration(
             if (metadataRequest.status != HttpStatusCode.OK) {
                 throw IllegalStateException("Invalid issuer, no $metadataUrl")
             }
-            val metadataText = metadataRequest.readBytes().decodeToString()
+            val metadataText = metadataRequest.readRawBytes().decodeToString()
             val metadata = Json.parseToJsonElement(metadataText).jsonObject
             val identifier = metadata.stringOrNull("issuer") ?: url
             val challengeEndpoint = metadata.stringOrNull("challenge_endpoint")

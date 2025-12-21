@@ -2,7 +2,7 @@ package org.multipaz.server.enrollment
 
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import kotlinx.io.bytestring.ByteString
@@ -84,7 +84,7 @@ private suspend fun getIdentityRootCertificate(
         if (response.status != HttpStatusCode.OK) {
             throw InvalidRequestException("Could not reach: $certUrl")
         }
-        X509Cert(ByteString(response.readBytes()))
+        X509Cert(ByteString(response.readRawBytes()))
     }
 }
 

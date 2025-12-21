@@ -6,7 +6,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.URLBuilder
 import io.ktor.http.Url
@@ -158,7 +158,7 @@ class ProvisioningClientTest {
             // Extract the parameter
             val request = client.get(authorizationUrl) {}
             Assert.assertEquals(HttpStatusCode.OK, request.status)
-            val authText = request.readBytes().decodeToString()
+            val authText = request.readRawBytes().decodeToString()
             val pattern = "name=\"authorizationCode\" value=\""
             val index = authText.indexOf(pattern)
             Assert.assertNotEquals(-1, index)
@@ -242,7 +242,7 @@ class ProvisioningClientTest {
                 }.toString())
             }
             Assert.assertEquals(HttpStatusCode.OK, response.status)
-            val json = Json.parseToJsonElement(response.readBytes().decodeToString()).jsonArray
+            val json = Json.parseToJsonElement(response.readRawBytes().decodeToString()).jsonArray
             val offerObject = json.first().jsonObject
             val preauthorizedOffer = offerObject["offer"]!!.jsonPrimitive.content
             val txCode = offerObject["tx_code"]!!.jsonPrimitive.content

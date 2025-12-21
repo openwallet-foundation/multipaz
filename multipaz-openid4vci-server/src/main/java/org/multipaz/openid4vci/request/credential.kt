@@ -3,7 +3,7 @@ package org.multipaz.openid4vci.request
 import io.ktor.client.HttpClient
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headers
@@ -294,11 +294,11 @@ private suspend fun readSystemOfRecord(state: IssuanceState): DataItem {
             }
         }
         if (request.status != HttpStatusCode.OK) {
-            val text = request.readBytes().decodeToString()
+            val text = request.readRawBytes().decodeToString()
             Logger.e(TAG, "Error accessing data from the System of Record: $text")
             throw IllegalStateException("Could not access data from System of Record")
         }
-        return Cbor.decode(request.readBytes())
+        return Cbor.decode(request.readRawBytes())
     }
 }
 

@@ -1,5 +1,7 @@
 package org.multipaz.mdoc.transport
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.nfc.CommandApdu
@@ -11,7 +13,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.ByteString
@@ -42,7 +44,7 @@ class NfcTransportMdoc(
                 if (instances.size > 1) {
                     Logger.w(TAG, "${instances.size} NfcTransportMdoc instances, expected just one")
                 }
-                runBlocking {
+                CoroutineScope(Dispatchers.Default).launch {
                     instances.forEach { instance ->
                         instance.processApdu(
                             command = command,
@@ -65,7 +67,7 @@ class NfcTransportMdoc(
                 if (instances.size > 1) {
                     Logger.w(TAG, "${instances.size} NfcTransportMdoc instances, expected just one")
                 }
-                runBlocking {
+                CoroutineScope(Dispatchers.Default).launch {
                     // Get a read-only copy since the caller may modify `instances` variable.
                     instances.toList().forEach { instance ->
                         instance.onDeactivated()

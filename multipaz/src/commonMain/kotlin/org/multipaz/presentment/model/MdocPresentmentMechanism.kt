@@ -5,7 +5,6 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.mdoc.transport.MdocTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.ByteString
 import kotlin.time.Duration
@@ -30,6 +29,6 @@ class MdocPresentmentMechanism(
 ): PresentmentMechanism {
 
     override fun close() {
-        CoroutineScope(Dispatchers.IO).launch() { transport.close() }
+        CoroutineScope(Dispatchers.Default).launch() { transport.close() }
     }
 }

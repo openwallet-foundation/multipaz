@@ -3,7 +3,6 @@ package org.multipaz.rpc.client
 import io.ktor.client.engine.HttpClientEngineFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -87,7 +86,7 @@ class RpcAuthorizedDeviceClient private constructor(
         ): RpcAuthorizedDeviceClient {
             val poll = RpcPollHttp(httpTransport)
             val notifier = RpcNotifierPoll(poll)
-            val notificationJob = CoroutineScope(Dispatchers.IO).launch {
+            val notificationJob = CoroutineScope(Dispatchers.Default).launch {
                 notifier.loop()
             }
             val dispatcher = RpcDispatcherHttp(httpTransport, exceptionMap)

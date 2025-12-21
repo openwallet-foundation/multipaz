@@ -2,7 +2,7 @@ package org.multipaz.provisioning.openid4vci
 
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Url
 import kotlinx.coroutines.CancellationException
@@ -77,7 +77,7 @@ internal sealed class CredentialOffer {
                     if (response.status != HttpStatusCode.OK) {
                         throw IllegalStateException("Error retrieving '$url'")
                     }
-                    credentialOfferString = response.readBytes().decodeToString()
+                    credentialOfferString = response.readRawBytes().decodeToString()
                 }
                 val json = Json.parseToJsonElement(credentialOfferString).jsonObject
                 return parseJson(json)

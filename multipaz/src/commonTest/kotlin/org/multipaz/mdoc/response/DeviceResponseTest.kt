@@ -1,6 +1,5 @@
 package org.multipaz.mdoc.response
 
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -78,7 +77,7 @@ class DeviceResponseTest {
     private lateinit var photoIdTimeExpectedUpdate: Instant
 
     @BeforeTest
-    fun setup() = runBlocking {
+    fun setup() = runTest {
         storage = EphemeralStorage()
         softwareSecureArea = SoftwareSecureArea.create(storage)
         secureAreaRepository = SecureAreaRepository.Builder()

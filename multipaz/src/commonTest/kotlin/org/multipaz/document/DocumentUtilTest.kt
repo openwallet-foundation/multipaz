@@ -15,7 +15,6 @@
  */
 package org.multipaz.document
 
-import kotlinx.coroutines.runBlocking
 import org.multipaz.claim.Claim
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.documenttype.DocumentTypeRepository
@@ -38,7 +37,7 @@ class DocumentUtilTest {
     private lateinit var secureAreaRepository: SecureAreaRepository
 
     @BeforeTest
-    fun setup() = runBlocking {
+    fun setup() = runTest {
         storage = EphemeralStorage()
         secureAreaRepository = SecureAreaRepository.Builder()
             .add(SoftwareSecureArea.create(storage))

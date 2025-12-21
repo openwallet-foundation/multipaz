@@ -13,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -114,11 +114,11 @@ private fun StatusListCheckSection(
                             val type = response.contentType()
                             val statusList = when (type) {
                                 STATUSLIST_JWT -> StatusList.fromJwt(
-                                    jwt = response.readBytes().decodeToString(),
+                                    jwt = response.readRawBytes().decodeToString(),
                                     publicKey = cert.ecPublicKey
                                 )
                                 STATUSLIST_CWT -> StatusList.fromCwt(
-                                    cwt = response.readBytes(),
+                                    cwt = response.readRawBytes(),
                                     publicKey = cert.ecPublicKey
                                 )
                                 else -> throw IllegalStateException("Unknown type: $type")
@@ -180,7 +180,7 @@ fun IdentifierListCheckSection(
                         val cert = status.certificate ?: certChain.certificates.first()
                         try {
                             val identifierList = IdentifierList.fromCwt(
-                                cwt = response.readBytes(),
+                                cwt = response.readRawBytes(),
                                 publicKey = cert.ecPublicKey
                             )
                             statusText.value = if (identifierList.contains(status.id)) {

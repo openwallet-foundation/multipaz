@@ -6,7 +6,9 @@ plugins {
     alias(libs.plugins.ktor)
 }
 
-project.setProperty("mainClassName", "org.multipaz.verifier.server.Main")
+application {
+    mainClass.set("org.multipaz.verifier.server.Main")
+}
 
 kotlin {
     jvmToolchain(17)

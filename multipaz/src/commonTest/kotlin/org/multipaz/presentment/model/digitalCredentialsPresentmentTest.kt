@@ -1,7 +1,6 @@
 package org.multipaz.presentment.model
 
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
@@ -54,7 +53,7 @@ class DigitalCredentialsPresentmentTest {
     val documentStoreTestHarness = DocumentStoreTestHarness()
 
     @BeforeTest
-    fun setup() = runBlocking {
+    fun setup() = runTest {
         documentStoreTestHarness.initialize()
         documentStoreTestHarness.provisionStandardDocuments()
     }

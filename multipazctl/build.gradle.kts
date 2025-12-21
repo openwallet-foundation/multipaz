@@ -4,6 +4,10 @@ plugins {
     alias(libs.plugins.ktor)
 }
 
+application {
+    mainClass.set("org.multipaz.multipazctl.MultipazCtl")
+}
+
 kotlin {
     jvmToolchain(17)
     compilerOptions {
@@ -32,10 +36,9 @@ tasks.register("runMultipazCtl", JavaExec::class) {
     workingDir = project.rootDir
 }
 
-project.setProperty("mainClassName", "org.multipaz.multipazctl.MultipazCtl")
-
 ktor {
 }
+
 subprojects {
 	apply(plugin = "org.jetbrains.dokka")
 }

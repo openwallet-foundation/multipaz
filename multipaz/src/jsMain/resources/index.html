@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Example of calling Multipaz from JS</title>
+    <style>
+        :root {
+            --bg-color: #fcfcfc;
+            --text-color: #333;
+            --border-color: #ccc;
+            --header-bg: #eee;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        header {
+            background-color: var(--header-bg);
+            padding: 10px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 1.2rem;
+            margin: 0;
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden; /* Prevent body scroll, let panels scroll */
+        }
+
+        .pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            min-width: 0; /* Fixes flex child overflow issues */
+        }
+
+        .pane-header {
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #555;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* The arrow divider in the middle */
+        .divider {
+            width: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f5f5f5;
+            border-left: 1px solid var(--border-color);
+            border-right: 1px solid var(--border-color);
+            color: #888;
+            font-size: 1.5rem;
+            user-select: none;
+        }
+
+        textarea {
+            flex: 1;
+            width: 100%;
+            resize: none; /* Layout handles resizing */
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+            font-size: 14px;
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        textarea:focus {
+            border-color: #007bff;
+        }
+
+        /* Specific styles to distinguish input vs output visually */
+        #diagnosticOutput {
+            background-color: #fafafa;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Simple example of calling <a href="https://developer.multipaz.org/kdocs/multipaz/org.multipaz.cbor/-cbor/to-diagnostics.html">Cbor.toDiagnostics()</a> from JS</h1>
+</header>
+
+<div class="container">
+    <div class="pane">
+        <div class="pane-header">
+            <span>Diagnostic Notation</span>
+        </div>
+        <textarea id="diagnosticOutput" readonly placeholder="Output will appear here..."></textarea>
+    </div>
+
+    <div class="divider" title="Converting Right to Left">
+        &larr;
+    </div>
+
+    <div class="pane">
+        <div class="pane-header">
+            <span>Cbor (Hex)</span>
+            <button onclick="clearAll()" style="font-size: 0.8rem;">Clear</button>
+        </div>
+        <textarea id="hexInput" placeholder="Paste hex bytes here (e.g. A1 01 02)..." autofocus></textarea>
+    </div>
+</div>
+
+<script src="multipaz.js"></script>
+
+<script>
+    // DOM Elements
+    const hexInput = document.getElementById('hexInput');
+    const diagOutput = document.getElementById('diagnosticOutput');
+
+    // Event Listener: Trigger conversion on keyup/input in the Hex box
+    hexInput.addEventListener('input', () => {
+        const rawHex = hexInput.value;
+
+        // 1. Clean the input (remove spaces, newlines, '0x' prefixes)
+        const cleanHex = rawHex.replace(/\s+|0x/g, '');
+
+        // 2. Run the conversion function
+        try {
+            if (cleanHex.length === 0) {
+                diagOutput.value = '';
+                return;
+            }
+
+            // Check for valid hex characters before passing to logic
+            if (!/^[0-9a-fA-F]+$/.test(cleanHex)) {
+                throw new Error("Invalid Hex characters");
+            }
+
+            // Call the conversion logic
+            const result = convertHexToDiagnostic(cleanHex);
+            diagOutput.value = result;
+
+        } catch (e) {
+            diagOutput.value = "Error: " + e.message;
+        }
+    });
+
+    function clearAll() {
+        hexInput.value = '';
+        diagOutput.value = '';
+        hexInput.focus();
+    }
+
+    function convertHexToDiagnostic(cleanHex) {
+        return multipaz.org.multipaz.tools.cborToDiagnostic(cleanHex)
+    }
+
+</script>
+
+</body>
+</html>

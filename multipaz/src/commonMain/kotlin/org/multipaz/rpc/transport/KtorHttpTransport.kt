@@ -7,7 +7,7 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.bytestring.ByteString
 
@@ -35,7 +35,7 @@ class KtorHttpTransport: HttpTransport {
         baseUrl: String
     ) {
         httpClient = HttpClient(engine) {
-            install(HttpTimeout.Plugin)
+            install(HttpTimeout)
         }
         this.baseUrl = baseUrl
     }
@@ -75,6 +75,6 @@ class KtorHttpTransport: HttpTransport {
             throw HttpTransport.ConnectionException("Error", e)
         }
         HttpTransport.processStatus(url, response.status.value, response.status.description)
-        return ByteString(response.readBytes())
+        return ByteString(response.readRawBytes())
     }
 }

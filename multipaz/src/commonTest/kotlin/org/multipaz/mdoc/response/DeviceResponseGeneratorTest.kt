@@ -15,7 +15,6 @@
  */
 package org.multipaz.mdoc.response
 
-import kotlinx.coroutines.runBlocking
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
@@ -76,7 +75,7 @@ class DeviceResponseGeneratorTest {
     private lateinit var dsCert: X509Cert
 
     @BeforeTest
-    fun setup() = runBlocking {
+    fun setup() = runTest {
         storage = EphemeralStorage()
         secureAreaRepository = SecureAreaRepository.Builder()
             .add(SoftwareSecureArea.create(storage))

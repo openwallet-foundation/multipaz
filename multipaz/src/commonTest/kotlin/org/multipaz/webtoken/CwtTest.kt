@@ -1,6 +1,5 @@
 package org.multipaz.webtoken
 
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -47,9 +46,23 @@ class CwtTest {
     private val privateTrustedKey = Crypto.createEcPrivateKey(EcCurve.P256)
     private val trustedKey = privateTrustedKey.publicKey
 
+    private lateinit var trustedCert: X509Cert
+
     @BeforeTest
-    fun init() {
+    fun init() = runTest {
         clock = FakeClock(Instant.fromEpochSeconds(1443944945))
+        trustedCert = X509Cert.Builder(
+            publicKey = trustedKey,
+            signingKey = AsymmetricKey.Companion.anonymous(
+                privateKey = Crypto.createEcPrivateKey(EcCurve.P384),
+                algorithm = EcCurve.P384.defaultSigningAlgorithm
+            ),
+            serialNumber = ASN1Integer(57),
+            subject = X500Name.Companion.fromName("CN=test-root"),
+            issuer = X500Name.Companion.fromName("CN=test-ca"),
+            validFrom = clock.now() - 10.days,
+            validUntil = clock.now() + 100.days
+        ).build()
     }
 
     @Test
@@ -259,21 +272,6 @@ class CwtTest {
         }
 
     inner class TestConfiguration(): Configuration {
-        private val trustedCert = runBlocking {
-            X509Cert.Builder(
-                publicKey = trustedKey,
-                signingKey = AsymmetricKey.Companion.anonymous(
-                    privateKey = Crypto.createEcPrivateKey(EcCurve.P384),
-                    algorithm = EcCurve.P384.defaultSigningAlgorithm
-                ),
-                serialNumber = ASN1Integer(57),
-                subject = X500Name.Companion.fromName("CN=test-root"),
-                issuer = X500Name.Companion.fromName("CN=test-ca"),
-                validFrom = clock.now() - 10.days,
-                validUntil = clock.now() + 100.days
-            ).build()
-        }
-
         override fun getValue(key: String): String? {
             if (key == "iss_kid") {
                 return buildJsonObject {

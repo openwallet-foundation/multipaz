@@ -17,6 +17,14 @@ kotlin {
 
     jvm()
 
+    js {
+        browser {
+            // Disable tests until fully implemented
+            testTask { enabled = false }
+        }
+        binaries.executable()
+    }
+
     listOf(
         iosX64(),
         iosArm64(),

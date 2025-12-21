@@ -7,7 +7,6 @@ import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -62,7 +61,7 @@ suspend fun List<MdocConnectionMethod>.advertise(
 @OptIn(ExperimentalCoroutinesApi::class)
 suspend fun List<MdocTransport>.waitForConnection(
     eSenderKey: EcPublicKey,
-    coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.IO)
+    coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default)
 ): MdocTransport {
     lateinit var continuation: CancellableContinuation<MdocTransport>
     forEach { transport ->

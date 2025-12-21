@@ -5,7 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
@@ -95,7 +95,7 @@ object AppLinksCheck {
                 Logger.e(TAG, "Error fetching '$assetLinksUrl': HTTP status ${response.status.value}")
                 "[]"
             } else {
-                response.readBytes().decodeToString()
+                response.readRawBytes().decodeToString()
             }
         } catch (err: Exception) {
             Logger.e(TAG, "Error connecting to $appLinkServer", err)

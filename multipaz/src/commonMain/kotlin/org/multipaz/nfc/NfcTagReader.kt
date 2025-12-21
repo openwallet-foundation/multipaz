@@ -1,7 +1,6 @@
 package org.multipaz.nfc
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import org.multipaz.prompt.PromptDismissedException
 import kotlin.coroutines.CoroutineContext
 
@@ -66,7 +65,7 @@ interface NfcTagReader {
         message: String?,
         tagInteractionFunc: suspend (tag: NfcIsoTag) -> T?,
         options: NfcScanOptions = NfcScanOptions(),
-        context: CoroutineContext = Dispatchers.IO
+        context: CoroutineContext = Dispatchers.Default
     ): T
 
     companion object {

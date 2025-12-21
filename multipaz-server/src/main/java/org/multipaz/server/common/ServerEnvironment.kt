@@ -78,7 +78,7 @@ class ServerEnvironment(
             }
 
             val httpClient = HttpClient(Java) {
-                install(HttpTimeout.Plugin)
+                install(HttpTimeout)
                 followRedirects = false
             }
 

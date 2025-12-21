@@ -1,6 +1,5 @@
 package org.multipaz.webtoken
 
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -21,8 +20,10 @@ import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.toBase64
 import org.multipaz.util.toBase64Url
+import org.multipaz.webtoken.CwtTest.FakeClock
 import kotlin.reflect.KClass
 import kotlin.reflect.cast
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -37,6 +38,24 @@ class JwtTest {
     private val clock = FakeClock()
     private val privateTrustedKey = Crypto.createEcPrivateKey(EcCurve.P256)
     private val trustedKey = privateTrustedKey.publicKey
+
+    private lateinit var trustedCert: X509Cert
+
+    @BeforeTest
+    fun init() = runTest {
+        trustedCert = X509Cert.Builder(
+            publicKey = trustedKey,
+            signingKey = AsymmetricKey.anonymous(
+                privateKey = Crypto.createEcPrivateKey(EcCurve.P384),
+                algorithm = EcCurve.P384.defaultSigningAlgorithm
+            ),
+            serialNumber = ASN1Integer(57),
+            subject = X500Name.fromName("CN=test-root"),
+            issuer = X500Name.fromName("CN=test-ca"),
+            validFrom = clock.now() - 10.days,
+            validUntil = clock.now() + 100.days
+        ).build()
+    }
 
     @Test
     fun testSimple() = runBackendTest {
@@ -234,21 +253,6 @@ class JwtTest {
         }
 
     inner class TestConfiguration(): Configuration {
-        private val trustedCert = runBlocking {
-            X509Cert.Builder(
-                publicKey = trustedKey,
-                signingKey = AsymmetricKey.anonymous(
-                    privateKey = Crypto.createEcPrivateKey(EcCurve.P384),
-                    algorithm = EcCurve.P384.defaultSigningAlgorithm
-                ),
-                serialNumber = ASN1Integer(57),
-                subject = X500Name.fromName("CN=test-root"),
-                issuer = X500Name.fromName("CN=test-ca"),
-                validFrom = clock.now() - 10.days,
-                validUntil = clock.now() + 100.days
-            ).build()
-        }
-
         override fun getValue(key: String): String? {
             if (key == "iss_kid") {
                 return buildJsonObject {

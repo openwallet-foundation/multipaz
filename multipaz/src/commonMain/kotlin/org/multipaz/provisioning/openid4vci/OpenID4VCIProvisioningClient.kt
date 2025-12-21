@@ -6,7 +6,7 @@ import io.ktor.client.request.headers
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Url
@@ -132,7 +132,7 @@ internal class OpenID4VCIProvisioningClient(
         Logger.i(TAG, "Got successful response for nonce request")
         // A fresh DPoP nonce might or might not be given
         nonceResponse.headers["DPoP-Nonce"]?.let { issuerDPoPNonce = it }
-        val responseText = nonceResponse.readBytes().decodeToString()
+        val responseText = nonceResponse.readRawBytes().decodeToString()
         val cNonce = Json.parseToJsonElement(responseText).jsonObject.string("c_nonce")
         keyChallenge = cNonce
         return cNonce
@@ -191,7 +191,7 @@ internal class OpenID4VCIProvisioningClient(
             break
         }
 
-        val responseText = credentialResponse.readBytes().decodeToString()
+        val responseText = credentialResponse.readRawBytes().decodeToString()
         if (credentialResponse.status != HttpStatusCode.OK) {
             Logger.e(TAG,"Credential request error: ${credentialResponse.status} $responseText")
             throw IllegalStateException(
@@ -338,7 +338,7 @@ internal class OpenID4VCIProvisioningClient(
             if (response.status == HttpStatusCode.Created) {
                 break
             }
-            val responseText = response.readBytes().decodeToString()
+            val responseText = response.readRawBytes().decodeToString()
             Logger.e(TAG, "PAR request error: ${response.status}: $responseText")
             if (retryCount == 0) {
                 retryCount++
@@ -348,7 +348,7 @@ internal class OpenID4VCIProvisioningClient(
             }
             throw IllegalStateException("Error establishing authenticated channel with issuer")
         }
-        val responseText = response.readBytes().decodeToString()
+        val responseText = response.readRawBytes().decodeToString()
         val parsedResponse = Json.parseToJsonElement(responseText).jsonObject
         return parsedResponse.string("request_uri")
     }
@@ -494,7 +494,7 @@ internal class OpenID4VCIProvisioningClient(
             response.headers["DPoP-Nonce"]?.let { authorizationDPoPNonce = it }
             response.headers["OAuth-Client-Attestation-Challenge"]?.let { clientAttestationChallenge = it }
             if (response.status != HttpStatusCode.OK) {
-                val errResponseText = response.readBytes().decodeToString()
+                val errResponseText = response.readRawBytes().decodeToString()
                 if (preauthorizedCode != null && txCode != null) {
                     // Transaction Code may be wrong
                     val errResponse = Json.parseToJsonElement(errResponseText) as JsonObject
@@ -521,7 +521,7 @@ internal class OpenID4VCIProvisioningClient(
                     }
                 )
             }
-            val tokenResponseString = response.readBytes().decodeToString()
+            val tokenResponseString = response.readRawBytes().decodeToString()
             val tokenResponse = Json.parseToJsonElement(tokenResponseString) as JsonObject
             token = tokenResponse.string("access_token")
             val duration = tokenResponse.integer("expires_in")
@@ -546,7 +546,7 @@ internal class OpenID4VCIProvisioningClient(
                 Logger.i(TAG, "Got successful response for challenge request")
                 // DPoP nonce might or might not be given
                 authorizationDPoPNonce = response.headers["DPoP-Nonce"]
-                val responseText = response.readBytes().decodeToString()
+                val responseText = response.readRawBytes().decodeToString()
                 clientAttestationChallenge = Json.parseToJsonElement(responseText)
                     .jsonObject.string("attestation_challenge")
             }

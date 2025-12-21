@@ -6,7 +6,9 @@ plugins {
     alias(libs.plugins.ktor)
 }
 
-project.setProperty("mainClassName", "org.multipaz.records.server.Main")
+application {
+    mainClass.set("org.multipaz.records.server.Main")
+}
 
 kotlin {
     jvmToolchain(17)

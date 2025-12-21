@@ -7,7 +7,6 @@ import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.NfcIsoTag
 import org.multipaz.nfc.ResponseApdu
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.test.runTest
 import org.multipaz.mdoc.role.MdocRole
@@ -44,7 +43,7 @@ class NfcTransportTests {
         override suspend fun transceive(command: CommandApdu): ResponseApdu {
             transcript.appendLine("${command.toString().truncateTo(100)} (${command.encode().size} bytes)")
             val response = suspendCancellableCoroutine<ResponseApdu> { continuation ->
-                runBlocking {
+                runTest {
                     transport.processApdu(
                         command = command,
                         sendResponse = { response ->

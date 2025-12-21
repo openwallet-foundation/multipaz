@@ -3,7 +3,7 @@ package org.multipaz.server.enrollment
 import io.ktor.client.HttpClient
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.parameters
 import kotlinx.coroutines.CompletableDeferred
@@ -337,7 +337,7 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
                     rpcAuthError = RpcAuthError.FAILED
                 )
             }
-            return X509Cert.fromPem(response.readBytes().decodeToString()).ecPublicKey
+            return X509Cert.fromPem(response.readRawBytes().decodeToString()).ecPublicKey
         }
 
         private val LOCALHOST = Regex("http://localhost([:/].*)?")

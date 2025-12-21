@@ -4,7 +4,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.headers
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.server.application.ApplicationCall
@@ -88,6 +88,6 @@ suspend fun identityOffer(call: ApplicationCall) {
     call.respondText (
         status = offerResponse.status,
         contentType = offerResponse.contentType(),
-        text = offerResponse.readBytes().decodeToString()
+        text = offerResponse.readRawBytes().decodeToString()
     )
 }

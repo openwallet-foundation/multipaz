@@ -2,7 +2,7 @@ package org.multipaz.testapp
 
 import androidx.compose.runtime.Composable
 import coil3.ImageLoader
-import coil3.network.ktor2.KtorNetworkFetcherFactory
+import coil3.network.ktor3.KtorNetworkFetcherFactory
 import io.ktor.client.HttpClient
 import org.multipaz.compose.presentment.UriSchemePresentmentActivity
 import org.multipaz.testapp.ui.AppTheme

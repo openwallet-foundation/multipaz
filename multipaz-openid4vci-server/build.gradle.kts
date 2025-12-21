@@ -6,7 +6,9 @@ plugins {
     alias(libs.plugins.ktor)
 }
 
-project.setProperty("mainClassName", "org.multipaz.openid4vci.server.Main")
+application {
+    mainClass.set("org.multipaz.openid4vci.server.Main")
+}
 
 kotlin {
     jvmToolchain(17)
