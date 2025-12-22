@@ -257,8 +257,6 @@ private fun ConsentPrompt(
     imageLoader: ImageLoader,
     showCancelAsBack: Boolean
 ) {
-    // TODO: use sheetGesturesEnabled=false when available - see
-    //  https://issuetracker.google.com/issues/288211587 for details
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true
     )

@@ -260,6 +260,7 @@ fun CredentialPresentmentModalBottomSheet(
     ModalBottomSheet(
         onDismissRequest = { onCancel() },
         sheetState = sheetState,
+        sheetGesturesEnabled = false,
         dragHandle = null,
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
