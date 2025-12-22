@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -38,14 +39,16 @@ import org.multipaz.util.toHex
 
 @Composable
 fun RevocationStatusSection(credential: Credential) {
-    val revocationData = remember { extractRevocationData(credential) }
-    if (revocationData == null) {
-        Text(
-            text = "Revocation Info Not Found",
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleMedium
-        )
-    } else when (val status = revocationData.revocationStatus) {
+    val coroutineScope = rememberCoroutineScope()
+    val revocationData = remember { mutableStateOf<RevocationData?>(null) }
+
+    LaunchedEffect(Unit) {
+        coroutineScope.launch {
+            revocationData.value = extractRevocationData(credential)
+        }
+    }
+
+    when (val status = revocationData.value?.revocationStatus) {
         is RevocationStatus.Unknown -> {
             Text(
                 text = "Revocation Info Not Parsed",
@@ -53,12 +56,19 @@ fun RevocationStatusSection(credential: Credential) {
                 style = MaterialTheme.typography.titleMedium
             )
         }
-        is RevocationStatus.StatusList -> StatusListCheckSection(status, revocationData.certChain)
-        is RevocationStatus.IdentifierList -> IdentifierListCheckSection(status, revocationData.certChain)
+        is RevocationStatus.StatusList -> StatusListCheckSection(status, revocationData.value!!.certChain)
+        is RevocationStatus.IdentifierList -> IdentifierListCheckSection(status, revocationData.value!!.certChain)
+        else -> {
+            Text(
+                text = "Revocation Info Not Found",
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
     }
 }
 
-private fun extractRevocationData(credential: Credential): RevocationData? {
+private suspend fun extractRevocationData(credential: Credential): RevocationData? {
     return when (credential) {
         is MdocCredential -> {
             val issuerSigned = Cbor.decode(credential.issuerProvidedData)
@@ -71,7 +81,7 @@ private fun extractRevocationData(credential: Credential): RevocationData? {
             mso.revocationStatus?.let { RevocationData(it, certChain) }
         }
         is SdJwtVcCredential -> {
-            val sdjwt = SdJwt(credential.issuerProvidedData.decodeToString())
+            val sdjwt = SdJwt.fromCompactSerialization(credential.issuerProvidedData.decodeToString())
             val certChain = sdjwt.x5c ?: return null
             sdjwt.revocationStatus?.let { RevocationData(it, certChain) }
         }

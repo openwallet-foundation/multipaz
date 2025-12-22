@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.vical
 
+import kotlinx.coroutines.test.runTest
 import org.multipaz.crypto.X509Cert
 import org.multipaz.util.fromBase64Url
 import kotlin.collections.joinToString
@@ -933,7 +934,7 @@ yPxFAiAaQMxnrcRJopU6SRrNTq1x29UlFJdaE7XHvdXu1sXnDA==
     }
 
     @Test
-    fun testAustroadsVical() {
+    fun testAustroadsVical() = runTest {
         val signedVical = SignedVical.parse(AUSTROADS_VICAL_20240919_BASE64.fromBase64Url())
 
         // Check the VICAL contains a single certificate...
@@ -997,7 +998,7 @@ Mbff+DlHy77+wXISb35NiZ8FdVHgC2ut4fDQTRN4
     }
 
     @Test
-    fun testAamvaVical() {
+    fun testAamvaVical() = runTest {
         val signedVical = SignedVical.parse(AAMVA_VICAL_20240925_BASE64.fromBase64Url())
 
         // Check the VICAL contains three certificates.

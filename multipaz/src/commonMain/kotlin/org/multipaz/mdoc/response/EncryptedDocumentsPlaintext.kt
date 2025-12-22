@@ -36,7 +36,7 @@ data class EncryptedDocumentsPlaintext internal constructor(
 
     companion object {
 
-        internal fun fromDataItem(dataItem: DataItem): EncryptedDocumentsPlaintext {
+        internal suspend fun fromDataItem(dataItem: DataItem): EncryptedDocumentsPlaintext {
             val documents = dataItem.getOrNull("documents")?.asArray?.map {
                 MdocDocument.fromDataItem(it)
             }

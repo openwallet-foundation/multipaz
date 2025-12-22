@@ -1,5 +1,6 @@
 package org.multipaz.device
 
+import kotlinx.coroutines.test.runTest
 import org.multipaz.util.fromBase64Url
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
@@ -12,7 +13,7 @@ import kotlin.test.Test
 
 class DeviceAttestationAndroidTest {
     @Test
-    fun testValidationPixel7a() {
+    fun testValidationPixel7a() = runTest {
         val deviceAttestation = DeviceAttestation.fromCbor(ATTESTATION_PIXEL7A)
         deviceAttestation.validate(
             DeviceAttestationValidationData(
@@ -31,14 +32,14 @@ class DeviceAttestationAndroidTest {
     }
 
     @Test
-    fun testAssertionPixel7a() {
+    fun testAssertionPixel7a() = runTest {
         val deviceAttestation = DeviceAttestation.fromCbor(ATTESTATION_PIXEL7A)
         val deviceAssertion = DeviceAssertion.fromCbor(ASSERTION_PIXEL7A)
         deviceAttestation.validateAssertion(deviceAssertion)
     }
 
     @Test
-    fun testAttestationEmulatorPixel3a() {
+    fun testAttestationEmulatorPixel3a() = runTest {
         val deviceAttestation = DeviceAttestation.fromCbor(ATTESTATION_EMULATOR_PIXEL3A)
         deviceAttestation.validate(
             DeviceAttestationValidationData(
@@ -57,7 +58,7 @@ class DeviceAttestationAndroidTest {
     }
 
     @Test
-    fun testAssertionEmulatorPixel3a() {
+    fun testAssertionEmulatorPixel3a() = runTest {
         val deviceAttestation = DeviceAttestation.fromCbor(ATTESTATION_EMULATOR_PIXEL3A)
         val deviceAssertion = DeviceAssertion.fromCbor(ASSERTION_EMULATOR_PIXEL3A)
         deviceAttestation.validateAssertion(deviceAssertion)

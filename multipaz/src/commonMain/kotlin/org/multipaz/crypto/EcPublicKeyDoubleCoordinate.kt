@@ -16,6 +16,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.multipaz.util.toBase64Url
+import kotlin.io.encoding.Base64
 
 /**
  * EC Public Key with two coordinates.
@@ -39,7 +40,7 @@ data class EcPublicKeyDoubleCoordinate(
             ) + additionalLabels
         )
 
-    override fun toJwk(
+    override suspend fun toJwk(
         additionalClaims: JsonObject?,
     ): JsonObject {
         return buildJsonObject {
@@ -56,7 +57,7 @@ data class EcPublicKeyDoubleCoordinate(
         }
     }
 
-    override fun toJwkThumbprint(digestAlgorithm: Algorithm): ByteString {
+    override suspend fun toJwkThumbprint(digestAlgorithm: Algorithm): ByteString {
         // See https://datatracker.ietf.org/doc/html/rfc7638#section-3 for the algorithm
         val jsonStr = Json {
             prettyPrint = false

@@ -248,7 +248,7 @@ data class MdocDocument(
          * @param dataItem a [DataItem] containing CBOR for `Document`.
          * @return a [MdocDocument].
          */
-        fun fromDataItem(dataItem: DataItem): MdocDocument {
+        suspend fun fromDataItem(dataItem: DataItem): MdocDocument {
             val docType = dataItem["docType"].asTstr
             val issuerSigned = dataItem["issuerSigned"]
             val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1

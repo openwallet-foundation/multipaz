@@ -55,7 +55,7 @@ import kotlin.random.Random
 class Openid4VpVerifierModel(
     val clientId: String,
     val nonce: ByteString = ByteString(Random.nextBytes(15)),
-    val ephemeralPrivateKey: EcPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256),
+    val ephemeralPrivateKey: EcPrivateKey,
     val requestedFormats: MutableMap<String, String> = mutableMapOf()
 ) {
     /**
@@ -220,7 +220,7 @@ class Openid4VpVerifierModel(
         )
     }
 
-    private fun buildClientMetadata(): JsonObject {
+    private suspend fun buildClientMetadata(): JsonObject {
         val vpFormats = buildJsonObject {
             putJsonObject("mso_mdoc") {
                 putJsonArray("alg") {
@@ -237,6 +237,11 @@ class Openid4VpVerifierModel(
                 }
             }
         }
+        val ephemeralPrivateKeyJwk = ephemeralPrivateKey.publicKey.toJwk(additionalClaims = buildJsonObject {
+            put("use", "enc")
+            put("kid", "default")
+            put("alg", "ECDH-ES")
+        })
         return buildJsonObject {
             putJsonArray("encrypted_response_enc_values_supported") {
                 add(Algorithm.A128GCM.joseAlgorithmIdentifier)
@@ -244,18 +249,14 @@ class Openid4VpVerifierModel(
             put("vp_formats_supported", vpFormats)
             put("jwks", buildJsonObject {
                 put("keys", buildJsonArray {
-                    add(ephemeralPrivateKey.publicKey.toJwk(additionalClaims = buildJsonObject {
-                        put("use", "enc")
-                        put("kid", "default")
-                        put("alg", "ECDH-ES")
-                    }))
+                    add(ephemeralPrivateKeyJwk)
                 })
             })
         }
     }
 
     // defined in ISO 18013-7 Annex B
-    private fun createSessionTranscript(
+    private suspend fun createSessionTranscript(
         clientId: String,
         responseUri: String,
         authorizationRequestNonce: String,

@@ -1,4 +1,3 @@
-import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -19,8 +18,6 @@ kotlin {
 
     js {
         browser {
-            // Disable tests until fully implemented
-            testTask { enabled = false }
         }
         binaries.executable()
     }
@@ -69,6 +66,12 @@ kotlin {
 
         val jvmTest by getting {
             dependencies {
+            }
+        }
+
+        val jsTest by getting {
+            dependencies {
+                implementation(libs.kotlin.wrappers.web)
             }
         }
     }

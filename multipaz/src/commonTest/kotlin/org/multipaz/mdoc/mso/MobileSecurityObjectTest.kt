@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.mso
 
+import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
@@ -71,7 +72,7 @@ class MobileSecurityObjectTest {
     }
 
     @Test
-    fun testComplex() {
+    fun testComplex() = runTest {
         val randomProvider = Random(42)
         val issuerNamespaces = buildIssuerNamespaces(randomProvider = randomProvider) {
             addNamespace(PhotoID.ISO_23220_2_NAMESPACE) {

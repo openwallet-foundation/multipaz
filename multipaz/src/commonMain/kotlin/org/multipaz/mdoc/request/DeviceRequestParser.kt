@@ -79,7 +79,7 @@ class DeviceRequestParser(
      * @throws IllegalStateException    if required data hasn't been set using the setter
      * methods on this class.
      */
-    fun parse(): DeviceRequest = DeviceRequest().apply {
+    suspend fun parse(): DeviceRequest = DeviceRequest().apply {
         parse(
             encodedDeviceRequest,
             Cbor.decode(encodedSessionTranscript),
@@ -106,7 +106,7 @@ class DeviceRequestParser(
          */
         lateinit var version: String
 
-        internal fun parse(
+        suspend internal fun parse(
             encodedDeviceRequest: ByteArray,
             sessionTranscript: DataItem,
             skipReaderAuthParseAndCheck: Boolean

@@ -111,7 +111,7 @@ data class SignedRical(
          * @throws IllegalArgumentException if the passed in signed RICAL is malformed
          * @throws SignatureVerificationException if signature verification failed.
          */
-        fun parse(
+        suspend fun parse(
             encodedSignedRical: ByteArray,
             disableSignatureVerification: Boolean = false
         ): SignedRical {

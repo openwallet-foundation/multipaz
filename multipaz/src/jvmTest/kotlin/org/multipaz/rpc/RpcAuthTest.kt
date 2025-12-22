@@ -63,12 +63,13 @@ class TestState: TestInterface, RpcAuthInspector {
 
 class TestRpcAuthIssuer(private val valid: Boolean): RpcAuthIssuer {
     override suspend fun auth(target: String, method: String, payload: Bstr): DataItem {
+        val digest = Crypto.digest(
+            Algorithm.SHA256,
+            if (valid) payload.asBstr else byteArrayOf()
+        )
         return buildCborMap {
             put("payload", payload)
-            put("digest", Crypto.digest(
-                Algorithm.SHA256,
-                if (valid) payload.asBstr else byteArrayOf()
-            ))
+            put("digest", digest)
         }
     }
 }

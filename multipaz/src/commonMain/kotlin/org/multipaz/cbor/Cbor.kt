@@ -112,6 +112,12 @@ object Cbor {
      * @throws IllegalArgumentException if the data isn't valid CBOR.
      */
     fun decode(encodedCbor: ByteArray, offset: Int): Pair<Int, DataItem> {
+        // This is needed by Kotlin/JS which doesn't have the same array access semantics
+        // as other platforms. In particular, one cannot rely on IndexOutOfBoundsException
+        // being thrown.
+        if (offset >= encodedCbor.size) {
+            throw IllegalArgumentException("Trying to access data out-of-bounds")
+        }
         try {
             val first = encodedCbor[offset]
             val majorType = MajorType.fromInt(first.toInt().and(0xff) ushr 5)

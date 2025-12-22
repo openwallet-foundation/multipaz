@@ -57,7 +57,7 @@ class StatusList(
     /**
      * Creates compressed form of the status list.
      */
-    fun compress(): CompressedStatusList =
+    suspend fun compress(): CompressedStatusList =
         CompressedStatusList(bitsPerItem, statusList.zlibDeflate(9))
 
     /**
@@ -157,7 +157,7 @@ class StatusList(
          * @return parsed [StatusList]
          * @throws IllegalArgumentException when [json] does not represent status list
          */
-        fun fromJson(json: JsonObject): StatusList =
+        suspend fun fromJson(json: JsonObject): StatusList =
             CompressedStatusList.fromJson(json).decompress()
 
         /**
@@ -191,7 +191,7 @@ class StatusList(
          * @return parsed [CompressedStatusList]
          * @throws IllegalArgumentException when [dataItem] does not represent status list
          */
-        fun fromDataItem(dataItem: DataItem): StatusList =
+        suspend fun fromDataItem(dataItem: DataItem): StatusList =
             CompressedStatusList.fromDataItem(dataItem).decompress()
     }
 }

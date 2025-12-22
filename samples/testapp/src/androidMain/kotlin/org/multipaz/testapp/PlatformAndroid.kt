@@ -144,7 +144,7 @@ actual val platformIsEmulator: Boolean by lazy {
 }
 
 @Suppress("DEPRECATION")
-actual fun getAppToAppOrigin(): String {
+actual suspend fun getAppToAppOrigin(): String {
     val packageInfo = applicationContext.packageManager
         .getPackageInfo(applicationContext.packageName, PackageManager.GET_SIGNATURES)
     return getAppOrigin(packageInfo.signatures!![0].toByteArray())

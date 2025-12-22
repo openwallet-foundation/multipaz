@@ -10,7 +10,7 @@ internal actual suspend fun cloudSecureAreaGetPlatformSecureArea(
     storage: Storage,
     partitionId: String
 ): SecureArea {
-    TODO("Not yet implemented")
+    TODO("cloudSecureAreaGetPlatformSecureArea not yet implemented")
 }
 
 internal actual fun cloudSecureAreaGetPlatformSecureAreaCreateKeySettings(
@@ -19,5 +19,5 @@ internal actual fun cloudSecureAreaGetPlatformSecureAreaCreateKeySettings(
     userAuthenticationRequired: Boolean,
     userAuthenticationTypes: Set<CloudUserAuthType>
 ): CreateKeySettings {
-    TODO("Not yet implemented")
+    TODO("cloudSecureAreaGetPlatformSecureAreaCreateKeySettings not yet implemented")
 }

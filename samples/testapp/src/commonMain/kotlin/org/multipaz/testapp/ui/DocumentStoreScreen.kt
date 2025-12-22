@@ -63,6 +63,7 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.testapp.platformHttpClientEngineFactory
 import org.multipaz.util.Logger
 import org.multipaz.util.Platform
+import org.multipaz.util.truncateToWholeSeconds
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
@@ -449,7 +450,7 @@ private suspend fun generateDsKeyAndCert(
     //
     // Reference: ISO/IEC 18013-5:2021 Annex B.1.4 Document signer certificate
     //
-    val dsCertValidFrom = Clock.System.now() - 1.days
+    val dsCertValidFrom = Clock.System.now().truncateToWholeSeconds() - 1.days
     val dsCertsValidUntil = dsCertValidFrom + 455.days
     val dsKey = Crypto.createEcPrivateKey(algorithm.curve!!)
     val dsCert = MdocUtil.generateDsCertificate(

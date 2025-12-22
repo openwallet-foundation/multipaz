@@ -90,7 +90,7 @@ data class X509Crl(override val encoded: ByteString): X509Signed() {
         suspend fun build(): X509Crl =
             X509Crl(ByteString(ASN1.encode(buildASN1())))
 
-        override fun buildTbs(tbsList: MutableList<ASN1Object>) {
+        override suspend fun buildTbs(tbsList: MutableList<ASN1Object>) {
             val signatureAlgorithmSeq =
                 signingKey.algorithm.getSignatureAlgorithmSeq(signingKey.publicKey.curve)
 

@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.rical
 
+import kotlinx.coroutines.test.runTest
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.util.fromBase64
@@ -36,7 +37,7 @@ DK+pCMrWxNz63+qbAFu4ant+3Vvr2A0CjUSj2wjgnOg=
     }
 
     @Test
-    fun testIsoSc17Wg10WellingtonRical() {
+    fun testIsoSc17Wg10WellingtonRical() = runTest {
         val signedRical = SignedRical.parse(RICAL_BASE64_ISO_SC17WG10_TEST_EVENT_WELLINGTON_NZ_NOV_2025.fromBase64())
 
         // Check RICAL is signed by the expected key. Note

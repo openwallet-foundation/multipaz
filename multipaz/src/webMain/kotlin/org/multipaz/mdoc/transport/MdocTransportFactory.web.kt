@@ -8,5 +8,5 @@ internal actual fun defaultMdocTransportFactoryCreateTransport(
     role: MdocRole,
     options: MdocTransportOptions
 ): MdocTransport {
-    TODO("Not yet implemented")
+    throw NotImplementedError("MdocTransportFactory is not available for JS")
 }

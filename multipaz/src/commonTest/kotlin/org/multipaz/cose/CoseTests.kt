@@ -28,7 +28,7 @@ class CoseTests {
     fun setup() = testUtilSetupCryptoProvider()
 
     @Test
-    fun coseKeyDecode() {
+    fun coseKeyDecode() = runTest {
         // This checks we can decode the first key from the Example set in
         //
         //   https://datatracker.ietf.org/doc/html/rfc9052#name-public-keys
@@ -57,7 +57,7 @@ class CoseTests {
     }
 
     @Test
-    fun coseSign1() {
+    fun coseSign1() = runTest {
         val key = Crypto.createEcPrivateKey(EcCurve.P256)
         val dataToSign = "This is the data to sign.".encodeToByteArray()
         val coseSignature = Cose.coseSign1Sign(
@@ -78,7 +78,7 @@ class CoseTests {
     }
 
     @Test
-    fun coseSign1TestVector() {
+    fun coseSign1TestVector() = runTest {
         // This is the COSE_Sign1 example from
         //
         //  https://datatracker.ietf.org/doc/html/rfc9052#appendix-C.2.1
@@ -116,7 +116,7 @@ class CoseTests {
         )
     }
 
-    fun coseSign1_helper(curve: EcCurve) {
+    suspend fun coseSign1_helper(curve: EcCurve) {
         // TODO: use assumeTrue() when available in kotlin-test
         if (!Crypto.supportedCurves.contains(curve)) {
             println("Curve $curve not supported on platform")
@@ -149,15 +149,15 @@ class CoseTests {
         )
     }
 
-    @Test fun coseSign1_P256() = coseSign1_helper(EcCurve.P256)
-    @Test fun coseSign1_P384() = coseSign1_helper(EcCurve.P384)
-    @Test fun coseSign1_P521() = coseSign1_helper(EcCurve.P521)
-    @Test fun coseSign1_BRAINPOOLP256R1() = coseSign1_helper(EcCurve.BRAINPOOLP256R1)
-    @Test fun coseSign1_BRAINPOOLP320R1() = coseSign1_helper(EcCurve.BRAINPOOLP320R1)
-    @Test fun coseSign1_BRAINPOOLP384R1() = coseSign1_helper(EcCurve.BRAINPOOLP384R1)
-    @Test fun coseSign1_BRAINPOOLP512R1() = coseSign1_helper(EcCurve.BRAINPOOLP512R1)
-    @Test fun coseSign1_ED25519() = coseSign1_helper(EcCurve.ED25519)
-    @Test fun coseSign1_ED448() = coseSign1_helper(EcCurve.ED448)
+    @Test fun coseSign1_P256() = runTest { coseSign1_helper(EcCurve.P256) }
+    @Test fun coseSign1_P384() = runTest {  coseSign1_helper(EcCurve.P384) }
+    @Test fun coseSign1_P521() = runTest {  coseSign1_helper(EcCurve.P521) }
+    @Test fun coseSign1_BRAINPOOLP256R1() = runTest {  coseSign1_helper(EcCurve.BRAINPOOLP256R1) }
+    @Test fun coseSign1_BRAINPOOLP320R1() = runTest {  coseSign1_helper(EcCurve.BRAINPOOLP320R1) }
+    @Test fun coseSign1_BRAINPOOLP384R1() = runTest {  coseSign1_helper(EcCurve.BRAINPOOLP384R1) }
+    @Test fun coseSign1_BRAINPOOLP512R1() = runTest {  coseSign1_helper(EcCurve.BRAINPOOLP512R1) }
+    @Test fun coseSign1_ED25519() = runTest {  coseSign1_helper(EcCurve.ED25519) }
+    @Test fun coseSign1_ED448() = runTest {  coseSign1_helper(EcCurve.ED448) }
 
     fun coseSign1_SecureArea_helper(algorithm: Algorithm) = runTest {
         assertTrue(algorithm.fullySpecified)
@@ -303,7 +303,7 @@ class CoseTests {
     @Test fun coseSign1_SigningKey_ED448() = coseSign1_SigningKey_helper(Algorithm.ED448)
 
     @Test
-    fun coseSign1X5Chain() {
+    fun coseSign1X5Chain() = runTest {
         // This is a test vector from ISO/IEC 18013-5:2021 Annex D.5.2 Issuer data authentication
         val issuerAuth =
             "8443a10126a118215901f3308201ef30820195a00302010202143c4416eed784f3b413e48" +

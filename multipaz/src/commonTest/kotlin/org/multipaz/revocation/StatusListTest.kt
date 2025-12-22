@@ -23,7 +23,7 @@ class StatusListTest {
     // testSpecVectorN tests use datasets from the spec (see "Test vectors for Status List encoding"
     // section in https://datatracker.ietf.org/doc/draft-ietf-oauth-status-list/)
     @Test
-    fun testSpecVector1() {
+    fun testSpecVector1() = runTest {
         val status = mutableMapOf<Int, Int>()
         status[0]=1
         status[1993]=1
@@ -61,7 +61,7 @@ class StatusListTest {
     }
 
     @Test
-    fun testSpecVector2() {
+    fun testSpecVector2() = runTest {
         val status = mutableMapOf<Int, Int>()
         status[0]=1
         status[1993]=2
@@ -103,7 +103,7 @@ class StatusListTest {
     }
 
     @Test
-    fun testSpecVector4() {
+    fun testSpecVector4() = runTest {
         val status = mutableMapOf<Int, Int>()
         status[0]=1
         status[1993]=2
@@ -157,7 +157,7 @@ class StatusListTest {
     }
 
     @Test
-    fun testSpecVector8() {
+    fun testSpecVector8() = runTest {
         val status = mutableMapOf<Int, Int>()
         status[233478] = 0
         status[52451] = 1

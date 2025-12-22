@@ -16,6 +16,7 @@
 package com.android.identity.android.mdoc.deviceretrieval
 
 import android.content.Context
+import com.android.identity.android.mdoc.sessionencryption.SessionEncryption
 import com.android.identity.android.mdoc.transport.DataTransport
 import com.android.identity.android.mdoc.transport.DataTransportBle
 import org.multipaz.cbor.Bstr
@@ -29,7 +30,6 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.engagement.EngagementGenerator
 import org.multipaz.mdoc.engagement.EngagementParser
 import org.multipaz.mdoc.origininfo.OriginInfo
-import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import kotlinx.coroutines.CoroutineScope

@@ -684,13 +684,14 @@ private suspend fun handleDcGetDataMdocApi(
         add(session.origin)
     }
 
+    val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
     session.sessionTranscript = Cbor.encode(
         buildCborArray {
             add(Simple.NULL) // DeviceEngagementBytes
             add(Simple.NULL) // EReaderKeyBytes
             addCborArray {
                 add("dcapi")
-                add(Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo)))
+                add(dcapiInfoDigest)
             }
         }
     )
@@ -747,7 +748,7 @@ private suspend fun handleDcGetDataOpenID4VP(
     }
 }
 
-private fun handleDcGetDataOpenID4VPForCredentialResponse(
+private suspend fun handleDcGetDataOpenID4VPForCredentialResponse(
     version: Int,
     session: Session,
     credentialResponse: String
@@ -781,12 +782,13 @@ private fun handleDcGetDataOpenID4VPForCredentialResponse(
                 )
             }
             29 -> {
+                val jwkThumbPrint = session.encryptionKey.publicKey.toJwkThumbprint(Algorithm.SHA256).toByteArray()
                 Cbor.encode(
                     buildCborArray {
                         add(session.origin)
                         add(session.nonce.toByteArray().toBase64Url())
                         if (session.encryptResponse) {
-                            add(session.encryptionKey.publicKey.toJwkThumbprint(Algorithm.SHA256).toByteArray())
+                            add(jwkThumbPrint)
                         } else {
                             add(Simple.NULL)
                         }
@@ -795,13 +797,14 @@ private fun handleDcGetDataOpenID4VPForCredentialResponse(
             }
             else -> throw IllegalStateException("Unsupported OpenID4VP version $version")
         }
+        val handoverInfoDigest = Crypto.digest(Algorithm.SHA256, handoverInfo)
         session.sessionTranscript = Cbor.encode(
             buildCborArray {
                 add(Simple.NULL) // DeviceEngagementBytes
                 add(Simple.NULL) // EReaderKeyBytes
                 addCborArray {
                     add("OpenID4VPDCAPIHandover")
-                    add(Crypto.digest(Algorithm.SHA256, handoverInfo))
+                    add(handoverInfoDigest)
                 }
             }
         )
@@ -987,25 +990,27 @@ private suspend fun handleOpenID4VPResponse(
         } else {
             "web-origin:${session.origin}"
         }
+        val jwkThumbprint = session.encryptionKey.publicKey.toJwkThumbprint(Algorithm.SHA256).toByteArray()
         val handoverInfo = Cbor.encode(
             buildCborArray {
                 add("x509_san_dns:${session.host}")
                 add(session.nonce.toByteArray().toBase64Url())
                 if (session.encryptResponse) {
-                    add(session.encryptionKey.publicKey.toJwkThumbprint(Algorithm.SHA256).toByteArray())
+                    add(jwkThumbprint)
                 } else {
                     add(Simple.NULL)
                 }
                 add(session.responseUri!!)
             }
         )
+        val handoverInfoDigest = Crypto.digest(Algorithm.SHA256, handoverInfo)
         session.sessionTranscript = Cbor.encode(
             buildCborArray {
                 add(Simple.NULL) // DeviceEngagementBytes
                 add(Simple.NULL) // EReaderKeyBytes
                 addCborArray {
                     add("OpenID4VPHandover")
-                    add(Crypto.digest(Algorithm.SHA256, handoverInfo))
+                    add(handoverInfoDigest)
                 }
             }
         )
@@ -1317,9 +1322,9 @@ private suspend fun handleGetDataSdJwt(
 
         Logger.d(TAG, "Handling SD-JWT: $presentationString")
         val (sdJwt, sdJwtKb) = if (presentationString.endsWith("~")) {
-            Pair(SdJwt(presentationString), null)
+            Pair(SdJwt.fromCompactSerialization(presentationString), null)
         } else {
-            val sdJwtKb = SdJwtKb(presentationString)
+            val sdJwtKb = SdJwtKb.fromCompactSerialization(presentationString)
             Pair(sdJwtKb.sdJwt, sdJwtKb)
         }
         val issuerCert = sdJwt.x5c?.certificates?.first()
@@ -1383,7 +1388,7 @@ private suspend fun handleGetDataSdJwt(
 }
 
 // defined in ISO 18013-7 Annex B
-private fun createSessionTranscriptOpenID4VP(
+private suspend fun createSessionTranscriptOpenID4VP(
     clientId: String,
     responseUri: String,
     authorizationRequestNonce: String?,
@@ -1885,12 +1890,13 @@ private suspend fun mdocCalcDcRequestStringMdocApi(
         emptyList()
     }
 
+    val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
     val sessionTranscript = buildCborArray {
         add(Simple.NULL) // DeviceEngagementBytes
         add(Simple.NULL) // EReaderKeyBytes
         addCborArray {
             add("dcapi")
-            add(Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo)))
+            add(dcapiInfoDigest)
         }
     }
 

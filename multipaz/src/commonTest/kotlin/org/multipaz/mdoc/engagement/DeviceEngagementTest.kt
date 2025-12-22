@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.engagement
 
+import kotlinx.coroutines.test.runTest
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Simple
 import org.multipaz.crypto.Crypto
@@ -42,7 +43,7 @@ class DeviceEngagementTest {
     }
 
     @Test
-    fun testNoConnectionMethodsOrOriginInfos() {
+    fun testNoConnectionMethodsOrOriginInfos() = runTest {
         val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val deviceEngagement = buildDeviceEngagement(
             eDeviceKey = eDeviceKey.publicKey,
@@ -60,7 +61,7 @@ class DeviceEngagementTest {
 
     @Test
     @Throws(Exception::class)
-    fun testDeviceEngagementQrBleCentralClientMode() {
+    fun testDeviceEngagementQrBleCentralClientMode() = runTest {
         val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val uuid = UUID.randomUUID()
         val deviceEngagement = buildDeviceEngagement(
@@ -97,7 +98,7 @@ class DeviceEngagementTest {
     }
 
     @Test
-    fun checkOriginInfos() {
+    fun checkOriginInfos() = runTest {
         val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
         assertEquals(
             "DeviceEngagement version must be 1.1 or higher when originInfos or capabilities are non-empty",
@@ -127,7 +128,7 @@ class DeviceEngagementTest {
     }
 
     @Test
-    fun checkCapabilities() {
+    fun checkCapabilities() = runTest {
         val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
         assertEquals(
             "DeviceEngagement version must be 1.1 or higher when originInfos or capabilities are non-empty",

@@ -85,7 +85,7 @@ internal object TrustManagerUtil {
      * Verify the signature of the [certificate] with the public key of the
      * [caCertificate].
      */
-    fun verifySignature(certificate: X509Cert, caCertificate: X509Cert) =
+    suspend fun verifySignature(certificate: X509Cert, caCertificate: X509Cert) =
         try {
             certificate.verify(caCertificate.ecPublicKey)
         } catch (e: Throwable) {
@@ -94,7 +94,7 @@ internal object TrustManagerUtil {
             )
         }
 
-    internal fun verifyX509TrustChain(
+    internal suspend fun verifyX509TrustChain(
         chain: List<X509Cert>,
         atTime: Instant,
         skiToTrustPoint: Map<String, TrustPoint>
@@ -185,7 +185,7 @@ internal object TrustManagerUtil {
     /**
      * Validate the certificate trust path.
      */
-    private fun validateCertificationTrustPath(
+    private suspend fun validateCertificationTrustPath(
         certificationTrustPath: List<X509Cert>,
         atTime: Instant
     ) {

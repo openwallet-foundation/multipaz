@@ -144,7 +144,7 @@ object Cose {
      * @throws IllegalArgumentException if not exactly one of `detachedData` and `signature.payload` are non-`null`.
      * @throws SignatureVerificationException if the signature check fails.
      */
-    fun coseSign1Check(
+    suspend fun coseSign1Check(
         publicKey: EcPublicKey,
         detachedData: ByteArray?,
         signature: CoseSign1,
@@ -322,7 +322,7 @@ object Cose {
      * @param unprotectedHeaders the unprotected headers to include.
      */
     @Deprecated(message = "Use SigningKey-based method instead")
-    fun coseSign1Sign(
+    suspend fun coseSign1Sign(
         key: EcPrivateKey,
         dataToSign: ByteArray,
         includeDataInPayload: Boolean,
@@ -363,7 +363,7 @@ object Cose {
      * @param protectedHeaders the protected headers to include.
      * @param unprotectedHeaders the unprotected headers to include.
      */
-    fun coseMac0(
+    suspend fun coseMac0(
         algorithm: Algorithm,
         key: ByteArray,
         message: ByteArray,

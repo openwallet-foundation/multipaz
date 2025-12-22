@@ -193,6 +193,7 @@ private suspend fun exportMdocCredential(
 
     val cardArtResized = resizedCardArt(cardArt)
 
+    val claims = credential.getClaims(documentTypeRepository)
     return buildCborMap {
         put("title", displayName)
         put("subtitle", displayNameSub)
@@ -201,7 +202,6 @@ private suspend fun exportMdocCredential(
             put("documentId", document.identifier)
             put("docType", credential.docType)
             putCborMap("namespaces") {
-                val claims = credential.getClaims(documentTypeRepository)
                 for ((namespace, claimsInNamespace) in claims.organizeByNamespace()) {
                     putCborMap(namespace) {
                         for (claim in claimsInNamespace) {
@@ -249,6 +249,7 @@ private suspend fun exportSdJwtVcCredential(
 
     val cardArtResized = resizedCardArt(cardArt)
 
+    val claims = credential.getClaimsImpl(documentTypeRepository)
     return buildCborMap {
         put("title", displayName)
         put("subtitle", displayNameSub)
@@ -257,7 +258,6 @@ private suspend fun exportSdJwtVcCredential(
             put("documentId", document.identifier)
             put("vct", credential.vct)
             putCborMap("claims") {
-                val claims = credential.getClaimsImpl(documentTypeRepository)
                 for (claim in claims) {
                     val claimName = claim.claimPath[0].jsonPrimitive.content
                     val claimAttr = getAttributeForJsonClaim(
@@ -461,6 +461,6 @@ internal actual suspend fun defaultRequest(request: JsonObject): JsonObject {
  *   a [android.content.pm.Signature] object.
  * @return the origin string of the form "android:apk-key-hash:<sha256_hash-of-apk-signing-cert>"
  */
-fun getAppOrigin(appSigningInfo: ByteArray): String {
+suspend fun getAppOrigin(appSigningInfo: ByteArray): String {
     return "android:apk-key-hash:${Crypto.digest(Algorithm.SHA256, appSigningInfo).toBase64()}"
 }

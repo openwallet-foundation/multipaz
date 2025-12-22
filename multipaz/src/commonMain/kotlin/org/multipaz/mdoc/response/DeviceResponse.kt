@@ -190,7 +190,7 @@ data class DeviceResponse internal constructor(
          * @param dataItem a [DataItem] containing CBOR for `DeviceResponse`.
          * @return a [DeviceResponse].
          */
-        fun fromDataItem(dataItem: DataItem): DeviceResponse {
+        suspend fun fromDataItem(dataItem: DataItem): DeviceResponse {
             val version = dataItem["version"].asTstr
             val status = dataItem["status"].asNumber.toInt()
             val documents = dataItem.getOrNull("documents")?.asArray?.map {

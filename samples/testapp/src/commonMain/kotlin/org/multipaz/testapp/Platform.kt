@@ -40,6 +40,6 @@ expect fun platformRestartApp()
 
 expect val platformSecureAreaHasKeyAgreement: Boolean
 
-expect fun getAppToAppOrigin(): String
+expect suspend fun getAppToAppOrigin(): String
 
 expect suspend fun getExternalNfcTagReaders(): List<NfcTagReader>

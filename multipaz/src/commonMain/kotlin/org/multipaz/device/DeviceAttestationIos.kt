@@ -29,7 +29,7 @@ import org.multipaz.crypto.SignatureVerificationException
 data class DeviceAttestationIos(
     val blob: ByteString
 ): DeviceAttestation() {
-    override fun validate(validationData: DeviceAttestationValidationData) {
+    override suspend fun validate(validationData: DeviceAttestationValidationData) {
         val attestationDict = Cbor.decode(blob.toByteArray())
         val format = attestationDict["fmt"]
         val attStmt = attestationDict["attStmt"]
@@ -138,7 +138,7 @@ data class DeviceAttestationIos(
         }
     }
 
-    override fun validateAssertion(assertion: DeviceAssertion) {
+    override suspend fun validateAssertion(assertion: DeviceAssertion) {
         val assertionDict = Cbor.decode(assertion.platformAssertion.toByteArray())
         val signatureItem = assertionDict["signature"]
         val authenticatorDataItem = assertionDict["authenticatorData"]

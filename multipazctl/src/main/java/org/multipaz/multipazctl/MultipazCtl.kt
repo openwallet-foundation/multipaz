@@ -47,7 +47,7 @@ object MultipazCtl {
         return defaultValue
     }
 
-    fun generateIaca(args: Array<String>) {
+    suspend fun generateIaca(args: Array<String>) {
         val certificateOutputFilename =
             getArg(args,"out_certificate", "iaca_certificate.pem")
         val privateKeyOutputFilename =
@@ -136,7 +136,7 @@ object MultipazCtl {
         println("- Wrote IACA CRL to $crlOutputFilename")
     }
 
-    fun generateDs(args: Array<String>) {
+    suspend fun generateDs(args: Array<String>) {
         val iacaCertificateFilename =
             getArg(args, "iaca_certificate", "iaca_certificate.pem")
         val iacaPrivateKeyFilename =
@@ -201,7 +201,7 @@ object MultipazCtl {
         println("- Wrote DS cert to $certificateOutputFilename")
     }
 
-    fun generateReaderRoot(args: Array<String>) {
+    suspend fun generateReaderRoot(args: Array<String>) {
         val subjectAndIssuer = X500Name.fromName(
             getArg(args, "subject_and_issuer", "CN=OWF Multipaz TEST Reader CA,C=US")
         )
@@ -272,7 +272,7 @@ object MultipazCtl {
         println("- Wrote reader root CRL to $crlOutputFilename")
     }
 
-    fun generateReaderCert(args: Array<String>) {
+    suspend fun generateReaderCert(args: Array<String>) {
         val readerRootCertificateFilename =
             getArg(args, "reader_root_certificate", "reader_root_certificate.pem")
         val readerRootPrivateKeyFilename =
@@ -431,7 +431,7 @@ Prints out version:
     }
 
     @JvmStatic
-    fun main(args: Array<String>) {
+    fun main(args: Array<String>) = runBlocking {
         // Load BouncyCastle for Brainpool curve support
         Security.insertProviderAt(BouncyCastleProvider(), 1)
 

@@ -14,7 +14,7 @@ class AesGcmCipher(val key: ByteArray) : SimpleCipher {
         else -> throw IllegalArgumentException("key length must be 16, 24, or 32 bytes")
     }
 
-    override fun encrypt(plaintext: ByteArray): ByteArray {
+    override suspend fun encrypt(plaintext: ByteArray): ByteArray {
         val ciphertext = ByteStringBuilder()
         val iv = Random.Default.nextBytes(12)
         ciphertext.append(iv)
@@ -22,7 +22,7 @@ class AesGcmCipher(val key: ByteArray) : SimpleCipher {
         return ciphertext.toByteString().toByteArray()
     }
 
-    override fun decrypt(ciphertext: ByteArray): ByteArray {
+    override suspend fun decrypt(ciphertext: ByteArray): ByteArray {
         if (ciphertext.size <= 12) {
             // Cannot be valid.
             throw SimpleCipher.DataTamperedException()

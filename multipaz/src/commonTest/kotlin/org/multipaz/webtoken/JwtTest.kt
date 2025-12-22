@@ -3,6 +3,7 @@ package org.multipaz.webtoken
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.multipaz.asn1.ASN1Integer
@@ -10,6 +11,7 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
@@ -36,13 +38,19 @@ import kotlin.time.Instant
 
 class JwtTest {
     private val clock = FakeClock()
-    private val privateTrustedKey = Crypto.createEcPrivateKey(EcCurve.P256)
-    private val trustedKey = privateTrustedKey.publicKey
+    private lateinit var privateTrustedKey: EcPrivateKey
+    private lateinit var trustedKey: EcPublicKey
+    private lateinit var trustedKeyJwk: JsonObject
 
     private lateinit var trustedCert: X509Cert
 
-    @BeforeTest
-    fun init() = runTest {
+    // On Kotlin/JS, @BeforeTest using runTest is broken. Work around.
+    private fun runTestWithSetup(block: suspend TestScope.() -> Unit) = runTest { setup(); block() }
+
+    private suspend fun setup() {
+        privateTrustedKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        trustedKey = privateTrustedKey.publicKey
+        trustedKeyJwk = trustedKey.toJwk()
         trustedCert = X509Cert.Builder(
             publicKey = trustedKey,
             signingKey = AsymmetricKey.anonymous(
@@ -193,7 +201,7 @@ class JwtTest {
         )
     }
 
-    private fun makeJwt(
+    private suspend fun makeJwt(
         privateKey: EcPrivateKey,
         typ: String = TEST_TYP,
         iss: String? = TEST_ISS,
@@ -246,7 +254,7 @@ class JwtTest {
     }
 
     private fun runBackendTest(body: suspend TestScope.() -> Unit) =
-        runTest {
+        runTestWithSetup {
             withContext(TestBackendEnvironment()) {
                 body()
             }
@@ -256,7 +264,7 @@ class JwtTest {
         override fun getValue(key: String): String? {
             if (key == "iss_kid") {
                 return buildJsonObject {
-                    put("test-iss#test-kid", trustedKey.toJwk())
+                    put("test-iss#test-kid", trustedKeyJwk)
                 }.toString()
             }
             if (key == "x5c") {

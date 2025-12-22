@@ -24,6 +24,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.EcCurve
 import org.multipaz.document.NameSpacedData
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.webtoken.buildJwt
@@ -203,7 +204,10 @@ private suspend fun getOpenid4Vp(code: String, call: ApplicationCall) {
     val baseUrl = BackendEnvironment.getBaseUrl()
     val responseUri = "$baseUrl/openid4vp_response"
     val state = IssuanceState.getIssuanceState(id)
-    val model = Openid4VpVerifierModel("redirect_uri:$responseUri")
+    val model = Openid4VpVerifierModel(
+        clientId = "redirect_uri:$responseUri",
+        ephemeralPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+    )
     state.openid4VpVerifierModel = model
     val jwt = state.openid4VpVerifierModel!!.makeRequest(
         state = stateRef,

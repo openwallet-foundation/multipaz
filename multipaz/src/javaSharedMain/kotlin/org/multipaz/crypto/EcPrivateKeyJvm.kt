@@ -1,6 +1,7 @@
 package org.multipaz.crypto
 
 import org.multipaz.asn1.OID
+import org.multipaz.crypto.Crypto.fixupEcDsaPrivateKeyMaterial
 import java.math.BigInteger
 import java.security.AlgorithmParameters
 import java.security.KeyFactory
@@ -23,7 +24,8 @@ fun PrivateKey.toEcPrivateKey(publicKey: PublicKey, curve: EcCurve): EcPrivateKe
         EcCurve.BRAINPOOLP512R1 -> {
             val pub = publicKey.toEcPublicKey(curve) as EcPublicKeyDoubleCoordinate
             val priv = this as ECPrivateKey
-            EcPrivateKeyDoubleCoordinate(curve, priv.s.toByteArray(), pub.x, pub.y)
+            val fixedUpD = fixupEcDsaPrivateKeyMaterial(curve, priv.s.toByteArray())
+            EcPrivateKeyDoubleCoordinate(curve, fixedUpD, pub.x, pub.y)
         }
 
         EcCurve.ED25519,

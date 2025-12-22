@@ -42,9 +42,9 @@ import android.util.Base64
 import android.util.Pair
 import androidx.annotation.DoNotInline
 import androidx.annotation.RequiresApi
+import com.android.identity.android.legacy.Hkdf
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.Hkdf
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodWifiAware
 import org.multipaz.util.HexUtil

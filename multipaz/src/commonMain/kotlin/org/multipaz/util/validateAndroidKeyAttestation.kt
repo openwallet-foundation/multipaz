@@ -7,7 +7,7 @@ import org.multipaz.device.AndroidKeystoreSecurityLevel
 
 private const val TAG = "validateAndroidKeyAttestation"
 
-fun validateAndroidKeyAttestation(
+suspend fun validateAndroidKeyAttestation(
     chain: X509CertChain,
     challenge: ByteString?,
     requireGmsAttestation: Boolean,

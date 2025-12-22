@@ -202,7 +202,7 @@ object MdocUtil {
      * @return a map from digest identifiers to the calculated digest.
      * @throws IllegalArgumentException if the digest algorithm isn't supported.
      */
-    fun calculateDigestsForNameSpace(
+    suspend fun calculateDigestsForNameSpace(
         nameSpaceName: String,
         issuerNameSpaces: Map<String, List<ByteArray>>,
         digestAlgorithm: Algorithm

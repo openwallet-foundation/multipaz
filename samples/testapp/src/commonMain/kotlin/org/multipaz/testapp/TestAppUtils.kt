@@ -430,7 +430,7 @@ object TestAppUtils {
             cardArtResource,
         )
 
-        val now = Clock.System.now()
+        val now = Clock.System.now().truncateToWholeSeconds()
         val signedAt = now - 1.hours
         val validFrom =  now - 1.hours
         val validUntil = now + 365.days
@@ -546,7 +546,7 @@ object TestAppUtils {
             cardArt = ByteString(cardArt),
         )
 
-        val now = Clock.System.now()
+        val now = Clock.System.now().truncateToWholeSeconds()
         val signedAt = now - 1.hours
         val validFrom =  now - 1.hours
         val validUntil = now + 365.days

@@ -46,33 +46,29 @@ private const val TAG = "SdJwt"
  * to the verifier. Otherwise use one of the [present] methods to generate a [SdJwtKb] instance. This implementation
  * supports SD-JWTs with disclosures nested at any level.
  *
- * To create a SD-JWT, use [Companion.create]. This currently only supports creating SD-JWT with fully recursive
- * disclosures.
+ * To create a SD-JWT, use [Companion.fromCompactSerialization] or [Companion.create]. This currently only supports
+ * creating SD-JWT with fully recursive disclosures.
  *
  * This class is immutable.
  *
- * @param compactSerialization the compact serialization of the SD-JWT.
+ * @property compactSerialization the compact serialization of the SD-JWT.
+ * @property digestAlg the digest algorithm used.
+ * @property jwtBody The body of the issuer-signed JWT.
  * @throws IllegalArgumentException if the given compact serialization is malformed.
  */
-class SdJwt(
-    val compactSerialization: String
+class SdJwt private constructor(
+    val compactSerialization: String,
+    val digestAlg: Algorithm,
+    val jwtBody: JsonObject,
+    private val header: String,
+    private val body: String,
+    private val signature: String,
+    private val hashToDisclosureString: Map<String, String>
 ) {
-    private lateinit var header: String
-    private lateinit var body: String
-    private lateinit var signature: String
-
-    private lateinit var hashToDisclosureString: Map<String, String>
-
-    /** The digest algorithm used. */
-    lateinit var digestAlg: Algorithm
-
     /** The header of the issuer-signed JWT. */
     val jwtHeader: JsonObject by lazy {
         Json.decodeFromString(JsonObject.serializer(), header.fromBase64Url().decodeToString())
     }
-
-    /** The body of the issuer-signed JWT. */
-    lateinit var jwtBody: JsonObject
 
     /**
      * The certificate chain in the `x5c` header element of the issuer-signed JWT, if present.
@@ -130,34 +126,6 @@ class SdJwt(
         hashToDisclosureString.values.toList()
     }
 
-    init {
-        if (!compactSerialization.endsWith('~')) {
-            throw IllegalArgumentException("Given compact serialization doesn't end with ~")
-        }
-
-        val splits = compactSerialization.split("~")
-        val jwtSplits = splits[0].split(".")
-        if (jwtSplits.size != 3) {
-            throw IllegalArgumentException("JWT in SD-JWT didn't consist of three parts: ${splits[0]}")
-        }
-        header = jwtSplits[0]
-        body = jwtSplits[1]
-        signature = jwtSplits[2]
-
-        jwtBody = Json.decodeFromString(JsonObject.serializer(), body.fromBase64Url().decodeToString())
-        digestAlg = jwtBody["_sd_alg"]?.let {
-            Algorithm.fromHashAlgorithmIdentifier(it.jsonPrimitive.content)
-        } ?: Algorithm.SHA256
-
-        val htds = mutableMapOf<String, String>()
-        for (n in IntRange(1, splits.size - 2)) {
-            val disclosureString = splits[n]
-            val hash = Crypto.digest(digestAlg, disclosureString.encodeToByteArray()).toBase64Url()
-            htds.put(hash, disclosureString)
-        }
-        hashToDisclosureString = htds
-    }
-
     /**
      * Verifies a SD-JWT according to Section 7.1 of the SD-JWT specification.
      *
@@ -165,7 +133,7 @@ class SdJwt(
      * @return the processed SD-JWT payload.
      * @throws SignatureVerificationException if the issuer signature or key-binding signature failed to validate.
      */
-    fun verify(
+    suspend fun verify(
         issuerKey: EcPublicKey,
     ): JsonObject {
         // TODO: make sure we perform all checks in Section 7.1
@@ -193,7 +161,7 @@ class SdJwt(
      * @param pathsToInclude list of paths describing which claims to include.
      * @return the resulting [SdJwt].
      */
-    fun filter(
+    suspend fun filter(
         pathsToInclude: List<JsonArray>
     ): SdJwt {
         val pathToIncludeStrings = pathsToInclude.map { it.joinToString(".") }
@@ -231,7 +199,7 @@ class SdJwt(
      * @param includeDisclosure a function to determine if a given disclosure should be included.
      * @return the resulting [SdJwt].
      */
-    fun filter(
+    suspend fun filter(
         includeDisclosure: (path: JsonArray, value: JsonElement) -> Boolean
     ): SdJwt {
         val disclosureHashIncludedInDisclosureString = mutableMapOf<String, String>()
@@ -288,7 +256,7 @@ class SdJwt(
 
         val sb = StringBuilder("$header.$body.$signature~")
         disclosureStringsToInclude.forEach { sb.append("$it~") }
-        return SdJwt(sb.toString())
+        return fromCompactSerialization(sb.toString())
     }
 
     /**
@@ -319,12 +287,56 @@ class SdJwt(
             put("aud", audience)
             put("sd_hash", Crypto.digest(digestAlg, compactSerialization.encodeToByteArray()).toBase64Url())
         }
-        return SdJwtKb(compactSerialization + kbJwt)
+        return SdJwtKb.fromCompactSerialization(compactSerialization + kbJwt)
     }
 
     companion object {
         // From SD-JWT spec 9.7.  Selectively-Disclosable Validity Claims
         private val CLAIMS_THAT_CANNOT_BE_DISCLOSED = setOf("iss", "exp", "nbf", "cnf", "aud")
+
+        /**
+         * Creates a [SdJwt] from compact serialization.
+         *
+         * @param compactSerialization the compact serialization of the SD-JWT.
+         * @return a [SdJwt] instance.
+         */
+        suspend fun fromCompactSerialization(
+            compactSerialization: String,
+        ): SdJwt {
+            if (!compactSerialization.endsWith('~')) {
+                throw IllegalArgumentException("Given compact serialization doesn't end with ~")
+            }
+
+            val splits = compactSerialization.split("~")
+            val jwtSplits = splits[0].split(".")
+            if (jwtSplits.size != 3) {
+                throw IllegalArgumentException("JWT in SD-JWT didn't consist of three parts: ${splits[0]}")
+            }
+            val header = jwtSplits[0]
+            val body = jwtSplits[1]
+            val signature = jwtSplits[2]
+
+            val jwtBody = Json.decodeFromString(JsonObject.serializer(), body.fromBase64Url().decodeToString())
+            val digestAlg = jwtBody["_sd_alg"]?.let {
+                Algorithm.fromHashAlgorithmIdentifier(it.jsonPrimitive.content)
+            } ?: Algorithm.SHA256
+
+            val htds = mutableMapOf<String, String>()
+            for (n in IntRange(1, splits.size - 2)) {
+                val disclosureString = splits[n]
+                val hash = Crypto.digest(digestAlg, disclosureString.encodeToByteArray()).toBase64Url()
+                htds.put(hash, disclosureString)
+            }
+            return SdJwt(
+                compactSerialization = compactSerialization,
+                digestAlg = digestAlg,
+                jwtBody = jwtBody,
+                header = header,
+                body = body,
+                signature = signature,
+                hashToDisclosureString = htds
+            )
+        }
 
         /**
          * Creates a SD-JWT.
@@ -399,9 +411,10 @@ class SdJwt(
 
                 put("_sd_alg", JsonPrimitive(digestAlgorithm.hashAlgorithmName))
 
-                if (kbKey != null) {
+                val kbKeyJwk = kbKey?.toJwk()
+                if (kbKeyJwk != null) {
                     putJsonObject("cnf") {
-                        put("jwk", kbKey.toJwk())
+                        put("jwk", kbKeyJwk)
                     }
                 }
             }
@@ -412,14 +425,14 @@ class SdJwt(
                 sb.append(disclosure.toString().encodeToByteArray().toBase64Url())
                 sb.append('~')
             }
-            return SdJwt(sb.toString())
+            return fromCompactSerialization(sb.toString())
         }
 
 
     }
 }
 
-private fun insertClaim(
+private suspend fun insertClaim(
     disclosures: MutableList<JsonArray>,
     hashes: MutableList<String>,
     random: Random,

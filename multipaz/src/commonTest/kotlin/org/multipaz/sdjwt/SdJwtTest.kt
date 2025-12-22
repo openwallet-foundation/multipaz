@@ -349,8 +349,8 @@ class SdJwtTest {
     }
 
     @Test
-    fun testVerifysdJwtRfcSection51() {
-        val sdJwt = SdJwt(sdJwtRfcSection51SdJwtCompactSerialization)
+    fun testVerifysdJwtRfcSection51() = runTest {
+        val sdJwt = SdJwt.fromCompactSerialization(sdJwtRfcSection51SdJwtCompactSerialization)
 
         assertEquals(
             """
@@ -452,8 +452,8 @@ class SdJwtTest {
     }
 
     @Test
-    fun testVerifySdJwtRfcAppendixA1() {
-        val sdJwt = SdJwt(sdJwtRfcAppendixA1SdJwtCompactSerialization)
+    fun testVerifySdJwtRfcAppendixA1() = runTest {
+        val sdJwt = SdJwt.fromCompactSerialization(sdJwtRfcAppendixA1SdJwtCompactSerialization)
         assertEquals(
             """
                 {
@@ -504,8 +504,8 @@ class SdJwtTest {
     }
 
     @Test
-    fun testVerifySdJwtRfcAppendixA2() {
-        val sdJwt = SdJwt(sdJwtRfcAppendixA2SdJwtCompactSerialization)
+    fun testVerifySdJwtRfcAppendixA2() = runTest {
+        val sdJwt = SdJwt.fromCompactSerialization(sdJwtRfcAppendixA2SdJwtCompactSerialization)
         assertEquals(
             """
                 {
@@ -630,8 +630,8 @@ class SdJwtTest {
     }
 
     @Test
-    fun testVerifySdJwtRfcAppendixA3() {
-        val sdJwt = SdJwt(sdJwtRfcAppendixA3SdJwtCompactSerialization)
+    fun testVerifySdJwtRfcAppendixA3() = runTest {
+        val sdJwt = SdJwt.fromCompactSerialization(sdJwtRfcAppendixA3SdJwtCompactSerialization)
         assertEquals(
             """
                 {
@@ -890,8 +890,8 @@ class SdJwtTest {
     }
 
     @Test
-    fun testVerifySdJwtRfcAppendixA3KeyBinding() {
-        val sdJwtKb = SdJwtKb(sdJwtRfcAppendixA3SdJwtKbCompactSerialization)
+    fun testVerifySdJwtRfcAppendixA3KeyBinding() = runTest {
+        val sdJwtKb = SdJwtKb.fromCompactSerialization(sdJwtRfcAppendixA3SdJwtKbCompactSerialization)
         assertEquals(
             """
                 {
@@ -1023,8 +1023,8 @@ class SdJwtTest {
     }
 
     @Test
-    fun testVerifySdJwtRfcAppendixA4() {
-        val sdJwt = SdJwt(sdJwtRfcAppendixA4SdJwtCompactSerialization)
+    fun testVerifySdJwtRfcAppendixA4() = runTest {
+        val sdJwt = SdJwt.fromCompactSerialization(sdJwtRfcAppendixA4SdJwtCompactSerialization)
         assertEquals(
             """
                 {
@@ -1216,8 +1216,8 @@ class SdJwtTest {
     }
 
     @Test
-    fun testVerifySdJwtRfcAppendixA4KeyBinding() {
-        val sdJwtKb = SdJwtKb(sdJwtRfcAppendixA4SdJwtKbCompactSerialization)
+    fun testVerifySdJwtRfcAppendixA4KeyBinding() = runTest {
+        val sdJwtKb = SdJwtKb.fromCompactSerialization(sdJwtRfcAppendixA4SdJwtKbCompactSerialization)
         assertEquals(
             """
                 {
@@ -1354,8 +1354,8 @@ class SdJwtTest {
     }
 
     @Test
-    fun testVerifyOther() {
-        val sdJwt = SdJwt(
+    fun testVerifyOther() = runTest {
+        val sdJwt = SdJwt.fromCompactSerialization(
             compactSerialization =
                 "eyJ4NWMiOlsiTUlJQzR6Q0NBb21nQXdJQkFnSUJEakFLQmdncWhrak9QUVFEQWpCak1Rc3dDUVlEVlFRR0V3SkVSVEVQTUEwR0ExVUVCd3dHUW1WeWJHbHVNUjB3R3dZRFZRUUtEQlJDZFc1a1pYTmtjblZqYTJWeVpXa2dSMjFpU0RFS01BZ0dBMVVFQ3d3QlNURVlNQllHQTFVRUF3d1BTVVIxYm1sdmJpQlVaWE4wSUVOQk1CNFhEVEkxTURFeU56RTFOVGswTWxvWERUSTJNRE13TXpFMU5UazBNbG93VGpFTE1Ba0dBMVVFQmhNQ1JFVXhIVEFiQmdOVkJBb01GRUoxYm1SbGMyUnlkV05yWlhKbGFTQkhiV0pJTVFvd0NBWURWUVFMREFGSk1SUXdFZ1lEVlFRRERBdFVaWE4wSUVsemMzVmxjakJaTUJNR0J5cUdTTTQ5QWdFR0NDcUdTTTQ5QXdFSEEwSUFCR2NFN0pPVU92VUwwYmZ0eXdzSEc0UWJKcDZ3c0ZhZ3E4NUpScmlXbUxzS1pjc1haS0I0QU52cW1YcUxocjJYN0JnS2ExOERCSEw3bllTMk9ONXlHdVdqZ2dGQk1JSUJQVEFkQmdOVkhRNEVGZ1FVNlR3dDV5eWNmMWpLOE1GQlpRbU5JbWR2Y3M0d0RBWURWUjBUQVFIL0JBSXdBREFPQmdOVkhROEJBZjhFQkFNQ0I0QXdnZHdHQTFVZEVRU0IxRENCMFlJVFpHVnRieTVpWkhJdGNISnZkRzkwZVhCbGM0WTBhSFIwY0hNNkx5OWtaVzF2TG1Ka2NpMXdjbTkwYjNSNWNHVnpMMmx6YzNWbGNpOTFibWwyWlhKemFYUjVibVYwZDI5eWE0WW1hSFIwY0hNNkx5OWtaVzF2TG1Ka2NpMXdjbTkwYjNSNWNHVnpMMmx6YzNWbGNpOXdhV1NHTEdoMGRIQnpPaTh2WkdWdGJ5NWlaSEl0Y0hKdmRHOTBlWEJsY3k5cGMzTjFaWEl2WW5WdVpHVnpZVzEwaGk1b2RIUndjem92TDJSbGJXOHVZbVJ5TFhCeWIzUnZkSGx3WlhNdmFYTnpkV1Z5TDJGeVltVnBkR2RsWW1WeU1COEdBMVVkSXdRWU1CYUFGRStXNno3YWpUdW1leCtZY0Zib05yVmVDMnRSTUFvR0NDcUdTTTQ5QkFNQ0EwZ0FNRVVDSUFHVDE4RTRRdThhT012MWI5V1dYMmlNM2drWlRSck14MlB4RzRxYTREeWhBaUVBeFVTTmUrdVNzTkJCSXh3b2I2K0RKMnVjN21USnp5aGlJQ2ZaR0J4MjNPOD0iLCJNSUlDTFRDQ0FkU2dBd0lCQWdJVU1ZVUhoR0Q5aFUvYzBFbzZtVzhyamplSit0MHdDZ1lJS29aSXpqMEVBd0l3WXpFTE1Ba0dBMVVFQmhNQ1JFVXhEekFOQmdOVkJBY01Ca0psY214cGJqRWRNQnNHQTFVRUNnd1VRblZ1WkdWelpISjFZMnRsY21WcElFZHRZa2d4Q2pBSUJnTlZCQXNNQVVreEdEQVdCZ05WQkFNTUQwbEVkVzVwYjI0Z1ZHVnpkQ0JEUVRBZUZ3MHlNekEzTVRNd09USTFNamhhRncwek16QTNNVEF3T1RJMU1qaGFNR014Q3pBSkJnTlZCQVlUQWtSRk1ROHdEUVlEVlFRSERBWkNaWEpzYVc0eEhUQWJCZ05WQkFvTUZFSjFibVJsYzJSeWRXTnJaWEpsYVNCSGJXSklNUW93Q0FZRFZRUUxEQUZKTVJnd0ZnWURWUVFEREE5SlJIVnVhVzl1SUZSbGMzUWdRMEV3V1RBVEJnY3Foa2pPUFFJQkJnZ3Foa2pPUFFNQkJ3TkNBQVNFSHo4WWpyRnlUTkhHTHZPMTRFQXhtOXloOGJLT2drVXpZV2NDMWN2ckpuNUpnSFlITXhaYk5NTzEzRWgwRXIyNzM4UVFPZ2VSb1pNSVRhb2RrZk5TbzJZd1pEQWRCZ05WSFE0RUZnUVVUNWJyUHRxTk82WjdINWh3VnVnMnRWNExhMUV3SHdZRFZSMGpCQmd3Rm9BVVQ1YnJQdHFOTzZaN0g1aHdWdWcydFY0TGExRXdFZ1lEVlIwVEFRSC9CQWd3QmdFQi93SUJBREFPQmdOVkhROEJBZjhFQkFNQ0FZWXdDZ1lJS29aSXpqMEVBd0lEUndBd1JBSWdZMERlcmRDeHQ0ekdQWW44eU5yRHhJV0NKSHB6cTRCZGpkc1ZOMm8xR1JVQ0lCMEtBN2JHMUZWQjFJaUs4ZDU3UUFMK1BHOVg1bGRLRzdFa29BbWhXVktlIl0sImtpZCI6ImJjMGRlZGE0NTU1NGVjYzNlZTQzNjA5YmEyMDc4MzIwMWY5NGEwOTYiLCJ0eXAiOiJkYytzZC1qd3QiLCJhbGciOiJFUzI1NiJ9.eyJfc2QiOlsiODQ5T1hCSnktcHZfNTk4UVhWcVFmVEp3X0tIdjlzOGdna25VMzBVaDZjayIsIlB6cTRsLUdBU2tlTV9kM09tS1lnQ0tUelU4T1FlNjZZbnFKal9XcUtPTGMiLCJiX3FLZXRVT3ppRXdPRl9LYVEyR0xoNXo5d2huYUVjNmtFdEFDdHlqSnZ3IiwiakVhd1FHRUVjU2RJWDRWbUtRS0J1dHQxRWJPVGc0QS1wcXJVbXlvOHFsRSIsImphSUpMSDc5MTYySVEydmZONTRBZ011VWxCNmx0OV80N1NsczlwUDUtQWsiLCJubEl4OXQxOXlrcEkxSm1pTF9mcmV4X0xVTnpMcEFUYXVZX0VXd09ES2ljIiwicDlXbTQxLUNsTy1acXNSVnNucnNUc3JlUGpoWGRqMnJUbFdJa2dqOUNsMCIsInZqZVFoSmJfU1J6NXY3TjY0NEd1bkczTkZQRURRY3RLZFQwN215ZjVLRzgiXSwidmN0IjoidXJuOmV1ZGk6cGlkOjEiLCJfc2RfYWxnIjoic2hhLTI1NiIsImlzcyI6Imh0dHBzOi8vZGVtby5iZHItcHJvdG90eXBlcy9pc3N1ZXIvcGlkIiwiY25mIjp7Imp3ayI6eyJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IjRsbElYWVpJLVIzSWppMm5wRDAwWmdZc3gtQmtKamY4bnFSeFVrRndDUTAiLCJ5IjoiVlRBMFdRSFo1el96NDJvQ2RFWHdCakYxblpUdHdyUnBYODNMazgweTE0ZyJ9fSwiZXhwIjoxNzUzNzg3NjY1LCJpYXQiOjE3NDYwMTE2NjUsImFnZV9lcXVhbF9vcl9vdmVyIjp7Il9zZCI6WyI4c2ZoOFJPaHlRV00tcmR6el9pb2xBYnZZY21ncFdjRHFNdUVSWnZ0NTFjIiwiVkFvc0czU2ZYb0hmUFVWTmgtaGlCRlNIbnl4MWRoM1FzZm9xcURwcS1aRSJdfX0.5KKKPiTNxNDzagKzYnaolyRciOZgOHFwub33BUWetUt8UatNQcX3nc87lRR6X1hzFY3p5gKWyP0BAtTX_mZyGA~WyIwSmRWenhqT1BmcGdETU9KOUNSWkxRIiwiZmFtaWx5X25hbWUiLCJNVVNURVJNQU5OIl0~WyI5UWFPdGVra193ZmxzZkFheFRNWVp3IiwiZ2l2ZW5fbmFtZSIsIkVSSUtBIl0~WyJQMzVoUEtIWlZ0bTVacnp3MTMwV0RBIiwiYmlydGhkYXRlIiwiMjAwNi0wMi0yOCJd~WyJXeExqYVZ2eHozem1NUkl6bm1SbVRBIiwiY291bnRyeSIsIkJFUkxJTiJd~WyJWdjM4ZVM3YTB1aXJCbWEydDAwaDh3IiwibG9jYWxpdHkiLCJCRVJMSU4iXQ~WyJNVGVhZVZkVmVKa243Tm1GOFNSdU53IiwicmVnaW9uIiwiQkVSTElOIl0~WyJRSkt6WktUVldqaHo4dFhuVWFGZTJBIiwicGxhY2Vfb2ZfYmlydGgiLHsiX3NkIjpbIjVMNkJiUGIxU2tGSWdvQUZ6VXFzRGJqeHVzN3V0RFVPUHgwZ3FadXVLYmMiLCJIanBVd3pjcXNCeEgtUFdmRnJqc2x0UzVmM3pWUExGU1liZjNPYUZ1OGprIiwiTmtkTEJzX180M0ROSDNKd09UNll2UDhxbUc1em9OMDJBbHZNbmJTcDF6byJdfV0~WyJlVm9qMTRPQ1pPN0VaYVZGcHQybTRRIiwibmF0aW9uYWxpdGllcyIsW11d~WyJUbTVITUY0cmhhY0ltNV91WGxKbkhnIiwiZGF0ZV9vZl9leHBpcnkiLCIyMDI2LTEyLTMxIl0~WyIxTURKcDhZV193Qnp1QktNa0hKSExBIiwiMTgiLHRydWVd~WyI5QVRkUldEdGVuVnNiMF85MWRueENnIiwiMjEiLGZhbHNlXQ~WyJmMFItM0xSMzA0bG45WXVKeVlnUGRRIiwiaXNzdWluZ19hdXRob3JpdHkiLCJERSJd~WyJhQlpCd3hyT1Rjd0JZemVDeDRlenpRIiwiaXNzdWluZ19jb3VudHJ5IiwiREUiXQ~"
         )
@@ -1693,8 +1693,8 @@ class SdJwtTest {
 
     // Check that no filter produces the same SD-JWT.
     @Test
-    fun testFilterAll() {
-        val filteredSdJwt = SdJwt(sdJwtRfcAppendixA3SdJwtCompactSerialization)
+    fun testFilterAll() = runTest {
+        val filteredSdJwt = SdJwt.fromCompactSerialization(sdJwtRfcAppendixA3SdJwtCompactSerialization)
             .filter { path: JsonArray, value: JsonElement -> true }
         assertEquals(filteredSdJwt.compactSerialization, sdJwtRfcAppendixA3SdJwtCompactSerialization)
         assertEquals(
@@ -1917,8 +1917,8 @@ class SdJwtTest {
 
     // Check that filtering all includes only the always disclosed elements.
     @Test
-    fun testFilterNone() {
-        val filteredSdJwt = SdJwt(sdJwtRfcAppendixA3SdJwtCompactSerialization)
+    fun testFilterNone() = runTest {
+        val filteredSdJwt = SdJwt.fromCompactSerialization(sdJwtRfcAppendixA3SdJwtCompactSerialization)
             .filter { path: JsonArray, value: JsonElement -> false }
         assertEquals(
             """
@@ -1950,8 +1950,8 @@ class SdJwtTest {
 
     // Check filtering on "given_name".
     @Test
-    fun testFilterGivenNameOnly() {
-        val filteredSdJwt = SdJwt(sdJwtRfcAppendixA3SdJwtCompactSerialization)
+    fun testFilterGivenNameOnly() = runTest {
+        val filteredSdJwt = SdJwt.fromCompactSerialization(sdJwtRfcAppendixA3SdJwtCompactSerialization)
             .filter { path: JsonArray, value: JsonElement ->
                 path.size == 1 && path[0].jsonPrimitive.content == "given_name"
             }
@@ -1994,8 +1994,8 @@ class SdJwtTest {
     // and also "address" is included EVEN when only "address.locality" was requested.
     //
     @Test
-    fun testFilterTopOffWorks() {
-        val filteredSdJwt = SdJwt(sdJwtRfcAppendixA3SdJwtCompactSerialization)
+    fun testFilterTopOffWorks() = runTest {
+        val filteredSdJwt = SdJwt.fromCompactSerialization(sdJwtRfcAppendixA3SdJwtCompactSerialization)
             .filter { path: JsonArray, value: JsonElement ->
                 path.size == 2 && path[0].jsonPrimitive.content == "address" && path[1].jsonPrimitive.content == "locality"
             }
@@ -2049,8 +2049,8 @@ class SdJwtTest {
 
     // Check filtering using paths on top-level claims.
     @Test
-    fun testFilterOnPaths() {
-        val filteredSdJwt = SdJwt(sdJwtRfcAppendixA3SdJwtCompactSerialization)
+    fun testFilterOnPaths() = runTest {
+        val filteredSdJwt = SdJwt.fromCompactSerialization(sdJwtRfcAppendixA3SdJwtCompactSerialization)
             .filter(
                 listOf(
                     JsonArray(listOf(JsonPrimitive("given_name"))),
@@ -2131,8 +2131,8 @@ class SdJwtTest {
 
     // Check filtering using paths into an object.
     @Test
-    fun testFilterOnPathsIntoObject() {
-        val filteredSdJwt = SdJwt(sdJwtRfcAppendixA3SdJwtCompactSerialization)
+    fun testFilterOnPathsIntoObject() = runTest {
+        val filteredSdJwt = SdJwt.fromCompactSerialization(sdJwtRfcAppendixA3SdJwtCompactSerialization)
             .filter(
                 listOf(
                     JsonArray(listOf(JsonPrimitive("given_name"))),
@@ -2202,8 +2202,8 @@ class SdJwtTest {
 
     // Check filtering using paths into an array.
     @Test
-    fun testFilterOnPathsIntoArrayWhole() {
-        val filteredSdJwt = SdJwt(sdJwtRfcSection51SdJwtCompactSerialization)
+    fun testFilterOnPathsIntoArrayWhole() = runTest {
+        val filteredSdJwt = SdJwt.fromCompactSerialization(sdJwtRfcSection51SdJwtCompactSerialization)
             .filter(
                 listOf(
                     JsonArray(listOf(JsonPrimitive("given_name"))),
@@ -2258,8 +2258,8 @@ class SdJwtTest {
 
     // Check filtering using paths into an array.
     @Test
-    fun testFilterOnPathsIntoArray() {
-        val filteredSdJwt = SdJwt(sdJwtRfcSection51SdJwtCompactSerialization)
+    fun testFilterOnPathsIntoArray() = runTest {
+        val filteredSdJwt = SdJwt.fromCompactSerialization(sdJwtRfcSection51SdJwtCompactSerialization)
             .filter(
                 listOf(
                     JsonArray(listOf(JsonPrimitive("given_name"))),
@@ -2309,8 +2309,8 @@ class SdJwtTest {
 
     // Check filtering using paths into an array.
     @Test
-    fun testFilterOnPathsIntoArray2() {
-        val filteredSdJwt = SdJwt(sdJwtRfcSection51SdJwtCompactSerialization)
+    fun testFilterOnPathsIntoArray2() = runTest {
+        val filteredSdJwt = SdJwt.fromCompactSerialization(sdJwtRfcSection51SdJwtCompactSerialization)
             .filter(
                 listOf(
                     JsonArray(listOf(JsonPrimitive("given_name"))),
@@ -2450,8 +2450,8 @@ class SdJwtTest {
     }
 
     @Test
-    fun testAccessors() {
-        val sdJwt = SdJwt(sdJwtRfcAppendixA3SdJwtCompactSerialization)
+    fun testAccessors() = runTest {
+        val sdJwt = SdJwt.fromCompactSerialization(sdJwtRfcAppendixA3SdJwtCompactSerialization)
         assertEquals("https://pid-issuer.bund.de.example", sdJwt.issuer)
         assertEquals(null, sdJwt.subject)
         assertEquals("urn:eudi:pid:de:1", sdJwt.credentialType)
@@ -2471,7 +2471,7 @@ class SdJwtTest {
                 sdJwt.kbKey!!.toJwk()
             ))
 
-        val otherSdJwt = SdJwt(sdJwtRfcSection51SdJwtCompactSerialization)
+        val otherSdJwt = SdJwt.fromCompactSerialization(sdJwtRfcSection51SdJwtCompactSerialization)
         assertEquals("user_42", otherSdJwt.subject)
     }
 

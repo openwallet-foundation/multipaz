@@ -99,7 +99,7 @@ data class SignedVical(
          * @throws IllegalArgumentException if the passed in signed VICAL is malformed
          * @throws SignatureVerificationException if signature verification failed.
          */
-        fun parse(
+        suspend fun parse(
             encodedSignedVical: ByteArray,
             disableSignatureVerification: Boolean = false
         ): SignedVical {

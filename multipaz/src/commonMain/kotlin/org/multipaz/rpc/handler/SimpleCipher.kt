@@ -7,8 +7,8 @@ package org.multipaz.rpc.handler
  * data authenticity and confidentiality.
  */
 interface SimpleCipher {
-    fun encrypt(plaintext: ByteArray): ByteArray
-    fun decrypt(ciphertext: ByteArray): ByteArray
+    suspend fun encrypt(plaintext: ByteArray): ByteArray
+    suspend fun decrypt(ciphertext: ByteArray): ByteArray
 
     class DataTamperedException : IllegalArgumentException()
 }

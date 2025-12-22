@@ -18,6 +18,7 @@ package com.android.identity.android.legacy
 import androidx.test.platform.app.InstrumentationRegistry
 import co.nstant.`in`.cbor.CborBuilder
 import co.nstant.`in`.cbor.model.UnicodeString
+import com.android.identity.android.legacy.Crypto.checkSignature
 import com.android.identity.android.legacy.Util.cborEncode
 import com.android.identity.android.legacy.Util.cborEncodeBytestring
 import com.android.identity.android.legacy.Util.cborEncodeNumber
@@ -27,7 +28,6 @@ import org.multipaz.cbor.Cbor.toDiagnostics
 import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.context.initializeApplication
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.Crypto.checkSignature
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.toEcPublicKey
 import org.multipaz.storage.android.AndroidStorage

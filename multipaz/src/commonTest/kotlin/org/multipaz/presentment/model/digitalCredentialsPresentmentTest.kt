@@ -1,6 +1,7 @@
 package org.multipaz.presentment.model
 
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
@@ -52,8 +53,10 @@ class DigitalCredentialsPresentmentTest {
 
     val documentStoreTestHarness = DocumentStoreTestHarness()
 
-    @BeforeTest
-    fun setup() = runTest {
+    // On Kotlin/JS, @BeforeTest using runTest is broken. Work around.
+    private fun runTestWithSetup(block: suspend TestScope.() -> Unit) = runTest { setup(); block() }
+
+    private suspend fun setup() {
         documentStoreTestHarness.initialize()
         documentStoreTestHarness.provisionStandardDocuments()
     }
@@ -263,13 +266,14 @@ class DigitalCredentialsPresentmentTest {
         val credId = response.vpToken.keys.first()
         val encodedDeviceResponse = response.vpToken[credId]!![0].fromBase64Url()
 
+        val encryptionKeyJwkThumbprint = encryptionKey?.publicKey?.toJwkThumbprint(Algorithm.SHA256)?.toByteArray()
         val handoverInfo = if (version == OpenID4VP.Version.DRAFT_29) {
             Cbor.encode(
                 buildCborArray {
                     add(response.origin)
                     add(response.nonce)
-                    if (encryptionKey != null) {
-                        add(encryptionKey.publicKey.toJwkThumbprint(Algorithm.SHA256).toByteArray())
+                    if (encryptionKeyJwkThumbprint != null) {
+                        add(encryptionKeyJwkThumbprint)
                     } else {
                         add(Simple.NULL)
                     }
@@ -289,12 +293,13 @@ class DigitalCredentialsPresentmentTest {
             )
         }
         Logger.iCbor(TAG, "handoverInfo", handoverInfo)
+        val handoverInfoDigest = Crypto.digest(Algorithm.SHA256, handoverInfo)
         val sessionTranscript = buildCborArray {
             add(Simple.NULL) // DeviceEngagementBytes
             add(Simple.NULL) // EReaderKeyBytes
             addCborArray {
                 add("OpenID4VPDCAPIHandover")
-                add(Crypto.digest(Algorithm.SHA256, handoverInfo))
+                add(handoverInfoDigest)
             }
         }
 
@@ -326,7 +331,7 @@ class DigitalCredentialsPresentmentTest {
         assertEquals(1, response.vpToken.keys.size)
         val credId = response.vpToken.keys.first()
         val compactSerialization = response.vpToken[credId]!![0]
-        val sdJwtKb = SdJwtKb(compactSerialization)
+        val sdJwtKb = SdJwtKb.fromCompactSerialization(compactSerialization)
         val expectedAudience = if (version == OpenID4VP.Version.DRAFT_29) {
             "origin:$ORIGIN"
         } else {
@@ -434,25 +439,25 @@ class DigitalCredentialsPresentmentTest {
         )
     }
 
-    @Test fun OID4VP_24_NoSignedRequest_NoEncryptedResponse_mDL() = runTest { test_OID4VP_mDL(24, false, false) }
-    @Test fun OID4VP_24_NoSignedRequest_EncryptedResponse_mDL() = runTest { test_OID4VP_mDL(24, false, true) }
-    @Test fun OID4VP_24_SignedRequest_NoEncryptedResponse_mDL() = runTest { test_OID4VP_mDL(24, true, false) }
-    @Test fun OID4VP_24_SignedRequest_EncryptedResponse_mDL() = runTest { test_OID4VP_mDL(24, true, true) }
+    @Test fun OID4VP_24_NoSignedRequest_NoEncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(24, false, false) }
+    @Test fun OID4VP_24_NoSignedRequest_EncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(24, false, true) }
+    @Test fun OID4VP_24_SignedRequest_NoEncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(24, true, false) }
+    @Test fun OID4VP_24_SignedRequest_EncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(24, true, true) }
 
-    @Test fun OID4VP_24_NoSignedRequest_NoEncryptedResponse_SDJWT() = runTest { test_OID4VP_SDJWT(24, false, false) }
-    @Test fun OID4VP_24_NoSignedRequest_EncryptedResponse_SDJWT() = runTest { test_OID4VP_SDJWT(24, false, true) }
-    @Test fun OID4VP_24_SignedRequest_NoEncryptedResponse_SDJWT() = runTest { test_OID4VP_SDJWT(24, true, false) }
-    @Test fun OID4VP_24_SignedRequest_EncryptedResponse_SDJWT() = runTest { test_OID4VP_SDJWT(24, true, true) }
+    @Test fun OID4VP_24_NoSignedRequest_NoEncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(24, false, false) }
+    @Test fun OID4VP_24_NoSignedRequest_EncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(24, false, true) }
+    @Test fun OID4VP_24_SignedRequest_NoEncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(24, true, false) }
+    @Test fun OID4VP_24_SignedRequest_EncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(24, true, true) }
 
-    @Test fun OID4VP_29_NoSignedRequest_NoEncryptedResponse_mDL() = runTest { test_OID4VP_mDL(29, false, false) }
-    @Test fun OID4VP_29_NoSignedRequest_EncryptedResponse_mDL() = runTest { test_OID4VP_mDL(29, false, true) }
-    @Test fun OID4VP_29_SignedRequest_NoEncryptedResponse_mDL() = runTest { test_OID4VP_mDL(29, true, false) }
-    @Test fun OID4VP_29_SignedRequest_EncryptedResponse_mDL() = runTest { test_OID4VP_mDL(29, true, true) }
+    @Test fun OID4VP_29_NoSignedRequest_NoEncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(29, false, false) }
+    @Test fun OID4VP_29_NoSignedRequest_EncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(29, false, true) }
+    @Test fun OID4VP_29_SignedRequest_NoEncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(29, true, false) }
+    @Test fun OID4VP_29_SignedRequest_EncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(29, true, true) }
 
-    @Test fun OID4VP_29_NoSignedRequest_NoEncryptedResponse_SDJWT() = runTest { test_OID4VP_SDJWT(29, false, false) }
-    @Test fun OID4VP_29_NoSignedRequest_EncryptedResponse_SDJWT() = runTest { test_OID4VP_SDJWT(29, false, true) }
-    @Test fun OID4VP_29_SignedRequest_NoEncryptedResponse_SDJWT() = runTest { test_OID4VP_SDJWT(29, true, false) }
-    @Test fun OID4VP_29_SignedRequest_EncryptedResponse_SDJWT() = runTest { test_OID4VP_SDJWT(29, true, true) }
+    @Test fun OID4VP_29_NoSignedRequest_NoEncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(29, false, false) }
+    @Test fun OID4VP_29_NoSignedRequest_EncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(29, false, true) }
+    @Test fun OID4VP_29_SignedRequest_NoEncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(29, true, false) }
+    @Test fun OID4VP_29_SignedRequest_EncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(29, true, true) }
 
 }
 

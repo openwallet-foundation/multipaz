@@ -14,7 +14,7 @@ import org.multipaz.crypto.SignatureVerificationException
 data class DeviceAttestationAndroid(
     val certificateChain: X509CertChain
 ) : DeviceAttestation() {
-    override fun validate(validationData: DeviceAttestationValidationData) {
+    override suspend fun validate(validationData: DeviceAttestationValidationData) {
         try {
             validateAndroidKeyAttestation(
                 chain = certificateChain,
@@ -30,7 +30,7 @@ data class DeviceAttestationAndroid(
         }
     }
 
-    override fun validateAssertion(assertion: DeviceAssertion) {
+    override suspend fun validateAssertion(assertion: DeviceAssertion) {
         val signature =
             EcSignature.fromCoseEncoded(assertion.platformAssertion.toByteArray())
         try {

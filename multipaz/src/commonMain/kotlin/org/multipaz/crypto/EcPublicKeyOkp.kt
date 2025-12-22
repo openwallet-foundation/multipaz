@@ -17,6 +17,7 @@ import org.multipaz.util.toBase64Url
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
+import kotlin.io.encoding.Base64
 
 /**
  * EC Public Key with Octet Key Pairs.
@@ -37,7 +38,7 @@ data class EcPublicKeyOkp(
             ) + additionalLabels
         )
 
-    override fun toJwk(
+    override suspend fun toJwk(
         additionalClaims: JsonObject?,
     ): JsonObject {
         return buildJsonObject {
@@ -53,7 +54,7 @@ data class EcPublicKeyOkp(
         }
     }
 
-    override fun toJwkThumbprint(digestAlgorithm: Algorithm): ByteString {
+    override suspend fun toJwkThumbprint(digestAlgorithm: Algorithm): ByteString {
         // See https://datatracker.ietf.org/doc/html/rfc7638#section-3 for the algorithm
         val jsonStr = Json {
             prettyPrint = false

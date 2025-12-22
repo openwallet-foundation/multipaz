@@ -1,5 +1,5 @@
 package org.multipaz.util
 
-internal actual fun getPlatformLogPrinter(): Logger.LogPrinter {
-    TODO("Not yet implemented")
+actual fun getPlatformLogPrinter() = Logger.LogPrinter { level, tag, msg, throwable ->
+    println(Logger.prepareLine(level, tag, msg, throwable))
 }

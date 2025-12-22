@@ -110,7 +110,7 @@ class CloudSecureAreaServer(
     private val openid4vciKeyAttestationCertification: String?,
     private val passphraseFailureEnforcer: PassphraseFailureEnforcer
 ) {
-    private fun encryptState(plaintext: ByteArray): ByteArray {
+    private suspend fun encryptState(plaintext: ByteArray): ByteArray {
         val counter = encryptionGcmCounter
         val iv = ByteBuffer.allocate(12)
         iv.putInt(0, 0x00000000)
@@ -119,7 +119,7 @@ class CloudSecureAreaServer(
         return iv.array() + ciphertext
     }
 
-    private fun decryptState(cipherText: ByteArray): ByteArray {
+    private suspend fun decryptState(cipherText: ByteArray): ByteArray {
         require(cipherText.size >= 12) { "input too short" }
         val iv = cipherText.copyOfRange(0, 12)
         val encryptedData = cipherText.copyOfRange(12, cipherText.size)
@@ -143,12 +143,12 @@ class CloudSecureAreaServer(
         companion object
     }
 
-    private fun RegisterState.encrypt(): ByteArray = encryptState(toCbor())
+    private suspend fun RegisterState.encrypt(): ByteArray = encryptState(toCbor())
 
-    private fun RegisterState.Companion.decrypt(encryptedState: ByteArray) =
+    private suspend fun RegisterState.Companion.decrypt(encryptedState: ByteArray) =
         fromCbor(decryptState(encryptedState))
 
-    private fun doRegisterRequest0(request0: RegisterRequest0,
+    private suspend fun doRegisterRequest0(request0: RegisterRequest0,
                                    remoteHost: String): Pair<Int, ByteArray> {
         val state = RegisterState()
         state.clientVersion = request0.clientVersion
@@ -271,13 +271,13 @@ class CloudSecureAreaServer(
         companion object
     }
 
-    private fun E2EEState.encrypt(): ByteArray = encryptState(toCbor())
+    private suspend fun E2EEState.encrypt(): ByteArray = encryptState(toCbor())
 
-    private fun E2EEState.Companion.decrypt(encryptedState: ByteArray) =
+    private suspend fun E2EEState.Companion.decrypt(encryptedState: ByteArray) =
         fromCbor(decryptState(encryptedState))
 
-    private fun doE2EESetupRequest0(request0: E2EESetupRequest0,
-                                    remoteHost: String): Pair<Int, ByteArray> {
+    private suspend fun doE2EESetupRequest0(request0: E2EESetupRequest0,
+                                            remoteHost: String): Pair<Int, ByteArray> {
         val state = E2EEState()
         state.context = RegisterState.decrypt(request0.registrationContext)
         state.cloudNonce = Random.Default.nextBytes(32)
@@ -289,8 +289,8 @@ class CloudSecureAreaServer(
         return Pair(200, response0.toCbor())
     }
 
-    private fun doE2EESetupRequest1(request1: E2EESetupRequest1,
-                                    remoteHost: String): Pair<Int, ByteArray> {
+    private suspend fun doE2EESetupRequest1(request1: E2EESetupRequest1,
+                                            remoteHost: String): Pair<Int, ByteArray> {
         val state = E2EEState.decrypt(request1.serverState)
         val dataThatWasSigned = Cbor.encode(
             buildCborArray {
@@ -360,7 +360,7 @@ class CloudSecureAreaServer(
         return Pair<Int, ByteArray>(200, response1.toCbor())
     }
 
-    private fun doRegisterStage2Request0(
+    private suspend fun doRegisterStage2Request0(
         request0: CloudSecureAreaProtocol.RegisterStage2Request0,
         remoteHost: String,
         e2eeState: E2EEState
@@ -408,15 +408,15 @@ class CloudSecureAreaServer(
         companion object
     }
 
-    private fun encryptCreateKeyState(state: CreateKeyState): ByteArray {
+    private suspend fun encryptCreateKeyState(state: CreateKeyState): ByteArray {
         return encryptState(state.toCbor())
     }
 
-    private fun decryptCreateKeyState(encryptedState: ByteArray): CreateKeyState {
+    private suspend fun decryptCreateKeyState(encryptedState: ByteArray): CreateKeyState {
         return CreateKeyState.fromCbor(decryptState(encryptedState))
     }
 
-    private fun doCreateKeyRequest0(
+    private suspend fun doCreateKeyRequest0(
         request0: CreateKeyRequest0,
         remoteHost: String,
         e2eeState: E2EEState
@@ -535,7 +535,7 @@ class CloudSecureAreaServer(
         return Pair(200, encryptedResponse1.toCbor())
     }
 
-    private fun doBatchCreateKeyRequest0(
+    private suspend fun doBatchCreateKeyRequest0(
         request0: CloudSecureAreaProtocol.BatchCreateKeyRequest0,
         remoteHost: String,
         e2eeState: E2EEState
@@ -709,15 +709,15 @@ class CloudSecureAreaServer(
         companion object
     }
 
-    private fun encryptSignState(state: SignState): ByteArray {
+    private suspend fun encryptSignState(state: SignState): ByteArray {
         return encryptState(state.toCbor())
     }
 
-    private fun decryptSignState(encryptedState: ByteArray): SignState {
+    private suspend fun decryptSignState(encryptedState: ByteArray): SignState {
         return SignState.fromCbor(decryptState(encryptedState))
     }
 
-    private fun doSignRequest0(
+    private suspend fun doSignRequest0(
         request0: CloudSecureAreaProtocol.SignRequest0,
         remoteHost: String,
         e2eeState: E2EEState
@@ -817,7 +817,7 @@ class CloudSecureAreaServer(
         }
     }
 
-    private fun checkPassphrase(
+    private suspend fun checkPassphrase(
         remoteHost: String,
         givenPassphrase: String?,
         context: RegisterState,
@@ -852,12 +852,12 @@ class CloudSecureAreaServer(
         companion object
     }
 
-    private fun KeyAgreementState.encrypt(): ByteArray = encryptState(toCbor())
+    private suspend fun KeyAgreementState.encrypt(): ByteArray = encryptState(toCbor())
 
-    private fun KeyAgreementState.Companion.decrypt(encryptedState: ByteArray) =
+    private suspend fun KeyAgreementState.Companion.decrypt(encryptedState: ByteArray) =
         fromCbor(decryptState(encryptedState))
 
-    private fun doKeyAgreementRequest0(
+    private suspend fun doKeyAgreementRequest0(
         request0: CloudSecureAreaProtocol.KeyAgreementRequest0,
         remoteHost: String,
         e2eeState: E2EEState
@@ -960,7 +960,7 @@ class CloudSecureAreaServer(
         }
     }
 
-    private fun doCheckPassphrase(
+    private suspend fun doCheckPassphrase(
         remoteHost: String,
         e2eeState: E2EEState,
         passphrase: String,
@@ -980,7 +980,7 @@ class CloudSecureAreaServer(
         return CloudSecureAreaProtocol.RESULT_OK
     }
 
-    private fun doCheckPassphraseRequest(
+    private suspend fun doCheckPassphraseRequest(
         request: CloudSecureAreaProtocol.CheckPassphraseRequest,
         remoteHost: String,
         e2eeState: E2EEState
@@ -997,7 +997,7 @@ class CloudSecureAreaServer(
         return Pair(200, encryptedResponse.toCbor())
     }
 
-    private fun encryptToDevice(
+    private suspend fun encryptToDevice(
         e2eeState: E2EEState,
         messagePlaintext: ByteArray
     ): ByteArray {

@@ -1,6 +1,7 @@
-package org.multipaz.crypto
+package com.android.identity.android.legacy
 
 import kotlinx.io.bytestring.buildByteString
+import org.multipaz.crypto.Algorithm
 import kotlin.math.ceil
 
 /**
@@ -30,7 +31,7 @@ object Hkdf {
      * @param salt optional salt value (a non-secret random value).
      * @return a pseudorandom key, the same length as the hash function for [algorithm].
      */
-    suspend fun extract(
+    fun extract(
         algorithm: Algorithm,
         ikm: ByteArray,
         salt: ByteArray?
@@ -51,7 +52,7 @@ object Hkdf {
      * @param length length of output keying material in octets.
      * @return output keying material of [length] octets.
      */
-    suspend fun expand(
+    fun expand(
         algorithm: Algorithm,
         prk: ByteArray,
         info: ByteArray,
@@ -88,7 +89,7 @@ object Hkdf {
      * @param length length of output keying material in octets.
      * @return output keying material of [length] octets.
      */
-    suspend fun deriveKey(
+    fun deriveKey(
         algorithm: Algorithm,
         ikm: ByteArray,
         salt: ByteArray?,

@@ -1,5 +1,6 @@
 package org.multipaz.trustmanagement
 
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
@@ -44,8 +45,10 @@ class TrustManagerTest {
     lateinit var ca2Certificate: X509Cert
     lateinit var ds2Certificate: X509Cert
 
-    @BeforeTest
-    fun setup() = runTest {
+    // On Kotlin/JS, @BeforeTest using runTest is broken. Work around.
+    private fun runTestWithSetup(block: suspend TestScope.() -> Unit) = runTest { setup(); block() }
+
+    private suspend fun setup() {
         val now = Clock.System.now().truncateToWholeSeconds()
 
         val caKey = Crypto.createEcPrivateKey(EcCurve.P384)
@@ -153,7 +156,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun happyFlow() = runTest {
+    fun happyFlow() = runTestWithSetup {
         val trustManager = TrustManagerLocal(EphemeralStorage())
 
         trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
@@ -168,7 +171,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun validInThePast() = runTest {
+    fun validInThePast() = runTestWithSetup {
         val trustManager = TrustManagerLocal(EphemeralStorage())
 
         trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
@@ -183,7 +186,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun validInTheFuture() = runTest {
+    fun validInTheFuture() = runTestWithSetup {
         val trustManager = TrustManagerLocal(EphemeralStorage())
 
         trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
@@ -198,7 +201,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun happyFlowWithOnlyIntermediateCertificate() = runTest {
+    fun happyFlowWithOnlyIntermediateCertificate() = runTestWithSetup {
         val trustManager = TrustManagerLocal(EphemeralStorage())
 
         trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
@@ -212,7 +215,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun happyFlowWithChainOfTwo() = runTest {
+    fun happyFlowWithChainOfTwo() = runTestWithSetup {
         val trustManager = TrustManagerLocal(EphemeralStorage())
 
         trustManager.addX509Cert(caCertificate, TrustMetadata())
@@ -226,7 +229,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun trustPointNotCaCert() = runTest {
+    fun trustPointNotCaCert() = runTestWithSetup {
         val trustManager = TrustManagerLocal(EphemeralStorage())
 
         trustManager.addX509Cert(dsCertificate, TrustMetadata())
@@ -240,7 +243,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun happyFlowMultipleCerts() = runTest {
+    fun happyFlowMultipleCerts() = runTestWithSetup {
         val trustManager = TrustManagerLocal(EphemeralStorage())
 
         trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
@@ -263,7 +266,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun noTrustPoints() = runTest {
+    fun noTrustPoints() = runTestWithSetup {
         val trustManager = TrustManagerLocal(EphemeralStorage())
 
         trustManager.verify(listOf(dsCertificate)).let {
@@ -275,7 +278,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun skiAlreadyExists() = runTest {
+    fun skiAlreadyExists() = runTestWithSetup {
         val storage = EphemeralStorage()
         val trustManager = TrustManagerLocal(storage)
 
@@ -299,7 +302,7 @@ class TrustManagerTest {
     )
 
     private suspend fun createTestIaca(): TestIaca {
-        val now = Clock.System.now()
+        val now = Clock.System.now().truncateToWholeSeconds()
         val validFrom = now - 10.minutes
         val validUntil = now + 10.minutes
 
@@ -383,7 +386,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun updateMetadataX509() = runTest {
+    fun updateMetadataX509() = runTestWithSetup {
         val storage = EphemeralStorage()
         val trustManager = TrustManagerLocal(storage)
 
@@ -425,7 +428,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun updateMetadataVical() = runTest {
+    fun updateMetadataVical() = runTestWithSetup {
         val storage = EphemeralStorage()
         val trustManager = TrustManagerLocal(storage)
 
@@ -454,7 +457,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun deleteEntryX509() = runTest {
+    fun deleteEntryX509() = runTestWithSetup {
         val storage = EphemeralStorage()
         val trustManager = TrustManagerLocal(storage)
 
@@ -496,7 +499,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun deleteEntryVical() = runTest {
+    fun deleteEntryVical() = runTestWithSetup {
         val storage = EphemeralStorage()
         val trustManager = TrustManagerLocal(storage)
 
@@ -535,7 +538,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun deleteAll() = runTest {
+    fun deleteAll() = runTestWithSetup {
         val storage = EphemeralStorage()
         val trustManager = TrustManagerLocal(storage)
 
@@ -547,7 +550,7 @@ class TrustManagerTest {
         val testIaca = createTestIaca()
         val entryVical = trustManager.addVical(testIaca.encodedSignedVical, TrustMetadata())
 
-        assertEquals(listOf(entryX509, entryVical), trustManager.getEntries())
+        assertEquals(setOf(entryX509, entryVical), trustManager.getEntries().toSet())
 
         // Check verification works
         trustManager.verify(listOf(dsCertificate)).let {
@@ -599,7 +602,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun persistence() = runTest {
+    fun persistence() = runTestWithSetup {
         val storage = EphemeralStorage()
         val trustManager = TrustManagerLocal(storage)
 
@@ -612,18 +615,18 @@ class TrustManagerTest {
             intermediateCertificate.subjectKeyIdentifier!!.toHex(),
         ), trustManager.getTrustPoints().map { it.certificate.subjectKeyIdentifier!!.toHex() }.toSet())
 
-        assertEquals(listOf(
+        assertEquals(setOf(
             intermediaCertificateEntry,
             caCertificateEntry,
             ca2CertificateEntry
-        ), trustManager.getEntries())
+        ), trustManager.getEntries().toSet())
 
         assertTrue(trustManager.deleteEntry(ca2CertificateEntry))
 
-        assertEquals(listOf(
+        assertEquals(setOf(
             intermediaCertificateEntry,
             caCertificateEntry,
-        ), trustManager.getEntries())
+        ), trustManager.getEntries().toSet())
 
         assertEquals(setOf(
             caCertificate.subjectKeyIdentifier!!.toHex(),
@@ -631,10 +634,10 @@ class TrustManagerTest {
         ), trustManager.getTrustPoints().map { it.certificate.subjectKeyIdentifier!!.toHex() }.toSet())
         assertFalse(trustManager.deleteEntry(ca2CertificateEntry))
 
-        assertEquals(listOf(
+        assertEquals(setOf(
             intermediaCertificateEntry,
             caCertificateEntry,
-        ), trustManager.getEntries())
+        ), trustManager.getEntries().toSet())
 
         // Now add the VICAL into the mix...
         val testIaca = createTestIaca()
@@ -646,11 +649,11 @@ class TrustManagerTest {
             testIaca.atlantisIaca.subjectKeyIdentifier!!.toHex(),
         ), trustManager.getTrustPoints().map { it.certificate.subjectKeyIdentifier!!.toHex() }.toSet())
 
-        assertEquals(listOf(
+        assertEquals(setOf(
             intermediaCertificateEntry,
             caCertificateEntry,
             vicalEntry
-        ), trustManager.getEntries())
+        ), trustManager.getEntries().toSet())
 
         // Check we can remove the VICAL
         assertTrue(trustManager.deleteEntry(vicalEntry))
@@ -660,10 +663,10 @@ class TrustManagerTest {
             intermediateCertificate.subjectKeyIdentifier!!.toHex(),
         ), trustManager.getTrustPoints().map { it.certificate.subjectKeyIdentifier!!.toHex() }.toSet())
 
-        assertEquals(listOf(
+        assertEquals(setOf(
             intermediaCertificateEntry,
             caCertificateEntry,
-        ), trustManager.getEntries())
+        ), trustManager.getEntries().toSet())
 
         // Add the VICAL back to check persistence...
         val vicalEntry2 = trustManager.addVical(testIaca.encodedSignedVical, TrustMetadata())
@@ -674,11 +677,11 @@ class TrustManagerTest {
             testIaca.atlantisIaca.subjectKeyIdentifier!!.toHex(),
         ), trustManager.getTrustPoints().map { it.certificate.subjectKeyIdentifier!!.toHex() }.toSet())
 
-        assertEquals(listOf(
+        assertEquals(setOf(
             intermediaCertificateEntry,
             caCertificateEntry,
             vicalEntry2
-        ), trustManager.getEntries())
+        ), trustManager.getEntries().toSet())
 
         val otherTrustManager = TrustManagerLocal(storage)
         assertEquals(setOf(
@@ -688,11 +691,11 @@ class TrustManagerTest {
             testIaca.atlantisIaca.subjectKeyIdentifier!!.toHex(),
         ), otherTrustManager.getTrustPoints().map { it.certificate.subjectKeyIdentifier!!.toHex() }.toSet())
 
-        assertEquals(listOf(
+        assertEquals(setOf(
             intermediaCertificateEntry,
             caCertificateEntry,
             vicalEntry2
-        ), otherTrustManager.getEntries())
+        ), otherTrustManager.getEntries().toSet())
 
         val otherStorage = EphemeralStorage()
         val yetAnotherTrustManager = TrustManagerLocal(otherStorage)
@@ -700,8 +703,8 @@ class TrustManagerTest {
     }
 
     @Test
-    fun testVicalTrustManager() = runTest {
-        val now = Clock.System.now()
+    fun testVicalTrustManager() = runTestWithSetup {
+        val now = Clock.System.now().truncateToWholeSeconds()
         val validFrom = now - 10.minutes
         val validUntil = now + 10.minutes
 
@@ -782,7 +785,7 @@ class TrustManagerTest {
     }
 
     @Test
-    fun testCompositeTrustManager() = runTest {
+    fun testCompositeTrustManager() = runTestWithSetup {
         val tm1 = TrustManagerLocal(EphemeralStorage()).apply { addX509Cert(caCertificate, TrustMetadata()) }
         val tm2 = TrustManagerLocal(EphemeralStorage()).apply { addX509Cert(ca2Certificate, TrustMetadata()) }
         val trustManager = CompositeTrustManager(listOf(tm1, tm2))

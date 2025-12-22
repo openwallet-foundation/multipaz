@@ -146,12 +146,13 @@ private suspend fun digitalCredentialsMdocApiProtocol(
         add(presentmentMechanism.origin)
     }
 
+    val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
     val sessionTranscript = buildCborArray {
         add(Simple.NULL) // DeviceEngagementBytes
         add(Simple.NULL) // EReaderKeyBytes
         addCborArray {
             add("dcapi")
-            add(Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo)))
+            add(dcapiInfoDigest)
         }
     }
     val encodedSessionTranscript = Cbor.encode(sessionTranscript)

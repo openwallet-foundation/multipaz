@@ -19,6 +19,7 @@ import org.multipaz.document.Document
 import org.multipaz.document.DocumentDeleted
 import org.multipaz.document.DocumentEvent
 import org.multipaz.document.DocumentStore
+import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.multipaz_compose.generated.resources.Res
 import org.multipaz.multipaz_compose.generated.resources.default_card_art
 import org.multipaz.util.Logger
@@ -31,11 +32,13 @@ import org.multipaz.util.Logger
  * creates a default stock cardArt.
  *
  * @param scope launches coroutines
- * @param documentStore contains and manges [Document]
+ * @param documentStore the [DocumentStore] which manages [Document] and [Credential] instances.
+ * @param documentTypeRepository a [DocumentTypeRepository] with information about document types or `null`.
  */
 class DocumentModel(
     val scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
-    val documentStore: DocumentStore
+    val documentStore: DocumentStore,
+    val documentTypeRepository: DocumentTypeRepository?,
 ) {
     private val _documentInfos = MutableStateFlow<Map<String, DocumentInfo>>(emptyMap())
     val documentInfos: StateFlow<Map<String, DocumentInfo>> = _documentInfos
@@ -100,14 +103,16 @@ class DocumentModel(
         return DocumentInfo(
             document = this,
             cardArt = cardArt,
-            credentialInfos = buildCredentialInfos()
+            credentialInfos = buildCredentialInfos(documentTypeRepository)
         )
     }
 
     companion object {
         private const val TAG = "DocumentModel"
 
-        private suspend fun Document.buildCredentialInfos(): List<CredentialInfo> {
+        private suspend fun Document.buildCredentialInfos(
+            documentTypeRepository: DocumentTypeRepository?
+        ): List<CredentialInfo> {
             return getCredentials().map { credential ->
                 val keyInfo = if (credential is SecureAreaBoundCredential) {
                     credential.secureArea.getKeyInfo(credential.alias)
@@ -119,8 +124,14 @@ class DocumentModel(
                 } else {
                     false
                 }
+                val claims = if (credential.isCertified) {
+                    credential.getClaims(documentTypeRepository)
+                } else {
+                    emptyList()
+                }
                 CredentialInfo(
                     credential = credential,
+                    claims = claims,
                     keyInfo = keyInfo,
                     keyInvalidated = keyInvalidated
                 )

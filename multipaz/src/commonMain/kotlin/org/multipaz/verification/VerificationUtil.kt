@@ -169,12 +169,13 @@ object VerificationUtil {
                     add(base64EncryptionInfo)
                     add(origin)
                 }
+                val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
                 val sessionTranscript = buildCborArray {
                     add(Simple.NULL) // DeviceEngagementBytes
                     add(Simple.NULL) // EReaderKeyBytes
                     addCborArray {
                         add("dcapi")
-                        add(Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo)))
+                        add(dcapiInfoDigest)
                     }
                 }
                 val itemsToRequest = mutableMapOf<String, MutableMap<String, Boolean>>()
@@ -422,11 +423,12 @@ object VerificationUtil {
                     }
                 } else {
                     // OpenID4VP 1.0
+                    val responseEncryptionKeyJwkThumbprint = responseEncryptionKey?.publicKey?.toJwkThumbprint(Algorithm.SHA256)?.toByteArray()
                     buildCborArray {
-                        val jwkThumbPrint = if (responseEncryptionKey == null) {
+                        val jwkThumbPrint = if (responseEncryptionKeyJwkThumbprint == null) {
                             Simple.NULL
                         } else {
-                            Bstr(responseEncryptionKey.publicKey.toJwkThumbprint(Algorithm.SHA256).toByteArray())
+                            Bstr(responseEncryptionKeyJwkThumbprint)
                         }
                         // B.2.6.2. Invocation via the Digital Credentials API
                         add(origin)
@@ -436,12 +438,13 @@ object VerificationUtil {
                 }
                 val encodedHandoverInfo = Cbor.encode(handoverInfo)
                 Logger.iCbor(TAG, "handoverInfo", encodedHandoverInfo)
+                val encodedHandoverInfoDigest = Crypto.digest(Algorithm.SHA256, encodedHandoverInfo)
                 val sessionTranscript = buildCborArray {
                     add(Simple.NULL) // DeviceEngagementBytes
                     add(Simple.NULL) // EReaderKeyBytes
                     addCborArray {
                         add("OpenID4VPDCAPIHandover")
-                        add(Crypto.digest(Algorithm.SHA256, encodedHandoverInfo))
+                        add(encodedHandoverInfoDigest)
                     }
                 }
                 Logger.iCbor(TAG, "sessionTranscript", Cbor.encode(sessionTranscript))
@@ -467,12 +470,13 @@ object VerificationUtil {
                     add(base64EncryptionInfo)
                     add(origin)
                 }
+                val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
                 val sessionTranscript = buildCborArray {
                     add(Simple.NULL) // DeviceEngagementBytes
                     add(Simple.NULL) // EReaderKeyBytes
                     addCborArray {
                         add("dcapi")
-                        add(Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo)))
+                        add(dcapiInfoDigest)
                     }
                 }
                 val encryptedResponseBase64 = response["data"]!!.jsonObject["response"]!!.jsonPrimitive.content
@@ -561,16 +565,16 @@ object VerificationUtil {
      * @param documentTypeRepository a [DocumentTypeRepository] or `null`.
      * @return a [VerifiedPresentation] instance.
      */
-    fun verifySdJwtPresentation(
+    suspend fun verifySdJwtPresentation(
         now: Instant,
         compactSerialization: String,
         nonce: ByteString,
         documentTypeRepository: DocumentTypeRepository?,
     ): VerifiedPresentation {
         val (sdJwt, sdJwtKb) = if (compactSerialization.endsWith("~")) {
-            Pair(SdJwt(compactSerialization), null)
+            Pair(SdJwt.fromCompactSerialization(compactSerialization), null)
         } else {
-            val sdJwtKb = SdJwtKb(compactSerialization)
+            val sdJwtKb = SdJwtKb.fromCompactSerialization(compactSerialization)
             Pair(sdJwtKb.sdJwt, sdJwtKb)
         }
 

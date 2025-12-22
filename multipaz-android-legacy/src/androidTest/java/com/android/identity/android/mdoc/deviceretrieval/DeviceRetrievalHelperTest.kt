@@ -17,7 +17,9 @@ package com.android.identity.android.mdoc.deviceretrieval
 
 import android.os.ConditionVariable
 import androidx.test.platform.app.InstrumentationRegistry
+import com.android.identity.android.legacy.Crypto.createEcPrivateKey
 import com.android.identity.android.mdoc.engagement.QrEngagementHelper
+import com.android.identity.android.mdoc.sessionencryption.SessionEncryption
 import com.android.identity.android.mdoc.transport.DataTransport
 import com.android.identity.android.mdoc.transport.DataTransportOptions
 import com.android.identity.android.mdoc.transport.DataTransportTcp
@@ -39,7 +41,6 @@ import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.NameSpacedData
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.Crypto.createEcPrivateKey
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
@@ -57,7 +58,6 @@ import org.multipaz.mdoc.request.DeviceRequestParser.DocRequest
 import org.multipaz.mdoc.response.DeviceResponseGenerator
 import org.multipaz.mdoc.response.DeviceResponseParser
 import org.multipaz.mdoc.response.DocumentGenerator
-import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.util.MdocUtil.calculateDigestsForNameSpace
 import org.multipaz.mdoc.util.MdocUtil.generateDocumentRequest
 import org.multipaz.mdoc.util.MdocUtil.generateIssuerNameSpaces

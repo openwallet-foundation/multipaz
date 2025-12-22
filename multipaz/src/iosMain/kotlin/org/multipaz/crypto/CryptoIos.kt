@@ -27,9 +27,11 @@ actual object Crypto {
         EcCurve.P521,
     )
 
+    actual val supportedEncryptionAlgorithms = setOf(Algorithm.A128GCM, Algorithm.A192GCM, Algorithm.A256GCM)
+
     actual val provider: String = "CryptoKit"
 
-    actual fun digest(
+    actual suspend fun digest(
         algorithm: Algorithm,
         message: ByteArray
     ): ByteArray {
@@ -42,7 +44,7 @@ actual object Crypto {
         }
     }
 
-    actual fun mac(
+    actual suspend fun mac(
         algorithm: Algorithm,
         key: ByteArray,
         message: ByteArray
@@ -56,7 +58,7 @@ actual object Crypto {
         }
     }
 
-    actual fun encrypt(
+    actual suspend fun encrypt(
         algorithm: Algorithm,
         key: ByteArray,
         nonce: ByteArray,
@@ -71,7 +73,7 @@ actual object Crypto {
         ).toByteArray()
     }
 
-    actual fun decrypt(
+    actual suspend fun decrypt(
         algorithm: Algorithm,
         key: ByteArray,
         nonce: ByteArray,
@@ -90,7 +92,7 @@ actual object Crypto {
         )?.toByteArray() ?: throw IllegalStateException("Decryption failed")
     }
 
-    actual fun checkSignature(
+    actual suspend fun checkSignature(
         publicKey: EcPublicKey,
         message: ByteArray,
         algorithm: Algorithm,
@@ -110,7 +112,7 @@ actual object Crypto {
         }
     }
 
-    actual fun createEcPrivateKey(curve: EcCurve): EcPrivateKey {
+    actual suspend fun createEcPrivateKey(curve: EcCurve): EcPrivateKey {
         val ret = SwiftBridge.createEcPrivateKey(curve.coseCurveIdentifier.toLong())
         if (ret.isEmpty()) {
             throw UnsupportedOperationException("Curve is not supported")
@@ -122,7 +124,7 @@ actual object Crypto {
         return EcPrivateKeyDoubleCoordinate(curve, privKeyBytes, x, y)
     }
 
-    actual fun sign(
+    actual suspend fun sign(
         key: EcPrivateKey,
         signatureAlgorithm: Algorithm,
         message: ByteArray
@@ -138,7 +140,7 @@ actual object Crypto {
         return EcSignature(r, s)
     }
 
-    actual fun keyAgreement(
+    actual suspend fun keyAgreement(
         key: EcPrivateKey,
         otherKey: EcPublicKey
     ): ByteArray {
@@ -152,62 +154,6 @@ actual object Crypto {
             key.d.toNSData(),
             otherKeyRaw.toNSData()
         )?.toByteArray() ?: throw UnsupportedOperationException("Curve is not supported")
-    }
-
-    internal actual fun ecPublicKeyToPem(publicKey: EcPublicKey): String {
-        val raw = when (publicKey) {
-            is EcPublicKeyDoubleCoordinate -> publicKey.x + publicKey.y
-            is EcPublicKeyOkp -> publicKey.x
-        }
-        val pemEncoding = SwiftBridge.ecPublicKeyToPem(
-            publicKey.curve.coseCurveIdentifier.toLong(),
-            raw.toNSData()
-        ) ?: throw IllegalStateException("Not available")
-        if (pemEncoding == "") {
-            throw UnsupportedOperationException("Curve is not supported")
-        }
-        return pemEncoding
-    }
-
-    internal actual fun ecPublicKeyFromPem(
-        pemEncoding: String,
-        curve: EcCurve
-    ): EcPublicKey {
-        val rawEncoding = SwiftBridge.ecPublicKeyFromPem(
-            curve.coseCurveIdentifier.toLong(),
-            pemEncoding
-        )?.toByteArray() ?: throw IllegalStateException("Not available")
-        val x = rawEncoding.sliceArray(IntRange(0, rawEncoding.size/2 - 1))
-        val y = rawEncoding.sliceArray(IntRange(rawEncoding.size/2, rawEncoding.size - 1))
-        return EcPublicKeyDoubleCoordinate(curve, x, y)
-    }
-
-    internal actual fun ecPrivateKeyToPem(privateKey: EcPrivateKey): String {
-        val pemEncoding = SwiftBridge.ecPrivateKeyToPem(
-            privateKey.curve.coseCurveIdentifier.toLong(),
-            privateKey.d.toNSData()
-        ) ?: throw IllegalStateException("Not available")
-        if (pemEncoding == "") {
-            throw UnsupportedOperationException("Curve is not supported")
-        }
-        return pemEncoding
-    }
-
-    internal actual fun ecPrivateKeyFromPem(
-        pemEncoding: String,
-        publicKey: EcPublicKey
-    ): EcPrivateKey {
-        val rawEncoding = SwiftBridge.ecPrivateKeyFromPem(
-            publicKey.curve.coseCurveIdentifier.toLong(),
-            pemEncoding
-        )?.toByteArray() ?: throw IllegalStateException("Not available")
-        publicKey as EcPublicKeyDoubleCoordinate
-        return EcPrivateKeyDoubleCoordinate(publicKey.curve, rawEncoding, publicKey.x, publicKey.y)
-    }
-
-    internal actual fun uuidGetRandom(): UUID {
-        val uuid = NSUUID()
-        return UUID.fromString(uuid.UUIDString())
     }
 
     internal fun secureEnclaveCreateEcPrivateKey(
@@ -261,7 +207,7 @@ actual object Crypto {
         )?.toByteArray() ?: throw KeyLockedException("Unable to unlock key")
     }
 
-    internal actual fun validateCertChain(certChain: X509CertChain): Boolean {
+    internal actual suspend fun validateCertChain(certChain: X509CertChain): Boolean {
         val certificates = certChain.certificates
         for (i in 1..certificates.lastIndex) {
             val toVerify = certificates[i - 1]

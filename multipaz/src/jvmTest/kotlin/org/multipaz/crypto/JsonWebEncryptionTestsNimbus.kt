@@ -31,13 +31,13 @@ class JsonWebEncryptionTestsNimbus {
 
     // TODO: Check for other curves than just P-256.
 
-    @Test fun testEncryptEcdhEs_A128GCM() = testEncryptEcdhEs(Algorithm.A128GCM, false)
-    @Test fun testEncryptEcdhEs_A192GCM() = testEncryptEcdhEs(Algorithm.A192GCM, false)
-    @Test fun testEncryptEcdhEs_A256GCM() = testEncryptEcdhEs(Algorithm.A256GCM, false)
+    @Test fun testEncryptEcdhEs_A128GCM() = runTest { testEncryptEcdhEs(Algorithm.A128GCM, false) }
+    @Test fun testEncryptEcdhEs_A192GCM() = runTest { testEncryptEcdhEs(Algorithm.A192GCM, false) }
+    @Test fun testEncryptEcdhEs_A256GCM() = runTest { testEncryptEcdhEs(Algorithm.A256GCM, false) }
 
-    @Test fun testEncryptEcdhEs_Compression() = testEncryptEcdhEs(Algorithm.A128GCM, true)
+    @Test fun testEncryptEcdhEs_Compression() = runTest { testEncryptEcdhEs(Algorithm.A128GCM, true) }
 
-    private fun testEncryptEcdhEs(encAlg: Algorithm, useCompression: Boolean) {
+    private suspend fun testEncryptEcdhEs(encAlg: Algorithm, useCompression: Boolean) {
         val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)
 
         val claims = buildJsonObject {
@@ -71,11 +71,11 @@ class JsonWebEncryptionTestsNimbus {
         assertEquals(claims, decryptedClaims)
     }
 
-    @Test fun testDecryptEcdhEs_A128GCM() = testDecryptEcdhEs(Algorithm.A128GCM, false)
-    @Test fun testDecryptEcdhEs_A192GCM() = testDecryptEcdhEs(Algorithm.A192GCM, false)
-    @Test fun testDecryptEcdhEs_A256GCM() = testDecryptEcdhEs(Algorithm.A256GCM, false)
+    @Test fun testDecryptEcdhEs_A128GCM() = runTest { testDecryptEcdhEs(Algorithm.A128GCM, false) }
+    @Test fun testDecryptEcdhEs_A192GCM() = runTest { testDecryptEcdhEs(Algorithm.A192GCM, false) }
+    @Test fun testDecryptEcdhEs_A256GCM() = runTest { testDecryptEcdhEs(Algorithm.A256GCM, false) }
 
-    @Test fun testDecryptEcdhEs_Compression() = testDecryptEcdhEs(Algorithm.A128GCM, true)
+    @Test fun testDecryptEcdhEs_Compression() = runTest { testDecryptEcdhEs(Algorithm.A128GCM, true) }
 
     private fun testDecryptEcdhEs(encAlg: Algorithm, useCompression: Boolean) = runTest {
         val recipientKey = Crypto.createEcPrivateKey(EcCurve.P256)

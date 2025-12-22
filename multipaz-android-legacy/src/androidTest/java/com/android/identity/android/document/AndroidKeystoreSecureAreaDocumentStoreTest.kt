@@ -135,7 +135,7 @@ class AndroidKeystoreSecureAreaDocumentStoreTest {
         override val credentialType: String
             get() = CREDENTIAL_TYPE
 
-        override fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<Claim> {
+        override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<Claim> {
             throw NotImplementedError()
         }
     }

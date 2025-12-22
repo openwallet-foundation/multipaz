@@ -6,7 +6,7 @@ import java.util.zip.Deflater
 import java.util.zip.Inflater
 import java.util.zip.InflaterInputStream
 
-actual fun ByteArray.deflate(compressionLevel: Int): ByteArray {
+actual suspend fun ByteArray.deflate(compressionLevel: Int): ByteArray {
     require(compressionLevel >=0 && compressionLevel <= 9) {
         "Compression level $compressionLevel is invalid, must be between 0 and 9"
     }
@@ -22,7 +22,7 @@ actual fun ByteArray.deflate(compressionLevel: Int): ByteArray {
     return baos.toByteArray()
 }
 
-actual fun ByteArray.inflate(): ByteArray {
+actual suspend fun ByteArray.inflate(): ByteArray {
     val bais = ByteArrayInputStream(this)
     val decompresser = Inflater(/* nowrap = */ true)
     val iis = InflaterInputStream(bais, decompresser)

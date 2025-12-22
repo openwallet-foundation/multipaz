@@ -225,7 +225,7 @@ sealed class AsymmetricKey {
     }
 
     companion object Companion {
-        private fun sign(explicit: Explicit, message: ByteArray): EcSignature =
+        private suspend fun sign(explicit: Explicit, message: ByteArray): EcSignature =
             Crypto.sign(explicit.privateKey, explicit.algorithm, message)
 
         private suspend fun sign(
@@ -238,7 +238,7 @@ sealed class AsymmetricKey {
                 unlockReason = secureAreaBased.unlockReason
             )
 
-        private fun keyAgreement(explicit: Explicit, otherKey: EcPublicKey): ByteArray =
+        private suspend fun keyAgreement(explicit: Explicit, otherKey: EcPublicKey): ByteArray =
             Crypto.keyAgreement(key = explicit.privateKey, otherKey = otherKey)
 
         private suspend fun keyAgreement(
@@ -349,7 +349,7 @@ sealed class AsymmetricKey {
             algorithm: Algorithm = privateKey.curve.defaultSigningAlgorithmFullySpecified
         ): AsymmetricKey = AnonymousExplicit(privateKey, algorithm)
 
-        fun ephemeral(algorithm: Algorithm = Algorithm.ESP256): AsymmetricKey =
+        suspend fun ephemeral(algorithm: Algorithm = Algorithm.ESP256): AsymmetricKey =
             AnonymousExplicit(Crypto.createEcPrivateKey(algorithm.curve!!), algorithm)
 
         private fun parseIdentifier(json: JsonObject): Pair<String?, X509CertChain?> {

@@ -43,9 +43,8 @@ kotlin {
     }
 
     js {
+        outputModuleName = "multipaz"
         browser {
-            // Disable tests until fully implemented
-            testTask { enabled = false }
         }
         binaries.executable()
     }
@@ -193,6 +192,12 @@ kotlin {
                 implementation(libs.androidx.sqlite)
                 implementation(libs.androidx.sqlite.framework)
                 implementation(libs.androidx.sqlite.bundled)
+            }
+        }
+
+        val webMain by getting {
+            dependencies {
+                implementation(libs.kotlin.wrappers.web)
             }
         }
     }

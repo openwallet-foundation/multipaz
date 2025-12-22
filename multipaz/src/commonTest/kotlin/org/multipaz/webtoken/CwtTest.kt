@@ -4,6 +4,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.multipaz.asn1.ASN1Integer
@@ -28,7 +29,6 @@ import org.multipaz.util.toBase64
 import org.multipaz.webtoken.WebTokenClaim.Companion.put
 import kotlin.reflect.KClass
 import kotlin.reflect.cast
-import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -43,13 +43,18 @@ import kotlin.time.Instant
 class CwtTest {
     private lateinit var clock: FakeClock
 
-    private val privateTrustedKey = Crypto.createEcPrivateKey(EcCurve.P256)
-    private val trustedKey = privateTrustedKey.publicKey
+    private lateinit var privateTrustedKey: EcPrivateKey
+    private lateinit var trustedKeyJwk: JsonObject
 
     private lateinit var trustedCert: X509Cert
 
-    @BeforeTest
-    fun init() = runTest {
+    // On Kotlin/JS, @BeforeTest using runTest is broken. Work around.
+    private fun runTestWithSetup(block: suspend TestScope.() -> Unit) = runTest { setup(); block() }
+
+    private suspend fun setup() {
+        privateTrustedKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val trustedKey = privateTrustedKey.publicKey
+        trustedKeyJwk = trustedKey.toJwk()
         clock = FakeClock(Instant.fromEpochSeconds(1443944945))
         trustedCert = X509Cert.Builder(
             publicKey = trustedKey,
@@ -265,7 +270,7 @@ class CwtTest {
     }
 
     private fun runBackendTest(body: suspend TestScope.() -> Unit) =
-        runTest {
+        runTestWithSetup {
             withContext(TestBackendEnvironment()) {
                 body()
             }
@@ -275,7 +280,7 @@ class CwtTest {
         override fun getValue(key: String): String? {
             if (key == "iss_kid") {
                 return buildJsonObject {
-                    put("test-iss#test-kid", trustedKey.toJwk())
+                    put("test-iss#test-kid", trustedKeyJwk)
                 }.toString()
             }
             if (key == "x5c") {

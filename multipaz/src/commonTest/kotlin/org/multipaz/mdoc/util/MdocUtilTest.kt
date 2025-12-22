@@ -51,7 +51,7 @@ import kotlin.test.assertTrue
 
 class MdocUtilTest {
     @Test
-    fun testGenerateIssuerNameSpaces() {
+    fun testGenerateIssuerNameSpaces() = runTest {
         val nameSpacedData = NameSpacedData.Builder()
             .putEntryString("ns1", "foo1", "bar1")
             .putEntryString("ns1", "foo2", "bar2")
@@ -234,7 +234,7 @@ class MdocUtilTest {
     }
 
     @Test
-    fun testGetDigestsForNameSpaceInTestVectors() {
+    fun testGetDigestsForNameSpaceInTestVectors() = runTest {
         val deviceResponse = Cbor.decode(
             TestVectors.ISO_18013_5_ANNEX_D_DEVICE_RESPONSE.fromHex()
         )
@@ -271,7 +271,7 @@ class MdocUtilTest {
     }
 
     @Test
-    fun testGenerateDocumentRequest() {
+    fun testGenerateDocumentRequest() = runTest {
         val encodedSessionTranscriptBytes =
             TestVectors.ISO_18013_5_ANNEX_D_SESSION_TRANSCRIPT_BYTES.fromHex()
         val encodedSessionTranscript = Cbor.encode(

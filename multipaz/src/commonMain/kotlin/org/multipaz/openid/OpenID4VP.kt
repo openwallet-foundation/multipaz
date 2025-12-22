@@ -105,6 +105,13 @@ object OpenID4VP {
                 dclqQuery = dclqQuery
             )
         }
+        val responseEncryptionKeyJwk = responseEncryptionKey?.let {
+            it.toJwk(additionalClaims = buildJsonObject {
+                put("kid", "response-encryption-key")
+                put("alg", "ECDH-ES")
+                put("use", "enc")
+            })
+        }
         val jsonBuildBlock: JsonObjectBuilder.() -> Unit = {
             put("response_type", "vp_token")
             put("response_mode",
@@ -145,15 +152,10 @@ object OpenID4VP {
                         }
                     }
                 })
-                if (responseEncryptionKey != null) {
+                if (responseEncryptionKeyJwk != null) {
                     putJsonObject("jwks") {
                         putJsonArray("keys") {
-                            add(responseEncryptionKey
-                                .toJwk(additionalClaims = buildJsonObject {
-                                    put("kid", "response-encryption-key")
-                                    put("alg", "ECDH-ES")
-                                    put("use", "enc")
-                                }))
+                            add(responseEncryptionKeyJwk)
                         }
                     }
                 }
@@ -183,6 +185,13 @@ object OpenID4VP {
         responseUri: String?,
         dclqQuery: JsonObject
     ): JsonObject {
+        val responseEncryptionKeyJwk = responseEncryptionKey?.let {
+            it.toJwk(additionalClaims = buildJsonObject {
+                put("kid", "response-encryption-key")
+                put("alg", "ECDH-ES")
+                put("use", "enc")
+            })
+        }
         val jsonBuildBlock: JsonObjectBuilder.() -> Unit = {
             put("response_type", "vp_token")
             put("response_mode",
@@ -219,19 +228,12 @@ object OpenID4VP {
                         }
                     }
                 })
-                if (responseEncryptionKey != null) {
+                if (responseEncryptionKeyJwk != null) {
                     put("authorization_encrypted_response_alg", "ECDH-ES")
                     put("authorization_encrypted_response_enc", "A128GCM")
                     putJsonObject("jwks") {
                         putJsonArray("keys") {
-                            add(
-                                responseEncryptionKey
-                                    .toJwk(additionalClaims = buildJsonObject {
-                                        put("kid", "response-encryption-key")
-                                        put("alg", "ECDH-ES")
-                                        put("use", "enc")
-                                    })
-                            )
+                            add(responseEncryptionKeyJwk)
                         }
                     }
                 }
@@ -554,14 +556,17 @@ object OpenID4VP {
             }
         }
 
+        val reReaderPublicKeJwkThumbprint = reReaderPublicKey?.let {
+            it.toJwkThumbprint(Algorithm.SHA256).toByteArray()
+        }
         val handoverInfo = Cbor.encode(
             when (version) {
                 Version.DRAFT_29 -> {
                     buildCborArray {
-                        val jwkThumbPrint = if (reReaderPublicKey == null) {
+                        val jwkThumbPrint = if (reReaderPublicKeJwkThumbprint == null) {
                             Simple.NULL
                         } else {
-                            Bstr(reReaderPublicKey.toJwkThumbprint(Algorithm.SHA256).toByteArray())
+                            Bstr(reReaderPublicKeJwkThumbprint)
                         }
                         if (responseUri != null) {
                             // B.2.6.1. Invocation via Redirects
@@ -593,13 +598,14 @@ object OpenID4VP {
         } else {
             "OpenID4VPDCAPIHandover"
         }
+        val handoverInfoDigest = Crypto.digest(Algorithm.SHA256, handoverInfo)
         val encodedSessionTranscript = Cbor.encode(
             buildCborArray {
                 add(Simple.NULL) // DeviceEngagementBytes
                 add(Simple.NULL) // EReaderKeyBytes
                 addCborArray {
                     add(handoverString)
-                    add(Crypto.digest(Algorithm.SHA256, handoverInfo))
+                    add(handoverInfoDigest)
                 }
             }
         )
@@ -643,7 +649,7 @@ object OpenID4VP {
         val sdjwtVcCredential = match.credential as SdJwtVcCredential
         val claims = match.credentialQuery.claims as List<JsonRequestedClaim>
 
-        val sdJwt = SdJwt(sdjwtVcCredential.issuerProvidedData.decodeToString())
+        val sdJwt = SdJwt.fromCompactSerialization(sdjwtVcCredential.issuerProvidedData.decodeToString())
         val pathsToDisclose = claims.map { claim: JsonRequestedClaim -> claim.claimPath }
         val filteredSdJwt = sdJwt.filter(pathsToDisclose)
 

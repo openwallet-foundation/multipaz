@@ -18,6 +18,13 @@ expect object Crypto {
     val supportedCurves: Set<EcCurve>
 
     /**
+     * The encryption algorithms supported by the platform.
+     *
+     * This is a subset of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM].
+     */
+    val supportedEncryptionAlgorithms: Set<Algorithm>
+
+    /**
      * A human-readable description of the underlying library used.
      */
     val provider: String
@@ -30,7 +37,7 @@ expect object Crypto {
      * @return the digest.
      * @throws IllegalArgumentException if the given algorithm is not supported.
      */
-    fun digest(
+    suspend fun digest(
         algorithm: Algorithm,
         message: ByteArray
     ): ByteArray
@@ -45,7 +52,7 @@ expect object Crypto {
      * @return the message authentication code.
      * @throws IllegalArgumentException if the given algorithm is not supported.
      */
-    fun mac(
+    suspend fun mac(
         algorithm: Algorithm,
         key: ByteArray,
         message: ByteArray
@@ -62,7 +69,7 @@ expect object Crypto {
      * @return the cipher text with the tag appended to it.
      * @throws IllegalArgumentException if the given algorithm is not supported.
      */
-    fun encrypt(
+    suspend fun encrypt(
         algorithm: Algorithm,
         key: ByteArray,
         nonce: ByteArray,
@@ -82,7 +89,7 @@ expect object Crypto {
      * @throws IllegalArgumentException if the given algorithm is not supported.
      * @throws IllegalStateException if decryption fails
      */
-    fun decrypt(
+    suspend fun decrypt(
         algorithm: Algorithm,
         key: ByteArray,
         nonce: ByteArray,
@@ -100,7 +107,7 @@ expect object Crypto {
      * @throws SignatureVerificationException if the signature check fails.
      * @throws IllegalStateException if an error occurred during the check, for example if data is malformed.
      */
-    fun checkSignature(
+    suspend fun checkSignature(
         publicKey: EcPublicKey,
         message: ByteArray,
         algorithm: Algorithm,
@@ -112,7 +119,7 @@ expect object Crypto {
      *
      * @param curve the curve to use.
      */
-    fun createEcPrivateKey(curve: EcCurve): EcPrivateKey
+    suspend fun createEcPrivateKey(curve: EcCurve): EcPrivateKey
 
     /**
      * Signs data with a key.
@@ -125,7 +132,7 @@ expect object Crypto {
      * @param message the data to sign.
      * @return the signature.
      */
-    fun sign(
+    suspend fun sign(
         key: EcPrivateKey,
         signatureAlgorithm: Algorithm,
         message: ByteArray
@@ -138,21 +145,11 @@ expect object Crypto {
      * @param otherKey the key from the other party.
      * @return the shared secret.
      */
-    fun keyAgreement(
+    suspend fun keyAgreement(
         key: EcPrivateKey,
         otherKey: EcPublicKey
     ): ByteArray
 
-    internal fun ecPublicKeyToPem(publicKey: EcPublicKey): String
-
-    internal fun ecPublicKeyFromPem(pemEncoding: String, curve: EcCurve): EcPublicKey
-
-    internal fun ecPrivateKeyToPem(privateKey: EcPrivateKey): String
-
-    internal fun ecPrivateKeyFromPem(pemEncoding: String, publicKey: EcPublicKey): EcPrivateKey
-
-    internal fun uuidGetRandom(): UUID
-
     // TODO: replace with non-platform specific code
-    internal fun validateCertChain(certChain: X509CertChain): Boolean
+    internal suspend fun validateCertChain(certChain: X509CertChain): Boolean
 }

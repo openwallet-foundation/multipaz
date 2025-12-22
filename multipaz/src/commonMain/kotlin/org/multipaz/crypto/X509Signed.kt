@@ -60,7 +60,7 @@ sealed class X509Signed() {
      * @param publicKey the key to check the signature with.
      * @throws SignatureVerificationException if the signature check fails.
      */
-    fun verify(publicKey: EcPublicKey) {
+    suspend fun verify(publicKey: EcPublicKey) {
         val ecSignature = when (signatureAlgorithm) {
             Algorithm.ES256, Algorithm.ESP256, Algorithm.ESB256,
             Algorithm.ES384, Algorithm.ESP384, Algorithm.ESB384, Algorithm.ESB320,
@@ -292,7 +292,7 @@ sealed class X509SignedBuilder<BuilderT: X509SignedBuilder<BuilderT>>(
     }
 
 
-    protected abstract fun buildTbs(tbsList: MutableList<ASN1Object>)
+    protected abstract suspend fun buildTbs(tbsList: MutableList<ASN1Object>)
 
     /**
      * Builds three-element [ASN1Sequence] that contains TBS [ASN1Sequence], signature algorithm

@@ -451,7 +451,7 @@ class MdocNfcEngagementHelperTest {
     // TODO: add more tests to exercise implementation of READ_BINARY and UPDATE_BINARY
 
     @Test
-    fun testConstructor() {
+    fun testConstructor() = runTest {
         assertFailsWith(
             IllegalStateException::class,
             "Must use either static or negotiated handover, none are selected"

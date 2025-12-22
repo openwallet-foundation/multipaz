@@ -8,6 +8,8 @@ import org.multipaz.rpc.handler.InvalidRequestException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.EcCurve
 import org.multipaz.verifier.Openid4VpVerifierModel
 import org.multipaz.openid4vci.util.AUTHZ_REQ
 import org.multipaz.openid4vci.util.IssuanceState
@@ -34,7 +36,10 @@ suspend fun credentialRequest(call: ApplicationCall) {
     val stateRef = idToCode(OpaqueIdType.OPENID4VP_STATE, id, timeout)
     val state = IssuanceState.getIssuanceState(id)
     val domain = BackendEnvironment.getDomain()
-    val model = Openid4VpVerifierModel("origin:${domain}")
+    val model = Openid4VpVerifierModel(
+        clientId = "origin:${domain}",
+        ephemeralPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+    )
     state.openid4VpVerifierModel = model
     val credentialRequest = model.makeRequest(
         state = stateRef,

@@ -165,7 +165,6 @@ class DocumentStoreTestHarness {
                     5RulaSWThWBfMyRjsfVODkosHLCDnbPV
                     -----END PUBLIC KEY-----
                 """.trimIndent().trim(),
-            EcCurve.P384
         )
         val iacaKey = EcPrivateKey.fromPem(
             """

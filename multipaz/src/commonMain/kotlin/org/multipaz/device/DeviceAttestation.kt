@@ -15,14 +15,14 @@ sealed class DeviceAttestation {
      *
      * If validity cannot be confirmed, [DeviceAttestationException] is thrown.
      */
-    abstract fun validate(validationData: DeviceAttestationValidationData)
+    abstract suspend fun validate(validationData: DeviceAttestationValidationData)
 
     /**
      * Check the validity of [assertion] in the context of this [DeviceAttestation].
      *
      * If validity cannot be confirmed, [DeviceAssertionException] is thrown.
      */
-    abstract fun validateAssertion(assertion: DeviceAssertion)
+    abstract suspend fun validateAssertion(assertion: DeviceAssertion)
 
     companion object
 }

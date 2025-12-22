@@ -1,22 +1,28 @@
 package org.multipaz.util
 
+import kotlinx.browser.window
 import org.multipaz.prompt.PromptModel
 import org.multipaz.securearea.SecureArea
 import org.multipaz.storage.Storage
 
 actual object Platform {
-    actual val name: String
-        get() = TODO("Not yet implemented")
+    actual val name: String by lazy {
+        "JavaScript (${window.navigator.userAgent})"
+    }
+
     actual val version: String
-        get() = TODO("Not yet implemented")
+        get() = BuildConfig.VERSION
+
     actual val promptModel: PromptModel
-        get() = TODO("Not yet implemented")
+        get() = TODO("Platform.promptModel not yet implemented")
+
     actual val storage: Storage
-        get() = TODO("Not yet implemented")
+        get() = TODO("Platform.storage not yet implemented")
+
     actual val nonBackedUpStorage: Storage
-        get() = TODO("Not yet implemented")
+        get() = TODO("Platform.nonBackedUpStorage not yet implemented")
 
     actual suspend fun getSecureArea(): SecureArea {
-        TODO("Not yet implemented")
+        TODO("Platform.getSecureArea not yet implemented")
     }
 }

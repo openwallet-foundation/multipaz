@@ -68,7 +68,7 @@ class X509CrlTests {
     }
 
     @Test
-    fun testOpenssl() {
+    fun testOpenssl() = runTest {
         // Test openssl-created certificate and crl
         val cert = X509Cert.fromPem(
             """

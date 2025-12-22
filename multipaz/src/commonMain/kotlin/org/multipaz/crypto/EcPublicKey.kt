@@ -3,6 +3,11 @@ package org.multipaz.crypto
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.multipaz.asn1.ASN1
+import org.multipaz.asn1.ASN1BitString
+import org.multipaz.asn1.ASN1ObjectIdentifier
+import org.multipaz.asn1.ASN1Sequence
+import org.multipaz.asn1.OID
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.annotation.CborSerializationImplemented
 import org.multipaz.cbor.toDataItem
@@ -10,7 +15,9 @@ import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseKey
 import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.toCoseLabel
+import org.multipaz.crypto.X509SignedBuilder.Companion.getCurveAlgorithmSeq
 import org.multipaz.util.fromBase64Url
+import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
@@ -39,8 +46,25 @@ sealed class EcPublicKey(
      *
      * @return a PEM encoded string.
      */
-    @OptIn(ExperimentalEncodingApi::class)
-    fun toPem(): String = Crypto.ecPublicKeyToPem(this)
+    fun toPem(): String {
+        val subjectPublicKey = when (this) {
+            is EcPublicKeyDoubleCoordinate -> {
+                asUncompressedPointEncoding
+            }
+            is EcPublicKeyOkp -> {
+                x
+            }
+        }
+        val subjectPublicKeyInfoSeq = ASN1Sequence(listOf(
+            curve.getCurveAlgorithmSeq(),
+            ASN1BitString(0, subjectPublicKey)
+        ))
+        val sb = StringBuilder()
+        sb.append("-----BEGIN PUBLIC KEY-----\n")
+        sb.append(Base64.Mime.encode(ASN1.encode(subjectPublicKeyInfoSeq)))
+        sb.append("\n-----END PUBLIC KEY-----\n")
+        return sb.toString()
+    }
 
     /**
      * Encodes the public key as a JSON Web Key according to
@@ -52,7 +76,7 @@ sealed class EcPublicKey(
      * @param additionalClaims additional claims to include or `null`.
      * @return a JSON Web Key.
      */
-    abstract fun toJwk(
+    abstract suspend fun toJwk(
         additionalClaims: JsonObject? = null,
     ): JsonObject
 
@@ -63,7 +87,7 @@ sealed class EcPublicKey(
      *
      * @param digestAlgorithm the digest algorithm to use for creating the thumbprint.
      */
-    abstract fun toJwkThumbprint(digestAlgorithm: Algorithm): ByteString
+    abstract suspend fun toJwkThumbprint(digestAlgorithm: Algorithm): ByteString
 
     fun toDataItem(): DataItem = toCoseKey().toDataItem()
 
@@ -72,12 +96,58 @@ sealed class EcPublicKey(
          * Creates an [EcPublicKey] from a PEM encoded string.
          *
          * @param pemEncoding the PEM encoded string.
-         * @param curve the curve of the key..
+         * @param curve the curve of the key.
          * @return a new [EcPublicKey].
          */
         @OptIn(ExperimentalEncodingApi::class)
-        fun fromPem(pemEncoding: String, curve: EcCurve): EcPublicKey =
-            Crypto.ecPublicKeyFromPem(pemEncoding, curve)
+        fun fromPem(pemEncoding: String): EcPublicKey {
+            val encoded = Base64.Mime.decode(pemEncoding
+                .replace("-----BEGIN PUBLIC KEY-----", "")
+                .replace("-----END PUBLIC KEY-----", "")
+                .trim())
+            val subjectPublicKeyInfo = ASN1.decode(encoded) as ASN1Sequence
+            val algorithmIdentifier = subjectPublicKeyInfo.elements[0] as ASN1Sequence
+            val algorithmOid = (algorithmIdentifier.elements[0] as ASN1ObjectIdentifier).oid
+            val curve = when (algorithmOid) {
+                // https://datatracker.ietf.org/doc/html/rfc5480#section-2.1.1
+                OID.EC_PUBLIC_KEY.oid -> {
+                    val ecCurveString = (algorithmIdentifier.elements[1] as ASN1ObjectIdentifier).oid
+                    when (ecCurveString) {
+                        "1.2.840.10045.3.1.7" -> EcCurve.P256
+                        "1.3.132.0.34" -> EcCurve.P384
+                        "1.3.132.0.35" -> EcCurve.P521
+                        "1.3.36.3.3.2.8.1.1.7" -> EcCurve.BRAINPOOLP256R1
+                        "1.3.36.3.3.2.8.1.1.9" -> EcCurve.BRAINPOOLP320R1
+                        "1.3.36.3.3.2.8.1.1.11" -> EcCurve.BRAINPOOLP384R1
+                        "1.3.36.3.3.2.8.1.1.13" -> EcCurve.BRAINPOOLP512R1
+                        else -> throw IllegalStateException("Unexpected curve OID $ecCurveString")
+                    }
+                }
+                "1.3.101.110" -> EcCurve.X25519
+                "1.3.101.111" -> EcCurve.X448
+                "1.3.101.112" -> EcCurve.ED25519
+                "1.3.101.113" -> EcCurve.ED448
+                else -> throw IllegalStateException("Unexpected OID $algorithmOid")
+            }
+            val keyMaterial = (subjectPublicKeyInfo.elements[1] as ASN1BitString).value
+            return when (curve) {
+                EcCurve.P256,
+                EcCurve.P384,
+                EcCurve.P521,
+                EcCurve.BRAINPOOLP256R1,
+                EcCurve.BRAINPOOLP320R1,
+                EcCurve.BRAINPOOLP384R1,
+                EcCurve.BRAINPOOLP512R1 -> {
+                    EcPublicKeyDoubleCoordinate.fromUncompressedPointEncoding(curve, keyMaterial)
+                }
+                EcCurve.ED25519,
+                EcCurve.X25519,
+                EcCurve.ED448,
+                EcCurve.X448 -> {
+                    EcPublicKeyOkp(curve, keyMaterial)
+                }
+            }
+        }
 
         /**
          * Gets a [EcPublicKey] from a COSE Key.

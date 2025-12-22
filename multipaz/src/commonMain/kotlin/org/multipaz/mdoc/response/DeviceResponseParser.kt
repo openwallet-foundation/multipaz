@@ -127,7 +127,7 @@ class DeviceResponseParser(
 
         // Returns the DeviceKey from the MSO
         //
-        private fun parseIssuerSigned(
+        suspend private fun parseIssuerSigned(
             expectedDocType: String,
             issuerSigned: DataItem,
             builder: Document.Builder

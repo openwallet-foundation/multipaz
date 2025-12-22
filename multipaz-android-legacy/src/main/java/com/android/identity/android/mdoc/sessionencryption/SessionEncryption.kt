@@ -13,19 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.multipaz.mdoc.sessionencryption
+package com.android.identity.android.mdoc.sessionencryption
 
+import com.android.identity.android.legacy.Crypto
+import com.android.identity.android.legacy.Hkdf
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Tagged
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.cbor.buildCborMap
-import org.multipaz.crypto.Hkdf
 import org.multipaz.mdoc.role.MdocRole
+import org.multipaz.mdoc.sessionencryption.EReaderKey
 
 /**
  * Helper class for implementing session encryption according to ISO/IEC 18013-5:2021
@@ -48,23 +49,17 @@ import org.multipaz.mdoc.role.MdocRole
 class SessionEncryption(
     val role: MdocRole,
     private val eSelfKey: EcPrivateKey,
-    private val remotePublicKey: EcPublicKey,
-    private val encodedSessionTranscript: ByteArray
+    remotePublicKey: EcPublicKey,
+    encodedSessionTranscript: ByteArray
 ) {
     private var sessionEstablishmentSent = false
-    private lateinit var skRemote: ByteArray
-    private lateinit var skSelf: ByteArray
+    private val skRemote: ByteArray
+    private val skSelf: ByteArray
     private var decryptedCounter = 1
     private var encryptedCounter = 1
     private var sendSessionEstablishment = true
 
-    private var initialized: Boolean = false
-
-    private suspend fun ensureInitialized() {
-        if (initialized) {
-            return
-        }
-        initialized = true
+    init {
         val sharedSecret = Crypto.keyAgreement(eSelfKey, remotePublicKey)
         val sessionTranscriptBytes = Cbor.encode(Tagged(24, Bstr(encodedSessionTranscript)))
         val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
@@ -116,11 +111,10 @@ class SessionEncryption(
      * @return the bytes of the `SessionEstablishment` or `SessionData`
      * CBOR as described above.
      */
-    suspend fun encryptMessage(
+    fun encryptMessage(
         messagePlaintext: ByteArray?,
         statusCode: Long?
     ): ByteArray {
-        ensureInitialized()
         var messageCiphertext: ByteArray? = null
         if (messagePlaintext != null) {
             // The IV and these constants are specified in ISO/IEC 18013-5:2021 clause 9.1.1.5.
@@ -167,10 +161,9 @@ class SessionEncryption(
      * @exception IllegalArgumentException if the passed in data does not conform to the CDDL.
      * @exception IllegalStateException if decryption fails.
      */
-    suspend fun decryptMessage(
+    fun decryptMessage(
         messageData: ByteArray
     ): Pair<ByteArray?, Long?> {
-        ensureInitialized()
         val map = Cbor.decode(messageData)
         val dataDataItem = map.getOrNull("data")
         var messageCiphertext: ByteArray? = null
@@ -245,4 +238,3 @@ private fun ByteStringBuilder.append(value: UInt) = apply {
     append((value shr 8).and(0xffU).toByte())
     append((value shr 0).and(0xffU).toByte())
 }
-

@@ -8,7 +8,7 @@ actual object DeviceCheck {
         secureArea: SecureArea,
         challenge: ByteString
     ): DeviceAttestationResult {
-        TODO("Not yet implemented")
+        TODO("generateAttestation not yet implemented")
     }
 
     actual suspend fun generateAssertion(
@@ -16,6 +16,6 @@ actual object DeviceCheck {
         deviceAttestationId: String,
         assertion: Assertion
     ): DeviceAssertion {
-        TODO("Not yet implemented")
+        TODO("generateAssertion not yet implemented")
     }
 }

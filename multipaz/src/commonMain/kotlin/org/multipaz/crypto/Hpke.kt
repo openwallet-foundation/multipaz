@@ -185,7 +185,7 @@ object Hpke {
         }.toByteArray()
     }
 
-    private fun labeledExtract(
+    private suspend fun labeledExtract(
         suiteId: ByteArray,
         kdf: Kdf,
         salt: ByteArray?, // Can be null for empty string salt
@@ -197,7 +197,7 @@ object Hpke {
         return Hkdf.extract(kdf.alg, labeledIkm, salt)
     }
 
-    private fun labeledExpand(
+    private suspend fun labeledExpand(
         suiteId: ByteArray,
         kdf: Kdf,
         prk: ByteArray,
@@ -211,7 +211,7 @@ object Hpke {
         return Hkdf.expand(kdf.alg, prk, labeledInfo, length)
     }
 
-    private fun extractAndExpand(
+    private suspend fun extractAndExpand(
         suiteId: ByteArray,
         kdf: Kdf,
         dh: ByteArray,
@@ -389,7 +389,7 @@ object Hpke {
          * @param aad additional authenticated data.
          * @return the encrypted message, including the authentication tag at the end.
          */
-        fun encrypt(
+        suspend fun encrypt(
             plaintext: ByteArray,
             aad: ByteArray
         ): ByteArray {
@@ -424,7 +424,7 @@ object Hpke {
          * @param context domain-specific context.
          * @param length length of the secret to generate.
          */
-        fun exportSecret(
+        suspend fun exportSecret(
             context: ByteArray,
             length: Int,
         ): ByteArray {
@@ -577,7 +577,7 @@ object Hpke {
          * @param aad additional authenticated data.
          * @return the decrypted message.
          */
-        fun decrypt(ciphertext: ByteArray, aad: ByteArray): ByteArray {
+        suspend fun decrypt(ciphertext: ByteArray, aad: ByteArray): ByteArray {
             require(hpkeContext.cipherSuite.aead != Aead.EXPORT_ONLY) {
                 "Cipher suite is configured for Aead.EXPORT_ONLY"
             }
@@ -609,7 +609,7 @@ object Hpke {
          * @param context domain-specific context.
          * @param length length of the secret to generate.
          */
-        fun exportSecret(
+        suspend fun exportSecret(
             context: ByteArray,
             length: Int,
         ): ByteArray {

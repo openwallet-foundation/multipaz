@@ -343,7 +343,7 @@ data class X509Cert(
         suspend fun build(): X509Cert =
             X509Cert(ByteString(ASN1.encode(buildASN1())))
 
-        override fun buildTbs(tbsList: MutableList<ASN1Object>) {
+        override suspend fun buildTbs(tbsList: MutableList<ASN1Object>) {
             val signatureAlgorithmSeq =
                 signingKey.algorithm.getSignatureAlgorithmSeq(signingKey.publicKey.curve)
 

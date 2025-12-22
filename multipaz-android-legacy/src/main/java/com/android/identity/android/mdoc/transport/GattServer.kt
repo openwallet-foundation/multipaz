@@ -27,8 +27,8 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.os.Build
+import com.android.identity.android.legacy.Hkdf
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.Hkdf
 import org.multipaz.util.Logger
 import org.multipaz.util.toHex
 import java.io.ByteArrayOutputStream

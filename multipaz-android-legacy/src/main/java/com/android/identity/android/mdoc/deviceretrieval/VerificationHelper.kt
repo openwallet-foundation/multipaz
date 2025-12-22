@@ -22,7 +22,9 @@ import android.nfc.NdefRecord
 import android.nfc.Tag
 import android.nfc.tech.IsoDep
 import android.util.Base64
+import com.android.identity.android.legacy.Crypto
 import com.android.identity.android.mdoc.deviceretrieval.VerificationHelper
+import com.android.identity.android.mdoc.sessionencryption.SessionEncryption
 import com.android.identity.android.mdoc.transport.DataTransport
 import com.android.identity.android.mdoc.transport.DataTransportBle
 import com.android.identity.android.mdoc.transport.DataTransportBleCentralClientMode
@@ -35,13 +37,11 @@ import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
-import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.engagement.EngagementGenerator
 import org.multipaz.mdoc.engagement.EngagementParser
-import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import kotlin.time.Clock

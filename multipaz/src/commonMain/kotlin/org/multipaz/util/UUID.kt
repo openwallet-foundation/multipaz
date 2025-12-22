@@ -2,6 +2,7 @@ package org.multipaz.util
 
 import org.multipaz.crypto.Crypto
 import kotlinx.io.bytestring.ByteStringBuilder
+import kotlin.random.Random
 
 /**
  *
@@ -48,7 +49,7 @@ data class UUID(
             )
         }
 
-        fun randomUUID(): UUID = Crypto.uuidGetRandom()
+        fun randomUUID(random: Random = Random.Default): UUID = UUID.fromByteArray(random.nextBytes(16))
     }
 }
 

@@ -351,7 +351,7 @@ abstract class Credential {
      * @param documentTypeRepository a [DocumentTypeRepository] or `null`.
      * @return a list of claims with values.
      */
-    abstract fun getClaims(
+    abstract suspend fun getClaims(
         documentTypeRepository: DocumentTypeRepository?
     ): List<Claim>
 

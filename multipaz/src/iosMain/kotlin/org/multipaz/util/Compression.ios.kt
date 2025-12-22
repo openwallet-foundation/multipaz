@@ -7,7 +7,7 @@ import platform.Foundation.compressUsingAlgorithm
 import platform.Foundation.decompressedDataUsingAlgorithm
 
 @OptIn(ExperimentalForeignApi::class)
-actual fun ByteArray.deflate(compressionLevel: Int): ByteArray {
+actual suspend fun ByteArray.deflate(compressionLevel: Int): ByteArray {
     require(compressionLevel >=0 && compressionLevel <= 9) {
         "Compression level $compressionLevel is invalid, must be between 0 and 9"
     }
@@ -21,7 +21,7 @@ actual fun ByteArray.deflate(compressionLevel: Int): ByteArray {
 }
 
 @OptIn(ExperimentalForeignApi::class)
-actual fun ByteArray.inflate(): ByteArray {
+actual suspend fun ByteArray.inflate(): ByteArray {
     val d = toNSData()
     val ret = d.decompressedDataUsingAlgorithm(
         algorithm = NSDataCompressionAlgorithmZlib,

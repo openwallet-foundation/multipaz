@@ -26,19 +26,17 @@ import org.multipaz.util.toBase64Url
  *
  * This class is immutable.
  *
- * @param compactSerialization the compact serialization of the SD-JWT+KB.
+ * @property compactSerialization the compact serialization of the SD-JWT+KB.
+ * @property sdJwt The SD-JWT part of the SD-JWT+KB.
  * @throws IllegalArgumentException if the given compact serialization is malformed.
  */
-class SdJwtKb(
-    val compactSerialization: String
-) {
-    /** The SD-JWT part of the SD-JWT+KB */
-    lateinit var sdJwt: SdJwt
-
-    private val kbHeader: String
-    private val kbBody: String
+class SdJwtKb private constructor(
+    val compactSerialization: String,
+    val sdJwt: SdJwt,
+    private val kbHeader: String,
+    private val kbBody: String,
     private val kbSignature: String
-
+) {
     /**
      * The body of the SD-JWT+KB.
      *
@@ -46,25 +44,6 @@ class SdJwtKb(
      */
     val jwtBody: JsonObject by lazy {
         Json.decodeFromString<JsonObject>(kbBody.fromBase64Url().decodeToString())
-    }
-
-    init {
-        if (compactSerialization.endsWith('~')) {
-            throw IllegalArgumentException("Given compact serialization appears to be a SD-JWT, not SD-JWT+KB")
-        }
-        val lastTilde = compactSerialization.lastIndexOf('~')
-        val sdJwtCompactSerialization = compactSerialization.substring(0, lastTilde + 1)
-        val kbJwt = compactSerialization.substring(lastTilde + 1, compactSerialization.length)
-
-        sdJwt = SdJwt(sdJwtCompactSerialization)
-
-        val kbJwtSplits = kbJwt.split(".")
-        if (kbJwtSplits.size != 3) {
-            throw IllegalArgumentException("KB-JWT in SD-JWT+KB didn't consist of three parts: $kbJwt")
-        }
-        kbHeader = kbJwtSplits[0]
-        kbBody = kbJwtSplits[1]
-        kbSignature = kbJwtSplits[2]
     }
 
     /**
@@ -78,7 +57,7 @@ class SdJwtKb(
      * @throws SignatureVerificationException if the issuer signature or key-binding signature failed to validate.
      * @throws IllegalStateException if [checkNonce], [checkAudience], or [checkCreationTime] returns false.
      */
-    fun verify(
+    suspend fun verify(
         issuerKey: EcPublicKey,
         checkNonce: (nonce: String) -> Boolean,
         checkAudience: (audience: String) -> Boolean,
@@ -109,5 +88,36 @@ class SdJwtKb(
         }
 
         return sdJwt.verify(issuerKey)
+    }
+
+    companion object {
+        /**
+         * Creates a [SdJwtKb] from compact serialization.
+         *
+         * @param compactSerialization the compact serialization of the SD-JWT.
+         * @return a [SdJwtKb] instance.
+         */
+        suspend fun fromCompactSerialization(compactSerialization: String): SdJwtKb {
+            if (compactSerialization.endsWith('~')) {
+                throw IllegalArgumentException("Given compact serialization appears to be a SD-JWT, not SD-JWT+KB")
+            }
+            val lastTilde = compactSerialization.lastIndexOf('~')
+            val sdJwtCompactSerialization = compactSerialization.substring(0, lastTilde + 1)
+            val kbJwt = compactSerialization.substring(lastTilde + 1, compactSerialization.length)
+
+            val sdJwt = SdJwt.fromCompactSerialization(sdJwtCompactSerialization)
+
+            val kbJwtSplits = kbJwt.split(".")
+            if (kbJwtSplits.size != 3) {
+                throw IllegalArgumentException("KB-JWT in SD-JWT+KB didn't consist of three parts: $kbJwt")
+            }
+            return SdJwtKb(
+                compactSerialization = compactSerialization,
+                sdJwt = sdJwt,
+                kbHeader = kbJwtSplits[0],
+                kbBody = kbJwtSplits[1],
+                kbSignature = kbJwtSplits[2]
+            )
+        }
     }
 }

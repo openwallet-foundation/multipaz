@@ -37,7 +37,7 @@ object JsonWebEncryption {
      * @param compressionLevel The compression level to use for DEFLATE compression or `null` to not compress.
      * @return the compact serialization of the JWE.
      */
-    fun encrypt(
+    suspend fun encrypt(
         claimsSet: JsonObject,
         recipientPublicKey: EcPublicKey,
         encAlg: Algorithm,
@@ -177,7 +177,7 @@ object JsonWebEncryption {
      * For ECDH-ES+AxxxKW, SuppPrivInfo is empty.
      * For ECDH-ES, this KDF is used to derive the KEK for AES Key Wrap.
      */
-    internal fun concatKDF(
+    internal suspend fun concatKDF(
         sharedSecretZ: ByteString,
         keyDataLenBits: Int, // Desired output key length in bits (e.g., 128, 192, 256 for AES Key Wrap)
         algorithmId: ByteString,

@@ -68,7 +68,7 @@ data class DeviceRequest private constructor(
      * @param sessionTranscript the session transcript to use.
      * @throws SignatureVerificationException if reader authentication fails.
      */
-    fun verifyReaderAuthentication(sessionTranscript: DataItem) {
+    suspend fun verifyReaderAuthentication(sessionTranscript: DataItem) {
         if (readerAuthAll_.isNotEmpty()) {
             val readerAuthenticationAll = buildCborArray {
                 add("ReaderAuthenticationAll")

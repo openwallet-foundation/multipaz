@@ -110,7 +110,7 @@ class CompressedStatusList(
     /**
      * Creates decompressed form of this status list.
      */
-    fun decompress(): StatusList {
+    suspend fun decompress(): StatusList {
         return StatusList(bitsPerItem, compressedStatusList.zlibInflate())
     }
 

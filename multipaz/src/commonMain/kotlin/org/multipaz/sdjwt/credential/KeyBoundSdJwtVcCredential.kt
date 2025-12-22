@@ -182,7 +182,7 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
     override val credentialType: String
         get() = CREDENTIAL_TYPE
 
-    override fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<JsonClaim> {
+    override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<JsonClaim> {
         return getClaimsImpl(documentTypeRepository)
     }
 }

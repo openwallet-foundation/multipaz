@@ -11,6 +11,7 @@ import org.multipaz.webtoken.WebTokenCheck
 import org.multipaz.webtoken.buildJwt
 import org.multipaz.webtoken.validateJwt
 import org.multipaz.testUtilSetupCryptoProvider
+import org.multipaz.util.truncateToWholeSeconds
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -38,7 +39,7 @@ class JsonWebSignatureTests {
         }
 
         val privateKey = Crypto.createEcPrivateKey(curve)
-        val now = Clock.System.now()
+        val now = Clock.System.now().truncateToWholeSeconds()
         val signingKeyCert = X509Cert.Builder(
             publicKey = privateKey.publicKey,
             signingKey = AsymmetricKey.anonymous(privateKey, privateKey.curve.defaultSigningAlgorithm),

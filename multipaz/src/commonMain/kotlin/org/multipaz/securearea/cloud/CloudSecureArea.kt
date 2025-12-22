@@ -335,7 +335,7 @@ open class CloudSecureArea protected constructor(
         skDevice = null
     }
 
-    private fun validateCloudBindingKeyAttestation(
+    private suspend fun validateCloudBindingKeyAttestation(
         attestation: X509CertChain,
         expectedDeviceChallenge: ByteArray,
         onAuthorizeRootOfTrust: (cloudSecureAreaRootOfTrust: X509Cert) -> Boolean,
@@ -447,7 +447,7 @@ open class CloudSecureArea protected constructor(
         }
     }
 
-    private fun encryptToCloud(messagePlaintext: ByteArray): ByteArray {
+    private suspend fun encryptToCloud(messagePlaintext: ByteArray): ByteArray {
         // The IV and these constants are specified in ISO/IEC 18013-5:2021 clause 9.1.1.5.
         val iv = buildByteString {
             appendUInt32(0x00000000)
@@ -458,7 +458,7 @@ open class CloudSecureArea protected constructor(
         return Crypto.encrypt(Algorithm.A128GCM, skDevice!!, iv, messagePlaintext)
     }
 
-    private fun decryptFromCloud(messageCiphertext: ByteArray): ByteArray {
+    private suspend fun decryptFromCloud(messageCiphertext: ByteArray): ByteArray {
         val iv = buildByteString {
             appendUInt32(0x00000000)
             val ivIdentifier = 0x00000000

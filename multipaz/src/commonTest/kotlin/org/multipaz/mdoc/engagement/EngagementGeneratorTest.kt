@@ -15,6 +15,7 @@
  */
 package org.multipaz.mdoc.engagement
 
+import kotlinx.coroutines.test.runTest
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
@@ -30,7 +31,7 @@ import kotlin.test.assertTrue
 
 class EngagementGeneratorTest {
     @Test
-    fun testNoConnectionMethodsOrOriginInfos() {
+    fun testNoConnectionMethodsOrOriginInfos() = runTest {
         val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val eg = EngagementGenerator(
             eSenderKey.publicKey,
@@ -47,7 +48,7 @@ class EngagementGeneratorTest {
 
     @Test
     @Throws(Exception::class)
-    fun testDeviceEngagementQrBleCentralClientMode() {
+    fun testDeviceEngagementQrBleCentralClientMode() = runTest {
         val eSenderKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val uuid = UUID.randomUUID()
         val eg = EngagementGenerator(

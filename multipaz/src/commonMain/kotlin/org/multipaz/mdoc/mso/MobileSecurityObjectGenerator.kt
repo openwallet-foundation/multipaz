@@ -106,7 +106,7 @@ class MobileSecurityObjectGenerator(
         valueDigestsInner.end()
     }
 
-    fun addValueDigests(
+    suspend fun addValueDigests(
         issuerNamespaces: IssuerNamespaces
     ) = apply {
         digestEmpty = false

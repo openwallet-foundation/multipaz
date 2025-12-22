@@ -2,6 +2,7 @@ package org.multipaz.provisioning.openid4vci
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -28,7 +29,7 @@ class OpenIDBackendUtilTest {
     @Test
     fun testClientAssertion() = runTest {
         val signingKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        val env = TestBackendEnvironment("$CLIENT_ID#my-kid", signingKey.publicKey)
+        val env = TestBackendEnvironment("$CLIENT_ID#my-kid", signingKey.publicKey.toJwk())
         withContext(env) {
             val assertionJwt = OpenID4VCIBackendUtil.createJwtClientAssertion(
                 signingKey = AsymmetricKey.NamedExplicit("my-kid", signingKey),
@@ -54,7 +55,7 @@ class OpenIDBackendUtilTest {
     fun testWalletAttestation() = runTest {
         val signingKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val attestedKey = Crypto.createEcPrivateKey(EcCurve.P256).publicKey
-        val env = TestBackendEnvironment("wallet-iss#wallet-kid", signingKey.publicKey)
+        val env = TestBackendEnvironment("wallet-iss#wallet-kid", signingKey.publicKey.toJwk())
         withContext(env) {
             val attestationJwt = OpenID4VCIBackendUtil.createWalletAttestation(
                 signingKey = AsymmetricKey.NamedExplicit("wallet-kid", signingKey),
@@ -84,7 +85,7 @@ class OpenIDBackendUtilTest {
     @Test
     fun testKeyAttestation() = runTest {
         val signingKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        val env = TestBackendEnvironment("my-iss#my-kid", signingKey.publicKey)
+        val env = TestBackendEnvironment("my-iss#my-kid", signingKey.publicKey.toJwk())
         withContext(env) {
             val ephemeralStorage = EphemeralStorage()
             val softwareSecureArea = SoftwareSecureArea.create(ephemeralStorage)
@@ -116,7 +117,7 @@ class OpenIDBackendUtilTest {
 
     inner class TestBackendEnvironment(
         val trustedKeyId: String,
-        val trustedKey: EcPublicKey
+        val trustedKeyJwk: JsonObject
     ): BackendEnvironment, Configuration {
         val storage = EphemeralStorage()
 
@@ -131,7 +132,7 @@ class OpenIDBackendUtilTest {
         override fun getValue(key: String): String? {
             if (key == "fake_trust") {
                 return buildJsonObject {
-                    put(trustedKeyId, trustedKey.toJwk())
+                    put(trustedKeyId, trustedKeyJwk)
                 }.toString()
             }
             return null

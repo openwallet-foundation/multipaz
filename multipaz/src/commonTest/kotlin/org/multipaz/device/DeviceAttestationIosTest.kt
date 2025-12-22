@@ -1,5 +1,6 @@
 package org.multipaz.device
 
+import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.encodeToByteString
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -11,7 +12,7 @@ class DeviceAttestationIosTest {
     private val deviceAssertion = DeviceAssertion.fromCbor(ASSERTION)
 
     @Test
-    fun testValidation() {
+    fun testValidation() = runTest {
         deviceAttestation.validate(
             DeviceAttestationValidationData(
                 attestationChallenge = attestationChallenge.encodeToByteString(),
@@ -27,7 +28,7 @@ class DeviceAttestationIosTest {
     }
 
     @Test
-    fun testAssertion() {
+    fun testAssertion() = runTest {
         deviceAttestation.validateAssertion(deviceAssertion)
     }
 

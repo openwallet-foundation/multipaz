@@ -45,7 +45,7 @@ class DeviceRequestParserTest {
     fun setup() = testUtilSetupCryptoProvider()
 
     @Test
-    fun testDeviceRequestParserWithVectors() {
+    fun testDeviceRequestParserWithVectors() = runTest {
         // Strip the #6.24 tag since our APIs expects just the bytes of SessionTranscript.
         val encodedSessionTranscriptBytes =
             TestVectors.ISO_18013_5_ANNEX_D_SESSION_TRANSCRIPT_BYTES.fromHex()
@@ -99,7 +99,7 @@ class DeviceRequestParserTest {
     }
 
     @Test
-    fun testDeviceRequestParserWithVectorsMalformedReaderSignature() {
+    fun testDeviceRequestParserWithVectorsMalformedReaderSignature() = runTest {
         // Strip the #6.24 tag since our APIs expects just the bytes of SessionTranscript.
         val encodedSessionTranscriptBytes =
             TestVectors.ISO_18013_5_ANNEX_D_SESSION_TRANSCRIPT_BYTES.fromHex()

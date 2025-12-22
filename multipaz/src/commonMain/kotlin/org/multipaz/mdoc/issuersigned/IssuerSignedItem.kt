@@ -25,7 +25,7 @@ data class IssuerSignedItem(
      *
      * @param algorithm the digest algorithm to use, e.g. [Algorithm.SHA256].
      */
-    fun calculateDigest(algorithm: Algorithm): ByteString {
+    suspend fun calculateDigest(algorithm: Algorithm): ByteString {
         val encodeIssuerSignedItemBytes =
             Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(toDataItem()))))
         return ByteString(Crypto.digest(algorithm, encodeIssuerSignedItemBytes))

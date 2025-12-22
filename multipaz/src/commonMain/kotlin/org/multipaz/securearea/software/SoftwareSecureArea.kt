@@ -137,7 +137,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         }
     }
 
-    private fun derivePrivateKeyEncryptionKey(
+    private suspend fun derivePrivateKeyEncryptionKey(
         encodedPublicKey: ByteArray,
         passphrase: String
     ): ByteArray {

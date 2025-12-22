@@ -302,7 +302,7 @@ private suspend fun readSystemOfRecord(state: IssuanceState): DataItem {
     }
 }
 
-private fun keyHash(key: EcPublicKey): String =
+private suspend fun keyHash(key: EcPublicKey): String =
     key.toJwkThumbprint(Algorithm.SHA256).toByteArray().toBase64Url()
 
 private data class KeyAndId(val key: EcPublicKey, val id: String)

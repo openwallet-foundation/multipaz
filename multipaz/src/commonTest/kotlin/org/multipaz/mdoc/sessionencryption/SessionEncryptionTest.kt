@@ -15,6 +15,7 @@
  */
 package org.multipaz.mdoc.sessionencryption
 
+import kotlinx.coroutines.test.runTest
 import org.multipaz.cbor.Cbor
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -37,7 +38,7 @@ class SessionEncryptionTest {
     fun setup() = testUtilSetupCryptoProvider()
 
     @Test
-    fun testReaderAgainstVectors() {
+    fun testReaderAgainstVectors() = runTest {
         val eReaderKey: EcPrivateKey = EcPrivateKeyDoubleCoordinate(
             EcCurve.P256,
             TestVectors.ISO_18013_5_ANNEX_D_EPHEMERAL_READER_KEY_D.fromHex(),
@@ -98,7 +99,7 @@ class SessionEncryptionTest {
     }
 
     @Test
-    fun testDeviceAgainstVectors() {
+    fun testDeviceAgainstVectors() = runTest {
         val eDeviceKey: EcPrivateKey = EcPrivateKeyDoubleCoordinate(
             EcCurve.P256,
             TestVectors.ISO_18013_5_ANNEX_D_EPHEMERAL_DEVICE_KEY_D.fromHex(),
@@ -156,7 +157,7 @@ class SessionEncryptionTest {
         )
     }
 
-    private fun testCurve(curve: EcCurve) {
+    private suspend fun testCurve(curve: EcCurve) {
         // TODO: use assumeTrue() when available in kotlin-test
         if (!Crypto.supportedCurves.contains(curve)) {
             println("Curve $curve not supported on platform")
@@ -213,47 +214,47 @@ class SessionEncryptionTest {
     }
 
     @Test
-    fun testP256() {
+    fun testP256() = runTest {
         testCurve(EcCurve.P256)
     }
 
     @Test
-    fun testP384() {
+    fun testP384() = runTest {
         testCurve(EcCurve.P384)
     }
 
     @Test
-    fun testP521() {
+    fun testP521() = runTest {
         testCurve(EcCurve.P521)
     }
 
     @Test
-    fun testBrainpool256() {
+    fun testBrainpool256() = runTest {
         testCurve(EcCurve.BRAINPOOLP256R1)
     }
 
     @Test
-    fun testBrainpool320() {
+    fun testBrainpool320() = runTest {
         testCurve(EcCurve.BRAINPOOLP320R1)
     }
 
     @Test
-    fun testBrainpool384() {
+    fun testBrainpool384() = runTest {
         testCurve(EcCurve.BRAINPOOLP384R1)
     }
 
     @Test
-    fun testBrainpool521() {
+    fun testBrainpool521() = runTest {
         testCurve(EcCurve.BRAINPOOLP512R1)
     }
 
     @Test
-    fun testX25519() {
+    fun testX25519() = runTest {
         testCurve(EcCurve.X25519)
     }
 
     @Test
-    fun testX448() {
+    fun testX448() = runTest {
         testCurve(EcCurve.X448)
     }
 }

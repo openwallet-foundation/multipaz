@@ -42,7 +42,7 @@ fun CredentialClaimsViewerScreen(
         if (credentialInfo == null) {
             Text("No credential for documentId ${documentId} credentialId ${credentialId}")
         } else {
-            for (claim in credentialInfo.credential.getClaims(documentTypeRepository)) {
+            for (claim in credentialInfo.claims) {
                 Column(
                     Modifier.fillMaxWidth()
                 ) {

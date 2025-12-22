@@ -5,12 +5,14 @@ import kotlin.math.min
 /**
  * Compresses data using DEFLATE algorithm according to [RFC 1951](https://www.ietf.org/rfc/rfc1951.txt).
  *
+ * The implementation may not support [compressionLevel] and use a fixed level instead.
+ *
  * @receiver the data to compress.
  * @param compressionLevel must be between 0 and 9, both inclusive.
  * @return the compressed data.
  * @throws IllegalArgumentException if [compressionLevel] isn't valid.
  */
-expect fun ByteArray.deflate(compressionLevel: Int = 5): ByteArray
+expect suspend fun ByteArray.deflate(compressionLevel: Int = 5): ByteArray
 
 /**
  * Decompresses data compressed DEFLATE algorithm according to [RFC 1951](https://www.ietf.org/rfc/rfc1951.txt).
@@ -19,7 +21,7 @@ expect fun ByteArray.deflate(compressionLevel: Int = 5): ByteArray
  * @return the decompressed data.
  * @throws IllegalArgumentException if the given data is invalid
  */
-expect fun ByteArray.inflate(): ByteArray
+expect suspend fun ByteArray.inflate(): ByteArray
 
 
 /**
@@ -65,7 +67,7 @@ private val zlibWrapperHeader = byteArrayOf(120, -38)
  * @return the compressed data.
  * @throws IllegalArgumentException if [compressionLevel] isn't valid.
  */
-fun ByteArray.zlibDeflate(compressionLevel: Int = 9): ByteArray =
+suspend fun ByteArray.zlibDeflate(compressionLevel: Int = 9): ByteArray =
     zlibWrapperHeader + deflate() + adler32()
 
 
@@ -78,7 +80,7 @@ fun ByteArray.zlibDeflate(compressionLevel: Int = 9): ByteArray =
  * @return the decompressed data.
  * @throws IllegalArgumentException if the given data is invalid
  */
-fun ByteArray.zlibInflate(): ByteArray {
+suspend fun ByteArray.zlibInflate(): ByteArray {
     if (!(sliceArray(0..<2) contentEquals zlibWrapperHeader)) {
         throw IllegalArgumentException("invalid compression (wrong header)")
     }

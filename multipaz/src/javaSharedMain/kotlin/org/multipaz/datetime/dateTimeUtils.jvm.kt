@@ -5,21 +5,20 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.toJavaLocalDate
 import kotlinx.datetime.toJavaLocalDateTime
 import java.time.ZoneId
-import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
-import org.multipaz.datetime.FormatStyle as MultipazFormsatStyle
+import org.multipaz.datetime.FormatStyle as MultipazFormatStyle
 
 actual fun LocalDate.formatLocalized(
-    dateStyle: MultipazFormsatStyle
+    dateStyle: MultipazFormatStyle
 ): String {
     val formatter = DateTimeFormatter.ofLocalizedDate(dateStyle.toJavaFormatStyle())
     return this.toJavaLocalDate().format(formatter)
 }
 
 actual fun LocalDateTime.formatLocalized(
-    dateStyle: MultipazFormsatStyle,
-    timeStyle: MultipazFormsatStyle
+    dateStyle: MultipazFormatStyle,
+    timeStyle: MultipazFormatStyle
 ): String {
     val formatter = DateTimeFormatter.ofLocalizedDateTime(
         dateStyle.toJavaFormatStyle(),
@@ -30,11 +29,11 @@ actual fun LocalDateTime.formatLocalized(
         .format(formatter)
 }
 
-private fun MultipazFormsatStyle.toJavaFormatStyle(): FormatStyle {
+private fun MultipazFormatStyle.toJavaFormatStyle(): FormatStyle {
     return when (this) {
-        MultipazFormsatStyle.SHORT -> FormatStyle.SHORT
-        MultipazFormsatStyle.MEDIUM -> FormatStyle.MEDIUM
-        MultipazFormsatStyle.LONG -> FormatStyle.LONG
-        MultipazFormsatStyle.FULL -> FormatStyle.FULL
+        MultipazFormatStyle.SHORT -> FormatStyle.SHORT
+        MultipazFormatStyle.MEDIUM -> FormatStyle.MEDIUM
+        MultipazFormatStyle.LONG -> FormatStyle.LONG
+        MultipazFormatStyle.FULL -> FormatStyle.FULL
     }
 }

@@ -70,7 +70,7 @@ data class IssuerNamespaces(
      * @param digestAlgorithm the algorithm to use for calculating the digests.
      * @return a map from namespaces into a map from digestId to the digest.
      */
-    fun getValueDigests(digestAlgorithm: Algorithm): Map<String, Map<Long, ByteString>> {
+    suspend fun getValueDigests(digestAlgorithm: Algorithm): Map<String, Map<Long, ByteString>> {
         val ret = mutableMapOf<String, Map<Long, ByteString>>()
         data.forEach { (namespace, innerMap) ->
             val innerMapTransformed = mutableMapOf<Long, ByteString>()

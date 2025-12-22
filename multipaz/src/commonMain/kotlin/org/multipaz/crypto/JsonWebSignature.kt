@@ -28,7 +28,7 @@ object JsonWebSignature {
      * @return the compact serialization with the JWS.
      */
     @Deprecated("Use org.multipaz.jwt.buildJwt instead")
-    fun sign(
+    suspend fun sign(
         key: EcPrivateKey,
         signatureAlgorithm: Algorithm,
         claimsSet: JsonObject,
@@ -101,7 +101,7 @@ object JsonWebSignature {
      * @param publicKey the key to use for verification
      * @throws Throwable if verification fails.
      */
-    fun verify(
+    suspend fun verify(
         jws: String,
         publicKey: EcPublicKey
     ) {

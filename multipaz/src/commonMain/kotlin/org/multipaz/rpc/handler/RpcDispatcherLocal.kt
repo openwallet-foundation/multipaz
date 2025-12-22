@@ -84,13 +84,13 @@ class RpcDispatcherLocal private constructor(
         }
     }
 
-    fun decodeStateParameter(stateParameter: DataItem): Any {
+    suspend fun decodeStateParameter(stateParameter: DataItem): Any {
         val stateArray = stateParameter.asArray
         val item = targetMap[stateArray[0].asTstr]!!
         return (item.stateDeserializer)(Cbor.decode(cipher.decrypt(stateArray[1].asBstr)))
     }
 
-    fun encodeStateResult(result: Any): DataItem {
+    suspend fun encodeStateResult(result: Any): DataItem {
         val target = stateMap[result::class]
             ?: throw IllegalStateException("${result::class.simpleName} was not registered")
         return CborArray(mutableListOf(
@@ -204,7 +204,7 @@ class RpcDispatcherLocal private constructor(
             }
         }
 
-        private fun stateDataItem(
+        private suspend fun stateDataItem(
             cipher: SimpleCipher,
             previous: DataItem,
             previousDecryptedState: ByteArray,

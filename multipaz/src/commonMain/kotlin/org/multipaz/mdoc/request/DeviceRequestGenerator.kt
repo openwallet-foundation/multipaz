@@ -157,7 +157,7 @@ class DeviceRequestGenerator(
      * for readerKey.
      * @return the [DeviceRequestGenerator].
      */
-    fun addDocumentRequest(
+    suspend fun addDocumentRequest(
         docType: String,
         itemsToRequest: Map<String, Map<String, Boolean>>,
         requestInfo: Map<String, ByteArray>?,

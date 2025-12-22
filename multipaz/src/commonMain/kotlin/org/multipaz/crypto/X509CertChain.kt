@@ -73,7 +73,8 @@ data class X509CertChain(
      *
      * @return true if every certificate in the chain is signed by the next one, false otherwise.
      */
-    fun validate(): Boolean = Crypto.validateCertChain(this)
+    // TODO: also include other checks including validity dates, etc
+    suspend fun validate(): Boolean = Crypto.validateCertChain(this)
 
     companion object {
         /**

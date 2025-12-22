@@ -63,6 +63,10 @@ class JsonWebEncryptionTests {
             println("Curve $curve not supported on platform")
             return@runTest
         }
+        if (!Crypto.supportedEncryptionAlgorithms.contains(encAlg)) {
+            println("Encryption algorithm $encAlg not supported on platform")
+            return@runTest
+        }
         val recipientKey = Crypto.createEcPrivateKey(curve)
         val claims = buildJsonObject {
             put("vp_token", buildJsonObject {
@@ -108,7 +112,7 @@ class JsonWebEncryptionTests {
     }
 
     @Test
-    fun testConcatKdf() {
+    fun testConcatKdf() = runTest {
         // This checks our ConcatKdf() implementation works by using test vectors from
         //
         //  https://datatracker.ietf.org/doc/html/rfc7518#appendix-C

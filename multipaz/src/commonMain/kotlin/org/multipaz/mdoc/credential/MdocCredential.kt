@@ -236,7 +236,7 @@ class MdocCredential : SecureAreaBoundCredential {
         super.certify(issuerProvidedAuthenticationData, validFrom, validUntil)
     }
 
-    override fun getClaims(
+    override suspend fun getClaims(
         documentTypeRepository: DocumentTypeRepository?
     ): List<MdocClaim> {
         val dt = documentTypeRepository?.getDocumentTypeForMdoc(docType)

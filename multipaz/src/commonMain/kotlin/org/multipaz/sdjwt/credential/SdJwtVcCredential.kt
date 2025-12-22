@@ -29,11 +29,11 @@ interface SdJwtVcCredential {
      */
     val issuerProvidedData: ByteArray
 
-    fun getClaimsImpl(
+    suspend fun getClaimsImpl(
         documentTypeRepository: DocumentTypeRepository?
     ): List<JsonClaim> {
         val ret = mutableListOf<JsonClaim>()
-        val sdJwt = SdJwt(issuerProvidedData.decodeToString())
+        val sdJwt = SdJwt.fromCompactSerialization(issuerProvidedData.decodeToString())
         val issuerKey = sdJwt.x5c!!.certificates.first().ecPublicKey
         val processedJwt = sdJwt.verify(issuerKey)
 

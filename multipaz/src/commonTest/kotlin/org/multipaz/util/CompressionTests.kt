@@ -1,5 +1,6 @@
 package org.multipaz.util
 
+import kotlinx.coroutines.test.runTest
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -8,18 +9,18 @@ import kotlin.test.assertTrue
 
 class CompressionTests {
     
-    @Test fun roundTripLevel0() { roundTrip(0) }
-    @Test fun roundTripLevel1() { roundTrip(1) }
-    @Test fun roundTripLevel2() { roundTrip(2) }
-    @Test fun roundTripLevel3() { roundTrip(3) }
-    @Test fun roundTripLevel4() { roundTrip(4) }
-    @Test fun roundTripLevel5() { roundTrip(5) }
-    @Test fun roundTripLevel6() { roundTrip(6) }
-    @Test fun roundTripLevel7() { roundTrip(7) }
-    @Test fun roundTripLevel8() { roundTrip(8) }
-    @Test fun roundTripLevel9() { roundTrip(9) }
+    @Test fun roundTripLevel0() = runTest { roundTrip(0) }
+    @Test fun roundTripLevel1() = runTest { roundTrip(1) }
+    @Test fun roundTripLevel2() = runTest { roundTrip(2) }
+    @Test fun roundTripLevel3() = runTest { roundTrip(3) }
+    @Test fun roundTripLevel4() = runTest { roundTrip(4) }
+    @Test fun roundTripLevel5() = runTest { roundTrip(5) }
+    @Test fun roundTripLevel6() = runTest { roundTrip(6) }
+    @Test fun roundTripLevel7() = runTest { roundTrip(7) }
+    @Test fun roundTripLevel8() = runTest { roundTrip(8) }
+    @Test fun roundTripLevel9() = runTest { roundTrip(9) }
 
-    fun roundTrip(level: Int) {
+    suspend fun roundTrip(level: Int) {
         val sb = StringBuilder()
         repeat(1000) {
             sb.append("Hello Multipaz!\n")
@@ -35,7 +36,7 @@ class CompressionTests {
     }
 
     @Test
-    fun testVector() {
+    fun testVector() = runTest {
         val sb = StringBuilder()
         repeat(1000) {
             sb.append("Hello Multipaz!\n")
@@ -49,7 +50,7 @@ class CompressionTests {
     }
 
     @Test
-    fun inflateWithUnsupportedLevel() {
+    fun inflateWithUnsupportedLevel() = runTest {
         assertFailsWith(IllegalArgumentException::class) { byteArrayOf(1, 2).deflate(-10) }
         assertFailsWith(IllegalArgumentException::class) { byteArrayOf(1, 2).deflate(-1) }
         assertFailsWith(IllegalArgumentException::class) { byteArrayOf(1, 2).deflate(10) }
@@ -57,21 +58,21 @@ class CompressionTests {
     }
 
     @Test
-    fun inflateWithInvalidData() {
+    fun inflateWithInvalidData() = runTest {
         assertFailsWith(IllegalArgumentException::class) {
             byteArrayOf(1, 2).inflate()
         }
     }
 
     @Test
-    fun zlibRoundtripFixed() {
+    fun zlibRoundtripFixed() = runTest {
         // NB: StatusListTest also indirectly tests some pre-defined compressed data.
         val data = byteArrayOf(42, 57, 70, 11, 17)
         assertContentEquals(data, data.zlibDeflate().zlibInflate())
     }
 
     @Test
-    fun zlibHeader() {
+    fun zlibHeader() = runTest {
         val data = byteArrayOf(42, 57, 70, 11, 17)
         val compressed = data.zlibDeflate()
         compressed[0] = 0
@@ -81,7 +82,7 @@ class CompressionTests {
     }
 
     @Test
-    fun zlibChecksum() {
+    fun zlibChecksum() = runTest {
         val data = byteArrayOf(42, 57, 70, 11, 17)
         val compressed = data.zlibDeflate()
         compressed[compressed.size - 1] = 0
@@ -91,7 +92,7 @@ class CompressionTests {
     }
 
     @Test
-    fun zlibRoundtripRandom() {
+    fun zlibRoundtripRandom() = runTest {
         val data = Random.nextBytes(64000)
         assertContentEquals(data, data.zlibDeflate().zlibInflate())
     }

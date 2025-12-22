@@ -43,7 +43,7 @@ class DeviceRequestTest {
 
     // Test against the test vector in Annex D of 18013-5:2021
     @Test
-    fun testAgainstVector2021() {
+    fun testAgainstVector2021() = runTest {
         val encodedSessionTranscriptBytes =
             TestVectors.ISO_18013_5_ANNEX_D_SESSION_TRANSCRIPT_BYTES.fromHex()
         val sessionTranscript = Cbor.decode(encodedSessionTranscriptBytes).asTaggedEncodedCbor
@@ -96,7 +96,7 @@ class DeviceRequestTest {
     }
 
     @Test
-    fun testAgainstMalformedReaderSignature() {
+    fun testAgainstMalformedReaderSignature() = runTest {
         val encodedSessionTranscriptBytes =
             TestVectors.ISO_18013_5_ANNEX_D_SESSION_TRANSCRIPT_BYTES.fromHex()
         val sessionTranscript = Cbor.decode(encodedSessionTranscriptBytes).asTaggedEncodedCbor

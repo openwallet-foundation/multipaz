@@ -137,7 +137,7 @@ actual fun platformHttpClientEngineFactory(): HttpClientEngineFactory<*> = Darwi
 
 actual val platformSecureAreaHasKeyAgreement = true
 
-actual fun getAppToAppOrigin(): String {
+actual suspend fun getAppToAppOrigin(): String {
     TODO("Add support for iOS")
 }
 

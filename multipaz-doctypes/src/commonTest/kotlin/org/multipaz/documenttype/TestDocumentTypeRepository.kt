@@ -1,8 +1,6 @@
 package org.multipaz.documenttype
 
 import org.multipaz.cbor.Bstr
-import org.multipaz.cbor.CborArray
-import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
@@ -20,6 +18,17 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class TestDocumentTypeRepository {
+    companion object {
+        // No timezone DB in Kotlin/JS so just use offsets.
+        //
+        // NOTE: This doesn't account for DST nor does it account for political events like
+        //   the timezone offset change. So please don't copy any of this around.
+        private const val TZ_AMERICA_LOS_ANGELES = "UTC-08:00"
+        private const val TZ_AMERICA_NEW_YORK = "UTC-05:00"
+        private const val TZ_EUROPE_COPENHAGEN = "UTC+01:00"
+        private const val TZ_AUSTRALIA_BRISBANE = "UTC+10:00"
+        private const val TZ_PACIFIC_HONOLULU = "UTC-10:00"
+    }
 
     @Test
     fun testDocumentTypeRepositoryDrivingLicense() {
@@ -143,7 +152,7 @@ class TestDocumentTypeRepository {
                 false
             ).renderValue(
                 Instant.parse("1976-02-03T05:30:00Z").toDataItemDateTimeString(),
-                timeZone = TimeZone.of("Europe/Copenhagen")
+                timeZone = TimeZone.of(TZ_EUROPE_COPENHAGEN)
             )
         )
         assertEquals(
@@ -168,12 +177,12 @@ class TestDocumentTypeRepository {
                         Instant.parse("1976-02-03T05:30:00Z").toDataItemDateTimeString()
                     )
                 },
-                timeZone = TimeZone.of("Europe/Copenhagen")
+                timeZone = TimeZone.of(TZ_EUROPE_COPENHAGEN)
             )
         )
         // ... if using a full-date we render the point in time as midnight. The timezone
         // isn't taken into account, check a couple of different timezones
-        for (zoneId in listOf("Europe/Copenhagen", "Australia/Brisbane", "Pacific/Honolulu")) {
+        for (zoneId in listOf(TZ_EUROPE_COPENHAGEN, TZ_AUSTRALIA_BRISBANE, TZ_PACIFIC_HONOLULU)) {
             assertEquals(
                 "1976-02-03T00:00:00",
                 MdocDataElement(
@@ -224,28 +233,28 @@ class TestDocumentTypeRepository {
             "1976-02-03",
             mdlNs.dataElements["birth_date"]?.renderValue(
                 Instant.parse("1976-02-03T05:30:00Z").toDataItemDateTimeString(),
-                timeZone = TimeZone.of("Europe/Copenhagen")
+                timeZone = TimeZone.of(TZ_EUROPE_COPENHAGEN)
             )
         )
         assertEquals(
             "1976-02-02",
             mdlNs.dataElements["birth_date"]?.renderValue(
                 Instant.parse("1976-02-03T05:30:00Z").toDataItemDateTimeString(),
-                timeZone = TimeZone.of("America/Los_Angeles")
+                timeZone = TimeZone.of(TZ_AMERICA_LOS_ANGELES)
             )
         )
         assertEquals(
             "1976-02-03",
             mdlNs.dataElements["birth_date"]?.renderValue(
                 LocalDate.parse("1976-02-03").toDataItemFullDate(),
-                timeZone = TimeZone.of("Europe/Copenhagen")
+                timeZone = TimeZone.of(TZ_EUROPE_COPENHAGEN)
             )
         )
         assertEquals(
             "1976-02-03",
             mdlNs.dataElements["birth_date"]?.renderValue(
                 LocalDate.parse("1976-02-03").toDataItemFullDate(),
-                timeZone = TimeZone.of("America/Los_Angeles")
+                timeZone = TimeZone.of(TZ_AMERICA_LOS_ANGELES)
             )
         )
         assertEquals(
@@ -257,7 +266,7 @@ class TestDocumentTypeRepository {
                         Instant.parse("1976-02-03T05:30:00Z").toDataItemDateTimeString()
                     )
                 },
-                timeZone = TimeZone.of("America/New_York")
+                timeZone = TimeZone.of(TZ_AMERICA_NEW_YORK)
             )
         )
         assertEquals(
@@ -266,7 +275,7 @@ class TestDocumentTypeRepository {
                 buildCborMap {
                     put("birth_date", LocalDate.parse("1976-02-03").toDataItemFullDate())
                 },
-                timeZone = TimeZone.of("America/New_York")
+                timeZone = TimeZone.of(TZ_AMERICA_NEW_YORK)
             )
         )
 

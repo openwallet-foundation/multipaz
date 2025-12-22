@@ -1,5 +1,6 @@
 package org.multipaz.crypto
 
+import kotlinx.coroutines.test.runTest
 import org.multipaz.testUtilSetupCryptoProvider
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -10,11 +11,11 @@ class EcPrivateKeyTests {
     @BeforeTest
     fun setup() = testUtilSetupCryptoProvider()
 
-    fun createAndCheck(curve: EcCurve) {
+    fun createAndCheck(curve: EcCurve) = runTest {
         // TODO: use assumeTrue() when available in kotlin-test
         if (!Crypto.supportedCurves.contains(curve)) {
             println("Curve $curve not supported on platform")
-            return
+            return@runTest
         }
 
         val privateKey = Crypto.createEcPrivateKey(curve)

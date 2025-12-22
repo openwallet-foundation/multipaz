@@ -352,7 +352,10 @@ class App private constructor (val promptModel: PromptModel) {
     }
 
     private suspend fun documentModelInit() {
-        documentModel = DocumentModel(documentStore = documentStore)
+        documentModel = DocumentModel(
+            documentStore = documentStore,
+            documentTypeRepository = documentTypeRepository
+        )
     }
 
     private suspend fun trustManagersInit() {
@@ -408,7 +411,6 @@ class App private constructor (val promptModel: PromptModel) {
                     5RulaSWThWBfMyRjsfVODkosHLCDnbPV
                     -----END PUBLIC KEY-----
                 """.trimIndent().trim(),
-            EcCurve.P384
         )
         EcPrivateKey.fromPem(
             """
@@ -432,7 +434,6 @@ class App private constructor (val promptModel: PromptModel) {
                     5RulaSWThWBfMyRjsfVODkosHLCDnbPV
                     -----END PUBLIC KEY-----
                 """.trimIndent().trim(),
-            EcCurve.P384
         )
         EcPrivateKey.fromPem(
             """

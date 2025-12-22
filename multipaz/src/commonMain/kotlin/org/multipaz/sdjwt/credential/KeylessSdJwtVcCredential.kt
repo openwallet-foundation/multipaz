@@ -84,7 +84,7 @@ class KeylessSdJwtVcCredential : Credential, SdJwtVcCredential {
         }
     }
 
-    override fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<JsonClaim> {
+    override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<JsonClaim> {
         return getClaimsImpl(documentTypeRepository)
     }
 }

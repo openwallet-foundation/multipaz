@@ -14,7 +14,7 @@ fun isCloudKeyAttestation(chain: X509CertChain): Boolean {
         .getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid) != null
 }
 
-fun validateCloudKeyAttestation(
+suspend fun validateCloudKeyAttestation(
     chain: X509CertChain,
     nonce: ByteString,
     trustedRootKeys: Set<ByteString>
