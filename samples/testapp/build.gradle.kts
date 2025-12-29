@@ -1,5 +1,8 @@
+@file:OptIn(ExperimentalWasmDsl::class)
+
 import org.gradle.kotlin.dsl.implementation
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -35,7 +38,13 @@ kotlin {
             allWarningsAsErrors = true
         }
     }
-    
+
+    wasmJs {
+        browser {
+        }
+        binaries.executable()
+    }
+
     listOf(
         iosX64(),
         iosArm64(),
@@ -79,6 +88,12 @@ kotlin {
                 implementation(libs.androidx.biometrics)
                 implementation(libs.ktor.client.android)
                 implementation(libs.process.phoenix)
+            }
+        }
+
+        val wasmJsMain by getting {
+            dependencies {
+                implementation(libs.ktor.client.js)
             }
         }
 
@@ -187,6 +202,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().all {
 tasks["compileKotlinIosX64"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinIosArm64"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinIosSimulatorArm64"].dependsOn("kspCommonMainKotlinMetadata")
+tasks["compileKotlinWasmJs"].dependsOn("kspCommonMainKotlinMetadata")
 
 subprojects {
 	apply(plugin = "org.jetbrains.dokka")

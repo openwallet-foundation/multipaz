@@ -87,8 +87,14 @@ class CborTests {
     // specific way to print float and doubles since there is no requirement in RFC 8949 on
     // how these should be formatted. Therefore, we need to adjust what we expect depending
     // on the platform.
+    private val isJsOrWasm: Boolean by lazy { isJs || isWasm }
+
     private val isJs: Boolean by lazy {
         Platform.name.startsWith("JavaScript")
+    }
+
+    private val isWasm: Boolean by lazy {
+        Platform.name.startsWith("WebAssembly")
     }
 
     @Test
@@ -97,8 +103,8 @@ class CborTests {
         assertEquals(if (isJs) "0.10000000149011612" else "0.1", encodeFloat(0.1f))
         assertEquals(if (isJs) "42" else "42.0", encodeFloat(42.0f))
         assertEquals(if (isJs) "42.099998474121094" else "42.1", encodeFloat(42.1f))
-        assertEquals(if (isJs) "1.401298464324817e-45" else "1.4E-45", encodeFloat(Float.MIN_VALUE))
-        assertEquals(if (isJs) "3.4028234663852886e+38" else "3.4028235E38", encodeFloat(Float.MAX_VALUE))
+        assertEquals(if (isJs) "1.401298464324817e-45" else if (isWasm) "1e-45" else "1.4E-45", encodeFloat(Float.MIN_VALUE))
+        assertEquals(if (isJs) "3.4028234663852886e+38" else if (isWasm) "3.4028235e+38" else "3.4028235E38", encodeFloat(Float.MAX_VALUE))
         assertEquals("NaN", encodeFloat(Float.NaN))
         assertEquals("-Infinity", encodeFloat(Float.NEGATIVE_INFINITY))
         assertEquals("Infinity", encodeFloat(Float.POSITIVE_INFINITY))
@@ -110,8 +116,8 @@ class CborTests {
         assertEquals("0.1", encodeDouble(0.1))
         assertEquals(if (isJs) "42" else "42.0", encodeDouble(42.0))
         assertEquals("42.1", encodeDouble(42.1))
-        assertEquals(if (isJs) "5e-324" else "4.9E-324", encodeDouble(Double.MIN_VALUE))
-        assertEquals(if (isJs) "1.7976931348623157e+308" else "1.7976931348623157E308", encodeDouble(Double.MAX_VALUE))
+        assertEquals(if (isJsOrWasm) "5e-324" else "4.9E-324", encodeDouble(Double.MIN_VALUE))
+        assertEquals(if (isJsOrWasm) "1.7976931348623157e+308" else "1.7976931348623157E308", encodeDouble(Double.MAX_VALUE))
         assertEquals("NaN", encodeDouble(Double.NaN))
         assertEquals("-Infinity", encodeDouble(Double.NEGATIVE_INFINITY))
         assertEquals("Infinity", encodeDouble(Double.POSITIVE_INFINITY))
@@ -661,10 +667,10 @@ class CborTests {
         TestVector("1.5", "f93e00"),
         TestVector(if (isJs) "65504" else "65504.0", "f97bff"),
         TestVector(if (isJs) "100000" else "100000.0", "fa47c35000"),
-        TestVector(if (isJs) "3.4028234663852886e+38" else "3.4028235E38", "fa7f7fffff"),
-        TestVector(if (isJs) "1e+300" else "1.0E300", "fb7e37e43c8800759c"),
-        TestVector(if (isJs) "5.960464477539063e-8" else "5.9604645E-8", "f90001"),
-        TestVector(if (isJs) "0.00006103515625" else "6.1035156E-5", "f90400"),
+        TestVector(if (isJs) "3.4028234663852886e+38" else if (isWasm) "3.4028235e+38" else "3.4028235E38", "fa7f7fffff"),
+        TestVector(if (isJsOrWasm) "1e+300" else "1.0E300", "fb7e37e43c8800759c"),
+        TestVector(if (isJs) "5.960464477539063e-8" else if (isWasm) "5.9604645e-8" else "5.9604645E-8", "f90001"),
+        TestVector(if (isJs) "0.00006103515625" else if (isWasm) "0.000061035156" else "6.1035156E-5", "f90400"),
         TestVector(if (isJs) "-4" else "-4.0", "f9c400"),
         TestVector("-4.1", "fbc010666666666666"),
         TestVector("Infinity", "f97c00"),
@@ -684,7 +690,7 @@ class CborTests {
         TestVector("simple(255)", "f8ff"),
         TestVector("0(\"2013-03-21T20:04:00Z\")", "c074323031332d30332d32315432303a30343a30305a"),
         TestVector("1(1363896240)", "c11a514b67b0"),
-        TestVector(if (isJs) "1(1363896240.5)" else "1(1.3638962405E9)", "c1fb41d452d9ec200000"),
+        TestVector(if (isJsOrWasm) "1(1363896240.5)" else "1(1.3638962405E9)", "c1fb41d452d9ec200000"),
         TestVector("23(h'01020304')", "d74401020304"),
         TestVector("24(<< \"IETF\" >>)", "d818456449455446"),
         TestVector(
@@ -797,6 +803,12 @@ class CborTests {
 
     @Test
     fun nonWellformedThrowsWhenDecoding() {
+        // Kotlin/Wasm doesn't have the same array access semantics as other platforms. In particular,
+        // out-of-bounds array access exceptions are uncatchable in Kotlin, manifested as WebAssembly
+        // traps. So we ignore this test on Kotlin/Wasm...
+        if (isWasm) {
+            return
+        }
         for (hexEncodedData in nonWellformedExamples) {
             val data = hexEncodedData.replace(" ", "").fromHex()
             assertFailsWith(IllegalArgumentException::class) {

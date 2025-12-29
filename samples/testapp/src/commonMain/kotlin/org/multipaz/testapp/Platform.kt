@@ -15,7 +15,8 @@ import org.multipaz.prompt.PromptModel
 
 enum class Platform(val displayName: String) {
     ANDROID("Android"),
-    IOS("iOS")
+    IOS("iOS"),
+    WASMJS("WasmJs")
 }
 
 expect val platformAppName: String

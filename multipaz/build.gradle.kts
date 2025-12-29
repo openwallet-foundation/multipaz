@@ -1,8 +1,11 @@
+@file:OptIn(ExperimentalWasmDsl::class)
+
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.kotlin.dsl.implementation
 import org.gradle.kotlin.dsl.dependencies
 import org.gradle.kotlin.dsl.get
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.konan.target.HostManager
 
@@ -43,6 +46,13 @@ kotlin {
     }
 
     js {
+        outputModuleName = "multipaz"
+        browser {
+        }
+        binaries.executable()
+    }
+
+    wasmJs {
         outputModuleName = "multipaz"
         browser {
         }
@@ -198,6 +208,7 @@ kotlin {
         val webMain by getting {
             dependencies {
                 implementation(libs.kotlin.wrappers.web)
+                implementation(libs.kotlinx.browser)
             }
         }
     }
@@ -212,7 +223,7 @@ tasks.all {
     if (name == "compileDebugKotlinAndroid" || name == "compileReleaseKotlinAndroid" ||
         name == "androidReleaseSourcesJar" || name == "iosArm64SourcesJar" ||
         name == "iosSimulatorArm64SourcesJar" || name == "iosX64SourcesJar" ||
-        name == "jsSourcesJar" || name == "jvmSourcesJar" || name == "sourcesJar") {
+        name == "jsSourcesJar" || name == "wasmJsSourcesJar"  || name == "jvmSourcesJar" || name == "sourcesJar") {
         dependsOn("kspCommonMainKotlinMetadata")
     }
 }
@@ -222,6 +233,7 @@ tasks["compileKotlinIosArm64"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinIosSimulatorArm64"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinJvm"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinJs"].dependsOn("kspCommonMainKotlinMetadata")
+tasks["compileKotlinWasmJs"].dependsOn("kspCommonMainKotlinMetadata")
 
 tasks.withType<Test> {
     testLogging {

@@ -5,14 +5,25 @@ import org.multipaz.util.toHex
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.io.bytestring.toHexString
+import org.multipaz.util.Platform
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class NdefMessageTest {
 
+    private val isWasm: Boolean by lazy {
+        Platform.name.startsWith("WebAssembly")
+    }
+
     @Test
     fun testInvalidParsing() {
+        // Kotlin/Wasm doesn't have the same array access semantics as other platforms. In particular,
+        // out-of-bounds array access exceptions are uncatchable in Kotlin, manifested as WebAssembly
+        // traps. So we ignore this test on Kotlin/Wasm...
+        if (isWasm) {
+            return
+        }
         // From https://cs.android.com/android/platform/superproject/main/+/main:cts/tests/tests/ndef/src/android/ndef/cts/NdefTest.java;l=90?q=NdefTest.java
         val invalidMessages = listOf(
             "",                      // too short

@@ -3,7 +3,6 @@ package org.multipaz.compose.document
 import androidx.compose.ui.graphics.ImageBitmap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.launchIn
@@ -36,7 +35,7 @@ import org.multipaz.util.Logger
  * @param documentTypeRepository a [DocumentTypeRepository] with information about document types or `null`.
  */
 class DocumentModel(
-    val scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
+    val scope: CoroutineScope = CoroutineScope(Dispatchers.Default),
     val documentStore: DocumentStore,
     val documentTypeRepository: DocumentTypeRepository?,
 ) {

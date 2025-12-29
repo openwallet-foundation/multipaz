@@ -40,7 +40,6 @@ import org.multipaz.multipaz_compose.generated.resources.passphrase_entry_field_
 import org.multipaz.multipaz_compose.generated.resources.passphrase_entry_field_pin_is_weak
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.jetbrains.compose.resources.getString
 
 
@@ -74,7 +73,7 @@ fun PassphraseEntryField(
         mutableStateOf(PassphraseAnalysis(false, null))
     }
     var obfuscateAll by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    val coroutineScope = rememberCoroutineScope()
     // Put boxes around the entered chars for fixed length and six or fewer characters
     var decorationBox: @Composable (@Composable () -> Unit) -> Unit =
         @Composable { innerTextField -> innerTextField() }
@@ -139,11 +138,11 @@ fun PassphraseEntryField(
                     }
                 }
 
-                inputText = it
-                passphraseAnalysis = analyzePassphrase(inputText, constraints, checkWeakPassphrase)
-
-                obfuscateAll = false
-                scope.launch {
+                coroutineScope.launch {
+                    inputText = it
+                    passphraseAnalysis = analyzePassphrase(inputText, constraints, checkWeakPassphrase)
+                    onChanged(inputText, passphraseAnalysis.meetsRequirements, false)
+                    obfuscateAll = false
                     delay(750)
                     obfuscateAll = true
                     val value = inputText
@@ -151,7 +150,6 @@ fun PassphraseEntryField(
                     inputText = value
                 }
 
-                onChanged(inputText, passphraseAnalysis.meetsRequirements, false)
             },
             singleLine = true,
             textStyle = MaterialTheme.typography.headlineMedium.copy(color = MaterialTheme.colorScheme.primary),
@@ -222,7 +220,7 @@ private data class PassphraseAnalysis(
     val weakHint: String?,
 )
 
-private fun analyzePassphrase(
+private suspend fun analyzePassphrase(
     passphrase: String,
     constraints: PassphraseConstraints,
     checkWeakPassphrase: Boolean
@@ -242,9 +240,9 @@ private fun analyzePassphrase(
         return PassphraseAnalysis(
             meetsRequirements = false,
             weakHint = if (constraints.requireNumerical)
-                runBlocking { getString(Res.string.passphrase_entry_field_pin_is_weak) }
+                getString(Res.string.passphrase_entry_field_pin_is_weak)
             else
-                runBlocking { getString(Res.string.passphrase_entry_field_passphrase_is_weak) },
+                getString(Res.string.passphrase_entry_field_passphrase_is_weak),
         )
     }
 

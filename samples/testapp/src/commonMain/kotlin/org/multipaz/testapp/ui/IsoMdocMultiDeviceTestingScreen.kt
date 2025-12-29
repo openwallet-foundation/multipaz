@@ -31,7 +31,6 @@ import io.ktor.network.sockets.InetSocketAddress
 import io.ktor.network.sockets.Socket
 import io.ktor.network.sockets.aSocket
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -91,9 +90,9 @@ fun IsoMdocMultiDeviceTestingScreen(
                     Logger.i(TAG, "Connect to $serverAddress port $serverPort")
 
                     coroutineScope.launch {
-                        withContext(Dispatchers.IO) {
+                        withContext(Dispatchers.Default) {
                             try {
-                                val selectorManager = SelectorManager(Dispatchers.IO)
+                                val selectorManager = SelectorManager(Dispatchers.Default)
                                 val socket = aSocket(selectorManager).tcp().connect(serverAddress, serverPort)
                                 runMultiDeviceTestsClient(
                                     socket,
@@ -119,10 +118,10 @@ fun IsoMdocMultiDeviceTestingScreen(
 
     fun multiDeviceTestListen(plan: Plan) {
         coroutineScope.launch {
-            withContext(Dispatchers.IO) {
+            withContext(Dispatchers.Default) {
                 try {
                     val localAddress = getLocalIpAddress()
-                    val selectorManager = SelectorManager(Dispatchers.IO)
+                    val selectorManager = SelectorManager(Dispatchers.Default)
                     val serverSocket = aSocket(selectorManager).tcp().bind(localAddress, 0)
                     val localAddressPort = (serverSocket.localAddress as InetSocketAddress).port
                     Logger.i(TAG, "Accepting connections at $localAddress port $localAddressPort")

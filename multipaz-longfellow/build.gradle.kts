@@ -1,4 +1,7 @@
+@file:OptIn(ExperimentalWasmDsl::class)
+
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -28,6 +31,24 @@ kotlin {
         }
 
         publishLibraryVariants("release")
+    }
+
+    js {
+        outputModuleName = "multipaz-longfellow"
+        browser {
+            // Longfellow is currently not implemented for this target
+            testTask { enabled = false }
+        }
+        binaries.executable()
+    }
+
+    wasmJs {
+        outputModuleName = "multipaz-longfellow"
+        browser {
+            // Longfellow is currently not implemented for this target
+            testTask { enabled = false }
+        }
+        binaries.executable()
     }
 
     listOf(

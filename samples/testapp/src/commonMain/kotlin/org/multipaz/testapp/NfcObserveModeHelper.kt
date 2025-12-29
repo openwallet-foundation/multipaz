@@ -1,12 +1,6 @@
 package org.multipaz.testapp
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 
 /**
  * Simple abstraction for managing Observe Mode for Test App.
@@ -49,18 +43,4 @@ expect object NfcObserveModeHelper {
  * leaving a composable.
  */
 @Composable
-fun rememberInhibitNfcObserveMode() {
-    val recomposeCounter = remember { mutableIntStateOf(0) }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            recomposeCounter.intValue += 1
-        }
-        NfcObserveModeHelper.inhibitObserveMode()
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            NfcObserveModeHelper.uninhibitObserveMode()
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-}
+expect fun rememberInhibitNfcObserveMode()

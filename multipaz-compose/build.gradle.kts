@@ -1,6 +1,9 @@
+@file:OptIn(ExperimentalWasmDsl::class)
+
 import org.gradle.kotlin.dsl.implementation
 import org.jetbrains.compose.ExperimentalComposeLibrary
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSetTree
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
@@ -34,6 +37,24 @@ kotlin {
         }
 
         publishLibraryVariants("release")
+    }
+
+    js {
+        outputModuleName = "multipaz-compose"
+        browser {
+            // Currently disabled, see https://youtrack.jetbrains.com/issue/CMP-4906
+            testTask { enabled = false }
+        }
+        binaries.executable()
+    }
+
+    wasmJs {
+        outputModuleName = "multipaz-compose"
+        browser {
+            // Currently disabled, see https://youtrack.jetbrains.com/issue/CMP-4906
+            testTask { enabled = false }
+        }
+        binaries.executable()
     }
 
     listOf(

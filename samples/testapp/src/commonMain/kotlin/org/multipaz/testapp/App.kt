@@ -43,7 +43,6 @@ import io.ktor.client.HttpClient
 import io.ktor.http.decodeURLPart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -324,9 +323,8 @@ class App private constructor (val promptModel: PromptModel) {
 
     private suspend fun documentStoreInit() {
         softwareSecureArea = SoftwareSecureArea.create(Platform.nonBackedUpStorage)
-        secureAreaRepository = SecureAreaRepository.Builder()
+        val secureAreaRepositoryBuilder = SecureAreaRepository.Builder()
             .add(softwareSecureArea)
-            .add(Platform.getSecureArea())
             .addFactory(CloudSecureArea.IDENTIFIER_PREFIX) { identifier ->
                 val queryString = identifier.substring(CloudSecureArea.IDENTIFIER_PREFIX.length + 1)
                 val params = queryString.split("&").associate {
@@ -342,7 +340,12 @@ class App private constructor (val promptModel: PromptModel) {
                     platformHttpClientEngineFactory()
                 )
             }
-            .build()
+        val platformSecureArea = Platform.getSecureArea()
+        // It's possible the platform SecureArea _is_ SoftwareSecureArea so avoid duplicates.
+        if (platformSecureArea !is SoftwareSecureArea) {
+            secureAreaRepositoryBuilder.add(platformSecureArea)
+        }
+        val secureAreaRepository = secureAreaRepositoryBuilder.build()
         documentStore = buildDocumentStore(
             storage = Platform.nonBackedUpStorage,
             secureAreaRepository = secureAreaRepository
@@ -672,7 +675,7 @@ class App private constructor (val promptModel: PromptModel) {
     fun startExportDocumentsToDigitalCredentials() {
         if (DigitalCredentials.Default.available) {
             val dc = DigitalCredentials.Default
-            CoroutineScope(Dispatchers.IO).launch {
+            CoroutineScope(Dispatchers.Default).launch {
                 dc.setSelectedProtocols(
                     settingsModel.dcApiProtocols.value
                 )
@@ -682,7 +685,7 @@ class App private constructor (val promptModel: PromptModel) {
                 )
             }
 
-            CoroutineScope(Dispatchers.IO).launch {
+            CoroutineScope(Dispatchers.Default).launch {
                 settingsModel.dcApiProtocols.collect {
                     dc.setSelectedProtocols(it)
                 }
@@ -742,7 +745,7 @@ class App private constructor (val promptModel: PromptModel) {
 
     private suspend fun observeModeInit() {
         NfcObserveModeHelper.isEnabled = settingsModel.observeModeEnabled.value
-        CoroutineScope(Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.Default).launch {
             settingsModel.observeModeEnabled.collect { isEnabled ->
                 NfcObserveModeHelper.isEnabled = isEnabled
             }

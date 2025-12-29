@@ -141,6 +141,10 @@ fun StartScreen(
                             }
                         }
                     }
+
+                    Platform.WASMJS -> {
+                        // No native SecureArea
+                    }
                 }
 
                 item {

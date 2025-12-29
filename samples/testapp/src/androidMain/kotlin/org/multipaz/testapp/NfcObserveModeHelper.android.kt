@@ -9,6 +9,10 @@ import android.nfc.cardemulation.PollingFrame
 import android.os.Build
 import android.os.Bundle
 import androidx.annotation.RequiresApi
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,6 +26,8 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import androidx.core.content.edit
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.multipaz.testapp.NfcObserveModeHelper.inhibitObserveModeForTransaction
 
 
@@ -223,5 +229,22 @@ actual object NfcObserveModeHelper {
 
         Logger.i(TAG, "Polling filters registered")
         pollingFiltersRegistered = true
+    }
+}
+
+@Composable
+actual fun rememberInhibitNfcObserveMode() {
+    val recomposeCounter = remember { mutableIntStateOf(0) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            recomposeCounter.intValue += 1
+        }
+        NfcObserveModeHelper.inhibitObserveMode()
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            NfcObserveModeHelper.uninhibitObserveMode()
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 }

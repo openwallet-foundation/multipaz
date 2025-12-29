@@ -49,7 +49,6 @@ import org.multipaz.testapp.TestAppSettingsModel
 import org.multipaz.testapp.TestAppUtils
 import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -93,9 +92,8 @@ fun DocumentStoreScreen(
     showToast: (message: String) -> Unit,
     onViewDocument: (documentId: String) -> Unit,
 ) {
-    // NB: we do not have to use Dispatchers.IO, but DocumentStore works faster if we call from the
-    // same coroutine scope as what the storage layer uses.
-    val coroutineScope = rememberCoroutineScope { Dispatchers.IO }
+    // TODO: Use the same coroutine scope as what the storage layer uses to make it faster.
+    val coroutineScope = rememberCoroutineScope()
     val numCredentialsPerDomain = remember { mutableIntStateOf(2) }
     val deviceKeyAlgorithm = remember { mutableStateOf<Algorithm>(Algorithm.ESP256) }
     val deviceKeyMacAlgorithm = remember { mutableStateOf<Algorithm>(Algorithm.ECDH_P256) }

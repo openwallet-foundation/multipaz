@@ -359,7 +359,10 @@ class DeviceResponseTest {
         assertEquals("1.0", deviceResponse.version)
 
         // Check we can call verify() on an instance we created ourselves
-        deviceResponse.verify(sessionTranscript)
+        deviceResponse.verify(
+            sessionTranscript = sessionTranscript,
+            atTime = mdlTimeValidityBegin
+        )
 
         val encodedDeviceResponse = Cbor.encode(deviceResponse.toDataItem())
 
@@ -511,7 +514,8 @@ class DeviceResponseTest {
         // Check we can call verify() on an instance we created ourselves
         deviceResponse.verify(
             sessionTranscript = sessionTranscript,
-            eReaderKey = AsymmetricKey.AnonymousExplicit(eReaderKey, Algorithm.ECDH_P256)
+            eReaderKey = AsymmetricKey.AnonymousExplicit(eReaderKey, Algorithm.ECDH_P256),
+            atTime = mdlTimeValidityBegin
         )
 
         val encodedDeviceResponse = Cbor.encode(deviceResponse.toDataItem())

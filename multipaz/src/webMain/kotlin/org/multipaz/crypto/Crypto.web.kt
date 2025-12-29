@@ -1,7 +1,8 @@
 package org.multipaz.crypto
 
-import js.buffer.BufferSource
+import js.array.jsArrayOf
 import js.buffer.toByteArray
+import js.objects.unsafeJso
 import kotlinx.browser.window
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1BitString
@@ -11,7 +12,6 @@ import org.multipaz.asn1.OID
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.toBufferSource
-import org.multipaz.util.toHex
 import web.crypto.AesGcmParams
 import web.crypto.CryptoKey
 import web.crypto.CryptoKeyPair
@@ -19,12 +19,10 @@ import web.crypto.EcKeyGenParams
 import web.crypto.EcKeyImportParams
 import web.crypto.EcdhKeyDeriveParams
 import web.crypto.EcdsaParams
-import web.crypto.HashAlgorithmIdentifier
 import web.crypto.HmacImportParams
 import web.crypto.JsonWebKey
 import web.crypto.KeyFormat
 import web.crypto.KeyUsage
-import web.crypto.NamedCurve
 import web.crypto.RsaHashedImportParams
 import web.crypto.crypto
 import web.crypto.decrypt
@@ -39,32 +37,36 @@ import web.crypto.raw
 import web.crypto.sign
 import web.crypto.spki
 import web.crypto.verify
+import kotlin.js.ExperimentalWasmJsInterop
+import kotlin.js.toJsString
+import kotlin.js.unsafeCast
 
 external interface XdhKeyDeriveParams : web.crypto.Algorithm {
     override var name: String
     var public: CryptoKey
 }
 
+@OptIn(ExperimentalWasmJsInterop::class)
 private fun EcPublicKey.toJsonWebKey(keyOp: String): JsonWebKey {
     when (this) {
         is EcPublicKeyDoubleCoordinate -> {
-            return JsonWebKey(
-                crv = curve.jwkName,
-                kty = "EC",
-                x = x.toBase64Url(),
-                y = y.toBase64Url(),
-                ext = true,
-                key_ops = arrayOf(keyOp)
-            )
+            return unsafeJso<JsonWebKey> {
+                crv = curve.jwkName
+                kty = "EC"
+                x = this@toJsonWebKey.x.toBase64Url()
+                y = this@toJsonWebKey.y.toBase64Url()
+                ext = true
+                key_ops = jsArrayOf(keyOp.toJsString())
+            }
         }
         is EcPublicKeyOkp -> {
-            return JsonWebKey(
-                crv = curve.jwkName,
-                kty = "OKP",
-                x = x.toBase64Url(),
-                ext = true,
-                key_ops = arrayOf(keyOp)
-            )
+            return unsafeJso<JsonWebKey> {
+                crv = curve.jwkName
+                kty = "OKP"
+                x = this@toJsonWebKey.x.toBase64Url()
+                ext = true
+                key_ops = jsArrayOf(keyOp.toJsString())
+            }
         }
     }
 }
@@ -72,25 +74,25 @@ private fun EcPublicKey.toJsonWebKey(keyOp: String): JsonWebKey {
 private fun EcPrivateKey.toJsonWebKey(keyOp: String): JsonWebKey {
     when (this) {
         is EcPrivateKeyDoubleCoordinate -> {
-            return JsonWebKey(
-                crv = curve.jwkName,
-                d = d.toBase64Url(),
-                kty = "EC",
-                x = x.toBase64Url(),
-                y = y.toBase64Url(),
-                ext = true,
-                key_ops = arrayOf(keyOp)
-            )
+            return unsafeJso<JsonWebKey> {
+                crv = curve.jwkName
+                d = this@toJsonWebKey.d.toBase64Url()
+                kty = "EC"
+                x = this@toJsonWebKey.x.toBase64Url()
+                y = this@toJsonWebKey.y.toBase64Url()
+                ext = true
+                key_ops = jsArrayOf(keyOp.toJsString())
+            }
         }
         is EcPrivateKeyOkp -> {
-            return JsonWebKey(
-                crv = curve.jwkName,
-                d = d.toBase64Url(),
-                kty = "OKP",
-                x = x.toBase64Url(),
-                ext = true,
-                key_ops = arrayOf(keyOp)
-            )
+            return unsafeJso<JsonWebKey> {
+                crv = curve.jwkName
+                d = this@toJsonWebKey.d.toBase64Url()
+                kty = "OKP"
+                x = this@toJsonWebKey.x.toBase64Url()
+                ext = true
+                key_ops = jsArrayOf(keyOp.toJsString())
+            }
         }
     }
 }
@@ -144,13 +146,13 @@ actual object Crypto {
         val hmacKey = crypto.subtle.importKey(
             format = KeyFormat.Companion.raw,
             keyData = key.toBufferSource(),
-            algorithm = object : HmacImportParams {
-                override var name: String = "HMAC"
-                override var hash: dynamic = hashAlgName
-                override var length: Int? = key.size*8
+            algorithm = unsafeJso<HmacImportParams> {
+                name = "HMAC"
+                hash = hashAlgName.toJsString()
+                length = key.size*8
             },
             extractable = false,
-            keyUsages = arrayOf(KeyUsage.sign, KeyUsage.verify)
+            keyUsages = jsArrayOf(KeyUsage.sign, KeyUsage.verify)
         )
         val signature = crypto.subtle.sign(
             algorithm = "HMAC",
@@ -167,18 +169,18 @@ actual object Crypto {
         messagePlaintext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
-        val algorithm = object : AesGcmParams {
-            override var name: String = "AES-GCM"
-            override var additionalData: BufferSource? = (aad ?: byteArrayOf()).toBufferSource()
-            override var iv: BufferSource = nonce.toBufferSource()
-            override var tagLength: Short? = 128
+        val algorithm = unsafeJso<AesGcmParams> {
+            name = "AES-GCM"
+            additionalData = (aad ?: byteArrayOf()).toBufferSource()
+            iv = nonce.toBufferSource()
+            tagLength = 128
         }
         val key = crypto.subtle.importKey(
             format = KeyFormat.Companion.raw,
             keyData = key.toBufferSource(),
             algorithm = algorithm,
             extractable = false,
-            keyUsages = arrayOf(KeyUsage.encrypt)
+            keyUsages = jsArrayOf(KeyUsage.encrypt)
         )
         return crypto.subtle.encrypt(
             algorithm = algorithm,
@@ -194,18 +196,18 @@ actual object Crypto {
         messageCiphertext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
-        val algorithm = object : AesGcmParams {
-            override var name: String = "AES-GCM"
-            override var additionalData: BufferSource? = (aad ?: byteArrayOf()).toBufferSource()
-            override var iv: BufferSource = nonce.toBufferSource()
-            override var tagLength: Short? = 128
+        val algorithm = unsafeJso<AesGcmParams> {
+            name = "AES-GCM"
+            additionalData = (aad ?: byteArrayOf()).toBufferSource()
+            iv = nonce.toBufferSource()
+            tagLength = 128
         }
         val key = crypto.subtle.importKey(
             format = KeyFormat.Companion.raw,
             keyData = key.toBufferSource(),
             algorithm = algorithm,
             extractable = false,
-            keyUsages = arrayOf(KeyUsage.decrypt)
+            keyUsages = jsArrayOf(KeyUsage.decrypt)
         )
         try {
             return crypto.subtle.decrypt(
@@ -218,6 +220,7 @@ actual object Crypto {
         }
     }
 
+    @OptIn(ExperimentalWasmJsInterop::class)
     actual suspend fun checkSignature(
         publicKey: EcPublicKey,
         message: ByteArray,
@@ -241,17 +244,17 @@ actual object Crypto {
                 val importedKey = crypto.subtle.importKey(
                     format = KeyFormat.Companion.raw,
                     keyData = (publicKey as EcPublicKeyDoubleCoordinate).asUncompressedPointEncoding.toBufferSource(),
-                    algorithm = object : EcKeyImportParams {
-                        override var name: String = "ECDSA"
-                        override var namedCurve: NamedCurve = publicKey.curve.jwkName
+                    algorithm = unsafeJso<EcKeyImportParams> {
+                        name = "ECDSA"
+                        namedCurve = publicKey.curve.jwkName.toJsString()
                     },
                     extractable = false,
-                    keyUsages = arrayOf(KeyUsage.verify)
+                    keyUsages = jsArrayOf(KeyUsage.verify)
                 )
                 if (!crypto.subtle.verify(
-                        algorithm = object : EcdsaParams {
-                            override var name: String = "ECDSA"
-                            override var hash: HashAlgorithmIdentifier = hashAlgorithmName
+                        algorithm = unsafeJso<EcdsaParams> {
+                            name = "ECDSA"
+                            hash = hashAlgorithmName.toJsString()
                         },
                         key = importedKey,
                         signature = (signature.r + signature.s).toBufferSource(),
@@ -269,7 +272,7 @@ actual object Crypto {
                     keyData = publicKey.toJsonWebKey("verify"),
                     algorithm = publicKey.curve.jwkName,
                     extractable = false,
-                    keyUsages = arrayOf(KeyUsage.verify)
+                    keyUsages = jsArrayOf(KeyUsage.verify)
                 )
                 if (!crypto.subtle.verify(
                         algorithm = publicKey.curve.jwkName,
@@ -298,12 +301,12 @@ actual object Crypto {
             EcCurve.BRAINPOOLP384R1,
             EcCurve.BRAINPOOLP512R1 -> {
                 val key = crypto.subtle.generateKey(
-                    algorithm = object : EcKeyGenParams {
-                        override var name: String = "ECDSA"
-                        override var namedCurve: NamedCurve = curve.jwkName
+                    algorithm = unsafeJso<EcKeyGenParams> {
+                        name = "ECDSA"
+                        namedCurve = curve.jwkName.toJsString()
                     },
                     extractable = true,
-                    keyUsages = arrayOf(KeyUsage.sign, KeyUsage.verify)
+                    keyUsages = jsArrayOf(KeyUsage.sign, KeyUsage.verify)
                 )
                 val publicKeyUncompressedPointEncoding = crypto.subtle.exportKey(
                     format = KeyFormat.Companion.raw,
@@ -329,7 +332,7 @@ actual object Crypto {
                 val key = crypto.subtle.generateKey(
                     algorithm = curve.jwkName,
                     extractable = true,
-                    keyUsages = arrayOf(KeyUsage.sign, KeyUsage.verify)
+                    keyUsages = jsArrayOf(KeyUsage.sign, KeyUsage.verify)
                 ).unsafeCast<CryptoKeyPair>()
                 val x = crypto.subtle.exportKey(
                     format = KeyFormat.Companion.raw,
@@ -350,7 +353,7 @@ actual object Crypto {
                 val key = crypto.subtle.generateKey(
                     algorithm = curve.jwkName,
                     extractable = true,
-                    keyUsages = arrayOf(KeyUsage.deriveBits)
+                    keyUsages = jsArrayOf(KeyUsage.deriveBits)
                 ).unsafeCast<CryptoKeyPair>()
                 val x = crypto.subtle.exportKey(
                     format = KeyFormat.Companion.raw,
@@ -391,17 +394,17 @@ actual object Crypto {
                 val importedKey = crypto.subtle.importKey(
                     format = KeyFormat.Companion.jwk,
                     keyData = key.toJsonWebKey("sign"),
-                    algorithm = object : EcKeyImportParams {
-                        override var name: String = "ECDSA"
-                        override var namedCurve: NamedCurve = key.curve.jwkName
+                    algorithm = unsafeJso<EcKeyImportParams> {
+                        name = "ECDSA"
+                        namedCurve = key.curve.jwkName.toJsString()
                     },
                     extractable = false,
-                    keyUsages = arrayOf(KeyUsage.sign)
+                    keyUsages = jsArrayOf(KeyUsage.sign)
                 )
                 crypto.subtle.sign(
-                    algorithm = object : EcdsaParams {
-                        override var name: String = "ECDSA"
-                        override var hash: HashAlgorithmIdentifier = hashAlgorithmName
+                    algorithm = unsafeJso<EcdsaParams> {
+                        name = "ECDSA"
+                        hash = hashAlgorithmName.toJsString()
                     },
                     key = importedKey,
                     data = message.toBufferSource(),
@@ -414,7 +417,7 @@ actual object Crypto {
                     keyData = key.toJsonWebKey("sign"),
                     algorithm = key.curve.jwkName,
                     extractable = false,
-                    keyUsages = arrayOf(KeyUsage.sign)
+                    keyUsages = jsArrayOf(KeyUsage.sign)
                 )
                 crypto.subtle.sign(
                     algorithm = key.curve.jwkName,
@@ -449,27 +452,27 @@ actual object Crypto {
                 val importedKey = crypto.subtle.importKey(
                     format = KeyFormat.Companion.jwk,
                     keyData = key.toJsonWebKey("deriveBits"),
-                    algorithm = object : EcKeyImportParams {
-                        override var name: String = "ECDH"
-                        override var namedCurve: NamedCurve = key.curve.jwkName
+                    algorithm = unsafeJso<EcKeyImportParams> {
+                        name = "ECDH"
+                        namedCurve = key.curve.jwkName.toJsString()
                     },
                     extractable = false,
-                    keyUsages = arrayOf(KeyUsage.deriveBits)
+                    keyUsages = jsArrayOf(KeyUsage.deriveBits)
                 )
                 val importedOtherKey = crypto.subtle.importKey(
                     format = KeyFormat.Companion.raw,
                     keyData = (otherKey as EcPublicKeyDoubleCoordinate).asUncompressedPointEncoding.toBufferSource(),
-                    algorithm = object : EcKeyImportParams {
-                        override var name: String = "ECDH"
-                        override var namedCurve: NamedCurve = otherKey.curve.jwkName
+                    algorithm = unsafeJso<EcKeyImportParams> {
+                        name = "ECDH"
+                        namedCurve = otherKey.curve.jwkName.toJsString()
                     },
                     extractable = false,
-                    keyUsages = arrayOf()
+                    keyUsages = jsArrayOf()
                 )
                 crypto.subtle.deriveBits(
-                    algorithm = object : EcdhKeyDeriveParams {
-                        override var name: String = "ECDH"
-                        override var public: CryptoKey = importedOtherKey
+                    algorithm = unsafeJso<EcdhKeyDeriveParams> {
+                        name = "ECDH"
+                        public = importedOtherKey
                     },
                     baseKey = importedKey
                 ).toByteArray()
@@ -481,19 +484,19 @@ actual object Crypto {
                     keyData = key.toJsonWebKey("deriveBits"),
                     algorithm = key.curve.jwkName,
                     extractable = false,
-                    keyUsages = arrayOf(KeyUsage.deriveBits)
+                    keyUsages = jsArrayOf(KeyUsage.deriveBits)
                 )
                 val importedOtherKey = crypto.subtle.importKey(
                     format = KeyFormat.Companion.jwk,
                     keyData = otherKey.toJsonWebKey("deriveBits"),
                     algorithm = otherKey.curve.jwkName,
                     extractable = false,
-                    keyUsages = arrayOf()
+                    keyUsages = jsArrayOf()
                 )
                 val foo = crypto.subtle.deriveBits(
-                    algorithm = object : XdhKeyDeriveParams {
-                        override var name: String = key.curve.jwkName
-                        override var public: CryptoKey = importedOtherKey
+                    algorithm = unsafeJso<XdhKeyDeriveParams> {
+                        name = key.curve.jwkName
+                        public = importedOtherKey
                     },
                     baseKey = importedKey
                 ).toByteArray()
@@ -506,6 +509,7 @@ actual object Crypto {
         }
     }
 
+    @OptIn(ExperimentalWasmJsInterop::class)
     internal actual suspend fun validateCertChain(certChain: X509CertChain): Boolean {
         val certificates = certChain.certificates
         for (n in 1..certificates.lastIndex) {
@@ -531,51 +535,51 @@ actual object Crypto {
                     val ecCurveString =
                         (verifierSpkiAlgorithmIdentifier.elements[1] as ASN1ObjectIdentifier).oid
                     when (ecCurveString) {
-                        OID.EC_CURVE_P256.oid -> EcKeyImportParams(
-                            name = "ECDSA",
-                            namedCurve = EcCurve.P256.jwkName
-                        )
+                        OID.EC_CURVE_P256.oid -> unsafeJso<EcKeyImportParams> {
+                            name = "ECDSA"
+                            namedCurve = EcCurve.P256.jwkName.toJsString()
+                        }
 
-                        OID.EC_CURVE_P384.oid -> EcKeyImportParams(
-                            name = "ECDSA",
-                            namedCurve = EcCurve.P384.jwkName
-                        )
+                        OID.EC_CURVE_P384.oid -> unsafeJso<EcKeyImportParams> {
+                            name = "ECDSA"
+                            namedCurve = EcCurve.P384.jwkName.toJsString()
+                        }
 
-                        OID.EC_CURVE_P521.oid -> EcKeyImportParams(
-                            name = "ECDSA",
-                            namedCurve = EcCurve.P521.jwkName
-                        )
+                        OID.EC_CURVE_P521.oid -> unsafeJso<EcKeyImportParams> {
+                            name = "ECDSA"
+                            namedCurve = EcCurve.P521.jwkName.toJsString()
+                        }
 
                         else -> throw IllegalStateException("Unexpected curve OID $ecCurveString")
                     }
                 }
 
-                OID.ED25519.oid -> EcKeyImportParams(
-                    name = "EdDSA",
-                    namedCurve = EcCurve.ED25519.jwkName
-                )
+                OID.ED25519.oid -> unsafeJso<EcKeyImportParams> {
+                    name = "EdDSA"
+                    namedCurve = EcCurve.ED25519.jwkName.toJsString()
+                }
 
-                OID.ED448.oid -> EcKeyImportParams(
-                    name = "EdDSA",
-                    namedCurve = EcCurve.ED448.jwkName
-                )
+                OID.ED25519.oid -> unsafeJso<EcKeyImportParams> {
+                    name = "EdDSA"
+                    namedCurve = EcCurve.ED448.jwkName.toJsString()
+                }
                 // https://datatracker.ietf.org/doc/html/rfc8017#appendix-A.2.2
                 "1.2.840.113549.1.1.1" ->
                     when (toVerifySignatureAlgorithmOid) {
-                        OID.SIGNATURE_RS256.oid -> RsaHashedImportParams(
-                            name = "RSASSA-PKCS1-v1_5",
-                            hash = "SHA-256"
-                        )
+                        OID.SIGNATURE_RS256.oid -> unsafeJso<RsaHashedImportParams> {
+                            name = "RSASSA-PKCS1-v1_5"
+                            hash = "SHA-256".toJsString()
+                        }
 
-                        OID.SIGNATURE_RS384.oid -> RsaHashedImportParams(
-                            name = "RSASSA-PKCS1-v1_5",
-                            hash = "SHA-384"
-                        )
+                        OID.SIGNATURE_RS384.oid -> unsafeJso<RsaHashedImportParams> {
+                            name = "RSASSA-PKCS1-v1_5"
+                            hash = "SHA-384".toJsString()
+                        }
 
-                        OID.SIGNATURE_RS512.oid -> RsaHashedImportParams(
-                            name = "RSASSA-PKCS1-v1_5",
-                            hash = "SHA-512"
-                        )
+                        OID.SIGNATURE_RS512.oid -> unsafeJso<RsaHashedImportParams> {
+                            name = "RSASSA-PKCS1-v1_5"
+                            hash = "SHA-512".toJsString()
+                        }
 
                         else -> throw IllegalStateException("Unexpected Signature Algorithm OID $toVerifySignatureAlgorithmOid")
                     }
@@ -588,17 +592,28 @@ actual object Crypto {
                 keyData = ASN1.encode(verifierSubjectPublicKeyInfo).toBufferSource(),
                 algorithm = verifierKeyImportParams,
                 extractable = false,
-                keyUsages = arrayOf(KeyUsage.verify)
+                keyUsages = jsArrayOf(KeyUsage.verify)
             )
             val signatureDerEncodedBytes = (toVerifyCert.elements[2] as ASN1BitString).value
             val data = ASN1.encode(toVerifyTbsCert)
             val verificationAlgorithm = when (toVerifySignatureAlgorithmOid) {
-                OID.SIGNATURE_ECDSA_SHA256.oid -> EcdsaParams(name = "ECDSA", hash = "SHA-256")
-                OID.SIGNATURE_ECDSA_SHA384.oid -> EcdsaParams(name = "ECDSA", hash = "SHA-384")
-                OID.SIGNATURE_ECDSA_SHA512.oid -> EcdsaParams(name = "ECDSA", hash = "SHA-512")
+                OID.SIGNATURE_ECDSA_SHA256.oid -> unsafeJso<EcdsaParams> {
+                    name = "ECDSA"
+                    hash = "SHA-256".toJsString()
+                }
+                OID.SIGNATURE_ECDSA_SHA384.oid -> unsafeJso<EcdsaParams> {
+                    name = "ECDSA"
+                    hash = "SHA-384".toJsString()
+                }
+                OID.SIGNATURE_ECDSA_SHA512.oid -> unsafeJso<EcdsaParams> {
+                    name = "ECDSA"
+                    hash = "SHA-512".toJsString()
+                }
                 OID.SIGNATURE_RS256.oid,
                 OID.SIGNATURE_RS384.oid,
-                OID.SIGNATURE_RS512.oid -> web.crypto.Algorithm("RSASSA-PKCS1-v1_5")
+                OID.SIGNATURE_RS512.oid -> unsafeJso<web.crypto.Algorithm> {
+                    name = "RSASSA-PKCS1-v1_5"
+                }
                 else -> throw IllegalStateException("Unexpected Signature Algorithm OID $toVerifySignatureAlgorithmOid")
             }
             val signatureBytes = when (toVerifySignatureAlgorithmOid) {

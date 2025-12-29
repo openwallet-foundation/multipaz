@@ -1,3 +1,6 @@
+@file:OptIn(ExperimentalWasmDsl::class)
+
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -17,6 +20,14 @@ kotlin {
     jvm()
 
     js {
+        outputModuleName = "multipaz-doctypes"
+        browser {
+        }
+        binaries.executable()
+    }
+
+    wasmJs {
+        outputModuleName = "multipaz-doctypes"
         browser {
         }
         binaries.executable()
