@@ -59,6 +59,8 @@ internal interface CredentialFactory {
         credentialId: CredentialId,
     ): MintedCredential
 
+    suspend fun display(systemOfRecordData: DataItem): CredentialDisplay? = null
+
     class RegisteredFactories(
         val byOfferId: Map<String, CredentialFactory>,
         val supportedScopes: Set<String>

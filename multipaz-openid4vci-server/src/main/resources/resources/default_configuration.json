@@ -4,6 +4,171 @@
     "*.multipaz.org/**",
     "sorotokin.com/**"
   ],
+  "credential_mdl": {
+    "title": "{core.given_name}'s Driver License",
+    "card_art": {
+      "blank": "blank_mdl.png",
+      "content": [
+        {
+          "op": "text",
+          "text": "DRIVER LICENSE",
+          "font": "fonts/OpenSans-SemiBold.ttf",
+          "font_size": 70,
+          "x": 120,
+          "y": 105,
+          "effects": [
+            {"type":  "blur", "radius": 3, "argb": "FFFFFFFF"},
+            {"type":  "fill", "argb": "FF002050" }
+          ]
+        },
+        {
+          "op": "image",
+          "field": "core.portrait",
+          "image": "female.jpg",
+          "x": 45,
+          "y": 150,
+          "width": 300,
+          "height": 300,
+          "fill": false
+        },
+        {
+          "op": "text",
+          "text": "{core.given_name}",
+          "uppercase": true,
+          "x": 382,
+          "y": 350,
+          "font_size": 55,
+          "max_width": 410,
+          "effects": [
+            {"type": "blur", "radius": 3},
+            {"type": "lighting", "argb": "FFC0C080" }
+          ]
+        },
+        {
+          "op": "text",
+          "text": "{core.family_name}",
+          "uppercase": true,
+          "x": 382,
+          "y": 440,
+          "font_size": 55,
+          "max_width": 410,
+          "effects": [
+            {"type": "blur", "radius": 3},
+            {"type": "lighting", "argb": "FFC0C080" }
+          ]
+        }
+      ]
+    }
+  },
+  "credential_pid": {
+    "title": "{core.given_name}'s PID",
+    "card_art": {
+      "blank": "blank_pid.png",
+      "content": [
+        {
+          "op": "text",
+          "text": "PERSONAL ID",
+          "font": "fonts/OpenSans-SemiBold.ttf",
+          "font_size": 80,
+          "x": 135,
+          "y": 105,
+          "effects": [
+            {
+              "type": "blur",
+              "radius": 5,
+              "argb": "FFFFFFFF"
+            },
+            {
+              "type": "fill",
+              "argb": "FF004020"
+            }
+          ]
+        },
+        {
+          "op": "image",
+          "field": "core.portrait",
+          "image": "female.jpg",
+          "x": 40,
+          "y": 180,
+          "width": 270,
+          "height": 270,
+          "fill": false
+        },
+        {
+          "op": "text",
+          "text": "{core.given_name}",
+          "uppercase": true,
+          "x": 340,
+          "y": 350,
+          "font_size": 60,
+          "max_width": 410,
+          "effects": [
+            {
+              "type": "blur",
+              "radius": 5,
+              "argb": "000000"
+            },
+            {
+              "type": "lighting",
+              "argb": "FFAACCEE"
+            }
+          ]
+        },
+        {
+          "op": "text",
+          "text": "{core.family_name}",
+          "uppercase": true,
+          "x": 340,
+          "y": 440,
+          "font_size": 60,
+          "max_width": 410,
+          "effects": [
+            {
+              "type": "blur",
+              "radius": 5,
+              "argb": "000000"
+            },
+            {
+              "type": "lighting",
+              "argb": "FFAACCEE"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "credential_naturalization": {
+    "title": "{core.given_name}'s Naturalization",
+    "card_art": {
+      "blank": "blank_naturalization.png",
+      "content": [
+        {
+          "op": "text",
+          "text": "CERTIFICATE OF NATURALIZATION",
+          "font": "fonts/OpenSans-SemiBold.ttf",
+          "font_size": 45,
+          "x": 37,
+          "y": 85,
+          "effects": [
+            {"type":  "blur", "radius": 3, "argb": "FFBBFFEE"},
+            {"type":  "fill", "argb": "FF003050" }
+          ]
+        },
+        {
+          "op": "text",
+          "text": "{core.given_name} {core.family_name}",
+          "uppercase": true,
+          "x": 50,
+          "y": 470,
+          "font_size": 45,
+          "max_width": 650,
+          "effects": [
+            {"type": "lighting", "argb": "FF80C0C0" }
+          ]
+        }
+      ]
+    }
+  },
   "trusted_client_assertions": {
     "urn:uuid:418745b8-78a3-4810-88df-7898aff3ffb4#895b72b9-0808-4fcc-bb19-960d14a9e28f": {
       "kty": "EC",

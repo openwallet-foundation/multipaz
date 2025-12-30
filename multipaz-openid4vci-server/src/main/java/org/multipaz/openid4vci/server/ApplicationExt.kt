@@ -27,6 +27,7 @@ import org.multipaz.openid4vci.request.identifierList
 import org.multipaz.openid4vci.request.preauthorizedOffer
 import org.multipaz.openid4vci.request.nonce
 import org.multipaz.openid4vci.request.openid4VpResponse
+import org.multipaz.openid4vci.request.paint
 import org.multipaz.openid4vci.request.pushedAuthorizationRequest
 import org.multipaz.openid4vci.request.qrCode
 import org.multipaz.openid4vci.request.signingCertificate
@@ -78,6 +79,7 @@ fun Application.configureRouting(serverEnvironment: Deferred<ServerEnvironment>)
         get("/finish_authorization") { finishAuthorization(call) }
         post("/nonce") { nonce(call) }
         post("/openid4vp_response") { openid4VpResponse(call) }
+        get("/paint") { paint(call) }
         post("/par") { pushedAuthorizationRequest(call) }
         get("/qr") { qrCode(call) }
         post("/token") { token(call) }

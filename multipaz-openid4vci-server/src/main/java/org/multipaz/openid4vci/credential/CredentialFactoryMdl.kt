@@ -16,12 +16,14 @@ import org.multipaz.rpc.backend.Resources
 import org.multipaz.util.toBase64Url
 import kotlin.time.Clock
 import kotlinx.datetime.DateTimeUnit
-import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.yearsUntil
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tstr
@@ -33,6 +35,7 @@ import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.openid4vci.util.CredentialId
 import org.multipaz.revocation.RevocationStatus
 import org.multipaz.openid4vci.util.CredentialState
+import org.multipaz.rpc.backend.Configuration
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.Logger
 import org.multipaz.util.truncateToWholeSeconds
@@ -281,6 +284,9 @@ internal class CredentialFactoryMdl : CredentialFactory {
             expiration = validUntil
         )
     }
+
+    override suspend fun display(systemOfRecordData: DataItem): CredentialDisplay =
+        CredentialDisplay.create(systemOfRecordData, "credential_mdl")
 
     companion object {
         private const val TAG = "CredentialFactoryMdl"

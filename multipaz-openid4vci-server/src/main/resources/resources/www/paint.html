@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OpenId4VCI Sample server</title>
+    <link rel="stylesheet" href="style.css">
+    <script>
+        function run() {
+            const config = document.getElementById("config").value;
+            const json = JSON.parse(config);
+            const img = document.getElementById("img");
+            img.src = "paint?c=" + encodeURIComponent(JSON.stringify(json));
+        }
+    </script>
+</head>
+<body>
+<h1>Drawing playground</h1>
+<p>Image dimensions are 810x510.</p>
+<div class='paint'>
+    <img id="img" src='paint?c={"content":[]}'/>
+</div>
+Config:<br/>
+<textarea id="config" style="width: 50em; height: 30em">
+    {
+        "blank": "blank.png",
+        "content": [
+        ]
+    }
+</textarea>
+<br/>
+<button onclick="run()">Run</button>
+</body>
+</html>

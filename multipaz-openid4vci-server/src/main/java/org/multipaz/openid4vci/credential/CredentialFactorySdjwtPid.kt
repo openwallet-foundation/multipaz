@@ -182,6 +182,9 @@ internal class CredentialFactorySdjwtPid : CredentialFactory {
         )
     }
 
+    override suspend fun display(systemOfRecordData: DataItem): CredentialDisplay =
+        CredentialDisplay.create(systemOfRecordData, "credential_pid")
+
     companion object {
         private val FORMAT = CredentialFormat.SdJwt(EUPersonalID.EUPID_VCT)
         private const val TAG = "CredentialFactorySdjwtPid"

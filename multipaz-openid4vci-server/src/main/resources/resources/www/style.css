@@ -25,6 +25,13 @@ div#main {
     width:200px;
 }
 
+.paint img {
+    // assume pixel density is 2
+    width: 405px;
+    height: 205px;
+    margin-left: 32px;
+}
+
 .header {
     border-bottom: 2px solid black
 }

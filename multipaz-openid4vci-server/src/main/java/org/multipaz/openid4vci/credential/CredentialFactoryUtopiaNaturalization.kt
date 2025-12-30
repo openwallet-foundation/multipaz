@@ -97,6 +97,9 @@ internal class CredentialFactoryUtopiaNaturalization : CredentialFactory {
         )
     }
 
+    override suspend fun display(systemOfRecordData: DataItem): CredentialDisplay =
+        CredentialDisplay.create(systemOfRecordData, "credential_naturalization")
+
     companion object {
         private val FORMAT = CredentialFormat.SdJwt(UtopiaNaturalization.VCT)
     }

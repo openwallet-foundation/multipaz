@@ -219,6 +219,9 @@ internal class CredentialFactoryMdocPid : CredentialFactory {
         )
     }
 
+    override suspend fun display(systemOfRecordData: DataItem): CredentialDisplay =
+        CredentialDisplay.create(systemOfRecordData, "credential_pid")
+
     companion object {
         private const val TAG = "CredentialFactoryMdocPid"
     }

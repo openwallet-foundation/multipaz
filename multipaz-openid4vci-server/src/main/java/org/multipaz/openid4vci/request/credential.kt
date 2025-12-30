@@ -17,6 +17,7 @@ import org.multipaz.util.fromBase64Url
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -32,6 +33,7 @@ import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.openid4vci.credential.CredentialDisplay
 import org.multipaz.webtoken.ChallengeInvalidException
 import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.openid4vci.util.IssuanceState
@@ -47,6 +49,7 @@ import org.multipaz.webtoken.validateJwt
 import org.multipaz.openid4vci.util.CredentialState
 import org.multipaz.openid4vci.util.respondWithNewDPoPNonce
 import org.multipaz.provisioning.CredentialFormat
+import org.multipaz.rpc.backend.Configuration
 import org.multipaz.server.enrollment.ServerIdentity
 import org.multipaz.server.enrollment.validateServerIdentityCertificateChain
 import org.multipaz.util.toBase64Url
@@ -86,6 +89,10 @@ suspend fun credential(call: ApplicationCall) {
 
     val credentialData = readSystemOfRecord(state)
 
+    val display = factory.display(credentialData)
+    val locale = BackendEnvironment.getInterface(Configuration::class)!!
+        .getValue("issuer_locale") ?: "en-US"
+
     val signingKey = factory.getSigningKey()
     if (factory.cryptographicBindingMethods.isEmpty()) {
         val credentialId = CredentialState.createCredentialId(
@@ -111,6 +118,7 @@ suspend fun credential(call: ApplicationCall) {
         IssuanceState.updateIssuanceState(id, state, expiration = null)
         call.respondText(
             text = buildJsonObject {
+                addDisplay(locale, display)
                 putJsonArray("credentials") {
                     addJsonObject {
                         put("credential", minted.credential)
@@ -242,6 +250,7 @@ suspend fun credential(call: ApplicationCall) {
 
     val result =
         buildJsonObject {
+            addDisplay(locale, display)
             putJsonArray("credentials") {
                 for (credential in credentials) {
                     addJsonObject {
@@ -255,6 +264,22 @@ suspend fun credential(call: ApplicationCall) {
         contentType = ContentType.Application.Json
     )
 }
+
+private fun JsonObjectBuilder.addDisplay(locale: String, display: CredentialDisplay?) =
+    display?.let { display ->
+        putJsonArray("display") {
+            addJsonObject {
+                put("name", display.title)
+                put("locale", locale)
+                display.cardArtUrl?.let { url ->
+                    put("logo", buildJsonObject {
+                        put("uri", url)
+                    })
+                }
+            }
+        }
+    }
+
 
 private const val TAG = "credential"
 
