@@ -101,53 +101,6 @@ internal data class IssuerConfiguration(
             )
         }
 
-        private suspend fun extractDisplay(
-            element: JsonObject?,
-            clientPreferences: OpenID4VCIClientPreferences
-        ): Display {
-            val displayJson = element?.arrayOrNull("display")
-            if (displayJson == null || displayJson.isEmpty()) {
-                return Display("Untitled", null)
-            }
-            var bestMatch: JsonObject? = null
-            var bestRank = Int.MAX_VALUE
-            for (displayObj in displayJson) {
-                if (displayObj !is JsonObject) {
-                    throw IllegalStateException("Invalid display object in metadata")
-                }
-                val locale = displayObj["locale"]
-                val localeText = if (locale == null) {
-                    "unknown"
-                } else {
-                    if (locale !is JsonPrimitive) {
-                        throw IllegalStateException("Invalid display object in metadata")
-                    }
-                    locale.jsonPrimitive.content
-                }
-                // TODO: we only do exact locale matches now, that's too restrictive
-                val index = clientPreferences.locales.indexOf(localeText)
-                val rank = if (index >= 0) index else clientPreferences.locales.size
-                if (bestRank > rank) {
-                    bestRank = rank
-                    bestMatch = displayObj
-                }
-            }
-            val text = bestMatch!!.string("name")
-            val logoObj = bestMatch.objOrNull("logo")
-            var logo: ByteString? = null
-            if (logoObj != null) {
-                val uri = logoObj.stringOrNull("uri")
-                if (uri != null) {
-                    val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
-                    val response = httpClient.get(uri)
-                    if (response.status == HttpStatusCode.OK) {
-                        logo = ByteString(response.readRawBytes())
-                    }
-                }
-            }
-            return Display(text, logo)
-        }
-
         private fun extractFormat(config: JsonObject): CredentialFormat =
             when (val format = config.string("format")) {
                 "dc+sd-jwt" -> CredentialFormat.SdJwt(config.string("vct"))

@@ -1,6 +1,5 @@
 package org.multipaz.provisioning
 
-import kotlinx.io.bytestring.ByteString
 import org.multipaz.securearea.SecureArea
 
 /**
@@ -61,5 +60,5 @@ interface ProvisioningClient {
      * [keyInfo] key binding information, required type is determined by
      * [CredentialMetadata.keyBindingType].
      */
-    suspend fun obtainCredentials(keyInfo: KeyBindingInfo): List<ByteString>
+    suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials
 }

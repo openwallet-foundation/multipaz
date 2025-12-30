@@ -37,6 +37,7 @@ import org.multipaz.provisioning.AuthorizationException
 import org.multipaz.provisioning.AuthorizationResponse
 import org.multipaz.provisioning.KeyBindingInfo
 import org.multipaz.provisioning.CredentialFormat
+import org.multipaz.provisioning.Credentials
 import org.multipaz.provisioning.KeyBindingType
 import org.multipaz.provisioning.ProvisioningClient
 import org.multipaz.provisioning.ProvisioningMetadata
@@ -138,7 +139,7 @@ internal class OpenID4VCIProvisioningClient(
         return cNonce
     }
 
-    override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): List<ByteString> {
+    override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials {
         refreshAccessIfNeeded()
         val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
 
@@ -200,7 +201,7 @@ internal class OpenID4VCIProvisioningClient(
         Logger.i(TAG, "Got successful response for credential request")
 
         val response = Json.parseToJsonElement(responseText) as JsonObject
-        return response["credentials"]!!.jsonArray.map {
+        val serializedCredentials = response["credentials"]!!.jsonArray.map {
             if (it !is JsonObject) {
                 throw IllegalStateException("Credential must be represented as json string")
             }
@@ -210,6 +211,12 @@ internal class OpenID4VCIProvisioningClient(
                 is CredentialFormat.SdJwt -> text.encodeToByteString()
             }
         }
+        val display = if (response.containsKey("display")) {
+            JsonParsing("Credentials").extractDisplay(response, clientPreferences)
+        } else {
+            null
+        }
+        return Credentials(serializedCredentials, display)
     }
 
     private suspend fun buildKeyProofs(keyInfo: KeyBindingInfo): JsonElement? =

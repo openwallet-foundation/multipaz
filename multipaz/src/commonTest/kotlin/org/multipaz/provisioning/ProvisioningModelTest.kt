@@ -7,7 +7,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -83,16 +82,8 @@ class ProvisioningModelTest {
             documentStore = documentStore,
             secureArea = secureArea,
             httpClient = HttpClient(mockHttpEngine),
-            promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build(),
-        ) { metadata, credentialDisplay, issuerDisplay ->
-            (metadata as DocumentMetadata).setMetadata(
-                displayName = "Document Title",
-                typeDisplayName = credentialDisplay.text,
-                cardArt = credentialDisplay.logo,
-                issuerLogo = issuerDisplay.logo,
-                other = null
-            )
-        }
+            promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build()
+        )
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -228,7 +219,7 @@ class ProvisioningModelTest {
 
         override suspend fun getKeyBindingChallenge(): String = "test_challenge"
 
-        override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): List<ByteString> {
+        override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials {
             obtainCredentialsHook()
             return when (keyInfo) {
                 is KeyBindingInfo.Attestation ->
@@ -258,7 +249,7 @@ class ProvisioningModelTest {
         suspend fun generateTestMDoc(
             docType: String,
             publicKeys: List<EcPublicKey>
-        ): List<ByteString> {
+        ): Credentials {
             val now = Clock.System.now()
             val nameSpacedData = NameSpacedData.Builder()
                 .putEntryString("ns", "name", "value")
@@ -277,7 +268,7 @@ class ProvisioningModelTest {
                 validFrom = validFrom,
                 validUntil = validUntil
             ).build()
-            return publicKeys.map { publicKey ->
+            val credentials = publicKeys.map { publicKey ->
                 val msoGenerator = MobileSecurityObjectGenerator(
                     Algorithm.SHA256,
                     docType,
@@ -334,6 +325,10 @@ class ProvisioningModelTest {
                     ).generate()
                 )
             }
+            return Credentials(
+                serializedCredentials = credentials,
+                display = Display(text = "Document Title", logo = null)
+            )
         }
     }
 }

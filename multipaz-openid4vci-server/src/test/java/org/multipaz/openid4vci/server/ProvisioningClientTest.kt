@@ -205,7 +205,7 @@ class ProvisioningClientTest {
             val credentials = provisioningClient.obtainCredentials(KeyBindingInfo.Attestation(
                 listOf(KeyIdAndAttestation("foo", keyInfo.attestation))))
 
-            Assert.assertEquals(1, credentials.size)
+            Assert.assertEquals(1, credentials.serializedCredentials.size)
         }
     }
 
@@ -276,7 +276,7 @@ class ProvisioningClientTest {
             val credentials = provisioningClient.obtainCredentials(KeyBindingInfo.Attestation(
                     listOf(KeyIdAndAttestation("bar", keyInfo.attestation))))
 
-            Assert.assertEquals(1, credentials.size)
+            Assert.assertEquals(1, credentials.serializedCredentials.size)
         }
     }
 

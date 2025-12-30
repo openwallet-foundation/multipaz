@@ -42,6 +42,7 @@ import org.multipaz.server.common.getBaseUrl
 import org.multipaz.server.common.enrollmentServerUrl
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTableSpec
+import org.multipaz.util.Eager
 import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.truncateToWholeSeconds
@@ -140,7 +141,7 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
             enrollmentsMap = buildMap {
                 putAll(enrollmentsMap)
                 put(identity, ServerIdentityRecord(
-                    signingKeyDeferred = CompletableDeferred(signingKey),
+                    signingKeyDeferred = Eager(CompletableDeferred(signingKey)),
                     requestId = null,
                     expiration = expiration,
                     responseChannel = null
@@ -150,7 +151,9 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
     }
 
     private class ServerIdentityRecord(
-        var signingKeyDeferred: Deferred<AsymmetricKey.X509Certified>,
+        // Lazy deferred seems exotic, but that's what's needed here. We do not want to launch
+        // enrollment until ServerIdentityRecord is created and registered.
+        var signingKeyDeferred: Lazy<Deferred<AsymmetricKey.X509Certified>>,
         val requestId: String? = null,
         val expiration: Instant? = null,
         val responseChannel: Channel<AsymmetricKey.X509Certified>? = null
@@ -159,7 +162,7 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
             fun fromKey(key: AsymmetricKey): ServerIdentityRecord {
                 val cert = (key as AsymmetricKey.X509Certified).certChain.certificates.first()
                 return ServerIdentityRecord(
-                    signingKeyDeferred = CompletableDeferred(key),
+                    signingKeyDeferred = Eager(CompletableDeferred(key)),
                     expiration = cert.validityNotAfter - MIN_VALIDITY_DURATION
                 )
             }
@@ -201,7 +204,7 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
                     }
                 }
             }
-            return validRecord.signingKeyDeferred
+            return validRecord.signingKeyDeferred.value
         }
 
         private suspend fun loadServerIdentity(
@@ -239,55 +242,60 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
             // Channel needs some capacity so that sending the result to the channel is not blocked.
             val responseChannel = Channel<AsymmetricKey.X509Certified>(capacity = 1)
             val requestId = Random.nextBytes(15).toBase64Url()
-            val signingKeyDeferred = CoroutineScope(Dispatchers.IO).async {
-                val selfEnroll = configuration.getValue("self_enroll") == "true"
-                val baseUrl = configuration.baseUrl
-                // If no enrollment record is found, check if we are running on localhost
-                if (LOCALHOST.matchEntire(baseUrl) != null || selfEnroll) {
-                    // Running on localhost, server-based enrollment is not possible. Self-enroll,
-                    // the root certificate will not be trusted (unless configured with a trusted
-                    // key/certificate).
-                    withContext(backendEnvironment) {
-                        val enrollment = EnrollmentImpl()
-                        val now = Clock.System.now().truncateToWholeSeconds()
-                        val expiration = now + 180.days
-                        val request = enrollment.request(
-                            requestId = requestId,
-                            identity = serverIdentity,
-                            nonce = ByteString(Random.nextBytes(15)),
-                            expiration = expiration
-                        )
-                        val certChain = generateServerIdentityLeafCertificate(
-                            serverIdentity = serverIdentity,
-                            enrollmentRequest = request,
-                            now = now,
-                            expiration = expiration
-                        )
-                        enrollment.enroll(
-                            requestId = requestId,
-                            identity = serverIdentity,
-                            alias = request.alias,
-                            certChain = certChain
-                        )
-                    }
-                } else {
-                    // Request enrollment from the server
-                    val httpClient = backendEnvironment.getInterface(HttpClient::class)!!
-                    val url = "${configuration.enrollmentServerUrl}/enroll"
-                    Logger.i(TAG, "Enrolling '$serverIdentity' using '$url'")
-                    val response = httpClient.submitForm(
-                        url = url,
-                        formParameters = parameters {
-                            append("url", baseUrl)
-                            append("identity", serverIdentity.name)
-                            append("request_id", requestId)
+            val signingKeyDeferred = lazy {
+                // Launch lazily to avoid race conditions. By the time this is launched,
+                // ServerIdentityRecord has been created and inserted in enrollmentsMap.
+                check(enrollmentsMap.containsKey(serverIdentity))
+                CoroutineScope(Dispatchers.IO).async {
+                    val selfEnroll = configuration.getValue("self_enroll") == "true"
+                    val baseUrl = configuration.baseUrl
+                    // If no enrollment record is found, check if we are running on localhost
+                    if (LOCALHOST.matchEntire(baseUrl) != null || selfEnroll) {
+                        // Running on localhost, server-based enrollment is not possible. Self-enroll,
+                        // the root certificate will not be trusted (unless configured with a trusted
+                        // key/certificate).
+                        withContext(backendEnvironment) {
+                            val enrollment = EnrollmentImpl()
+                            val now = Clock.System.now().truncateToWholeSeconds()
+                            val expiration = now + 180.days
+                            val request = enrollment.request(
+                                requestId = requestId,
+                                identity = serverIdentity,
+                                nonce = ByteString(Random.nextBytes(15)),
+                                expiration = expiration
+                            )
+                            val certChain = generateServerIdentityLeafCertificate(
+                                serverIdentity = serverIdentity,
+                                enrollmentRequest = request,
+                                now = now,
+                                expiration = expiration
+                            )
+                            enrollment.enroll(
+                                requestId = requestId,
+                                identity = serverIdentity,
+                                alias = request.alias,
+                                certChain = certChain
+                            )
                         }
-                    )
-                    if (response.status != HttpStatusCode.OK) {
-                        throw IllegalStateException("Could not enroll '$serverIdentity'")
+                    } else {
+                        // Request enrollment from the server
+                        val httpClient = backendEnvironment.getInterface(HttpClient::class)!!
+                        val url = "${configuration.enrollmentServerUrl}/enroll"
+                        Logger.i(TAG, "Enrolling '$serverIdentity' using '$url'")
+                        val response = httpClient.submitForm(
+                            url = url,
+                            formParameters = parameters {
+                                append("url", baseUrl)
+                                append("identity", serverIdentity.name)
+                                append("request_id", requestId)
+                            }
+                        )
+                        if (response.status != HttpStatusCode.OK) {
+                            throw IllegalStateException("Could not enroll '$serverIdentity'")
+                        }
                     }
+                    responseChannel.receive()
                 }
-                responseChannel.receive()
             }
             return ServerIdentityRecord(
                 signingKeyDeferred = signingKeyDeferred,

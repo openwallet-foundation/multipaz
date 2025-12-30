@@ -77,8 +77,6 @@ import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.digitalcredentials.Default
 import org.multipaz.digitalcredentials.DigitalCredentials
-import org.multipaz.document.AbstractDocumentMetadata
-import org.multipaz.document.DocumentMetadata
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
@@ -99,7 +97,6 @@ import org.multipaz.presentment.model.PresentmentModel
 import org.multipaz.presentment.model.PresentmentSource
 import org.multipaz.presentment.model.SimplePresentmentSource
 import org.multipaz.prompt.PromptModel
-import org.multipaz.provisioning.Display
 import org.multipaz.provisioning.ProvisioningModel
 import org.multipaz.request.Requester
 import org.multipaz.secure_area_test_app.ui.CloudSecureAreaScreen
@@ -369,8 +366,7 @@ class App private constructor (val promptModel: PromptModel) {
             httpClient = HttpClient(platformHttpClientEngineFactory()) {
                 followRedirects = false
             },
-            promptModel = promptModel,
-            documentMetadataInitializer = App::initializeDocumentMetadata
+            promptModel = promptModel
         )
         provisioningSupport = ProvisioningSupport(
             storage = Platform.nonBackedUpStorage,
@@ -722,21 +718,6 @@ class App private constructor (val promptModel: PromptModel) {
                 app = App(platformPromptModel)
             }
             return app!!
-        }
-
-        private suspend fun initializeDocumentMetadata(
-            metadata: AbstractDocumentMetadata,
-            credentialDisplay: Display,
-            issuerDisplay: Display
-        ) {
-            (metadata as DocumentMetadata).setMetadata(
-                displayName = credentialDisplay.text,  // TODO: customize after provisioning?
-                typeDisplayName = credentialDisplay.text,
-                cardArt = credentialDisplay.logo
-                    ?: ByteString(Res.readBytes("drawable/card_generic.png")),
-                issuerLogo = issuerDisplay.logo,
-                other = null
-            )
         }
     }
 

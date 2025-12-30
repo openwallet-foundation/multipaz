@@ -1,10 +1,19 @@
 package org.multipaz.provisioning.openid4vci
 
+import io.ktor.client.HttpClient
+import io.ktor.client.request.get
+import io.ktor.client.statement.readRawBytes
+import io.ktor.http.HttpStatusCode
+import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.crypto.Algorithm
+import org.multipaz.provisioning.Display
+import org.multipaz.rpc.backend.BackendEnvironment
+import org.multipaz.util.fromBase64
 
 internal open class JsonParsing(val source: String) {
     fun preferredAlgorithm(
@@ -101,5 +110,59 @@ internal open class JsonParsing(val source: String) {
             throw IllegalStateException("$source: $name must be an array")
         }
         return value
+    }
+
+    suspend fun extractDisplay(
+        element: JsonObject?,
+        clientPreferences: OpenID4VCIClientPreferences
+    ): Display {
+        val displayJson = element?.arrayOrNull("display")
+        if (displayJson == null || displayJson.isEmpty()) {
+            return Display("Untitled", null)
+        }
+        var bestMatch: JsonObject? = null
+        var bestRank = Int.MAX_VALUE
+        for (displayObj in displayJson) {
+            if (displayObj !is JsonObject) {
+                throw IllegalStateException("Invalid display object in metadata")
+            }
+            val locale = displayObj["locale"]
+            val localeText = if (locale == null) {
+                "unknown"
+            } else {
+                if (locale !is JsonPrimitive) {
+                    throw IllegalStateException("Invalid display object in metadata")
+                }
+                locale.jsonPrimitive.content
+            }
+            // TODO: we only do exact locale matches now, that's too restrictive
+            val index = clientPreferences.locales.indexOf(localeText)
+            val rank = if (index >= 0) index else clientPreferences.locales.size
+            if (bestRank > rank) {
+                bestRank = rank
+                bestMatch = displayObj
+            }
+        }
+        val text = bestMatch!!.string("name")
+        val logoObj = bestMatch.objOrNull("logo")
+        var logo: ByteString? = null
+        if (logoObj != null) {
+            val uri = logoObj.stringOrNull("uri")
+            if (uri != null) {
+                if (uri.startsWith("data:")) {
+                    val start = uri.indexOf(",")
+                    if (start > 0) {
+                        logo = ByteString(uri.substring(start + 1).fromBase64())
+                    }
+                } else {
+                    val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
+                    val response = httpClient.get(uri)
+                    if (response.status == HttpStatusCode.OK) {
+                        logo = ByteString(response.readRawBytes())
+                    }
+                }
+            }
+        }
+        return Display(text, logo)
     }
 }
