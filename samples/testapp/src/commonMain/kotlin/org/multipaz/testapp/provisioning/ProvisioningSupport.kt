@@ -16,7 +16,9 @@ import org.multipaz.rpc.handler.RpcExceptionMap
 import org.multipaz.rpc.transport.HttpTransport
 import org.multipaz.securearea.SecureArea
 import org.multipaz.storage.Storage
+import org.multipaz.testapp.BuildConfig
 import org.multipaz.testapp.platformHttpClientEngineFactory
+import org.multipaz.testapp.platformRedirectPath
 import org.multipaz.util.Logger
 
 /**
@@ -32,8 +34,8 @@ class ProvisioningSupport(
     val secureArea: SecureArea,
 ) {
     companion object {
-        const val APP_LINK_SERVER = "https://apps.multipaz.org"
-        const val APP_LINK_BASE_URL = "$APP_LINK_SERVER/landing/"
+        const val APP_LINK_SERVER = "https://${BuildConfig.APPLINK_HOST}"
+        val APP_LINK_BASE_URL = "$APP_LINK_SERVER$platformRedirectPath"
 
         private const val TAG = "ProvisioningSupport"
 

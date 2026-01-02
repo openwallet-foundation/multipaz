@@ -18,10 +18,15 @@ plugins {
 val projectVersionCode: Int by rootProject.extra
 val projectVersionName: String by rootProject.extra
 
+// If changing it here, it must also be changed in XCode "Signing and Capabilities", under
+// "Associated Domains"
+val applinkHost = "apps.multipaz.org"
+
 buildConfig {
     packageName("org.multipaz.testapp")
     buildConfigField("TEST_APP_UPDATE_URL", System.getenv("TEST_APP_UPDATE_URL") ?: "")
     buildConfigField("TEST_APP_UPDATE_WEBSITE_URL", System.getenv("TEST_APP_UPDATE_WEBSITE_URL") ?: "")
+    buildConfigField("APPLINK_HOST", applinkHost)
     useKotlinOutput { internalVisibility = false }
 }
 
@@ -142,6 +147,7 @@ android {
 
     defaultConfig {
         applicationId = "org.multipaz.testapp"
+        manifestPlaceholders["applinkHost"] = applinkHost
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = projectVersionCode

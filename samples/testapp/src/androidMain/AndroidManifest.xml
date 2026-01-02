@@ -67,7 +67,7 @@
             <!-- Deep Link Configuration -->
             
             <!-- 1. HTTPS App Links (default) - Requires .well-known/assetlinks.json -->
-            <!-- Examples: https://apps.multipaz.org/landing/ -->
+            <!-- Examples: https://apps.multipaz.org/redirect/org.multipaz.testapp/ -->
             <!-- Must match ProvisioningSupport.APP_LINK_SERVER -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -77,11 +77,13 @@
                 <!--
                 Do not include other schemes, only https. If domain is changed here, it
                 also MUST be changed in ProvisioningSupport class.
+
+                applinkHost is configured in Gradle
                  -->
                 <data
                     android:scheme="https"
-                    android:host="apps.multipaz.org"
-                    android:pathPattern="/landing/.*"/>
+                    android:host="${applinkHost}"
+                    android:pathPattern="/redirect/${applicationId}/"/>
             </intent-filter>
 
             <!-- 2. Custom URI Scheme - App-specific URLs -->

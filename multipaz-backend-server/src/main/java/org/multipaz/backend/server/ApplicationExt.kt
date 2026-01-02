@@ -135,7 +135,10 @@ private suspend fun generateAppleAppSiteAssociationJson(): JsonElement {
                     put("appIDs", appIds)
                     putJsonArray("components") {
                         addJsonObject {
-                            put("/", "/landing/")
+                            put("/", "/redirect/")
+                        }
+                        addJsonObject {
+                            put("/", "/landing/")  // legacy name
                         }
                     }
                 }

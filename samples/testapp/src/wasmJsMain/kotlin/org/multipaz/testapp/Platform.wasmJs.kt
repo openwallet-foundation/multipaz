@@ -18,6 +18,8 @@ actual val platformPromptModel: PromptModel by lazy {
 
 actual val platform = Platform.WASMJS
 
+actual val platformRedirectPath: String = "/redirect/"
+
 actual suspend fun platformInit() {
     // Nothing to do
 }

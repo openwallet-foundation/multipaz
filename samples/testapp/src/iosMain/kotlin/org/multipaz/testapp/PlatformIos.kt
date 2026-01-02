@@ -62,6 +62,10 @@ actual val platformAppName = "Multipaz Test App"
 
 actual val platformAppIcon = Res.drawable.app_icon
 
+// No flavors for iOS, just use generic name.
+// TODO: replace with "/redirect/" for consistency with Android once we configure it on the server.
+actual val platformRedirectPath: String get() = "/landing/"
+
 actual val platformPromptModel: PromptModel by lazy {
     IosPromptModel.Builder().apply { addCommonDialogs() }.build()
 }

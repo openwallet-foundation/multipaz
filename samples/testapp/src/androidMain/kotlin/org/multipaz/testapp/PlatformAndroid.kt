@@ -27,6 +27,9 @@ private const val TAG = "PlatformAndroid"
 
 actual val platformAppName = applicationContext.getString(R.string.app_name)
 
+// Redirect paths should differ by flavor.
+actual val platformRedirectPath: String = "/redirect/${applicationContext.packageName}/"
+
 actual val platformAppIcon = if (platformAppName.endsWith("(Red)")) {
     Res.drawable.app_icon_red
 } else {
