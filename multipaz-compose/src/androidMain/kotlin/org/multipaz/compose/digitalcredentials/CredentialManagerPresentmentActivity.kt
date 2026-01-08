@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.core.graphics.drawable.toDrawable
 import androidx.credentials.DigitalCredential
 import androidx.credentials.ExperimentalDigitalCredentialApi
@@ -27,8 +28,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import org.jetbrains.compose.resources.DrawableResource
-import org.jetbrains.compose.resources.painterResource
 import org.multipaz.compose.presentment.Presentment
 import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.context.initializeApplication
@@ -72,7 +71,7 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
      */
     data class Settings(
         val appName: String,
-        val appIcon: DrawableResource,
+        val appIcon: @Composable () -> Painter,
         val promptModel: PromptModel,
         val applicationTheme: @Composable (content: @Composable () -> Unit) -> Unit,
         val documentTypeRepository: DocumentTypeRepository,
@@ -180,7 +179,7 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
                 PromptDialogs(settings.promptModel)
                 Presentment(
                     appName = settings.appName,
-                    appIconPainter = painterResource(settings.appIcon),
+                    appIconPainter = settings.appIcon(),
                     presentmentModel = presentmentModel,
                     presentmentSource = settings.presentmentSource,
                     documentTypeRepository = settings.documentTypeRepository,

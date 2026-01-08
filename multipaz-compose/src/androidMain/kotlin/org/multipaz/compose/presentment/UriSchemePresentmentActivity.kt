@@ -7,14 +7,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
 import io.ktor.client.engine.HttpClientEngineFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.DrawableResource
-import org.jetbrains.compose.resources.painterResource
 import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.context.initializeApplication
 import org.multipaz.documenttype.DocumentTypeRepository
@@ -53,7 +52,7 @@ abstract class UriSchemePresentmentActivity: FragmentActivity() {
      */
     data class Settings(
         val appName: String,
-        val appIcon: DrawableResource,
+        val appIcon: @Composable () -> Painter,
         val promptModel: PromptModel,
         val applicationTheme: @Composable (content: @Composable () -> Unit) -> Unit,
         val documentTypeRepository: DocumentTypeRepository,
@@ -148,7 +147,7 @@ abstract class UriSchemePresentmentActivity: FragmentActivity() {
                 PromptDialogs(settings.promptModel)
                 Presentment(
                     appName = settings.appName,
-                    appIconPainter = painterResource(settings.appIcon),
+                    appIconPainter = settings.appIcon(),
                     presentmentModel = presentmentModel,
                     presentmentSource = settings.presentmentSource,
                     documentTypeRepository = settings.documentTypeRepository,
