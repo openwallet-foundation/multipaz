@@ -699,7 +699,33 @@ class VerificationHelper internal constructor(
         transceiverThread.start()
     }
 
-    private fun setDeviceEngagement(
+    /**
+     * Set device engagement data acquired from a secondary source; a source other than
+     * Android NFC or QR code.
+     *
+     * This method initializes the session state, including the reader ephemeral key
+     * and the session transcript.
+     *
+     * After calling this method, the caller is responsible for parsing the connection
+     * methods from the engagement data and calling [reportDeviceEngagementReceived],
+     * which will then trigger the [Listener.onDeviceEngagementReceived] callback.
+     *
+     * This method must be called before [connect].
+     *
+     * @param deviceEngagement, a [ByteArray], the raw CBOR-encoded
+     *   [org.multipaz.mdoc.engagement.DeviceEngagement]
+     *   structure as defined in ISO 18013-5. This contains the device's public key and supported
+     *   connection methods.
+     * @param handover, a [DataItem], the raw CBOR-encoded ISO 18013-5 handover structure to
+     *   be included in the Session Transcript. For QR code engagement, this is typically
+     *   [org.multipaz.cbor.Simple.NULL]. For NFC, it contains the hashes of the handover select
+     *   and handover request messages.
+     * @param engagementMethod, an [EngagementMethod], the [EngagementMethod] used to retrieve the
+     *  engagement data, used for tracking the provenance of the session.
+     *
+     * @throws IllegalStateException if called after [connect].
+     */
+    fun setDeviceEngagement(
         deviceEngagement: ByteArray,
         handover: DataItem,
         engagementMethod: EngagementMethod
