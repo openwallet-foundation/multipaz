@@ -1,6 +1,5 @@
 package org.multipaz.storage.ephemeral
 
-import org.multipaz.cbor.Bstr
 import org.multipaz.storage.base.BaseStorage
 import org.multipaz.storage.base.BaseStorageTable
 import org.multipaz.storage.StorageTableSpec
@@ -13,6 +12,8 @@ class EphemeralStorage(clock: Clock = Clock.System) : BaseStorage(clock) {
         val clockToUse = if (tableSpec.supportExpiration) clock else StoppedClock
         return EphemeralStorageTable(this, tableSpec, clockToUse)
     }
+
+    internal val storage = mutableMapOf<String, MutableList<EphemeralStorageItem>>()
 
     suspend fun serialize(): ByteString {
         val out = ByteStringBuilder()

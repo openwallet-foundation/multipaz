@@ -100,7 +100,7 @@ private suspend fun PresentmentSource.mdocFindDocumentsForRequest(
     val now = Clock.System.now()
     val result = mutableListOf<Document>()
 
-    for (documentName in documentStore.listDocuments()) {
+    for (documentName in documentStore.listDocumentIds()) {
         val document = documentStore.lookupDocument(documentName) ?: continue
         if (mdocDocumentMatchesRequest(request, document)) {
             result.add(document)
@@ -127,7 +127,7 @@ private suspend fun PresentmentSource.sdjwtFindDocumentsForRequest(
     val now = Clock.System.now()
     val result = mutableListOf<Document>()
 
-    for (documentName in documentStore.listDocuments()) {
+    for (documentName in documentStore.listDocumentIds()) {
         val document = documentStore.lookupDocument(documentName) ?: continue
         if (sdjwtDocumentMatchesRequest(request, document)) {
             result.add(document)

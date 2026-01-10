@@ -47,7 +47,6 @@ import org.multipaz.compose.document.DocumentModel
 import org.multipaz.testapp.TestAppSettingsModel
 import org.multipaz.testapp.TestAppUtils
 import io.ktor.http.encodeURLParameter
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -213,7 +212,7 @@ fun DocumentStoreScreen(
             TextButton(onClick = {
                 coroutineScope.launch {
                     val timestampBegin = Clock.System.now()
-                    documentStore.listDocuments().forEach { documentId ->
+                    documentStore.listDocumentIds().forEach { documentId ->
                         documentStore.deleteDocument(documentId)
                     }
                     val timestampEnd = Clock.System.now()
@@ -431,7 +430,7 @@ fun DocumentStoreScreen(
                             // TODO: Go to page showing document details and credentials
                         }) {
                             Text(
-                                text = documentInfo.document.metadata.displayName ?: "(displayName not set)"
+                                text = documentInfo.document.displayName ?: "(displayName not set)"
                             )
                         }
                     }
@@ -487,7 +486,7 @@ private suspend fun provisionTestDocuments(
     // This can be slow... so we show a dialog to help convey this to the user.
     showDocumentCreationDialog.value = true
 
-    if (documentCreationMode == DocumentCreationMode.NORMAL && documentStore.listDocuments().size >= 5) {
+    if (documentCreationMode == DocumentCreationMode.NORMAL && documentStore.listDocumentIds().size >= 5) {
         // TODO: we need a more granular check once we support provisioning of other kinds of documents
         showToast("Test Documents already provisioned. Delete all documents and try again")
         showDocumentCreationDialog.value = false
@@ -505,7 +504,7 @@ private suspend fun provisionTestDocuments(
         return
     }
     try {
-        val numDocsBegin = documentStore.listDocuments().size
+        val numDocsBegin = documentStore.listDocumentIds().size
         val timestampBegin = Clock.System.now()
         val openid4vciAttestationCompactSerialization = TestAppUtils.provisionTestDocuments(
             documentCreationMode,
@@ -518,7 +517,7 @@ private suspend fun provisionTestDocuments(
             numCredentialsPerDomain
         )
         val timestampEnd = Clock.System.now()
-        val numDocsEnd = documentStore.listDocuments().size
+        val numDocsEnd = documentStore.listDocumentIds().size
 
         val provisioningResult = buildAnnotatedString {
             Logger.i(TAG, "Created ${numDocsEnd - numDocsBegin} document(s) in ${timestampEnd - timestampBegin}.")

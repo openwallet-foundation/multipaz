@@ -25,8 +25,8 @@ fun Document.RenderCartArtWithFallback(
     size: Dp = 40.dp,
     forceFallback: Boolean = false
 ) {
-    if (metadata.cardArt != null && !forceFallback) {
-        val imageBitmap = remember { decodeImage(metadata.cardArt!!.toByteArray()) }
+    if (cardArt != null && !forceFallback) {
+        val imageBitmap = remember { decodeImage(cardArt!!.toByteArray()) }
         Box(
             modifier = modifier.size(size),
             contentAlignment = Alignment.Center
@@ -39,7 +39,7 @@ fun Document.RenderCartArtWithFallback(
         return
     }
 
-    val name = metadata.displayName ?: "Document"
+    val name = displayName ?: "Document"
     val initials = name.split(" ")
         .mapNotNull { it.firstOrNull()?.uppercaseChar() }
         .take(2)

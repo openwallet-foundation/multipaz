@@ -155,7 +155,7 @@ internal fun DcqlResponseCredentialSetOptionMemberMatch.print(pp: PrettyPrinter)
     pp.append("credential:")
     pp.pushIndent()
     pp.append("type: ${credential.credentialType}")
-    pp.append("docId: ${credential.document.metadata.displayName}")
+    pp.append("docId: ${credential.document.displayName}")
     pp.append("claims:")
     pp.pushIndent()
     for ((requestedClaim, claim) in claims) {

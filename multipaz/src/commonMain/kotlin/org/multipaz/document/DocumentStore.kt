@@ -29,6 +29,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.credential.Credential
 import org.multipaz.credential.CredentialLoaderBuilder
+import org.multipaz.provisioning.Provisioning
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * Class for storing real-world identity documents.
@@ -59,11 +62,10 @@ class DocumentStore private constructor(
     val storage: Storage,
     val secureAreaRepository: SecureAreaRepository,
     internal val credentialLoader: CredentialLoader,
-    internal val documentMetadataFactory: suspend (
+    internal val documentMetadataFactory: (suspend (
         documentId: String,
-        data: ByteString?,
-        saveFn: suspend (data: ByteString) -> Unit
-    ) -> AbstractDocumentMetadata,
+        data: ByteString,
+    ) -> AbstractDocumentMetadata)?,
     private val documentTableSpec: StorageTableSpec = Document.defaultTableSpec
 ) {
     // Use a cache so the same instance is returned by multiple lookupDocument() calls.
@@ -79,24 +81,18 @@ class DocumentStore private constructor(
     /**
      * Creates a new document.
      *
-     * The parameters passed will be available in the [Document.metadata] property of the returned
-     * document and can be updated using [AbstractDocumentMetadata.setMetadata] and
-     * [AbstractDocumentMetadata.markAsProvisioned].
-     *
-     * The initial provisioning state of the document will be `false`. This can be updated using
-     * [AbstractDocumentMetadata.markAsProvisioned] when configured with one or more certified [Credential] instances.
-     *
-     * If a document with the given identifier already exists, it will be deleted prior to
-     * creating the document.
-     *
-     * @param displayName User-facing name of this specific [Document] instance, e.g. "John's Passport", or `null`.
-     * @param typeDisplayName User-facing name of this document type, e.g. "Utopia Passport", or `null`.
-     * @param cardArt An image that represents this document to the user in the UI. Generally, the aspect
-     *   ratio of 1.586 is expected (based on ID-1 from the ISO/IEC 7810). PNG format is expected
-     *   and transparency is supported.
-     * @param issuerLogo An image that represents the issuer of the document in the UI, e.g. passport office logo.
-     *   PNG format is expected, transparency is supported and square aspect ratio is preferred.
-     * @param other Additional data the application wishes to store.
+     * @param displayName User-facing name of this specific [Document] instance, e.g.
+     *  "John's Passport", or `null`.
+     * @param typeDisplayName User-facing name of this document type, e.g. "Utopia Passport",
+     *  or `null`.
+     * @param cardArt An image that represents this document to the user in the UI. Generally,
+     *  the aspect ratio of 1.586 is expected (based on ID-1 from the ISO/IEC 7810). PNG format
+     *  is expected and transparency is supported.
+     * @param issuerLogo An image that represents the issuer of the document in the UI,
+     *  e.g. passport office logo. PNG format is expected, transparency is supported and square
+     *  aspect ratio is preferred.
+     * @param metadata initial value for [Document.metadata]
+     * @return A newly created document.
      */
     suspend fun createDocument(
         displayName: String? = null,
@@ -104,42 +100,29 @@ class DocumentStore private constructor(
         cardArt: ByteString? = null,
         issuerLogo: ByteString? = null,
         authorizationData: ByteString? = null,
-        other: ByteString? = null
-    ): Document {
-        return createDocument(
-            metadataInitializer = {
-                val metadata = it as DocumentMetadata
-                metadata.setMetadata(
-                    displayName, typeDisplayName, cardArt, issuerLogo, authorizationData, other)
-            }
-        )
-    }
-
-    /**
-     * Creates a new document using another [AbstractDocumentMetadata] than [DocumentMetadata].
-     *
-     * If a document with the given identifier already exists, it will be deleted prior to
-     * creating the document.
-     *
-     * @param metadataInitializer a function to create an instance implementing [AbstractDocumentMetadata].
-     * @return A newly created document.
-     */
-    suspend fun createDocument(
-        metadataInitializer: suspend (metadata: AbstractDocumentMetadata) -> Unit = {}
+        created: Instant = Clock.System.now(),
+        metadata: AbstractDocumentMetadata? = null
     ): Document {
         val table = storage.getTable(documentTableSpec)
-        val documentIdentifier = table.insert(key = null, ByteString())
-        val document = Document(this, documentIdentifier)
-        document.metadata = documentMetadataFactory(
-            document.identifier,
-            null,
-            document::saveMetadata
+        val data = DocumentData(
+            provisioned = false,
+            created = created,
+            displayName = displayName,
+            typeDisplayName = typeDisplayName,
+            cardArt = cardArt,
+            issuerLogo = issuerLogo,
+            authorizationData = authorizationData,
+            metadata = metadata?.serialize()
         )
-        metadataInitializer(document.metadata)
-        lock.withLock {
-            documentCache[document.identifier] = document
+        // NB: insertion in the storage is when the document is actually added, it may be
+        // inserted in the cache before we manage to call lock.withLock below
+        val documentIdentifier = table.insert(key = null, ByteString(data.toCbor()))
+        emitOnDocumentAdded(documentIdentifier)
+        val document = lock.withLock {
+            documentCache.getOrPut(documentIdentifier) {
+                Document(this, documentIdentifier, data, metadata)
+            }
         }
-        emitOnDocumentAdded(document.identifier)
         return document
     }
 
@@ -154,21 +137,44 @@ class DocumentStore private constructor(
             documentCache.getOrPut(identifier) {
                 val table = getDocumentTable()
                 val blob = table.get(identifier) ?: return@withLock null
-                val document = Document(this, identifier)
-                document.metadata = documentMetadataFactory(identifier, blob, document::saveMetadata)
+                val data = DocumentData.fromCbor(blob.toByteArray())
+                val metadata = data.metadata?.let {
+                    documentMetadataFactory!!(identifier, it)
+                }
+                val document = Document(this, identifier, data, metadata)
                 document
             }
         }
     }
 
     /**
-     * Lists all documents in the store.
+     * Lists all document ids in the store.
+     *
+     * Ids are returned sorted *as strings*, not in the document sorting order.
      *
      * @return list of all the document identifiers in the store.
      */
-    suspend fun listDocuments(): List<String> {
+    suspend fun listDocumentIds(): List<String> {
         // right now lock is not required
         return storage.getTable(documentTableSpec).enumerate()
+    }
+
+    /**
+     * Lists all documents in the store.
+     *
+     * @param sort if true, the returned list is sorted using [Document.Comparator]
+     * @return list of all the documents in the store.
+     */
+    suspend fun listDocuments(sort: Boolean = true): List<Document> {
+        // right now lock is not required
+        val list = storage.getTable(documentTableSpec).enumerate().mapNotNull {
+            lookupDocument(it)
+        }
+        return if (sort) {
+            list.sortedWith(Document.Comparator)
+        } else {
+            list
+        }
     }
 
     /**
@@ -180,13 +186,18 @@ class DocumentStore private constructor(
      */
     suspend fun deleteDocument(identifier: String) {
         lookupDocument(identifier)?.let { document ->
-            val metadata = lock.withLock {
-                val metadata = document.metadata
+            lock.withLock {
                 document.deleteDocument()
                 documentCache.remove(identifier)
-                metadata
             }
-            metadata.cleanup(secureAreaRepository, storage)
+            document.authorizationData?.let {
+                Provisioning.cleanupAuthorizationData(
+                    authorizationData = it,
+                    secureAreaRepository = secureAreaRepository,
+                    storage = storage
+                )
+            }
+            document.metadata?.cleanup(secureAreaRepository, storage)
         }
     }
 
@@ -232,20 +243,18 @@ class DocumentStore private constructor(
             addKeyBoundSdJwtVcCredential()
         }
 
-        private var documentMetadataFactory: suspend (
+        private var documentMetadataFactory: (suspend (
             documentId: String,
-            data: ByteString?,
-            saveFn: suspend (data: ByteString) -> Unit
-        ) -> AbstractDocumentMetadata = DocumentMetadata::create
+            data: ByteString
+        ) -> AbstractDocumentMetadata)? = null
 
         private var documentTableSpec: StorageTableSpec = Document.defaultTableSpec
 
         /**
          * Sets the factory function for creating [AbstractDocumentMetadata] instances.
          *
-         * This should only be called if the applications wants to use another [AbstractDocumentMetadata]
-         * implementation than [DocumentMetadata]. By default this is set to [DocumentMetadata.create]
-         * which creates [DocumentMetadata] instances.
+         * This should only be called if the applications wants to use [AbstractDocumentMetadata].
+         * By default there is no factory and [Document.metadata] field is null.
          *
          * @param factory the factory to use.
          * @return the builder.
@@ -253,8 +262,7 @@ class DocumentStore private constructor(
         fun setDocumentMetadataFactory(
             factory: suspend (
                 documentId: String,
-                data: ByteString?,
-                saveFn: suspend (data: ByteString) -> Unit
+                data: ByteString
             ) -> AbstractDocumentMetadata
         ): Builder {
             this.documentMetadataFactory = factory

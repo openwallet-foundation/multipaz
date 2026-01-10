@@ -104,7 +104,9 @@ class DeviceResponseGeneratorTest {
             .putEntryString("ns2", "bar1", "foo1")
             .putEntryString("ns2", "bar2", "foo2")
             .build()
-        document.testMetadata.setNameSpacedData(nameSpacedData)
+        document.edit {
+            metadata = TestDocumentMetadata(nameSpacedData)
+        }
         val overrides: MutableMap<String, Map<String, ByteArray>> = HashMap()
         val overridesForNs1: MutableMap<String, ByteArray> = HashMap()
         overridesForNs1["foo3"] = Cbor.encode(Tstr("bar3_override"))

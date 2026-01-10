@@ -5,7 +5,6 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
 import org.multipaz.storage.KeyExistsStorageException
 import org.multipaz.storage.NoRecordStorageException
-import org.multipaz.storage.Storage
 import org.multipaz.storage.base.BaseStorageTable
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.toBase64Url
@@ -19,13 +18,15 @@ import kotlin.math.abs
 import kotlin.random.Random
 
 internal class EphemeralStorageTable(
-    override val storage: Storage,
+    override val storage: EphemeralStorage,
     spec: StorageTableSpec,
     private val clock: Clock
 ): BaseStorageTable(spec) {
 
     private val lock = Mutex()
-    private var storedData = mutableListOf<EphemeralStorageItem>()
+    private val storedData = storage.storage.getOrPut(spec.name.lowercase()) {
+        mutableListOf()
+    }
     private var earliestExpiration: Instant = Instant.DISTANT_FUTURE
 
     override suspend fun get(key: String, partitionId: String?): ByteString? {
@@ -72,7 +73,7 @@ internal class EphemeralStorageTable(
                         return@withLock keyToUse
                     }
                     throw KeyExistsStorageException(
-                        "Record with ${recordDescription(key!!, partitionId)} already exists"
+                        "Record with ${recordDescription(key, partitionId)} already exists"
                     )
                 }
             }
@@ -213,7 +214,8 @@ internal class EphemeralStorageTable(
                         unexpired.add(item)
                     }
                 }
-                storedData = unexpired
+                storedData.clear()
+                storedData.addAll(unexpired)
             }
         }
     }

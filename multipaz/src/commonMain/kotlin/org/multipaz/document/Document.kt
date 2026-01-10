@@ -24,6 +24,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.storage.base.BaseStorageTable
 import kotlin.concurrent.Volatile
 
 /**
@@ -39,8 +40,8 @@ import kotlin.concurrent.Volatile
  *
  * Arbitrary data can be stored in documents using the [AbstractDocumentMetadata] returned
  * by [metadata]. Applications that use this library should supply their [AbstractDocumentMetadata]
- * factory using [DocumentStore.Builder.setDocumentMetadataFactory] if the built-in
- * [DocumentMetadata] isn't sufficient.
+ * factory using [DocumentStore.Builder.setDocumentMetadataFactory] if there is a need to
+ * store custom data alongside the document itself.
  *
  * Each document may have a number of *Credentials*
  * associated with it. These credentials are intended to be used in ways specified by the
@@ -82,6 +83,9 @@ import kotlin.concurrent.Volatile
 class Document internal constructor(
     internal val store: DocumentStore,
     val identifier: String,
+    @Volatile
+    private var data: DocumentData,
+    metadata: AbstractDocumentMetadata?
 ) {
     // Protects credentialCache and allCredentialsLoaded
     // NB: when this lock is held, don't attempt to call anything that requires also
@@ -90,12 +94,50 @@ class Document internal constructor(
     private val lock = Mutex()
     private val credentialCache = mutableMapOf<String, Credential>()
     private var allCredentialsLoaded = false
-    lateinit var metadata: AbstractDocumentMetadata
+
+    @Volatile
+    var metadata: AbstractDocumentMetadata?
         internal set
+
+    init {
+        this.metadata = metadata
+    }
 
     @Volatile
     internal var deleted = false
         private set
+
+    /** Whether the document is provisioned, i.e. issuer is ready to provide credentials. */
+    val provisioned: Boolean get() = data.provisioned
+
+    val created: Instant get() = data.created
+
+    val orderingKey: String? get() = data.orderingKey
+
+    /** User-facing name of this specific [Document] instance, e.g. "John's Passport". */
+    val displayName: String? get() = data.displayName
+
+    /** User-facing name of this document type, e.g. "Utopia Passport". */
+    val typeDisplayName: String? get() = data.typeDisplayName
+
+    /**
+     * An image that represents this document to the user in the UI. Generally, the aspect
+     * ratio of 1.586 is expected (based on ID-1 from the ISO/IEC 7810). PNG format is expected
+     * and transparency is supported.
+     * */
+    val cardArt: ByteString? get() = data.cardArt
+
+    /**
+     * An image that represents the issuer of the document in the UI, e.g. passport office logo.
+     * PNG format is expected, transparency is supported and square aspect ratio is preferred.
+     */
+    val issuerLogo: ByteString? get() = data.issuerLogo
+
+    /**
+     * Saved authorization data to refresh credentials, possibly without requiring
+     * user to re-authorize.
+     */
+    val authorizationData: ByteString? get() = data.authorizationData
 
     /** Clear cached credentials; only used for testing */
     internal suspend fun deleteCache() = lock.withLock {
@@ -191,15 +233,6 @@ class Document internal constructor(
         return getCredentials().filter { it.isCertified && it.domain == domain }
     }
 
-    internal suspend fun saveMetadata(blob: ByteString) {
-        if (deleted) {
-            Logger.w(TAG, "Attempt to save deleted document '$identifier'")
-        } else {
-            store.getDocumentTable().update(identifier, blob)
-            store.emitOnDocumentChanged(identifier)
-        }
-    }
-
     // Called from DocumentStore.deleteDocument
     internal suspend fun deleteDocument() {
         deleted = true
@@ -224,6 +257,7 @@ class Document internal constructor(
                 credential.deleteCredential()
                 credentialCache.remove(credential.identifier)
             }
+            store.emitOnDocumentChanged(identifier)
         }
         getReplacementCredentialFor(credentialIdentifier)?.replacementForDeleted()
     }
@@ -334,13 +368,155 @@ class Document internal constructor(
         return UsableCredentialResult(numCredentials, numCredentialsAvailable)
     }
 
+    suspend fun edit(editAction: suspend Editor.() -> Unit) {
+        val editor = Editor(
+            provisioned = data.provisioned,
+            created = data.created,
+            orderingKey = data.orderingKey,
+            displayName = data.displayName,
+            typeDisplayName = data.typeDisplayName,
+            cardArt = data.cardArt,
+            issuerLogo = data.issuerLogo,
+            authorizationData = data.authorizationData,
+            metadata = metadata
+        )
+        editAction.invoke(editor)
+        val data = DocumentData(
+            provisioned = editor.provisioned,
+            created = editor.created,
+            orderingKey = editor.orderingKey,
+            displayName = editor.displayName,
+            typeDisplayName = editor.typeDisplayName,
+            cardArt = editor.cardArt,
+            issuerLogo = editor.issuerLogo,
+            authorizationData = editor.authorizationData,
+            metadata = metadata?.serialize()
+        )
+        val blob = ByteString(data.toCbor())
+        metadata = editor.metadata
+        this.data = data
+        store.getDocumentTable().update(identifier, blob)
+        store.emitOnDocumentChanged(identifier)
+    }
+
+    class Editor internal constructor(
+        var provisioned: Boolean,
+        var created: Instant,
+        var orderingKey: String?,
+        var displayName: String?,
+        var typeDisplayName: String?,
+        var cardArt: ByteString?,
+        var issuerLogo: ByteString?,
+        var authorizationData: ByteString?,
+        var metadata: AbstractDocumentMetadata?
+    )
+
+    /**
+     * Defines default document order: by [Document.orderingKey], then by [Document.created],
+     * then by [Document.identifier].
+     */
+    object Comparator: kotlin.Comparator<Document> {
+        override fun compare(a: Document, b: Document): Int {
+            val ordering = (a.orderingKey ?: "").compareTo(b.orderingKey ?: "")
+            if (ordering != 0) {
+                return ordering
+            }
+            val creation = a.created.compareTo(b.created)
+            if (creation != 0) {
+                return creation
+            }
+            return a.identifier.compareTo(b.identifier)
+        }
+    }
+
     companion object {
         private const val TAG = "Document"
 
-        val defaultTableSpec = StorageTableSpec(
+        var customSchema0_97_0_MigrationFn:
+                ((documentId: String, data: ByteString) -> ByteString)? = null
+
+        val defaultTableSpec = object: StorageTableSpec(
             name = "Documents",
             supportPartitions = false,
-            supportExpiration = false
-        )
+            supportExpiration = false,
+            schemaVersion = 1
+        ) {
+            override suspend fun schemaUpgrade(oldTable: BaseStorageTable) {
+                var version = oldTable.spec.schemaVersion
+                // Keep all version upgrades basically forever, so that we can upgrade even from
+                // the oldest used schema.
+                if (version == 0L) {
+                    version = upgradeSchema0To1(oldTable)
+                }
+                // Add future schema version upgrades here
+                if (version != schemaVersion) {
+                    throw IllegalStateException("Unexpected schema version $version")
+                }
+            }
+
+            private suspend fun upgradeSchema0To1(table: BaseStorageTable): Long {
+                val customFn = customSchema0_97_0_MigrationFn
+                Logger.i(TAG, "Upgrading Documents table schema version from 0 to 1...")
+                if (customFn != null) {
+                    Logger.i(TAG, "Using custom migration function")
+                    for (documentId in table.enumerate()) {
+                        val data = table.get(documentId)
+                        if (data == null) {
+                            Logger.e(TAG, "Error reading document '$documentId'")
+                            table.delete(documentId) // just in case
+                        } else {
+                            table.update(
+                                key = documentId,
+                                data = customFn.invoke(documentId, data)
+                            )
+                        }
+                    }
+                } else {
+                    val now = Clock.System.now()
+                    for (documentId in table.enumerate()) {
+                        // We want to be very defensive here
+                        val data = table.get(documentId)
+                        val newData = if (data == null) {
+                            Logger.e(TAG, "Error reading document '$documentId'")
+                            // keep the document as not provisioned; this will have to be handled by
+                            // the app (e.g. consult credentials, delete document,
+                            // update metadata from the server, etc.)
+                            DocumentData(provisioned = false, created = now)
+                        } else {
+                            try {
+                                // This corresponds to default DocumentMetadata serialization in schema
+                                // version 0. Apps might have used their own serialization, in that case
+                                // we will be out of luck here.
+                                val existing = SchemaV0DocumentData.fromCbor(data.toByteArray())
+                                DocumentData(
+                                    provisioned = existing.provisioned,
+                                    created = now,
+                                    displayName = existing.displayName,
+                                    typeDisplayName = existing.typeDisplayName,
+                                    cardArt = existing.cardArt,
+                                    issuerLogo = existing.issuerLogo,
+                                    authorizationData = existing.authorizationData,
+                                    metadata = existing.other
+                                )
+                            } catch (err: Exception) {
+                                Logger.e(TAG, "Error parsing document '$documentId'", err)
+                                // keep the document as not provisioned; this will have to be handled by
+                                // the app (e.g. consult credentials, delete document,
+                                // update metadata from the server, etc.) Keep existing data in other.
+                                DocumentData(provisioned = false, created = now, metadata = data)
+                            }
+                        }
+                        try {
+                            table.update(documentId, ByteString(newData.toCbor()))
+                        } catch (err: Exception) {
+                            Logger.e(TAG, "Error writing document '$documentId'", err)
+                            table.delete(documentId)
+                        }
+                    }
+                }
+                Logger.i(TAG, "Upgraded Documents table schema version from 0 to 1")
+                return 1L
+            }
+        }
     }
 }

@@ -21,7 +21,6 @@ import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.AbstractDocumentMetadata
 import org.multipaz.document.Document
-import org.multipaz.document.DocumentMetadata
 import org.multipaz.document.DocumentStore
 import org.multipaz.webtoken.buildJwt
 import org.multipaz.mdoc.credential.MdocCredential
@@ -39,7 +38,6 @@ import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.util.Logger
 import kotlin.coroutines.CoroutineContext
-import kotlin.io.encoding.Base64
 import kotlin.math.min
 import kotlin.reflect.KClass
 import kotlin.reflect.safeCast
@@ -57,16 +55,16 @@ import kotlin.time.Duration.Companion.days
  *     handle redirects automatically
  * @param promptModel [PromptModel] that is used to show prompts to generate proof-of-possession for
  *     credential keys
- * @param metadataHandler interface that initializes and updates document metadata; it must be
- *  provided if [DocumentStore] uses custom implementation for [AbstractDocumentMetadata] (i.e.
- *  not [DocumentMetadata]).
+ * @param metadataHandler interface that initializes and updates document metadata; it may be
+ *  provided if [DocumentStore] uses an [AbstractDocumentMetadata] factory (see
+ *  [DocumentStore.Builder.setDocumentMetadataFactory]).
  */
 class ProvisioningModel(
     private val documentStore: DocumentStore,
     private val secureArea: SecureArea,
     private val httpClient: HttpClient,
     private val promptModel: PromptModel,
-    private val metadataHandler: AbstractDocumentMetadataHandler = DocumentMetadataHandler()
+    private val metadataHandler: AbstractDocumentMetadataHandler? = null
 ) {
     private var mutableState = MutableStateFlow<State>(Idle)
 
@@ -105,7 +103,7 @@ class ProvisioningModel(
      *
      * @param document [Document] where credentials should be provisioned
      * @param authorizationData authorization data from a previous provisioning session (see
-     *  [DocumentMetadataHandler.updateDocumentMetadata] `authorizationData` parameter)
+     *  [AbstractDocumentMetadataHandler.updateDocumentMetadata] `authorizationData` parameter)
      * @param clientPreferences configuration parameters for OpenID4VCI client
      * @param backend interface to the wallet back-end service
      * @return deferred [Document] value, resolved when credentials are provisioned
@@ -192,7 +190,7 @@ class ProvisioningModel(
     private suspend fun runProvisioning(provisioningClient: ProvisioningClient): Document {
         mutableState.emit(Connected)
         val issuerMetadata = provisioningClient.getMetadata()
-        val credentialMetadata = issuerMetadata.credentials.values.first()
+        val credentialConfig = issuerMetadata.credentials.values.first()
 
         var evidenceRequests = provisioningClient.getAuthorizationChallenges()
 
@@ -206,32 +204,35 @@ class ProvisioningModel(
 
         mutableState.emit(Authorized)
 
-        val format = credentialMetadata.format
+        val format = credentialConfig.format
+        val documentAuthorizationData = provisioningClient.getAuthorizationData()
         val document = targetDocument ?: run {
-            documentStore.createDocument { metadata ->
-                metadataHandler.initializeDocumentMetadata(
-                    metadata,
-                    credentialMetadata.display,
-                    issuerMetadata.display,
-                    authorizationData = provisioningClient.getAuthorizationData()
+            documentStore.createDocument(
+                displayName = credentialConfig.display.text,
+                typeDisplayName = credentialConfig.display.text,
+                cardArt = credentialConfig.display.logo,
+                issuerLogo = issuerMetadata.display.logo,
+                authorizationData = documentAuthorizationData,
+                metadata = metadataHandler?.initializeDocumentMetadata(
+                    credentialDisplay = credentialConfig.display,
+                    issuerDisplay = issuerMetadata.display,
+                    authorizationData = documentAuthorizationData
                 )
-            }
+            )
         }
+        var pendingCredentials: List<Credential> = listOf()
         try {
-            val credentialCount = min(credentialMetadata.maxBatchSize, 3)
-
-            var pendingCredentials: List<Credential>
+            val credentialCount = min(credentialConfig.maxBatchSize, 3)
 
             // get the initial set of credentials
-            val keyInfo = if (credentialMetadata.keyBindingType == KeyBindingType.Keyless) {
+            val keyInfo = if (credentialConfig.keyBindingType == KeyBindingType.Keyless) {
                 // keyless, no need for keys
-                pendingCredentials = listOf()
                 KeyBindingInfo.Keyless
             } else {
                 // create keys in the selected secure area and send them to the issuer
                 val keyChallenge = provisioningClient.getKeyBindingChallenge()
                 val createKeySettings = CreateKeySettings(
-                    algorithm = when (val type = credentialMetadata.keyBindingType) {
+                    algorithm = when (val type = credentialConfig.keyBindingType) {
                         is KeyBindingType.OpenidProofOfPossession -> type.algorithm
                         is KeyBindingType.Attestation -> type.algorithm
                         else -> throw IllegalStateException()
@@ -267,7 +268,7 @@ class ProvisioningModel(
                     }
                 }
 
-                when (val keyProofType = credentialMetadata.keyBindingType) {
+                when (val keyProofType = credentialConfig.keyBindingType) {
                     is KeyBindingType.Attestation -> {
                         KeyBindingInfo.Attestation(
                             attestations = pendingCredentials.map {
@@ -293,7 +294,7 @@ class ProvisioningModel(
             val credentials = provisioningClient.obtainCredentials(keyInfo)
             val credentialData = credentials.serializedCredentials
 
-            if (credentialMetadata.keyBindingType == KeyBindingType.Keyless) {
+            if (credentialConfig.keyBindingType == KeyBindingType.Keyless) {
                 if (credentialData.size != 1) {
                     throw IllegalStateException("Only a single keyless credential must be issued")
                 }
@@ -316,18 +317,34 @@ class ProvisioningModel(
                     Clock.System.now() + 30.days
                 )
             }
-            if (credentials.display != null) {
-                metadataHandler.updateDocumentMetadata(
-                    document = document,
-                    credentialDisplay = credentials.display,
-                    authorizationData = provisioningClient.getAuthorizationData()
-                )
+            val updatedAuthorizationData = provisioningClient.getAuthorizationData()
+            document.edit {
+                provisioned = true
+                updatedAuthorizationData?.let {
+                    authorizationData = updatedAuthorizationData
+                }
+                if (credentials.display != null) {
+                    displayName = credentials.display.text
+                    credentials.display.logo?.let { cardArt = it }
+                    metadataHandler?.apply {
+                        metadata = updateDocumentMetadata(
+                            document = document,
+                            credentialDisplay = credentials.display
+                        )
+                    }
+                }
             }
         } catch (err: Throwable) {
-            documentStore.deleteDocument(document.identifier)
+            // Clean-up after failed provisioning
+            if (targetDocument == null) {
+                // Initial provisioning: delete the document and all pending credentials
+                documentStore.deleteDocument(document.identifier)
+            } else {
+                // Refresh: only delete the pending credentials
+                pendingCredentials.forEach { document.deleteCredential(it.identifier) }
+            }
             throw err
         }
-        document.metadata.markAsProvisioned()
         mutableState.emit(CredentialsIssued)
         return document
     }
@@ -394,24 +411,20 @@ class ProvisioningModel(
     /**
      * Manager document metadata when the document is created and when the metadata is updated
      * from the server.
-     *
-     * When [DocumentMetadata] is used as [AbstractDocumentMetadata] implementation,
-     * [DocumentMetadataHandler] can be used as implementation of this interface.
      */
     interface AbstractDocumentMetadataHandler {
         /**
          * Initializes metadata object when the document is first created.
          *
-         * @param metadata metadata object from a freshly created [Document]
          * @param credentialDisplay display data from the issuer's credential configuration
          * @param issuerDisplay display data for the issuer itself
+         * @param authorizationData data for creating a provisioning session later
          */
         suspend fun initializeDocumentMetadata(
-            metadata: AbstractDocumentMetadata,
             credentialDisplay: Display,
             issuerDisplay: Display,
             authorizationData: ByteString?
-        )
+        ): AbstractDocumentMetadata?
 
         /**
          * Updates metadata for the existing document.
@@ -421,52 +434,8 @@ class ProvisioningModel(
          */
         suspend fun updateDocumentMetadata(
             document: Document,
-            credentialDisplay: Display,
-            authorizationData: ByteString?
-        )
-    }
-
-    /**
-     * [AbstractDocumentMetadataHandler] implementation that handles the case when default
-     * implementation ([DocumentMetadata]) is used to represent document metadata.
-     *
-     * @param defaultCardArtLoader function that is called to create card art for the document
-     *    when no card art is provided by the server.
-     */
-    class DocumentMetadataHandler(
-        private val defaultCardArtLoader: suspend () -> ByteString = { defaultCardArt }
-    ): AbstractDocumentMetadataHandler {
-        override suspend fun initializeDocumentMetadata(
-            metadata: AbstractDocumentMetadata,
-            credentialDisplay: Display,
-            issuerDisplay: Display,
-            authorizationData: ByteString?
-        ) {
-            (metadata as DocumentMetadata).setMetadata(
-                displayName = credentialDisplay.text,
-                typeDisplayName = credentialDisplay.text,
-                cardArt = credentialDisplay.logo ?: defaultCardArtLoader.invoke(),
-                issuerLogo = issuerDisplay.logo,
-                authorizationData = authorizationData,
-                other = null
-            )
-        }
-
-        override suspend fun updateDocumentMetadata(
-            document: Document,
-            credentialDisplay: Display,
-            authorizationData: ByteString?
-        ) {
-            val metadata = document.metadata as DocumentMetadata
-            metadata.setMetadata(
-                displayName = credentialDisplay.text,
-                typeDisplayName = metadata.typeDisplayName,
-                cardArt = credentialDisplay.logo ?: metadata.cardArt,
-                issuerLogo = metadata.issuerLogo,
-                authorizationData = authorizationData ?: metadata.authorizationData,
-                other = metadata.other
-            )
-        }
+            credentialDisplay: Display
+        ): AbstractDocumentMetadata?
     }
 
     companion object {
@@ -475,10 +444,6 @@ class ProvisioningModel(
         private const val CREDENTIAL_DOMAIN_SD_JWT_VC_KEYLESS = "sdjwt_keyless"
 
         private const val TAG = "ProvisioningModel"
-
-        private val defaultCardArt: ByteString by lazy {
-            ByteString(Base64.Mime.decode(DEFAULT_CARD_ART))
-        }
 
         private suspend fun openidProofOfPossession(
             challenge: String,
@@ -504,52 +469,5 @@ class ProvisioningModel(
                 put("nonce", challenge)
             }
         }
-
-        // PNG image that says "NO CARD ART".
-        private val DEFAULT_CARD_ART = """
-            iVBORw0KGgoAAAANSUhEUgAAAFEAAAAzCAMAAADYbRRVAAADAFBMVEVmHjt6S6G0ue2zt+1kHUBnHjmGYAB+XQC0
-            ve98UqhfHkSHYQBsOgBqNwBuPABqNABtNgCFYgCEXwBvPgB2TABqMAJvQAB3UACCXQB+WAB6UwBwQgBsPQCRbQCK
-            ZQB0SgD8+vh1RgCDX7KZdAGPagB8VgByRgCFaryjggCIYgCIcMCDZ7eOSz2beAB/WwD39PGKdcVpKRVzQwCARH9m
-            HTetjwGgfwGWcACNZwCtuuuEQG+efACLe8d+Wal9TZ2BPCyAQh5pKxDw7Ol/UaZ9VaN/VZp7R5loHzNqLQqShdCG
-            YreDWq+AYKx9TaKISixpIiacltvi2tDNwbqTTVJ5RQGRi8+Pg8mJXZeDPmeRTF+JQVR8UACoteZ8RIyFPTloICyE
-            WgCfnd6BVauBUpJ9SJKQUHKJP0RqKBqFUwF8RwGvtOmCZ7G5o2yLSGx9TAGnqOSYkNeVitSPfsx/XKaNV4e/pnqC
-            RHl5OxRnKw5/VACrruihpdzl39qBS4h+Q4V+P3a1imqIUyh+RhGpigCmsOOio+GNUX2JQ2G4oV+DO12cbTV7NyGP
-            XwOJWQOmrduXkM+GeMCOaKKQX4+HUYm2nFGpglCLQ0yjckuqhjyTYDuSUjqRWDCbcCVpJR/r5eCZltSgndOEZqq5
-            qaKCXqK6pnObWm2wkUBjHT6kezqxkzOnhAC3uOqMfL+GcbuJcLTDq4S9p4SUWH6HSXqlZmy9qGu2mGucWFqod1e6
-            olGbZ0avkQ+qig+iu+SwueKft92npdSPecqllceWf7qVcqfIuJO3sYmjaVWujlC2mz2VZCyFQyymgiGOXR+EThzb
-            0cjUysWmjbu8nHaaWUyxkyNyQh+ccRV0Ng1pLAZ0PACXiMKrl4y2foCscGuTdma0mF2uglyGYk6YbgunuOCur9jY
-            y7msg6rMtameapPCloabYYW0fHOwfWa1ps22nsS6lbXDuLSdeq2nd528h5ircoyRaFaev5+ynpPBrZGxj1x5TzGj
-            fC6VaBOrkoa8jHejgnHGlJ5qsE0XAAAADHRSTlP6ra2tra2trRISEhJ2cf0zAAAHhUlEQVRYw2XTBZQSURTG8bEL
-            ARUTu3sUuxW7Bbu7uwu7u7uxu7u7u7u7u+P77ns6evzvOuDu2d+5d95gRAhRWlWQ1atXr2TJxIlL/CmFlDp16gwZ
-            Muxi7Vhx1LZtmzblpLp1Bwxo3bp1N9QsVHgjRN68eS0SoqCWqkGKYpITEAEVT2tsaUgjb5G8RRhdPSZJhSYukSYN
-            RKbR3Llzc0yAHJEewdb0ciyVDOE0ac1JEAGU/hIRxxQPGoJXg2CzHGhpDqMmatBAmXrOPIgiI8e0JxzTonit+/fv
-            X6NGjRxiiigoVYiFChUiSJOomOCYFisVr1ixIkAhxezfrQZqlgMmxZ6IIsOQEAtaHsESemstVqpUqThNorNmAe0+
-            oHtrzshjETFTpkwatUyOWYqRbE5x+XJOKSKryEaNmgWybt3uaCQXR9u2UxRTVIskqtjmzRUJczQSUjwBZ2uNGNu+
-            fbvRiwnbo0eP+vULI3jtJYBIoyuWL4cIcxlRIRU4cmT/HTt23Lkj4B0tdurU6R/TUhVIc4Uily1bxr0vVyQ4G+TO
-            kSN3jLyz4+7dO2C3b19qVMmJYCJtEtXN1egcBBUoQLTn8uXLFNFONHLkXX7d3bHjwcv3RhUmqjaJInp/AshWsD2M
-            5G5E8dmzZzufP9v57OP+9+/f79tnDBkyxDKFHMfqs8r1KzM2RrcXvXq1Z88ptJs9Ry9W7Ucr5bKSoiZZp05rEETW
-            AY2tPNZCCYr46v79+zRfoJ+PHq1iK1eu5IWimBYKEw1U0WTs8diH7DWD+IY9Qqc7/pNRTTWIsZaqNQ0bKlK3evXq
-            x+zhW3ZV9f3799PSvI7zdC3mGY2kidUmKtlCG7ZsiAADQ/NXz58/fy27du3aE6m3tH79+haMrUNGLcYEnki4arWq
-            KrC6+WzDbxI9lQgyy4OYT2WhVMtLVcuTZRvwrTvANrKb7NOnGzduDP7TpsGDjWEIouUqNW1akFZndJs3bwY4adIk
-            iBPYwYMwiY5HmxhEZrFHjhxJ+19T8S1NmbIZTWIalMgxEQ/0vnChsyq/CiYqw7THprEpbKi0SJqMFugOqYwyEJmF
-            qgha9UFiHmbaFJIttoK4ubfT6TyXMHDpUtDf+brPNE+8U+S7E14z8O14mQcJv0FLmDDhzB/H5OXB4cPTpQcJV335
-            Mpk/mrcyITPPImNSbwdEr+8KxM/el7fenQz0ZX1m+t+9C/r79p358sTx433M41P8vmOHzWObr8z0f/369TzEmX7f
-            0aNfzKOT7/m2bt3q27dli4hTJol4fea5oP8KJr3U13u9AroyEyz64evjnSLiyZMjjpnDhw/faE7/evv8+fPrA1+8
-            k48eNbcuOHFCxCySMWmjk6LtZDDoD5602y9dClyhGDzZVPJ/aOUPtuqDnXxTmhwzRwwfnt2cQPD8vY/p7j1IeRS/
-            CSzYunULZ2RGn5tKvOXljHZ7tM7e6x6IHwK4NG163ORfNOljNvng3SwzJp1gTr99O0mS6fzNzKxHzSX7vAv69evH
-            GRlEm80G0fbSK/fx1smAx+NJlOiz13/rVtD/4QTm9F4/bjZp4g8cgzh01Uw/wSQffbmyZvWuh7jkXmBLvyzW1r3t
-            dvs5r90Gwi5nfSuG2508USK8Txj45rvCzf0UR/hOHsNY3ge3s2VLkiSd72O6XFnv3aO41XfiL/HwaZsNplyi6exx
-            48aNEYOTyuatUBM0YgTOJXvSpPHixRMzF8qaNWXKlEuWLOmnwqvhaUUAnAJ5iREtBsM7mEBBVu/alSLN+NmzJwUJ
-            EyiDCpfJ1eBw0UBwMhuLa49r5//d0CC6Krg4Y3WIdeqATJUqPgJKU6F6UiaiXSdvtAkSeYgmcLlcAKsLyaKKaS2P
-            LBQ3wIASWeV0kouML87N3T04oOSJXC54EFHs2CJycZIyp14dqeUNzdlEdkJz4L26o3I2HrfHo1WInBGk3tu6mfR0
-            htOG0ZCMqFeW7Xng0XDkbg/C8q3+kBQ5YlJrbS4upUtnqG2dzsiOyA6HIzJenJhXTgkkHk09Y0xrSE0yuAy0XDm2
-            AZA5okd3IKKIt1YeJ4DJk3t4SZ4ggStmzJhxkiWLnT59rFhRtcs0zS9kEBJTaEwMTxU3Gld2I08iHBHmJBgbYiwR
-            o6SiycTlC3EjOnKw6DoH0chqWLIYkHHIBDTjJOtKVJtEpVRRovAnUaIYBQp0KRY9+sVixbp06VIM7/5aXQfWA8/F
-            YqLqQGPHpkiCQYPHC1SKBUAVKyDBBH/xImSnU2R7XHyi3CATJWCixmFyQzlrLAZb40ZGVICXxo0zSmQvYlRwanGA
-            bn566MnhUBQSKPcXkKRkNGYzZpRFM2bMwHtRi4HEUQHEhSyeIyxOVEidkEihWiTFauvgAu2CisnyDvkIgGRusi6q
-            gnJIkhT/3FMjc9HawhVVgRRT3VOmPkx2/QHSh87nkp7KEnH6hpE5M6DMOpplsTtIjnkRon6ORI1GUx8QUMUhtbQ8
-            TvGNMAJaYWaa6ogYTDUmPMQP5m+TCcx5wRIPZ0QMbSy0AihjiimPKkDEIfEPqFueeIJMmyDV/YwaNtIvf1+uGda+
-            alIAAAAASUVORK5CYII=
-        """.trimIndent()
     }
 }

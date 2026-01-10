@@ -19,7 +19,6 @@ import kotlinx.coroutines.test.runTest
 import org.multipaz.credential.CredentialLoader
 import org.multipaz.crypto.Algorithm
 import org.multipaz.document.DocumentStore
-import org.multipaz.document.DocumentMetadata
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.securearea.BatchCreateKeyResult
 import org.multipaz.securearea.CreateKeySettings

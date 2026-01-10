@@ -13,6 +13,7 @@ import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.getDrawableResourceBytes
 import org.jetbrains.compose.resources.getSystemResourceEnvironment
 import org.multipaz.compose.decodeImage
+import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentDeleted
@@ -44,7 +45,7 @@ class DocumentModel(
 
     init {
         scope.launch {
-            val docIds = documentStore.listDocuments()
+            val docIds = documentStore.listDocumentIds()
             docIds.forEach { documentId ->
                 updateDocumentInfo(documentId)
             }
@@ -87,13 +88,13 @@ class DocumentModel(
     }
 
     private suspend fun Document.toDocumentInfo(): DocumentInfo {
-        val cardArtBitMap = decodeImage(metadata.cardArt?.toByteArray() ?: byteArrayOf())
+        val cardArtBitMap = decodeImage(cardArt?.toByteArray() ?: byteArrayOf())
         val defaultCardArtBitMap = decodeImage(Res.drawable.default_card_art.toByteArray())
-        val cardArt = if (metadata.cardArt == null) {
+        val cardArt = if (cardArt == null) {
             renderFallbackCardArt(
                 defaultCardArtBitMap,
-                metadata.displayName,
-                metadata.typeDisplayName
+                displayName,
+                typeDisplayName
             )
 
         } else {
@@ -145,7 +146,9 @@ class DocumentModel(
 
         private fun Map<String, DocumentInfo>.sortedMap(): Map<String, DocumentInfo> =
             this.entries
-                .sortedBy { it.key }
+                .sortedWith { a, b ->
+                    Document.Comparator.compare(a.value.document, b.value.document)
+                }
                 .associate { it.toPair() }
     }
 }

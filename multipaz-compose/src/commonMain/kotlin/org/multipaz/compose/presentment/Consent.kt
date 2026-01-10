@@ -673,12 +673,12 @@ private fun CredentialViewer(
                     modifier = Modifier.padding(start = 16.dp).weight(1.0f)
                 ) {
                     Text(
-                        text = credential.document.metadata.displayName
+                        text = credential.document.displayName
                             ?: "No Document Title",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Companion.Bold
                     )
-                    credential.document.metadata.typeDisplayName?.let {
+                    credential.document.typeDisplayName?.let {
                         Text(
                             text = it,
                             style = MaterialTheme.typography.bodySmall,

@@ -18,7 +18,6 @@ import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
-import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
@@ -31,7 +30,6 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
-import org.multipaz.document.DocumentMetadata
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.NameSpacedData
 import org.multipaz.document.buildDocumentStore
@@ -93,10 +91,9 @@ class ProvisioningModelTest {
         val doc = model.launch(UnconfinedTestDispatcher(testScheduler)) {
             TestProvisioningClient()
         }.await()
-        val docMetadata = doc.metadata as DocumentMetadata
-        assertTrue(docMetadata.provisioned)
-        assertEquals("Document Title", docMetadata.displayName)
-        assertEquals("Test Document", docMetadata.typeDisplayName)
+        assertTrue(doc.provisioned)
+        assertEquals("Document Title", doc.displayName)
+        assertEquals("Test Document", doc.typeDisplayName)
         val credentials = doc.getCredentials()
         assertEquals(2, credentials.size)
         val credential = credentials.first() as MdocCredential
@@ -132,10 +129,9 @@ class ProvisioningModelTest {
                 )
             )
         }.await()
-        val docMetadata = doc.metadata as DocumentMetadata
-        assertTrue(docMetadata.provisioned)
+        assertTrue(doc.provisioned)
         assertEquals("foobar_auth",
-            docMetadata.authorizationData!!.toByteArray().decodeToString())
+            doc.authorizationData!!.toByteArray().decodeToString())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -150,7 +146,7 @@ class ProvisioningModelTest {
         }
         assertTrue(deferredDoc.isActive)
         channel.receive()
-        val documentIds = documentStore.listDocuments()
+        val documentIds = documentStore.listDocumentIds()
         assertEquals(1, documentIds.size)
         val doc = documentStore.lookupDocument(documentIds.first())!!
         val credentials = doc.getCredentials()
@@ -158,15 +154,15 @@ class ProvisioningModelTest {
         val credential = credentials.first() as MdocCredential
         assertFalse(credential.isCertified)
         assertEquals(TestProvisioningClient.DOCTYPE, credential.docType)
-        assertFalse((doc.metadata as DocumentMetadata).provisioned)
+        assertFalse(doc.provisioned)
         deferredDoc.cancel()
         try {
             deferredDoc.await()
             fail()
-        } catch (e: CancellationException) {
+        } catch (_: CancellationException) {
         }
         // Initial provisioning failed, document must be cleaned up
-        assertTrue(documentStore.listDocuments().isEmpty())
+        assertTrue(documentStore.listDocumentIds().isEmpty())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -184,7 +180,7 @@ class ProvisioningModelTest {
             assertEquals("foobar", e.message)
         }
         // Initial provisioning failed, document must be cleaned up
-        assertTrue(documentStore.listDocuments().isEmpty())
+        assertTrue(documentStore.listDocumentIds().isEmpty())
     }
 
     class TestProvisioningClient(

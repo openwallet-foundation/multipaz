@@ -114,9 +114,9 @@ class MatcherDcqlQueryExecuteTest {
             credentialDatabase = Cbor.encode(credentialDatabase)
         )
         // To get stable output, replace all document IDs with displayName
-        for (docId in harness.documentStore.listDocuments()) {
+        for (docId in harness.documentStore.listDocumentIds()) {
             val doc = harness.documentStore.lookupDocument(docId)!!
-            result = result.replace(docId, "__${doc.metadata.displayName!!}__")
+            result = result.replace(docId, "__${doc.displayName!!}__")
         }
         return result
     }

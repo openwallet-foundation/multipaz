@@ -45,7 +45,7 @@ fun DocumentViewerScreen(
         if (documentInfo == null) {
             Text("No document for identifier ${documentId}")
         } else {
-            val metadata = documentInfo.document.metadata
+            val document = documentInfo.document
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center
@@ -63,7 +63,7 @@ fun DocumentViewerScreen(
             ) {
                 Text(
                     modifier = Modifier.padding(8.dp),
-                    text = metadata.typeDisplayName ?: "(typeDisplayName not set)",
+                    text = document.typeDisplayName ?: "(typeDisplayName not set)",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.secondary
                 )
@@ -79,15 +79,15 @@ fun DocumentViewerScreen(
             ) {
                 KeyValuePairText(
                     keyText = "Provisioned",
-                    valueText = if (metadata.provisioned) "Yes" else "No"
+                    valueText = if (document.provisioned) "Yes" else "No"
                 )
                 KeyValuePairText(
                     keyText = "Document Type",
-                    valueText = metadata.typeDisplayName ?: "(typeDisplayName not set)"
+                    valueText = document.typeDisplayName ?: "(typeDisplayName not set)"
                 )
                 KeyValuePairText(
                     keyText = "Document Name",
-                    valueText = metadata.displayName ?: "(displayName not set)"
+                    valueText = document.displayName ?: "(displayName not set)"
                 )
                 Text(
                     text = "Credentials",
@@ -127,7 +127,7 @@ fun DocumentViewerScreen(
                         )
                     }
                 }
-                metadata.authorizationData?.let { authorizationData ->
+                document.authorizationData?.let { authorizationData ->
                     Button(onClick = {
                         onProvisionMore(documentInfo.document, authorizationData)
                     }) {

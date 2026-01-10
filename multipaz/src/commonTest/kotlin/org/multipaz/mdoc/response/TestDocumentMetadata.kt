@@ -5,72 +5,23 @@ import org.multipaz.document.NameSpacedData
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.isEmpty
 import org.multipaz.document.AbstractDocumentMetadata
-import org.multipaz.securearea.SecureAreaRepository
-import org.multipaz.storage.Storage
-import kotlin.concurrent.Volatile
 
-class TestDocumentMetadata private constructor(
-    data: ByteString?,
-    private val saveFn: suspend (data: ByteString) -> Unit
-) : AbstractDocumentMetadata {
-    override val provisioned: Boolean
-        get() = false
-    override val displayName: String
-        get() = "Test Doc"
-    override val typeDisplayName: String
-        get() = "Test"
-    override val cardArt: ByteString?
-        get() = null
-    override val issuerLogo: ByteString?
-        get() = null
-    override val authorizationData: ByteString?
-        get() = null
-    override val other: ByteString?
-        get() = null
-
-    @Volatile
+class TestDocumentMetadata(
     var nameSpacedData: NameSpacedData
-        private set
-
-    init {
-        nameSpacedData = if (data == null || data.isEmpty()) {
-            NameSpacedData.Builder().build()
-        } else {
-            NameSpacedData.fromEncodedCbor(data.toByteArray())
-        }
-    }
-
-    override suspend fun markAsProvisioned() {
-    }
-
-    override suspend fun setMetadata(
-        displayName: String?,
-        typeDisplayName: String?,
-        cardArt: ByteString?,
-        issuerLogo: ByteString?,
-        authorizationData: ByteString?,
-        other: ByteString?
-    ) {
-    }
-
-    override suspend fun cleanup(
-        secureAreaRepository: SecureAreaRepository,
-        storage: Storage
-    ) {
-    }
-
-    suspend fun setNameSpacedData(nameSpacedData: NameSpacedData) {
-        this.nameSpacedData = nameSpacedData
-        saveFn(ByteString(nameSpacedData.encodeAsCbor()))
-    }
+) : AbstractDocumentMetadata {
+    override fun serialize() = ByteString(nameSpacedData.encodeAsCbor())
 
     companion object {
         suspend fun create(
             documentId: String,
             serializedData: ByteString?,
-            saveFn: suspend (data: ByteString) -> Unit
         ): TestDocumentMetadata {
-            return TestDocumentMetadata(serializedData, saveFn)
+            val nameSpacedData = if (serializedData == null || serializedData.isEmpty()) {
+                NameSpacedData.Builder().build()
+            } else {
+                NameSpacedData.fromEncodedCbor(serializedData.toByteArray())
+            }
+            return TestDocumentMetadata(nameSpacedData)
         }
     }
 }

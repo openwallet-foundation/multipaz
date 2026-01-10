@@ -53,7 +53,7 @@ fun DocumentCarousel(
     val carouselItems = documentInfos.values.map { documentInfo ->
         CarouselModel(
             id = documentInfo.document.identifier,
-            name = documentInfo.document.metadata.displayName.orEmpty(),
+            name = documentInfo.document.displayName.orEmpty(),
             image = documentInfo.cardArt
         )
     }

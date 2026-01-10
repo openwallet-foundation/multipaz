@@ -128,8 +128,6 @@ private suspend fun updateOsCredentialManager() {
 
     for (registrationData in exportedStores.values) {
         val documents = registrationData.documentStore.listDocuments()
-            .mapNotNull { registrationData.documentStore.lookupDocument(it) }
-            .sortedBy { it.metadata.displayName ?: it.identifier }
         Logger.i(TAG, "numDoc: ${documents.size}")
         for (document in documents) {
             val mdocCredential = document.getCertifiedCredentials().find { it is MdocCredential } as MdocCredential?

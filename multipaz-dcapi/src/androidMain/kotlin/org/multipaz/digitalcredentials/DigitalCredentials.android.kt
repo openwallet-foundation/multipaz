@@ -141,9 +141,9 @@ internal suspend fun calculateCredentialDatabase(
     val credentialsBuilder = CborArray.builder()
     for ((documentStore, documentTypeRepository) in stores) {
         // We sort on displayName b/c otherwise it's sorted on Document.identifier which can be unpredictable
-        val documents = documentStore.listDocuments()
+        val documents = documentStore.listDocumentIds()
             .mapNotNull { documentStore.lookupDocument(it) }
-            .sortedBy { it.metadata.displayName ?: it.identifier }
+            .sortedBy { it.displayName ?: it.identifier }
         for (document in documents) {
             val mdocCredential = document.getCertifiedCredentials().find { it is MdocCredential }
             if (mdocCredential != null) {
@@ -186,10 +186,9 @@ private suspend fun exportMdocCredential(
 ): DataItem {
     val credentialType = documentTypeRepository.getDocumentTypeForMdoc(credential.docType)
 
-    val documentMetadata = document.metadata
-    val cardArt = documentMetadata.cardArt?.toByteArray()
-    val displayName = documentMetadata.displayName ?: "Unnamed Credential"
-    val displayNameSub = documentMetadata.typeDisplayName ?: "Unknown Credential Type"
+    val cardArt = document.cardArt?.toByteArray()
+    val displayName = document.displayName ?: "Unnamed Credential"
+    val displayNameSub = document.typeDisplayName ?: "Unknown Credential Type"
 
     val cardArtResized = resizedCardArt(cardArt)
 
@@ -242,10 +241,9 @@ private suspend fun exportSdJwtVcCredential(
     credential: SdJwtVcCredential,
     documentTypeRepository: DocumentTypeRepository
 ): DataItem {
-    val documentMetadata = document.metadata
-    val cardArt = documentMetadata.cardArt?.toByteArray()
-    val displayName = documentMetadata.displayName ?: "Unnamed Credential"
-    val displayNameSub = documentMetadata.typeDisplayName ?: "Unknown Credential Type"
+    val cardArt = document.cardArt?.toByteArray()
+    val displayName = document.displayName ?: "Unnamed Credential"
+    val displayNameSub = document.typeDisplayName ?: "Unknown Credential Type"
 
     val cardArtResized = resizedCardArt(cardArt)
 

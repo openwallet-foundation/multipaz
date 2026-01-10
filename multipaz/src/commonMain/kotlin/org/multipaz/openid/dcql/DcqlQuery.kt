@@ -82,7 +82,7 @@ data class DcqlQuery(
             val credsSatisfyingMeta = when (credentialQuery.format) {
                 "mso_mdoc", "mso_mdoc_zk" -> {
                     val ret = mutableListOf<Credential>()
-                    for (documentId in presentmentSource.documentStore.listDocuments()) {
+                    for (documentId in presentmentSource.documentStore.listDocumentIds()) {
                         val document =
                             presentmentSource.documentStore.lookupDocument(documentId) ?: continue
                         document.getCertifiedCredentials().find {
@@ -94,7 +94,7 @@ data class DcqlQuery(
 
                 "dc+sd-jwt" -> {
                     val ret = mutableListOf<Credential>()
-                    for (documentId in presentmentSource.documentStore.listDocuments()) {
+                    for (documentId in presentmentSource.documentStore.listDocumentIds()) {
                         val document =
                             presentmentSource.documentStore.lookupDocument(documentId) ?: continue
                         document.getCertifiedCredentials().find {
@@ -109,7 +109,7 @@ data class DcqlQuery(
 
             val matches = mutableListOf<QueryResponseMatch>()
             // We sort on displayName b/c otherwise it's sorted on Document.identifier which can be unpredictable
-            for (cred in credsSatisfyingMeta.sortedBy { it.document.metadata.displayName }) {
+            for (cred in credsSatisfyingMeta.sortedBy { it.document.displayName }) {
                 val claimsInCredential =
                     cred.getClaims(documentTypeRepository = presentmentSource.documentTypeRepository)
                 if (credentialQuery.claimSets.isEmpty()) {

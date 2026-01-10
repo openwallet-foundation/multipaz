@@ -57,42 +57,62 @@ fun CredentialViewerScreen(
             KeyValuePairText("Class", credentialInfo.credential::class.simpleName.toString())
             KeyValuePairText("Identifier", credentialInfo.credential.identifier)
             KeyValuePairText("Domain", credentialInfo.credential.domain)
-            KeyValuePairText("Valid From", formattedDateTime(credentialInfo.credential.validFrom))
-            KeyValuePairText("Valid Until", formattedDateTime(credentialInfo.credential.validUntil))
             KeyValuePairText("Certified", if (credentialInfo.credential.isCertified) "Yes" else "No")
-            KeyValuePairText("Issuer provided data", "${credentialInfo.credential.issuerProvidedData.size} bytes")
-            KeyValuePairText("Usage Count", credentialInfo.credential.usageCount.toString())
-            RevocationStatusSection(credentialInfo.credential)
-            when (credentialInfo.credential) {
-                is MdocCredential -> {
-                    val issuerSigned = Cbor.decode(credentialInfo.credential.issuerProvidedData)
-                    val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1
-                    val msoBytes = issuerAuth.payload!!
-                    KeyValuePairText("MSO size", "${msoBytes.size} bytes")
-                    KeyValuePairText("ISO mdoc DocType", (credentialInfo.credential as MdocCredential).docType)
-                    KeyValuePairText(
-                        keyText = "ISO mdoc DS Key Certificate",
-                        valueText = buildAnnotatedString {
-                            withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.secondary)) {
-                                append("Click for details")
+            if (credentialInfo.credential.isCertified) {
+                KeyValuePairText(
+                    "Valid From",
+                    formattedDateTime(credentialInfo.credential.validFrom)
+                )
+                KeyValuePairText(
+                    "Valid Until",
+                    formattedDateTime(credentialInfo.credential.validUntil)
+                )
+                KeyValuePairText(
+                    "Issuer provided data",
+                    "${credentialInfo.credential.issuerProvidedData.size} bytes"
+                )
+                KeyValuePairText("Usage Count", credentialInfo.credential.usageCount.toString())
+                RevocationStatusSection(credentialInfo.credential)
+                when (credentialInfo.credential) {
+                    is MdocCredential -> {
+                        val issuerSigned = Cbor.decode(credentialInfo.credential.issuerProvidedData)
+                        val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1
+                        val msoBytes = issuerAuth.payload!!
+                        KeyValuePairText("MSO size", "${msoBytes.size} bytes")
+                        KeyValuePairText(
+                            "ISO mdoc DocType",
+                            (credentialInfo.credential as MdocCredential).docType
+                        )
+                        KeyValuePairText(
+                            keyText = "ISO mdoc DS Key Certificate",
+                            valueText = buildAnnotatedString {
+                                withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.secondary)) {
+                                    append("Click for details")
+                                }
+                            },
+                            modifier = Modifier.clickable {
+                                coroutineScope.launch {
+                                    val certChain =
+                                        issuerAuth.unprotectedHeaders[
+                                            CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)
+                                        ]!!.asX509CertChain
+                                    onViewCertificateChain(
+                                        Cbor.encode(certChain.toDataItem()).toBase64Url()
+                                    )
+                                }
                             }
-                        },
-                        modifier = Modifier.clickable {
-                            coroutineScope.launch {
-                                val certChain =
-                                    issuerAuth.unprotectedHeaders[
-                                        CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)
-                                    ]!!.asX509CertChain
-                                onViewCertificateChain(Cbor.encode(certChain.toDataItem()).toBase64Url())
-                            }
-                        }
-                    )
-                }
-                is SdJwtVcCredential -> {
-                    KeyValuePairText("Verifiable Credential Type", (credentialInfo.credential as SdJwtVcCredential).vct)
-                    // TODO: Show cert chain for key used to sign issuer-signed data. Involves
-                    //  getting this over the network as specified in section 5 "JWT VC Issuer Metadata"
-                    //  of https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/ ... how annoying
+                        )
+                    }
+
+                    is SdJwtVcCredential -> {
+                        KeyValuePairText(
+                            "Verifiable Credential Type",
+                            (credentialInfo.credential as SdJwtVcCredential).vct
+                        )
+                        // TODO: Show cert chain for key used to sign issuer-signed data. Involves
+                        //  getting this over the network as specified in section 5 "JWT VC Issuer Metadata"
+                        //  of https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/ ... how annoying
+                    }
                 }
             }
 
@@ -144,20 +164,21 @@ fun CredentialViewerScreen(
                 KeyValuePairText("Secure Area", "N/A")
             }
 
-            KeyValuePairText(
-                keyText = "Claims",
-                valueText = buildAnnotatedString {
-                    withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.secondary)) {
-                        append("Click for details")
+            if (credentialInfo.credential.isCertified) {
+                KeyValuePairText(
+                    keyText = "Claims",
+                    valueText = buildAnnotatedString {
+                        withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.secondary)) {
+                            append("Click for details")
+                        }
+                    },
+                    modifier = Modifier.clickable {
+                        coroutineScope.launch {
+                            onViewCredentialClaims(documentId, credentialId)
+                        }
                     }
-                },
-                modifier = Modifier.clickable {
-                    coroutineScope.launch {
-                        onViewCredentialClaims(documentId, credentialId)
-                    }
-                }
-            )
-
+                )
+            }
         }
     }
 }
