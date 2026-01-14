@@ -52,19 +52,20 @@ internal suspend fun uriSchemePresentment(
     val httpClient = HttpClient(mechanism.httpClientEngineFactory) {
         install(HttpTimeout)
     }
+    val requestObjectMediaType = ContentType("application", "oauth-authz-req+jwt")
     val httpResponse = when (requestUriMethod) {
         "post" -> {
             // TODO: include wallet capabilities as POST body as per 5.10
             httpClient.post(requestUri) {
                 contentType(ContentType.Application.FormUrlEncoded)
-                accept(ContentType("application", "oauth-authz-req+jwt"))
+                accept(requestObjectMediaType)
             }
         }
         "get" -> httpClient.get(requestUri)
         else -> throw IllegalArgumentException("Unexpected method $requestUriMethod")
     }
     check(httpResponse.status == HttpStatusCode.OK)
-    check(httpResponse.contentType() == ContentType("application", "oauth-authz-req+jwt"))
+    check(httpResponse.contentType()?.match(requestObjectMediaType) ?: false)
 
     val reqJwt = (httpResponse.body() as ByteArray).decodeToString()
     val info = JsonWebSignature.getInfo(reqJwt)
