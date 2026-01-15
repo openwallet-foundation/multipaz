@@ -51,7 +51,6 @@ extern "C" void matcher(void) {
                         combination.addToCredmanPicker(*request);
                     }
                 }
-                break;
 
             } else if (protocolValue == "org.iso.mdoc" || protocolValue == "org-iso-mdoc") {
                 auto request = MdocRequest::parseMdocApi(protocolValue, protocolData);
@@ -59,7 +58,6 @@ extern "C" void matcher(void) {
                 for (auto const& combination : combinations) {
                     combination.addToCredmanPicker(*request);
                 }
-                break;
             }
         }
     }
