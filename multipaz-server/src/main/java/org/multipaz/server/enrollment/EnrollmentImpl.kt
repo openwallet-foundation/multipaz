@@ -247,13 +247,19 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
                 // ServerIdentityRecord has been created and inserted in enrollmentsMap.
                 check(enrollmentsMap.containsKey(serverIdentity))
                 CoroutineScope(Dispatchers.IO).async {
-                    val selfEnroll = configuration.getValue("self_enroll") == "true"
+                    val selfEnrollProp = configuration.getValue("self_enroll")
                     val baseUrl = configuration.baseUrl
+                    val enrollmentUrl = configuration.enrollmentServerUrl
                     // If no enrollment record is found, check if we are running on localhost
-                    if (LOCALHOST.matchEntire(baseUrl) != null || selfEnroll) {
-                        // Running on localhost, server-based enrollment is not possible. Self-enroll,
-                        // the root certificate will not be trusted (unless configured with a trusted
-                        // key/certificate).
+                    // When running on localhost, server-based enrollment is not possible unless
+                    // records server is also on localhost. When self-enrolling, the root
+                    // certificate will not be trusted (unless a trusted key/certificate is
+                    // specified in the config file, which is not generally recommended).
+                    val selfEnroll = selfEnrollProp?.let { it == "true" }
+                        ?: (LOCALHOST.matchEntire(baseUrl) != null &&
+                                LOCALHOST.matchEntire(enrollmentUrl) == null)
+                    if (selfEnroll) {
+                        Logger.i(TAG, "Self-enrolling '$serverIdentity'")
                         withContext(backendEnvironment) {
                             val enrollment = EnrollmentImpl()
                             val now = Clock.System.now().truncateToWholeSeconds()
@@ -280,7 +286,7 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
                     } else {
                         // Request enrollment from the server
                         val httpClient = backendEnvironment.getInterface(HttpClient::class)!!
-                        val url = "${configuration.enrollmentServerUrl}/enroll"
+                        val url = "$enrollmentUrl/enroll"
                         Logger.i(TAG, "Enrolling '$serverIdentity' using '$url'")
                         val response = httpClient.submitForm(
                             url = url,
@@ -348,6 +354,7 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
             return X509Cert.fromPem(response.readRawBytes().decodeToString()).ecPublicKey
         }
 
-        private val LOCALHOST = Regex("http://localhost([:/].*)?")
+        /** Pattern that matches localhost urls */
+        internal val LOCALHOST = Regex("http://localhost([:/].*)?")
     }
 }

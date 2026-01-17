@@ -554,7 +554,9 @@ suspend fun getCrl(
  */
 suspend fun checkServerTrust(url: String, settingName: String) {
     val parsedUrl = Url(url)
-    if (parsedUrl.protocol != URLProtocol.HTTPS) {
+    val baseUrl = BackendEnvironment.getBaseUrl()
+    if (EnrollmentImpl.LOCALHOST.matchEntire(baseUrl) == null
+        && parsedUrl.protocol != URLProtocol.HTTPS) {
         throw IllegalStateException("Only allow https servers")
     }
     val host = parsedUrl.host
@@ -577,7 +579,7 @@ suspend fun checkServerTrust(url: String, settingName: String) {
             }
         }
     }
-    throw IllegalStateException("Not a trusted host: '$url'")
+    throw IllegalStateException("Not a trusted host: '$url' ['$host' '$path' '$trustedServers']")
 }
 
 private const val TAG = "ServerIdentity"

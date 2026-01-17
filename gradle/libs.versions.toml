@@ -50,7 +50,11 @@ semver = "3.0.0"
 skie = "0.10.8"
 process-phoenix = "3.0.0"
 coil = "3.3.0"
+# Kotlin/JS wrappers; require `./gradlew kotlinUpgradeYarnLock` after version changes
+# this is how npm works, that will update kotlin-js-store/yarn.lock (part of the repo)
 kotlin-wrappers = "2025.12.1"
+kotlin-wrappers-rx = "2025.12.1-19.2.0"
+kotlin-wrappers-em = "2025.12.1-11.14.0"
 
 [libraries]
 androidx-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview", version.ref = "uiToolingPreview" }
@@ -124,6 +128,9 @@ coil-compose-core = { module = "io.coil-kt.coil3:coil-compose-core", version.ref
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 coil-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 kotlin-wrappers-web = { module = "org.jetbrains.kotlin-wrappers:kotlin-web", version.ref="kotlin-wrappers" }
+kotlin-wrappers-react = { module = "org.jetbrains.kotlin-wrappers:kotlin-react", version.ref= "kotlin-wrappers-rx" }
+kotlin-wrappers-react-dom = { module = "org.jetbrains.kotlin-wrappers:kotlin-react-dom", version.ref= "kotlin-wrappers-rx" }
+kotlin-wrappers-emotion-react-js = { module = "org.jetbrains.kotlin-wrappers:kotlin-emotion-react-js", version.ref="kotlin-wrappers-em" }
 skie-annotations = { module = "co.touchlab.skie:configuration-annotations", version.ref = "skie" }
 
 [plugins]
