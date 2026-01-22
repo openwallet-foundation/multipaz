@@ -139,10 +139,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <!--  Various OpenID4VP schemes -->
-                <data android:scheme="haip"/>
+                <data android:scheme="haip-vp"/>
                 <data android:scheme="openid4vp"/>
-                <data android:scheme="eudi-openid4vp"/>
-                <data android:scheme="mdoc-openid4vp"/>
                 <!-- Accept all hosts for any of the defined schemes above -->
                 <data android:host="*"/>
             </intent-filter>

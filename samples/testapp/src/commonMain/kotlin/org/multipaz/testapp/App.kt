@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -40,7 +41,9 @@ import coil3.ImageLoader
 import coil3.compose.LocalPlatformContext
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import io.ktor.client.HttpClient
+import io.ktor.http.Url
 import io.ktor.http.decodeURLPart
+import io.ktor.http.protocolWithAuthority
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -95,6 +98,7 @@ import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
 import org.multipaz.nfc.NfcTagReader
 import org.multipaz.presentment.model.PresentmentSource
 import org.multipaz.presentment.model.SimplePresentmentSource
+import org.multipaz.presentment.model.uriSchemePresentment
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.promptModelRequestConsent
 import org.multipaz.prompt.promptModelSilentConsent
@@ -194,6 +198,8 @@ class App private constructor (val promptModel: PromptModel) {
     private lateinit var provisioningModel: ProvisioningModel
 
     private val credentialOffers = Channel<String>()
+
+    private val urlsToOpen = Channel<String>()
 
     private lateinit var provisioningSupport: ProvisioningSupport
 
@@ -730,9 +736,33 @@ class App private constructor (val promptModel: PromptModel) {
                     credentialOffers.send(url)
                 }
             }
+        } else if (url.startsWith(HAIP_VP_URL_SCHEME) || url.startsWith(OPENID4VP_URL_SCHEME)) {
+            // On Android OpenID4VP is handled by a dedicated activity, so this code
+            // is called only on iOS
+            uriSchemePresentation(url)
         } else if (url.startsWith(ProvisioningSupport.APP_LINK_BASE_URL)) {
             CoroutineScope(Dispatchers.Default).launch {
                 provisioningSupport.processAppLinkInvocation(url)
+            }
+        } else {
+            Logger.e(TAG, "Unhandled URL: '$url'")
+        }
+    }
+
+    private fun uriSchemePresentation(requestUrl: String) {
+        CoroutineScope(Dispatchers.Main + promptModel).launch {
+            val origin = Url(requestUrl).protocolWithAuthority
+            try {
+                val redirectUri = uriSchemePresentment(
+                    source = getPresentmentSource(),
+                    uri = requestUrl,
+                    origin = origin,
+                    httpClientEngineFactory = TestAppConfiguration.httpClientEngineFactory,
+                )
+                // Open the redirect URI in a browser...
+                urlsToOpen.send(redirectUri)
+            } catch (e: Throwable) {
+                Logger.i(TAG, "Error processing request", e)
             }
         }
     }
@@ -743,6 +773,8 @@ class App private constructor (val promptModel: PromptModel) {
         // OID4VCI url scheme used for filtering OID4VCI Urls from all incoming URLs (deep links or QR)
         private const val OID4VCI_CREDENTIAL_OFFER_URL_SCHEME = "openid-credential-offer://"
         private const val HAIP_VCI_URL_SCHEME = "haip-vci://"
+        private const val OPENID4VP_URL_SCHEME = "openid4vp://"
+        private const val HAIP_VP_URL_SCHEME = "haip-vp://"
 
         private var app: App? = null
         fun getInstance(): App {
@@ -808,6 +840,13 @@ class App private constructor (val promptModel: PromptModel) {
                     )
                     navController.navigate(ProvisioningTestDestination)
                 }
+            }
+        }
+
+        val uriHandler = LocalUriHandler.current
+        LaunchedEffect(true) {
+            while (true) {
+                uriHandler.openUri(urlsToOpen.receive())
             }
         }
 

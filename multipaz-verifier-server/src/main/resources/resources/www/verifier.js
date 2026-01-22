@@ -757,8 +757,7 @@ async function requestDocument(format, docType, requestId) {
                 encryptResponse: encryptResponse
             }
         )
-        console.log("URI " + response.uri)
-        window.open(response.uri, '_blank').focus()
+        window.location = response.uri
     } else if (selectedProtocol === "w3c_dc_mdoc_api" ||
                selectedProtocol === "w3c_dc_openid4vp_24" ||
                selectedProtocol === 'w3c_dc_openid4vp_29' ||
