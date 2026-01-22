@@ -147,9 +147,9 @@ enum class ServerIdentity(
  *
  * Otherwise, an previously-created identity is looked up in the database.
  *
- * Otherwise, if "self_enroll" setting is set to `true` or the server is running with
- * localhost url, a new private key is generated and a certificate is created locally on this
- * server (signed using key obtained using `getRootIdentity` function).
+ * Otherwise, if "enrollment_server_url" setting is null or points to non-localhost url when the
+ * server's baseUrl is a localhost url, a new private key is generated and a certificate is created
+ * locally on this server (signed using key obtained using `getRootIdentity` function).
  *
  * Otherwise, a request is made to an enrollment server (set by "enrollment_server_url" setting,
  * "https://issuer.multipaz.org/records" by default) to issue a new certificate using

@@ -229,7 +229,7 @@ This may be useful if you are trying to troubleshoot a build problem.
 ./gradlew :multipaz-backend-server:buildFatJar
 ./gradlew :multipaz-records-server:buildFatJar
 ./gradlew :multipaz-csa-server:buildFatJar
-./gradlew :multipaz-server-frontend:jsBrowserProductionWebpack
+./gradlew :multipaz-server-frontend:jsBrowserDistribution
 
 # 2. Build the container image
 podman build -f multipaz-server-deployment/docker/Dockerfile -t multipaz/server-bundle:latest .

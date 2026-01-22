@@ -247,7 +247,6 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
                 // ServerIdentityRecord has been created and inserted in enrollmentsMap.
                 check(enrollmentsMap.containsKey(serverIdentity))
                 CoroutineScope(Dispatchers.IO).async {
-                    val selfEnrollProp = configuration.getValue("self_enroll")
                     val baseUrl = configuration.baseUrl
                     val enrollmentUrl = configuration.enrollmentServerUrl
                     // If no enrollment record is found, check if we are running on localhost
@@ -255,8 +254,8 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
                     // records server is also on localhost. When self-enrolling, the root
                     // certificate will not be trusted (unless a trusted key/certificate is
                     // specified in the config file, which is not generally recommended).
-                    val selfEnroll = selfEnrollProp?.let { it == "true" }
-                        ?: (LOCALHOST.matchEntire(baseUrl) != null &&
+                    val selfEnroll = enrollmentUrl == null ||
+                        (LOCALHOST.matchEntire(baseUrl) != null &&
                                 LOCALHOST.matchEntire(enrollmentUrl) == null)
                     if (selfEnroll) {
                         Logger.i(TAG, "Self-enrolling '$serverIdentity'")
