@@ -52,9 +52,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.decodeToImageBitmap
+import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -65,6 +67,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -568,7 +571,20 @@ private fun ConsentPage(
                 HorizontalPager(
                     state = pagerState,
                 ) { page ->
-                    Column {
+                    // Add a very slight drop shadow to make the main box stand out.
+                    Column(
+                        modifier = Modifier
+                            .padding(10.dp)
+                            .dropShadow(
+                                shape = RoundedCornerShape(10.dp),
+                                shadow = Shadow(
+                                    radius = 10.dp,
+                                    spread = 5.dp,
+                                    color = Color.Black.copy(alpha = 0.035f),
+                                    offset = DpOffset(x = 0.dp, 2.dp)
+                                )
+                            ),
+                    ) {
                         CredentialSetViewer(
                             combinations = combinations,
                             combinationNum = page,
@@ -652,7 +668,7 @@ private fun CredentialSetViewer(
             )
         }
         val notStoredClaims =
-            combinationElement.matches[0].claims.mapNotNull { (requestedClaim, claim) ->
+            combinationElement.matches[matchNum].claims.mapNotNull { (requestedClaim, claim) ->
                 if (requestedClaim is MdocRequestedClaim && requestedClaim.intentToRetain) {
                     null
                 } else {
@@ -660,7 +676,7 @@ private fun CredentialSetViewer(
                 }
             }
         val storedClaims =
-            combinationElement.matches[0].claims.mapNotNull { (requestedClaim, claim) ->
+            combinationElement.matches[matchNum].claims.mapNotNull { (requestedClaim, claim) ->
                 if (requestedClaim is MdocRequestedClaim && requestedClaim.intentToRetain) {
                     claim
                 } else {
@@ -822,6 +838,7 @@ private fun CredentialViewer(
                     Icon(
                         modifier = Modifier.clickable { onOptionsButtonClicked() },
                         imageVector = Icons.Outlined.ArrowDropDownCircle,
+                        tint = MaterialTheme.colorScheme.primary,
                         contentDescription = null,
                     )
                 }
@@ -946,7 +963,7 @@ private fun EntryList(
             }
         }
         if (!isLast) {
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(1.dp))
         }
     }
 }
@@ -963,7 +980,7 @@ private fun ButtonSection(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 8.dp, horizontal = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         OutlinedButton(

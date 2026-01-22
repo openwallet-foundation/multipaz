@@ -55,7 +55,7 @@ struct ClaimsSection : View {
                 }
             }
         }
-        .foregroundColor(.black)
+        .foregroundColor(.primary)
     }
 }
 
@@ -65,16 +65,14 @@ struct RequestedDocumentSection : View {
     let document: Document
     let retainedClaims: [Claim]
     let notRetainedClaims: [Claim]
+    let showOptionsButton: Bool
 
     var body: some View {
         HStack(alignment: .center) {
-            if let cardArt = document.cardArt {
-                let uiImage = UIImage(data: cardArt.toNSData())!
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: 32)
-            }
+            Image(uiImage: document.renderCardArt())
+                .resizable()
+                .scaledToFit()
+                .frame(height: 40)
             if let displayName = document.displayName {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(displayName)
@@ -88,13 +86,23 @@ struct RequestedDocumentSection : View {
             } else {
                 Text("Unknown Document")
             }
+            if showOptionsButton {
+                Spacer()
+                Button(action: {
+                    // TODO: go to screen to allow user to select document
+                    print("Chevron tapped")
+                }) {
+                    Image(systemName: "chevron.down.circle")
+                        .imageScale(.large)
+                }
+            }
         }
 
         Divider()
 
         if (!notRetainedClaims.isEmpty) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("The following data will be shared with \(rpName)")
+                Text("This data will be shared with \(rpName):")
                     .font(.system(size: 14, weight: .bold))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -103,7 +111,7 @@ struct RequestedDocumentSection : View {
         }
         if (!retainedClaims.isEmpty) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("The following data will be shared with and stored by \(rpName)")
+                Text("This data will be stored by \(rpName):")
                     .font(.system(size: 14, weight: .bold))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -134,6 +142,7 @@ struct RelyingPartySection : View {
 
     let rpName: String
     let trustMetadata: TrustMetadata?
+    let onRequesterClicked: () -> Void
 
     var body: some View {
 
@@ -145,12 +154,15 @@ struct RelyingPartySection : View {
                             .resizable()
                             .scaledToFit()
                             .frame(height: 80)
+                            .onTapGesture { onRequesterClicked() }
                     } else if phase.error != nil {
                         Image(systemName: "xmark.circle")
                             .foregroundColor(.red)
                             .font(.largeTitle)
+                            .onTapGesture { onRequesterClicked() }
                     } else {
                         ProgressView()
+                            .onTapGesture { onRequesterClicked() }
                     }
                 }
             } else if let iconData = trustMetadata?.displayIcon {
@@ -159,28 +171,115 @@ struct RelyingPartySection : View {
                     .resizable()
                     .scaledToFit()
                     .frame(height: 80)
+                    .onTapGesture { onRequesterClicked() }
             }
 
-            Text("\(rpName) requests information")
+            Text(rpName)
                 .font(.system(size: 22, weight: .bold))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+                .onTapGesture { onRequesterClicked() }
         }
     }
 }
 
 struct InfoSection: View {
-        let markdown: String
+    let markdown: String
+    let showWarning: Bool
+    
     var body: some View {
-        HStack(alignment: .top) {
-            Image(systemName: "info.circle")
+        HStack(alignment: .center) {
+            Image(systemName: showWarning ? "exclamationmark.triangle" : "info.circle")
                 .imageScale(.small)
+                .foregroundStyle(showWarning ? .red : .primary)
             Text(try! AttributedString(markdown: markdown))
                 .font(.system(size: 14))
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(showWarning ? .red : .primary)
         }
     }
+}
+
+struct CombinationSection: View {
+    let rpName: String
+    let requester: Requester
+    let trustMetadata: TrustMetadata?
+    fileprivate let combination: Combination
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            
+            ForEach(0..<combination.elements.count, id: \.self) { idx in
+                let element = combination.elements[idx]
+                // TODO: add ability to select match if more than one...
+                let match = element.matches.first!
+
+                let retainedClaims = Array(match.claims.filter( {
+                    ($0.key as! MdocRequestedClaim).intentToRetain == true
+                }).values).sorted(by: { a, b in
+                    (a as! MdocClaim).dataElementName < (b as! MdocClaim).dataElementName
+                })
+
+                let notRetainedClaims = Array(match.claims.filter( {
+                    ($0.key as! MdocRequestedClaim).intentToRetain == false
+                }).values).sorted(by: { a, b in
+                    (a as! MdocClaim).dataElementName < (b as! MdocClaim).dataElementName
+                })
+
+                RequestedDocumentSection(
+                    rpName: rpName,
+                    document: match.credential.document,
+                    retainedClaims: retainedClaims,
+                    notRetainedClaims: notRetainedClaims,
+                    showOptionsButton: element.matches.count > 1
+                )
+            }
+
+            // Note: on iOS we do not support apps requesting data so no need to handle the case
+            // where requester.origin is nil and requester.appId isn't.
+            //
+            let (infoText, showWarning) = if requester.origin == nil {
+                if let privacyPolicyUrl = trustMetadata?.privacyPolicyUrl {
+                    (
+                        "The identity reader requesting this data is trusted. " +
+                        "Review the [\(rpName) privacy policy](\(privacyPolicyUrl))",
+                        false
+                    )
+                } else if trustMetadata != nil {
+                    ("The identity reader requesting this data is trusted", false)
+                } else {
+                    (
+                        "The identity reader requesting this data is unknown. " +
+                        "Make sure you are comfortable sharing this data",
+                        true
+                    )
+                }
+            } else {
+                if let privacyPolicyUrl = trustMetadata?.privacyPolicyUrl {
+                    (
+                        "The website requesting this data is trusted. " +
+                        "Review the [\(rpName) privacy policy](\(privacyPolicyUrl))",
+                        false
+                    )
+                } else if trustMetadata != nil {
+                    ("The website requesting this data is trusted", false)
+                } else {
+                    (
+                        "The website requesting this data is unknown. " +
+                        "Make sure you are comfortable sharing this data",
+                        true
+                    )
+                }
+            }
+            Divider()
+            InfoSection(markdown: infoText, showWarning: showWarning)
+        }
+    }
+}
+
+private enum ConsentDestinations: Hashable {
+    case showRequesterInfo
 }
 
 /// A ``View`` which asks the user to approve sharing of a credentials.
@@ -188,116 +287,319 @@ struct InfoSection: View {
 /// - Parameters:
 ///   - credentialPresentmentData: the combinations of credentials and claims that the user can select.
 ///   - requester: the relying party which is requesting the data.
-///   - trustMetadata:``TrustMetadata`` conveying the level of trust in the requester, if any..
+///   - trustMetadata:``TrustMetadata`` conveying the level of trust in the requester, if any.
+///   - maxHeight: the maximum height of the view.
 ///   - onConfirm: callback when the user presses the Share button with the credentials that were selected.
+///   - onCancel: callback when the user presses the Cancel button.
 public struct Consent: View {
-
+    let maxHeight: CGFloat
     let credentialPresentmentData: CredentialPresentmentData
     let requester: Requester
     let trustMetadata: TrustMetadata?
     let onConfirm: (_: CredentialPresentmentSelection) -> Void
+    let onCancel: () -> Void
+
+    fileprivate let combinations: [Combination]
 
     public init(
         credentialPresentmentData: CredentialPresentmentData,
         requester: Requester,
         trustMetadata: TrustMetadata?,
+        maxHeight: CGFloat = .infinity,
         onConfirm: @escaping (_: CredentialPresentmentSelection) -> Void,
+        onCancel: @escaping () -> Void
     ) {
         self.credentialPresentmentData = credentialPresentmentData
+        // TODO: take preselectedDocuments
+        self.combinations = credentialPresentmentData.generateCombinations(preselectedDocuments: [])
         self.requester = requester
         self.trustMetadata = trustMetadata
+        self.maxHeight = maxHeight
         self.onConfirm = onConfirm
+        self.onCancel = onCancel
     }
 
-    @State private var hasReachedEnd = true
-    @State private var position: ScrollPosition = .init(point: .zero)
+    @State private var path = NavigationPath()
 
     public var body: some View {
-        ScrollViewReader { proxy in
-            let cred = credentialPresentmentData.credentialSets.first!
-                .options.first!
-                .members.first!
-                .matches.first!
-
-            let retainedClaims = Array(cred.claims.filter( {
-                ($0.key as! MdocRequestedClaim).intentToRetain == true
-            }).values).sorted(by: { a, b in
-                (a as! MdocClaim).dataElementName < (b as! MdocClaim).dataElementName
-            })
-            let notRetainedClaims = Array(cred.claims.filter( {
-                ($0.key as! MdocRequestedClaim).intentToRetain == false
-            }).values).sorted(by: { a, b in
-                (a as! MdocClaim).dataElementName < (b as! MdocClaim).dataElementName
-            })
-
-            let rpName = getRelyingPartyName(
-                requester: requester,
-                trustMetadata: trustMetadata
-            )
-
-            VStack(spacing: 5) {
-                RelyingPartySection(
+        let rpName = getRelyingPartyName(
+            requester: requester,
+            trustMetadata: trustMetadata
+        )
+        NavigationStack(path: $path) {
+            VStack {
+                ConsentMain(
+                    maxHeight: maxHeight,
+                    credentialPresentmentData: credentialPresentmentData,
                     rpName: rpName,
+                    requester: requester,
                     trustMetadata: trustMetadata,
-                )
-
-                VStack {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 10) {
-                            RequestedDocumentSection(
-                                rpName: rpName,
-                                document: cred.credential.document,
-                                retainedClaims: retainedClaims,
-                                notRetainedClaims: notRetainedClaims,
-                            )
-
-                            let infoText = if let privacyPolicyUrl = trustMetadata?.privacyPolicyUrl {
-                                "The website requesting this data has been identified and is trusted. " +
-                                "Review the [\(rpName) privacy policy](\(privacyPolicyUrl)) to see how your data is being handled"
-                            } else if trustMetadata != nil {
-                                "The website requesting this data has been identified and is trusted"
-                            } else {
-                                "The website requesting this data is unknown so make sure you are comfortable sharing this data with them"
-                            }
-                            Divider()
-                            InfoSection(markdown: infoText)
+                    combinations: combinations,
+                    onRequesterClicked: {
+                        if requester.certChain != nil {
+                            path.append(ConsentDestinations.showRequesterInfo)
                         }
-                        .scrollTargetLayout()
+                    },
+                    onConfirm: onConfirm,
+                    onCancel: onCancel
+                )
+            }
+            .navigationDestination(for: ConsentDestinations.self) { destination in
+                switch destination {
+                case .showRequesterInfo:
+                    ShowRequesterInfo(
+                        maxHeight: maxHeight,
+                        requester: requester
+                    )
+                }
+            }
+        }
+    }
+}
+
+private struct ShowRequesterInfo: View {
+    let maxHeight: CGFloat
+    let requester: Requester
+    @State private var currentPage: Int = 0
+    @State private var tabHeight: CGFloat = 300
+
+    var body: some View {
+        VStack {
+            SmartSheet(maxHeight: maxHeight) {
+            } content: {
+                let certificates = requester.certChain!.certificates
+                VStack {
+                    TabView(selection: $currentPage) {
+                        ForEach(0..<certificates.count, id: \.self) { index in
+                            X509CertViewer(certificate: certificates[index])
+                                .tag(index)
+                                .readHeight(to: $tabHeight)
+                        }
                     }
-                    .scrollPosition($position)
-                    .onScrollGeometryChange(for: Bool.self) { geometry in
-                        let totalHeight = geometry.contentSize.height + geometry.contentInsets.top + geometry.contentInsets.bottom
-                        let currentPosition = geometry.contentOffset.y + geometry.containerSize.height
-                        return currentPosition >= totalHeight - 1.0
-                    } action: { _, isAtBottom in
-                        hasReachedEnd = isAtBottom
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .frame(height: tabHeight)
+                }
+            } footer: { isAtBottom, scrollDown in
+                let certificates = requester.certChain!.certificates
+                if certificates.count > 1 {
+                    HStack(spacing: 4) {
+                        ForEach(0..<certificates.count, id: \.self) { index in
+                            Circle()
+                                .fill(
+                                    index == currentPage
+                                    ? Color.blue
+                                    : Color.primary.opacity(0.2)
+                                )
+                                .frame(width: 8, height: 8)
+                        }
                     }
+                    .frame(height: 30)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 8)
+                }
+            }
+        }
+        .navigationTitle("Requester info")
+    }
+}
+
+extension View {
+    /// Reads the height of a view and pushes it to a Binding.
+    fileprivate func readHeight(to binding: Binding<CGFloat>) -> some View {
+        background(
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: TabLayerHeightKey.self, value: proxy.size.height)
+            }
+        )
+        .onPreferenceChange(TabLayerHeightKey.self) { height in
+            // Only update if the change is significant to avoid layout loops
+            if abs(binding.wrappedValue - height) > 1 {
+                binding.wrappedValue = height
+            }
+        }
+    }
+}
+
+private struct TabLayerHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct ConsentMain: View {
+    let maxHeight: CGFloat
+    let credentialPresentmentData: CredentialPresentmentData
+    let rpName: String
+    let requester: Requester
+    let trustMetadata: TrustMetadata?
+    let combinations: [Combination]
+    let onRequesterClicked: () -> Void
+    let onConfirm: (_: CredentialPresentmentSelection) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        SmartSheet(maxHeight: maxHeight) {
+            RelyingPartySection(
+                rpName: rpName,
+                trustMetadata: trustMetadata,
+                onRequesterClicked: onRequesterClicked
+            )
+            .padding()
+        } content: {
+            VStack(spacing: 10) {
+                VStack {
+                    let combination = combinations.first!
+                    CombinationSection(
+                        rpName: rpName,
+                        requester: requester,
+                        trustMetadata: trustMetadata,
+                        combination: combination
+                    )
                 }
                 .padding()
                 .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color.white)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
                 )
-                .padding()
+                .padding(.vertical, 20)
             }
-
-            let buttonText = if (hasReachedEnd) {
-                "Share document"
-            } else {
-                "More"
-            }
-
-            Button(buttonText) {
-                if (!hasReachedEnd) {
-                    withAnimation {
-                        position.scrollTo(y: (position.y ?? 0) + 300)
-                    }
+            .padding(.horizontal)
+        } footer: { isAtBottom, scrollDown in
+            HStack(spacing: 10) {
+                Button(action : { onCancel() }) {
+                    Text("Cancel")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                
+                let buttonText = if (isAtBottom) {
+                    "Share"
                 } else {
-                    onConfirm(credentialPresentmentData.select(preselectedDocuments: []))
+                    "More"
+                }
+                Button(action : {
+                    if (!isAtBottom) {
+                        scrollDown()
+                    } else {
+                        onConfirm(credentialPresentmentData.select(preselectedDocuments: []))
+                    }
+                }) {
+                    Text(buttonText)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+            }
+            .padding()
+        }
+    }
+}
+
+private struct CombinationElement {
+    let matches: [CredentialPresentmentSetOptionMemberMatch]
+}
+
+private struct Combination {
+    let elements: [CombinationElement]
+}
+
+extension CredentialPresentmentData {
+
+    fileprivate func generateCombinations(preselectedDocuments: [Document]) -> [Combination] {
+        var combinations: [Combination] = []
+        let consolidated = self.consolidate()
+
+        var credentialSetsMaxPath: [Int] = []
+        for credentialSet in consolidated.credentialSets {
+            let extraSlot = credentialSet.optional ? 1 : 0
+            credentialSetsMaxPath.append(credentialSet.options.count + extraSlot)
+        }
+
+        for path in credentialSetsMaxPath.generateAllPaths() {
+            var elements: [CombinationElement] = []
+
+            for (credentialSetNum, credentialSet) in consolidated.credentialSets.enumerated() {
+                let omitCredentialSet = (path[credentialSetNum] == credentialSet.options.count)
+                if omitCredentialSet {
+                    assert(credentialSet.optional, "Path indicated omission for non-optional set")
+                } else {
+                    let option = credentialSet.options[path[credentialSetNum]]
+                    for member in option.members {
+                        elements.append(CombinationElement(matches: member.matches))
+                    }
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
+            combinations.append(Combination(elements: elements))
+        }
+
+        if preselectedDocuments.isEmpty {
+            return combinations
+        }
+
+        let setOfPreselectedDocuments = Set(preselectedDocuments)
+
+        for combination in combinations {
+            if combination.elements.count == preselectedDocuments.count {
+                var chosenElements: [CombinationElement] = []
+
+                for element in combination.elements {
+                    let match = element.matches.first { match in
+                        setOfPreselectedDocuments.contains(match.credential.document)
+                    }
+                    
+                    guard let foundMatch = match else {
+                        continue
+                    }
+                    
+                    chosenElements.append(CombinationElement(matches: [foundMatch]))
+                }
+
+                // Winner, winner, chicken dinner!
+                return [Combination(elements: chosenElements)]
+            }
+        }
+
+        print("Error picking combination for pre-selected documents")
+        return combinations
+    }
+}
+
+extension Array where Element == Int {
+    
+    /// Given a list [X0, X1, ...], generates a list of lists where the `n`th position
+    /// iterates from 0 up to Xn.
+    fileprivate func generateAllPaths() -> [[Int]] {
+        if isEmpty {
+            return [[]]
+        }
+        var allPaths: [[Int]] = []
+        var currentPath = Array(repeating: 0, count: count)
+        
+        generate(index: 0, currentPath: &currentPath, allPaths: &allPaths, maxPath: self)
+        
+        return allPaths
+    }
+    
+    private func generate(
+        index: Int,
+        currentPath: inout [Int],
+        allPaths: inout [[Int]],
+        maxPath: [Int]
+    ) {
+        if index == maxPath.count {
+            allPaths.append(currentPath)
+            return
+        }
+        
+        for value in 0..<maxPath[index] {
+            currentPath[index] = value
+            generate(index: index + 1, currentPath: &currentPath, allPaths: &allPaths, maxPath: maxPath)
         }
     }
 }

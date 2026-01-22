@@ -20,6 +20,7 @@ import org.multipaz.mdoc.transport.MdocTransportClosedException
 import org.multipaz.presentment.CredentialPresentmentSelection
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -46,7 +47,15 @@ private const val TAG = "Iso180135Presentment"
  * @param onSendingResponse called when sending a response to the remote reader.
  * @throws MdocTransportClosedException if [transport] was closed.
  * @throws Iso18013PresentmentTimeoutException if the reader didn't send a message without the given [timeout].
+ * @throws PresentmentCanceled if the user canceled in a consent prompt.
  */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class,
+    MdocTransportClosedException::class,
+    Iso18013PresentmentTimeoutException::class,
+    PresentmentCanceled::class
+)
 suspend fun Iso18013Presentment(
     transport: MdocTransport,
     eDeviceKey: EcPrivateKey,

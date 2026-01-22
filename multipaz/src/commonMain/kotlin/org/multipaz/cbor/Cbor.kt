@@ -111,6 +111,7 @@ object Cbor {
      * decoded data item.
      * @throws IllegalArgumentException if the data isn't valid CBOR.
      */
+    @Throws(IllegalArgumentException::class)
     fun decode(encodedCbor: ByteArray, offset: Int): Pair<Int, DataItem> {
         // This is needed by Kotlin/JS which doesn't have the same array access semantics
         // as other platforms. In particular, one cannot rely on IndexOutOfBoundsException
@@ -203,6 +204,7 @@ object Cbor {
      * @return a [DataItem] with the decoded data.
      * @throws IllegalArgumentException if bytes are left over or the data isn't valid CBOR.
      */
+    @Throws(IllegalArgumentException::class)
     fun decode(encodedCbor: ByteArray): DataItem {
         val (newOffset, item) = decode(encodedCbor, 0)
         if (newOffset != encodedCbor.size) {

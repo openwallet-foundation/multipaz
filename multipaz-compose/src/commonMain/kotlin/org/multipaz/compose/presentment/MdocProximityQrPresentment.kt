@@ -59,7 +59,7 @@ private enum class State {
  *   when ready to reset the state and go back and show a QR button.
  * @param preselectedDocuments a list of documents the user may have preselected or the empty list.
  * @param eDeviceKeyCurve the curve to use for session encryption.
- * @param transportFactory the [MdocTransportFactory] to use for creating a transport.
+ * @param transportFactory the [MdocTransportFactory] to use for creating transports.
  * @param disablePlatformSpecificImplementation set to `true` to not use platform-specific implementations.
  */
 @Composable

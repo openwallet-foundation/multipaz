@@ -7,6 +7,11 @@ import org.multipaz.prompt.PassphrasePromptDialogModel.PassphraseRequest
 import org.multipaz.request.Requester
 import org.multipaz.securearea.PassphraseConstraints
 import org.multipaz.trustmanagement.TrustMetadata
+import kotlin.coroutines.cancellation.CancellationException
+
+fun PromptModel.getPassphraseDialogModel() = getDialogModel(PassphrasePromptDialogModel.DialogType)
+
+fun PromptModel.getConsentPromptDialogModel() = getDialogModel(ConsentPromptDialogModel.DialogType)
 
 /**
  * Prompts user for authentication through a passphrase.
@@ -32,6 +37,13 @@ import org.multipaz.trustmanagement.TrustMetadata
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
  */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class,
+    PromptDismissedException::class,
+    PromptModelNotAvailableException::class,
+    PromptUiNotAvailableException::class
+)
 suspend fun PromptModel.requestPassphrase(
     title: String,
     subtitle: String,
@@ -65,6 +77,13 @@ suspend fun PromptModel.requestPassphrase(
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
  */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class,
+    PromptDismissedException::class,
+    PromptModelNotAvailableException::class,
+    PromptUiNotAvailableException::class
+)
 suspend fun PromptModel.requestConsent(
     requester: Requester,
     trustMetadata: TrustMetadata?,

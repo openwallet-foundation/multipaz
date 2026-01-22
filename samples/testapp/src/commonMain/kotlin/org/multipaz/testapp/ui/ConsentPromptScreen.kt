@@ -60,6 +60,7 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.Icon
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.PhotoID
+import org.multipaz.documenttype.knowntypes.UtopiaBoardingPass
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.openid.dcql.DcqlResponse
@@ -128,7 +129,8 @@ private enum class UseCase(
     MDL_NAME_AND_ADDRESS_ALL_STORED("mDL: Name and address (all stored)"),
     PHOTO_ID_MANDATORY("PhotoID: Mandatory data elements (2 docs)"),
     OPENID4VP_COMPLEX_EXAMPLE("Complex example from OpenID4VP Appendix D"),
-    BOARDING_PASS_AND_MDL_EXAMPLE("Boarding pass and mDL")
+    BOARDING_PASS_AND_MDL_EXAMPLE("Boarding pass AND mDL"),
+    BOARDING_PASS_OR_MDL_EXAMPLE("Boarding pass OR mDL")
 }
 
 private enum class PaDuration(
@@ -147,6 +149,7 @@ private enum class PaPreselectedDocuments(
     PRESELECTED_DOCUMENTS_NONE("None"),
     PRESELECTED_DOCUMENTS_MDL("mDL"),
     PRESELECTED_DOCUMENTS_PHOTOID("PhotoID"),
+    PRESELECTED_DOCUMENTS_BOARDING_PASS("Boarding pass"),
     PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID("mDL and PhotoID"),
     PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID_AND_PHOTOID("mDL and PhotoID and PhotoID"),
     PRESELECTED_DOCUMENTS_MDL_AND_BOARDING_PASS("mDL and boarding pass")
@@ -160,61 +163,6 @@ data class AndroidPresentmentActivityData(
     val sendResponseDuration: Duration = 0.seconds,
     val preselectedDocuments: List<Document> = emptyList()
 )
-
-private object UtopiaBoardingPass {
-    const val BOARDING_PASS_DOCTYPE = "org.multipaz.example.boarding-pass.1"
-    const val BOARDING_PASS_NS = "org.multipaz.example.boarding-pass.1"
-
-    /**
-     * Build the Movie Ticket Document Type.
-     */
-    fun getDocumentType(): DocumentType {
-        return DocumentType.Builder("Boarding Pass").apply {
-            addMdocDocumentType(BOARDING_PASS_DOCTYPE)
-            addMdocAttribute(
-                DocumentAttributeType.String,
-                "passenger_name",
-                "Passenger name",
-                "Last name, surname, or primary identifier, of the mDL holder.",
-                true,
-                BOARDING_PASS_NS,
-                Icon.PERSON,
-                "Erika Mustermann".toDataItem()
-            )
-            addMdocAttribute(
-                DocumentAttributeType.String,
-                "flight_number",
-                "Flight number",
-                "The flight number",
-                true,
-                BOARDING_PASS_NS,
-                Icon.AIRPORT_SHUTTLE,
-                "United 815".toDataItem()
-            )
-            addMdocAttribute(
-                DocumentAttributeType.String,
-                "seat_number",
-                "Seat number",
-                "The seat number",
-                true,
-                BOARDING_PASS_NS,
-                Icon.DIRECTIONS,
-                "12A".toDataItem()
-            )
-            addMdocAttribute(
-                DocumentAttributeType.DateTime,
-                "departure_time",
-                "Departure time",
-                "The date of time of departure",
-                true,
-                BOARDING_PASS_NS,
-                Icon.TODAY,
-                Clock.System.now().toDataItemDateTimeString()
-            )
-        }.build()
-    }
-}
-
 
 expect suspend fun launchAndroidPresentmentActivity(
     source: PresentmentSource,
@@ -251,7 +199,7 @@ fun ConsentPromptScreen(
     var paAuthRequireConfirmation by remember { mutableStateOf(false) }
     var paConnectionDuration by remember { mutableStateOf(PaDuration.PA_DURATION_2SEC) }
     var paSendingDuration by remember { mutableStateOf(PaDuration.PA_DURATION_2SEC) }
-    var paPreselectedDocuments by remember { mutableStateOf(PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL)}
+    var paPreselectedDocuments by remember { mutableStateOf(PaPreselectedDocuments.PRESELECTED_DOCUMENTS_NONE)}
     lateinit var documentTypeRepository: DocumentTypeRepository
     lateinit var documentMdl: Document
     lateinit var documentPhotoId: Document
@@ -311,7 +259,7 @@ fun ConsentPromptScreen(
 
         documentMdl = documentStore!!.createDocument(
             displayName = "Erika's driving license",
-            typeDisplayName = "Utopia driving dicense",
+            typeDisplayName = "Utopia driving license",
             cardArt = ByteString(cardArtMdl)
         )
         DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
@@ -585,6 +533,7 @@ fun ConsentPromptScreen(
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_NONE -> listOf()
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL -> listOf(documentMdl)
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_PHOTOID -> listOf(documentPhotoId)
+                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_BOARDING_PASS -> listOf(documentBoardingPass)
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID -> listOf(documentMdl, documentPhotoId)
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID_AND_PHOTOID ->
                             listOf(documentMdl, documentPhotoId, documentPhotoId2)
@@ -617,19 +566,19 @@ private suspend fun getQueryResult(
 ): QueryResult {
     val dcql = when (useCase) {
         UseCase.MDL_AGE_OVER_21_AND_PORTRAIT ->
-            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "age_over_21_and_portrait" }!!.toDcql()
+            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "age_over_21_and_portrait" }!!.mdocRequest!!.toDcql()
         UseCase.MDL_US_TRANSPORTATION ->
-            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "us-transportation" }!!.toDcql()
+            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "us-transportation" }!!.mdocRequest!!.toDcql()
         UseCase.MDL_MANDATORY ->
-            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "mandatory" }!!.toDcql()
+            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "mandatory" }!!.mdocRequest!!.toDcql()
         UseCase.MDL_ALL ->
-            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "full" }!!.toDcql()
+            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "full" }!!.mdocRequest!!.toDcql()
         UseCase.MDL_NAME_AND_ADDRESS_PARTIALLY_STORED ->
-            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "name-and-address-partially-stored" }!!.toDcql()
+            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "name-and-address-partially-stored" }!!.mdocRequest!!.toDcql()
         UseCase.MDL_NAME_AND_ADDRESS_ALL_STORED ->
-            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "name-and-address-all-stored" }!!.toDcql()
+            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "name-and-address-all-stored" }!!.mdocRequest!!.toDcql()
         UseCase.PHOTO_ID_MANDATORY ->
-            PhotoID.getDocumentType().cannedRequests.find { it.id == "mandatory" }!!.toDcql()
+            PhotoID.getDocumentType().cannedRequests.find { it.id == "mandatory" }!!.mdocRequest!!.toDcql()
         UseCase.OPENID4VP_COMPLEX_EXAMPLE -> Json.parseToJsonElement(
             """
             {
@@ -730,7 +679,6 @@ private suspend fun getQueryResult(
                     { "path": ["org.iso.18013.5.1", "issuing_authority" ] },
                     { "path": ["org.iso.18013.5.1", "document_number" ] },
                     { "path": ["org.iso.18013.5.1", "portrait" ] },
-                    { "path": ["org.iso.18013.5.1", "driving_privileges" ] },
                     { "path": ["org.iso.18013.5.1", "un_distinguishing_sign" ] }
                   ]
                 },
@@ -751,6 +699,54 @@ private suspend fun getQueryResult(
             }
             """.trimIndent()
         ).jsonObject
+        UseCase.BOARDING_PASS_OR_MDL_EXAMPLE -> Json.parseToJsonElement(
+                """
+            {
+              "credentials": [
+                {
+                  "id": "mdl",
+                  "format": "mso_mdoc",
+                  "meta": {
+                    "doctype_value": "org.iso.18013.5.1.mDL"
+                  },
+                  "claims": [
+                    { "path": ["org.iso.18013.5.1", "family_name" ] },
+                    { "path": ["org.iso.18013.5.1", "given_name" ] },
+                    { "path": ["org.iso.18013.5.1", "birth_date" ] },
+                    { "path": ["org.iso.18013.5.1", "issue_date" ] },
+                    { "path": ["org.iso.18013.5.1", "expiry_date" ] },
+                    { "path": ["org.iso.18013.5.1", "issuing_country" ] },
+                    { "path": ["org.iso.18013.5.1", "issuing_authority" ] },
+                    { "path": ["org.iso.18013.5.1", "document_number" ] },
+                    { "path": ["org.iso.18013.5.1", "portrait" ] },
+                    { "path": ["org.iso.18013.5.1", "un_distinguishing_sign" ] }
+                  ]
+                },
+                {
+                  "id": "boarding-pass",
+                  "format": "mso_mdoc",
+                  "meta": {
+                    "doctype_value": "org.multipaz.example.boarding-pass.1"
+                  },
+                  "claims": [
+                    { "path": ["org.multipaz.example.boarding-pass.1", "passenger_name" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "seat_number" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "flight_number" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "departure_time" ] }
+                  ]
+                }
+              ],
+              "credential_sets": [
+                {
+                  "options": [
+                    [ "mdl" ],
+                    [ "boarding-pass" ]
+                  ]
+                }
+              ]
+            }
+            """.trimIndent()
+            ).jsonObject
     }
     val (requester, trustMetadata) = calculateRequester(
         certChain = certChain,
@@ -798,7 +794,6 @@ private suspend fun calculateRequester(
     val now = Clock.System.now().truncateToWholeSeconds()
     val validFrom = now - 1.days
     val validUntil = now + 1.days
-    // TODO: should it be in SecureArea?
     val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P256)
     val readerRootCert = MdocUtil.generateReaderRootCertificate(
         readerRootKey = AsymmetricKey.anonymous(readerRootKey),
@@ -894,61 +889,6 @@ private suspend fun calculateRequester(
         ),
         trustMetadata
     )
-}
-
-private fun DocumentCannedRequest.toDcql(
-    requestJson: Boolean = false
-): JsonObject {
-    val dcql = buildJsonObject {
-        putJsonArray("credentials") {
-            if (requestJson) {
-                addJsonObject {
-                    put("id", JsonPrimitive("cred1"))
-                    put("format", JsonPrimitive("dc+sd-jwt"))
-                    putJsonObject("meta") {
-                        put(
-                            "vct_values",
-                            buildJsonArray {
-                                add(JsonPrimitive(jsonRequest!!.vct))
-                            }
-                        )
-                    }
-                    putJsonArray("claims") {
-                        for (claim in jsonRequest!!.claimsToRequest) {
-                            addJsonObject {
-                                putJsonArray("path") {
-                                    claim.parentAttribute?.let { add(JsonPrimitive(it.identifier)) }
-                                    add(JsonPrimitive(claim.identifier))
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                addJsonObject {
-                    put("id", JsonPrimitive("cred1"))
-                    put("format", JsonPrimitive("mso_mdoc"))
-                    putJsonObject("meta") {
-                        put("doctype_value", JsonPrimitive(mdocRequest!!.docType))
-                    }
-                    putJsonArray("claims") {
-                        for (ns in mdocRequest!!.namespacesToRequest) {
-                            for ((de, intentToRetain) in ns.dataElementsToRequest) {
-                                addJsonObject {
-                                    putJsonArray("path") {
-                                        add(JsonPrimitive(ns.namespace))
-                                        add(JsonPrimitive(de.attribute.identifier))
-                                    }
-                                    put("intent_to_retain", JsonPrimitive(intentToRetain))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return dcql
 }
 
 private suspend fun addCredentialsForOpenID4VPComplexExample(

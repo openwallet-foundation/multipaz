@@ -135,11 +135,11 @@ private fun showPassphrasePrompt(
         subtitle = if (constraints.requireNumerical) {
             "Enter your PIN to continue. " +
             "It's '$expectedPassphrase' but also try entering " +
-            "something else to test see an error message"
+            "something else to see an error message"
         } else {
             "Enter your passphrase to continue. " +
                     "It's '$expectedPassphrase' but also try entering " +
-                    "something else to test see an error message"
+                    "something else to see an error message"
         },
         passphraseConstraints = constraints,
         showKeyboard = showKeyboard.asStateFlow(),

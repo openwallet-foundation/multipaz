@@ -5,11 +5,11 @@ import org.multipaz.document.Document
 /**
  * An object containing data related to a credential presentment event.
  */
-interface CredentialPresentmentData {
+abstract class CredentialPresentmentData {
     /**
      * A list of credential sets which can be presented. Contains at least one set but may contain more.
      */
-    val credentialSets: List<CredentialPresentmentSet>
+    abstract val credentialSets: List<CredentialPresentmentSet>
 
     /**
      * Consolidates matches from several options and members into one.
@@ -60,7 +60,7 @@ interface CredentialPresentmentData {
      *
      * @return a [CredentialPresentmentData] with options, members, and matches consolidated.
      */
-    fun consolidate(): CredentialPresentmentData
+    abstract fun consolidate(): CredentialPresentmentData
 
     /**
      * Selects a particular combination of credentials to select.
@@ -75,5 +75,5 @@ interface CredentialPresentmentData {
      * @param preselectedDocuments either empty or a list of documents the user already selected.
      * @return a [CredentialPresentmentSelection].
      */
-    fun select(preselectedDocuments: List<Document>): CredentialPresentmentSelection
+    abstract fun select(preselectedDocuments: List<Document>): CredentialPresentmentSelection
 }

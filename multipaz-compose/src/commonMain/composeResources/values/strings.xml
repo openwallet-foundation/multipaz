@@ -13,7 +13,7 @@
     <string name="credential_presentment_share_and_stored_by_known_requester">This data will be stored by %1$s:</string>
     <string name="credential_presentment_share_and_stored_by_unknown_requester">This data will be stored:</string>
     <string name="credential_presentment_warning_verifier_not_in_trust_list">The identity reader requesting this data is unknown. Make sure you are comfortable sharing this data</string>
-    <string name="credential_presentment_warning_verifier_not_in_trust_list_anonymous">The identity reader requesting this data does not identify themselves. Make sure you are comfortable sharing this data</string>
+    <string name="credential_presentment_warning_verifier_not_in_trust_list_anonymous">The identity reader requesting this data is anonymous. Make sure you are comfortable sharing this data</string>
     <string name="credential_presentment_warning_verifier_not_in_trust_list_website">The website requesting this data is unknown. Make sure you are comfortable sharing this data</string>
     <string name="credential_presentment_warning_verifier_not_in_trust_list_app">The application requesting this data is unknown. Make sure you are comfortable sharing this data</string>
     <string name="credential_presentment_info_verifier_in_trust_list">The identity reader requesting this data is trusted</string>

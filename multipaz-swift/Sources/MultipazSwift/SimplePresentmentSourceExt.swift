@@ -1,4 +1,4 @@
-import Multipaz
+@preconcurrency import Multipaz
 
 // Swift-friendly version of SimplePresentmentSource() constructor which takes
 // suspend functions as parameters.
@@ -22,15 +22,15 @@ extension SimplePresentmentSource.Companion {
         documentStore: DocumentStore,
         documentTypeRepository: DocumentTypeRepository,
         zkSystemRepository: ZkSystemRepository? = nil,
-        resolveTrustFn: @escaping (
+        resolveTrustFn: @escaping @Sendable (
             _ requester: Requester
         ) async -> TrustMetadata?,
-        showConsentPromptFn: @escaping (
+        showConsentPromptFn: @escaping @Sendable (
             _ requester: Requester,
             _ trustMetadata: TrustMetadata?,
             _ credentialPresentmentData: CredentialPresentmentData,
             _ preselectedDocuments: [Document],
-            _ onDocumentsInFocus: @escaping (_ documents: [Document]) -> Void,
+            _ onDocumentsInFocus: @escaping @Sendable (_ documents: [Document]) -> Void,
         ) async -> CredentialPresentmentSelection?,
         preferSignatureToKeyAgreement: Bool = true,
         domainMdocSignature: String? = nil,
@@ -55,17 +55,18 @@ extension SimplePresentmentSource.Companion {
 }
 
 private class ResolveTrustHandler: KotlinSuspendFunction1 {
-    let f: (
+    let f: @Sendable (
         _ requester: Requester
     ) async -> TrustMetadata?
     
-    init(f: @escaping (_ requester: Requester) async -> TrustMetadata?) {
+    init(f: @escaping @Sendable (_ requester: Requester) async -> TrustMetadata?) {
         self.f = f
     }
 
     func __invoke(p1: Any?, completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void) {
+        let requester = p1 as! Requester
+        let f = self.f
         Task {
-            let requester = p1 as! Requester
             let value = await f(requester)
             completionHandler(value, nil)
         }
@@ -73,30 +74,31 @@ private class ResolveTrustHandler: KotlinSuspendFunction1 {
 }
 
 private class ShowConsentPromptHandler: KotlinSuspendFunction5 {
-    let f: (
+    let f: @Sendable (
         _ requester: Requester,
         _ trustMetadata: TrustMetadata?,
         _ credentialPresentmentData: CredentialPresentmentData,
         _ preselectedDocuments: [Document],
-        _ onDocumentsInFocus: @escaping (_ documents: [Document]) -> Void,
+        _ onDocumentsInFocus: @escaping @Sendable (_ documents: [Document]) -> Void,
     ) async -> CredentialPresentmentSelection?
     
-    init(f: @escaping (
+    init(f: @escaping @Sendable (
         _ requester: Requester,
         _ trustMetadata: TrustMetadata?,
         _ credentialPresentmentData: CredentialPresentmentData,
         _ preselectedDocuments: [Document],
-        _ onDocumentsInFocus: @escaping (_ documents: [Document]) -> Void,
+        _ onDocumentsInFocus: @escaping @Sendable (_ documents: [Document]) -> Void,
     ) async -> CredentialPresentmentSelection?) {
         self.f = f
     }
 
     func __invoke(p1: Any?, p2: Any?, p3: Any?, p4: Any?, p5: Any?, completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void) {
+        let requester = p1 as! Requester
+        let trustMetadata = p2 as! TrustMetadata?
+        let credentialPresentmentData = p3 as! CredentialPresentmentData
+        let preselectedDocuments = p4 as! [Document]
+        let f = self.f
         Task {
-            let requester = p1 as! Requester
-            let trustMetadata = p2 as! TrustMetadata?
-            let credentialPresentmentData = p3 as! CredentialPresentmentData
-            let preselectedDocuments = p4 as! [Document]
             // TODO: The cast for onDocumentsInFocus fails at runtime, figure out how to make it work
             let value = await f(
                 requester,

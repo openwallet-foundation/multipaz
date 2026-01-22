@@ -17,6 +17,8 @@
 		7B1E53EE2EF5EE16007C8E8D /* RequestAuthorizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51EF29922EF40D730077E722 /* RequestAuthorizationView.swift */; };
 		7B1E54072EF5F3CA007C8E8D /* Consent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B1E54062EF5F3CA007C8E8D /* Consent.swift */; };
 		7B7E65C52F19ED96000736E1 /* SimplePresentmentSourceExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B7E65C42F19ED96000736E1 /* SimplePresentmentSourceExt.swift */; };
+		7B7E66372F2436C7000736E1 /* SmartSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B7E66362F2436C7000736E1 /* SmartSheet.swift */; };
+		7B7E66382F2436C7000736E1 /* SmartSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B7E66362F2436C7000736E1 /* SmartSheet.swift */; };
 		7BAB1AC82DB687B000CAC98C /* DeveloperConfig.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 7BAB1AC72DB687B000CAC98C /* DeveloperConfig.xcconfig */; };
 /* End PBXBuildFile section */
 
@@ -58,6 +60,7 @@
 		7B1E54062EF5F3CA007C8E8D /* Consent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Consent.swift; sourceTree = "<group>"; };
 		7B39212C2C27D97A00A18AB5 /* TestApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TestApp.entitlements; sourceTree = "<group>"; };
 		7B7E65C42F19ED96000736E1 /* SimplePresentmentSourceExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimplePresentmentSourceExt.swift; sourceTree = "<group>"; };
+		7B7E66362F2436C7000736E1 /* SmartSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartSheet.swift; sourceTree = "<group>"; };
 		7B9C61172DBA8D46000484FF /* AdditionalConfig.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = AdditionalConfig.xcconfig; sourceTree = "<group>"; };
 		7BAB1AC72DB687B000CAC98C /* DeveloperConfig.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = DeveloperConfig.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -105,6 +108,7 @@
 		51B083112EF4028400A90AA1 /* MultipazSwift */ = {
 			isa = PBXGroup;
 			children = (
+				7B7E66362F2436C7000736E1 /* SmartSheet.swift */,
 				7B7E65C42F19ED96000736E1 /* SimplePresentmentSourceExt.swift */,
 				51804B222EF70CAF00A95196 /* Extensions.swift */,
 				7B1E54062EF5F3CA007C8E8D /* Consent.swift */,
@@ -299,6 +303,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				51804B232EF70CAF00A95196 /* Extensions.swift in Sources */,
+				7B7E66372F2436C7000736E1 /* SmartSheet.swift in Sources */,
 				7B1E53ED2EF5EDE2007C8E8D /* DocumentModel.swift in Sources */,
 				7B7E65C52F19ED96000736E1 /* SimplePresentmentSourceExt.swift in Sources */,
 				7B1E53EE2EF5EE16007C8E8D /* RequestAuthorizationView.swift in Sources */,
@@ -310,6 +315,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7B7E66382F2436C7000736E1 /* SmartSheet.swift in Sources */,
 				2152FB042600AC8F00CF470E /* iOSApp.swift in Sources */,
 				7555FF83242A565900829871 /* ContentView.swift in Sources */,
 			);
@@ -544,7 +550,7 @@
 					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)\n$(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
 				);
 				INFOPLIST_FILE = TestApp/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.3;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -579,7 +585,7 @@
 					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)\n$(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
 				);
 				INFOPLIST_FILE = TestApp/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.3;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

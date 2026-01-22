@@ -34,6 +34,7 @@ import org.multipaz.presentment.SimpleCredentialPresentmentData
 import org.multipaz.request.RequestedClaim
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
+import kotlin.coroutines.cancellation.CancellationException
 
 private const val TAG = "mdocPresentment"
 
@@ -49,7 +50,15 @@ private const val TAG = "mdocPresentment"
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @return a [DeviceResponse].
+ * @throws PresentmentCanceled if the user canceled in a consent prompt.
  */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class,
+    MdocTransportClosedException::class,
+    Iso18013PresentmentTimeoutException::class,
+    PresentmentCanceled::class
+)
 suspend fun mdocPresentment(
     deviceRequest: DeviceRequest,
     eReaderKey: EcPublicKey?,

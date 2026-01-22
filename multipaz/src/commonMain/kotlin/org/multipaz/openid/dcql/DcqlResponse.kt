@@ -18,7 +18,7 @@ private const val TAG = "DcqlResponse"
  */
 data class DcqlResponse(
     override val credentialSets: List<DcqlResponseCredentialSet>
-): CredentialPresentmentData {
+): CredentialPresentmentData() {
 
     override fun consolidate(): CredentialPresentmentData {
         val ret = mutableListOf<DcqlResponseCredentialSet>()

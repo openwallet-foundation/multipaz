@@ -13,7 +13,10 @@ import platform.Foundation.create
 import platform.Foundation.timeIntervalSince1970
 import platform.posix.memcpy
 import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.DurationUnit
 import kotlin.time.Instant
+import kotlin.time.toDuration
 
 // Various iOS related utilities.
 //
@@ -52,3 +55,6 @@ fun NSDate.toKotlinInstant(): Instant {
 }
 
 fun Clock.Companion.getSystem(): Clock = Clock.System
+
+// Helper to create duration from simple seconds (Double)
+fun Duration.Companion.fromSeconds(seconds: Double): Duration = seconds.toDuration(DurationUnit.SECONDS)

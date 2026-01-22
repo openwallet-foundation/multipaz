@@ -7,6 +7,7 @@ import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.cose.CoseSign1
 import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
@@ -81,6 +82,7 @@ data class DocRequest internal constructor(
      * @return a [MdocRequest]
      * @throws IllegalStateException if this is accessed before [DeviceRequest.verifyReaderAuthentication] is called.
      */
+    @Throws(IllegalStateException::class)
     fun toMdocRequest(
         documentTypeRepository: DocumentTypeRepository,
         mdocCredential: MdocCredential?,

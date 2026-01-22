@@ -49,6 +49,7 @@ import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
 
@@ -266,7 +267,13 @@ object OpenID4VP {
      * @param requesterCertChain the X.509 certificate chain if the request is signed or `null`
      *   if the request is not signed.
      * @return the generated response according to OpenID4VP Section 8 Response.
+     * @throws PresentmentCanceled if the user canceled in a consent prompt.
      */
+    @Throws(
+        CancellationException::class,
+        IllegalStateException::class,
+        PresentmentCanceled::class
+    )
     @OptIn(ExperimentalEncodingApi::class)
     suspend fun generateResponse(
         version: Version,

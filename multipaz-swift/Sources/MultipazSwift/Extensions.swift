@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import Multipaz
 
 extension URL {
     /// Gets the serialized origin according to the [WHATWG HTML standard](https://html.spec.whatwg.org/multipage/browsers.html#origin).
@@ -22,3 +23,13 @@ extension Duration {
     }
 }
 
+// Needed until it's possible to annotate in Kotlin.
+//
+extension Requester: @unchecked Sendable {}
+extension TrustMetadata: @unchecked Sendable {}
+extension Requester: @unchecked Sendable {}
+extension Document: @unchecked Sendable {}
+extension PresentmentSource: @unchecked Sendable {}
+extension DocumentTypeRepository: @unchecked Sendable {}
+extension CredentialPresentmentData: @unchecked Sendable {}
+extension CredentialPresentmentSelection: @unchecked Sendable {}

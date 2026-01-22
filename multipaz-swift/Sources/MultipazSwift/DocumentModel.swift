@@ -1,39 +1,37 @@
-import Multipaz
+@preconcurrency import Multipaz
 import UIKit
 import Combine
 
 /// A structure with information about a ``Credential``.
-public struct CredentialInfo {
+public struct CredentialInfo: Hashable {
     /// A reference to the ``Credential`` this information is about.
-    let credential: Credential
+    public let credential: Credential
     
     /// The claims in the credential.
-    let claims: [Claim]
+    public let claims: [Claim]
     
     /// Information about the key-binding key if the credential is a ``SecureAreaBoundCredential``.
-    let keyInfo: KeyInfo?
-
+    public let keyInfo: KeyInfo?
+    
     /// True if the credential is a ``SecureAreaBoundCredential`` and the key has been invalidated.
-    let keyInvalidated: Bool
+    public let keyInvalidated: Bool
 }
 
 /// A structure with information about a ``Document``.
-public struct DocumentInfo {
+public struct DocumentInfo: Hashable {
     /// A reference to the ``Document`` this information is about.
-    let document: Document
-
+    public let document: Document
+    
     /// Card art for the document.
-    let cardArt: UIImage?
+    public let cardArt: UIImage
     
     /// The credentials for the document.
-    let credentialInfos: [CredentialInfo]
+    public let credentialInfos: [CredentialInfo]
+    
+    public static func == (lhs: DocumentInfo, rhs: DocumentInfo) -> Bool {
+        return lhs.document.identifier == rhs.document.identifier
+    }
 }
-
-extension Document: @unchecked Sendable {}
-extension DocumentStore: @unchecked Sendable {}
-extension SecureAreaBoundCredential: @unchecked Sendable {}
-extension Credential: @unchecked Sendable {}
-extension DocumentTypeRepository: @unchecked Sendable {}
 
 /**
  * Model that loads documents from a ``DocumentStore`` and keeps them updated.
@@ -95,7 +93,7 @@ public class DocumentModel {
         }
         return DocumentInfo(
             document: document,
-            cardArt: nil, // TODO
+            cardArt: document.renderCardArt(),
             credentialInfos: credentialInfos
         )
     }

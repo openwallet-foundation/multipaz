@@ -13,7 +13,10 @@ let package = Package(
         .target(
             name: "MultipazSwift",
             dependencies: ["Multipaz"],
-            path: "multipaz-swift/Sources/MultipazSwift"
+            path: "multipaz-swift/Sources/MultipazSwift",
+            resources: [
+                .process("Resources/default_card_art.png")
+            ]
         ),
         .binaryTarget(
              name: "Multipaz",

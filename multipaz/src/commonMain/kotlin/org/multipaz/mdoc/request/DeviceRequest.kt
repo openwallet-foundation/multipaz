@@ -24,6 +24,7 @@ import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.SecureArea
 import org.multipaz.util.Logger
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Top-level request in ISO 18013-5.
@@ -68,6 +69,7 @@ data class DeviceRequest private constructor(
      * @param sessionTranscript the session transcript to use.
      * @throws SignatureVerificationException if reader authentication fails.
      */
+    @Throws(SignatureVerificationException::class, CancellationException::class)
     suspend fun verifyReaderAuthentication(sessionTranscript: DataItem) {
         if (readerAuthAll_.isNotEmpty()) {
             val readerAuthenticationAll = buildCborArray {

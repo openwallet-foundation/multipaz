@@ -131,10 +131,39 @@ abstract class PromptModel protected constructor(
 
     companion object {
         /**
-         * Return injected [PromptModel] from the current coroutine scope.
+         * Return injected [PromptModel] from the current coroutine scope or the one
+         * set via [setGlobal].
+         *
+         * @return a [PromptModel]
+         * @throws PromptModelNotAvailableException if no [PromptModel] is available.
          */
         suspend fun get(): PromptModel {
-            return currentCoroutineContext()[Key] ?: throw PromptModelNotAvailableException()
+            return currentCoroutineContext()[Key]
+                ?: globalPromptModel
+                ?: throw PromptModelNotAvailableException()
+        }
+
+        private var globalPromptModel: PromptModel? = null
+
+        /**
+         * Sets a [PromptModel] which will be returned for every [get] call regardless
+         * of the current coroutine scope.
+         *
+         * This is intended to only be used in situations where there is no coroutine
+         * scope available, for example when using this library from Swift. For applications
+         * written entirely in Kotlin, **do not use this**, instead inject the [PromptModel]
+         * in the current coroutine scope like this:
+         * ```
+         * CoroutineScope(Dispatchers.IO + myPromptModel).launch {
+         *   // code here which will want to show prompts using PromptModel.get()
+         * }
+         * ```
+         *
+         * @param promptModel the global [PromptModel] to set or `null` to clear it.
+         */
+        fun setGlobal(promptModel: PromptModel?) {
+            globalPromptModel = promptModel
         }
     }
 }
+

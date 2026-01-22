@@ -26,6 +26,7 @@ import org.multipaz.prompt.PromptUiNotAvailableException
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 private const val TAG = "digitalCredentialsPresentment"
@@ -44,7 +45,13 @@ private const val TAG = "digitalCredentialsPresentment"
  * @throws PromptDismissedException if the user dismissed a prompt.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
+ * @throws PresentmentCanceled if the user canceled in a consent prompt.
  */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class,
+    PresentmentCanceled::class
+)
 suspend fun digitalCredentialsPresentment(
     protocol: String,
     data: String,
@@ -79,7 +86,13 @@ suspend fun digitalCredentialsPresentment(
  * @throws PromptDismissedException if the user dismissed a prompt.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
+ * @throws PresentmentCanceled if the user canceled in a consent prompt.
  */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class,
+    PresentmentCanceled::class
+)
 suspend fun digitalCredentialsPresentment(
     protocol: String,
     data: JsonObject,

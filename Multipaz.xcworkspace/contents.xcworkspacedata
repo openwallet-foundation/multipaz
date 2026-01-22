@@ -7,4 +7,7 @@
    <FileRef
       location = "group:multipaz/SwiftBridge/SwiftBridge.xcodeproj">
    </FileRef>
+   <FileRef
+      location = "group:samples/SwiftTestApp/SwiftTestApp.xcodeproj">
+   </FileRef>
 </Workspace>

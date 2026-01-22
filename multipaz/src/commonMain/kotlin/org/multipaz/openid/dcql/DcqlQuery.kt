@@ -1,5 +1,6 @@
 package org.multipaz.openid.dcql
 
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
@@ -292,6 +293,8 @@ data class DcqlQuery(
 
     companion object {
         private const val TAG = "DcqlQuery"
+
+        fun fromJsonString(dcql: String): DcqlQuery = fromJson(Json.decodeFromString<JsonObject>(dcql))
 
         /**
          * Parses a DCQL according to OpenID4VP.

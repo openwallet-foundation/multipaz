@@ -9,9 +9,8 @@
 import ExtensionKit
 import IdentityDocumentServices
 import IdentityDocumentServicesUI
-import Multipaz
+@preconcurrency import Multipaz
 import SwiftUI
-
 
 func getPresentmentSource() async -> PresentmentSource {
     let storage = TestAppConfiguration.shared.storage

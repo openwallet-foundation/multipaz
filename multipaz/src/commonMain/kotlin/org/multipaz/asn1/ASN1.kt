@@ -167,8 +167,13 @@ object ASN1 {
      * @return a [ASN1Object]-derived instance.
      * @throws IllegalArgumentException if the given bytes are not valid.
      */
+    @Throws(IllegalArgumentException::class)
     fun decode(derEncoded: ByteArray): ASN1Object? {
-        val (newOffset, obj) = decode(derEncoded, 0)
+        val (newOffset, obj) = try {
+            decode(derEncoded, 0)
+        } catch(e: Throwable) {
+            throw IllegalArgumentException("Unexpected error decoding", e)
+        }
         if (newOffset != derEncoded.size) {
             throw IllegalArgumentException(
                 "${newOffset - derEncoded.size} bytes leftover after decoding"
@@ -184,6 +189,7 @@ object ASN1 {
      * @return a [ASN1Object]-derived instance.
      * @throws IllegalArgumentException if the given bytes are not valid.
      */
+    @Throws(IllegalArgumentException::class)
     fun decode(derEncoded: ByteString): ASN1Object? = decode(derEncoded.toByteArray())
 
     /**
@@ -193,6 +199,7 @@ object ASN1 {
      * @return one or more [ASN1Object]-derived instances.
      * @throws IllegalArgumentException if the given bytes are not valid.
      */
+    @Throws(IllegalArgumentException::class)
     fun decodeMultiple(derEncoded: ByteArray): List<ASN1Object> {
         val objects = mutableListOf<ASN1Object>()
         var offset = 0

@@ -15,7 +15,7 @@ import org.multipaz.request.RequestedClaim
  */
 class SimpleCredentialPresentmentData(
     private val credentials: List<Pair<Credential, Map<RequestedClaim, Claim>>>
-) : CredentialPresentmentData {
+) : CredentialPresentmentData() {
     override val credentialSets: List<CredentialPresentmentSet>
         get() = listOf(object: CredentialPresentmentSet {
             override val optional: Boolean

@@ -2,12 +2,8 @@ import ExtensionKit
 import IdentityDocumentServices
 import IdentityDocumentServicesUI
 import SwiftUI
-import Multipaz
+@preconcurrency import Multipaz
 import Combine
-
-extension PresentmentSource: @unchecked Sendable {}
-extension Iso18013Request: @unchecked Sendable {}
-extension X509Cert: @unchecked Sendable {}
 
 @MainActor
 final class RequestAuthorizationViewModel: ObservableObject {
@@ -64,12 +60,12 @@ final class RequestAuthorizationViewModel: ObservableObject {
                         X509Cert(encoded: ByteString(bytes: (SecCertificateCopyData(secCert) as Data).toByteArray()))
                     }
                     
-                    let requester2 = Requester(
+                    requester = Requester(
                         certChain: X509CertChain(certificates: certChain),
                         appId: nil,
                         origin: requestContext.requestingWebsiteOrigin?.getOrigin()
                     )
-                    trustMetadata = try! await source.resolveTrust(requester: requester2)
+                    trustMetadata = try! await source.resolveTrust(requester: requester)
                 }
             }
             print("Prepared PresentmentSource in \(sourceDuration.toMilliseconds()) msec")
@@ -102,6 +98,7 @@ public struct RequestAuthorizationView : View {
 
     public var body: some View {
         VStack {
+            // TODO: Probably need custom PromptDialog() here to show e.g. PassphrasePrompt requests for Cloud HSM
             if (viewModel.isLoading) {
                 VStack {
                     ProgressView()
@@ -112,6 +109,7 @@ public struct RequestAuthorizationView : View {
                     credentialPresentmentData: viewModel.credentialPresentmentData,
                     requester: viewModel.requester,
                     trustMetadata: viewModel.trustMetadata,
+                    maxHeight: .infinity,
                     onConfirm: { selection in
                         Task {
                             try await requestContext.sendResponse { rawRequest in
@@ -130,6 +128,9 @@ public struct RequestAuthorizationView : View {
                                 return ISO18013MobileDocumentResponse(responseData: response)
                             }
                         }
+                    },
+                    onCancel: {
+                        requestContext.cancel()
                     }
                 )
             }
@@ -141,6 +142,6 @@ public struct RequestAuthorizationView : View {
             )
         }
         .frame(maxHeight: .infinity)
-        .background(Color(white: 0.85))
+        .background(Color(.secondarySystemBackground))
     }
 }
