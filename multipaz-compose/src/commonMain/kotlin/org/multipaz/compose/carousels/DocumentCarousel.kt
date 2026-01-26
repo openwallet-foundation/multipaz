@@ -1,9 +1,10 @@
 package org.multipaz.compose.carousels
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -14,11 +15,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -80,7 +84,9 @@ private fun CardCarousel(
 ) {
     val scope = rememberCoroutineScope()
     val cardIndex = remember { Animatable(0f) }
-    val maxIndex = (carouselItems.size - 1).toFloat()
+    val maxIndex = (carouselItems.size - 1).coerceAtLeast(0).toFloat()
+
+    val lastDragAmount = remember { mutableFloatStateOf(0f) }
 
     if (carouselItems.isEmpty()) {
         emptyItemContent()
@@ -90,25 +96,68 @@ private fun CardCarousel(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
+            .clipToBounds()
             .pointerInput(carouselItems.size) {
+                var dragStartValue = -1f
+                var totalDragPx = 0f
+
                 detectHorizontalDragGestures(
+                    onDragStart = { _ ->
+                        scope.launch { cardIndex.stop() }
+                        dragStartValue = -1f
+                        totalDragPx = 0f
+                    },
                     onHorizontalDrag = { change, dragAmount ->
                         change.consume()
+                        lastDragAmount.floatValue = dragAmount
+
+                        if (dragStartValue < 0f) {
+                            dragStartValue = cardIndex.value.roundToInt().toFloat()
+                        }
+
+                        totalDragPx += dragAmount
+
+                        val dragSensitivity = size.width * 0.8f
+                        val dragOffset = totalDragPx / dragSensitivity
+
+                        val minBound = (dragStartValue - 1f).coerceAtLeast(0f)
+                        val maxBound = (dragStartValue + 1f).coerceAtMost(maxIndex)
+                        val newValue = (dragStartValue - dragOffset).coerceIn(minBound, maxBound)
+
                         scope.launch {
-                            val delta = dragAmount / 450f
-                            val newValue = (cardIndex.value - delta)
-                                .coerceIn(0f, maxIndex)
                             cardIndex.snapTo(newValue)
                         }
                     },
                     onDragEnd = {
-                        val target = cardIndex.value.roundToInt().coerceIn(0, maxIndex.toInt())
                         scope.launch {
+                            val velocityThreshold = 5f
+                            val currentIndex = cardIndex.value
+                            val nearestIndex = currentIndex.roundToInt()
+                            val fraction = currentIndex - nearestIndex
+
+                            val rawTarget = when {
+                                lastDragAmount.floatValue < -velocityThreshold ->
+                                    (nearestIndex + 1).coerceAtMost(maxIndex.toInt())
+                                lastDragAmount.floatValue > velocityThreshold ->
+                                    (nearestIndex - 1).coerceAtLeast(0)
+                                fraction > 0.35f ->
+                                    (nearestIndex + 1).coerceAtMost(maxIndex.toInt())
+                                fraction < -0.35f ->
+                                    (nearestIndex - 1).coerceAtLeast(0)
+                                else -> nearestIndex.coerceIn(0, maxIndex.toInt())
+                            }
+
+                            val startIdx = if (dragStartValue >= 0f) dragStartValue.toInt() else nearestIndex
+                            val target = rawTarget.coerceIn(
+                                (startIdx - 1).coerceAtLeast(0),
+                                (startIdx + 1).coerceAtMost(maxIndex.toInt())
+                            )
+
                             cardIndex.animateTo(
                                 target.toFloat(),
-                                animationSpec = tween(
-                                    durationMillis = 300,
-                                    easing = FastOutSlowInEasing
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioLowBouncy,
+                                    stiffness = Spring.StiffnessMediumLow
                                 )
                             )
                         }
@@ -117,7 +166,10 @@ private fun CardCarousel(
             },
         contentAlignment = Alignment.Center
     ) {
-        val screenWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
+        val density = LocalDensity.current
+        val screenWidthPx = with(density) { maxWidth.toPx() }
+        val edgePaddingPx = with(density) { 8.dp.toPx() }
+
         val cardWidthPx = screenWidthPx * 0.75f
         val cardHeightPx = cardWidthPx / 1.6f
         val horizontalPeekPx = cardWidthPx * 0.12f
@@ -125,47 +177,79 @@ private fun CardCarousel(
         val initialFocus = cardIndex.value < 0.05f
         val lastFocus = cardIndex.value > maxIndex - 0.5f
 
+        val maxSlideDistance = (screenWidthPx - cardWidthPx) / 2f - edgePaddingPx
+        val motionSlidePx = maxSlideDistance * 2f
+
         val focusAlignmentOffset = when {
             initialFocus -> horizontalPeekPx / 3f
             lastFocus -> -horizontalPeekPx / 3f
             else -> 0f
         }
 
+        val currentWhole = cardIndex.value.toInt()
+        val fractionalPart = cardIndex.value - currentWhole
+        val motionFactor = 2f * minOf(fractionalPart, 1f - fractionalPart)
+
         carouselItems.indices.forEach { index ->
             val offset = index - cardIndex.value
             val absOffset = abs(offset)
             val visibleFactor = (1f - (absOffset - 1f).coerceAtLeast(0f)).coerceIn(0f, 1f)
 
-            if (visibleFactor <= 0f) return@forEach
+            if (visibleFactor > 0f) {
+                val isFocused = absOffset < 0.5f
+                val scale = 1f - 0.08f * absOffset.coerceIn(0f, 1.5f)
 
-            val isFocused = absOffset < 0.5f
-            val scale = 1f - 0.08f * absOffset.coerceIn(0f, 1.5f)
-            val translationX =
-                horizontalPeekPx * offset.coerceIn(-1f, 1f) - focusAlignmentOffset
-            val translationY = if (isFocused) 0f else verticalOffsetPx
-            val alpha = if (isFocused) 1f else 1f - 0.55f * absOffset.coerceIn(0f, 1.5f)
+                val baseTranslationX = horizontalPeekPx * offset.coerceIn(-1f, 1f) - focusAlignmentOffset
 
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .graphicsLayer {
-                        this.scaleX = scale
-                        this.scaleY = scale
-                        this.translationX = translationX
-                        this.translationY = translationY
-                        this.alpha = alpha
-                        this.shape = RoundedCornerShape(24.dp)
-                        this.clip = true
-                    }
-                    .zIndex(if (isFocused) 1f else -absOffset)
-                    .fillMaxWidth(0.8f)
-                    .aspectRatio(if (isFocused) 1.6f else 1.9f)
-                    .clickable(enabled = isFocused) {
-                        onCarouselItemClick(carouselItems[index])
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                CarouselItem(item = carouselItems[index])
+                val isCurrentCard = index == currentWhole
+                val isNextCard = index == currentWhole + 1
+                val motionExtra = if (isCurrentCard || isNextCard) {
+                    (motionSlidePx - horizontalPeekPx) * motionFactor * offset.coerceIn(-1f, 1f)
+                } else {
+                    0f
+                }
+
+                val translationX = baseTranslationX + motionExtra
+                val translationY = if (isFocused) 0f else verticalOffsetPx
+                val alpha = if (isFocused) 1f else 1f - 0.55f * absOffset.coerceIn(0f, 1.5f)
+
+                val overlayAlpha = when {
+                    isCurrentCard -> 0.35f * motionFactor
+                    isNextCard -> if (fractionalPart >= 0.5f) 0f else 0.35f * motionFactor
+                    else -> 0f
+                }
+
+                val zIndexValue = when {
+                    fractionalPart < 0.5f && isCurrentCard -> 2f
+                    fractionalPart < 0.5f && isNextCard -> 1f
+                    fractionalPart >= 0.5f && isNextCard -> 2f
+                    fractionalPart >= 0.5f && isCurrentCard -> 1f
+                    isFocused -> 1f
+                    else -> -absOffset
+                }
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .graphicsLayer {
+                            this.scaleX = scale
+                            this.scaleY = scale
+                            this.translationX = translationX
+                            this.translationY = translationY
+                            this.alpha = alpha
+                            this.shape = RoundedCornerShape(24.dp)
+                            this.clip = true
+                        }
+                        .zIndex(zIndexValue)
+                        .fillMaxWidth(0.8f)
+                        .aspectRatio(if (isFocused) 1.6f else 1.9f)
+                        .clickable(enabled = isFocused) {
+                            onCarouselItemClick(carouselItems[index])
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    CarouselItem(item = carouselItems[index], overlayAlpha = overlayAlpha)
+                }
             }
         }
     }
@@ -173,11 +257,11 @@ private fun CardCarousel(
 
 
 @Composable
-private fun CarouselItem(item: CarouselModel) {
+private fun CarouselItem(item: CarouselModel, overlayAlpha: Float = 0f) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(4.dp))
     ) {
         item.image?.let {
             Image(
@@ -186,7 +270,15 @@ private fun CarouselItem(item: CarouselModel) {
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(24.dp))
+                    .clip(RoundedCornerShape(4.dp))
+            )
+        }
+
+        if (overlayAlpha > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.White.copy(alpha = overlayAlpha))
             )
         }
     }
