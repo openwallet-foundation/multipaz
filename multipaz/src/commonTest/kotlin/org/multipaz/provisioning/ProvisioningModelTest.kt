@@ -47,6 +47,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlin.time.Clock
@@ -78,10 +79,13 @@ class ProvisioningModelTest {
             secureAreaRepository = secureAreaRepository
         ) {}
         model = ProvisioningModel(
-            documentStore = documentStore,
-            secureArea = secureArea,
+            documentProvisioningHandler = DocumentProvisioningHandler(
+                documentStore = documentStore,
+                secureArea = secureArea
+            ),
             httpClient = HttpClient(mockHttpEngine),
-            promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build()
+            promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build(),
+            authorizationSecureArea = secureArea
         )
     }
 
@@ -98,6 +102,36 @@ class ProvisioningModelTest {
         assertEquals(2, credentials.size)
         val credential = credentials.first() as MdocCredential
         assertTrue(credential.isCertified)
+        assertEquals(TestProvisioningClient.DOCTYPE, credential.docType)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun delayed() = runTest {
+        var issue = false
+        val client = TestProvisioningClient( obtainCredentialsHook = { issue } )
+        val doc = model.launch(UnconfinedTestDispatcher(testScheduler)) {
+            client
+        }.await()
+        assertFalse(doc.provisioned)
+        assertEquals("Test Document", doc.displayName)
+        assertEquals("Test Document", doc.typeDisplayName)
+        val credentials = doc.getCredentials()
+        assertEquals(2, credentials.size)
+        val credential = credentials.first() as MdocCredential
+        assertFalse(credential.isCertified)
+        issue = true
+        val doc1 = model.launch(UnconfinedTestDispatcher(testScheduler), doc) {
+            client
+        }.await()
+        assertSame(doc, doc1)
+        assertTrue(doc.provisioned)
+        assertEquals("Document Title", doc.displayName)
+        assertEquals("Test Document", doc.typeDisplayName)
+        val credentials1 = doc.getCredentials()
+        assertEquals(2, credentials1.size)
+        val credential1 = credentials.first() as MdocCredential
+        assertTrue(credential1.isCertified)
         assertEquals(TestProvisioningClient.DOCTYPE, credential.docType)
     }
 
@@ -142,6 +176,7 @@ class ProvisioningModelTest {
             TestProvisioningClient(obtainCredentialsHook = {
                 channel.send(Unit)
                 delay(Duration.INFINITE)
+                true
             })
         }
         assertTrue(deferredDoc.isActive)
@@ -184,7 +219,7 @@ class ProvisioningModelTest {
     }
 
     class TestProvisioningClient(
-        val obtainCredentialsHook: suspend () -> Unit = {},
+        val obtainCredentialsHook: suspend () -> Boolean = { true },
         val authorizationChallenges: List<AuthorizationChallenge> = listOf()
     ) : ProvisioningClient {
         companion object {
@@ -204,6 +239,8 @@ class ProvisioningModelTest {
         )
         var authorizationResponse: AuthorizationResponse? = null
 
+        val pending = mutableListOf<CredentialKeyAttestation>()
+
         override suspend fun getMetadata(): ProvisioningMetadata = metadata
 
         override suspend fun getAuthorizationChallenges(): List<AuthorizationChallenge> =
@@ -222,15 +259,20 @@ class ProvisioningModelTest {
         override suspend fun getKeyBindingChallenge(): String = "test_challenge"
 
         override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials {
-            obtainCredentialsHook()
-            return when (keyInfo) {
+            when (keyInfo) {
                 is KeyBindingInfo.Attestation ->
-                    generateTestMDoc(
-                        docType = DOCTYPE,
-                        publicKeys = keyInfo.attestations.map { it.keyAttestation.publicKey }
-                    )
-
+                    pending.addAll(keyInfo.attestations)
                 else -> throw IllegalArgumentException()
+            }
+            if (!obtainCredentialsHook()) {
+                return Credentials(listOf(), null)
+            }
+            return generateTestMDoc(
+                docType = DOCTYPE,
+                credentialIds = pending.map { it.credentialId },
+                publicKeys = pending.map { it.keyAttestation.publicKey }
+            ).also {
+                pending.clear()
             }
         }
     }
@@ -250,6 +292,7 @@ class ProvisioningModelTest {
         // TODO: move to some shared test utility?
         suspend fun generateTestMDoc(
             docType: String,
+            credentialIds: List<String>,
             publicKeys: List<EcPublicKey>
         ): Credentials {
             val now = Clock.System.now()
@@ -328,7 +371,9 @@ class ProvisioningModelTest {
                 )
             }
             return Credentials(
-                serializedCredentials = credentials,
+                certifications = credentials.zip(credentialIds).map { (data, id) ->
+                    CredentialCertification(id, data)
+                },
                 display = Display(text = "Document Title", logo = null)
             )
         }

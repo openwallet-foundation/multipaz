@@ -4,11 +4,13 @@ import org.multipaz.cbor.CborBuilder
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.MapBuilder
 import org.multipaz.claim.JsonClaim
+import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.document.Document
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureArea
+import kotlin.time.Instant
 
 /**
  * A SD-JWT VC credential, according to [draft-ietf-oauth-sd-jwt-vc-03]
@@ -166,8 +168,7 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
      */
     constructor(
         document: Document
-    ) : super(document) {
-    }
+    ) : super(document)
 
     override suspend fun deserialize(dataItem: DataItem) {
         super.deserialize(dataItem)
@@ -185,4 +186,7 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
     override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<JsonClaim> {
         return getClaimsImpl(documentTypeRepository)
     }
+
+    override suspend fun extractValidityFromIssuerData(): Pair<Instant, Instant> =
+        extractValidityFromIssuerDataImpl()
 }

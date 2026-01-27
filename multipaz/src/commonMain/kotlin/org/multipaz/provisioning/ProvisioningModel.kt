@@ -19,52 +19,42 @@ import kotlinx.serialization.json.put
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.document.AbstractDocumentMetadata
 import org.multipaz.document.Document
-import org.multipaz.document.DocumentStore
 import org.multipaz.webtoken.buildJwt
-import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.prompt.PromptModel
-import org.multipaz.provisioning.openid4vci.KeyIdAndAttestation
 import org.multipaz.provisioning.openid4vci.OpenID4VCI
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
 import org.multipaz.provisioning.openid4vci.OpenID4VCIClientPreferences
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.handler.RpcAuthClientSession
-import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
-import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.util.Logger
 import kotlin.coroutines.CoroutineContext
-import kotlin.math.min
 import kotlin.reflect.KClass
 import kotlin.reflect.safeCast
-import kotlin.time.Clock
-import kotlin.time.Duration.Companion.days
 
 /**
  * This model supports UX/UI flow for provisioning of credentials.
  *
  * Only a single provisioning session per model object can be active at any time.
  *
- * @param documentStore new [Document] will be created in this [DocumentStore]
- * @param secureArea [Credential] objects will be bound to this [SecureArea]
+ * @param documentProvisioningHandler object that manages document and credential creation,
+ *  e.g. [DocumentProvisioningHandler].
  * @param httpClient HTTP client used to communicate to the provisioning server, it MUST NOT
- *     handle redirects automatically
+ *  handle redirects automatically
  * @param promptModel [PromptModel] that is used to show prompts to generate proof-of-possession for
- *     credential keys
- * @param metadataHandler interface that initializes and updates document metadata; it may be
- *  provided if [DocumentStore] uses an [AbstractDocumentMetadata] factory (see
- *  [DocumentStore.Builder.setDocumentMetadataFactory]).
+ *  credential keys
+ * @param authorizationSecureArea secure area that is used to store session authorization keys
+ *  during provisioning; when credentials are refreshed, it is important that the [SecureArea]
+ *  used during refresh is the same that was used during the initial provisioning
  */
 class ProvisioningModel(
-    private val documentStore: DocumentStore,
-    private val secureArea: SecureArea,
+    private val documentProvisioningHandler: AbstractDocumentProvisioningHandler,
     private val httpClient: HttpClient,
     private val promptModel: PromptModel,
-    private val metadataHandler: AbstractDocumentMetadataHandler? = null
+    private val authorizationSecureArea: SecureArea
 ) {
     private var mutableState = MutableStateFlow<State>(Idle)
 
@@ -103,7 +93,8 @@ class ProvisioningModel(
      *
      * @param document [Document] where credentials should be provisioned
      * @param authorizationData authorization data from a previous provisioning session (see
-     *  [AbstractDocumentMetadataHandler.updateDocumentMetadata] `authorizationData` parameter)
+     *  [DocumentProvisioningHandler.AbstractDocumentMetadataHandler.updateDocumentMetadata]
+     *  `authorizationData` parameter)
      * @param clientPreferences configuration parameters for OpenID4VCI client
      * @param backend interface to the wallet back-end service
      * @return deferred [Document] value, resolved when credentials are provisioned
@@ -115,7 +106,6 @@ class ProvisioningModel(
         backend: OpenID4VCIBackend,
     ): Deferred<Document> =
         launch(createCoroutineContext(clientPreferences, backend)) {
-            check(document.store === documentStore)
             targetDocument = document
             Provisioning.createClientFromAuthorizationData(authorizationData)
         }
@@ -125,11 +115,14 @@ class ProvisioningModel(
      * given [ProvisioningClient] factory.
      *
      * @param coroutineContext coroutine context to run [ProvisioningClient] in
+     * @param document if null, this is an initial provisioning, if not null, provision more
+     *  credentials into the given document
      * @param provisioningClientFactory function that creates [ProvisioningClient]
      * @return deferred [Document] value
      */
     fun launch(
         coroutineContext: CoroutineContext,
+        document: Document? = null,
         provisioningClientFactory: suspend () -> ProvisioningClient
     ): Deferred<Document> {
         if (isActive) {
@@ -138,6 +131,7 @@ class ProvisioningModel(
         val deferred = CoroutineScope(coroutineContext).async {
             try {
                 mutableState.emit(Initial)
+                targetDocument = document
                 val provisioningClient = provisioningClientFactory.invoke()
                 runProvisioning(provisioningClient)
             } catch(err: CancellationException) {
@@ -204,26 +198,16 @@ class ProvisioningModel(
 
         mutableState.emit(Authorized)
 
-        val format = credentialConfig.format
         val documentAuthorizationData = provisioningClient.getAuthorizationData()
         val document = targetDocument ?: run {
-            documentStore.createDocument(
-                displayName = credentialConfig.display.text,
-                typeDisplayName = credentialConfig.display.text,
-                cardArt = credentialConfig.display.logo,
-                issuerLogo = issuerMetadata.display.logo,
-                authorizationData = documentAuthorizationData,
-                metadata = metadataHandler?.initializeDocumentMetadata(
-                    credentialDisplay = credentialConfig.display,
-                    issuerDisplay = issuerMetadata.display,
-                    authorizationData = documentAuthorizationData
-                )
+            documentProvisioningHandler.createDocument(
+                credentialConfig,
+                issuerMetadata,
+                documentAuthorizationData
             )
         }
         var pendingCredentials: List<Credential> = listOf()
         try {
-            val credentialCount = min(credentialConfig.maxBatchSize, 3)
-
             // get the initial set of credentials
             val keyInfo = if (credentialConfig.keyBindingType == KeyBindingType.Keyless) {
                 // keyless, no need for keys
@@ -240,39 +224,17 @@ class ProvisioningModel(
                     nonce = keyChallenge.encodeToByteString(),
                     userAuthenticationRequired = true
                 )
-                when (format) {
-                    is CredentialFormat.Mdoc -> {
-                        pendingCredentials = (0..<credentialCount).map {
-                            MdocCredential.create(
-                                document = document,
-                                asReplacementForIdentifier = null,
-                                domain = CREDENTIAL_DOMAIN_MDOC,
-                                secureArea = secureArea,
-                                docType = format.docType,
-                                createKeySettings = createKeySettings
-                            )
-                        }
-                    }
-
-                    is CredentialFormat.SdJwt -> {
-                        pendingCredentials = (0..<credentialCount).map {
-                            KeyBoundSdJwtVcCredential.create(
-                                document = document,
-                                asReplacementForIdentifier = null,
-                                domain = CREDENTIAL_DOMAIN_SD_JWT_VC,
-                                secureArea = secureArea,
-                                vct = format.vct,
-                                createKeySettings = createKeySettings
-                            )
-                        }
-                    }
-                }
+                pendingCredentials = documentProvisioningHandler.createKeyBoundCredentials(
+                    document,
+                    credentialConfig,
+                    createKeySettings
+                )
 
                 when (val keyProofType = credentialConfig.keyBindingType) {
                     is KeyBindingType.Attestation -> {
                         KeyBindingInfo.Attestation(
                             attestations = pendingCredentials.map {
-                                KeyIdAndAttestation(it.identifier, it.getAttestation())
+                                CredentialKeyAttestation(it.identifier, it.getAttestation())
                             }
                         )
                     }
@@ -292,56 +254,49 @@ class ProvisioningModel(
 
             mutableState.emit(RequestingCredentials)
             val credentials = provisioningClient.obtainCredentials(keyInfo)
-            val credentialData = credentials.serializedCredentials
+            // If we successfully sent keys to the server, we should not unconditionally clean
+            // them up on error if we are past this point.
+            pendingCredentials = listOf()
+
+            val credentialData = credentials.certifications
 
             if (credentialConfig.keyBindingType == KeyBindingType.Keyless) {
                 if (credentialData.size != 1) {
                     throw IllegalStateException("Only a single keyless credential must be issued")
                 }
-                pendingCredentials = listOf(
-                    KeylessSdJwtVcCredential.create(
-                        document,
-                        null,
-                        CREDENTIAL_DOMAIN_SD_JWT_VC_KEYLESS,
-                        (format as CredentialFormat.SdJwt).vct
-                    )
+                val pendingCredential = documentProvisioningHandler.createKeylessCredential(
+                    document = document,
+                    credentialMetadata = credentialConfig
                 )
-            }
-            // TODO: for server-to-server provisioning protocols we should handle the case when
-            //  (some) credentials come later in subsequent calls to obtainCredentials.
-            for ((credentialData, pendingCredential) in credentialData.zip(pendingCredentials)) {
-                // TODO: remove validity parameters, extract them from the credentialData
-                pendingCredential.certify(
-                    credentialData.toByteArray(),
-                    Clock.System.now(),
-                    Clock.System.now() + 30.days
-                )
-            }
-            val updatedAuthorizationData = provisioningClient.getAuthorizationData()
-            document.edit {
-                provisioned = true
-                updatedAuthorizationData?.let {
-                    authorizationData = updatedAuthorizationData
-                }
-                if (credentials.display != null) {
-                    displayName = credentials.display.text
-                    credentials.display.logo?.let { cardArt = it }
-                    metadataHandler?.apply {
-                        metadata = updateDocumentMetadata(
-                            document = document,
-                            credentialDisplay = credentials.display
-                        )
+                pendingCredential.certify(credentialData.first().issuerData)
+            } else {
+                // Credential minting can happen offline, we can get any number of new credentials
+                // here, some might have been created as pending in the previous calls to this
+                // method.
+                for ((credentialId, credentialData) in credentialData) {
+                    val pendingCredential = document.lookupCredential(credentialId)
+                    if (pendingCredential == null) {
+                        Logger.e(TAG, "Credential '$credentialId' is not found")
+                    } else if (pendingCredential.isCertified) {
+                        Logger.e(TAG, "Credential '$credentialId' is already certified")
+                    } else {
+                        pendingCredential.certify(credentialData)
                     }
                 }
+                documentProvisioningHandler.updateDocument(
+                    document = document,
+                    display = credentials.display,
+                    documentAuthorizationData = provisioningClient.getAuthorizationData()
+                )
             }
         } catch (err: Throwable) {
             // Clean-up after failed provisioning
             if (targetDocument == null) {
-                // Initial provisioning: delete the document and all pending credentials
-                documentStore.deleteDocument(document.identifier)
+                // Initial provisioning: failed
+                documentProvisioningHandler.cleanupDocumentOnError(document, err)
             } else {
                 // Refresh: only delete the pending credentials
-                pendingCredentials.forEach { document.deleteCredential(it.identifier) }
+                documentProvisioningHandler.cleanupCredentialsOnError(pendingCredentials, err)
             }
             throw err
         }
@@ -396,7 +351,9 @@ class ProvisioningModel(
         val openID4VCIClientPreferences: OpenID4VCIClientPreferences,
         val openid4VciBackend: OpenID4VCIBackend
     ): BackendEnvironment {
-        val secureAreaProvider = SecureAreaProvider { secureArea }
+        val secureAreaProvider = SecureAreaProvider {
+            authorizationSecureArea
+        }
         override fun <T : Any> getInterface(clazz: KClass<T>): T? = clazz.safeCast(
             when (clazz) {
                 HttpClient::class -> httpClient
@@ -408,41 +365,7 @@ class ProvisioningModel(
         )
     }
 
-    /**
-     * Manager document metadata when the document is created and when the metadata is updated
-     * from the server.
-     */
-    interface AbstractDocumentMetadataHandler {
-        /**
-         * Initializes metadata object when the document is first created.
-         *
-         * @param credentialDisplay display data from the issuer's credential configuration
-         * @param issuerDisplay display data for the issuer itself
-         * @param authorizationData data for creating a provisioning session later
-         */
-        suspend fun initializeDocumentMetadata(
-            credentialDisplay: Display,
-            issuerDisplay: Display,
-            authorizationData: ByteString?
-        ): AbstractDocumentMetadata?
-
-        /**
-         * Updates metadata for the existing document.
-         *
-         * @param document document being updated
-         * @param credentialDisplay customized display data for the provisioned credentials
-         */
-        suspend fun updateDocumentMetadata(
-            document: Document,
-            credentialDisplay: Display
-        ): AbstractDocumentMetadata?
-    }
-
     companion object {
-        private const val CREDENTIAL_DOMAIN_MDOC = "mdoc_user_auth"
-        private const val CREDENTIAL_DOMAIN_SD_JWT_VC = "sdjwt_user_auth"
-        private const val CREDENTIAL_DOMAIN_SD_JWT_VC_KEYLESS = "sdjwt_keyless"
-
         private const val TAG = "ProvisioningModel"
 
         private suspend fun openidProofOfPossession(

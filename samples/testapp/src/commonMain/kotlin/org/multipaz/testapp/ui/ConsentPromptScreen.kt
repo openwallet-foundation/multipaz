@@ -21,6 +21,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -1196,10 +1197,6 @@ private suspend fun DocumentStore.provisionSdJwtVc(
             put("exp", validUntil.epochSeconds)
         },
     )
-    credential.certify(
-        sdJwt.compactSerialization.encodeToByteArray(),
-        validFrom,
-        validUntil
-    )
+    credential.certify(sdJwt.compactSerialization.encodeToByteString())
     return document
 }

@@ -507,11 +507,7 @@ object TestAppUtils {
                     put("exp", validUntil.epochSeconds)
                 },
             )
-            credential.certify(
-                sdJwt.compactSerialization.encodeToByteArray(),
-                validFrom,
-                validUntil
-            )
+            credential.certify(sdJwt.compactSerialization.encodeToByteString())
         }
     }
 
@@ -766,11 +762,7 @@ object TestAppUtils {
                 )
 
                 // Now that we have issuer-provided authentication data we certify the authentication key.
-                mdocCredential.certify(
-                    issuerProvidedAuthenticationData,
-                    validFrom,
-                    validUntil
-                )
+                mdocCredential.certify(ByteString(issuerProvidedAuthenticationData))
             }
         }
 
@@ -906,11 +898,7 @@ object TestAppUtils {
             )
 
             // Now that we have issuer-provided authentication data we certify the authentication key.
-            mdocCredential.certify(
-                issuerProvidedAuthenticationData,
-                validFrom,
-                validUntil
-            )
+            mdocCredential.certify(ByteString(issuerProvidedAuthenticationData))
         }
         return openid4vciAttestationCompactSerialization
     }
@@ -1006,11 +994,7 @@ object TestAppUtils {
                         put("exp", validUntil.epochSeconds)
                     },
                 )
-                credential.certify(
-                    sdJwt.compactSerialization.encodeToByteArray(),
-                    validFrom,
-                    validUntil
-                )
+                credential.certify(sdJwt.compactSerialization.encodeToByteString())
             }
         }
     }

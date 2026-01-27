@@ -164,7 +164,7 @@ abstract class Credential {
         usageCount = dataItem["usageCount"].asNumber.toInt()
 
         if (dataItem.hasKey("data")) {
-            _issuerProvidedData = dataItem["data"].asBstr
+            _issuerProvidedData = ByteString(dataItem["data"].asBstr)
             _validFrom = Instant.fromEpochMilliseconds(dataItem["validFrom"].asNumber)
             _validUntil = Instant.fromEpochMilliseconds(dataItem["validUntil"].asNumber)
         } else {
@@ -186,11 +186,11 @@ abstract class Credential {
      *
      * @throws IllegalStateException if the credential is not yet certified.
      */
-    val issuerProvidedData: ByteArray
+    val issuerProvidedData: ByteString
         get() = _issuerProvidedData
             ?: throw IllegalStateException("This credential is not yet certified")
     @Volatile
-    private var _issuerProvidedData: ByteArray? = null
+    private var _issuerProvidedData: ByteString? = null
 
     /**
      * The point in time the issuer-provided data is valid from.
@@ -270,20 +270,15 @@ abstract class Credential {
      * Certifies the credential.
      *
      * @param issuerProvidedAuthenticationData the issuer-provided static authentication data.
-     * @param validFrom the point in time before which the data is not valid.
-     * @param validUntil the point in time after which the data is not valid.
      */
-    open suspend fun certify(
-        issuerProvidedAuthenticationData: ByteArray,
-        validFrom: Instant,
-        validUntil: Instant
-    ) {
+    open suspend fun certify(issuerProvidedAuthenticationData: ByteString) {
         check(!isCertified) { "Credential is already certified" }
 
+        _issuerProvidedData = issuerProvidedAuthenticationData
+        val validity = extractValidityFromIssuerData()
+        _validFrom = validity.first
+        _validUntil = validity.second
         val replacementForIdentifier = lock.withLock {
-            _issuerProvidedData = issuerProvidedAuthenticationData
-            _validFrom = validFrom
-            _validUntil = validUntil
             val replacementForIdentifier = this.replacementForIdentifier
             this.replacementForIdentifier = null
             save()
@@ -294,6 +289,14 @@ abstract class Credential {
             document.deleteCredential(replacementForIdentifier)
         }
     }
+
+    /**
+     * Extract validity from the issuer-provided data
+     *
+     * Must return the validity range for this credential: first element in the pair is used
+     * to initialize [Credential.validFrom] and the second one [Credential.validUntil].
+     */
+    protected abstract suspend fun extractValidityFromIssuerData(): Pair<Instant, Instant>
 
     // Deleted identifier for which this one is a replacement
     // Called by Document.deleteCredential()
@@ -326,7 +329,7 @@ abstract class Credential {
                 put("replacementForAlias", replacementForIdentifier!!)
             }
             if (isCertified) {
-                put("data", issuerProvidedData)
+                put("data", issuerProvidedData.toByteArray())
                 put("validFrom", validFrom.toEpochMilliseconds())
                 put("validUntil", validUntil.toEpochMilliseconds())
             }

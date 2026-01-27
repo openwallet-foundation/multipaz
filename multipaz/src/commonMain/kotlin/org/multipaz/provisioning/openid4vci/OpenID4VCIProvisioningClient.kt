@@ -27,6 +27,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.multipaz.cbor.DataItem
@@ -38,6 +39,7 @@ import org.multipaz.provisioning.AuthorizationException
 import org.multipaz.provisioning.AuthorizationResponse
 import org.multipaz.provisioning.KeyBindingInfo
 import org.multipaz.provisioning.CredentialFormat
+import org.multipaz.provisioning.CredentialCertification
 import org.multipaz.provisioning.Credentials
 import org.multipaz.provisioning.KeyBindingType
 import org.multipaz.provisioning.ProvisioningClient
@@ -226,7 +228,11 @@ internal class OpenID4VCIProvisioningClient(
         } else {
             null
         }
-        return Credentials(serializedCredentials, display)
+        val ids = extractCredentialIds(keyInfo)
+        val idAndData = serializedCredentials.zip(ids).map { (data, id) ->
+            CredentialCertification(id, data)
+        }
+        return Credentials(idAndData, display)
     }
 
     private suspend fun buildKeyProofs(keyInfo: KeyBindingInfo): JsonElement? =
@@ -242,13 +248,24 @@ internal class OpenID4VCIProvisioningClient(
             is KeyBindingInfo.Attestation -> buildJsonObject {
                 val backend = BackendEnvironment.getInterface(OpenID4VCIBackend::class)!!
                 val jwtKeyAttestation = backend.createJwtKeyAttestation(
-                    keyIdAndAttestations = keyInfo.attestations,
+                    credentialKeyAttestations = keyInfo.attestations,
                     challenge = keyChallenge!!
                 )
                 putJsonArray("attestation") {
                     add(jwtKeyAttestation)
                 }
             }
+        }
+
+    private fun extractCredentialIds(keyInfo: KeyBindingInfo): List<String> =
+        when (keyInfo) {
+            KeyBindingInfo.Keyless -> listOf("")
+            is KeyBindingInfo.OpenidProofOfPossession -> keyInfo.jwtList.map { jwt ->
+                val header = Json.parseToJsonElement(jwt.take(jwt.indexOf('.') - 1))
+                // 'kid' must be present and corresponds to the credential id
+                header.jsonObject["kid"]!!.jsonPrimitive.content
+            }
+            is KeyBindingInfo.Attestation -> keyInfo.attestations.map { it.credentialId }
         }
 
     private suspend fun performPushedAuthorizationRequest(): String {

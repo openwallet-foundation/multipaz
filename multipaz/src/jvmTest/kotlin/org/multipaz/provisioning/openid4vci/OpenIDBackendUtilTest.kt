@@ -12,6 +12,7 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.provisioning.CredentialKeyAttestation
 import org.multipaz.webtoken.WebTokenCheck
 import org.multipaz.webtoken.validateJwt
 import org.multipaz.rpc.backend.BackendEnvironment
@@ -96,7 +97,7 @@ class OpenIDBackendUtilTest {
             val attestationJwt = OpenID4VCIBackendUtil.createJwtKeyAttestation(
                 signingKey = AsymmetricKey.NamedExplicit("my-kid", signingKey),
                 attestationIssuer = "my-iss",
-                keysToAttest = listOf(KeyIdAndAttestation("foo", attestedKeyInfo.attestation)),
+                keysToAttest = listOf(CredentialKeyAttestation("foo", attestedKeyInfo.attestation)),
                 challenge = NONCE
             )
             val body = validateJwt(

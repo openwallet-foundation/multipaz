@@ -1,11 +1,16 @@
 package org.multipaz.sdjwt.credential
 
+import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import org.multipaz.claim.JsonClaim
 import org.multipaz.credential.Credential
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.sdjwt.SdJwt
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Instant
 
 /**
  * A SD-JWT VC credential, according to [draft-ietf-oauth-sd-jwt-vc-03]
@@ -27,7 +32,7 @@ interface SdJwtVcCredential {
      * This data must be the encoded string containing the SD-JWT VC. The SD-JWT VC itself is by
      * disclosures: `<header>.<body>.<signature>~<Disclosure 1>~<Disclosure 2>~...~<Disclosure N>~`
      */
-    val issuerProvidedData: ByteArray
+    val issuerProvidedData: ByteString
 
     suspend fun getClaimsImpl(
         documentTypeRepository: DocumentTypeRepository?
@@ -51,5 +56,18 @@ interface SdJwtVcCredential {
             )
         }
         return ret
+    }
+
+    /**
+     * Extracts validity from the credential
+     *
+     * @return a `Pair(validFrom, validUntil)`
+     */
+    suspend fun extractValidityFromIssuerDataImpl(): Pair<Instant, Instant> {
+        val sdJwt = SdJwt.fromCompactSerialization(issuerProvidedData.decodeToString())
+        // If SD-JWT somehow does not specify these values, treat it as effectively non-expiring
+        val validFrom = sdJwt.validFrom ?: Instant.fromEpochMilliseconds(0)
+        val validUntil = sdJwt.validUntil ?: Instant.fromEpochMilliseconds(Long.MAX_VALUE)
+        return Pair(validFrom, validUntil)
     }
 }

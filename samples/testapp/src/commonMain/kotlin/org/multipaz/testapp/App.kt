@@ -102,6 +102,7 @@ import org.multipaz.presentment.model.uriSchemePresentment
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.promptModelRequestConsent
 import org.multipaz.prompt.promptModelSilentConsent
+import org.multipaz.provisioning.DocumentProvisioningHandler
 import org.multipaz.provisioning.ProvisioningModel
 import org.multipaz.request.Requester
 import org.multipaz.secure_area_test_app.ui.CloudSecureAreaScreen
@@ -383,13 +384,17 @@ class App private constructor (val promptModel: PromptModel) {
     }
 
     private suspend fun provisioningModelInit() {
+        val secureArea = Platform.getSecureArea(TestAppConfiguration.storage)
         provisioningModel = ProvisioningModel(
-            documentStore = documentStore,
-            secureArea = Platform.getSecureArea(TestAppConfiguration.storage),
+            documentProvisioningHandler = DocumentProvisioningHandler(
+                documentStore = documentStore,
+                secureArea = secureArea
+            ),
             httpClient = HttpClient(TestAppConfiguration.httpClientEngineFactory) {
                 followRedirects = false
             },
-            promptModel = promptModel
+            promptModel = promptModel,
+            authorizationSecureArea = secureArea
         )
         provisioningSupport = ProvisioningSupport(
             storage = TestAppConfiguration.storage,

@@ -75,7 +75,7 @@ fun CredentialViewerScreen(
                 RevocationStatusSection(credentialInfo.credential)
                 when (credentialInfo.credential) {
                     is MdocCredential -> {
-                        val issuerSigned = Cbor.decode(credentialInfo.credential.issuerProvidedData)
+                        val issuerSigned = Cbor.decode(credentialInfo.credential.issuerProvidedData.toByteArray())
                         val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1
                         val msoBytes = issuerAuth.payload!!
                         KeyValuePairText("MSO size", "${msoBytes.size} bytes")

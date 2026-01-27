@@ -4,7 +4,7 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.device.DeviceAttestationAndroid
-import org.multipaz.provisioning.openid4vci.KeyIdAndAttestation
+import org.multipaz.provisioning.CredentialKeyAttestation
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackendUtil
 import org.multipaz.rpc.annotation.RpcState
@@ -52,20 +52,20 @@ class OpenID4VCIBackendImpl: OpenID4VCIBackend, RpcAuthInspector by RpcAuthBacke
     }
 
     override suspend fun createJwtKeyAttestation(
-        keyIdAndAttestations: List<KeyIdAndAttestation>,
+        credentialKeyAttestations: List<CredentialKeyAttestation>,
         challenge: String,
         userAuthentication: List<String>?,
         keyStorage: List<String>?
     ): String {
         validateKeyAttestations(
-            keyAttestations = keyIdAndAttestations.map { it.keyAttestation },
+            keyAttestations = credentialKeyAttestations.map { it.keyAttestation },
             challenge = challenge.encodeToByteString()
         )
         val keyAttestationKey = getServerIdentity(ServerIdentity.KEY_ATTESTATION)
         return OpenID4VCIBackendUtil.createJwtKeyAttestation(
             signingKey = keyAttestationKey,
             attestationIssuer = keyAttestationKey.subject,
-            keysToAttest = keyIdAndAttestations,
+            keysToAttest = credentialKeyAttestations,
             challenge = challenge,
             userAuthentication = userAuthentication,
             keyStorage = keyStorage

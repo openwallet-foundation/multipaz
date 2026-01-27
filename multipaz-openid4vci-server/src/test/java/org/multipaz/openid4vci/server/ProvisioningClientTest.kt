@@ -42,7 +42,7 @@ import org.multipaz.provisioning.AuthorizationChallenge
 import org.multipaz.provisioning.AuthorizationResponse
 import org.multipaz.provisioning.KeyBindingInfo
 import org.multipaz.provisioning.Provisioning
-import org.multipaz.provisioning.openid4vci.KeyIdAndAttestation
+import org.multipaz.provisioning.CredentialKeyAttestation
 import org.multipaz.provisioning.openid4vci.OpenID4VCI
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackendUtil
@@ -213,9 +213,9 @@ class ProvisioningClientTest {
             val keyInfo = secureArea.createKey(null, CreateKeySettings())
 
             val credentials = provisioningClient.obtainCredentials(KeyBindingInfo.Attestation(
-                listOf(KeyIdAndAttestation("foo", keyInfo.attestation))))
+                listOf(CredentialKeyAttestation("foo", keyInfo.attestation))))
 
-            Assert.assertEquals(1, credentials.serializedCredentials.size)
+            Assert.assertEquals(1, credentials.certifications.size)
         }
     }
 
@@ -284,9 +284,9 @@ class ProvisioningClientTest {
             val keyInfo = secureArea.createKey(null, CreateKeySettings())
 
             val credentials = provisioningClient.obtainCredentials(KeyBindingInfo.Attestation(
-                    listOf(KeyIdAndAttestation("bar", keyInfo.attestation))))
+                    listOf(CredentialKeyAttestation("bar", keyInfo.attestation))))
 
-            Assert.assertEquals(1, credentials.serializedCredentials.size)
+            Assert.assertEquals(1, credentials.certifications.size)
 
             val authorizationData = provisioningClient.getAuthorizationData()!!
 
@@ -295,8 +295,8 @@ class ProvisioningClientTest {
             refreshClient.getKeyBindingChallenge()
             val refreshKeyInfo = secureArea.createKey(null, CreateKeySettings())
             val refreshed = refreshClient.obtainCredentials(KeyBindingInfo.Attestation(
-                listOf(KeyIdAndAttestation("refresh", refreshKeyInfo.attestation))))
-            Assert.assertEquals(1, refreshed.serializedCredentials.size)
+                listOf(CredentialKeyAttestation("refresh", refreshKeyInfo.attestation))))
+            Assert.assertEquals(1, refreshed.certifications.size)
 
             // Clean up authorization data
             Provisioning.cleanupAuthorizationData(
@@ -309,7 +309,7 @@ class ProvisioningClientTest {
             val exception = assertThrows<Exception>("Should not succeed, keys were deleted") {
                 refreshClient.obtainCredentials(
                     KeyBindingInfo.Attestation(
-                        listOf(KeyIdAndAttestation("fail", failingKeyInfo.attestation))
+                        listOf(CredentialKeyAttestation("fail", failingKeyInfo.attestation))
                     )
                 )
             }
@@ -376,13 +376,13 @@ class ProvisioningClientTest {
         }
 
         override suspend fun createJwtKeyAttestation(
-            keyIdAndAttestations: List<KeyIdAndAttestation>,
+            credentialKeyAttestations: List<CredentialKeyAttestation>,
             challenge: String,
             userAuthentication: List<String>?,
             keyStorage: List<String>?
         ): String {
             // Generate key attestation
-            val keyList = keyIdAndAttestations.map { it.keyAttestation.publicKey }
+            val keyList = credentialKeyAttestations.map { it.keyAttestation.publicKey }
 
             val alg = localAttestationPrivateKey.curve.defaultSigningAlgorithmFullySpecified.joseAlgorithmIdentifier
             val head = buildJsonObject {

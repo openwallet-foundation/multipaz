@@ -7,6 +7,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.provisioning.CredentialKeyAttestation
 import org.multipaz.webtoken.buildJwt
 import org.multipaz.securearea.KeyAttestation
 import org.multipaz.util.toBase64Url
@@ -104,7 +105,7 @@ object OpenID4VCIBackendUtil {
     suspend fun createJwtKeyAttestation(
         signingKey: AsymmetricKey,
         attestationIssuer: String,
-        keysToAttest: List<KeyIdAndAttestation>,
+        keysToAttest: List<CredentialKeyAttestation>,
         challenge: String,
         userAuthentication: List<String>? = null,
         keyStorage: List<String>? = null
@@ -117,7 +118,7 @@ object OpenID4VCIBackendUtil {
         put("attested_keys", JsonArray(
             keysToAttest.map {
                 it.keyAttestation.publicKey.toJwk(buildJsonObject {
-                    put("kid", it.keyId)
+                    put("kid", it.credentialId)
                 })
             }
         ))

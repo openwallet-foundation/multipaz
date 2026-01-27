@@ -1,5 +1,6 @@
 package org.multipaz.provisioning.openid4vci
 
+import org.multipaz.provisioning.CredentialKeyAttestation
 import org.multipaz.provisioning.ProvisioningClient
 import org.multipaz.rpc.annotation.RpcInterface
 import org.multipaz.rpc.annotation.RpcMethod
@@ -46,7 +47,7 @@ interface OpenID4VCIBackend {
      */
     @RpcMethod
     suspend fun createJwtKeyAttestation(
-        keyIdAndAttestations: List<KeyIdAndAttestation>,
+        credentialKeyAttestations: List<CredentialKeyAttestation>,
         challenge: String,
         userAuthentication: List<String>? = null,
         keyStorage: List<String>? = null

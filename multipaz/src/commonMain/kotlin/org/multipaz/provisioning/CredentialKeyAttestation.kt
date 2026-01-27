@@ -1,4 +1,4 @@
-package org.multipaz.provisioning.openid4vci
+package org.multipaz.provisioning
 
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.securearea.KeyAttestation
@@ -7,8 +7,8 @@ import org.multipaz.securearea.KeyAttestation
  * Public key id and its attestation.
  */
 @CborSerializable
-class KeyIdAndAttestation(
-    val keyId: String,
+class CredentialKeyAttestation(
+    val credentialId: String,
     val keyAttestation: KeyAttestation
 ) {
     companion object

@@ -15,8 +15,8 @@
  */
 package org.multipaz.mdoc.credential
 
+import kotlinx.io.bytestring.ByteString
 import kotlin.time.Instant
-import kotlinx.serialization.json.JsonObject
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborBuilder
 import org.multipaz.cbor.DataItem
@@ -204,6 +204,10 @@ class MdocCredential : SecureAreaBoundCredential {
         docType = dataItem["docType"].asTstr
     }
 
+    override suspend fun extractValidityFromIssuerData(): Pair<Instant, Instant> {
+        return Pair(mso.validFrom, mso.validUntil)
+    }
+
     override val credentialType: String
         get() = CREDENTIAL_TYPE
 
@@ -222,18 +226,16 @@ class MdocCredential : SecureAreaBoundCredential {
     // Override certify() to check that the issuerProvidedData is of the right form.
     //
     override suspend fun certify(
-        issuerProvidedAuthenticationData: ByteArray,
-        validFrom: Instant,
-        validUntil: Instant
+        issuerProvidedAuthenticationData: ByteString
     ) {
-        val issuerSigned = Cbor.decode(issuerProvidedAuthenticationData)
+        super.certify(issuerProvidedAuthenticationData)
+        val issuerSigned = this.issuerSigned
         if (!issuerSigned.hasKey("nameSpaces")) {
             Logger.w(TAG, "issuerProvidedData doesn't have 'nameSpaces' - presentment will not work as expected")
         }
         if (!issuerSigned.hasKey("issuerAuth")) {
             Logger.w(TAG, "issuerProvidedData doesn't have 'issuerAuth' - presentment will not work as expected")
         }
-        super.certify(issuerProvidedAuthenticationData, validFrom, validUntil)
     }
 
     override suspend fun getClaims(
@@ -263,7 +265,7 @@ class MdocCredential : SecureAreaBoundCredential {
      * The `IssuerSigned` data according to ISO/IEC 18013-5:2021.
      */
     val issuerSigned: DataItem by lazy {
-        Cbor.decode(issuerProvidedData)
+        Cbor.decode(issuerProvidedData.toByteArray())
     }
 
     /**

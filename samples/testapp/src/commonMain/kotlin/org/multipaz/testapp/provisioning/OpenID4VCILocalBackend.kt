@@ -1,7 +1,7 @@
 package org.multipaz.testapp.provisioning
 
 import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.provisioning.openid4vci.KeyIdAndAttestation
+import org.multipaz.provisioning.CredentialKeyAttestation
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackendUtil
 import org.multipaz.securearea.KeyAttestation
@@ -28,14 +28,14 @@ class OpenID4VCILocalBackend: OpenID4VCIBackend {
         )
 
     override suspend fun createJwtKeyAttestation(
-        keyIdAndAttestations: List<KeyIdAndAttestation>,
+        credentialKeyAttestations: List<CredentialKeyAttestation>,
         challenge: String,
         userAuthentication: List<String>?,
         keyStorage: List<String>?
     ): String = OpenID4VCIBackendUtil.createJwtKeyAttestation(
         signingKey = attestationKey,
         attestationIssuer = attestationKey.subject,
-        keysToAttest = keyIdAndAttestations,
+        keysToAttest = credentialKeyAttestations,
         challenge = challenge,
         userAuthentication = userAuthentication,
         keyStorage = keyStorage,

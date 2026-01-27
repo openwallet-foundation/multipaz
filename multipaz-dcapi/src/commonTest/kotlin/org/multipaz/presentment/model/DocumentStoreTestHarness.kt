@@ -2,6 +2,8 @@ package org.multipaz.presentment.model
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -517,11 +519,7 @@ class DocumentStoreTestHarness {
         )
 
         // Now that we have issuer-provided authentication data we certify the authentication key.
-        mdocCredential.certify(
-            issuerProvidedAuthenticationData,
-            validFrom,
-            validUntil
-        )
+        mdocCredential.certify(ByteString(issuerProvidedAuthenticationData))
     }
 
     private suspend fun addSdJwtVcCredential(
@@ -598,11 +596,7 @@ class DocumentStoreTestHarness {
                 put("exp", validUntil.epochSeconds)
             },
         )
-        credential.certify(
-            sdJwt.compactSerialization.encodeToByteArray(),
-            validFrom,
-            validUntil
-        )
+        credential.certify(sdJwt.compactSerialization.encodeToByteString())
     }
 
 }

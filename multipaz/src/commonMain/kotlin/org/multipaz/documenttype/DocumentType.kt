@@ -16,6 +16,7 @@
 
 package org.multipaz.documenttype
 
+import kotlinx.io.bytestring.ByteString
 import kotlin.time.Instant
 import org.multipaz.cbor.DataItem
 import kotlinx.serialization.json.JsonElement
@@ -432,11 +433,7 @@ class DocumentType private constructor(
         )
 
         // Now that we have issuer-provided authentication data we ccan ertify the authentication key.
-        mdocCredential.certify(
-            issuerProvidedAuthenticationData,
-            validFrom,
-            validUntil
-        )
+        mdocCredential.certify(ByteString(issuerProvidedAuthenticationData))
         return mdocCredential
     }
 }

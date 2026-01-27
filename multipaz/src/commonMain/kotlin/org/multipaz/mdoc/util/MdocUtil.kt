@@ -797,7 +797,7 @@ private fun filterConsentFields(
     if (credential == null) {
         return list
     }
-    val staticAuthData = StaticAuthDataParser(credential.issuerProvidedData).parse()
+    val staticAuthData = StaticAuthDataParser(credential.issuerProvidedData.toByteArray()).parse()
     val availableDataElements = calcAvailableDataElements(staticAuthData.digestIdMapping)
     return list.filter { mdocConsentField ->
         availableDataElements[mdocConsentField.namespaceName]

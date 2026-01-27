@@ -8,6 +8,7 @@ import org.multipaz.credential.Credential
 import org.multipaz.document.Document
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.securearea.SecureArea
+import kotlin.time.Instant
 
 class KeylessSdJwtVcCredential : Credential, SdJwtVcCredential {
     override lateinit var vct: String
@@ -55,6 +56,13 @@ class KeylessSdJwtVcCredential : Credential, SdJwtVcCredential {
         builder.put("vct", vct)
     }
 
+    override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<JsonClaim> {
+        return getClaimsImpl(documentTypeRepository)
+    }
+
+    override suspend fun extractValidityFromIssuerData(): Pair<Instant, Instant> =
+        extractValidityFromIssuerDataImpl()
+
     companion object {
         const val CREDENTIAL_TYPE: String = "KeylessSdJwtVcCredential"
 
@@ -82,9 +90,5 @@ class KeylessSdJwtVcCredential : Credential, SdJwtVcCredential {
                 addToDocument()
             }
         }
-    }
-
-    override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<JsonClaim> {
-        return getClaimsImpl(documentTypeRepository)
     }
 }

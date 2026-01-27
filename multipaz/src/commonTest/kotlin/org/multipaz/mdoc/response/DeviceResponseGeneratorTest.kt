@@ -47,6 +47,7 @@ import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.crypto.AsymmetricKey
 import kotlin.time.Clock
@@ -214,11 +215,7 @@ class DeviceResponseGeneratorTest {
             ).generate()
 
             // Now that we have issuer-provided authentication data we certify the authentication key.
-            mdocCredential.certify(
-                issuerProvidedAuthenticationData,
-                timeValidityBegin,
-                timeValidityEnd
-            )
+            mdocCredential.certify(ByteString(issuerProvidedAuthenticationData))
         }
     }
 
@@ -239,7 +236,7 @@ class DeviceResponseGeneratorTest {
         val request = DocumentRequest(dataElements)
         val encodedSessionTranscript = Cbor.encode(Tstr("Doesn't matter"))
 
-        val staticAuthData = StaticAuthDataParser(mdocCredentialSign.issuerProvidedData)
+        val staticAuthData = StaticAuthDataParser(mdocCredentialSign.issuerProvidedData.toByteArray())
             .parse()
         val mergedIssuerNamespaces: Map<String, List<ByteArray>> =
             MdocUtil.mergeIssuerNamesSpaces(
@@ -361,7 +358,7 @@ class DeviceResponseGeneratorTest {
         )
         val request = DocumentRequest(dataElements)
         val encodedSessionTranscript = Cbor.encode(Tstr("Doesn't matter"))
-        val staticAuthData = StaticAuthDataParser(mdocCredentialMac.issuerProvidedData)
+        val staticAuthData = StaticAuthDataParser(mdocCredentialMac.issuerProvidedData.toByteArray())
             .parse()
         val eReaderKey = AsymmetricKey.anonymous(
             privateKey = Crypto.createEcPrivateKey(EcCurve.P256),
@@ -458,7 +455,7 @@ class DeviceResponseGeneratorTest {
         )
         val request = DocumentRequest(dataElements)
         val encodedSessionTranscript = Cbor.encode(Tstr("Doesn't matter"))
-        val staticAuthData = StaticAuthDataParser(mdocCredentialSign.issuerProvidedData)
+        val staticAuthData = StaticAuthDataParser(mdocCredentialSign.issuerProvidedData.toByteArray())
             .parse()
         val mergedIssuerNamespaces: Map<String, List<ByteArray>> = MdocUtil.mergeIssuerNamesSpaces(
             request,
@@ -579,7 +576,7 @@ class DeviceResponseGeneratorTest {
         provisionDocument()
 
         val encodedSessionTranscript = Cbor.encode(Tstr("Doesn't matter"))
-        val staticAuthData = StaticAuthDataParser(mdocCredentialSign.issuerProvidedData)
+        val staticAuthData = StaticAuthDataParser(mdocCredentialSign.issuerProvidedData.toByteArray())
             .parse()
 
         // Check that DeviceSigned works.
@@ -676,7 +673,7 @@ class DeviceResponseGeneratorTest {
         val request = DocumentRequest(dataElements)
         val encodedSessionTranscript = Cbor.encode(Tstr("Doesn't matter"))
 
-        val staticAuthData = StaticAuthDataParser(mdocCredentialSign.issuerProvidedData)
+        val staticAuthData = StaticAuthDataParser(mdocCredentialSign.issuerProvidedData.toByteArray())
             .parse()
         val mergedIssuerNamespaces: Map<String, List<ByteArray>> =
             MdocUtil.mergeIssuerNamesSpaces(

@@ -20,6 +20,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.coroutines.launch
+import kotlinx.io.bytestring.decodeToString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Tagged
 import org.multipaz.cose.Cose
@@ -71,7 +72,7 @@ fun RevocationStatusSection(credential: Credential) {
 private suspend fun extractRevocationData(credential: Credential): RevocationData? {
     return when (credential) {
         is MdocCredential -> {
-            val issuerSigned = Cbor.decode(credential.issuerProvidedData)
+            val issuerSigned = Cbor.decode(credential.issuerProvidedData.toByteArray())
             val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1
             val certChain = issuerAuth.unprotectedHeaders[
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)
@@ -121,8 +122,7 @@ private fun StatusListCheckSection(
                     } else {
                         try {
                             val cert = status.certificate ?: certChain.certificates.first()
-                            val type = response.contentType()
-                            val statusList = when (type) {
+                            val statusList = when (val type = response.contentType()) {
                                 STATUSLIST_JWT -> StatusList.fromJwt(
                                     jwt = response.readRawBytes().decodeToString(),
                                     publicKey = cert.ecPublicKey
