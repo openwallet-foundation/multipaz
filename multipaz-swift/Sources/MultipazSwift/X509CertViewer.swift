@@ -84,17 +84,19 @@ private struct SubjectView: View {
     
     var body: some View {
         RenderSection(title: "Subject") {
-            let oids = Array(data.subject.components.keys)
-            ForEach(0..<oids.count, id: \.self) { oidIdx in
-                let componentOid = oids[oidIdx]
-                let componentName = oidToPrettyName[componentOid] ?? componentOid
-                let componentValue = data.subject.components[componentOid]!
-                KeyValuePairLine(
-                    key: componentName,
-                    value: componentValue.value
-                )
-                if oidIdx < oids.count - 1 {
-                    Divider()
+            VStack(spacing: 2) {
+                let oids = Array(data.subject.components.keys)
+                ForEach(0..<oids.count, id: \.self) { oidIdx in
+                    let componentOid = oids[oidIdx]
+                    let componentName = oidToPrettyName[componentOid] ?? componentOid
+                    let componentValue = data.subject.components[componentOid]!
+                    KeyValuePairLine(
+                        key: componentName,
+                        value: componentValue.value
+                    )
+                    if oidIdx < oids.count - 1 {
+                        Divider()
+                    }
                 }
             }
         }
@@ -106,17 +108,19 @@ private struct IssuerView: View {
     
     var body: some View {
         RenderSection(title: "Issuer") {
-            let oids = Array(data.issuer.components.keys)
-            ForEach(0..<oids.count, id: \.self) { oidIdx in
-                let componentOid = oids[oidIdx]
-                let componentName = oidToPrettyName[componentOid] ?? componentOid
-                let componentValue = data.issuer.components[componentOid]!
-                KeyValuePairLine(
-                    key: componentName,
-                    value: componentValue.value
-                )
-                if oidIdx < oids.count - 1 {
-                    Divider()
+            VStack(spacing: 2) {
+                let oids = Array(data.issuer.components.keys)
+                ForEach(0..<oids.count, id: \.self) { oidIdx in
+                    let componentOid = oids[oidIdx]
+                    let componentName = oidToPrettyName[componentOid] ?? componentOid
+                    let componentValue = data.issuer.components[componentOid]!
+                    KeyValuePairLine(
+                        key: componentName,
+                        value: componentValue.value
+                    )
+                    if oidIdx < oids.count - 1 {
+                        Divider()
+                    }
                 }
             }
         }
@@ -315,10 +319,14 @@ extension X509Cert {
                 
             case OID.x509ExtensionAndroidKeystoreProvisioningInformation.oid:
                 // CBOR Diagnostics
-                displayValue = Cbor.shared.toDiagnostics(
-                    item: Cbor.shared.decode(encodedCbor: ext.data.toByteArray(startIndex: 0, endIndex: ext.data.size)),
-                    options: [.prettyPrint]
-                )
+                do {
+                    displayValue = Cbor.shared.toDiagnostics(
+                        item: try Cbor.shared.decode(encodedCbor: ext.data.toByteArray(startIndex: 0, endIndex: ext.data.size)),
+                        options: [.prettyPrint]
+                    )
+                } catch {
+                    displayValue = "Failed to decode CBOR: \(error)"
+                }
                 
             case OID.x509ExtensionMultipazExtension.oid:
                 displayValue = MultipazExtension.companion.fromCbor(
