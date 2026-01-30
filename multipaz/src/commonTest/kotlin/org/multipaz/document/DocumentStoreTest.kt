@@ -762,6 +762,36 @@ class DocumentStoreTest {
         // manner, not serialized in a way that is compatible with the default implementation
         // (DocumentMetadata).
         val documentTable = storage.getTable(documentTable)
+        val metadata = buildCborMap {  // Note "provisioned" field is missing
+            put("provisioningId", "foo")
+            put("accountId", "bar")
+        }
+        documentTable.insert("foo", ByteString(Cbor.encode(metadata)))
+        val newStorage = EphemeralStorage.deserialize(storage.serialize())
+        // Document schema will be upgraded here.
+        val documentStore = buildDocumentStore(
+            storage = newStorage,
+            secureAreaRepository = secureAreaRepository
+        ) {
+            setDocumentMetadataFactory { _, data -> TestMetadata(data) }
+        }
+        val document = documentStore.lookupDocument("foo")!!
+        assertFalse(document.provisioned)
+        assertNull(document.displayName)
+        assertNull(document.typeDisplayName)
+        assertNull(document.cardArt)
+        assertNull(document.issuerLogo)
+        assertNull(document.authorizationData)
+        val migratedMetadata = Cbor.decode(document.metadata!!.serialize().toByteArray())
+        assertEquals("foo", migratedMetadata["provisioningId"].asTstr)
+        assertEquals("bar", migratedMetadata["accountId"].asTstr)
+    }
+
+    @Test
+    fun documentSchemaChangeCustomCborSerialization() = runTest {
+        // Tests the case when AbstractDocumentMetadata was implemented using CBOR serialization,
+        // but not in a way that can be confused with the default implementation (DocumentMetadata).
+        val documentTable = storage.getTable(documentTable)
         val customData = "foobar".encodeToByteString()
         documentTable.insert("foo", customData)
         val newStorage = EphemeralStorage.deserialize(storage.serialize())
