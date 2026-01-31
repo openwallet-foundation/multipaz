@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
@@ -53,6 +54,7 @@ import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
+import org.multipaz.compose.document.DocumentCarousel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.AsymmetricKey
@@ -208,6 +210,51 @@ fun DocumentStoreScreen(
         modifier = Modifier.padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        item {
+            DocumentCarousel(
+                documentModel = documentModel,
+                initialDocumentId = settingsModel.currentlyFocusedDocumentId.value,
+                allowReordering = true,
+                onDocumentClicked = { documentInfo ->
+                    onViewDocument(documentInfo.document.identifier)
+                },
+                onDocumentFocused = { documentInfo ->
+                    settingsModel.currentlyFocusedDocumentId.value = documentInfo.document.identifier
+                },
+                onDocumentReordered = { documentInfo, oldPos, newPos ->
+                    coroutineScope.launch {
+                        try {
+                            documentModel.setDocumentPosition(
+                                documentInfo = documentInfo,
+                                position = newPos
+                            )
+                        } catch (e: IllegalArgumentException) {
+                            Logger.e(TAG, "Error setting document position", e)
+                        }
+                    }
+                },
+                selectedDocumentInfo = { documentInfo, index, total ->
+                    if (documentInfo != null) {
+                        Text(
+                            text = "${index + 1} of $total: ${documentInfo.document.displayName ?: "No displayname"}",
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else {
+                        Text(
+                            text = "Drag to reorder",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                emptyDocumentContent = {
+                    Text(
+                        text = "No documents in store",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            )
+        }
+
         item {
             TextButton(onClick = {
                 coroutineScope.launch {
@@ -412,7 +459,7 @@ fun DocumentStoreScreen(
                 )
             }
         } else {
-            for ((_, documentInfo) in documentInfos) {
+            for (documentInfo in documentInfos) {
                 item {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp),
@@ -427,7 +474,6 @@ fun DocumentStoreScreen(
                         )
                         TextButton(onClick = {
                             onViewDocument(documentInfo.document.identifier)
-                            // TODO: Go to page showing document details and credentials
                         }) {
                             Text(
                                 text = documentInfo.document.displayName ?: "(displayName not set)"

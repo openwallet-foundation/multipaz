@@ -197,7 +197,10 @@ class ViewModel {
             )
         }
         
-        documentModel = DocumentModel(documentTypeRepository: documentTypeRepository)
+        documentModel = DocumentModel(
+            documentTypeRepository: documentTypeRepository,
+            storage: storage
+        )
         await documentModel.setDocumentStore(documentStore: documentStore)
     
         isLoading = false

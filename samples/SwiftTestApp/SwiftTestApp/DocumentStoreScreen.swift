@@ -5,6 +5,8 @@ import MultipazSwift
 struct DocumentStoreScreen: View {
     @Environment(ViewModel.self) private var viewModel
 
+    @AppStorage("focusedDocumentId") private var focusedDocumentId: String = ""
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -56,7 +58,7 @@ struct DocumentStoreScreen: View {
                 }) {
                     Text("Add self-signed Age Verification Credential")
                 }
-
+                
                 Button(
                     role: .destructive,
                     action: {
@@ -69,29 +71,52 @@ struct DocumentStoreScreen: View {
                 ) {
                     Text("Delete all documents")
                 }
-
-                let numDocs = viewModel.documentModel.documentInfos.count
-                let docWord = if (numDocs == 1) { "document" } else { "documents" }
-                Text("\(numDocs) \(docWord) in DocumentStore")
-                    .font(.headline)
-                    .bold()
                 
-                ForEach(viewModel.documentModel.documentInfos, id: \.self) { documentInfo in
-                    HStack {
-                        Image(uiImage: documentInfo.cardArt)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(height: 40)
-                        Text(documentInfo.document.displayName ?? "(No displayName)")
-                    }
-                    .onTapGesture {
+                DocumentCarousel(
+                    documentModel: viewModel.documentModel,
+                    initialDocumentId: focusedDocumentId,
+                    allowReordering: true,
+                    onDocumentClicked: { documentInfo in
                         viewModel.path.append(Destination.documentScreen(documentInfo: documentInfo))
+                    },
+                    onDocumentFocused: { documentInfo in
+                        focusedDocumentId = documentInfo.document.identifier
+                    },
+                    onDocumentReordered: { documentInfo, oldPosition, newPosition in
+                        Task {
+                            do {
+                                try await viewModel.documentModel.setDocumentPosition(
+                                    documentInfo: documentInfo,
+                                    position: newPosition
+                                )
+                            } catch {
+                                print("Error setting document position: \(error)")
+                            }
+                        }
+                    },
+                    selectedDocumentInfo: { documentInfo, documentIdx, numDocuments in
+                        HStack {
+                            if let documentInfo = documentInfo {
+                                Text("\(documentIdx + 1) of \(numDocuments): " +
+                                     (documentInfo.document.displayName ?? "(No displayName)")
+                                )
+                                .font(.subheadline)
+                                .bold()
+                            } else {
+                                Text("Drag to reorder")
+                                    .font(.subheadline)
+                                    .bold()
+                            }
+                        }
+                    },
+                    emptyDocumentContent: {
+                        Text("No documents in store")
+                            .foregroundStyle(Color.secondary)
                     }
-                }
+                )
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
         }
         .navigationTitle("Document Store")
-        .padding()
     }
 }

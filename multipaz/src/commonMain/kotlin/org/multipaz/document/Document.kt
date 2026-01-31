@@ -112,8 +112,6 @@ class Document internal constructor(
 
     val created: Instant get() = data.created
 
-    val orderingKey: String? get() = data.orderingKey
-
     /** User-facing name of this specific [Document] instance, e.g. "John's Passport". */
     val displayName: String? get() = data.displayName
 
@@ -372,7 +370,6 @@ class Document internal constructor(
         val editor = Editor(
             provisioned = data.provisioned,
             created = data.created,
-            orderingKey = data.orderingKey,
             displayName = data.displayName,
             typeDisplayName = data.typeDisplayName,
             cardArt = data.cardArt,
@@ -384,7 +381,6 @@ class Document internal constructor(
         val data = DocumentData(
             provisioned = editor.provisioned,
             created = editor.created,
-            orderingKey = editor.orderingKey,
             displayName = editor.displayName,
             typeDisplayName = editor.typeDisplayName,
             cardArt = editor.cardArt,
@@ -402,7 +398,6 @@ class Document internal constructor(
     class Editor internal constructor(
         var provisioned: Boolean,
         var created: Instant,
-        var orderingKey: String?,
         var displayName: String?,
         var typeDisplayName: String?,
         var cardArt: ByteString?,
@@ -412,15 +407,10 @@ class Document internal constructor(
     )
 
     /**
-     * Defines default document order: by [Document.orderingKey], then by [Document.created],
-     * then by [Document.identifier].
+     * Defines default document order: by [Document.created], then by [Document.identifier].
      */
     object Comparator: kotlin.Comparator<Document> {
         override fun compare(a: Document, b: Document): Int {
-            val ordering = (a.orderingKey ?: "").compareTo(b.orderingKey ?: "")
-            if (ordering != 0) {
-                return ordering
-            }
             val creation = a.created.compareTo(b.created)
             if (creation != 0) {
                 return creation

@@ -290,7 +290,7 @@ internal fun PresentmentActivityContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         for (docToShow in docsToShow) {
-                            val documentInfo = documentInfos[docToShow.identifier]
+                            val documentInfo = documentInfos.find { it.document.identifier == docToShow.identifier }
                             if (documentInfo != null) {
                                 Image(
                                     modifier = Modifier.weight(1.0f).fillMaxHeight(),

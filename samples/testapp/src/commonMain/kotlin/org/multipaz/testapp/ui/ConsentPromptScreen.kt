@@ -435,8 +435,10 @@ fun ConsentPromptScreen(
         // Draw currently selected documents from consent prompt.
         //
         if (onDocumentsInFocus != null) {
-            onDocumentsInFocus?.forEach {
-                documentModel?.documentInfos?.value?.get(it.identifier)?.let { documentInfo ->
+            onDocumentsInFocus?.forEach { document ->
+                documentModel?.documentInfos?.value?.find {
+                    documentInfo -> documentInfo.document.identifier == document.identifier
+                }?.let { documentInfo ->
                     item {
                         Image(
                             modifier = Modifier.size(100.dp),

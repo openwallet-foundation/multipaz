@@ -393,7 +393,7 @@ private fun ShowRequesterInfoPage(
 
         requester.certChain?.let { certChain ->
             Box(
-                modifier = Modifier.fillMaxHeight().padding(start = 16.dp)
+                modifier = Modifier.fillMaxHeight()
             ) {
                 val pagerState = rememberPagerState(pageCount = { certChain.certificates.size })
                 Column(

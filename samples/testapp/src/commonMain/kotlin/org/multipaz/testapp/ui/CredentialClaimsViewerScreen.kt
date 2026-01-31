@@ -28,7 +28,7 @@ fun CredentialClaimsViewerScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val documentInfos = documentModel.documentInfos.collectAsState().value
-    val documentInfo = documentInfos[documentId]
+    val documentInfo = documentInfos.find { it.document.identifier == documentId }
     val credentialInfo = documentInfo?.credentialInfos?.find { it.credential.identifier == credentialId  }
 
     val scrollState = rememberScrollState()

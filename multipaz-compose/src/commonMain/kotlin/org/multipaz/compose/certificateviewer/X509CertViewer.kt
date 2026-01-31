@@ -18,12 +18,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import kotlin.time.Clock
 import org.jetbrains.compose.resources.StringResource
@@ -296,36 +300,50 @@ private fun RenderSection(
     title: String,
 ) {
     Text(
-        modifier = modifier.padding(top = 16.dp, bottom = 8.dp),
+        modifier = modifier.padding(start = 15.dp, top = 15.dp, end = 15.dp, bottom = 0.dp),
         text = title,
         style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.secondary,
     )
 
-    for (n in sections.indices) {
-        val section = sections[n]
-        val isFirst = (n == 0)
-        val isLast = (n == sections.size - 1)
-        val rounded = 16.dp
-        val firstRounded = if (isFirst) rounded else 0.dp
-        val endRound = if (isLast) rounded else 0.dp
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .clip(shape = RoundedCornerShape(firstRounded, firstRounded, endRound, endRound))
-                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                .padding(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            CompositionLocalProvider(
-                LocalContentColor provides MaterialTheme.colorScheme.onSurface
+    Column(
+        modifier = Modifier
+            .padding(15.dp)
+            .dropShadow(
+                shape = RoundedCornerShape(16.dp),
+                shadow = Shadow(
+                    radius = 10.dp,
+                    spread = 5.dp,
+                    color = Color.Black.copy(alpha = 0.05f),
+                    offset = DpOffset(x = 0.dp, 2.dp)
+                )
+            ),
+    ) {
+        for (n in sections.indices) {
+            val section = sections[n]
+            val isFirst = (n == 0)
+            val isLast = (n == sections.size - 1)
+            val rounded = 16.dp
+            val firstRounded = if (isFirst) rounded else 0.dp
+            val endRound = if (isLast) rounded else 0.dp
+            Column(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .clip(shape = RoundedCornerShape(firstRounded, firstRounded, endRound, endRound))
+                    .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                    .padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                section()
+                CompositionLocalProvider(
+                    LocalContentColor provides MaterialTheme.colorScheme.onSurface
+                ) {
+                    section()
+                }
             }
-        }
-        if (!isLast) {
-            Spacer(modifier = Modifier.height(2.dp))
+            if (!isLast) {
+                Spacer(modifier = Modifier.height(1.dp))
+            }
         }
     }
 }

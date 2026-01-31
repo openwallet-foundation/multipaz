@@ -21,7 +21,6 @@ struct DocumentScreen: View {
                 KvPair("Document Name", string: documentInfo.document.displayName ?? "Unknown")
                 KvPair("Document Type", string: documentInfo.document.typeDisplayName ?? "Unknown")
                 KvPair("Identifier", string: documentInfo.document.identifier)
-                KvPair("Ordering key", string: documentInfo.document.orderingKey)
                 KvPair("Created", instant: documentInfo.document.created)
                 KvPair("Provisioned", bool: documentInfo.document.provisioned)
                 KvPair("Card art", numBytes: documentInfo.document.cardArt?.size ?? -1)

@@ -121,7 +121,6 @@ import org.multipaz.testapp.ui.ConsentPromptScreen
 import org.multipaz.testapp.ui.CredentialClaimsViewerScreen
 import org.multipaz.testapp.ui.CredentialViewerScreen
 import org.multipaz.testapp.ui.DcRequestScreen
-import org.multipaz.testapp.ui.DocumentCarouselScreen
 import org.multipaz.testapp.ui.DocumentStoreScreen
 import org.multipaz.testapp.ui.DocumentViewerScreen
 import org.multipaz.testapp.ui.IsoMdocMultiDeviceTestingScreen
@@ -366,7 +365,7 @@ class App private constructor (val promptModel: PromptModel) {
         secureAreaRepository = secureAreaRepositoryBuilder.build()
         documentStore = buildDocumentStore(
             storage = TestAppConfiguration.storage,
-            secureAreaRepository = secureAreaRepository
+            secureAreaRepository = secureAreaRepository,
         ) {
             //setTableSpec(testDocumentTableSpec)
         }
@@ -375,7 +374,8 @@ class App private constructor (val promptModel: PromptModel) {
     private suspend fun documentModelInit() {
         documentModel = DocumentModel(
             documentStore = documentStore,
-            documentTypeRepository = documentTypeRepository
+            documentTypeRepository = documentTypeRepository,
+            storage = TestAppConfiguration.storage
         )
     }
 
@@ -917,10 +917,7 @@ class App private constructor (val promptModel: PromptModel) {
                             onClickRichText = { navController.navigate(RichTextDestination) },
                             onClickNotifications = { navController.navigate(NotificationsDestination) },
                             onClickScreenLock = { navController.navigate(ScreenLockDestination) },
-                            onClickPickersScreen = { navController.navigate(PickersDestination) },
-                            onClickDocumentCarouselScreen = {
-                                navController.navigate(DocumentCarouselDestination)
-                            }
+                            onClickPickersScreen = { navController.navigate(PickersDestination) }
                         )
                     }
                 }
@@ -957,6 +954,7 @@ class App private constructor (val promptModel: PromptModel) {
                         val destination = backStackEntry.toRoute<DocumentViewerDestination>()
                         DocumentViewerScreen(
                             documentModel = documentModel,
+                            documentStore = documentStore,
                             documentId = destination.documentId,
                             showToast = ::showToast,
                             onViewCredential = { documentId, credentialId ->
@@ -974,6 +972,9 @@ class App private constructor (val promptModel: PromptModel) {
                                     provisioningSupport.getOpenID4VCIClientPreferences(),
                                     provisioningSupport.getOpenID4VCIBackend()
                                 )
+                            },
+                            onDocumentDeleted = {
+                                navController.navigateUp()
                             }
                         )
                     }
@@ -1304,11 +1305,6 @@ class App private constructor (val promptModel: PromptModel) {
                 composable<PickersDestination> { backStackEntry ->
                     WithAppBar(navController, "Picker use-cases") {
                         PickersScreen()
-                    }
-                }
-                composable<DocumentCarouselDestination> { backStackEntry ->
-                    WithAppBar(navController, "Document Carousel") {
-                        DocumentCarouselScreen(documentModel)
                     }
                 }
             }

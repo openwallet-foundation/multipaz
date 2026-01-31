@@ -30,6 +30,7 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.credential.Credential
 import org.multipaz.credential.CredentialLoaderBuilder
 import org.multipaz.provisioning.Provisioning
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -162,7 +163,7 @@ class DocumentStore private constructor(
     /**
      * Lists all documents in the store.
      *
-     * @param sort if true, the returned list is sorted using [Document.Comparator]
+     * @param sort if true, the returned list is sorted using [Document.Comparator].
      * @return list of all the documents in the store.
      */
     suspend fun listDocuments(sort: Boolean = true): List<Document> {

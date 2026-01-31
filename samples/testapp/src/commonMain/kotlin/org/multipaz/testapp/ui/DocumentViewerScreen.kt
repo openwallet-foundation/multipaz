@@ -11,11 +11,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -23,21 +26,27 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.compose.document.DocumentModel
 import org.multipaz.document.Document
+import org.multipaz.document.DocumentStore
 import org.multipaz.testapp.rememberInhibitNfcObserveMode
 
 @Composable
 fun DocumentViewerScreen(
     documentModel: DocumentModel,
+    documentStore: DocumentStore,
     documentId: String,
     showToast: (message: String) -> Unit,
     onViewCredential: (documentId: String, credentialId: String) -> Unit,
-    onProvisionMore: (document: Document, authorizationData: ByteString) -> Unit
+    onProvisionMore: (document: Document, authorizationData: ByteString) -> Unit,
+    onDocumentDeleted: () -> Unit
 ) {
+    val coroutineScope = rememberCoroutineScope()
     val documentInfos = documentModel.documentInfos.collectAsState().value
-    val documentInfo = documentInfos[documentId]
+    val documentInfo = documentInfos.find { it.document.identifier == documentId }
 
     rememberInhibitNfcObserveMode()
 
@@ -89,6 +98,31 @@ fun DocumentViewerScreen(
                     keyText = "Document Name",
                     valueText = document.displayName ?: "(displayName not set)"
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp, horizontal = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Button(
+                        modifier = Modifier.weight(1.0f),
+                        onClick = {
+                            coroutineScope.launch {
+                                documentStore.deleteDocument(documentId)
+                            }
+                            onDocumentDeleted()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Red,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            text = "Delete document"
+                        )
+                    }
+                }
                 Text(
                     text = "Credentials",
                     fontWeight = FontWeight.Bold,

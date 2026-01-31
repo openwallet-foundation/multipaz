@@ -112,16 +112,6 @@ class DocumentStoreTest {
 
         // Expect reverse order, since creation time was decreasing
         assertEquals(documents.reversed(), documentStore.listDocuments())
-
-        // Use ordering
-        documents.withIndex().forEach { (index, document) ->
-            document.edit {
-                orderingKey = "order $index"
-            }
-        }
-
-        // Check that the order has changed
-        assertEquals(documents, documentStore.listDocuments())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
