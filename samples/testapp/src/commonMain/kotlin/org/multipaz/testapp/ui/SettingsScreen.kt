@@ -33,8 +33,6 @@ import org.multipaz.testapp.TestAppPlatform
 import org.multipaz.testapp.TestAppSettingsModel
 import org.multipaz.compose.cards.WarningCard
 import org.multipaz.compose.decodeImage
-import org.multipaz.digitalcredentials.Default
-import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.document.Document
 import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.testapp.ui.customtheme.AppThemeLimeGreen
@@ -254,8 +252,8 @@ fun SettingsScreen(
         item {
             SettingHeadline("Digital Credentials API Options")
         }
-        if (DigitalCredentials.Default.available) {
-            for (protocol in DigitalCredentials.Default.supportedProtocols.sorted()) {
+        if (app.digitalCredentials.registerAvailable) {
+            for (protocol in app.digitalCredentials.supportedProtocols.sorted()) {
                 item {
                     SettingToggle(
                         title = "Protocol: $protocol",

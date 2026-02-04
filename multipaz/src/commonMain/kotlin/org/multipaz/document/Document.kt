@@ -15,6 +15,10 @@
  */
 package org.multipaz.document
 
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.storage.StorageTableSpec
@@ -24,7 +28,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.storage.base.BaseStorageTable
+import org.multipaz.tags.Tags
+import kotlin.collections.component1
+import kotlin.collections.component2
 import kotlin.concurrent.Volatile
 
 /**
@@ -92,6 +101,8 @@ class Document internal constructor(
     // DocumentStore.lock, as it will cause a deadlock, as there are code paths that
     // obtain this lock when DocumentStore.lock is already held.
     private val lock = Mutex()
+    // Protects write access to data and metadata fields.
+    private val editLock = Mutex()
     private val credentialCache = mutableMapOf<String, Credential>()
     private var allCredentialsLoaded = false
 
@@ -136,6 +147,46 @@ class Document internal constructor(
      * user to re-authorize.
      */
     val authorizationData: ByteString? get() = data.authorizationData
+
+    /**
+     * A [Tags] for storing application-specific data.
+     *
+     * Applications must use collision-resistant keys when using the [Tags] instance.
+     */
+    val tags: Tags by lazy {
+        Tags(
+            data = data.tagsData?.let { Cbor.decode(it.toByteArray()) },
+            editLock = editLock,
+            saveFn = { newData ->
+                val data = DocumentData(
+                    provisioned = data.provisioned,
+                    created = data.created,
+                    displayName = data.displayName,
+                    typeDisplayName = data.typeDisplayName,
+                    cardArt = data.cardArt,
+                    issuerLogo = data.issuerLogo,
+                    authorizationData = data.authorizationData,
+                    metadata = data.metadata,
+                    tagsData = if (newData.asMap.isEmpty()) {
+                        null
+                    } else {
+                        ByteString(Cbor.encode(newData))
+                    }
+                )
+                // Emit events only if something actually changed.
+                if (data != this.data) {
+                    val blob = ByteString(data.toCbor())
+                    this.data = data
+                    store.getDocumentTable().update(identifier, blob)
+                    return@Tags {
+                        store.emitOnDocumentChanged(identifier)
+                    }
+                } else {
+                    return@Tags null
+                }
+            }
+        )
+    }
 
     /** Clear cached credentials; only used for testing */
     internal suspend fun deleteCache() = lock.withLock {
@@ -234,7 +285,6 @@ class Document internal constructor(
     // Called from DocumentStore.deleteDocument
     internal suspend fun deleteDocument() {
         deleted = true
-        store.emitOnDocumentDeleted(identifier)
         for (credential in getCredentials()) {
             credential.clearCredential()
         }
@@ -367,34 +417,56 @@ class Document internal constructor(
     }
 
     suspend fun edit(editAction: suspend Editor.() -> Unit) {
-        val editor = Editor(
-            provisioned = data.provisioned,
-            created = data.created,
-            displayName = data.displayName,
-            typeDisplayName = data.typeDisplayName,
-            cardArt = data.cardArt,
-            issuerLogo = data.issuerLogo,
-            authorizationData = data.authorizationData,
-            metadata = metadata
-        )
-        editAction.invoke(editor)
-        val data = DocumentData(
-            provisioned = editor.provisioned,
-            created = editor.created,
-            displayName = editor.displayName,
-            typeDisplayName = editor.typeDisplayName,
-            cardArt = editor.cardArt,
-            issuerLogo = editor.issuerLogo,
-            authorizationData = editor.authorizationData,
-            metadata = metadata?.serialize()
-        )
-        val blob = ByteString(data.toCbor())
-        metadata = editor.metadata
-        this.data = data
-        store.getDocumentTable().update(identifier, blob)
-        store.emitOnDocumentChanged(identifier)
+        var emitChanged = false
+        editLock.withLock {
+            val editor = Editor(
+                provisioned = data.provisioned,
+                created = data.created,
+                displayName = data.displayName,
+                typeDisplayName = data.typeDisplayName,
+                cardArt = data.cardArt,
+                issuerLogo = data.issuerLogo,
+                authorizationData = data.authorizationData,
+                metadata = metadata,
+                tags = Tags.Editor(this@Document.tags._tags)
+            )
+            editAction.invoke(editor)
+            val newTagsData = if (editor.tags.tags.isEmpty()) {
+                null
+            } else {
+                buildCborMap {
+                    this@Document.tags._tags.forEach { (key, value) -> put(key, value) }
+                }
+            }
+            val data = DocumentData(
+                provisioned = editor.provisioned,
+                created = editor.created,
+                displayName = editor.displayName,
+                typeDisplayName = editor.typeDisplayName,
+                cardArt = editor.cardArt,
+                issuerLogo = editor.issuerLogo,
+                authorizationData = editor.authorizationData,
+                metadata = editor.metadata?.serialize(),
+                tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) }
+            )
+            // Emit events only if something actually changed.
+            if (data != this.data) {
+                val blob = ByteString(data.toCbor())
+                metadata = editor.metadata
+                this.data = data
+                this@Document.tags._tags = editor.tags.tags
+                store.getDocumentTable().update(identifier, blob)
+                emitChanged = true
+            }
+        }
+        if (emitChanged) {
+            store.emitOnDocumentChanged(identifier)
+        }
     }
 
+    /**
+     * An interface to edit [Document] metadata
+     */
     class Editor internal constructor(
         var provisioned: Boolean,
         var created: Instant,
@@ -403,7 +475,8 @@ class Document internal constructor(
         var cardArt: ByteString?,
         var issuerLogo: ByteString?,
         var authorizationData: ByteString?,
-        var metadata: AbstractDocumentMetadata?
+        var metadata: AbstractDocumentMetadata?,
+        val tags: Tags.Editor
     )
 
     /**

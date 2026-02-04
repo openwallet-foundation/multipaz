@@ -24,7 +24,6 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.digitalcredentials.Default
 import org.multipaz.documenttype.DocumentCannedRequest
 import org.multipaz.documenttype.DocumentType
 import org.multipaz.mdoc.zkp.ZkSystemRepository
@@ -213,6 +212,7 @@ fun DcRequestScreen(
                     coroutineScope.launch {
                         try {
                             doDcRequestFlow(
+                                digitalCredentials = app.digitalCredentials,
                                 appReaderKey = app.readerKey,
                                 request = requestSelected.value.sampleRequest,
                                 protocol = protocolSelected.value,
@@ -233,6 +233,7 @@ fun DcRequestScreen(
 }
 
 private suspend fun doDcRequestFlow(
+    digitalCredentials: DigitalCredentials,
     appReaderKey: AsymmetricKey.X509Compatible,
     request: DocumentCannedRequest,
     protocol: RequestProtocol,
@@ -326,7 +327,7 @@ private suspend fun doDcRequestFlow(
     Logger.i(TAG, "origin: $origin")
     Logger.iJson(TAG, "Request", dcRequestObject)
     val t0 = Clock.System.now()
-    val dcResponseObject = DigitalCredentials.Default.request(dcRequestObject)
+    val dcResponseObject = digitalCredentials.request(dcRequestObject)
     Logger.iJson(TAG, "Response", dcResponseObject)
 
     val dcResponse = VerificationUtil.decryptDcResponse(

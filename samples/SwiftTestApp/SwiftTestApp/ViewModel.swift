@@ -189,19 +189,28 @@ class ViewModel {
         )
          */
         
-        let dcApi = DigitalCredentialsCompanion.shared.Default
-        if dcApi.available {
-            try! await dcApi.startExportingCredentials(
+        let dcApi = try! await DigitalCredentialsCompanion.shared.getDefault()
+        if dcApi.registerAvailable {
+            try! await dcApi.register(
                 documentStore: documentStore,
-                documentTypeRepository: documentTypeRepository
+                documentTypeRepository: documentTypeRepository,
+                selectedProtocols: dcApi.supportedProtocols
             )
+            Task {
+                for await _ in documentStore.eventFlow {
+                    try! await dcApi.register(
+                        documentStore: documentStore,
+                        documentTypeRepository: documentTypeRepository,
+                        selectedProtocols: dcApi.supportedProtocols
+                    )
+                }
+            }
         }
         
-        documentModel = DocumentModel(
-            documentTypeRepository: documentTypeRepository,
-            storage: storage
+        documentModel = try! await DocumentModel(
+            documentStore: documentStore,
+            documentTypeRepository: documentTypeRepository
         )
-        await documentModel.setDocumentStore(documentStore: documentStore)
     
         isLoading = false
     }

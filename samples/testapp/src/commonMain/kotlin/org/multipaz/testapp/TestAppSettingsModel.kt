@@ -14,8 +14,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.buildCborArray
-import org.multipaz.digitalcredentials.Default
 import org.multipaz.digitalcredentials.DigitalCredentials
+import org.multipaz.digitalcredentials.getDefault
 import kotlin.Boolean
 
 /**
@@ -28,6 +28,8 @@ class TestAppSettingsModel private constructor(
 ) {
 
     private lateinit var settingsTable: StorageTable
+
+    private lateinit var digitalCredentials: DigitalCredentials
 
     companion object {
         private val tableSpec = StorageTableSpec(
@@ -48,6 +50,7 @@ class TestAppSettingsModel private constructor(
         ): TestAppSettingsModel {
             val instance = TestAppSettingsModel(readOnly)
             instance.settingsTable = storage.getTable(tableSpec)
+            instance.digitalCredentials = DigitalCredentials.getDefault()
             instance.init()
             return instance
         }
@@ -160,7 +163,7 @@ class TestAppSettingsModel private constructor(
         bind(readerAllowMultipleRequests, "readerAllowMultipleRequests", false)
 
         bind(cloudSecureAreaUrl, "cloudSecureAreaUrl", CSA_URL_DEFAULT)
-        bind(dcApiProtocols, "dcApiProtocols", DigitalCredentials.Default.supportedProtocols)
+        bind(dcApiProtocols, "dcApiProtocols", digitalCredentials.supportedProtocols)
 
         bind(cryptoPreferBouncyCastle, "cryptoForceBouncyCastle", false)
 
@@ -191,7 +194,7 @@ class TestAppSettingsModel private constructor(
     val readerAllowMultipleRequests = MutableStateFlow<Boolean>(false)
 
     val cloudSecureAreaUrl = MutableStateFlow<String>(CSA_URL_DEFAULT)
-    val dcApiProtocols = MutableStateFlow<Set<String>>(DigitalCredentials.Default.supportedProtocols)
+    val dcApiProtocols = MutableStateFlow<Set<String>>(emptySet())
 
     val cryptoPreferBouncyCastle = MutableStateFlow<Boolean>(false)
 

@@ -484,5 +484,47 @@ import IdentityDocumentServices
         }
         return 0
     }
+
+    @objc(docRegGetAll:) public class func docRegGetAll() async throws -> [String] {
+        if #available(iOS 26.0, *) {
+            let store = IdentityDocumentProviderRegistrationStore()
+            let registrations = try await store.registrations
+            var ret: [String] = []
+            for registration in registrations {
+                ret.append(registration.documentIdentifier)
+            }
+            return ret
+        }
+        return []
+    }
+
+    @objc(docRegRemove::) public class func docRegRemove(documentIdentifier: String) async throws -> Bool {
+        if #available(iOS 26.0, *) {
+            let store = IdentityDocumentProviderRegistrationStore()
+            try await store.removeRegistration(forDocumentIdentifier: documentIdentifier)
+            return true
+        }
+        return false
+    }
+
+    @objc(docRegGetStatus:) public class func docRegGetStatus() async -> String {
+        if #available(iOS 26.0, *) {
+            let store = IdentityDocumentProviderRegistrationStore()
+            let status = await store.status
+            switch status {
+            case .authorized:
+                return "authorized"
+            case .notAuthorized:
+                return "notAuthorized"
+            case .notDetermined:
+                return "notDetermined"
+            case .notSupported:
+                return "notSupported"
+            @unknown default:
+                return "unknown"
+            }
+        }
+        return ""
+    }
 }
 

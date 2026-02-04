@@ -31,6 +31,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.tags.Tags
 import kotlin.concurrent.Volatile
 
 /**
@@ -116,6 +117,30 @@ abstract class Credential {
      */
     val isCertified get() = _issuerProvidedData != null
 
+    private var _tagsData: DataItem? = null
+
+    /**
+     * A [Tags] for storing application-specific data.
+     *
+     * Applications must use collision-resistant keys when using the [Tags] instance.
+     */
+    val tags: Tags by lazy {
+        Tags(
+            data = _tagsData,
+            saveFn = { newData ->
+                // Emit events only if something actually changed.
+                if (newData != _tagsData) {
+                    lock.withLock {
+                        _tagsData = newData
+                        save()
+                    }
+                    document.store.emitOnDocumentChanged(document.identifier)
+                }
+                null
+            }
+        )
+    }
+
     /**
      * Constructs a new [Credential].
      *
@@ -174,6 +199,7 @@ abstract class Credential {
         }
 
         replacementForIdentifier = dataItem.getOrNull("replacementForAlias")?.asTstr
+        _tagsData = dataItem.getOrNull("tags")
     }
 
     /**
@@ -332,6 +358,9 @@ abstract class Credential {
                 put("data", issuerProvidedData.toByteArray())
                 put("validFrom", validFrom.toEpochMilliseconds())
                 put("validUntil", validUntil.toEpochMilliseconds())
+            }
+            if (_tagsData != null) {
+                put("tags", _tagsData!!)
             }
             addSerializedData(this)
         }

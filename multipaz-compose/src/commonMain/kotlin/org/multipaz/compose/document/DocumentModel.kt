@@ -50,32 +50,7 @@ private data class DocumentModelStorageData(
         }
     }
 
-    suspend fun save(
-        table: StorageTable,
-        partitionId: String
-    ) {
-        table.update(
-            key = KEY_NAME,
-            data = ByteString(Cbor.encode(toDataItem())),
-            partitionId = partitionId
-        )
-    }
-
     companion object {
-        const val KEY_NAME = "DocumentModelStorageData"
-
-        suspend fun load(
-            table: StorageTable,
-            partitionId: String
-        ): DocumentModelStorageData {
-            table.get(KEY_NAME, partitionId)?.let {
-                return fromDataItem(Cbor.decode(it.toByteArray()))
-            }
-            val data = DocumentModelStorageData()
-            table.insert(KEY_NAME, ByteString(Cbor.encode(data.toDataItem())), partitionId)
-            return data
-        }
-
         fun fromDataItem(dataItem: DataItem): DocumentModelStorageData {
             var sortingOrder = emptyMap<String, Int>()
             try {
@@ -103,14 +78,13 @@ private data class DocumentModelStorageData(
  *
  * @param documentStore the [DocumentStore] which manages [Document] and [Credential] instances.
  * @param documentTypeRepository a [DocumentTypeRepository] with information about document types or `null`.
- * @param storage the [Storage] used for storing document order.
- * @param storagePartition the partition of [storage] to use.
+ * @param documentOrderKey the name of the key to use for storing the document order in the [Tags] object
+ *   associated with  [documentStore].
  */
 class DocumentModel(
     val documentStore: DocumentStore,
     val documentTypeRepository: DocumentTypeRepository?,
-    val storage: Storage = EphemeralStorage(),
-    val storagePartition: String = "default",
+    val documentOrderKey: String = "org.multipaz.DocumentModel.orderingKey",
 ) {
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
     private val _documentInfos = MutableStateFlow<List<DocumentInfo>>(emptyList())
@@ -124,8 +98,9 @@ class DocumentModel(
 
     init {
         scope.launch {
-            table = storage.getTable(documentModelTableSpec)
-            storageData = DocumentModelStorageData.load(table, storagePartition)
+            storageData = documentStore.getTags().get<ByteString>(documentOrderKey)?.let {
+                DocumentModelStorageData.fromDataItem(Cbor.decode(it.toByteArray()))
+            } ?: DocumentModelStorageData()
 
             val docIds = documentStore.listDocumentIds()
             docIds.forEach { documentId ->
@@ -133,14 +108,7 @@ class DocumentModel(
             }
 
             documentStore.eventFlow
-                .onEach { event ->
-                    Logger.i(
-                        TAG,
-                        "DocumentStore event ${event::class.simpleName} ${event.documentId}"
-                    )
-                    updateDocumentInfo(event = event)
-
-                }
+                .onEach { event -> updateDocumentInfo(event = event) }
                 .launchIn(scope)
         }
     }
@@ -238,7 +206,9 @@ class DocumentModel(
             sortingOrder.put(documentInfo.document.identifier, index)
         }
         storageData.sortingOrder = sortingOrder
-        storageData.save(table, storagePartition)
+        documentStore.getTags().edit {
+            set(documentOrderKey, ByteString(Cbor.encode(storageData.toDataItem())))
+        }
         _documentInfos.value = documentInfos
     }
 

@@ -54,6 +54,7 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.prompt.Reason
+import org.multipaz.util.truncateToWholeSeconds
 import kotlin.random.Random
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -145,7 +146,7 @@ class DeviceResponseGeneratorTest {
         assertFalse(mdocCredentialMac.isCertified)
 
         // Generate an MSO and issuer-signed data for these authentication keys.
-        val validFrom = Clock.System.now()
+        val validFrom = Clock.System.now().truncateToWholeSeconds()
         val validUntil = Instant.fromEpochMilliseconds(
             validFrom.toEpochMilliseconds() + 5L * 365 * 24 * 60 * 60 * 1000
         )

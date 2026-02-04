@@ -19,12 +19,16 @@ import org.multipaz.compose.cards.InfoCard
 import org.multipaz.compose.cards.WarningCard
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
 import org.multipaz.compose.document.DocumentModel
+import org.multipaz.digitalcredentials.DigitalCredentials
+import org.multipaz.digitalcredentials.DigitalCredentialsAuthorizationState
 import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.testapp.TestAppPlatform
 
 @Composable
 fun StartScreen(
     documentModel: DocumentModel,
+    digitalCredentials: DigitalCredentials,
+    onDigitalCredentialsReregister: suspend () -> Unit = {},
     onClickAbout: () -> Unit = {},
     onClickDocumentStore: () -> Unit = {},
     onClickTrustedIssuers: () -> Unit = {},
@@ -52,6 +56,7 @@ fun StartScreen(
     val blePermissionState = rememberBluetoothPermissionState()
     val coroutineScope = rememberCoroutineScope()
     val documentInfos = documentModel.documentInfos.collectAsState().value
+    val dcAuthorizationState = digitalCredentials.authorizationState.collectAsState().value
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -90,6 +95,20 @@ fun StartScreen(
                         ) {
                             Text("Proximity presentment require BLE permissions to be granted. Click to fix.")
                         }
+                    }
+                }
+                if (dcAuthorizationState == DigitalCredentialsAuthorizationState.NOT_AUTHORIZED) {
+                    WarningCard(
+                        modifier = Modifier.padding(8.dp).clickable() {
+                            coroutineScope.launch {
+                                onDigitalCredentialsReregister()
+                            }
+                        }
+                    ) {
+                        Text(
+                            "W3C DC API is not authorized and needs to be manually enabled in OS Settings app. " +
+                                    "When enabled, click here to retry exporting documents"
+                        )
                     }
                 }
             }

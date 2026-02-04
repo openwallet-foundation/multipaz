@@ -48,6 +48,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -78,8 +81,8 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
-import org.multipaz.digitalcredentials.Default
 import org.multipaz.digitalcredentials.DigitalCredentials
+import org.multipaz.digitalcredentials.getDefault
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
@@ -375,7 +378,6 @@ class App private constructor (val promptModel: PromptModel) {
         documentModel = DocumentModel(
             documentStore = documentStore,
             documentTypeRepository = documentTypeRepository,
-            storage = TestAppConfiguration.storage
         )
     }
 
@@ -703,29 +705,73 @@ class App private constructor (val promptModel: PromptModel) {
         }
     }
 
+    lateinit var digitalCredentials: DigitalCredentials
+
     /**
-     * Starts export documents via the W3C Digital Credentials API on the platform, if available.
+     * Starts exporting documents via the W3C Digital Credentials API on the platform, if available.
      *
      * This should be called when the main wallet application UI is running.
      */
     private suspend fun digitalCredentialsInit() {
-        if (DigitalCredentials.Default.available) {
-            val dc = DigitalCredentials.Default
-            CoroutineScope(Dispatchers.Default).launch {
-                dc.setSelectedProtocols(
-                    settingsModel.dcApiProtocols.value
-                )
-                dc.startExportingCredentials(
+        digitalCredentials = DigitalCredentials.getDefault()
+        if (digitalCredentials.registerAvailable) {
+            try {
+                digitalCredentials.register(
                     documentStore = documentStore,
                     documentTypeRepository = documentTypeRepository,
+                    selectedProtocols = settingsModel.dcApiProtocols.value
                 )
+            } catch (e: Throwable) {
+                Logger.w(TAG, "Error registering with W3C DC API", e)
             }
 
+            // Re-register if document store changes...
             CoroutineScope(Dispatchers.Default).launch {
-                settingsModel.dcApiProtocols.collect {
-                    dc.setSelectedProtocols(it)
-                }
+                documentStore.eventFlow
+                    .onEach { event ->
+                        Logger.i(TAG, "DocumentStore event ${event::class.simpleName} ${event.documentId}")
+                        try {
+                            digitalCredentials.register(
+                                documentStore = documentStore,
+                                documentTypeRepository = documentTypeRepository,
+                                selectedProtocols = settingsModel.dcApiProtocols.value
+                            )
+                        } catch (e: Throwable) {
+                            Logger.w(TAG, "Error registering with W3C DC API", e)
+                        }
+                    }
+                    .launchIn(this)
             }
+
+            // Re-register if selected protocols change...
+            CoroutineScope(Dispatchers.Default).launch {
+                settingsModel.dcApiProtocols
+                    .drop(1) // drop initial value, we just registered above.
+                    .collect {
+                        Logger.i(TAG, "DC protocols changed: $it")
+                        try {
+                            digitalCredentials.register(
+                                documentStore = documentStore,
+                                documentTypeRepository = documentTypeRepository,
+                                selectedProtocols = settingsModel.dcApiProtocols.value
+                            )
+                        } catch (e: Throwable) {
+                            Logger.w(TAG, "Error registering with W3C DC API", e)
+                        }
+                    }
+            }
+        }
+    }
+
+    private suspend fun digitalCredentialsReregister() {
+        try {
+            digitalCredentials.register(
+                documentStore = documentStore,
+                documentTypeRepository = documentTypeRepository,
+                selectedProtocols = settingsModel.dcApiProtocols.value
+            )
+        } catch (e: Throwable) {
+            Logger.w(TAG, "Error registering with W3C DC API", e)
         }
     }
 
@@ -873,6 +919,8 @@ class App private constructor (val promptModel: PromptModel) {
                     WithAppBar(navController) {
                         StartScreen(
                             documentModel = documentModel,
+                            digitalCredentials = digitalCredentials,
+                            onDigitalCredentialsReregister = { digitalCredentialsReregister() },
                             onClickAbout = { navController.navigate(AboutDestination) },
                             onClickDocumentStore = { navController.navigate(DocumentStoreDestination) },
                             onClickTrustedIssuers = { navController.navigate(TrustedIssuersDestination) },

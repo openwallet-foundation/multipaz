@@ -161,6 +161,20 @@ struct DocumentProviderExtension: IdentityDocumentProvider {
     }
 
     func performRegistrationUpdates() async {
+        print("in performRegistrationUpdates")
+        let source = await getPresentmentSource()
+        do {
+            let dcApi = try await DigitalCredentialsCompanion.shared.getDefault()
+            try await dcApi.register(
+                documentStore: source.documentStore,
+                documentTypeRepository: source.documentTypeRepository,
+                selectedProtocols: dcApi.supportedProtocols
+            )
+            print("Successfully registered credentials")
+        } catch {
+            print("Error registering credentials: \(error)")
+        }
+        
     }
 }
 

@@ -45,7 +45,6 @@ import org.multipaz.storage.StorageTableSpec
 import kotlin.random.Random
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
@@ -114,6 +113,92 @@ class DocumentStoreTest {
         assertEquals(documents.reversed(), documentStore.listDocuments())
     }
 
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun testTags() = runTest {
+        val documentStore = buildDocumentStore(
+            storage = storage,
+            secureAreaRepository = secureAreaRepository
+        ) {
+            addCredentialImplementation(TestCredential.CREDENTIAL_TYPE) { document ->
+                TestCredential(document)
+            }
+        }
+
+        assertTrue(documentStore.getTags().keys.isEmpty())
+        documentStore.getTags().edit {
+            set("com.example.name", "Alice")
+        }
+        assertEquals("Alice", documentStore.getTags().get<String>("com.example.name"))
+        documentStore.getTags().edit {
+            set("com.example.name", "Bob")
+        }
+        assertEquals("Bob", documentStore.getTags().get<String>("com.example.name"))
+
+        val doc1 = documentStore.createDocument()
+        assertTrue(doc1.tags.keys.isEmpty())
+        doc1.tags.edit {
+            set("com.example.name", "Carol")
+        }
+        assertEquals("Carol", doc1.tags.get<String>("com.example.name"))
+        doc1.tags.edit {
+            set("com.example.name", "Carlos")
+        }
+        assertEquals("Carlos", doc1.tags.get<String>("com.example.name"))
+
+        val doc2 = documentStore.createDocument()
+        assertTrue(doc2.tags.keys.isEmpty())
+        doc2.tags.edit {
+            set("com.example.name", "Dan")
+        }
+        assertEquals("Dan", doc2.tags.get<String>("com.example.name"))
+
+        val cred = TestCredential(
+            doc2,
+            null,
+            CREDENTIAL_DOMAIN
+        )
+        cred.addToDocument()
+        assertTrue(cred.tags.keys.isEmpty())
+        cred.tags.edit {
+            set("com.example.name", "Eve")
+        }
+        assertEquals("Eve", cred.tags.get<String>("com.example.name"))
+        cred.tags.edit {
+            set("com.example.name", "Yves")
+        }
+        assertEquals("Yves", cred.tags.get<String>("com.example.name"))
+
+
+        // Check that the tags are persisted
+        runCurrent()
+        val documentStore2 = buildDocumentStore(
+            storage = storage,
+            secureAreaRepository = secureAreaRepository
+        ) {
+            addCredentialImplementation(TestCredential.CREDENTIAL_TYPE) { document ->
+                TestCredential(document)
+            }
+        }
+        assertEquals("Bob", documentStore2.getTags().get<String>("com.example.name"))
+
+        assertEquals(
+            "Carlos",
+            documentStore2.lookupDocument(doc1.identifier)!!.tags.get<String>("com.example.name")
+        )
+        assertEquals(
+            "Dan",
+            documentStore2.lookupDocument(doc2.identifier)!!.tags.get<String>("com.example.name")
+        )
+        assertEquals(
+            "Yves",
+            documentStore2.lookupDocument(doc2.identifier)!!
+                .getPendingCredentials().first().tags.get<String>("com.example.name")
+        )
+    }
+
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun testEventFlow() = runTest {
@@ -121,8 +206,8 @@ class DocumentStoreTest {
             storage = storage,
             secureAreaRepository = secureAreaRepository
         ) {
-            addCredentialImplementation(TestSecureAreaBoundCredential.CREDENTIAL_TYPE) { document ->
-                TestSecureAreaBoundCredential(document)
+            addCredentialImplementation(TestCredential.CREDENTIAL_TYPE) { document ->
+                TestCredential(document)
             }
         }
 
@@ -150,8 +235,70 @@ class DocumentStoreTest {
         doc1.edit {
             displayName = "foo"
             typeDisplayName = "bar"
+            tags.set("com.example.something", "foobar")
         }
         runCurrent()
+        assertEquals(DocumentUpdated(doc1.identifier), events.last())
+
+        doc2.tags.edit {
+            set("com.example.something", "foobar")
+        }
+        runCurrent()
+        assertEquals(DocumentUpdated(doc2.identifier), events.last())
+
+        // Make sure we only emit events if something actually changed
+        doc1.edit {}
+        assertEquals(DocumentUpdated(doc2.identifier), events.last())
+        doc1.edit {
+            displayName = "foo"  // no change, value is the same
+        }
+        assertEquals(DocumentUpdated(doc2.identifier), events.last())
+        doc1.tags.edit {
+            set("com.example.something", "foobar") // no change, value is the same
+        }
+        assertEquals(DocumentUpdated(doc2.identifier), events.last())
+        doc1.edit {
+            tags.set("com.example.something", "foobar") // no change, value is the same
+        }
+        assertEquals(DocumentUpdated(doc2.identifier), events.last())
+
+        // Check we get DocumentUpdated when changing an underlying credential
+        val credDoc1 = TestCredential(
+            doc1,
+            null,
+            CREDENTIAL_DOMAIN
+        )
+        credDoc1.addToDocument()
+        assertEquals(DocumentUpdated(doc1.identifier), events.last())
+
+        val credDoc2 = TestCredential(
+            doc2,
+            null,
+            CREDENTIAL_DOMAIN
+        )
+        credDoc2.addToDocument()
+        assertEquals(DocumentUpdated(doc2.identifier), events.last())
+
+        assertTrue(credDoc1.tags.keys.isEmpty())
+        credDoc1.tags.edit {
+            set("com.example.name", "Alice")
+        }
+        assertEquals(DocumentUpdated(doc1.identifier), events.last())
+
+        assertTrue(credDoc2.tags.keys.isEmpty())
+        credDoc2.tags.edit {
+            set("com.example.name", "Bob")
+        }
+        assertEquals(DocumentUpdated(doc2.identifier), events.last())
+
+        credDoc1.tags.edit {
+            set("com.example.name", "Alice")  // no change, value is the same
+        }
+        assertEquals(DocumentUpdated(doc2.identifier), events.last())
+
+        credDoc1.tags.edit {
+            set("com.example.name", "Alex")  // different value, should cause a change
+        }
         assertEquals(DocumentUpdated(doc1.identifier), events.last())
 
         documentStore.deleteDocument(doc0.identifier)
@@ -473,9 +620,13 @@ class DocumentStoreTest {
             displayName = "foo"
             typeDisplayName = "bar"
             cardArt = ByteString(1, 2, 3)
+            tags.set("com.example.foo", "bar")
+            tags.set("com.example.bar", 42L)
         }
         assertEquals("foo", document.displayName)
         assertEquals(ByteString(1, 2, 3), document.cardArt)
+        assertEquals("bar", document.tags.get("com.example.foo"))
+        assertEquals(42L, document.tags.get("com.example.bar"))
 
         val documentStore2 = buildDocumentStore(
             storage = storage,
@@ -490,6 +641,13 @@ class DocumentStoreTest {
         assertTrue(document2.provisioned)
         assertEquals("foo", document2.displayName)
         assertEquals(ByteString(1, 2, 3), document2.cardArt)
+        assertEquals("bar", document2.tags.get("com.example.foo"))
+        assertEquals(42L, document2.tags.get("com.example.bar"))
+        assertEquals(setOf("com.example.foo", "com.example.bar"), document2.tags.keys)
+        document2.edit {
+            tags.remove("com.example.bar")
+        }
+        assertEquals(setOf("com.example.foo"), document2.tags.keys)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

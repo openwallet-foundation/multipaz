@@ -8,30 +8,15 @@ import androidx.credentials.DigitalCredential
 import androidx.credentials.ExperimentalDigitalCredentialApi
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetDigitalCredentialOption
-import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.CborArray
-import org.multipaz.cbor.DataItem
-import org.multipaz.claim.organizeByNamespace
-import org.multipaz.context.applicationContext
-import org.multipaz.document.Document
-import org.multipaz.document.DocumentStore
-import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.mdoc.credential.MdocCredential
-import org.multipaz.sdjwt.credential.SdJwtVcCredential
-import org.multipaz.util.Logger
 import com.google.android.gms.identitycredentials.IdentityCredentialManager
 import com.google.android.gms.identitycredentials.RegistrationRequest
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.sample
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -39,28 +24,30 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
+import org.multipaz.claim.organizeByNamespace
 import org.multipaz.context.AndroidUiContext
+import org.multipaz.context.applicationContext
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
+import org.multipaz.document.Document
+import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentAttribute
+import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.sdjwt.credential.SdJwtVcCredential
+import org.multipaz.util.Logger
 import org.multipaz.util.toBase64
-import kotlin.time.Duration.Companion.seconds
 import java.io.ByteArrayOutputStream
-import kotlin.collections.iterator
-import kotlin.let
+import kotlin.time.Clock
 
 private const val TAG = "DigitalCredentials"
 
-private class RegistrationData (
-    val documentStore: DocumentStore,
-    val documentTypeRepository: DocumentTypeRepository,
-    val listeningJob: Job,
-)
-
-private val exportedStores = mutableMapOf<DocumentStore, RegistrationData>()
+private const val CREDMAN_DB_SHA256_KEY = "org.multipaz.CredmanDbSha256"
 
 private fun getAttributeForJsonClaim(
     documentTypeRepository: DocumentTypeRepository,
@@ -92,7 +79,13 @@ private fun getDataElementDisplayName(
     return dataElementName
 }
 
-private suspend fun updateCredman() {
+// Called with lock held
+private suspend fun updateCredmanUnlocked(
+    documentStore: DocumentStore,
+    documentTypeRepository: DocumentTypeRepository,
+    selectedProtocols: Set<String>
+) {
+    val startTime = Clock.System.now()
     val appInfo = applicationContext.applicationInfo
     val appName = if (appInfo.labelRes != 0) {
         applicationContext.getString(appInfo.labelRes)
@@ -102,12 +95,28 @@ private suspend fun updateCredman() {
 
     val credentialDatabase = calculateCredentialDatabase(
         appName = appName,
-        selectedProtocols = selectedProtocols,
-        stores = exportedStores.values.map { Pair(it.documentStore, it.documentTypeRepository) }
+        documentStore = documentStore,
+        documentTypeRepository = documentTypeRepository,
+        selectedProtocols = selectedProtocols
     )
 
     val credentialDatabaseCbor = Cbor.encode(credentialDatabase)
     //Logger.iCbor(TAG, "credentialDatabaseCbor", credentialDatabaseCbor)
+
+    val endTime = Clock.System.now()
+    Logger.i(TAG, "Credman database of ${credentialDatabaseCbor.size} bytes " +
+            "generated in ${(endTime - startTime).inWholeMilliseconds} ms")
+
+    val credDbSha256 = ByteString(Crypto.digest(Algorithm.SHA256, credentialDatabaseCbor))
+    val lastCredDbSha256 = documentStore.getTags().get<ByteString>(CREDMAN_DB_SHA256_KEY)
+    if (lastCredDbSha256 != null && credDbSha256 == lastCredDbSha256) {
+        Logger.i(TAG, "No change in Credman database since last registration")
+        return
+    }
+    documentStore.getTags().edit {
+        set(CREDMAN_DB_SHA256_KEY, credDbSha256)
+    }
+
     val client = IdentityCredentialManager.getClient(applicationContext)
     client.registerCredentials(
         RegistrationRequest(
@@ -135,45 +144,35 @@ private suspend fun updateCredman() {
 
 internal suspend fun calculateCredentialDatabase(
     appName: String,
-    selectedProtocols: Set<String>,
-    stores: List<Pair<DocumentStore, DocumentTypeRepository>>
+    documentStore: DocumentStore,
+    documentTypeRepository: DocumentTypeRepository,
+    selectedProtocols: Set<String>
 ): DataItem {
-    val credentialsBuilder = CborArray.builder()
-    for ((documentStore, documentTypeRepository) in stores) {
-        // We sort on displayName b/c otherwise it's sorted on Document.identifier which can be unpredictable
-        val documents = documentStore.listDocumentIds()
-            .mapNotNull { documentStore.lookupDocument(it) }
-            .sortedBy { it.displayName ?: it.identifier }
-        for (document in documents) {
-            val mdocCredential = document.getCertifiedCredentials().find { it is MdocCredential }
-            if (mdocCredential != null) {
-                credentialsBuilder.add(
-                    exportMdocCredential(
+    val credentialDatabase = buildCborMap {
+        putCborArray("protocols") { selectedProtocols.forEach { add(it) } }
+        putCborArray("credentials") {
+            val documents = documentStore.listDocuments(sort = true)
+            for (document in documents) {
+                val mdocCredential = document.getCertifiedCredentials().find { it is MdocCredential }
+                if (mdocCredential != null) {
+                    add(exportMdocCredential(
                         appName = appName,
                         document = document,
                         credential = mdocCredential as MdocCredential,
                         documentTypeRepository = documentTypeRepository
-                    )
-                )
-            }
-
-            val sdJwtVcCredential = document.getCertifiedCredentials().find { it is SdJwtVcCredential }
-            if (sdJwtVcCredential != null) {
-                credentialsBuilder.add(
-                    exportSdJwtVcCredential(
+                    ))
+                }
+                val sdJwtVcCredential = document.getCertifiedCredentials().find { it is SdJwtVcCredential }
+                if (sdJwtVcCredential != null) {
+                    add(exportSdJwtVcCredential(
                         appName = appName,
                         document = document,
                         credential = sdJwtVcCredential as SdJwtVcCredential,
                         documentTypeRepository = documentTypeRepository
-                    )
-                )
+                    ))
+                }
             }
         }
-    }
-
-    val credentialDatabase = buildCborMap {
-        putCborArray("protocols") { selectedProtocols.forEach { add(it) } }
-        put("credentials", credentialsBuilder.end().build())
     }
     return credentialDatabase
 }
@@ -323,15 +322,34 @@ private fun resizedCardArt(cardArt: ByteArray?): ByteArray? {
         }
 }
 
-private fun loadMatcher(context: Context): ByteArray {
-    val stream = context.assets.open("identitycredentialmatcher.wasm")
-    val matcher = ByteArray(stream.available())
-    stream.read(matcher)
-    stream.close()
-    return matcher
+private var matcher: ByteArray? = null
+private var matcherLock = Mutex()
+
+private suspend fun loadMatcher(context: Context): ByteArray {
+    matcherLock.withLock {
+        if (matcher != null) {
+            return matcher!!
+        }
+        val stream = context.assets.open("identitycredentialmatcher.wasm")
+        val matcherBytes = ByteArray(stream.available())
+        stream.read(matcherBytes)
+        stream.close()
+        matcher = matcherBytes
+        return matcher!!
+    }
 }
 
-internal actual val defaultAvailable = true
+internal actual suspend fun defaultInitialize() {
+}
+
+internal actual val defaultRegisterAvailable = true
+
+internal actual val defaultRequestAvailable = true
+
+// Always authorized on Android
+private val mutableAuthorizationState = MutableStateFlow(DigitalCredentialsAuthorizationState.AUTHORIZED)
+
+internal actual val defaultAuthorizationState: StateFlow<DigitalCredentialsAuthorizationState> = mutableAuthorizationState
 
 internal actual val defaultSupportedProtocols: Set<String>
     get() = supportedProtocols
@@ -343,70 +361,23 @@ private val supportedProtocols = setOf(
     "openid4vp",
 )
 
-internal actual val defaultSelectedProtocols: Set<String>
-    get() = selectedProtocols
+private val registerLock = Mutex()
 
-private var selectedProtocols = supportedProtocols
-
-internal actual suspend fun defaultSetSelectedProtocols(
-    protocols: Set<String>
-) {
-    selectedProtocols = protocols.mapNotNull {
-        if (supportedProtocols.contains(it)) {
-            it
-        } else {
-            Logger.w(TAG, "Protocol $it is not supported")
-            null
-        }
-    }.toSet()
-    updateCredman()
-}
-
-@OptIn(FlowPreview::class)
-internal actual suspend fun defaultStartExportingCredentials(
+internal actual suspend fun defaultRegister(
     documentStore: DocumentStore,
-    documentTypeRepository: DocumentTypeRepository
+    documentTypeRepository: DocumentTypeRepository,
+    selectedProtocols: Set<String>
 ) {
-    val listeningJob = CoroutineScope(Dispatchers.IO).launch {
-        documentStore.eventFlow
-            .onEach { event ->
-                Logger.i(TAG, "DocumentStore event ${event::class.simpleName} ${event.documentId}")
-                try {
-                    updateCredman()
-                } catch (e: Throwable) {
-                    currentCoroutineContext().ensureActive()
-                    Logger.w(TAG, "Exception while updating Credman", e)
-                    e.printStackTrace()
-                }
-            }
+    require(supportedProtocols.containsAll(selectedProtocols)) {
+        "The selected protocols is not a subset of supported protocols"
     }
-    exportedStores.put(documentStore, RegistrationData(
-        documentStore = documentStore,
-        documentTypeRepository = documentTypeRepository,
-        listeningJob = listeningJob,
-    ))
-    updateCredman()
-
-    // To avoid continually updating Credman when documents are added one after the other, sample
-    // only every 10 seconds.
-    documentStore.eventFlow
-        .sample(10.seconds)
-        .onEach { event ->
-            Logger.i(TAG, "DocumentStore event ${event::class.simpleName} ${event.documentId}")
-            updateCredman()
-        }
-        .launchIn(CoroutineScope(Dispatchers.IO))
-}
-
-internal actual suspend fun defaultStopExportingCredentials(
-    documentStore: DocumentStore,
-) {
-    val registrationData = exportedStores.remove(documentStore)
-    if (registrationData == null) {
-        return
+    registerLock.withLock {
+        updateCredmanUnlocked(
+            documentStore = documentStore,
+            documentTypeRepository = documentTypeRepository,
+            selectedProtocols = selectedProtocols
+        )
     }
-    registrationData.listeningJob.cancel()
-    updateCredman()
 }
 
 suspend fun DocumentStore.lookupForCredmanId(credManId: String): Document? {

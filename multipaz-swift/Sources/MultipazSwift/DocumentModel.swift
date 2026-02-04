@@ -47,67 +47,38 @@ public enum DocumentModelError: Error {
  * The model exposes the documents as ``DocumentInfo`` and listens to live updates from the store
  * and maintains a persistent order which can be changed using ``setDocumentPosition(documentInfo:position:)``.
  *
- * If a ``Document`` has no cardArt the model creates a default stock cardArt.
+ * If a ``Document`` has no card art the model creates a default stock card art.
  */
 @MainActor
 @Observable
 public class DocumentModel {
     
     let documentTypeRepository: DocumentTypeRepository?
-    let storage: Storage
-    let storagePartition: String
+    let documentOrderKey: String
 
     /**
      * Initialization for ``DocumentModel``.
      *
      * - Parameters:
+     *   - documentStore: the ``DocumentStore`` to use as a source of truth.
      *   - documentTypeRepository: a ``DocumentTypeRepository`` with information about document types or nil.
-     *   - storage: the [Storage] used for storing document order.
-     *   - storagePartition: the partition of [storage] to use.
+     *   - documentOrderKey: the name of the key to use for storing the document order in the ``Tags`` object associated with  ``documentStore``.
      */
     public init(
+        documentStore: DocumentStore,
         documentTypeRepository: DocumentTypeRepository?,
-        storage: Storage = EphemeralStorage(clock: KotlinClockCompanion.shared.getSystem()),
-        storagePartition: String = "default"
-    ) {
+        documentOrderKey: String = "org.multipaz.DocumentModel.orderingKey"
+    ) async throws {
         self.documentTypeRepository = documentTypeRepository
-        self.storage = storage
-        self.storagePartition = storagePartition
-    }
-    
-    private var _documentInfos: [DocumentInfo] = []
-
-    public var documentInfos: [DocumentInfo] {
-        _documentInfos.sorted { (a: DocumentInfo, b: DocumentInfo) -> Bool in
-            let sa = storageData.sortingOrder[a.document.identifier]
-            let sb = storageData.sortingOrder[b.document.identifier]
-            if sa != nil && sb != nil {
-                if sa != sb {
-                    return sa! < sb!
-                }
-            }
-            return Document.Comparator.shared.compare(a: a.document, b: b.document) < 0
-        }
-    }
-
-    private var documentStore: DocumentStore!
-    private var table: StorageTable!
-    private var storageData: DocumentModelStorageData!
-    
-    private let documentModelTableSpec = StorageTableSpec(
-        name: "DocumentModel",
-        supportPartitions: true,
-        supportExpiration: false,
-        schemaVersion: 0
-    )
-
-    public func setDocumentStore(documentStore: DocumentStore) async {
+        self.documentOrderKey = documentOrderKey
         self.documentStore = documentStore
-        self.table = try! await storage.getTable(spec: documentModelTableSpec)
-        self.storageData = try! await DocumentModelStorageData.load(
-            table: self.table,
-            partitionId: self.storagePartition
-        )
+        self.storageData = if let encoded = try! await documentStore.getTags().getByteString(key: documentOrderKey) {
+            DocumentModelStorageData.fromDataItem(
+                try! Cbor.shared.decode(encodedCbor: encoded.toByteArray(startIndex: 0, endIndex: encoded.size))
+            )
+        } else {
+            DocumentModelStorageData()
+        }
 
         for document in try! await documentStore.listDocuments(sort: true) {
             await _documentInfos.append(getDocumentInfo(document))
@@ -134,6 +105,24 @@ public class DocumentModel {
             }
         }
     }
+    
+    private var _documentInfos: [DocumentInfo] = []
+
+    public var documentInfos: [DocumentInfo] {
+        _documentInfos.sorted { (a: DocumentInfo, b: DocumentInfo) -> Bool in
+            let sa = storageData.sortingOrder[a.document.identifier]
+            let sb = storageData.sortingOrder[b.document.identifier]
+            if sa != nil && sb != nil {
+                if sa != sb {
+                    return sa! < sb!
+                }
+            }
+            return Document.Comparator.shared.compare(a: a.document, b: b.document) < 0
+        }
+    }
+
+    private var documentStore: DocumentStore!
+    private var storageData: DocumentModelStorageData!
     
     /**
      * Sets the position of a document.
@@ -163,7 +152,12 @@ public class DocumentModel {
             sortingOrder[di.document.identifier] = index
         }
         storageData = DocumentModelStorageData(sortingOrder: sortingOrder)
-        try! await storageData.save(table: table, partitionId: storagePartition)
+        try await documentStore.getTags().edit { tags in
+            await tags.setByteString(
+                key: self.documentOrderKey,
+                value: ByteString(bytes: Cbor.shared.encode(item: self.storageData.toDataItem()))
+            )
+        }
     }
 
     private func getDocumentInfo(_ document: Document) async -> DocumentInfo {
@@ -203,8 +197,6 @@ public class DocumentModel {
 
 
 fileprivate struct DocumentModelStorageData {
-    private static let keyName = "DocumentModelStorageData"
-    
     var sortingOrder: [String: Int] = [:]
     
     func toDataItem() -> DataItem {
@@ -217,38 +209,6 @@ fileprivate struct DocumentModelStorageData {
             )
         }
         return builder.end()!.build()
-    }
-    
-    func save(table: StorageTable, partitionId: String) async throws {
-        let data = try Cbor.shared.encode(item: toDataItem())
-        
-        try await table.update(
-            key: Self.keyName,
-            data: ByteString(data: data, startIndex: 0, endIndex: data.size),
-            partitionId: partitionId,
-            expiration: nil
-        )
-    }
-    
-    static func load(table: StorageTable, partitionId: String) async throws -> DocumentModelStorageData {
-        // Try to get existing data
-        if let data = try await table.get(key: keyName, partitionId: partitionId) {
-            let dataItem = try Cbor.shared.decode(encodedCbor: data.toByteArray(startIndex: 0, endIndex: data.size))
-            return fromDataItem(dataItem)
-        }
-        
-        // If not found, create new, insert, and return
-        let newData = DocumentModelStorageData()
-        let encodedData = try Cbor.shared.encode(item: newData.toDataItem())
-        
-        try await table.insert(
-            key: keyName,
-            data: ByteString(data: encodedData, startIndex: 0, endIndex: encodedData.size),
-            partitionId: partitionId,
-            expiration: KotlinInstant.companion.DISTANT_FUTURE
-        )
-        
-        return newData
     }
     
     static func fromDataItem(_ dataItem: DataItem) -> DocumentModelStorageData {

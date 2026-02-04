@@ -27,10 +27,12 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.Cbor
 import org.multipaz.credential.Credential
 import org.multipaz.credential.CredentialLoaderBuilder
 import org.multipaz.provisioning.Provisioning
-import kotlin.coroutines.cancellation.CancellationException
+import org.multipaz.storage.NoRecordStorageException
+import org.multipaz.tags.Tags
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -67,7 +69,7 @@ class DocumentStore private constructor(
         documentId: String,
         data: ByteString,
     ) -> AbstractDocumentMetadata)?,
-    private val documentTableSpec: StorageTableSpec = Document.defaultTableSpec
+    private val documentTableSpec: StorageTableSpec = Document.defaultTableSpec,
 ) {
     // Use a cache so the same instance is returned by multiple lookupDocument() calls.
     // Cache is protected by the lock. Once the document is loaded it is never evicted.
@@ -77,6 +79,37 @@ class DocumentStore private constructor(
     init {
         check(!documentTableSpec.supportExpiration)
         check(!documentTableSpec.supportPartitions)
+    }
+
+    private var tags: Tags? = null
+
+    /**
+     * Gets a [Tags] which can be used to storing application-specific data.
+     *
+     * Applications must use collision-resistant keys when using the [Tags] instance.
+     *
+     * @return a [Tags] instance.
+     */
+    suspend fun getTags(): Tags {
+        lock.withLock {
+            if (tags != null) {
+                return tags!!
+            }
+            val table = storage.getTable(documentStoreTableSpec)
+            val encodedTags = table.get(TAGS_KEY)
+            tags = Tags(
+                data = encodedTags?.toByteArray()?.let { Cbor.decode(it) },
+                saveFn = { newData ->
+                    try {
+                        table.update(TAGS_KEY, ByteString(Cbor.encode(newData)))
+                    } catch (_: NoRecordStorageException) {
+                        table.insert(TAGS_KEY, ByteString(Cbor.encode(newData)))
+                    }
+                    null
+                }
+            )
+            return tags!!
+        }
     }
 
     /**
@@ -187,6 +220,7 @@ class DocumentStore private constructor(
      */
     suspend fun deleteDocument(identifier: String) {
         lookupDocument(identifier)?.let { document ->
+            emitOnDocumentDeleted(identifier)
             lock.withLock {
                 document.deleteDocument()
                 documentCache.remove(identifier)
@@ -321,6 +355,13 @@ class DocumentStore private constructor(
 
     companion object {
         private const val TAG = "DocumentStore"
+
+        private val documentStoreTableSpec = StorageTableSpec(
+            name = "DocumentStore",
+            supportPartitions = false,
+            supportExpiration = false,
+        )
+        private const val TAGS_KEY = "tags"
     }
 }
 
