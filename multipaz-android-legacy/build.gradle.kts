@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.androidLibrary)
     id("kotlin-android")
     id("maven-publish")
+    id("org.jetbrains.dokka") version "2.1.0"
 }
 
 val projectVersionCode: Int by rootProject.extra
@@ -92,6 +93,3 @@ publishing {
     }
 }
 
-subprojects {
-	apply(plugin = "org.jetbrains.dokka")
-}

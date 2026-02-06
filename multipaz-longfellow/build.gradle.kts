@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.ksp)
     id("maven-publish")
+    id("org.jetbrains.dokka") version "2.1.0"
 }
 
 val projectVersionCode: Int by rootProject.extra
@@ -193,6 +194,3 @@ tasks.withType<Test>().configureEach {
     }
 }
 
-subprojects {
-	apply(plugin = "org.jetbrains.dokka")
-}

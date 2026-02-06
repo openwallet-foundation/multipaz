@@ -66,6 +66,3 @@ kotlin {
         }
     }
 }
-subprojects {
-	apply(plugin = "org.jetbrains.dokka")
-}

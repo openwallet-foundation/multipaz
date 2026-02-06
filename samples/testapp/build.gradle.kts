@@ -230,6 +230,3 @@ tasks["compileKotlinIosArm64"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinIosSimulatorArm64"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinWasmJs"].dependsOn("kspCommonMainKotlinMetadata")
 
-subprojects {
-	apply(plugin = "org.jetbrains.dokka")
-}

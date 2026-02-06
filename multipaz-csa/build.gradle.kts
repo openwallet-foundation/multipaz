@@ -28,6 +28,3 @@ dependencies {
     testImplementation(libs.kotlin.test)
 }
 
-subprojects {
-	apply(plugin = "org.jetbrains.dokka")
-}

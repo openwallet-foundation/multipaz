@@ -39,6 +39,3 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
 }
 
-subprojects {
-	apply(plugin = "org.jetbrains.dokka")
-}

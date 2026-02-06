@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
     id("maven-publish")
+    id("org.jetbrains.dokka") version "2.1.0"
 }
 
 val projectVersionCode: Int by rootProject.extra

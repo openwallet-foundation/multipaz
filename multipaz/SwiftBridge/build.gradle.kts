@@ -33,6 +33,3 @@ tasks.create<Delete>("clean") {
     delete("$projectDir/build")
 }
 
-subprojects {
-	apply(plugin = "org.jetbrains.dokka")
-}

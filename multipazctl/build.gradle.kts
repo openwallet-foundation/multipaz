@@ -39,6 +39,3 @@ tasks.register("runMultipazCtl", JavaExec::class) {
 ktor {
 }
 
-subprojects {
-	apply(plugin = "org.jetbrains.dokka")
-}
