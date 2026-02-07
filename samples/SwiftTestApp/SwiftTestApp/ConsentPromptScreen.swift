@@ -10,6 +10,7 @@ private enum RequestType: String, CaseIterable {
     case mdlNameAndAddressPartiallyStored = "mDL: Name and address (partially stored)"
     case mdlNameAndAddressAllStored = "mDL: Name and address (all stored)"
     case photoIdMandatory = "PhotoID: Mandatory data elements (two docs)"
+    case openid4vpComplexExampleFromAppendixD = "Complex example from OpenID4VP Appendix D"
     case boardingPassAndMdl = "Boarding pass AND mDL"
     case boardingPassOrMdl = "Boarding pass OR mDL"
 }
@@ -283,7 +284,19 @@ private func calcConsentData(
         domain: "mdoc",
         randomProvider: KotlinRandom.companion
     )
-
+    
+    try! await addCredentialsForOpenID4VPComplexExample(
+        documentStore: documentStore,
+        secureArea: secureArea,
+        signedAt: signedAt,
+        validFrom: validFrom,
+        validUntil: validUntil,
+        dsKey: AsymmetricKey.X509CertifiedExplicit(
+            certChain: X509CertChain(certificates: [dsCert]),
+            privateKey: dsKey,
+            algorithm: Algorithm.esp256
+        ),
+    )
     
     let mdlDocType = DrivingLicense.shared.getDocumentType()
     let photoIdDocType = PhotoID.shared.getDocumentType()
@@ -303,6 +316,86 @@ private func calcConsentData(
         mdlDocType.cannedRequests.first(where: { cr in cr.id == "name-and-address-all-stored" })!.mdocRequest!.toDcqlString()
     case .photoIdMandatory:
         photoIdDocType.cannedRequests.first(where: { cr in cr.id == "mandatory" })!.mdocRequest!.toDcqlString()
+    case .openid4vpComplexExampleFromAppendixD:
+        """
+            {
+              "credentials": [
+                {
+                  "id": "pid",
+                  "format": "dc+sd-jwt",
+                  "meta": {
+                    "vct_values": ["https://credentials.example.com/identity_credential"]
+                  },
+                  "claims": [
+                    {"path": ["given_name"]},
+                    {"path": ["family_name"]},
+                    {"path": ["address", "street_address"]}
+                  ]
+                },
+                {
+                  "id": "other_pid",
+                  "format": "dc+sd-jwt",
+                  "meta": {
+                    "vct_values": ["https://othercredentials.example/pid"]
+                  },
+                  "claims": [
+                    {"path": ["given_name"]},
+                    {"path": ["family_name"]},
+                    {"path": ["address", "street_address"]}
+                  ]
+                },
+                {
+                  "id": "pid_reduced_cred_1",
+                  "format": "dc+sd-jwt",
+                  "meta": {
+                    "vct_values": ["https://credentials.example.com/reduced_identity_credential"]
+                  },
+                  "claims": [
+                    {"path": ["family_name"]},
+                    {"path": ["given_name"]}
+                  ]
+                },
+                {
+                  "id": "pid_reduced_cred_2",
+                  "format": "dc+sd-jwt",
+                  "meta": {
+                    "vct_values": ["https://cred.example/residence_credential"]
+                  },
+                  "claims": [
+                    {"path": ["postal_code"]},
+                    {"path": ["locality"]},
+                    {"path": ["region"]}
+                  ]
+                },
+                {
+                  "id": "nice_to_have",
+                  "format": "dc+sd-jwt",
+                  "meta": {
+                    "vct_values": ["https://company.example/company_rewards"]
+                  },
+                  "claims": [
+                    {"path": ["rewards_number"]}
+                  ]
+                }
+              ],
+              "credential_sets": [
+                {
+                  "options": [
+                    [ "pid" ],
+                    [ "other_pid" ],
+                    [ "pid_reduced_cred_1", "pid_reduced_cred_2" ]
+                  ]
+                },
+                {
+                  "required": false,
+                  "options": [
+                    [ "nice_to_have" ]
+                  ]
+                }
+              ]
+            }
+
+        """
     case .boardingPassAndMdl:
         """
             {
@@ -488,10 +581,11 @@ private func calcConsentData(
                 onDocumentsInFocus: { documents in onDocumentsInFocus(documents) }
             )
         },
-        domainMdocSignature: "mdoc"
+        domainMdocSignature: "mdoc",
+        domainKeyBoundSdJwt: "sdjwt"
     )
 
-    let query = DcqlQuery.companion.fromJsonString(dcql: dcqlString)
+    let query = try! DcqlQuery.companion.fromJsonString(dcql: dcqlString)
     let presentmentData = try! await query.execute(presentmentSource: source, keyAgreementPossible: [])
     
     return ConsentData(
@@ -508,4 +602,292 @@ private func getIsRunningOnSimulator() -> Bool {
 #else
     return false
 #endif
+}
+
+private func addCredentialsForOpenID4VPComplexExample(
+    documentStore: DocumentStore,
+    secureArea: SecureArea,
+    signedAt: Date,
+    validFrom: Date,
+    validUntil: Date,
+    dsKey: AsymmetricKey
+) async throws {
+    try await addCredPid(
+        documentStore: documentStore,
+        secureArea: secureArea,
+        signedAt: signedAt,
+        validFrom: validFrom,
+        validUntil: validUntil,
+        dsKey: dsKey
+    )
+    try await addCredPidMax(
+        documentStore: documentStore,
+        secureArea: secureArea,
+        signedAt: signedAt,
+        validFrom: validFrom,
+        validUntil: validUntil,
+        dsKey: dsKey
+    )
+    try await addCredOtherPid(
+        documentStore: documentStore,
+        secureArea: secureArea,
+        signedAt: signedAt,
+        validFrom: validFrom,
+        validUntil: validUntil,
+        dsKey: dsKey
+    )
+    try await addCredPidReduced1(
+        documentStore: documentStore,
+        secureArea: secureArea,
+        signedAt: signedAt,
+        validFrom: validFrom,
+        validUntil: validUntil,
+        dsKey: dsKey
+    )
+    try await addCredPidReduced2(
+        documentStore: documentStore,
+        secureArea: secureArea,
+        signedAt: signedAt,
+        validFrom: validFrom,
+        validUntil: validUntil,
+        dsKey: dsKey
+    )
+    try await addCredCompanyRewards(
+        documentStore: documentStore,
+        secureArea: secureArea,
+        signedAt: signedAt,
+        validFrom: validFrom,
+        validUntil: validUntil,
+        dsKey: dsKey
+    )
+}
+
+private func addCredPid(
+    documentStore: DocumentStore,
+    secureArea: SecureArea,
+    signedAt: Date,
+    validFrom: Date,
+    validUntil: Date,
+    dsKey: AsymmetricKey
+) async throws {
+    let claims: [String: Any] = [
+        "given_name": "Erika",
+        "family_name": "Mustermann",
+        "address": [
+            "street_address": "Sample Street 123"
+        ]
+    ]
+    
+    let _ = try await documentStore.provisionSdJwtVc(
+        displayName: "my-pid",
+        vct: "https://credentials.example.com/identity_credential",
+        claims: claims,
+        secureArea: secureArea,
+        signedAt: signedAt,
+        validFrom: validFrom,
+        validUntil: validUntil,
+        dsKey: dsKey
+    )
+}
+
+private func addCredPidMax(
+    documentStore: DocumentStore,
+    secureArea: SecureArea,
+    signedAt: Date,
+    validFrom: Date,
+    validUntil: Date,
+    dsKey: AsymmetricKey
+) async throws {
+    let claims: [String: Any] = [
+        "given_name": "Max",
+        "family_name": "Mustermann",
+        "address": [
+            "street_address": "Sample Street 456"
+        ]
+    ]
+    
+    let _ = try await documentStore.provisionSdJwtVc(
+        displayName: "my-pid-max",
+        vct: "https://credentials.example.com/identity_credential",
+        claims: claims,
+        secureArea: secureArea,
+        signedAt: signedAt,
+        validFrom: validFrom,
+        validUntil: validUntil,
+        dsKey: dsKey
+    )
+}
+
+private func addCredOtherPid(
+    documentStore: DocumentStore,
+    secureArea: SecureArea,
+    signedAt: Date,
+    validFrom: Date,
+    validUntil: Date,
+    dsKey: AsymmetricKey
+) async throws {
+    let claims: [String: Any] = [
+        "given_name": "Erika",
+        "family_name": "Mustermann",
+        "address": [
+            "street_address": "Sample Street 123"
+        ]
+    ]
+    
+    let _ = try await documentStore.provisionSdJwtVc(
+        displayName: "my-other-pid",
+        vct: "https://othercredentials.example/pid",
+        claims: claims,
+        secureArea: secureArea,
+        signedAt: signedAt,
+        validFrom: validFrom,
+        validUntil: validUntil,
+        dsKey: dsKey
+    )
+}
+
+private func addCredPidReduced1(
+    documentStore: DocumentStore,
+    secureArea: SecureArea,
+    signedAt: Date,
+    validFrom: Date,
+    validUntil: Date,
+    dsKey: AsymmetricKey
+) async throws {
+    let claims: [String: Any] = [
+        "given_name": "Erika",
+        "family_name": "Mustermann"
+    ]
+    
+    let _ = try await documentStore.provisionSdJwtVc(
+        displayName: "my-pid-reduced1",
+        vct: "https://credentials.example.com/reduced_identity_credential",
+        claims: claims,
+        secureArea: secureArea,
+        signedAt: signedAt,
+        validFrom: validFrom,
+        validUntil: validUntil,
+        dsKey: dsKey
+    )
+}
+
+private func addCredPidReduced2(
+    documentStore: DocumentStore,
+    secureArea: SecureArea,
+    signedAt: Date,
+    validFrom: Date,
+    validUntil: Date,
+    dsKey: AsymmetricKey
+) async throws {
+    let claims: [String: Any] = [
+        "postal_code": 90210,
+        "locality": "Beverly Hills",
+        "region": "Los Angeles Basin"
+    ]
+    
+    let _ = try await documentStore.provisionSdJwtVc(
+        displayName: "my-pid-reduced2",
+        vct: "https://cred.example/residence_credential",
+        claims: claims,
+        secureArea: secureArea,
+        signedAt: signedAt,
+        validFrom: validFrom,
+        validUntil: validUntil,
+        dsKey: dsKey
+    )
+}
+
+private func addCredCompanyRewards(
+    documentStore: DocumentStore,
+    secureArea: SecureArea,
+    signedAt: Date,
+    validFrom: Date,
+    validUntil: Date,
+    dsKey: AsymmetricKey
+) async throws {
+    let claims: [String: Any] = [
+        "rewards_number": 24601
+    ]
+    
+    let _ = try await documentStore.provisionSdJwtVc(
+        displayName: "my-reward-card",
+        vct: "https://company.example/company_rewards",
+        claims: claims,
+        secureArea: secureArea,
+        signedAt: signedAt,
+        validFrom: validFrom,
+        validUntil: validUntil,
+        dsKey: dsKey
+    )
+}
+
+// MARK: - DocumentStore Extension
+
+extension DocumentStore {
+    
+    fileprivate func provisionSdJwtVc(
+        displayName: String,
+        vct: String,
+        claims: [String: Any],
+        secureArea: SecureArea,
+        signedAt: Date,
+        validFrom: Date,
+        validUntil: Date,
+        dsKey: AsymmetricKey
+    ) async throws -> Document {
+        
+        let document = try await self.createDocument(
+            displayName: displayName,
+            typeDisplayName: vct,
+            cardArt: nil,
+            issuerLogo: nil,
+            authorizationData: nil,
+            created: Date.now.toKotlinInstant(),
+            metadata: nil
+        )
+        
+        let credential = try await KeyBoundSdJwtVcCredential.Companion.shared.create(
+            document: document,
+            asReplacementForIdentifier: nil,
+            domain: "sdjwt",
+            secureArea: secureArea,
+            vct: vct,
+            createKeySettings: SoftwareCreateKeySettings.Builder().build()
+        )
+
+        let nonSdClaims: [String: Any] = [
+            "iss": "https://example-issuer.com",
+            "vct": credential.vct,
+            "iat": signedAt.toKotlinInstant().epochSeconds,
+            "nbf": validFrom.toKotlinInstant().epochSeconds,
+            "exp": validUntil.toKotlinInstant().epochSeconds
+        ]
+        
+        let keyInfo = try await credential.secureArea.getKeyInfo(alias: credential.alias)
+        let sdJwt = try await SdJwt.Companion.shared.create(
+            issuerKey: dsKey,
+            kbKey: keyInfo.publicKey,
+            claims: String(
+                data: try JSONSerialization.data(withJSONObject: claims, options: []),
+                encoding: .utf8
+            )!,
+            nonSdClaims: String(
+                data: try JSONSerialization.data(withJSONObject: nonSdClaims, options: []),
+                encoding: .utf8
+            )!,
+            digestAlgorithm: Algorithm.sha256,
+            random: KotlinRandom.companion,
+            saltSizeNumBits: 128,
+            creationTime: KotlinInstant.companion.DISTANT_PAST,
+            expiresIn: nil
+        )
+        
+        try await credential.certify(
+            issuerProvidedAuthenticationData:
+                ByteStringBuilder(initialCapacity: 0)
+                .appendString(string: sdJwt.compactSerialization)
+                .toByteString()
+        )
+        return document
+    }
 }

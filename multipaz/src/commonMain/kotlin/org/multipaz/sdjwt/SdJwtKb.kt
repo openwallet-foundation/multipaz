@@ -15,8 +15,7 @@ import org.multipaz.util.toBase64Url
 
 
 /**
- * A SD-JWT+KB according to
- * [draft-ietf-oauth-selective-disclosure-jwt](https://datatracker.ietf.org/doc/draft-ietf-oauth-selective-disclosure-jwt/).
+ * A SD-JWT+KB according to [RFC 9901](https://datatracker.ietf.org/doc/rfc9901/).
  *
  * When a [SdJwtKb] instance is initialized, cursory checks on the provided string with compact serialization
  * are performed. Full verification of the SD-JWT+KB can be done using the [verify] method.

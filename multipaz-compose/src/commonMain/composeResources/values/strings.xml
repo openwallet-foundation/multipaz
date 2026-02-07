@@ -24,7 +24,7 @@
     <string name="credential_presentment_verifier_icon_description">Verifier icon</string>
     <string name="credential_presentment_data_element_icon_description">Data element icon</string>
     <string name="credential_presentment_warning_icon_description">Warning icon</string>
-    <string name="credential_presentment_choose_an_option">Choose an option</string>
+    <string name="credential_presentment_select_document">Select document</string>
     <string name="credential_presentment_requester_information">Requester information</string>
 
     <!-- CertificateViewer -->

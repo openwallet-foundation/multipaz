@@ -66,6 +66,7 @@ struct RequestedDocumentSection : View {
     let retainedClaims: [Claim]
     let notRetainedClaims: [Claim]
     let showOptionsButton: Bool
+    let onOptionsTapped: () -> Void
 
     var body: some View {
         HStack(alignment: .center) {
@@ -89,8 +90,7 @@ struct RequestedDocumentSection : View {
             if showOptionsButton {
                 Spacer()
                 Button(action: {
-                    // TODO: go to screen to allow user to select document
-                    print("Chevron tapped")
+                    onOptionsTapped()
                 }) {
                     Image(systemName: "chevron.down.circle")
                         .imageScale(.large)
@@ -206,25 +206,43 @@ struct CombinationSection: View {
     let requester: Requester
     let trustMetadata: TrustMetadata?
     fileprivate let combination: Combination
+    let matchSelections: [Int]
+    let onShowOptions: (Int) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             
             ForEach(0..<combination.elements.count, id: \.self) { idx in
                 let element = combination.elements[idx]
-                // TODO: add ability to select match if more than one...
-                let match = element.matches.first!
-
+                let matchIndex = idx < matchSelections.count ? matchSelections[idx] : 0
+                let match = element.matches[matchIndex]
+                
                 let retainedClaims = Array(match.claims.filter( {
-                    ($0.key as! MdocRequestedClaim).intentToRetain == true
+                    if $0 is MdocClaim {
+                        ($0.key as! MdocRequestedClaim).intentToRetain == true
+                    } else {
+                        false
+                    }
                 }).values).sorted(by: { a, b in
-                    (a as! MdocClaim).dataElementName < (b as! MdocClaim).dataElementName
+                    if a is MdocClaim {
+                        (a as! MdocClaim).dataElementName < (b as! MdocClaim).dataElementName
+                    } else {
+                        (a as! JsonClaim).displayName < (b as! JsonClaim).displayName
+                    }
                 })
 
                 let notRetainedClaims = Array(match.claims.filter( {
-                    ($0.key as! MdocRequestedClaim).intentToRetain == false
+                    if $0 is MdocClaim {
+                        ($0.key as! MdocRequestedClaim).intentToRetain == false
+                    } else {
+                        true
+                    }
                 }).values).sorted(by: { a, b in
-                    (a as! MdocClaim).dataElementName < (b as! MdocClaim).dataElementName
+                    if a is MdocClaim {
+                        (a as! MdocClaim).dataElementName < (b as! MdocClaim).dataElementName
+                    } else {
+                        (a as! JsonClaim).displayName < (b as! JsonClaim).displayName
+                    }
                 })
 
                 RequestedDocumentSection(
@@ -232,7 +250,8 @@ struct CombinationSection: View {
                     document: match.credential.document,
                     retainedClaims: retainedClaims,
                     notRetainedClaims: notRetainedClaims,
-                    showOptionsButton: element.matches.count > 1
+                    showOptionsButton: element.matches.count > 1,
+                    onOptionsTapped: { onShowOptions(idx) }
                 )
             }
 
@@ -361,7 +380,8 @@ private struct ShowRequesterInfo: View {
     let maxHeight: CGFloat
     let requester: Requester
     @State private var currentPage: Int = 0
-    @State private var tabHeight: CGFloat = 300
+    // Store heights for each page index
+    @State private var pageHeights: [Int: CGFloat] = [:]
 
     var body: some View {
         VStack {
@@ -373,11 +393,15 @@ private struct ShowRequesterInfo: View {
                         ForEach(0..<certificates.count, id: \.self) { index in
                             X509CertViewer(certificate: certificates[index])
                                 .tag(index)
-                                .readHeight(to: $tabHeight)
+                                .measurePageHeight(index)
                         }
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
-                    .frame(height: tabHeight)
+                    // Dynamically size based on the current page's measured height
+                    .frame(height: pageHeights[currentPage] ?? 300)
+                    .onPreferenceChange(PageHeightsKey.self) { heights in
+                        self.pageHeights = heights
+                    }
                 }
             } footer: { isAtBottom, scrollDown in
                 let certificates = requester.certChain!.certificates
@@ -404,27 +428,36 @@ private struct ShowRequesterInfo: View {
 }
 
 extension View {
-    /// Reads the height of a view and pushes it to a Binding.
-    fileprivate func readHeight(to binding: Binding<CGFloat>) -> some View {
+    /// Applies the standard card styling used in the consent flow
+    fileprivate func cardStyle() -> some View {
+        self
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                    .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+            )
+    }
+    
+    /// Measures the height of a page and tags it with the index using PreferenceKey
+    fileprivate func measurePageHeight(_ index: Int) -> some View {
         background(
             GeometryReader { proxy in
                 Color.clear
-                    .preference(key: TabLayerHeightKey.self, value: proxy.size.height)
+                    .preference(
+                        key: PageHeightsKey.self,
+                        value: [index: proxy.size.height]
+                    )
             }
         )
-        .onPreferenceChange(TabLayerHeightKey.self) { height in
-            // Only update if the change is significant to avoid layout loops
-            if abs(binding.wrappedValue - height) > 1 {
-                binding.wrappedValue = height
-            }
-        }
     }
 }
 
-private struct TabLayerHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
+/// A PreferenceKey that aggregates heights for multiple pages in a dictionary.
+private struct PageHeightsKey: PreferenceKey {
+    static let defaultValue: [Int: CGFloat] = [:]
+    static func reduce(value: inout [Int: CGFloat], nextValue: () -> [Int: CGFloat]) {
+        value.merge(nextValue()) { (_, new) in new }
     }
 }
 
@@ -439,6 +472,24 @@ private struct ConsentMain: View {
     let onConfirm: (_: CredentialPresentmentSelection) -> Void
     let onCancel: () -> Void
 
+    @State private var isFlipped = false
+    @State private var activeElementIndex = 0
+    @State private var currentPage: Int = 0
+    
+    // Tracks selections: [CombinationIndex][ElementIndex] -> MatchIndex
+    @State private var allMatchSelections: [[Int]] = []
+    
+    // Store heights for each page index
+    @State private var pageHeights: [Int: CGFloat] = [:]
+
+    private func ensureSelectionsInitialized() {
+        if allMatchSelections.isEmpty {
+            allMatchSelections = combinations.map { combination in
+                Array(repeating: 0, count: combination.elements.count)
+            }
+        }
+    }
+
     var body: some View {
         SmartSheet(maxHeight: maxHeight) {
             RelyingPartySection(
@@ -447,56 +498,235 @@ private struct ConsentMain: View {
                 onRequesterClicked: onRequesterClicked
             )
             .padding()
+            .onAppear { ensureSelectionsInitialized() }
         } content: {
             VStack(spacing: 10) {
-                VStack {
-                    let combination = combinations.first!
-                    CombinationSection(
-                        rpName: rpName,
-                        requester: requester,
-                        trustMetadata: trustMetadata,
-                        combination: combination
-                    )
-                }
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color(uiColor: .secondarySystemGroupedBackground))
-                        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
-                )
-                .padding(.vertical, 20)
-            }
-            .padding(.horizontal)
-        } footer: { isAtBottom, scrollDown in
-            HStack(spacing: 10) {
-                Button(action : { onCancel() }) {
-                    Text("Cancel")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
-                
-                let buttonText = if (isAtBottom) {
-                    "Share"
-                } else {
-                    "More"
-                }
-                Button(action : {
-                    if (!isAtBottom) {
-                        scrollDown()
-                    } else {
-                        onConfirm(credentialPresentmentData.select(preselectedDocuments: []))
+                if !allMatchSelections.isEmpty {
+                    TabView(selection: $currentPage) {
+                        ForEach(0..<combinations.count, id: \.self) { index in
+                            let combination = combinations[index]
+                            let currentSelections = allMatchSelections[index]
+                            
+                            FlipView(
+                                isFlipped: isFlipped,
+                                front: {
+                                    CombinationSection(
+                                        rpName: rpName,
+                                        requester: requester,
+                                        trustMetadata: trustMetadata,
+                                        combination: combination,
+                                        matchSelections: currentSelections,
+                                        onShowOptions: { elementIdx in
+                                            activeElementIndex = elementIdx
+                                            withAnimation {
+                                                isFlipped = true
+                                            }
+                                        }
+                                    )
+                                    .cardStyle()
+                                },
+                                back: {
+                                    DocumentSelectionView(
+                                        combination: combination,
+                                        elementIndex: activeElementIndex,
+                                        initialSelection: currentSelections.indices.contains(activeElementIndex) ? currentSelections[activeElementIndex] : 0,
+                                        onBack: {
+                                            withAnimation {
+                                                isFlipped = false
+                                            }
+                                        },
+                                        onSelect: { newIndex in
+                                            allMatchSelections[index][activeElementIndex] = newIndex
+                                            withAnimation {
+                                                isFlipped = false
+                                            }
+                                        }
+                                    )
+                                    .cardStyle()
+                                }
+                            )
+                            .padding(.vertical, 20)
+                            .padding(.horizontal)
+                            .tag(index)
+                            .measurePageHeight(index)
+                        }
                     }
-                }) {
-                    Text(buttonText)
-                        .frame(maxWidth: .infinity)
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    // Dynamically size the TabView to the height of the CURRENT page.
+                    .frame(height: pageHeights[currentPage] ?? 300)
+                    .onPreferenceChange(PageHeightsKey.self) { heights in
+                        self.pageHeights = heights
+                    }
+                } else {
+                     // Loading state or empty
+                     ProgressView()
+                        .frame(height: 200)
                 }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
             }
-            .padding()
+        } footer: { isAtBottom, scrollDown in
+            VStack(spacing: 0) {
+                // Pager Indicators
+                if !isFlipped && combinations.count > 1 {
+                    HStack(spacing: 4) {
+                        ForEach(0..<combinations.count, id: \.self) { index in
+                            Circle()
+                                .fill(
+                                    index == currentPage
+                                    ? Color.blue
+                                    : Color.primary.opacity(0.2)
+                                )
+                                .frame(width: 8, height: 8)
+                        }
+                    }
+                    .padding(.bottom, 12)
+                }
+                
+                if !isFlipped {
+                    HStack(spacing: 10) {
+                        Button(action : { onCancel() }) {
+                            Text("Cancel")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.large)
+                        
+                        let buttonText = if (isAtBottom) {
+                            "Share"
+                        } else {
+                            "More"
+                        }
+                        Button(action : {
+                            if (!isAtBottom) {
+                                scrollDown()
+                            } else {
+                                if combinations.indices.contains(currentPage), allMatchSelections.indices.contains(currentPage) {
+                                    let combination = combinations[currentPage]
+                                    let selections = allMatchSelections[currentPage]
+                                    
+                                    var selectedMatches: [CredentialPresentmentSetOptionMemberMatch] = []
+                                    for (idx, element) in combination.elements.enumerated() {
+                                        let matchIdx = idx < selections.count ? selections[idx] : 0
+                                        selectedMatches.append(element.matches[matchIdx])
+                                    }
+                                    onConfirm(CredentialPresentmentSelection(matches: selectedMatches))
+                                }
+                            }
+                        }) {
+                            Text(buttonText)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.large)
+                    }
+                    .padding()
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+        }
+    }
+}
+
+private struct FlipView<Front: View, Back: View>: View {
+    var isFlipped: Bool
+    var front: () -> Front
+    var back: () -> Back
+    
+    init(isFlipped: Bool, @ViewBuilder front: @escaping () -> Front, @ViewBuilder back: @escaping () -> Back) {
+        self.isFlipped = isFlipped
+        self.front = front
+        self.back = back
+    }
+    
+    var body: some View {
+        ZStack {
+            front()
+                .opacity(isFlipped ? 0 : 1)
+            back()
+                .opacity(isFlipped ? 1 : 0)
+                .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+        }
+        .rotation3DEffect(.degrees(isFlipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
+    }
+}
+
+private struct DocumentSelectionView: View {
+    let combination: Combination
+    let elementIndex: Int
+    let initialSelection: Int
+    let onBack: () -> Void
+    let onSelect: (Int) -> Void
+
+    @State private var selectedIndex: Int
+    
+    init(combination: Combination, elementIndex: Int, initialSelection: Int, onBack: @escaping () -> Void, onSelect: @escaping (Int) -> Void) {
+        self.combination = combination
+        self.elementIndex = elementIndex
+        self.initialSelection = initialSelection
+        self.onBack = onBack
+        self.onSelect = onSelect
+        _selectedIndex = State(initialValue: initialSelection)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            ZStack {
+                HStack {
+                    Button(action: onBack) {
+                        Image(systemName: "arrow.backward")
+                            .imageScale(.large)
+                    }
+                    Spacer()
+                }
+                Text("Select document")
+                    .font(.headline)
+            }
+            .padding(.bottom, 10)
+
+            Divider()
+
+            // List of matches
+            if elementIndex < combination.elements.count {
+                let element = combination.elements[elementIndex]
+                ForEach(0..<element.matches.count, id: \.self) { idx in
+                    let match = element.matches[idx]
+                    VStack {
+                        HStack {
+                            Image(uiImage: match.credential.document.renderCardArt())
+                                .resizable()
+                                .scaledToFit()
+                                .frame(height: 40)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(match.credential.document.displayName ?? "Unknown Document")
+                                    .font(.body)
+                                    .fontWeight(.medium)
+                                if let type = match.credential.document.typeDisplayName {
+                                    Text(type)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            
+                            Image(systemName: selectedIndex == idx ? "circle.inset.filled" : "circle")
+                                .imageScale(.large)
+                                .foregroundStyle(selectedIndex == idx ? .blue : .gray)
+                        }
+                        .padding(.vertical, 8)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedIndex = idx
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                onSelect(idx)
+                            }
+                        }
+                        Divider()
+                    }
+                }
+            }
         }
     }
 }

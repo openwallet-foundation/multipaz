@@ -17,6 +17,7 @@ import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.util.Logger
+import kotlin.coroutines.cancellation.CancellationException
 
 private data class QueryResponse(
     val credentialQuery: DcqlCredentialQuery,
@@ -64,7 +65,8 @@ data class DcqlQuery(
      * If successful, this returns a [DcqlResponse] object which contains a [DcqlResponse] which is also
      * a [org.multipaz.presentment.CredentialPresentmentData]. The intent is that the application can show
      * an user interface for the user to select which combination of credentials to return, see
-     * [CredentialPresentmentModalBottomSheet] in the `multipaz-compose` library for an example.
+     * [Consent] composable in `multipaz-compose` and [Consent] view in `multipaz-swift` for examples
+     * of how to do this.
      *
      * If the query cannot be satisfied, [DcqlCredentialQueryException] is thrown.
      *
@@ -74,6 +76,7 @@ data class DcqlQuery(
      * @return the resulting [DcqlResponse] if the query was successful.
      * @throws [DcqlCredentialQueryException] if it's not possible satisfy the query.
      */
+    @Throws(DcqlCredentialQueryException::class, CancellationException::class)
     suspend fun execute(
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve> = emptyList()
@@ -294,6 +297,16 @@ data class DcqlQuery(
     companion object {
         private const val TAG = "DcqlQuery"
 
+        /**
+         * Parses a DCQL according to OpenID4VP.
+         *
+         * Reference: OpenID4VP 1.0 Section 6
+         *
+         * @param dcql a [JsonObject] with the DCQL.
+         * @return a [DcqlQuery] object
+         * @throws IllegalArgumentException if the given DCQL isn't well-formed.
+         */
+        @Throws(IllegalArgumentException::class)
         fun fromJsonString(dcql: String): DcqlQuery = fromJson(Json.decodeFromString<JsonObject>(dcql))
 
         /**
@@ -305,6 +318,7 @@ data class DcqlQuery(
          * @return a [DcqlQuery] object
          * @throws IllegalArgumentException if the given DCQL isn't well-formed.
          */
+        @Throws(IllegalArgumentException::class)
         fun fromJson(dcql: JsonObject): DcqlQuery {
             val dcqlCredentialQueries = mutableListOf<DcqlCredentialQuery>()
             val dcqlCredentialSetQueries = mutableListOf<DcqlCredentialSetQuery>()

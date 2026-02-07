@@ -44,8 +44,7 @@ import kotlin.time.Duration
 private const val TAG = "SdJwt"
 
 /**
- * A SD-JWT according to
- * [draft-ietf-oauth-selective-disclosure-jwt](https://datatracker.ietf.org/doc/draft-ietf-oauth-selective-disclosure-jwt/).
+ * A SD-JWT according to [RFC 9901](https://datatracker.ietf.org/doc/rfc9901/).
  *
  * When a [SdJwt] instance is initialized, cursory checks on the provided string with the compact serialization are
  * performed. Full verification of the SD-JWT can be performed using the [verify] method which also returns
@@ -368,6 +367,8 @@ class SdJwt private constructor(
          * This implementation uses [DisclosureMetadata] in the "_sd" claim of each nested
          * JsonObject in the [claims] parameter to describe which claims to disclose.
          *
+         * Note: this variant with [String] instead of [JsonObject] only exists for interoperability with Swift.
+         *
          * @param issuerKey the key to sign the issuerSigned JWT with. If this is a [AsymmetricKey.X509Certified]
          *   the certificate chain will be included in the `x5c` claim and always be disclosed.
          * @param kbKey if set, a `cnf` claim with this public key will be included in the Issuer-signed JWT.
@@ -375,6 +376,46 @@ class SdJwt private constructor(
          * @param digestAlgorithm the hash algorithm to use, e.g. [Algorithm.SHA256].
          * @param random the [Random] to use to generate salts.
          * @param saltSizeNumBits number of bits to use for each salt.
+         * @param creationTime the time the SD-JWT was created, pass [Instant.DISTANT_PAST] to not set `iat` claim.
+         * @param expiresIn the duration in which the SD-JWT expire or `null`.
+         */
+        suspend fun createFromMetadata(
+            issuerKey: AsymmetricKey,
+            kbKey: EcPublicKey?,
+            claims: String,
+            digestAlgorithm: Algorithm = Algorithm.SHA256,
+            random: Random = Random.Default,
+            saltSizeNumBits: Int = 128,
+            creationTime: Instant = Instant.DISTANT_PAST,
+            expiresIn: Duration? = null
+        ): SdJwt {
+            return createFromMetadata(
+                issuerKey = issuerKey,
+                kbKey = kbKey,
+                claims = Json.decodeFromString<JsonObject>(claims),
+                digestAlgorithm = digestAlgorithm,
+                random = random,
+                saltSizeNumBits = saltSizeNumBits,
+                creationTime = creationTime,
+                expiresIn = expiresIn
+            )
+        }
+
+        /**
+         * Creates a SD-JWT.
+         *
+         * This implementation uses [DisclosureMetadata] in the "_sd" claim of each nested
+         * JsonObject in the [claims] parameter to describe which claims to disclose.
+         *
+         * @param issuerKey the key to sign the issuerSigned JWT with. If this is a [AsymmetricKey.X509Certified]
+         *   the certificate chain will be included in the `x5c` claim and always be disclosed.
+         * @param kbKey if set, a `cnf` claim with this public key will be included in the Issuer-signed JWT.
+         * @param claims the object with claims that can be selectively disclosed.
+         * @param digestAlgorithm the hash algorithm to use, e.g. [Algorithm.SHA256].
+         * @param random the [Random] to use to generate salts.
+         * @param saltSizeNumBits number of bits to use for each salt.
+         * @param creationTime the time the SD-JWT was created, pass [Instant.DISTANT_PAST] to not set `iat` claim.
+         * @param expiresIn the duration in which the SD-JWT expire or `null`.
          */
         suspend fun createFromMetadata(
             issuerKey: AsymmetricKey,
@@ -383,7 +424,7 @@ class SdJwt private constructor(
             digestAlgorithm: Algorithm = Algorithm.SHA256,
             random: Random = Random.Default,
             saltSizeNumBits: Int = 128,
-            creationTime: Instant = Instant.DISTANT_PAST,  // TODO: switch to System.Clock.now()?
+            creationTime: Instant = Instant.DISTANT_PAST,
             expiresIn: Duration? = null
         ): SdJwt {
             require(claims["iss"] != null) { "Must include `iss`" }
@@ -509,6 +550,8 @@ class SdJwt private constructor(
          *
          * This implementation uses recursive disclosures for all claims in the [claims] parameter.
          *
+         * Note: this variant with [String] instead of [JsonObject] only exists for interoperability with Swift.
+         *
          * @param issuerKey the key to sign the issuerSigned JWT with. If this is a [AsymmetricKey.X509Certified]
          *   the certificate chain will be included in the `x5c` claim and always be disclosed.
          * @param kbKey if set, a `cnf` claim with this public key will be included in the Issuer-signed JWT.
@@ -518,6 +561,49 @@ class SdJwt private constructor(
          * @param digestAlgorithm the hash algorithm to use, e.g. [Algorithm.SHA256].
          * @param random the [Random] to use to generate salts.
          * @param saltSizeNumBits number of bits to use for each salt.
+         * @param creationTime the time the SD-JWT was created, pass [Instant.DISTANT_PAST] to not set `iat` claim.
+         * @param expiresIn the duration in which the SD-JWT expire or `null`.
+         */
+        suspend fun create(
+            issuerKey: AsymmetricKey,
+            kbKey: EcPublicKey?,
+            claims: String,
+            nonSdClaims: String,
+            digestAlgorithm: Algorithm = Algorithm.SHA256,
+            random: Random = Random.Default,
+            saltSizeNumBits: Int = 128,
+            creationTime: Instant = Instant.DISTANT_PAST,
+            expiresIn: Duration? = null
+        ): SdJwt {
+            return create(
+                issuerKey = issuerKey,
+                kbKey = kbKey,
+                claims = Json.decodeFromString<JsonObject>(claims),
+                nonSdClaims = Json.decodeFromString<JsonObject>(nonSdClaims),
+                digestAlgorithm = digestAlgorithm,
+                random = random,
+                saltSizeNumBits = saltSizeNumBits,
+                creationTime = creationTime,
+                expiresIn = expiresIn
+            )
+        }
+
+        /**
+         * Creates a SD-JWT.
+         *
+         * This implementation uses recursive disclosures for all claims in the [claims] parameter.
+         *
+         * @param issuerKey the key to sign the issuerSigned JWT with. If this is a [AsymmetricKey.X509Certified]
+         *   the certificate chain will be included in the `x5c` claim and always be disclosed.
+         * @param kbKey if set, a `cnf` claim with this public key will be included in the Issuer-signed JWT.
+         * @param claims the object with claims that can be selectively disclosed.
+         * @param nonSdClaims claims to include in the Issuer-signed JWT which are always disclosed. This must at least
+         *   include the `iss` claim and may include more such as `vct`, `sub`, `iat`, `nbf`, `exp`.
+         * @param digestAlgorithm the hash algorithm to use, e.g. [Algorithm.SHA256].
+         * @param random the [Random] to use to generate salts.
+         * @param saltSizeNumBits number of bits to use for each salt.
+         * @param creationTime the time the SD-JWT was created, pass [Instant.DISTANT_PAST] to not set `iat` claim.
+         * @param expiresIn the duration in which the SD-JWT expire or `null`.
          */
         suspend fun create(
             issuerKey: AsymmetricKey,
@@ -527,7 +613,7 @@ class SdJwt private constructor(
             digestAlgorithm: Algorithm = Algorithm.SHA256,
             random: Random = Random.Default,
             saltSizeNumBits: Int = 128,
-            creationTime: Instant = Instant.DISTANT_PAST,  // TODO: switch to System.Clock.now()?
+            creationTime: Instant = Instant.DISTANT_PAST,
             expiresIn: Duration? = null
         ): SdJwt {
             require(nonSdClaims["iss"] != null) { "Must include `iss` claim in nonSdClaims" }

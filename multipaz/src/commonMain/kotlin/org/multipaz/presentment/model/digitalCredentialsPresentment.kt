@@ -34,6 +34,8 @@ private const val TAG = "digitalCredentialsPresentment"
 /**
  * Present credentials according to the [W3C Digital Credentials API](https://www.w3.org/TR/digital-credentials/).
  *
+ * Note: this variant with [String] instead of [JsonObject] only exists for interoperability with Swift.
+ *
  * @param protocol the `protocol` field in the [DigitalCredentialGetRequest](https://www.w3.org/TR/digital-credentials/#the-digitalcredentialgetrequest-dictionary) dictionary.
  * @param data a string with JSON from the `data` field in the [DigitalCredentialGetRequest](https://www.w3.org/TR/digital-credentials/#the-digitalcredentialgetrequest-dictionary) dictionary.
  * @param appId the id of the application making the request, if available, for example `com.example.app` on Android or `<teamId>.<bundleId>` on iOS.

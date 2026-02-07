@@ -1,7 +1,15 @@
 package org.multipaz.compose.presentment
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -33,11 +41,13 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -56,6 +66,7 @@ import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.decodeToImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.AnnotatedString
@@ -74,6 +85,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import coil3.ImageLoader
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.claim.Claim
@@ -90,7 +102,7 @@ import org.multipaz.multipaz_compose.generated.resources.Res
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_button_cancel
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_button_more
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_button_share
-import org.multipaz.multipaz_compose.generated.resources.credential_presentment_choose_an_option
+import org.multipaz.multipaz_compose.generated.resources.credential_presentment_select_document
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_data_element_icon_description
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_headline_share_with_unknown_requester
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_info_verifier_in_trust_list
@@ -215,11 +227,11 @@ private fun setMatch(
  * @param trustMetadata [TrustMetadata] conveying the level of trust in the requester, if any.
  * @param credentialPresentmentData the combinations of credentials and claims that the user can select.
  * @param preselectedDocuments the list of documents the user may have preselected earlier (for
- *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
- *   if the user didn't preselect.
+ * example an OS-provided credential picker like Android's Credential Manager) or the empty list
+ * if the user didn't preselect.
  * @param imageLoader a [ImageLoader].
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
- *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
+ * first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @param onConfirm called when the user presses the "Share" button, returns the user's selection.
  * @param onCancel called when the sheet is dismissed.
  */
@@ -249,7 +261,6 @@ fun Consent(
         }
     }
     val combinations = remember { credentialPresentmentData.generateCombinations(preselectedDocuments) }
-    val selectMatchCombinationAndElement = remember { mutableStateOf<Pair<Int, Int>?>(null) }
     val matchSelectionLists = remember {
         val initialSelections = combinations.map { List(it.elements.size) { 0 } }
         mutableStateOf(initialSelections)
@@ -310,10 +321,6 @@ fun Consent(
                     imageLoader = imageLoader,
                     combinations = combinations,
                     matchSelectionLists = matchSelectionLists,
-                    onChooseMatch = { combinationNum, elementNum ->
-                        selectMatchCombinationAndElement.value = Pair(combinationNum, elementNum)
-                        navController.navigate("selectMatch")
-                    },
                     onShowRequesterInfo = {
                         navController.navigate("showRequesterInfo")
                     },
@@ -330,26 +337,6 @@ fun Consent(
                     onBackClicked = {
                         navController.navigateUp()
                     },
-                )
-            }
-            composable("selectMatch") {
-                val (combinationNum, elementNum) = selectMatchCombinationAndElement.value!!
-                ChooseMatchPage(
-                    combinations = combinations,
-                    combinationNum = combinationNum,
-                    elementNum = elementNum,
-                    onBackClicked = {
-                        navController.navigateUp()
-                    },
-                    onMatchClicked = { matchNumber ->
-                        matchSelectionLists.value = setMatch(
-                            oldValue = matchSelectionLists.value,
-                            combinationNum = combinationNum,
-                            elementNum = elementNum,
-                            newMatchNum = matchNumber
-                        )
-                        navController.navigateUp()
-                    }
                 )
             }
         }
@@ -448,64 +435,6 @@ private fun ShowRequesterInfoPage(
     }
 }
 
-@Composable
-private fun ChooseMatchPage(
-    combinations: List<Combination>,
-    combinationNum: Int,
-    elementNum: Int,
-    onBackClicked: () -> Unit,
-    onMatchClicked: (matchNumber: Int) -> Unit
-) {
-    Column(
-        modifier = Modifier.padding(8.dp),
-        verticalArrangement = Arrangement.Bottom
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(
-                8.dp,
-            ),
-            verticalAlignment = Alignment.Companion.CenterVertically
-        ) {
-            IconButton(onClick = onBackClicked) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = null
-                )
-            }
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.Start
-            ) {
-                Text(
-                    text = stringResource(Res.string.credential_presentment_choose_an_option),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.titleLarge,
-                )
-            }
-        }
-
-        val entries = mutableListOf<@Composable () -> Unit>()
-
-        combinations[combinationNum].elements[elementNum].matches.forEachIndexed { matchNum, match ->
-            entries.add {
-                CredentialViewer(
-                    modifier = Modifier.clickable { onMatchClicked(matchNum) },
-                    credential = match.credential,
-                    showOptionsButton = false,
-                    onOptionsButtonClicked = {}
-                )
-            }
-        }
-
-        EntryList(
-            title = null,
-            entries = entries
-        )
-
-    }
-}
-
 private data class RequesterDisplayData(
     val name: String? = null,
     val icon: ImageBitmap? = null,
@@ -522,13 +451,14 @@ private fun ConsentPage(
     imageLoader: ImageLoader?,
     combinations: List<Combination>,
     matchSelectionLists: MutableState<List<List<Int>>>,
-    onChooseMatch: (combinationNum: Int, elementNum: Int) -> Unit,
     onShowRequesterInfo: () -> Unit,
     onConfirm: (selection: CredentialPresentmentSelection) -> Unit,
     onCancel: () -> Unit,
     pagerState: PagerState
 ) {
     val scrollState = rememberScrollState()
+    var isFlipped by remember { mutableStateOf(false) }
+    var activeElementIndex by remember { mutableStateOf(0) }
 
     val requesterDisplayData = if (trustMetadata != null) {
         RequesterDisplayData(
@@ -560,86 +490,251 @@ private fun ConsentPage(
         )
 
         Column(
-            modifier = Modifier.padding(top = 12.dp)
+            modifier = Modifier.padding(top = 12.dp).weight(1f, fill = false)
         ) {
             Column(
                 modifier = Modifier
                     .focusGroup()
                     .verticalScroll(scrollState)
-                    .weight(0.9f, false)
             ) {
                 HorizontalPager(
                     state = pagerState,
+                    userScrollEnabled = !isFlipped
                 ) { page ->
                     // Add a very slight drop shadow to make the main box stand out.
-                    Column(
-                        modifier = Modifier
-                            .padding(10.dp)
-                            .dropShadow(
-                                shape = RoundedCornerShape(10.dp),
-                                shadow = Shadow(
-                                    radius = 10.dp,
-                                    spread = 5.dp,
-                                    color = Color.Black.copy(alpha = 0.035f),
-                                    offset = DpOffset(x = 0.dp, 2.dp)
-                                )
-                            ),
-                    ) {
-                        CredentialSetViewer(
-                            combinations = combinations,
-                            combinationNum = page,
-                            matchSelectionLists = matchSelectionLists,
-                            requester = requester,
-                            requesterDisplayData = requesterDisplayData,
-                            trustMetadata = trustMetadata,
-                            appInfo = appInfo,
-                            onChooseMatch = onChooseMatch
-                        )
-                    }
-                }
-            }
-
-            if (combinations.size > 1) {
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier
-                        .align(Alignment.Companion.End)
-                        .wrapContentHeight()
-                        .fillMaxWidth()
-                        .height(PAGER_INDICATOR_HEIGHT)
-                        .padding(PAGER_INDICATOR_PADDING),
-                ) {
-                    repeat(pagerState.pageCount) { iteration ->
-                        val color =
-                            if (pagerState.currentPage == iteration) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .2f)
+                    Box(modifier = Modifier.padding(10.dp)) {
+                        FlipCard(
+                            isFlipped = isFlipped,
+                            front = {
+                                Column(
+                                    modifier = Modifier
+                                        .dropShadow(
+                                            shape = RoundedCornerShape(10.dp),
+                                            shadow = Shadow(
+                                                radius = 10.dp,
+                                                spread = 5.dp,
+                                                color = Color.Black.copy(alpha = 0.035f),
+                                                offset = DpOffset(x = 0.dp, 2.dp)
+                                            )
+                                        ),
+                                ) {
+                                    CredentialSetViewer(
+                                        combinations = combinations,
+                                        combinationNum = page,
+                                        matchSelectionLists = matchSelectionLists,
+                                        requester = requester,
+                                        requesterDisplayData = requesterDisplayData,
+                                        trustMetadata = trustMetadata,
+                                        appInfo = appInfo,
+                                        onChooseMatch = { _, elementNum ->
+                                            activeElementIndex = elementNum
+                                            isFlipped = true
+                                        }
+                                    )
+                                }
+                            },
+                            back = {
+                                Column(
+                                    modifier = Modifier
+                                        .dropShadow(
+                                            shape = RoundedCornerShape(10.dp),
+                                            shadow = Shadow(
+                                                radius = 10.dp,
+                                                spread = 5.dp,
+                                                color = Color.Black.copy(alpha = 0.035f),
+                                                offset = DpOffset(x = 0.dp, 2.dp)
+                                            )
+                                        )
+                                ) {
+                                    DocumentSelectionView(
+                                        combinations = combinations,
+                                        combinationNum = page,
+                                        elementNum = activeElementIndex,
+                                        initialSelection = matchSelectionLists.value[page][activeElementIndex],
+                                        onBack = { isFlipped = false },
+                                        onMatchSelected = { matchIndex ->
+                                            matchSelectionLists.value = setMatch(
+                                                oldValue = matchSelectionLists.value,
+                                                combinationNum = page,
+                                                elementNum = activeElementIndex,
+                                                newMatchNum = matchIndex
+                                            )
+                                            isFlipped = false
+                                        }
+                                    )
+                                }
                             }
-                        Box(
-                            modifier = Modifier
-                                .padding(2.dp)
-                                .clip(CircleShape)
-                                .background(color)
-                                .size(8.dp)
                         )
                     }
                 }
             }
+        }
 
-            ButtonSection(
-                onConfirm = {
-                    onConfirm(CredentialPresentmentSelection(
-                        matches = matchSelectionLists.value[pagerState.currentPage].mapIndexed { n, selectedMatch ->
-                            combinations[pagerState.currentPage].elements[n].matches[selectedMatch]
-                        },
-                    ))
-                },
-                onCancel = onCancel,
-                scrollState = scrollState
-            )
+        AnimatedVisibility(
+            visible = !isFlipped,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut()
+        ) {
+            Column {
+                if (combinations.size > 1) {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .wrapContentHeight()
+                            .fillMaxWidth()
+                            .height(PAGER_INDICATOR_HEIGHT)
+                            .padding(PAGER_INDICATOR_PADDING),
+                    ) {
+                        repeat(pagerState.pageCount) { iteration ->
+                            val color =
+                                if (pagerState.currentPage == iteration) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .2f)
+                                }
+                            Box(
+                                modifier = Modifier
+                                    .padding(2.dp)
+                                    .clip(CircleShape)
+                                    .background(color)
+                                    .size(8.dp)
+                            )
+                        }
+                    }
+                }
+
+                ButtonSection(
+                    onConfirm = {
+                        onConfirm(
+                            CredentialPresentmentSelection(
+                                matches = matchSelectionLists.value[pagerState.currentPage].mapIndexed { n, selectedMatch ->
+                                    combinations[pagerState.currentPage].elements[n].matches[selectedMatch]
+                                },
+                            )
+                        )
+                    },
+                    onCancel = onCancel,
+                    scrollState = scrollState
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun FlipCard(
+    isFlipped: Boolean,
+    modifier: Modifier = Modifier,
+    front: @Composable () -> Unit,
+    back: @Composable () -> Unit,
+) {
+    val rotation by animateFloatAsState(
+        targetValue = if (isFlipped) 180f else 0f,
+        animationSpec = tween(
+            durationMillis = 400,
+            easing = FastOutSlowInEasing
+        ),
+        label = "cardFlip"
+    )
+
+    Box(
+        modifier = modifier
+            .graphicsLayer {
+                rotationY = rotation
+                cameraDistance = 12f * density
+            }
+    ) {
+        if (rotation <= 90f) {
+            Box(Modifier.fillMaxWidth()) {
+                front()
+            }
+        } else {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        rotationY = 180f
+                    }
+            ) {
+                back()
+            }
+        }
+    }
+}
+
+@Composable
+private fun DocumentSelectionView(
+    combinations: List<Combination>,
+    combinationNum: Int,
+    elementNum: Int,
+    initialSelection: Int,
+    onBack: () -> Unit,
+    onMatchSelected: (Int) -> Unit
+) {
+    val entries = mutableListOf<@Composable () -> Unit>()
+    var selectedMatchIndex by remember { mutableStateOf(initialSelection) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Back Face Header
+    entries.add {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null
+                )
+            }
+            Text(
+                text = stringResource(Res.string.credential_presentment_select_document),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.size(48.dp)) // Balance the icon
+        }
+    }
+
+    // List of matches
+    val element = combinations[combinationNum].elements[elementNum]
+    element.matches.forEachIndexed { matchIndex, match ->
+        entries.add {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        if (selectedMatchIndex != matchIndex) {
+                            selectedMatchIndex = matchIndex
+                            coroutineScope.launch {
+                                delay(200)
+                                onMatchSelected(matchIndex)
+                            }
+                        }
+                    },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CredentialViewer(
+                    credential = match.credential,
+                    showOptionsButton = false,
+                    modifier = Modifier.weight(1.0f),
+                    onOptionsButtonClicked = {}
+                )
+                RadioButton(
+                    selected = (selectedMatchIndex == matchIndex),
+                    onClick = null // Handled by row click
+                )
+            }
+        }
+    }
+
+    EntryList(
+        modifier = Modifier,
+        title = null,
+        entries = entries
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -808,17 +903,18 @@ private fun CredentialViewer(
                 }
                 cardArtBitmap?.let {
                     Box(
-                        modifier = modifier.size(40.dp),
+                        modifier = Modifier.size(60.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
                             bitmap = it,
                             contentDescription = null,
+                            contentScale = ContentScale.Fit
                         )
                     }
                 }
                 Column(
-                    modifier = Modifier.padding(start = 16.dp).weight(1.0f)
+                    modifier = Modifier.padding(start = 5.dp).weight(1.0f)
                 ) {
                     Text(
                         text = credential.document.displayName
