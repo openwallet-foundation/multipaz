@@ -99,9 +99,9 @@ import org.multipaz.mdoc.vical.SignedVical
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
 import org.multipaz.nfc.NfcTagReader
-import org.multipaz.presentment.model.PresentmentSource
-import org.multipaz.presentment.model.SimplePresentmentSource
-import org.multipaz.presentment.model.uriSchemePresentment
+import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.SimplePresentmentSource
+import org.multipaz.presentment.uriSchemePresentment
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.promptModelRequestConsent
 import org.multipaz.prompt.promptModelSilentConsent

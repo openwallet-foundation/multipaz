@@ -22,8 +22,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.ByteString
@@ -385,7 +389,7 @@ private fun EntryList(
 ) {
     if (title != null) {
         Text(
-            modifier = modifier.padding(top = 16.dp, bottom = 8.dp),
+            modifier = modifier.padding(start = 15.dp, top = 15.dp, end = 15.dp, bottom = 0.dp),
             text = title,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
@@ -393,29 +397,43 @@ private fun EntryList(
         )
     }
 
-    for (n in entries.indices) {
-        val section = entries[n]
-        val isFirst = (n == 0)
-        val isLast = (n == entries.size - 1)
-        val rounded = 16.dp
-        val firstRounded = if (isFirst) rounded else 0.dp
-        val endRound = if (isLast) rounded else 0.dp
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .clip(shape = RoundedCornerShape(firstRounded, firstRounded, endRound, endRound))
-                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                .padding(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            CompositionLocalProvider(
-                LocalContentColor provides MaterialTheme.colorScheme.onSurface
+    Column(
+        modifier = Modifier
+            .padding(15.dp)
+            .dropShadow(
+                shape = RoundedCornerShape(16.dp),
+                shadow = Shadow(
+                    radius = 10.dp,
+                    spread = 5.dp,
+                    color = Color.Black.copy(alpha = 0.05f),
+                    offset = DpOffset(x = 0.dp, 2.dp)
+                )
+            ),
+    ) {
+        for (n in entries.indices) {
+            val section = entries[n]
+            val isFirst = (n == 0)
+            val isLast = (n == entries.size - 1)
+            val rounded = 16.dp
+            val firstRounded = if (isFirst) rounded else 0.dp
+            val endRound = if (isLast) rounded else 0.dp
+            Column(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .clip(shape = RoundedCornerShape(firstRounded, firstRounded, endRound, endRound))
+                    .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                    .padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                section()
+                CompositionLocalProvider(
+                    LocalContentColor provides MaterialTheme.colorScheme.onSurface
+                ) {
+                    section()
+                }
             }
-        }
-        if (!isLast) {
-            Spacer(modifier = Modifier.height(2.dp))
+            if (!isLast) {
+                Spacer(modifier = Modifier.height(1.dp))
+            }
         }
     }
 }

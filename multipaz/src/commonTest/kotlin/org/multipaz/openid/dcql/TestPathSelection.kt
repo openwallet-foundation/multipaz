@@ -12,7 +12,7 @@ import org.multipaz.claim.MdocClaim
 import org.multipaz.claim.findMatchingClaim
 import org.multipaz.document.Document
 import org.multipaz.documenttype.knowntypes.EUPersonalID
-import org.multipaz.presentment.model.DocumentStoreTestHarness
+import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import kotlin.test.Test

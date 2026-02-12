@@ -41,7 +41,6 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.documenttype.DocumentCannedRequest
-import org.multipaz.documenttype.DocumentType
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
@@ -62,13 +61,13 @@ import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonObject
 import org.multipaz.compose.permissions.rememberBluetoothEnabledState
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
+import org.multipaz.documenttype.knowntypes.wellKnownMultipleDocumentRequests
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.nfc.NfcScanOptions
@@ -77,7 +76,6 @@ import org.multipaz.testapp.ShowResponseMetadata
 import org.multipaz.util.fromHex
 import kotlin.time.Clock
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "IsoMdocProximityReadingScreen"
 
@@ -102,8 +100,7 @@ private suspend fun selectConnectionMethod(
 
 private data class RequestPickerEntry(
     val displayName: String,
-    val documentType: DocumentType,
-    val sampleRequest: DocumentCannedRequest
+    val request: DocumentCannedRequest
 )
 
 private var lastRequest: Int = 0
@@ -127,10 +124,15 @@ fun IsoMdocProximityReadingScreen(
         for (sampleRequest in documentType.cannedRequests) {
             requestOptions.add(RequestPickerEntry(
                 displayName = "${documentType.displayName}: ${sampleRequest.displayName}",
-                documentType = documentType,
-                sampleRequest = sampleRequest
+                request = sampleRequest
             ))
         }
+    }
+    for (request in wellKnownMultipleDocumentRequests) {
+        requestOptions.add(RequestPickerEntry(
+            displayName = "Multi-doc: ${request.displayName}",
+            request = request
+        ))
     }
     val requestDropdownExpanded = remember { mutableStateOf(false) }
     val requestSelected = remember { mutableStateOf(requestOptions[lastRequest]) }
@@ -364,7 +366,7 @@ fun IsoMdocProximityReadingScreen(
                                 try {
                                     val encodedDeviceRequest =
                                         TestAppUtils.generateEncodedDeviceRequest(
-                                            request = requestSelected.value.sampleRequest,
+                                            request = requestSelected.value.request,
                                             encodedSessionTranscript = readerSessionTranscript.value!!,
                                             readerKey = app.readerKey,
                                         )
@@ -797,7 +799,7 @@ private suspend fun doReaderFlowWithTransport(
     readerSessionEncryption.value = sessionEncryption
     readerSessionTranscript.value = encodedSessionTranscript
     val encodedDeviceRequest = TestAppUtils.generateEncodedDeviceRequest(
-        request = selectedRequest.value.sampleRequest,
+        request = selectedRequest.value.request,
         encodedSessionTranscript = readerSessionTranscript.value!!,
         readerKey = app.readerKey,
         zkSystemRepository = app.zkSystemRepository,

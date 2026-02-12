@@ -39,8 +39,6 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class DeviceRequestTest {
-
-
     // Test against the test vector in Annex D of 18013-5:2021
     @Test
     fun testAgainstVector2021() = runTest {

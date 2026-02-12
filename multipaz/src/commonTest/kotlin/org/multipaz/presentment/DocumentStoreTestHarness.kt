@@ -1,4 +1,4 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -53,7 +53,6 @@ import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
-import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.util.Logger
 import org.multipaz.util.truncateToWholeSeconds
 import kotlin.collections.iterator

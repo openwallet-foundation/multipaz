@@ -3,7 +3,7 @@ package org.multipaz.request
 import org.multipaz.crypto.X509CertChain
 
 /**
- * Details about the entity requesting data.
+ * Details about an entity requesting data.
  *
  * @property certChain if the requester signed the request and provided a certificate chain.
  * @property appId if this is a request from a local application, this contains the app identifier

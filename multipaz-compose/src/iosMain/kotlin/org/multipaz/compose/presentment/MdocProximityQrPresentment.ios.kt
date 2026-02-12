@@ -5,7 +5,7 @@ import androidx.compose.ui.Modifier
 import org.multipaz.crypto.EcCurve
 import org.multipaz.document.Document
 import org.multipaz.mdoc.transport.MdocTransportFactory
-import org.multipaz.presentment.model.PresentmentSource
+import org.multipaz.presentment.PresentmentSource
 import org.multipaz.prompt.PromptModel
 
 @Composable

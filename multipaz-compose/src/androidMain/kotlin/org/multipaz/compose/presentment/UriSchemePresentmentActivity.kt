@@ -16,7 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.context.initializeApplication
-import org.multipaz.presentment.model.PresentmentSource
+import org.multipaz.presentment.PresentmentSource
 import org.multipaz.util.Logger
 import java.net.URL
 import androidx.core.net.toUri
@@ -25,7 +25,7 @@ import coil3.network.ktor3.KtorNetworkFetcherFactory
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import org.multipaz.compose.branding.Branding
-import org.multipaz.presentment.model.uriSchemePresentment
+import org.multipaz.presentment.uriSchemePresentment
 import org.multipaz.prompt.AndroidPromptModel
 
 /**

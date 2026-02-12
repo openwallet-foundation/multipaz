@@ -37,14 +37,8 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509KeyUsage
-import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.mdoc.credential.MdocCredential
-import org.multipaz.mdoc.mso.StaticAuthDataParser
 import org.multipaz.mdoc.mso.StaticAuthDataParser.StaticAuthData
 import org.multipaz.mdoc.request.DeviceRequestParser
-import org.multipaz.request.MdocRequest
-import org.multipaz.request.MdocRequestedClaim
-import org.multipaz.request.Requester
 import org.multipaz.util.Logger
 import kotlin.time.Instant
 import org.multipaz.cbor.buildCborMap
@@ -651,37 +645,6 @@ object MdocUtil {
         }
         return builder.build()
     }
-
-    /**
-     * Helper function to generate a list of claims for an mdoc.
-     *
-     * @param docType the mdoc document type.
-     * @param requestedData a map from namespace into a list of data elements where each
-     *     pair is the data element name and whether the data element will be retained.
-     * @param documentTypeRepository a [DocumentTypeRepository] used to determine the display name for claims.
-     * @param mdocCredential if set, the returned list is filtered so it only references data
-     *     elements available in the credential.
-     */
-    fun generateRequestedClaims(
-        docType: String,
-        requestedData: Map<String, List<Pair<String, Boolean>>>,
-        documentTypeRepository: DocumentTypeRepository,
-        mdocCredential: MdocCredential?,
-    ): List<MdocRequestedClaim> {
-        val ret = mutableListOf<MdocRequestedClaim>()
-        for ((namespaceName, listOfDe) in requestedData) {
-            for ((dataElementName, intentToRetain) in listOfDe) {
-                ret.add(
-                    MdocRequestedClaim(
-                        namespaceName = namespaceName,
-                        dataElementName = dataElementName,
-                        intentToRetain = intentToRetain,
-                    )
-                )
-            }
-        }
-        return filterConsentFields(ret, mdocCredential)
-    }
 }
 
 /**
@@ -728,80 +691,5 @@ fun String.mdocVersionCompareTo(otherVersion: String): Int {
         return -1
     }
     return 0
-}
-
-/**
- * Convert to a [MdocRequest].
- *
- * @param documentTypeRepository a [DocumentTypeRepository] used to determine the display name for claims.
- * @param mdocCredential if set, the returned list is filtered so it only references data
- *     elements available in the credential.
- * @param requesterAppId the appId if an app is making the request or `null`.
- * @param requesterOrigin the origin or `null`.
- */
-fun DeviceRequestParser.DocRequest.toMdocRequest(
-    documentTypeRepository: DocumentTypeRepository,
-    mdocCredential: MdocCredential?,
-    requesterAppId: String? = null,
-    requesterOrigin: String? = null,
-): MdocRequest {
-    val requestedData = mutableMapOf<String, MutableList<Pair<String, Boolean>>>()
-    for (namespaceName in namespaces) {
-        for (dataElementName in getEntryNames(namespaceName)) {
-            val intentToRetain = getIntentToRetain(namespaceName, dataElementName)
-            requestedData.getOrPut(namespaceName) { mutableListOf() }
-                .add(Pair(dataElementName, intentToRetain))
-        }
-    }
-    return MdocRequest(
-        requester = Requester(
-            certChain = if (readerAuthenticated) {
-                readerCertificateChain
-            } else {
-                null
-            },
-            appId = requesterAppId,
-            origin = requesterOrigin
-        ),
-        requestedClaims = MdocUtil.generateRequestedClaims(
-            docType,
-            requestedData,
-            documentTypeRepository,
-            mdocCredential
-        ),
-        docType = docType,
-        zkSystemSpecs = this.zkSystemSpecs
-    )
-}
-
-private fun calcAvailableDataElements(
-    issuerNameSpaces: Map<String, List<ByteArray>>
-): Map<String, Set<String>> {
-    val ret = mutableMapOf<String, Set<String>>()
-    for (nameSpaceName in issuerNameSpaces.keys) {
-        val innerSet = mutableSetOf<String>()
-        for (encodedIssuerSignedItemBytes in issuerNameSpaces[nameSpaceName]!!) {
-            val issuerSignedItem = Cbor.decode(encodedIssuerSignedItemBytes).asTaggedEncodedCbor
-            val elementIdentifier = issuerSignedItem["elementIdentifier"].asTstr
-            innerSet.add(elementIdentifier)
-        }
-        ret[nameSpaceName] = innerSet
-    }
-    return ret
-}
-
-private fun filterConsentFields(
-    list: List<MdocRequestedClaim>,
-    credential: MdocCredential?
-): List<MdocRequestedClaim> {
-    if (credential == null) {
-        return list
-    }
-    val staticAuthData = StaticAuthDataParser(credential.issuerProvidedData.toByteArray()).parse()
-    val availableDataElements = calcAvailableDataElements(staticAuthData.digestIdMapping)
-    return list.filter { mdocConsentField ->
-        availableDataElements[mdocConsentField.namespaceName]
-            ?.contains(mdocConsentField.dataElementName) != null
-    }
 }
 

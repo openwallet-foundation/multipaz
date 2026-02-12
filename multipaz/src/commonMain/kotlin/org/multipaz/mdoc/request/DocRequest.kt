@@ -7,13 +7,7 @@ import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.cose.CoseSign1
 import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
-import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.mdoc.credential.MdocCredential
-import org.multipaz.mdoc.util.MdocUtil
-import org.multipaz.request.MdocRequest
-import org.multipaz.request.Requester
 
 /**
  * Document request according to ISO 18013-5.
@@ -69,51 +63,6 @@ data class DocRequest internal constructor(
                 put("readerAuth", it.toDataItem())
             }
         }
-    }
-
-    /**
-     * Convert to a [MdocRequest].
-     *
-     * @param documentTypeRepository a [DocumentTypeRepository] used to determine the display name for claims.
-     * @param mdocCredential if set, the returned list is filtered so it only references data
-     *     elements available in the credential.
-     * @param requesterAppId the appId if an app is making the request or `null`.
-     * @param requesterOrigin the origin or `null`.
-     * @return a [MdocRequest]
-     * @throws IllegalStateException if this is accessed before [DeviceRequest.verifyReaderAuthentication] is called.
-     */
-    @Throws(IllegalStateException::class)
-    fun toMdocRequest(
-        documentTypeRepository: DocumentTypeRepository,
-        mdocCredential: MdocCredential?,
-        requesterAppId: String? = null,
-        requesterOrigin: String? = null,
-    ): MdocRequest {
-        if (!readerAuthVerified) {
-            throw IllegalStateException("readerAuth not verified")
-        }
-        val requestedData = mutableMapOf<String, MutableList<Pair<String, Boolean>>>()
-        for ((namespace, dataElementMap) in nameSpaces) {
-            for ((dataElement, intentToRetain) in dataElementMap) {
-                requestedData.getOrPut(namespace) { mutableListOf() }
-                    .add(Pair(dataElement, intentToRetain))
-            }
-        }
-        return MdocRequest(
-            requester = Requester(
-                certChain = readerAuthCertChain,
-                appId = requesterAppId,
-                origin = requesterOrigin
-            ),
-            requestedClaims = MdocUtil.generateRequestedClaims(
-                docType,
-                requestedData,
-                documentTypeRepository,
-                mdocCredential
-            ),
-            docType = docType,
-            zkSystemSpecs = docRequestInfo?.zkRequest?.systemSpecs ?: emptyList()
-        )
     }
 
     companion object {

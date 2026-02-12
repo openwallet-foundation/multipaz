@@ -5,7 +5,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
-import org.multipaz.presentment.model.DocumentStoreTestHarness
+import org.multipaz.presentment.DocumentStoreTestHarness
+import org.multipaz.presentment.prettyPrint
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith

@@ -66,8 +66,8 @@ import org.multipaz.compose.document.DocumentModel
 import org.multipaz.context.applicationContext
 import org.multipaz.context.initializeApplication
 import org.multipaz.multipaz_compose.generated.resources.Res
-import org.multipaz.presentment.model.PresentmentCanceled
-import org.multipaz.presentment.model.PresentmentModel
+import org.multipaz.presentment.PresentmentCanceled
+import org.multipaz.presentment.PresentmentModel
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.prompt.PromptModel
 import org.multipaz.util.Logger

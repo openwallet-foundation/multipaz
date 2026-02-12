@@ -11,7 +11,7 @@
 
 extern "C"
 JNIEXPORT jstring JNICALL
-Java_org_multipaz_presentment_model_MatcherDcqlQueryExecuteTest_executeDcqlQuery(
+Java_org_multipaz_presentment_MatcherDcqlQueryExecuteTest_executeDcqlQuery(
         JNIEnv *env,
         jobject thiz,
         jbyteArray requestBytes,

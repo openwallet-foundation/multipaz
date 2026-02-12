@@ -5,7 +5,7 @@ toolchain installed, specifically version 20. It should be installed in `~/wasi-
 
 The bundled `Makefile` will build the `build/matcher.wasm` binary which can be copied
 into `../assets/identitycredentialmatcher.wasm` where it will get picked up as part
-of the identity-appsupport library. The following command-line does this
+of the multipaz-dcapi library. The following command-line does this
 
 ```shell
 $ make clean && make -j && cp build/matcher.wasm ../assets/identitycredentialmatcher.wasm

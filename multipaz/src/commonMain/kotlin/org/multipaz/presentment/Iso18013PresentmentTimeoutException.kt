@@ -1,4 +1,4 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
 /**
  * Thrown if timed out waiting for a message from the remote reader.

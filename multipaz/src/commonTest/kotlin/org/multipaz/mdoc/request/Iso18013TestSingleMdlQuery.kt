@@ -1,24 +1,27 @@
-package org.multipaz.openid.dcql
+package org.multipaz.mdoc.request
 
 import kotlinx.coroutines.test.runTest
-import org.multipaz.cbor.Tstr
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
+import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.buildCborArray
+import org.multipaz.documenttype.knowntypes.DrivingLicense
+import org.multipaz.mdoc.response.Iso18015ResponseException
 import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.presentment.prettyPrint
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-class TestSingleMdlQuery {
+class Iso18013TestSingleMdlQuery {
 
     companion object {
         private suspend fun addMdlErika(harness: DocumentStoreTestHarness) {
             harness.provisionMdoc(
                 displayName = "my-mDL-Erika",
-                docType = "org.iso.18013.5.1.mDL",
+                docType = DrivingLicense.MDL_DOCTYPE,
                 data = mapOf(
-                    "org.iso.18013.5.1" to listOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
                         "given_name" to Tstr("Erika"),
                         "family_name" to Tstr("Mustermann"),
                         "resident_address" to Tstr("Sample Street 123"),
@@ -30,9 +33,9 @@ class TestSingleMdlQuery {
         private suspend fun addMdlMax(harness: DocumentStoreTestHarness) {
             harness.provisionMdoc(
                 displayName = "my-mDL-Max",
-                docType = "org.iso.18013.5.1.mDL",
+                docType = DrivingLicense.MDL_DOCTYPE,
                 data = mapOf(
-                    "org.iso.18013.5.1" to listOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
                         "given_name" to Tstr("Max"),
                         "family_name" to Tstr("Mustermann"),
                         "resident_address" to Tstr("Sample Street 456"),
@@ -44,9 +47,9 @@ class TestSingleMdlQuery {
         private suspend fun addMdlErikaNoResidentAddress(harness: DocumentStoreTestHarness) {
             harness.provisionMdoc(
                 displayName = "my-mDL-without-resident-address",
-                docType = "org.iso.18013.5.1.mDL",
+                docType = DrivingLicense.MDL_DOCTYPE,
                 data = mapOf(
-                    "org.iso.18013.5.1" to listOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
                         "given_name" to Tstr("Erika"),
                         "family_name" to Tstr("Mustermann"),
                     )
@@ -68,29 +71,64 @@ class TestSingleMdlQuery {
             )
         }
 
-        private fun singleMdlQuery(): DcqlQuery {
-            return DcqlQuery.fromJson(
-                Json.parseToJsonElement(
-                    """
-                        {
-                          "credentials": [
-                            {
-                              "id": "my_credential",
-                              "format": "mso_mdoc",
-                              "meta": {
-                                "doctype_value": "org.iso.18013.5.1.mDL"
-                              },
-                              "claims": [
-                                {"path": ["org.iso.18013.5.1", "given_name"]},
-                                {"path": ["org.iso.18013.5.1", "resident_address"]}
-                              ]
-                            }
-                          ]
-                        }
-                    """
-                ).jsonObject
-            )
+        private fun singleMdlQuery(): DeviceRequest {
+            return buildDeviceRequest(
+                sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+            ) {
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to mapOf(
+                            "given_name" to false,
+                            "resident_address" to false
+                        )
+                    )
+                )
+            }
         }
+    }
+
+    @Test
+    fun testToDqclQuery() = runTest {
+        @OptIn(ExperimentalSerializationApi::class)
+        val prettyJson = Json {
+            prettyPrint = true
+            prettyPrintIndent = "  "
+        }
+        assertEquals(
+            """
+                {
+                  "credentials": [
+                    {
+                      "id": "cred0",
+                      "format": "mso_mdoc",
+                      "meta": {
+                        "doctype_value": "org.iso.18013.5.1.mDL"
+                      },
+                      "claims": [
+                        {
+                          "id": "claim0",
+                          "path": [
+                            "org.iso.18013.5.1",
+                            "given_name"
+                          ],
+                          "intent_to_retain": false
+                        },
+                        {
+                          "id": "claim1",
+                          "path": [
+                            "org.iso.18013.5.1",
+                            "resident_address"
+                          ],
+                          "intent_to_retain": false
+                        }
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent(),
+            prettyJson.encodeToString(singleMdlQuery().toDcql())
+        )
     }
 
     @Test
@@ -99,12 +137,12 @@ class TestSingleMdlQuery {
         harness.initialize()
         addPidMdoc(harness)
         // Fails if we have no credentials
-        val e = assertFailsWith(DcqlCredentialQueryException::class) {
+        val e = assertFailsWith(Iso18015ResponseException::class) {
             singleMdlQuery().execute(
                 presentmentSource = harness.presentmentSource
             )
         }
-        assertEquals("No matches for credential query with id my_credential", e.message)
+        assertEquals("No matching credentials for first DocRequest", e.message)
     }
 
     @Test
@@ -113,12 +151,12 @@ class TestSingleMdlQuery {
         harness.initialize()
         addPidMdoc(harness)
         // Fails if we have no credentials with the right docType
-        val e = assertFailsWith(DcqlCredentialQueryException::class) {
+        val e = assertFailsWith(Iso18015ResponseException::class) {
             singleMdlQuery().execute(
                 presentmentSource = harness.presentmentSource
             )
         }
-        assertEquals("No matches for credential query with id my_credential", e.message)
+        assertEquals("No matching credentials for first DocRequest", e.message)
     }
 
     @Test
@@ -143,12 +181,12 @@ class TestSingleMdlQuery {
                                   docId: my-mDL-Erika
                                   claims:
                                     claim:
-                                      nameSpace: org.iso.18013.5.1
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: given_name
                                       displayName: Given Names
                                       value: Erika
                                     claim:
-                                      nameSpace: org.iso.18013.5.1
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: resident_address
                                       displayName: Resident Address
                                       value: Sample Street 123
@@ -182,12 +220,12 @@ class TestSingleMdlQuery {
                                   docId: my-mDL-Erika
                                   claims:
                                     claim:
-                                      nameSpace: org.iso.18013.5.1
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: given_name
                                       displayName: Given Names
                                       value: Erika
                                     claim:
-                                      nameSpace: org.iso.18013.5.1
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: resident_address
                                       displayName: Resident Address
                                       value: Sample Street 123
@@ -197,12 +235,12 @@ class TestSingleMdlQuery {
                                   docId: my-mDL-Max
                                   claims:
                                     claim:
-                                      nameSpace: org.iso.18013.5.1
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: given_name
                                       displayName: Given Names
                                       value: Max
                                     claim:
-                                      nameSpace: org.iso.18013.5.1
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: resident_address
                                       displayName: Resident Address
                                       value: Sample Street 456
@@ -236,12 +274,12 @@ class TestSingleMdlQuery {
                                   docId: my-mDL-Erika
                                   claims:
                                     claim:
-                                      nameSpace: org.iso.18013.5.1
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: given_name
                                       displayName: Given Names
                                       value: Erika
                                     claim:
-                                      nameSpace: org.iso.18013.5.1
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: resident_address
                                       displayName: Resident Address
                                       value: Sample Street 123

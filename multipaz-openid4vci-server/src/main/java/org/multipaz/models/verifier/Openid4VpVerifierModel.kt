@@ -25,13 +25,13 @@ import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentCannedRequest
+import org.multipaz.documenttype.SingleDocumentCannedRequest
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.webtoken.buildJwt
 import org.multipaz.mdoc.util.MdocUtil
@@ -65,7 +65,7 @@ class Openid4VpVerifierModel(
     suspend fun makeRequest(
         state: String,
         responseMode: String,
-        requests: Map<String, DocumentCannedRequest>,
+        requests: Map<String, SingleDocumentCannedRequest>,
         readerIdentity: ReaderIdentity,
         expectedOrigins: List<String> = listOf(),
         responseUri: String? = null,

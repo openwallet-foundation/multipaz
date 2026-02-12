@@ -1,4 +1,4 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

@@ -1,38 +1,20 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
-import org.multipaz.cbor.Bstr
-import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.Tagged
-import org.multipaz.cbor.buildCborArray
-import org.multipaz.claim.Claim
-import org.multipaz.claim.findMatchingClaim
-import org.multipaz.credential.Credential
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.document.Document
-import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
 import org.multipaz.mdoc.request.DeviceRequest
-import org.multipaz.mdoc.request.DocRequest
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.response.buildDeviceResponse
-import org.multipaz.mdoc.role.MdocRole
-import org.multipaz.mdoc.sessionencryption.EReaderKey
-import org.multipaz.mdoc.sessionencryption.SessionEncryption
-import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportClosedException
 import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
-import org.multipaz.presentment.CredentialPresentmentData
-import org.multipaz.presentment.CredentialPresentmentSelection
-import org.multipaz.presentment.SimpleCredentialPresentmentData
-import org.multipaz.request.RequestedClaim
-import org.multipaz.util.Constants
+import org.multipaz.request.MdocRequestedClaim
+import org.multipaz.request.Requester
 import org.multipaz.util.Logger
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -46,6 +28,11 @@ private const val TAG = "mdocPresentment"
  * @param sessionTranscript the session transcript.
  * @param source the source of truth used for presentment.
  * @param keyAgreementPossible the list of curves for which key agreement is possible.
+ * @param requesterAppId the appId if an app is making the request or `null`.
+ * @param requesterOrigin the origin or `null`.
+ * @param preselectedDocuments the list of documents the user may have preselected earlier (for
+ *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
+ *   if the user didn't preselect.
  * @param onWaitingForUserInput called when waiting for input from the user (consent or authentication)
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
@@ -65,18 +52,98 @@ suspend fun mdocPresentment(
     sessionTranscript: DataItem,
     source: PresentmentSource,
     keyAgreementPossible: List<EcCurve>,
+    requesterAppId: String?,
+    requesterOrigin: String?,
+    preselectedDocuments: List<Document> = emptyList(),
     onWaitingForUserInput: () -> Unit = {},
     onDocumentsInFocus: (documents: List<Document>) -> Unit
 ): DeviceResponse {
-    deviceRequest.verifyReaderAuthentication(sessionTranscript = sessionTranscript)
-    // TODO: transfer deviceRequest into a ISO 18013-5 Second Edition-specific CredentialPresentmentData
-    //   so multiple document requests will appear in a single consent prompt.
-    //
     return buildDeviceResponse(
         sessionTranscript = sessionTranscript,
         status = DeviceResponse.STATUS_OK,
         eReaderKey = eReaderKey,
     ) {
+        val presentmentData = try {
+            deviceRequest.execute(
+                presentmentSource = source,
+                keyAgreementPossible = keyAgreementPossible
+            )
+        } catch (e: Throwable) {
+            throw IllegalStateException("Error satisfying request", e)
+        }
+        val requester = Requester(
+            certChain = deviceRequest.getRequester(),
+            appId = requesterAppId,
+            origin = requesterOrigin,
+        )
+        onWaitingForUserInput()
+        val selection = source.showConsentPrompt(
+            requester = requester,
+            trustMetadata = source.resolveTrust(requester),
+            credentialPresentmentData = presentmentData,
+            preselectedDocuments = preselectedDocuments,
+            onDocumentsInFocus = onDocumentsInFocus
+        )
+        if (selection == null) {
+            throw PresentmentCanceled("User canceled consent prompt")
+        }
+
+        for (match in selection.matches) {
+            match.source as CredentialMatchSourceIso18013
+            val zkRequested = match.source.docRequest.docRequestInfo?.zkRequest != null
+
+            var zkSystemMatch: ZkSystem? = null
+            var zkSystemSpec: ZkSystemSpec? = null
+            if (zkRequested) {
+                val requesterSupportedZkSpecs = match.source.docRequest.docRequestInfo.zkRequest.systemSpecs
+                val zkSystemRepository = source.zkSystemRepository
+                if (zkSystemRepository != null) {
+                    // Find the first ZK System that the requester supports and matches the document
+                    for (zkSpec in requesterSupportedZkSpecs) {
+                        val zkSystem = zkSystemRepository.lookup(zkSpec.system)
+                        if (zkSystem == null) {
+                            continue
+                        }
+                        val matchingZkSystemSpec = zkSystem.getMatchingSystemSpec(
+                            zkSystemSpecs = requesterSupportedZkSpecs,
+                            requestedClaims = match.claims.keys.toList()
+                        )
+                        if (matchingZkSystemSpec != null) {
+                            zkSystemMatch = zkSystem
+                            zkSystemSpec = matchingZkSystemSpec
+                            break
+                        }
+                    }
+                }
+            }
+
+            if (zkRequested && zkSystemSpec == null) {
+                Logger.w(TAG, "Reader requested ZK proof but no compatible ZkSpec was found.")
+            }
+
+            val document = MdocDocument.fromPresentment(
+                sessionTranscript = sessionTranscript,
+                eReaderKey = eReaderKey,
+                credential = match.credential as MdocCredential,
+                requestedClaims = match.claims.keys.toList() as List<MdocRequestedClaim>,
+                deviceNamespaces = buildDeviceNamespaces {},
+                errors = mapOf()
+            )
+            if (zkSystemMatch != null) {
+                val zkDocument = zkSystemMatch.generateProof(
+                    zkSystemSpec = zkSystemSpec!!,
+                    document = document,
+                    sessionTranscript = sessionTranscript
+                )
+                addZkDocument(zkDocument)
+            } else {
+                addDocument(document)
+            }
+            match.credential.increaseUsageCount()
+        }
+
+
+        /*
         for (docRequest in deviceRequest.docRequests) {
             val zkRequested = docRequest.docRequestInfo?.zkRequest != null
 
@@ -157,78 +224,6 @@ suspend fun mdocPresentment(
             }
             mdocCredential.increaseUsageCount()
         }
+         */
     }
-}
-
-// TODO: this is just temporary until we have an equivalent of DcqlQuery.execute() for DeviceRequest
-suspend fun DocRequest.getPresentmentData(
-    documentTypeRepository: DocumentTypeRepository,
-    source: PresentmentSource,
-    keyAgreementPossible: List<EcCurve>,
-): CredentialPresentmentData? {
-    val zkRequested = docRequestInfo?.zkRequest != null
-    val requestWithoutFiltering = toMdocRequest(
-        documentTypeRepository = documentTypeRepository,
-        mdocCredential = null
-    )
-    val documents = source.getDocumentsMatchingRequest(
-        request = requestWithoutFiltering,
-    )
-    val matches = mutableListOf<Pair<Credential, Map<RequestedClaim, Claim>>>()
-    for (document in documents) {
-        var zkSystemSpec: ZkSystemSpec? = null
-        if (zkRequested) {
-            val requesterSupportedZkSpecs = docRequestInfo.zkRequest.systemSpecs
-            val zkSystemRepository = source.zkSystemRepository
-            if (zkSystemRepository != null) {
-                // Find the first ZK System that the requester supports and matches the document
-                for (zkSpec in requesterSupportedZkSpecs) {
-                    val zkSystem = zkSystemRepository.lookup(zkSpec.system)
-                    if (zkSystem == null) {
-                        continue
-                    }
-
-                    val matchingZkSystemSpec = zkSystem.getMatchingSystemSpec(
-                        zkSystemSpecs = requesterSupportedZkSpecs,
-                        requestedClaims = requestWithoutFiltering.requestedClaims
-                    )
-                    if (matchingZkSystemSpec != null) {
-                        zkSystemSpec = matchingZkSystemSpec
-                        break
-                    }
-                }
-            }
-        }
-        if (zkRequested && zkSystemSpec == null) {
-            Logger.w(TAG, "Reader requested ZK proof but no compatible ZkSpec was found.")
-        }
-        val mdocCredential = source.selectCredential(
-            document = document,
-            request = requestWithoutFiltering,
-            // Check is zk is requested and a compatible ZK system spec was found
-            keyAgreementPossible = if (zkRequested && zkSystemSpec != null) {
-                listOf()
-            } else {
-                keyAgreementPossible
-            }
-        ) as MdocCredential?
-        if (mdocCredential == null) {
-            Logger.w(TAG, "No credential found")
-            continue
-        }
-
-        val claims = mdocCredential.getClaims(documentTypeRepository)
-        val claimsToShow = buildMap {
-            for (requestedClaim in requestWithoutFiltering.requestedClaims) {
-                claims.findMatchingClaim(requestedClaim)?.let {
-                    put(requestedClaim as RequestedClaim, it)
-                }
-            }
-        }
-        matches.add(Pair(mdocCredential,claimsToShow))
-    }
-    if (matches.isEmpty()) {
-        throw IllegalStateException("No credentials matching request")
-    }
-    return SimpleCredentialPresentmentData(matches)
 }

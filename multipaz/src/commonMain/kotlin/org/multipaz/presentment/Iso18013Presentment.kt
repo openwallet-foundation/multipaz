@@ -1,4 +1,4 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.first
@@ -17,7 +17,6 @@ import org.multipaz.mdoc.sessionencryption.EReaderKey
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportClosedException
-import org.multipaz.presentment.CredentialPresentmentSelection
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import kotlin.coroutines.cancellation.CancellationException
@@ -134,12 +133,15 @@ suspend fun Iso18013Presentment(
             val deviceRequestCbor = Cbor.decode(encodedDeviceRequest!!)
             Logger.iCbor(TAG, "DeviceRequest", deviceRequestCbor)
             val deviceRequest = DeviceRequest.fromDataItem(deviceRequestCbor)
+            deviceRequest.verifyReaderAuthentication(sessionTranscript)
             val deviceResponse = mdocPresentment(
                 deviceRequest = deviceRequest,
                 eReaderKey = eReaderKey.publicKey,
                 sessionTranscript = sessionTranscript,
                 source = source,
                 keyAgreementPossible = keyAgreementPossible,
+                requesterAppId = null,
+                requesterOrigin = null,
                 onWaitingForUserInput = onWaitingForUserInput,
                 onDocumentsInFocus = onDocumentsInFocus
             )

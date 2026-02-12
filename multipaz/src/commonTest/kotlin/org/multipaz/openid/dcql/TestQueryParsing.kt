@@ -2,8 +2,116 @@ package org.multipaz.openid.dcql
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import org.multipaz.presentment.PrettyPrinter
+import org.multipaz.request.JsonRequestedClaim
+import org.multipaz.request.MdocRequestedClaim
+import org.multipaz.request.RequestedClaim
 import kotlin.test.Test
 import kotlin.test.assertEquals
+
+internal fun DcqlQuery.print(): String {
+    val pp = PrettyPrinter()
+    this.print(pp)
+    return pp.toString()
+}
+
+
+internal fun DcqlQuery.print(pp: PrettyPrinter) {
+    pp.append("credentials:")
+    pp.pushIndent()
+    credentialQueries.forEach {
+        pp.append("credential:")
+        pp.pushIndent()
+        it.print(pp)
+        pp.popIndent()
+    }
+    pp.popIndent()
+
+    pp.append("credentialSets:")
+    pp.pushIndent()
+    if (credentialSetQueries.isNotEmpty()) {
+        credentialSetQueries.forEach {
+            pp.append("credentialSet:")
+            pp.pushIndent()
+            it.print(pp)
+            pp.popIndent()
+        }
+    } else {
+        pp.append("<empty>")
+    }
+    pp.popIndent()
+}
+
+internal fun DcqlCredentialSetQuery.print(pp: PrettyPrinter) {
+    pp.append("required: $required")
+    pp.append("options:")
+    pp.pushIndent()
+    for (option in options) {
+        option.print(pp)
+    }
+    pp.popIndent()
+}
+
+internal fun DcqlCredentialSetOption.print(pp: PrettyPrinter) {
+    pp.append("$credentialIds")
+}
+
+internal fun DcqlCredentialQuery.print(pp: PrettyPrinter) {
+    pp.append("id: $id")
+    pp.append("format: $format")
+    if (mdocDocType != null) {
+        pp.append("mdocDocType: $mdocDocType")
+    }
+    if (vctValues != null) {
+        pp.append("vctValues: $vctValues")
+    }
+    pp.append("claims:")
+    pp.pushIndent()
+    claims.forEach {
+        pp.append("claim:")
+        pp.pushIndent()
+        it.print(pp)
+        pp.popIndent()
+    }
+    pp.popIndent()
+    pp.append("claimSets:")
+    pp.pushIndent()
+    if (claimSets.isNotEmpty()) {
+        claimSets.forEach {
+            pp.append("claimset:")
+            pp.pushIndent()
+            it.print(pp)
+            pp.popIndent()
+        }
+    } else {
+        pp.append("<empty>")
+    }
+    pp.popIndent()
+}
+
+internal fun DcqlClaimSet.print(pp: PrettyPrinter) {
+    pp.append("ids: $claimIdentifiers")
+}
+
+internal fun RequestedClaim.print(pp: PrettyPrinter) {
+    if (id != null) {
+        pp.append("id: $id")
+    }
+    when (this) {
+        is JsonRequestedClaim -> {
+            pp.append("path: $claimPath")
+        }
+        is MdocRequestedClaim -> {
+            pp.append("path: [\"$namespaceName\",\"$dataElementName\"]")
+            if (intentToRetain) {
+                pp.append("mdocIntentToRetain: $intentToRetain")
+            }
+        }
+    }
+    if (values != null) {
+        pp.append("values: $values")
+    }
+}
 
 class TestQueryParsing {
 

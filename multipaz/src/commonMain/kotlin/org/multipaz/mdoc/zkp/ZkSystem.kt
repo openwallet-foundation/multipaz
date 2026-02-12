@@ -2,10 +2,8 @@ package org.multipaz.mdoc.zkp
 
 import kotlin.time.Clock
 import kotlin.time.Instant
-import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.DataItem
 import org.multipaz.mdoc.response.MdocDocument
-import org.multipaz.request.MdocRequest
 import org.multipaz.request.RequestedClaim
 
 /**

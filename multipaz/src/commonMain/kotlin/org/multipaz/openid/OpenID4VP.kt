@@ -37,9 +37,10 @@ import org.multipaz.mdoc.response.buildDeviceResponse
 import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.dcql.DcqlQuery
-import org.multipaz.openid.dcql.DcqlResponseCredentialSetOptionMemberMatch
-import org.multipaz.presentment.model.PresentmentCanceled
-import org.multipaz.presentment.model.PresentmentSource
+import org.multipaz.presentment.CredentialMatchSourceOpenID4VP
+import org.multipaz.presentment.CredentialPresentmentSetOptionMemberMatch
+import org.multipaz.presentment.PresentmentCanceled
+import org.multipaz.presentment.PresentmentSource
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.Requester
@@ -414,12 +415,12 @@ object OpenID4VP {
 
         var usingZk = false
         selection.matches.forEach { match ->
-            match as DcqlResponseCredentialSetOptionMemberMatch
-            val requestIsForZk = match.credentialQuery.format == "mso_mdoc_zk"
+            match.source as CredentialMatchSourceOpenID4VP
+            val requestIsForZk = match.source.credentialQuery.format == "mso_mdoc_zk"
             if (requestIsForZk) {
                 usingZk = true
             }
-            val credentialResponse = if (match.credentialQuery.mdocDocType != null) {
+            val credentialResponse = if (match.source.credentialQuery.mdocDocType != null) {
                 openID4VPMsoMdoc(
                     version = version,
                     match = match,
@@ -431,7 +432,7 @@ object OpenID4VP {
                     responseUri = responseUri,
                     requestIsForZk = requestIsForZk
                 )
-            } else if (match.credentialQuery.vctValues != null) {
+            } else if (match.source.credentialQuery.vctValues != null) {
                 openID4VPSdJwt(
                     version = version,
                     match = match,
@@ -443,7 +444,7 @@ object OpenID4VP {
             } else {
                 throw IllegalArgumentException("Expected ISO mdoc or IETF SD-JWT, got neither")
             }
-            vpTokens.put(match.credentialQuery.id, credentialResponse)
+            vpTokens.put(match.source.credentialQuery.id, credentialResponse)
         }
 
         val vpToken = when (version) {
@@ -497,7 +498,7 @@ object OpenID4VP {
 
     private suspend fun openID4VPMsoMdoc(
         version: Version,
-        match: DcqlResponseCredentialSetOptionMemberMatch,
+        match: CredentialPresentmentSetOptionMemberMatch,
         source: PresentmentSource,
         origin: String?,
         clientId: String,
@@ -506,11 +507,12 @@ object OpenID4VP {
         responseUri: String?,
         requestIsForZk: Boolean
     ): String {
+        match.source as CredentialMatchSourceOpenID4VP
         var zkSystemMatch: ZkSystem? = null
         var zkSystemSpec: ZkSystemSpec? = null
         if (requestIsForZk) {
             val requesterSupportedZkSpecs = mutableListOf<ZkSystemSpec>()
-            for (entry in match.credentialQuery.meta["zk_system_type"]!!.jsonArray) {
+            for (entry in match.source.credentialQuery.meta["zk_system_type"]!!.jsonArray) {
                 entry as JsonObject
                 val system = entry["system"]!!.jsonPrimitive.content
                 val id = entry["id"]!!.jsonPrimitive.content
@@ -534,7 +536,7 @@ object OpenID4VP {
 
                     val matchingZkSystemSpec = zkSystem.getMatchingSystemSpec(
                         zkSystemSpecs = requesterSupportedZkSpecs,
-                        requestedClaims = match.credentialQuery.claims
+                        requestedClaims = match.source.credentialQuery.claims
                     )
                     if (matchingZkSystemSpec != null) {
                         zkSystemMatch = zkSystem
@@ -609,7 +611,7 @@ object OpenID4VP {
         val document = MdocDocument.fromPresentment(
             sessionTranscript = Cbor.decode(encodedSessionTranscript),
             credential = mdocCredential,
-            requestedClaims = match.credentialQuery.claims as List<MdocRequestedClaim>,
+            requestedClaims = match.source.credentialQuery.claims as List<MdocRequestedClaim>,
         )
         val deviceResponse = buildDeviceResponse(
             sessionTranscript = Cbor.decode(encodedSessionTranscript),
@@ -633,14 +635,15 @@ object OpenID4VP {
 
     private suspend fun openID4VPSdJwt(
         version: Version,
-        match: DcqlResponseCredentialSetOptionMemberMatch,
+        match: CredentialPresentmentSetOptionMemberMatch,
         origin: String?,
         clientId: String,
         nonce: String,
         responseMode: ResponseMode,
     ): String {
+        match.source as CredentialMatchSourceOpenID4VP
         val sdjwtVcCredential = match.credential as SdJwtVcCredential
-        val claims = match.credentialQuery.claims as List<JsonRequestedClaim>
+        val claims = match.source.credentialQuery.claims as List<JsonRequestedClaim>
 
         val sdJwt = SdJwt.fromCompactSerialization(sdjwtVcCredential.issuerProvidedData.decodeToString())
         val pathsToDisclose = claims.map { claim: JsonRequestedClaim -> claim.claimPath }

@@ -1,4 +1,4 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -14,16 +14,13 @@ import io.ktor.http.Parameters
 import io.ktor.http.contentType
 import io.ktor.http.formUrlEncode
 import io.ktor.http.parseUrlEncodedParameters
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.multipaz.crypto.JsonWebSignature
-import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.openid.OpenID4VP
-import org.multipaz.prompt.ShowConsentPromptFn
 import org.multipaz.util.toBase64Url
 
 private const val TAG = "uriSchemePresentment"

@@ -1,4 +1,4 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
@@ -9,13 +9,19 @@ import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import org.junit.Assert
 import org.junit.Test
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.addCborArray
+import org.multipaz.cbor.addCborMap
+import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemFullDate
+import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
@@ -28,7 +34,9 @@ import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.calculateCredentialDatabase
 import org.multipaz.digitalcredentials.getDefault
+import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.openid.OpenID4VP
+import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
 import kotlin.random.Random
 
@@ -123,7 +131,98 @@ class MatcherTest {
         return result
     }
 
-    // TODO: add tests for more complicated DCQL, including requests for multiple credentials...
+    suspend fun testMatcherIso18013(
+        signRequest: Boolean,
+        harnessInitializer: suspend (harness: DocumentStoreTestHarness) -> Unit,
+        dcql: String,
+    ): String {
+        val encryptionKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harnessInitializer(harness)
+
+        val nonce = Random.Default.nextBytes(16).toBase64Url()
+        val readerAuthKey = if (signRequest) {
+            val key = Crypto.createEcPrivateKey(EcCurve.P256)
+            val readerRootCert = harness.readerRootKey.certChain.certificates.first()
+            val cert = MdocUtil.generateReaderCertificate(
+                readerRootKey = harness.readerRootKey,
+                readerKey = key.publicKey,
+                subject = X500Name.fromName("CN=Multipaz Reader Cert Single-Use key"),
+                serial = ASN1Integer.fromRandom(128),
+                validFrom = readerRootCert.validityNotBefore,
+                validUntil = readerRootCert.validityNotAfter
+            )
+            AsymmetricKey.X509CertifiedExplicit(
+                privateKey = key,
+                certChain = X509CertChain(listOf(cert) + harness.readerRootKey.certChain.certificates)
+            )
+        } else {
+            null
+        }
+
+        val encryptionInfo = buildCborArray {
+            add("dcapi")
+            addCborMap {
+                put("nonce", nonce.toByteArray())
+                put("recipientPublicKey", encryptionKey.toCoseKey().toDataItem())
+            }
+        }
+        val base64EncryptionInfo = Cbor.encode(encryptionInfo).toBase64Url()
+        val dcapiInfo = buildCborArray {
+            add(base64EncryptionInfo)
+            add(ORIGIN)
+        }
+        val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL) // DeviceEngagementBytes
+            add(Simple.NULL) // EReaderKeyBytes
+            addCborArray {
+                add("dcapi")
+                add(dcapiInfoDigest)
+            }
+        }
+
+        val deviceRequest = buildDeviceRequestFromDcql(
+            sessionTranscript = sessionTranscript,
+            dcqlString = dcql,
+        ) {
+            if (readerAuthKey != null) {
+                addReaderAuthAll(readerAuthKey)
+            }
+        }
+        val base64DeviceRequest = Cbor.encode(deviceRequest.toDataItem()).toBase64Url()
+        Logger.iCbor(TAG, "deviceRequest", deviceRequest.toDataItem())
+
+        val credentialDatabase = calculateCredentialDatabase(
+            appName = "Test App",
+            documentStore = harness.documentStore,
+            documentTypeRepository = harness.documentTypeRepository,
+            selectedProtocols = DigitalCredentials.getDefault().supportedProtocols,
+        )
+
+        var result = runMatcher(
+            request = buildJsonObject {
+                putJsonArray("requests") {
+                    addJsonObject {
+                        put("protocol", "org-iso-mdoc")
+                        putJsonObject("data") {
+                            put("deviceRequest", base64DeviceRequest)
+                            put("encryptionInfo", base64EncryptionInfo)
+                        }
+                    }
+                }
+            }.toString().encodeToByteArray(),
+            credentialDatabase = Cbor.encode(credentialDatabase)
+        )
+        // To get stable output, replace all document IDs with displayName
+        for (docId in harness.documentStore.listDocumentIds()) {
+            val doc = harness.documentStore.lookupDocument(docId)!!
+            result = result.replace(docId, "__${doc.displayName!!}__")
+        }
+        return result
+    }
+
     @Test
     fun testMatcher_OpenID4VP_mDL_simple() = runTest {
         val matcherResult = testMatcherDcql(
@@ -212,7 +311,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_mDL_or_PID() = runTest {
+    fun testMatcher_OpenID4VP_mDL_or_PID() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -302,7 +401,94 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_age_mdocs() = runTest {
+    fun testMatcher_OpenID4VP_mDL_and_PID() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "org.iso.18013.5.1.mDL"
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "given_name"
+                              ]
+                            },
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "family_name"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "meta": {
+                            "vct_values": [
+                              "urn:eudi:pid:1"
+                            ]
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "family_name"
+                              ]
+                            },
+                            {
+                              "path": [
+                                "given_name"
+                              ]
+                            }
+                          ]
+                        }
+                      ],
+                      "credential_sets": [
+                        {
+                          "options": [
+                            [
+                              "mdl", "pid"
+                            ]
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __mDL__
+                    Given Names: Erika
+                    Family Name: Mustermann
+                  SetEntry set_index 1
+                    cred_id 0 openid4vp-v1-signed __EU PID__
+                    Family Name: Mustermann
+                    Given Names: Erika
+                  SetEntry set_index 1
+                    cred_id 0 openid4vp-v1-signed __EU PID 2__
+                    Family Name: Mustermann
+                    Given Names: Max
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_age_mdocs() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -413,7 +599,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_IDs_and_MovieTickets() = runTest {
+    fun testMatcher_OpenID4VP_IDs_and_MovieTickets() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -567,7 +753,7 @@ class MatcherTest {
     // our set-construction logic is implemented.
     //
     @Test
-    fun testMatcher_IDs_and_MovieTickets_alternative() = runTest {
+    fun testMatcher_OpenID4VP_IDs_and_MovieTickets_alternative() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -785,7 +971,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_ClaimSet_With_AgeOver() = runTest {
+    fun testMatcher_OpenID4VP_ClaimSet_With_AgeOver() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -809,7 +995,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_ClaimSet_With_AgeInYears() = runTest {
+    fun testMatcher_OpenID4VP_ClaimSet_With_AgeInYears() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -833,7 +1019,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_ClaimSet_With_BirthDate() = runTest {
+    fun testMatcher_OpenID4VP_ClaimSet_With_BirthDate() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -857,7 +1043,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_ClaimSet_With_NoAgeInfo() = runTest {
+    fun testMatcher_OpenID4VP_ClaimSet_With_NoAgeInfo() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -950,7 +1136,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_complex_query() = runTest {
+    fun testMatcher_OpenID4VP_complex_query() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -1113,7 +1299,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_value_matching_mdoc_String() = runTest {
+    fun testMatcher_OpenID4VP_value_matching_mdoc_String() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -1158,7 +1344,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_value_matching_mdoc_Int() = runTest {
+    fun testMatcher_OpenID4VP_value_matching_mdoc_Int() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -1203,7 +1389,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_value_matching_mdoc_Bool_True() = runTest {
+    fun testMatcher_OpenID4VP_value_matching_mdoc_Bool_True() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -1248,7 +1434,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_value_matching_mdoc_Bool_False() = runTest {
+    fun testMatcher_OpenID4VP_value_matching_mdoc_Bool_False() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -1293,7 +1479,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_value_matching_sdjwt_String() = runTest {
+    fun testMatcher_OpenID4VP_value_matching_sdjwt_String() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -1336,7 +1522,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_value_matching_sdjwt_Int() = runTest {
+    fun testMatcher_OpenID4VP_value_matching_sdjwt_Int() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -1412,7 +1598,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_value_matching_sdjwt_Bool_True() = runTest {
+    fun testMatcher_OpenID4VP_value_matching_sdjwt_Bool_True() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -1455,7 +1641,7 @@ class MatcherTest {
     }
 
     @Test
-    fun testMatcher_value_matching_sdjwt_Bool_False() = runTest {
+    fun testMatcher_OpenID4VP_value_matching_sdjwt_Bool_False() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
             signRequest = true,
@@ -1493,6 +1679,379 @@ class MatcherTest {
                     Given Names: Erika
                     Older Than 18: false
             """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_mDL_simple() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "org.iso.18013.5.1.mDL" },
+                          "claims": [
+                            { "path": ["org.iso.18013.5.1", "age_over_21"] },
+                            { "path": ["org.iso.18013.5.1", "portrait"] }
+                    ]}]}
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Older Than 21 Years: true
+                    Photo of Holder: 5318 bytes
+                """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_mDL_or_PID() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "org.iso.18013.5.1.mDL"
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "given_name"
+                              ]
+                            },
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "family_name"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "id": "pid",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "eu.europa.ec.eudi.pid.1"
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "eu.europa.ec.eudi.pid.1",
+                                "given_name"
+                              ]
+                            },
+                            {
+                              "path": [
+                                "eu.europa.ec.eudi.pid.1",
+                                "family_name"
+                              ]
+                            }
+                          ]
+                        }
+                      ],
+                      "credential_sets": [
+                        {
+                          "options": [
+                            [
+                              "mdl"
+                            ],
+                            [
+                              "pid"
+                            ]
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Given Names: Erika
+                    Family Name: Mustermann
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __EU PID__
+                    Given Names: Erika
+                    Family Name: Mustermann
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __EU PID 2__
+                    Given Names: Max
+                    Family Name: Mustermann
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_mDL_and_PID() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "org.iso.18013.5.1.mDL"
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "given_name"
+                              ]
+                            },
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "family_name"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "id": "pid",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "eu.europa.ec.eudi.pid.1"
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "eu.europa.ec.eudi.pid.1",
+                                "given_name"
+                              ]
+                            },
+                            {
+                              "path": [
+                                "eu.europa.ec.eudi.pid.1",
+                                "family_name"
+                              ]
+                            }
+                          ]
+                        }
+                      ],
+                      "credential_sets": [
+                        {
+                          "options": [
+                            [
+                              "mdl", "pid"
+                            ]
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Given Names: Erika
+                    Family Name: Mustermann
+                  SetEntry set_index 1
+                    cred_id 0 org-iso-mdoc __EU PID__
+                    Given Names: Erika
+                    Family Name: Mustermann
+                  SetEntry set_index 1
+                    cred_id 0 org-iso-mdoc __EU PID 2__
+                    Given Names: Max
+                    Family Name: Mustermann
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_age_mdocs() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionStandardDocuments()
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "pid",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "eu.europa.ec.eudi.pid.1"
+                          },
+                          "claims": [
+                            {
+                              "path": [ "eu.europa.ec.eudi.pid.1", "age_over_18" ],
+                              "values": [ true ]
+                            }
+                          ]
+                        },
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "org.iso.18013.5.1.mDL"
+                          },
+                          "claims": [
+                            {
+                              "path": ["org.iso.18013.5.1", "age_over_18" ],
+                              "values": [ true ]
+                            }
+                          ]
+                        },
+                        {
+                          "id": "photoid",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "org.iso.23220.photoid.1"
+                          },
+                          "claims": [
+                            {
+                              "path": [ "org.iso.23220.1", "age_over_18" ],
+                              "values": [ true ]
+                            }
+                          ]
+                        }
+                      ],
+                      "credential_sets": [
+                        {
+                          "options": [
+                            [ "pid" ],
+                            [ "mdl" ],
+                            [ "photoid" ]
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __EU PID__
+                    Older Than 18: true
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __EU PID 2__
+                    Older Than 18: true
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Older Than 18 Years: true
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __Photo ID__
+                    Older Than 18 Years: true
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __Photo ID 2__
+                    Older Than 18 Years: true
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_ClaimSet_With_AgeOver() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                addMdl_with_AgeOver_AgeInYears_BirthDate(harness)
+            },
+            dcql = ageMdlQuery()
+        )
+        Assert.assertEquals(
+            """
+            Set
+              set_id 0 org-iso-mdoc
+              SetEntry set_index 0
+                cred_id 0 org-iso-mdoc __my-mDL__
+                Given Names: David
+                Older Than 18 Years: true
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_ClaimSet_With_AgeInYears() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                addMdl_with_AgeInYears_BirthDate(harness)
+            },
+            dcql = ageMdlQuery()
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __my-mDL-no-age-over__
+                    Given Names: David
+                    Age in Years: 48
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_ClaimSet_With_BirthDate() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                addMdl_with_BirthDate(harness)
+            },
+            dcql = ageMdlQuery()
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __my-mDL-only-birth-date__
+                    Given Names: David
+                    Date of Birth: 1976-03-02
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_ClaimSet_With_NoAgeInfo() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                addMdl_with_OnlyName(harness)
+            },
+            dcql = ageMdlQuery()
+        )
+        Assert.assertEquals(
+            """
+            """.trimIndent().trim(),
             matcherResult
         )
     }

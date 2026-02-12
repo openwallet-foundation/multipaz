@@ -1,4 +1,4 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -221,6 +221,9 @@ private suspend fun digitalCredentialsMdocApiProtocol(
         sessionTranscript = sessionTranscript,
         source = source,
         keyAgreementPossible = emptyList(),
+        requesterAppId = appId,
+        requesterOrigin = origin,
+        preselectedDocuments = preselectedDocuments,
         onWaitingForUserInput = {},
         onDocumentsInFocus = {},
     )

@@ -1,28 +1,31 @@
-package org.multipaz.openid.dcql
+package org.multipaz.mdoc.request
 
 import kotlinx.coroutines.test.runTest
 import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemFullDate
 import kotlinx.datetime.LocalDate
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
+import org.multipaz.cbor.buildCborArray
 import org.multipaz.datetime.formatLocalized
+import org.multipaz.documenttype.knowntypes.DrivingLicense
+import org.multipaz.mdoc.response.Iso18015ResponseException
 import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.presentment.prettyPrint
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-class TestPrivacyPreservingAgeRequest {
+class Iso18013TestPrivacyPreservingAgeRequest {
 
     companion object {
         suspend fun addMdl_with_AgeOver_AgeInYears_BirthDate(harness: DocumentStoreTestHarness) {
             harness.provisionMdoc(
                 displayName = "my-mDL",
-                docType = "org.iso.18013.5.1.mDL",
+                docType = DrivingLicense.MDL_DOCTYPE,
                 data = mapOf(
-                    "org.iso.18013.5.1" to listOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
                         "given_name" to Tstr("David"),
                         "age_over_18" to true.toDataItem(),
                         "age_in_years" to 48.toDataItem(),
@@ -35,9 +38,9 @@ class TestPrivacyPreservingAgeRequest {
         suspend fun addMdl_with_AgeInYears_BirthDate(harness: DocumentStoreTestHarness) {
             harness.provisionMdoc(
                 displayName = "my-mDL-no-age-over",
-                docType = "org.iso.18013.5.1.mDL",
+                docType = DrivingLicense.MDL_DOCTYPE,
                 data = mapOf(
-                    "org.iso.18013.5.1" to listOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
                         "given_name" to Tstr("David"),
                         "age_in_years" to 48.toDataItem(),
                         "birth_date" to LocalDate.parse("1976-03-02").toDataItemFullDate()
@@ -49,9 +52,9 @@ class TestPrivacyPreservingAgeRequest {
         suspend fun addMdl_with_BirthDate(harness: DocumentStoreTestHarness) {
             harness.provisionMdoc(
                 displayName = "my-mDL-only-birth-date",
-                docType = "org.iso.18013.5.1.mDL",
+                docType = DrivingLicense.MDL_DOCTYPE,
                 data = mapOf(
-                    "org.iso.18013.5.1" to listOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
                         "given_name" to Tstr("David"),
                         "birth_date" to LocalDate.parse("1976-03-02").toDataItemFullDate()
                     )
@@ -62,45 +65,121 @@ class TestPrivacyPreservingAgeRequest {
         suspend fun addMdl_with_OnlyName(harness: DocumentStoreTestHarness) {
             harness.provisionMdoc(
                 displayName = "my-mDL-only-name",
-                docType = "org.iso.18013.5.1.mDL",
+                docType = DrivingLicense.MDL_DOCTYPE,
                 data = mapOf(
-                    "org.iso.18013.5.1" to listOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
                         "given_name" to Tstr("David"),
                     )
                 )
             )
         }
 
-        private fun ageMdlQuery(): DcqlQuery {
-            return DcqlQuery.fromJson(
-                Json.parseToJsonElement(
-                    """
-                        {
-                          "credentials": [
-                            {
-                              "id": "my_credential",
-                              "format": "mso_mdoc",
-                              "meta": {
-                                "doctype_value": "org.iso.18013.5.1.mDL"
-                              },
-                              "claims": [
-                                {"id": "a", "path": ["org.iso.18013.5.1", "given_name"]},
-                                {"id": "b", "path": ["org.iso.18013.5.1", "age_over_18"]},
-                                {"id": "c", "path": ["org.iso.18013.5.1", "age_in_years"]},
-                                {"id": "d", "path": ["org.iso.18013.5.1", "birth_date"]}
-                              ],
-                              "claim_sets": [
-                                ["a", "b"],
-                                ["a", "c"],
-                                ["a", "d"]
-                              ]
-                            }
-                          ]
-                        }
-                    """
-                ).jsonObject
-            )
+        private fun ageMdlQuery(): DeviceRequest {
+            return buildDeviceRequest(
+                sessionTranscript = buildCborArray { add("doesn't"); add("matter") }
+            ) {
+                addDocRequest(
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    nameSpaces = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to mapOf(
+                            "given_name" to false,
+                            "age_over_18" to false
+                        )
+                    ),
+                    docRequestInfo = DocRequestInfo(
+                        alternativeDataElements = listOf(AlternativeDataElementSet(
+                            requestedElement = ElementReference(
+                                namespace = DrivingLicense.MDL_NAMESPACE,
+                                dataElement = "age_over_18",
+                            ),
+                            alternativeElementSets = listOf(
+                                listOf(ElementReference(
+                                    namespace = DrivingLicense.MDL_NAMESPACE,
+                                    dataElement = "age_in_years",
+                                )),
+                                listOf(ElementReference(
+                                    namespace = DrivingLicense.MDL_NAMESPACE,
+                                    dataElement = "birth_date",
+                                ))
+                            )
+                        ))
+                    )
+                )
+            }
         }
+    }
+
+    @Test
+    fun testToDqclQuery() = runTest {
+        @OptIn(ExperimentalSerializationApi::class)
+        val prettyJson = Json {
+            prettyPrint = true
+            prettyPrintIndent = "  "
+        }
+        assertEquals(
+            """
+                {
+                  "credentials": [
+                    {
+                      "id": "cred0",
+                      "format": "mso_mdoc",
+                      "meta": {
+                        "doctype_value": "org.iso.18013.5.1.mDL"
+                      },
+                      "claims": [
+                        {
+                          "id": "claim0",
+                          "path": [
+                            "org.iso.18013.5.1",
+                            "given_name"
+                          ],
+                          "intent_to_retain": false
+                        },
+                        {
+                          "id": "claim1",
+                          "path": [
+                            "org.iso.18013.5.1",
+                            "age_over_18"
+                          ],
+                          "intent_to_retain": false
+                        },
+                        {
+                          "id": "claim2",
+                          "path": [
+                            "org.iso.18013.5.1",
+                            "age_in_years"
+                          ],
+                          "intent_to_retain": false
+                        },
+                        {
+                          "id": "claim3",
+                          "path": [
+                            "org.iso.18013.5.1",
+                            "birth_date"
+                          ],
+                          "intent_to_retain": false
+                        }
+                      ],
+                      "claim_sets": [
+                        [
+                          "claim0",
+                          "claim1"
+                        ],
+                        [
+                          "claim0",
+                          "claim2"
+                        ],
+                        [
+                          "claim0",
+                          "claim3"
+                        ]
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent(),
+            prettyJson.encodeToString(ageMdlQuery().toDcql())
+        )
     }
 
     @Test
@@ -124,12 +203,12 @@ class TestPrivacyPreservingAgeRequest {
                                   docId: my-mDL
                                   claims:
                                     claim:
-                                      nameSpace: org.iso.18013.5.1
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: given_name
                                       displayName: Given Names
                                       value: David
                                     claim:
-                                      nameSpace: org.iso.18013.5.1
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: age_over_18
                                       displayName: Older Than 18 Years
                                       value: True
@@ -161,12 +240,12 @@ class TestPrivacyPreservingAgeRequest {
                                   docId: my-mDL-no-age-over
                                   claims:
                                     claim:
-                                      nameSpace: org.iso.18013.5.1
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: given_name
                                       displayName: Given Names
                                       value: David
                                     claim:
-                                      nameSpace: org.iso.18013.5.1
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: age_in_years
                                       displayName: Age in Years
                                       value: 48
@@ -204,12 +283,12 @@ class TestPrivacyPreservingAgeRequest {
                                   docId: my-mDL-only-birth-date
                                   claims:
                                     claim:
-                                      nameSpace: org.iso.18013.5.1
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: given_name
                                       displayName: Given Names
                                       value: David
                                     claim:
-                                      nameSpace: org.iso.18013.5.1
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: birth_date
                                       displayName: Date of Birth
                                       value: $dateValue
@@ -223,12 +302,12 @@ class TestPrivacyPreservingAgeRequest {
         val harness = DocumentStoreTestHarness()
         harness.initialize()
         addMdl_with_OnlyName(harness)
-        val e = assertFailsWith(DcqlCredentialQueryException::class) {
+        val e = assertFailsWith(Iso18015ResponseException::class) {
             ageMdlQuery().execute(
                 presentmentSource = harness.presentmentSource
             )
         }
-        assertEquals("No matches for credential query with id my_credential", e.message)
+        assertEquals("No matching credentials for first DocRequest", e.message)
     }
 
 }

@@ -24,20 +24,13 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.addJsonObject
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.putJsonObject
 import multipazproject.samples.testapp.generated.resources.Res
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.OID
-import org.multipaz.cbor.toDataItem
-import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.certext.GoogleAccount
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
@@ -53,21 +46,16 @@ import org.multipaz.crypto.X509Extension
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
-import org.multipaz.documenttype.DocumentAttributeType
-import org.multipaz.documenttype.DocumentCannedRequest
-import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.documenttype.Icon
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.documenttype.knowntypes.UtopiaBoardingPass
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.dcql.DcqlQuery
-import org.multipaz.openid.dcql.DcqlResponse
 import org.multipaz.presentment.CredentialPresentmentData
 import org.multipaz.presentment.CredentialPresentmentSelection
-import org.multipaz.presentment.model.PresentmentSource
-import org.multipaz.presentment.model.SimplePresentmentSource
+import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.SimplePresentmentSource
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.requestConsent
 import org.multipaz.request.Requester
@@ -81,9 +69,6 @@ import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.truncateToWholeSeconds
-import kotlin.collections.component1
-import kotlin.collections.component2
-import kotlin.collections.iterator
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -399,7 +384,7 @@ fun ConsentPromptScreen(
                         paData,
                         queryResult.requester,
                         queryResult.source.resolveTrust(queryResult.requester),
-                        queryResult.dcqlResponse,
+                        queryResult.presentmentData,
                         emptyList(),
                         { documents ->
                             onDocumentsInFocus = documents
@@ -553,7 +538,7 @@ fun ConsentPromptScreen(
 private data class QueryResult(
     val requester: Requester,
     val source: PresentmentSource,
-    val dcqlResponse: DcqlResponse
+    val presentmentData: CredentialPresentmentData
 )
 
 private suspend fun getQueryResult(

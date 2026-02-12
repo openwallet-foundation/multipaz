@@ -1,21 +1,13 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
-import kotlin.time.Clock
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.EcCurve
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.zkp.ZkSystemRepository
-import org.multipaz.presentment.CredentialPresentmentData
-import org.multipaz.presentment.CredentialPresentmentSelection
-import org.multipaz.request.JsonRequest
-import org.multipaz.request.MdocRequest
-import org.multipaz.request.Request
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
-import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.trustmanagement.TrustMetadata
 
 /**
@@ -78,23 +70,6 @@ abstract class PresentmentSource(
         onDocumentsInFocus: (documents: List<Document>) -> Unit
     ): CredentialPresentmentSelection?
 
-    // TODO: why do we have two selectCredential() methods?
-
-    /**
-     * Chooses a credential from a document.
-     *
-     * @param document the [Document] to pick a credential from or `null`.
-     * @param request the request in question.
-     * @param keyAgreementPossible if non-empty, a credential using Key Agreement may be returned provided
-     *   its private key is one of the given curves.
-     * @return a [Credential] belonging to [document] that may be presented or `null`.
-     */
-    abstract suspend fun selectCredential(
-        document: Document?,
-        request: Request,
-        keyAgreementPossible: List<EcCurve>,
-    ): Credential?
-
     /**
      * Chooses a credential from a document.
      *
@@ -109,69 +84,4 @@ abstract class PresentmentSource(
         requestedClaims: List<RequestedClaim>,
         keyAgreementPossible: List<EcCurve>,
     ): Credential?
-}
-
-private const val TAG = "PresentmentSource"
-
-internal suspend fun PresentmentSource.getDocumentsMatchingRequest(
-    request: Request,
-): List<Document> {
-    return when (request) {
-        is MdocRequest -> mdocFindDocumentsForRequest(request)
-        is JsonRequest -> sdjwtFindDocumentsForRequest(request)
-    }
-}
-
-private suspend fun PresentmentSource.mdocFindDocumentsForRequest(
-    request: MdocRequest,
-): List<Document> {
-    val now = Clock.System.now()
-    val result = mutableListOf<Document>()
-
-    for (documentName in documentStore.listDocumentIds()) {
-        val document = documentStore.lookupDocument(documentName) ?: continue
-        if (mdocDocumentMatchesRequest(request, document)) {
-            result.add(document)
-        }
-    }
-    return result
-}
-
-private suspend fun PresentmentSource.mdocDocumentMatchesRequest(
-    request: MdocRequest,
-    document: Document,
-): Boolean {
-    for (credential in document.getCertifiedCredentials()) {
-        if (credential is MdocCredential && credential.docType == request.docType) {
-            return true
-        }
-    }
-    return false
-}
-
-private suspend fun PresentmentSource.sdjwtFindDocumentsForRequest(
-    request: JsonRequest,
-): List<Document> {
-    val now = Clock.System.now()
-    val result = mutableListOf<Document>()
-
-    for (documentName in documentStore.listDocumentIds()) {
-        val document = documentStore.lookupDocument(documentName) ?: continue
-        if (sdjwtDocumentMatchesRequest(request, document)) {
-            result.add(document)
-        }
-    }
-    return result
-}
-
-internal suspend fun PresentmentSource.sdjwtDocumentMatchesRequest(
-    request: JsonRequest,
-    document: Document,
-): Boolean {
-    for (credential in document.getCertifiedCredentials()) {
-        if (credential is SdJwtVcCredential && credential.vct == request.vct) {
-            return true
-        }
-    }
-    return false
 }

@@ -1,4 +1,4 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
 import kotlin.time.Clock
 import org.multipaz.credential.Credential
@@ -8,15 +8,10 @@ import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.zkp.ZkSystemRepository
-import org.multipaz.presentment.CredentialPresentmentData
-import org.multipaz.presentment.CredentialPresentmentSelection
 import org.multipaz.prompt.ShowConsentPromptFn
 import org.multipaz.prompt.promptModelRequestConsent
-import org.multipaz.request.JsonRequest
 import org.multipaz.request.JsonRequestedClaim
-import org.multipaz.request.MdocRequest
 import org.multipaz.request.MdocRequestedClaim
-import org.multipaz.request.Request
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
@@ -83,32 +78,11 @@ class SimplePresentmentSource(
     }
 
     override suspend fun selectCredential(
-        document: Document?,
-        request: Request,
-        keyAgreementPossible: List<EcCurve>,
-    ): Credential? {
-        val credsForPresentment = when (request) {
-            is MdocRequest -> mdocGetCredentialsForPresentment(request, document)
-            is JsonRequest -> sdjwtGetCredentialsForPresentment(request, document)
-        }
-        if (!preferSignatureToKeyAgreement && credsForPresentment.credentialKeyAgreement != null) {
-            credsForPresentment.credentialKeyAgreement as SecureAreaBoundCredential
-            val keyInfo = credsForPresentment.credentialKeyAgreement.secureArea.getKeyInfo(
-                credsForPresentment.credentialKeyAgreement.alias
-            )
-            if (keyAgreementPossible.contains(keyInfo.algorithm.curve!!)) {
-                return credsForPresentment.credentialKeyAgreement
-            }
-        }
-        return credsForPresentment.credential
-    }
-
-    override suspend fun selectCredential(
         document: Document,
         requestedClaims: List<RequestedClaim>,
         keyAgreementPossible: List<EcCurve>,
     ): Credential? {
-        check(requestedClaims.size > 0)
+        check(requestedClaims.isNotEmpty())
         val now = Clock.System.now()
         val credsForPresentment = when (requestedClaims[0]) {
             is MdocRequestedClaim -> {
@@ -149,44 +123,6 @@ class SimplePresentmentSource(
             }
         }
         return credsForPresentment.credential
-    }
-
-    private suspend fun PresentmentSource.mdocGetCredentialsForPresentment(
-        request: MdocRequest,
-        document: Document?,
-    ): CredentialForPresentment {
-        val now = Clock.System.now()
-        val documentToQuery = document ?: getDocumentsMatchingRequest(request).first()
-        return CredentialForPresentment(
-            credential = domainMdocSignature?.let {
-                documentToQuery.findCredential(domain = it, now = now)
-            },
-            credentialKeyAgreement = domainMdocKeyAgreement?.let {
-                documentToQuery.findCredential(domain = it, now = now)
-            }
-        )
-    }
-
-    private suspend fun PresentmentSource.sdjwtGetCredentialsForPresentment(
-        request: JsonRequest,
-        document: Document?,
-    ): CredentialForPresentment {
-        val now = Clock.System.now()
-        val documentToQuery = document ?: getDocumentsMatchingRequest(request).first()
-        if (documentToQuery.getCertifiedCredentials().firstOrNull() is KeylessSdJwtVcCredential) {
-            return CredentialForPresentment(
-                credential = domainKeylessSdJwt?.let {
-                    documentToQuery.findCredential(domain = it, now = now)
-                },
-                credentialKeyAgreement = null
-            )
-        }
-        return CredentialForPresentment(
-            credential = domainKeyBoundSdJwt?.let {
-                documentToQuery.findCredential(domain = it, now = now)
-            },
-            credentialKeyAgreement = null
-        )
     }
 
     // Companion object needed for multipaz-swift, see SimplePresentmentSourceExt.swift

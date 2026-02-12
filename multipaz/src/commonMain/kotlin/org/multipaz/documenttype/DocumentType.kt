@@ -56,7 +56,7 @@ import kotlin.random.Random
  */
 class DocumentType private constructor(
     val displayName: String,
-    val cannedRequests: List<DocumentCannedRequest>,
+    val cannedRequests: List<SingleDocumentCannedRequest>,
     val mdocDocumentType: MdocDocumentType?,
     val jsonDocumentType: JsonDocumentType?
 ) {
@@ -73,7 +73,7 @@ class DocumentType private constructor(
         var mdocBuilder: MdocDocumentType.Builder? = null,
         var jsonBuilder: JsonDocumentType.Builder? = null
     ) {
-        private val sampleRequests = mutableListOf<DocumentCannedRequest>()
+        private val sampleRequests = mutableListOf<SingleDocumentCannedRequest>()
 
         /**
          * Initialize the [mdocBuilder].
@@ -316,7 +316,13 @@ class DocumentType private constructor(
                 }
                 JsonCannedRequest(jsonBuilder!!.vct, claims)
             }
-            sampleRequests.add(DocumentCannedRequest(id, displayName, mdocRequest, jsonRequest))
+            sampleRequests.add(
+                SingleDocumentCannedRequest(
+                    id = id,
+                    displayName = displayName,
+                    mdocRequest = mdocRequest,
+                    jsonRequest = jsonRequest
+                ))
         }
 
         /**

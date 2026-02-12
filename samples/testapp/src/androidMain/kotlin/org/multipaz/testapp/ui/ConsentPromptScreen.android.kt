@@ -9,9 +9,9 @@ import org.multipaz.compose.prompt.PresentmentActivity
 import org.multipaz.document.Document
 import org.multipaz.presentment.CredentialPresentmentData
 import org.multipaz.presentment.CredentialPresentmentSelection
-import org.multipaz.presentment.model.PresentmentModel
-import org.multipaz.presentment.model.PresentmentCanceled
-import org.multipaz.presentment.model.PresentmentSource
+import org.multipaz.presentment.PresentmentModel
+import org.multipaz.presentment.PresentmentCanceled
+import org.multipaz.presentment.PresentmentSource
 import org.multipaz.prompt.promptModelRequestConsent
 import org.multipaz.prompt.showBiometricPrompt
 import org.multipaz.request.Requester

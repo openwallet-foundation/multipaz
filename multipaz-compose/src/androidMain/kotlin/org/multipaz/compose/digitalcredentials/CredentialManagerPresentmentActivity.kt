@@ -26,7 +26,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -37,8 +36,8 @@ import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.context.initializeApplication
 import org.multipaz.digitalcredentials.getAppOrigin
 import org.multipaz.digitalcredentials.lookupForCredmanId
-import org.multipaz.presentment.model.PresentmentSource
-import org.multipaz.presentment.model.digitalCredentialsPresentment
+import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.digitalCredentialsPresentment
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.util.Logger
 import java.lang.IllegalStateException

@@ -1,4 +1,4 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -25,11 +25,11 @@ import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
@@ -53,7 +53,6 @@ import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
-import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.util.Logger
 import org.multipaz.util.truncateToWholeSeconds
 import kotlin.collections.iterator
@@ -64,7 +63,7 @@ import kotlin.time.Instant
 /**
  * Test harness for DocumentStore and related types.
  *
- * This provides a test harness for [DocumentStore], [Document], and [Credential]
+ * This provides a test harness for [org.multipaz.document.DocumentStore], [org.multipaz.document.Document], and [Credential]
  * which can be used to test functionality sitting on top of these.
  *
  * Creating a [DocumentStoreTestHarness] is a no-op, call [initialize] to actually
@@ -104,11 +103,11 @@ class DocumentStoreTestHarness {
      * Initializes the [DocumentStoreTestHarness].
      *
      * This creates [documentStore] and with give documents [docMdl], [docPhotoId], [docPhotoId2],
-     * [docEuPid], [docEuPid2], all populated with sample data. Each document will have one [MdocCredential]
-     * in the domain `mdoc` and the EU PIDs will also have a [KeyBoundSdJwtVcCredential]
+     * [docEuPid], [docEuPid2], all populated with sample data. Each document will have one [org.multipaz.mdoc.credential.MdocCredential]
+     * in the domain `mdoc` and the EU PIDs will also have a [org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential]
      * in the domain `sdjwt`.
      *
-     * The [DocumentStore] itself is backed by [EphemeralStorage] and each credential is using
+     * The [DocumentStore] itself is backed by [org.multipaz.storage.ephemeral.EphemeralStorage] and each credential is using
      * a single [SoftwareSecureArea].
      *
      * This method can be called multiple times.
@@ -135,7 +134,8 @@ class DocumentStoreTestHarness {
             .add(softwareSecureArea)
             .build()
 
-        documentStore = buildDocumentStore(storage = storage, secureAreaRepository = secureAreaRepository) {}
+        documentStore =
+            buildDocumentStore(storage = storage, secureAreaRepository = secureAreaRepository) {}
 
         presentmentSource = SimplePresentmentSource(
             documentStore = documentStore,
@@ -481,9 +481,11 @@ class DocumentStoreTestHarness {
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = mdocCredential.getAttestation().publicKey,
         )
-        val taggedEncodedMso = Cbor.encode(Tagged(
-            Tagged.ENCODED_CBOR,
-            Bstr(Cbor.encode(mso.toDataItem())))
+        val taggedEncodedMso = Cbor.encode(
+            Tagged(
+                Tagged.ENCODED_CBOR,
+                Bstr(Cbor.encode(mso.toDataItem()))
+            )
         )
 
         // IssuerAuth is a COSE_Sign1 where payload is MobileSecurityObjectBytes

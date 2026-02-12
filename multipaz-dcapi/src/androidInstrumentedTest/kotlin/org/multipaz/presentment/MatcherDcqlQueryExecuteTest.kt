@@ -1,4 +1,4 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -18,10 +18,10 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
-import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.calculateCredentialDatabase
 import org.multipaz.digitalcredentials.getDefault
+import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.util.toBase64Url
 import kotlin.random.Random

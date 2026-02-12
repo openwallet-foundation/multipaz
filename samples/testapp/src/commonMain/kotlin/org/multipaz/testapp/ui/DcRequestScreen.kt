@@ -25,9 +25,11 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.documenttype.DocumentCannedRequest
-import org.multipaz.documenttype.DocumentType
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.digitalcredentials.DigitalCredentials
+import org.multipaz.documenttype.MultiDocumentCannedRequest
+import org.multipaz.documenttype.SingleDocumentCannedRequest
+import org.multipaz.documenttype.knowntypes.wellKnownMultipleDocumentRequests
 import org.multipaz.verification.MdocApiDcResponse
 import org.multipaz.verification.OpenID4VPDcResponse
 import org.multipaz.request.JsonRequestedClaim
@@ -45,8 +47,7 @@ private const val TAG = "AppToAppReadingScreen"
 
 private data class RequestEntry(
     val displayName: String,
-    val documentType: DocumentType,
-    val sampleRequest: DocumentCannedRequest
+    val request: DocumentCannedRequest
 )
 
 private enum class RequestProtocol(
@@ -158,10 +159,15 @@ fun DcRequestScreen(
         for (sampleRequest in documentType.cannedRequests) {
             requestOptions.add(RequestEntry(
                 displayName = "${documentType.displayName}: ${sampleRequest.displayName}",
-                documentType = documentType,
-                sampleRequest = sampleRequest
+                request = sampleRequest
             ))
         }
+    }
+    for (request in wellKnownMultipleDocumentRequests) {
+        requestOptions.add(RequestEntry(
+            displayName = "Multi-doc: ${request.displayName}",
+            request = request
+        ))
     }
     val requestDropdownExpanded = remember { mutableStateOf(false) }
     val requestSelected = remember { mutableStateOf(requestOptions[lastRequest]) }
@@ -214,7 +220,7 @@ fun DcRequestScreen(
                             doDcRequestFlow(
                                 digitalCredentials = app.digitalCredentials,
                                 appReaderKey = app.readerKey,
-                                request = requestSelected.value.sampleRequest,
+                                request = requestSelected.value.request,
                                 protocol = protocolSelected.value,
                                 format = formatSelected.value,
                                 zkSystemRepository = app.zkSystemRepository,
@@ -248,13 +254,15 @@ private suspend fun doDcRequestFlow(
         metadata: ShowResponseMetadata
     ) -> Unit
 ) {
-    when (format) {
-        CredentialFormat.ISO_MDOC -> {
-            require(request.mdocRequest != null) { "No ISO mdoc format in request" }
-        }
+    if (request is SingleDocumentCannedRequest) {
+        when (format) {
+            CredentialFormat.ISO_MDOC -> {
+                require(request.mdocRequest != null) { "No ISO mdoc format in request" }
+            }
 
-        CredentialFormat.IETF_SDJWT -> {
-            require(request.jsonRequest != null) { "No IETF SD-JWT format in request" }
+            CredentialFormat.IETF_SDJWT -> {
+                require(request.jsonRequest != null) { "No IETF SD-JWT format in request" }
+            }
         }
     }
 
@@ -264,24 +272,75 @@ private suspend fun doDcRequestFlow(
     // According to OpenID4VP, Client ID must be set for signed requests and not for unsigned requests
     val clientId = "web-origin:$origin"
 
-    val dcRequestObject = when (format) {
-        CredentialFormat.ISO_MDOC -> {
-            val claims = mutableListOf<MdocRequestedClaim>()
-            request.mdocRequest!!.namespacesToRequest.forEach { namespaceRequest ->
-                namespaceRequest.dataElementsToRequest.forEach { (mdocDataElement, intentToRetain) ->
-                    claims.add(
-                        MdocRequestedClaim(
-                            namespaceName = namespaceRequest.namespace,
-                            dataElementName = mdocDataElement.attribute.identifier,
-                            intentToRetain = intentToRetain
+    val dcRequestObject = when (request) {
+        is SingleDocumentCannedRequest -> {
+            when (format) {
+                CredentialFormat.ISO_MDOC -> {
+                    val claims = mutableListOf<MdocRequestedClaim>()
+                    request.mdocRequest!!.namespacesToRequest.forEach { namespaceRequest ->
+                        namespaceRequest.dataElementsToRequest.forEach { (mdocDataElement, intentToRetain) ->
+                            claims.add(
+                                MdocRequestedClaim(
+                                    namespaceName = namespaceRequest.namespace,
+                                    dataElementName = mdocDataElement.attribute.identifier,
+                                    intentToRetain = intentToRetain
+                                )
+                            )
+                        }
+                    }
+                    VerificationUtil.generateDcRequestMdoc(
+                        exchangeProtocols = protocol.exchangeProtocolNames,
+                        docType = request.mdocRequest!!.docType,
+                        claims = claims,
+                        nonce = nonce,
+                        origin = origin,
+                        clientId = clientId,
+                        responseEncryptionKey = responseEncryptionKey.publicKey,
+                        readerAuthenticationKey = if (protocol.signRequest) {
+                            appReaderKey
+                        } else {
+                            null
+                        },
+                        zkSystemSpecs = if (request.mdocRequest!!.useZkp) {
+                            zkSystemRepository.getAllZkSystemSpecs()
+                        } else {
+                            emptyList()
+                        }
+                    )
+                }
+
+                CredentialFormat.IETF_SDJWT -> {
+                    val claims = request.jsonRequest!!.claimsToRequest.map { documentAttribute ->
+                        val path = mutableListOf<JsonElement>()
+                        documentAttribute.parentAttribute?.let {
+                            path.add(JsonPrimitive(it.identifier))
+                        }
+                        path.add(JsonPrimitive(documentAttribute.identifier))
+                        JsonRequestedClaim(
+                            claimPath = JsonArray(path),
                         )
+                    }
+                    VerificationUtil.generateDcRequestSdJwt(
+                        exchangeProtocols = protocol.exchangeProtocolNames,
+                        vct = listOf(request.jsonRequest!!.vct),
+                        claims = claims,
+                        nonce = nonce,
+                        origin = origin,
+                        clientId = clientId,
+                        responseEncryptionKey = responseEncryptionKey.publicKey,
+                        readerAuthenticationKey = if (protocol.signRequest) {
+                            appReaderKey
+                        } else {
+                            null
+                        },
                     )
                 }
             }
-            VerificationUtil.generateDcRequestMdoc(
+        }
+        is MultiDocumentCannedRequest -> {
+            VerificationUtil.generateDcRequestDcql(
                 exchangeProtocols = protocol.exchangeProtocolNames,
-                docType = request.mdocRequest!!.docType,
-                claims = claims,
+                dcql = Json.decodeFromString<JsonObject>(request.dcqlString),
                 nonce = nonce,
                 origin = origin,
                 clientId = clientId,
@@ -290,38 +349,11 @@ private suspend fun doDcRequestFlow(
                     appReaderKey
                 } else {
                     null
-                },
-                zkSystemSpecs = if (request.mdocRequest!!.useZkp) {
-                    zkSystemRepository.getAllZkSystemSpecs()
-                } else {
-                    emptyList()
                 }
-            )
-        }
-
-        CredentialFormat.IETF_SDJWT -> {
-            val claims = request.jsonRequest!!.claimsToRequest.map { documentAttribute ->
-                val path = mutableListOf<JsonElement>()
-                documentAttribute.parentAttribute?.let {
-                    path.add(JsonPrimitive(it.identifier))
-                }
-                path.add(JsonPrimitive(documentAttribute.identifier))
-                JsonRequestedClaim(
-                    claimPath = JsonArray(path),
-                )
-            }
-            VerificationUtil.generateDcRequestSdJwt(
-                exchangeProtocols = protocol.exchangeProtocolNames,
-                vct = listOf(request.jsonRequest!!.vct),
-                claims = claims,
-                nonce = nonce,
-                origin = origin,
-                clientId = clientId,
-                responseEncryptionKey = responseEncryptionKey.publicKey,
-                readerAuthenticationKey = appReaderKey,
             )
         }
     }
+
 
     Logger.i(TAG, "clientId: $clientId")
     Logger.i(TAG, "origin: $origin")

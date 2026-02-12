@@ -33,10 +33,10 @@ import org.multipaz.mdoc.transport.waitForConnection
 import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.Nfc
 import org.multipaz.nfc.ResponseApdu
-import org.multipaz.presentment.model.Iso18013Presentment
-import org.multipaz.presentment.model.PresentmentCanceled
-import org.multipaz.presentment.model.PresentmentModel
-import org.multipaz.presentment.model.PresentmentSource
+import org.multipaz.presentment.Iso18013Presentment
+import org.multipaz.presentment.PresentmentCanceled
+import org.multipaz.presentment.PresentmentModel
+import org.multipaz.presentment.PresentmentSource
 import org.multipaz.prompt.PromptModel
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID

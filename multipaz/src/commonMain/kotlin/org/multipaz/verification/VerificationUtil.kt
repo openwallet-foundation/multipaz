@@ -32,16 +32,19 @@ import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.request.DeviceRequestInfo
 import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.DocumentSet
 import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequest
+import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.OpenID4VP
+import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.sdjwt.SdJwt
@@ -51,6 +54,7 @@ import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import kotlin.collections.component1
 import kotlin.collections.component2
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Instant
 
 private const val TAG = "VerificationUtil"
@@ -69,7 +73,7 @@ object VerificationUtil {
      * - org-iso-mdoc
      * - openid4vp
      * - openid4vp-v1-signed
-     * - openid4v4-v1-unsigned
+     * - openid4vp-v1-unsigned
      *
      * This can be used on the server-side to generate the request. The resulting [JsonObject] can be serialized
      * to a string using [Json.encodeToString] and sent to the browser or requesting app which can pass it to
@@ -91,6 +95,7 @@ object VerificationUtil {
      * @param zkSystemSpecs if non-empty, request a ZK proof using these systems.
      * @return a [JsonObject] with the request.
      */
+    @Throws(CancellationException::class)
     suspend fun generateDcRequestMdoc(
         exchangeProtocols: List<String>,
         docType: String,
@@ -119,6 +124,150 @@ object VerificationUtil {
             put("requests", JsonArray(requests))
         }
     }
+
+    /**
+     * Utility function to generate a W3C Digital Credentials API request for requesting credentials.
+     *
+     * The request can expressed for multiple exchange protocols simultaneously, for example OpenID4VP 1.0 and
+     * ISO/IEC 18013:2025 Annex C. In the ISO 18013-5 case the DCQL is converted using the
+     * [buildDeviceRequestFromDcql].
+     *
+     * The following exchange protocols are supported by this function
+     * - org-iso-mdoc
+     * - openid4vp
+     * - openid4vp-v1-signed
+     * - openid4vp-v1-unsigned
+     *
+     * This can be used on the server-side to generate the request. The resulting [JsonObject] can be serialized
+     * to a string using [Json.encodeToString] and sent to the browser or requesting app which can pass it to
+     * `navigator.credentials.get()` or its native Credential Manager implementation.
+     *
+     * @param exchangeProtocols a list of W3C Exchange Protocol strings to generate requests for. The order of
+     *   requests in the resulting JSON will match the order in this list.
+     * @param dcql the DCQL to use.
+     * @param nonce the nonce to use. For OpenID4VP, this will be base64url-encoded without padding. For mdoc-api
+     *   this will be used as is.
+     * @param origin the origin to use.
+     * @param clientId the client id to use, must be non-null for signed requests.
+     * @param responseEncryptionKey the key to encrypt the response against or `null` to not encrypt the response.
+     *   Note that in some protocols encryption of the response is mandatory and this will throw [IllegalArgumentException]
+     *   if this is `null` for such protocols
+     * @param readerAuthenticationKey an optional key to use for reader authentication and its
+     *    certificate chain.
+     * @throws IllegalArgumentException if [dcqlQuery] contains features not supported by [DeviceRequest], for
+     *   example a request for credentials that aren't ISO mdocs.
+     * @return a [JsonObject] with the request.
+     */
+    @Throws(IllegalArgumentException::class, CancellationException::class)
+    suspend fun generateDcRequestDcql(
+        exchangeProtocols: List<String>,
+        dcql: JsonObject,
+        nonce: ByteString,
+        origin: String,
+        clientId: String?,
+        responseEncryptionKey: EcPublicKey?,
+        readerAuthenticationKey: AsymmetricKey.X509Compatible?,
+    ): JsonObject {
+        val requests = exchangeProtocols.map { exchangeProtocol ->
+            generateSingleRequestDcql(
+                exchangeProtocol = exchangeProtocol,
+                dcql = dcql,
+                nonce = nonce,
+                origin = origin,
+                clientId = clientId,
+                responseEncryptionKey = responseEncryptionKey,
+                readerAuthenticationKey = readerAuthenticationKey,
+            )
+        }
+        return buildJsonObject {
+            put("requests", JsonArray(requests))
+        }
+    }
+
+    private suspend fun generateSingleRequestDcql(
+        exchangeProtocol: String,
+        dcql: JsonObject,
+        nonce: ByteString,
+        origin: String,
+        clientId: String?,
+        responseEncryptionKey: EcPublicKey?,
+        readerAuthenticationKey: AsymmetricKey.X509Compatible?,
+    ): JsonObject = buildJsonObject {
+        put("protocol", exchangeProtocol)
+        when (exchangeProtocol) {
+            "openid4vp",
+            "openid4vp-v1-unsigned",
+            "openid4vp-v1-signed" -> {
+                put(
+                    "data",
+                    OpenID4VP.generateRequest(
+                        version = if (exchangeProtocol == "openid4vp") {
+                            OpenID4VP.Version.DRAFT_24
+                        } else {
+                            OpenID4VP.Version.DRAFT_29
+                        },
+                        origin = origin,
+                        clientId = clientId,
+                        nonce = nonce.toByteArray().toBase64Url(),
+                        responseEncryptionKey = responseEncryptionKey,
+                        requestSigningKey = readerAuthenticationKey,
+                        responseMode = OpenID4VP.ResponseMode.DC_API,
+                        responseUri = null,
+                        dclqQuery = dcql
+                    )
+                )
+            }
+
+            "org-iso-mdoc" -> {
+                if (responseEncryptionKey == null) {
+                    throw IllegalArgumentException("Response encryption is mandatory for org-iso-mdoc")
+                }
+                val encryptionInfo = buildCborArray {
+                    add("dcapi")
+                    addCborMap {
+                        put("nonce", nonce.toByteArray())
+                        put("recipientPublicKey", responseEncryptionKey.toCoseKey().toDataItem())
+                    }
+                }
+                val base64EncryptionInfo = Cbor.encode(encryptionInfo).toBase64Url()
+                val dcapiInfo = buildCborArray {
+                    add(base64EncryptionInfo)
+                    add(origin)
+                }
+                val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
+                val sessionTranscript = buildCborArray {
+                    add(Simple.NULL) // DeviceEngagementBytes
+                    add(Simple.NULL) // EReaderKeyBytes
+                    addCborArray {
+                        add("dcapi")
+                        add(dcapiInfoDigest)
+                    }
+                }
+                val encodedDeviceRequest = Cbor.encode(
+                    buildDeviceRequestFromDcql(
+                        sessionTranscript = sessionTranscript,
+                        dcql = dcql
+                        // TODO: sign individual requests with readerAuthenticationKey
+                    ) {
+                        if (readerAuthenticationKey != null) {
+                            addReaderAuthAll(readerKey = readerAuthenticationKey)
+                        }
+                    }.toDataItem()
+                )
+                Logger.iCbor(TAG, "deviceRequest", encodedDeviceRequest)
+                val dr = DeviceRequest.fromDataItem(Cbor.decode(encodedDeviceRequest))
+                dr.verifyReaderAuthentication(sessionTranscript)
+                val base64DeviceRequest = encodedDeviceRequest.toBase64Url()
+                putJsonObject("data") {
+                    put("deviceRequest", base64DeviceRequest)
+                    put("encryptionInfo", base64EncryptionInfo)
+                }
+            }
+
+            else -> throw IllegalArgumentException("Unsupported exchange protocol $exchangeProtocol")
+        }
+    }
+
 
     private suspend fun generateSingleRequest(
         exchangeProtocol: String,
@@ -252,7 +401,7 @@ object VerificationUtil {
      * - org-iso-mdoc
      * - openid4vp
      * - openid4vp-v1-signed
-     * - openid4v4-v1-unsigned
+     * - openid4vp-v1-unsigned
      *
      * This can be used on the server-side to generate the request. The resulting [JsonObject] can be serialized
      * to a string using [Json.encodeToString] and sent to the browser or requesting app which can pass it to
@@ -273,6 +422,7 @@ object VerificationUtil {
      *    certificate chain.
      * @return a [JsonObject] with the request.
      */
+    @Throws(CancellationException::class)
     suspend fun generateDcRequestSdJwt(
         exchangeProtocols: List<String>,
         vct: List<String>,

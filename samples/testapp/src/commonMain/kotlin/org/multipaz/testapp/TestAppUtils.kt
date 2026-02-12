@@ -2,6 +2,7 @@ package org.multipaz.testapp
 
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -38,6 +39,8 @@ import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentCannedRequest
 import org.multipaz.documenttype.DocumentType
+import org.multipaz.documenttype.MultiDocumentCannedRequest
+import org.multipaz.documenttype.SingleDocumentCannedRequest
 import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.documenttype.knowntypes.Loyalty
 import org.multipaz.documenttype.knowntypes.DrivingLicense
@@ -50,7 +53,9 @@ import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequest
+import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
@@ -94,39 +99,51 @@ object TestAppUtils {
         readerKey: AsymmetricKey.X509Compatible,
         zkSystemRepository: ZkSystemRepository? = null,
     ): ByteArray {
-        val mdocRequest = request.mdocRequest!!
-        val itemsToRequest = mutableMapOf<String, MutableMap<String, Boolean>>()
-        for (ns in mdocRequest.namespacesToRequest) {
-            for ((de, intentToRetain) in ns.dataElementsToRequest) {
-                itemsToRequest.getOrPut(ns.namespace) { mutableMapOf() }
-                    .put(de.attribute.identifier, intentToRetain)
+        val deviceRequest = when (request) {
+            is SingleDocumentCannedRequest -> {
+                buildDeviceRequest(
+                    sessionTranscript = RawCbor(encodedSessionTranscript)
+                ) {
+                    request.mdocRequest?.let { mdocRequest ->
+                        val itemsToRequest = mutableMapOf<String, MutableMap<String, Boolean>>()
+                        for (ns in mdocRequest.namespacesToRequest) {
+                            for ((de, intentToRetain) in ns.dataElementsToRequest) {
+                                itemsToRequest.getOrPut(ns.namespace) { mutableMapOf() }
+                                    .put(de.attribute.identifier, intentToRetain)
+                            }
+                        }
+                        val zkRequest = if (mdocRequest.useZkp) {
+                            if (zkSystemRepository == null) {
+                                throw IllegalStateException("zkSystemRepository is null")
+                            }
+                            ZkRequest(
+                                systemSpecs = zkSystemRepository.getAllZkSystemSpecs(),
+                                zkRequired = false
+                            )
+                        } else {
+                            null
+                        }
+                        addDocRequest(
+                            docType = mdocRequest.docType,
+                            nameSpaces = itemsToRequest,
+                            docRequestInfo = DocRequestInfo(
+                                zkRequest = zkRequest
+                            ),
+                            readerKey = readerKey,
+                        )
+                    }
+                }
+            }
+            is MultiDocumentCannedRequest -> {
+                buildDeviceRequestFromDcql(
+                    sessionTranscript = RawCbor(encodedSessionTranscript),
+                    dcql = Json.decodeFromString<JsonObject>( request.dcqlString)
+                ) {
+                    addReaderAuthAll(readerKey)
+                }
             }
         }
-
-        val zkRequest = if (mdocRequest.useZkp) {
-            if (zkSystemRepository == null){
-                throw IllegalStateException("zkSystemRepository is null")
-            }
-            ZkRequest(
-                systemSpecs = zkSystemRepository.getAllZkSystemSpecs(),
-                zkRequired = false
-            )
-        } else {
-            null
-        }
-
-        return Cbor.encode(buildDeviceRequest(
-            sessionTranscript = RawCbor(encodedSessionTranscript)
-        ) {
-            addDocRequest(
-                docType = mdocRequest.docType,
-                nameSpaces = itemsToRequest,
-                docRequestInfo = DocRequestInfo(
-                    zkRequest = zkRequest
-                ),
-                readerKey = readerKey,
-            )
-        }.toDataItem())
+        return Cbor.encode(deviceRequest.toDataItem())
     }
 
     fun generateEncodedSessionTranscript(

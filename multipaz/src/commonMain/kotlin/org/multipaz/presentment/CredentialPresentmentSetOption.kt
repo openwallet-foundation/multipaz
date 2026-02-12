@@ -8,6 +8,6 @@ package org.multipaz.presentment
  * @property members a list of members for this credential set option. Contains at least one
  *   and may contain more.
  */
-interface CredentialPresentmentSetOption {
+data class CredentialPresentmentSetOption(
     val members: List<CredentialPresentmentSetOptionMember>
-}
+)

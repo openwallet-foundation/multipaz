@@ -1,4 +1,4 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
 /**
  * Thrown when timing out waiting for the reader to connect.

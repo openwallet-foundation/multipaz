@@ -13,7 +13,37 @@ package org.multipaz.presentment
  * @property options a list of different credentials that can be presented. Contains at least one option
  *   and may contain more.
  */
-interface CredentialPresentmentSet {
-    val optional: Boolean
+data class CredentialPresentmentSet(
+    val optional: Boolean,
     val options: List<CredentialPresentmentSetOption>
+) {
+
+    internal fun consolidateSingleMemberOptions(): CredentialPresentmentSet {
+        val nonSingleMemberOptions = mutableListOf<CredentialPresentmentSetOption>()
+        val singleMemberMatches = mutableListOf<CredentialPresentmentSetOptionMemberMatch>()
+        var numSingleMemberOptions = 0
+        for (option in options) {
+            if (option.members.size == 1) {
+                singleMemberMatches.addAll(option.members[0].matches)
+                numSingleMemberOptions += 1
+            } else {
+                nonSingleMemberOptions.add(option)
+            }
+        }
+
+        if (numSingleMemberOptions > 1) {
+            return CredentialPresentmentSet(
+                optional = optional,
+                options = listOf(
+                    CredentialPresentmentSetOption(
+                        members = listOf(CredentialPresentmentSetOptionMember(
+                            matches = singleMemberMatches
+                        ))
+                    )) + nonSingleMemberOptions
+            )
+        } else {
+            return this
+        }
+    }
+
 }

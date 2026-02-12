@@ -1,4 +1,4 @@
-package org.multipaz.presentment.model
+package org.multipaz.presentment
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -27,19 +27,15 @@ import org.multipaz.document.Document
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.OpenID4VP
-import org.multipaz.presentment.CredentialPresentmentData
 import org.multipaz.prompt.promptModelSilentConsent
 import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwtKb
-import org.multipaz.storage.ephemeral.EphemeralStorage
-import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.trustmanagement.TrustPoint
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
-import kotlin.io.encoding.Base64
+import kotlin.collections.iterator
 import kotlin.random.Random
-import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
