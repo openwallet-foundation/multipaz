@@ -1,0 +1,21 @@
+.cred_data {
+    margin: 4px;
+    border: 1px solid black;
+    padding: 3px;
+}
+
+.cred_data h4 {
+    margin: 0px;
+}
+
+.cred_data img {
+    max-width: 100%;
+}
+
+.nest1 { background-color: #FFC; }
+.nest2 { background-color: #FCF; }
+.nest3 { background-color: #CFF; }
+.nest4 { background-color: #FCC; }
+.nest5 { background-color: #CFC; }
+.nest6 { background-color: #CCF; }
+.nest7 { background-color: #CCC; }

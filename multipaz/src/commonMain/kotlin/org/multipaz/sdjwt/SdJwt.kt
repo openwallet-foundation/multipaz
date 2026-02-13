@@ -8,10 +8,10 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -277,12 +277,14 @@ class SdJwt private constructor(
      * @param nonce the nonce, obtained from the verifier.
      * @param audience the audience, obtained from the verifier.
      * @param creationTime the time the presentation was made.
+     * @param additionalClaimBuilderAction builder block to add extra claims into SD-JWT+KB body
      */
     suspend fun present(
         signingKey: AsymmetricKey,
         nonce: String,
         audience: String,
-        creationTime: Instant = Clock.System.now()
+        creationTime: Instant = Clock.System.now(),
+        additionalClaimBuilderAction: JsonObjectBuilder.() -> Unit = {}
     ): SdJwtKb {
         require(signingKey.publicKey == this.kbKey) {
             "Public part of signing key does not match key in `cnf` claim"
@@ -295,6 +297,7 @@ class SdJwt private constructor(
             put("nonce", nonce)
             put("aud", audience)
             put("sd_hash", Crypto.digest(digestAlg, compactSerialization.encodeToByteArray()).toBase64Url())
+            additionalClaimBuilderAction.invoke(this)
         }
         return SdJwtKb.fromCompactSerialization(compactSerialization + kbJwt)
     }
