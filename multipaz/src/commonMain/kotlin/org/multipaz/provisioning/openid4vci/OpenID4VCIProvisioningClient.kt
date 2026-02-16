@@ -335,9 +335,25 @@ internal class OpenID4VCIProvisioningClient(
         when (keyInfo) {
             KeyBindingInfo.Keyless -> listOf("")
             is KeyBindingInfo.OpenidProofOfPossession -> keyInfo.jwtList.map { jwt ->
-                val header = Json.parseToJsonElement(jwt.take(jwt.indexOf('.') - 1))
-                // 'kid' must be present and corresponds to the credential id
-                header.jsonObject["kid"]!!.jsonPrimitive.content
+                val headerSegment = jwt.substringBefore('.')
+                val headerJson = headerSegment.fromBase64Url().decodeToString()
+                val header = Json.parseToJsonElement(headerJson).jsonObject
+                // Prefer top-level kid, fallback to jwk.kid for proof JWTs.
+                val topLevelKid = header["kid"]?.jsonPrimitive?.content
+                if (!topLevelKid.isNullOrBlank()) {
+                    topLevelKid
+                } else {
+                    val jwkKid = header["jwk"]
+                        ?.jsonObject
+                        ?.get("kid")
+                        ?.jsonPrimitive
+                        ?.content
+                    if (!jwkKid.isNullOrBlank()) {
+                        jwkKid
+                    } else {
+                        throw IllegalStateException("No kid in proof JWT header")
+                    }
+                }
             }
             is KeyBindingInfo.Attestation -> keyInfo.attestations.map { it.credentialId }
         }
