@@ -20,7 +20,8 @@ internal data class AuthorizationConfiguration(
     val tokenEndpoint: String,
     val dpopSigningAlgorithm: Algorithm,
     val clientAttestationSigningAlgorithm: Algorithm,
-    val clientAuthentication: ClientAuthenticationType
+    val clientAuthentication: ClientAuthenticationType,
+    val supportsDPoP: Boolean
 ) {
     companion object: JsonParsing("Authorization server metadata") {
         suspend fun get(url: String, clientPreferences: OpenID4VCIClientPreferences): AuthorizationConfiguration {
@@ -67,9 +68,16 @@ internal data class AuthorizationConfiguration(
                 }
             }
 
-            val dpopSigningAlgorithm = preferredAlgorithm(
-                available = metadata.arrayOrNull("dpop_signing_alg_values_supported"),
-                clientPreferences = clientPreferences)
+            val dpopAlgorithms = metadata.arrayOrNull("dpop_signing_alg_values_supported")
+            val supportsDPoP = dpopAlgorithms?.isNotEmpty() == true
+            val dpopSigningAlgorithm = if (supportsDPoP) {
+                preferredAlgorithm(
+                    available = dpopAlgorithms,
+                    clientPreferences = clientPreferences
+                )
+            } else {
+                Algorithm.ESP256
+            }
             val clientAttestationSigningAlgorithm = preferredAlgorithm(
                 available = metadata.arrayOrNull("client_attestation_pop_signing_alg_values_supported"),
                 clientPreferences = clientPreferences
@@ -85,7 +93,7 @@ internal data class AuthorizationConfiguration(
                         when (val auth = authMethod.content) {
                             "private_key_jwt" -> clientAssertionSupported = true
                             "attest_jwt_client_auth" -> walletAttestationSupported = true
-                            "none" -> noAuthentication = true
+                            "none", "public" -> noAuthentication = true
                             else -> Logger.w(TAG, "Unknown auth method: '$auth'")
                         }
                     }
@@ -109,7 +117,8 @@ internal data class AuthorizationConfiguration(
                 tokenEndpoint = tokenEndpoint,
                 dpopSigningAlgorithm = dpopSigningAlgorithm,
                 clientAttestationSigningAlgorithm = clientAttestationSigningAlgorithm,
-                clientAuthentication = clientAuthentication
+                clientAuthentication = clientAuthentication,
+                supportsDPoP = supportsDPoP
             )
         }
 

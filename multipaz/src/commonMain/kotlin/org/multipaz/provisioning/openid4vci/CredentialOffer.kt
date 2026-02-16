@@ -5,10 +5,12 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Url
+import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.provisioning.SecretCodeRequest
@@ -78,7 +80,29 @@ internal sealed class CredentialOffer {
                     }
                     credentialOfferString = response.readRawBytes().decodeToString()
                 }
-                val json = Json.parseToJsonElement(credentialOfferString).jsonObject
+                val normalized = credentialOfferString.trim()
+                if (normalized.startsWith("openid-credential-offer:") ||
+                    normalized.startsWith("haip-vci:")
+                ) {
+                    return parseCredentialOffer(normalizeOfferScheme(normalized))
+                }
+                if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+                    val offerUri =
+                        "openid-credential-offer://?credential_offer_uri=${normalized.encodeURLParameter()}"
+                    return parseCredentialOffer(offerUri)
+                }
+                val parsed = runCatching { Json.parseToJsonElement(normalized) }.getOrNull()
+                val json = when (parsed) {
+                    is JsonObject -> parsed
+                    is JsonPrimitive -> {
+                        if (!parsed.isString) {
+                            throw IllegalStateException("credential offer is not a JSON object")
+                        }
+                        Json.parseToJsonElement(parsed.content).jsonObject
+                    }
+                    null -> throw IllegalStateException("credential offer is not a JSON object")
+                    else -> throw IllegalStateException("credential offer is not a JSON object")
+                }
                 return parseJson(json)
             } catch (err: CancellationException) {
                 throw err
@@ -133,6 +157,18 @@ internal sealed class CredentialOffer {
                     length = obj.integerOrNull("length") ?: Int.MAX_VALUE,
                     isNumeric = obj.stringOrNull("input_mode") != "text"
                 )
+            }
+        }
+
+        private fun normalizeOfferScheme(offer: String): String {
+            return when {
+                offer.startsWith("openid-credential-offer://") -> offer
+                offer.startsWith("openid-credential-offer:") ->
+                    offer.replaceFirst("openid-credential-offer:", "openid-credential-offer://")
+                offer.startsWith("haip-vci://") -> offer
+                offer.startsWith("haip-vci:") ->
+                    offer.replaceFirst("haip-vci:", "haip-vci://")
+                else -> offer
             }
         }
     }

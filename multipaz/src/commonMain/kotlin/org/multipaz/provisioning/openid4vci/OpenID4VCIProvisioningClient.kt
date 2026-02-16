@@ -1,7 +1,10 @@
 package org.multipaz.provisioning.openid4vci
 
 import io.ktor.client.HttpClient
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.accept
 import io.ktor.client.request.forms.submitForm
+import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -66,6 +69,7 @@ internal class OpenID4VCIProvisioningClient(
     val secureArea: SecureArea,
     val authorizationData: OpenID4VCIAuthorizationData
 ): ProvisioningClient {
+    private enum class NonceAuthMode { DPOP, BEARER, NONE }
     var pkceCodeVerifier: String? = null
     var token: String? = null
     var tokenExpiration: Instant? = null
@@ -134,17 +138,78 @@ internal class OpenID4VCIProvisioningClient(
         if (credentialConfiguration.keyBindingType == KeyBindingType.Keyless) {
             throw IllegalStateException("getKeyBindingChallenge must not be called for keyless credentials")
         }
+        keyChallenge?.let { return it }
         // obtain c_nonce (serves as challenge for the device-bound key)
         val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
-        val nonceResponse = httpClient.post(issuerConfiguration.nonceEndpoint!!) {}
-        if (nonceResponse.status != HttpStatusCode.OK) {
+        val tokenSnapshot = token
+        val useDpop = authorizationConfiguration.supportsDPoP
+        val authHost = runCatching { Url(authorizationConfiguration.identifier).host }.getOrNull()
+        val nonceHost = runCatching { Url(issuerConfiguration.nonceEndpoint!!).host }.getOrNull()
+        val allowNonceDpop = useDpop && authHost != null && nonceHost == authHost
+
+        suspend fun requestNonce(mode: NonceAuthMode): Pair<HttpResponse, String> {
+            val dpopKeyLocal = if (tokenSnapshot != null && mode == NonceAuthMode.DPOP) getDPopKey() else null
+            // Pre-generate DPoP token in suspend context so it can be used in non-suspend applyAuth
+            val dpopToken = if (mode == NonceAuthMode.DPOP && tokenSnapshot != null && dpopKeyLocal != null) {
+                OpenID4VCIUtil.generateDPoP(
+                    dpopKey = dpopKeyLocal,
+                    clientId = clientPreferences.clientId,
+                    requestUrl = issuerConfiguration.nonceEndpoint!!,
+                    dpopNonce = issuerDPoPNonce,
+                    accessToken = tokenSnapshot
+                )
+            } else null
+            fun HttpRequestBuilder.applyAuth() {
+                when (mode) {
+                    NonceAuthMode.DPOP -> if (dpopToken != null) {
+                        headers {
+                            append("Authorization", "DPoP $tokenSnapshot")
+                            append("DPoP", dpopToken)
+                        }
+                    }
+                    NonceAuthMode.BEARER -> if (tokenSnapshot != null) {
+                        headers { append("Authorization", "Bearer $tokenSnapshot") }
+                    }
+                    NonceAuthMode.NONE -> {}
+                }
+                accept(ContentType.Application.Json)
+            }
+            val response = httpClient.post(issuerConfiguration.nonceEndpoint!!) {
+                applyAuth()
+                contentType(ContentType.Application.Json)
+            }
+            var bodyText = response.readRawBytes().decodeToString()
+            if (bodyText.trimStart().startsWith("<")) {
+                val retryResponse = httpClient.get(issuerConfiguration.nonceEndpoint!!) {
+                    applyAuth()
+                }
+                bodyText = retryResponse.readRawBytes().decodeToString()
+                return retryResponse to bodyText
+            }
+            return response to bodyText
+        }
+
+        val modes = buildList {
+            if (allowNonceDpop) add(NonceAuthMode.DPOP)
+            if (tokenSnapshot != null) add(NonceAuthMode.BEARER)
+            add(NonceAuthMode.NONE)
+        }
+
+        var cNonce: String? = null
+        for (mode in modes) {
+            val (resp, bodyText) = requestNonce(mode)
+            val trimmed = bodyText.trimStart()
+            val isHtml = trimmed.startsWith("<")
+            if (resp.status == HttpStatusCode.OK && !isHtml) {
+                resp.headers["DPoP-Nonce"]?.let { issuerDPoPNonce = it }
+                cNonce = Json.parseToJsonElement(bodyText).jsonObject.string("c_nonce")
+                break
+            }
+        }
+
+        if (cNonce == null) {
             throw IllegalStateException("Error getting a nonce")
         }
-        Logger.i(TAG, "Got successful response for nonce request")
-        // A fresh DPoP nonce might or might not be given
-        nonceResponse.headers["DPoP-Nonce"]?.let { issuerDPoPNonce = it }
-        val responseText = nonceResponse.readRawBytes().decodeToString()
-        val cNonce = Json.parseToJsonElement(responseText).jsonObject.string("c_nonce")
         keyChallenge = cNonce
         return cNonce
     }
@@ -159,19 +224,28 @@ internal class OpenID4VCIProvisioningClient(
         val credentialMetadata =
             issuerConfiguration.provisioningMetadata.credentials[credentialOffer.configurationId]!!
         val keyProofs = buildKeyProofs(keyInfo)
-        val dpopKey = getDPopKey()
+        val useDpop = authorizationConfiguration.supportsDPoP
+        val dpopKey = if (useDpop) getDPopKey() else null
         while (true) {
-            val dpop = OpenID4VCIUtil.generateDPoP(
-                dpopKey = dpopKey,
-                clientId = clientPreferences.clientId,
-                requestUrl = issuerConfiguration.credentialEndpoint,
-                dpopNonce = issuerDPoPNonce,
-                accessToken = token
-            )
+            val dpop = if (useDpop && dpopKey != null) {
+                OpenID4VCIUtil.generateDPoP(
+                    dpopKey = dpopKey,
+                    clientId = clientPreferences.clientId,
+                    requestUrl = issuerConfiguration.credentialEndpoint,
+                    dpopNonce = issuerDPoPNonce,
+                    accessToken = token
+                )
+            } else {
+                null
+            }
             credentialResponse = httpClient.post(issuerConfiguration.credentialEndpoint) {
                 headers {
-                    append("Authorization", "DPoP $token")
-                    append("DPoP", dpop)
+                    if (dpop != null) {
+                        append("Authorization", "DPoP $token")
+                        append("DPoP", dpop)
+                    } else {
+                        append("Authorization", "Bearer $token")
+                    }
                     contentType(ContentType.Application.Json)
                 }
                 setBody(buildJsonObject {
@@ -297,17 +371,22 @@ internal class OpenID4VCIProvisioningClient(
         val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
         var response: HttpResponse
         var retryCount = 0
-        val dpopKey = getDPopKey()
+        val useDpop = authorizationConfiguration.supportsDPoP
+        val dpopKey = if (useDpop) getDPopKey() else null
 
         while (true) {
             // retry loop for DPoP nonce
-            val dpop = OpenID4VCIUtil.generateDPoP(
-                dpopKey = dpopKey,
-                clientId = clientPreferences.clientId,
-                requestUrl = authorizationConfiguration.pushedAuthorizationRequestEndpoint,
-                dpopNonce = authorizationDPoPNonce,
-                accessToken = null
-            )
+            val dpop = if (useDpop && dpopKey != null) {
+                OpenID4VCIUtil.generateDPoP(
+                    dpopKey = dpopKey,
+                    clientId = clientPreferences.clientId,
+                    requestUrl = authorizationConfiguration.pushedAuthorizationRequestEndpoint,
+                    dpopNonce = authorizationDPoPNonce,
+                    accessToken = null
+                )
+            } else {
+                null
+            }
             val walletAttestationPoP = if (authorizationConfiguration.clientAuthentication == ClientAuthenticationType.CLIENT_ATTESTATION) {
                 val key = obtainWalletAttestation()
                 OpenID4VCIUtil.createWalletAttestationPoP(
@@ -362,7 +441,9 @@ internal class OpenID4VCIProvisioningClient(
                 }
             ) {
                 headers {
-                    append("DPoP", dpop)
+                    if (dpop != null) {
+                        append("DPoP", dpop)
+                    }
                     if (authorizationData.walletAttestation != null) {
                         append("OAuth-Client-Attestation", authorizationData.walletAttestation!!)
                         append("OAuth-Client-Attestation-PoP", walletAttestationPoP!!)
@@ -371,7 +452,7 @@ internal class OpenID4VCIProvisioningClient(
             }
             response.headers["DPoP-Nonce"]?.let { authorizationDPoPNonce = it }
             response.headers["OAuth-Client-Attestation-Challenge"]?.let { clientAttestationChallenge = it }
-            if (response.status == HttpStatusCode.Created) {
+            if (response.status == HttpStatusCode.Created || response.status == HttpStatusCode.OK) {
                 break
             }
             val responseText = response.readRawBytes().decodeToString()
@@ -449,18 +530,23 @@ internal class OpenID4VCIProvisioningClient(
         }
         val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
         var retried = false
-        val dpopKey = getDPopKey()
+        val useDpop = authorizationConfiguration.supportsDPoP
+        val dpopKey = if (useDpop) getDPopKey() else null
 
         // When dpop nonce is null, this loop will run twice, first request will return with error,
         // but will provide fresh, dpop nonce and the second request will get fresh access data.
         while (true) {
-            val dpop = OpenID4VCIUtil.generateDPoP(
-                dpopKey = dpopKey,
-                clientId = clientPreferences.clientId,
-                requestUrl = authorizationConfiguration.tokenEndpoint,
-                dpopNonce = authorizationDPoPNonce,
-                accessToken = null
-            )
+            val dpop = if (useDpop && dpopKey != null) {
+                OpenID4VCIUtil.generateDPoP(
+                    dpopKey = dpopKey,
+                    clientId = clientPreferences.clientId,
+                    requestUrl = authorizationConfiguration.tokenEndpoint,
+                    dpopNonce = authorizationDPoPNonce,
+                    accessToken = null
+                )
+            } else {
+                null
+            }
             val walletAttestationPoP = if (authorizationConfiguration.clientAuthentication == ClientAuthenticationType.CLIENT_ATTESTATION) {
                 val key = if (authorizationData.walletAttestation == null) {
                     // For pre-authorized code case, this is where the session is initialized.
@@ -523,7 +609,9 @@ internal class OpenID4VCIProvisioningClient(
                 }
             ) {
                 headers {
-                    append("DPoP", dpop)
+                    if (dpop != null) {
+                        append("DPoP", dpop)
+                    }
                     append("Content-Type", "application/x-www-form-urlencoded")
                     if (authorizationData.walletAttestation != null) {
                         append("OAuth-Client-Attestation", authorizationData.walletAttestation!!)
@@ -566,6 +654,9 @@ internal class OpenID4VCIProvisioningClient(
             token = tokenResponse.string("access_token")
             val duration = tokenResponse.integer("expires_in")
             tokenExpiration = Clock.System.now() + duration.seconds
+            tokenResponse.stringOrNull("c_nonce")?.let { cNonce ->
+                keyChallenge = cNonce
+            }
             val refreshToken = tokenResponse.stringOrNull("refresh_token")
             if (refreshToken != null) {
                 authorizationData.refreshToken = refreshToken
