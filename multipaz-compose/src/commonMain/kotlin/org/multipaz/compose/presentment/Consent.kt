@@ -95,6 +95,7 @@ import org.multipaz.compose.certificateviewer.X509CertViewer
 import org.multipaz.compose.decodeImage
 import org.multipaz.compose.getApplicationInfo
 import org.multipaz.compose.getOutlinedImageVector
+import org.multipaz.compose.text.fromMarkdown
 import org.multipaz.credential.Credential
 import org.multipaz.document.Document
 import org.multipaz.documenttype.Icon
@@ -985,7 +986,7 @@ private fun RelyingPartyTrailer(
             )
             Text(
                 modifier = Modifier.align(Alignment.CenterVertically),
-                text = AnnotatedString.Companion.fromMarkdown(markdownString = text),
+                text = AnnotatedString.fromMarkdown(markdownString = text),
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -1181,49 +1182,6 @@ private fun ClaimsView(
             fontWeight = FontWeight.Companion.Normal,
             style = MaterialTheme.typography.bodySmall
         )
-    }
-}
-
-// This only supports links for now, would be nice to have a full support...
-//
-private fun AnnotatedString.Companion.fromMarkdown(
-    markdownString: String,
-    linkInteractionListener: LinkInteractionListener? = null
-): AnnotatedString {
-    val linkRegex = """\[(.*?)\]\((.*?)\)""".toRegex()
-
-    val links = linkRegex.findAll(markdownString).toMutableList()
-    links.sortBy { it.range.start }
-
-    return buildAnnotatedString {
-        var idx = 0
-        for (link in links) {
-            if (idx < link.range.start) {
-                append(markdownString.substring(idx, link.range.start))
-            }
-            val linkText = link.groupValues[1]
-            val linkUrl = link.groupValues[2]
-            val styleStart = length
-            append(linkText)
-            addLink(
-                url = LinkAnnotation.Url(
-                    url = linkUrl,
-                    styles = TextLinkStyles(
-                        style = SpanStyle(
-                            color = Color.Companion.Blue,
-                            textDecoration = TextDecoration.Companion.Underline
-                        ),
-                    ),
-                    linkInteractionListener = linkInteractionListener
-                ),
-                start = styleStart,
-                end = length,
-            )
-            idx = link.range.endInclusive + 1
-        }
-        if (idx < markdownString.length) {
-            append(markdownString.substring(idx, markdownString.length))
-        }
     }
 }
 

@@ -1,4 +1,4 @@
-package org.multipaz.testapp.externalnfc
+package org.multipaz.nfc
 
 import java.io.IOException
 

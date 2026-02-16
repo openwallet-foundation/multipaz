@@ -1,11 +1,11 @@
-package org.multipaz.testapp.externalnfc
+package org.multipaz.nfc
 
 /**
  * Listener interface for receiving notifications about smart card events.
  * Implement this interface to receive callbacks when a card is inserted or removed
  * from the CCID reader.
  */
-interface CcidDriverListener {
+internal interface CcidDriverListener {
     /**
      * Called when a smart card is inserted into the reader.
      */

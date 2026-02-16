@@ -1,9 +1,9 @@
-package org.multipaz.testapp.externalnfc
+package org.multipaz.nfc
 
 /**
  * Represents the status of the smart card in the reader.
  */
-enum class CardStatus {
+internal enum class CardStatus {
     /**
      * Card is present and powered on.
      */

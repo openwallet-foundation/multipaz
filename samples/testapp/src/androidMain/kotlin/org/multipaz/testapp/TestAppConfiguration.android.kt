@@ -1,8 +1,6 @@
 package org.multipaz.testapp
 
 import android.content.pm.PackageManager
-import android.os.Build
-import android.widget.Toast
 import com.jakewharton.processphoenix.ProcessPhoenix
 import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.engine.android.Android
@@ -14,11 +12,9 @@ import multipazproject.samples.testapp.generated.resources.app_icon_red
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.multipaz.compose.notifications.NotificationManagerAndroid
 import org.multipaz.digitalcredentials.getAppOrigin
-import org.multipaz.nfc.NfcTagReader
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.prompt.PromptDialogModel
 import org.multipaz.prompt.PromptModel
-import org.multipaz.testapp.externalnfc.nfcTagReaderUsbCheck
 import org.multipaz.util.Logger
 import java.net.NetworkInterface
 import java.security.Security
@@ -119,18 +115,5 @@ actual object TestAppConfiguration {
         val packageInfo = applicationContext.packageManager
             .getPackageInfo(applicationContext.packageName, PackageManager.GET_SIGNATURES)
         return getAppOrigin(packageInfo.signatures!![0].toByteArray())
-    }
-
-    actual suspend fun getExternalNfcTagReaders(): List<NfcTagReader> {
-        val externalNfcReader = nfcTagReaderUsbCheck()
-        if (externalNfcReader == null) {
-            return emptyList()
-        }
-        Toast.makeText(
-            applicationContext,
-            "Using USB-connected NFC reader ${externalNfcReader.readerName}",
-            Toast.LENGTH_LONG
-        ).show()
-        return listOf(externalNfcReader)
     }
 }

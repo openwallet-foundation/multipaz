@@ -132,6 +132,4 @@ actual object TestAppConfiguration {
     actual suspend fun getAppToAppOrigin(): String {
         TODO("Add support for iOS")
     }
-
-    actual suspend fun getExternalNfcTagReaders(): List<NfcTagReader> = emptyList()
 }

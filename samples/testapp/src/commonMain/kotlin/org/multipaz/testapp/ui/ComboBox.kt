@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun<T: Any> ComboBox(
     headline: String,
-    availableRequests: List<T>,
+    options: List<T>,
     comboBoxSelected: MutableState<T>,
     comboBoxExpanded: MutableState<Boolean>,
     getDisplayName: (T) -> String,
@@ -62,7 +62,7 @@ fun<T: Any> ComboBox(
                     expanded = comboBoxExpanded.value,
                     onDismissRequest = { comboBoxExpanded.value = false }
                 ) {
-                    availableRequests.forEachIndexed { n, item ->
+                    options.forEachIndexed { n, item ->
                         DropdownMenuItem(
                             text = { Text(text = getDisplayName(item)) },
                             onClick = {

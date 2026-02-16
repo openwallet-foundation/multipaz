@@ -1,4 +1,4 @@
-package org.multipaz.testapp.externalnfc
+package org.multipaz.nfc
 
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
@@ -6,6 +6,7 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
+import org.multipaz.util.toHex
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -23,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * @property usbManager The UsbManager system service, used for accessing USB devices.
  * @property device The UsbDevice representing the CCID reader.
  */
-class CcidDriver(
+internal class CcidDriver(
     private val usbManager: UsbManager,
     private val device: UsbDevice
 ) {

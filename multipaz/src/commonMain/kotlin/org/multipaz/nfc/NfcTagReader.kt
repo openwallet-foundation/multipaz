@@ -15,8 +15,17 @@ interface NfcTagReader {
 
     /**
      * Whether a system dialog is always shown when scanning.
+     *
+     * This is true for some operating systems such as iOS.
      */
     val dialogAlwaysShown: Boolean
+
+    /**
+     * If true, a system dialog is never shown when scanning.
+     *
+     * This is true for external NFC readers connected via e.g. USB or Bluetooth.
+     */
+    val dialogNeverShown: Boolean
 
     /**
      * Scans a NFC tag.

@@ -104,6 +104,7 @@ private data class RequestPickerEntry(
 )
 
 private var lastRequest: Int = 0
+internal var lastNfcReaderSelected: Int = 0
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalCoroutinesApi::class)
 @Composable
@@ -150,6 +151,18 @@ fun IsoMdocProximityReadingScreen(
     val durationRequestSentToResponseReceived = remember { mutableStateOf<Duration?>(null) }
     val eReaderKey = remember { mutableStateOf<EcPrivateKey?>(null) }
     var readerJob by remember { mutableStateOf<Job?>(null) }
+
+    val readers = mutableListOf<NfcReaderEntry>()
+    NfcTagReader.getReaders().forEachIndexed { index, reader ->
+        readers.add(NfcReaderInternal("Internal NFC Reader", index))
+    }
+    app.externalNfcReaderStore.readers.value.forEach { externalReader ->
+        readers.add(NfcReaderExternal(externalReader.displayName, externalReader))
+    }
+    val readerSelected = remember { mutableStateOf<NfcReaderEntry>(
+        if (lastNfcReaderSelected < readers.size) readers[lastNfcReaderSelected] else readers[0]
+    ) }
+    val readerDropdownExpanded = remember { mutableStateOf(false) }
 
     if (connectionMethodPickerData.value != null) {
         val radioOptions = connectionMethodPickerData.value!!.connectionMethods
@@ -226,16 +239,11 @@ fun IsoMdocProximityReadingScreen(
                     readerShowQrScanner.value = false
                     eReaderKey.value = null
                     readerJob = coroutineScope.launch() {
-                        val reader = if (app.externalNfcTagReaders.isNotEmpty())  {
-                            app.externalNfcTagReaders.first()
-                        } else {
-                            NfcTagReader.getReaders().first()
-                        }
                         try {
                             var transferProtocol = ""
                             doReaderFlow(
                                 app = app,
-                                nfcTagReader = reader,
+                                nfcTagReader = readerSelected.value.getNfcTagReader(),
                                 encodedDeviceEngagement = ByteString(data.substring(5).fromBase64Url()),
                                 existingTransport = null,
                                 handover = Simple.NULL,
@@ -468,8 +476,18 @@ fun IsoMdocProximityReadingScreen(
             ) {
                 item {
                     ComboBox(
+                        headline = "NFC Reader",
+                        options = readers,
+                        comboBoxSelected = readerSelected,
+                        comboBoxExpanded = readerDropdownExpanded,
+                        getDisplayName = { it.displayName },
+                        onSelected = { index, value -> lastNfcReaderSelected = index }
+                    )
+                }
+                item {
+                    ComboBox(
                         headline = "DocType and data elements to request",
-                        availableRequests = requestOptions,
+                        options = requestOptions,
                         comboBoxSelected = requestSelected,
                         comboBoxExpanded = requestDropdownExpanded,
                         getDisplayName = { it.displayName },
@@ -524,17 +542,13 @@ fun IsoMdocProximityReadingScreen(
                                         )
                                     }
 
-                                    val reader = if (app.externalNfcTagReaders.size > 0)  {
-                                        app.externalNfcTagReaders.first()
-                                    } else {
-                                        NfcTagReader.getReaders().first()
-                                    }
                                     val nfcScanOptions = if (app.settingsModel.observeModeEmitPollingFramesAsReader.value) {
                                         NfcScanOptions(pollingFrameData = ByteString("6a0281030000".fromHex()))
                                     } else {
                                         NfcScanOptions()
                                     }
                                     Logger.i(TAG, "nfcScanOptions: $nfcScanOptions")
+                                    val reader = readerSelected.value.getNfcTagReader()
                                     val scanResult = reader.scanMdocReader(
                                         message = "Hold near credential holder's phone.",
                                         options = MdocTransportOptions(

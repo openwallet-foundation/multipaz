@@ -117,3 +117,11 @@ data object ScreenLockDestination: Destination()
 
 @Serializable
 data object PickersDestination: Destination()
+
+@Serializable
+data object NfcReadersDestination: Destination()
+
+@Serializable
+data class NfcReaderDestination(
+    val readerId: String
+): Destination()

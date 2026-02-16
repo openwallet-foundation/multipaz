@@ -39,6 +39,4 @@ expect object TestAppConfiguration {
     val platformSecureAreaHasKeyAgreement: Boolean
 
     suspend fun getAppToAppOrigin(): String
-
-    suspend fun getExternalNfcTagReaders(): List<NfcTagReader>
 }

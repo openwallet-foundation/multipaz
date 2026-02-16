@@ -51,7 +51,8 @@ fun StartScreen(
     onClickRichText: () -> Unit = {},
     onClickNotifications: () -> Unit = {},
     onClickScreenLock: () -> Unit = {},
-    onClickPickersScreen: () -> Unit = {}
+    onClickPickersScreen: () -> Unit = {},
+    onClickNfcReadersScreen: () -> Unit = {}
 ) {
     val blePermissionState = rememberBluetoothPermissionState()
     val coroutineScope = rememberCoroutineScope()
@@ -258,6 +259,12 @@ fun StartScreen(
                 item {
                     TextButton(onClick = onClickPickersScreen) {
                         Text("Pickers")
+                    }
+                }
+
+                item {
+                    TextButton(onClick = onClickNfcReadersScreen) {
+                        Text("External NFC Readers")
                     }
                 }
             }

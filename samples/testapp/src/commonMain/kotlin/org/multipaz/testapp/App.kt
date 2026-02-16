@@ -49,6 +49,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -98,6 +99,7 @@ import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.vical.SignedVical
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
+import org.multipaz.nfc.ExternalNfcReaderStore
 import org.multipaz.nfc.NfcTagReader
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.SimplePresentmentSource
@@ -129,6 +131,8 @@ import org.multipaz.testapp.ui.DocumentViewerScreen
 import org.multipaz.testapp.ui.IsoMdocMultiDeviceTestingScreen
 import org.multipaz.testapp.ui.IsoMdocProximityReadingScreen
 import org.multipaz.testapp.ui.IsoMdocProximitySharingScreen
+import org.multipaz.testapp.ui.NfcReaderScreen
+import org.multipaz.testapp.ui.NfcReadersScreen
 import org.multipaz.testapp.ui.NfcScreen
 import org.multipaz.testapp.ui.NotificationsScreen
 import org.multipaz.testapp.ui.PassphraseEntryFieldScreen
@@ -313,17 +317,10 @@ class App private constructor (val promptModel: PromptModel) {
         TestAppConfiguration.cryptoInit(settingsModel)
     }
 
-    lateinit var externalNfcTagReaders: List<NfcTagReader>
+    lateinit var externalNfcReaderStore: ExternalNfcReaderStore
 
-    // TODO: Instead of only scanning for external NFC readers at startup, make it hotplug aware
-    //   so things work when the user adds/removes an external NFC reader while the application
-    //   is running. We'd probably want some kind of stateful ExternalNfcReaderManager object
-    //   which maintains a list of these external readers. This should also support readers
-    //   connected via BLE (e.g. ACR1555U) and support a way to programmatically request
-    //   permission.
-    //
     private suspend fun platformExternalNfcTagReadersInit() {
-        externalNfcTagReaders = TestAppConfiguration.getExternalNfcTagReaders()
+        externalNfcReaderStore = ExternalNfcReaderStore.create(TestAppConfiguration.storage)
     }
 
     private suspend fun settingsInit() {
@@ -965,7 +962,8 @@ class App private constructor (val promptModel: PromptModel) {
                             onClickRichText = { navController.navigate(RichTextDestination) },
                             onClickNotifications = { navController.navigate(NotificationsDestination) },
                             onClickScreenLock = { navController.navigate(ScreenLockDestination) },
-                            onClickPickersScreen = { navController.navigate(PickersDestination) }
+                            onClickPickersScreen = { navController.navigate(PickersDestination) },
+                            onClickNfcReadersScreen = { navController.navigate(NfcReadersDestination) },
                         )
                     }
                 }
@@ -1210,7 +1208,7 @@ class App private constructor (val promptModel: PromptModel) {
                 composable<NfcDestination> { backStackEntry ->
                     WithAppBar(navController, "NFC use-cases") {
                         NfcScreen(
-                            externalNfcTagReaders = externalNfcTagReaders,
+                            externalNfcReaderStore = externalNfcReaderStore,
                             promptModel = promptModel,
                             showToast = { message -> showToast(message) }
                         )
@@ -1353,6 +1351,30 @@ class App private constructor (val promptModel: PromptModel) {
                 composable<PickersDestination> { backStackEntry ->
                     WithAppBar(navController, "Picker use-cases") {
                         PickersScreen()
+                    }
+                }
+                composable<NfcReadersDestination> { backStackEntry ->
+                    WithAppBar(navController, "External NFC Readers") {
+                        NfcReadersScreen(
+                            externalNfcReaderStore = externalNfcReaderStore,
+                            showToast = { message -> showToast(message) },
+                            onReaderClicked = { readerId ->
+                                navController.navigate(NfcReaderDestination(readerId))
+                            }
+                        )
+                    }
+                }
+                composable<NfcReaderDestination> { backStackEntry ->
+                    val destination = backStackEntry.toRoute<NfcReaderDestination>()
+                    WithAppBar(navController, "External NFC Reader") {
+                        NfcReaderScreen(
+                            externalNfcReaderStore = externalNfcReaderStore,
+                            readerId = destination.readerId,
+                            showToast = { message -> showToast(message) },
+                            onReaderRemoved = {
+                                navController.navigateUp()
+                            }
+                        )
                     }
                 }
             }

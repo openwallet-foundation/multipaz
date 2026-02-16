@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<resources>
+    <!-- ACR 1252U -->
+    <usb-device vendor-id="0x072f" product-id="0x223b" />
+
+    <!-- ACR WalletMate II -->
+    <usb-device vendor-id="0x072f" product-id="0x2401" />
+
+    <!-- ACR ACR1555 BLE Reader (USB interface) -->
+    <usb-device vendor-id="0x072f" product-id="0x230a" />
+</resources>

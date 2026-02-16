@@ -14,6 +14,9 @@ private object NfcTagReaderAndroid: NfcTagReader {
     override val dialogAlwaysShown: Boolean
         get() = false
 
+    override val dialogNeverShown: Boolean
+        get() = false
+
     override suspend fun <T : Any> scan(
         message: String?,
         tagInteractionFunc: suspend (NfcIsoTag) -> T?,
