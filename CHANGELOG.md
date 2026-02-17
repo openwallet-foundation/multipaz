@@ -5,9 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.97.0] - Not yet released, expected in January 2026
+## [0.97.0] - 2026-02-17
 Changes since Multipaz 0.96.0 include:
-- TODO
+- Export library version in `Platform` singleton.
+- Use correct COSE algorithm in 18013-5 DeviceRequest.
+- Update to Ktor 3.x series.
+- Publish JavaScript and WasmJS variants of libraries and start implementing abstractions
+  for the web platform, including `Crypto` backed by Web Crypto.
+- Add support for display data in OpenID4VCI.
+- Add support for refreshing credentials using OpenID4VCI.
+- Add W3C Digital Credentials support on iOS.
+- Don't force KMP resources on apps using multipaz-compose.
+- Simplify presentment APIs.
+- Add multipaz-swift library and Swift test app.
+- Update to Longfellow ZK version 0.8.6.
+- DocumentCarousel UI enhancements (haptics, reordering).
+- Support for creating SD-JWTs without fully recursive disclosures.
+- New generic key/value storage ("Tags") for documents and credentials.
+- Update Dokka to 1.2.0.
+- Bug fixes.
 
 ## [0.96.0] - 2025-12-11
 Changes since Multipaz 0.95.0 include:
