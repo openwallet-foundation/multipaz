@@ -70,6 +70,7 @@ import org.multipaz.storage.Storage
 import org.multipaz.storage.android.AndroidStorage
 import org.multipaz.util.Constants
 import kotlinx.coroutines.runBlocking
+import kotlinx.io.bytestring.ByteString
 import kotlin.time.Clock.System.now
 import kotlin.time.Instant
 import kotlin.time.Instant.Companion.fromEpochMilliseconds
@@ -218,9 +219,7 @@ class DeviceRetrievalHelperTest {
 
         // Now that we have issuer-provided authentication data we certify the credential.
         mdocCredential.certify(
-            issuerProvidedAuthenticationData,
-            timeValidityBegin,
-            timeValidityEnd
+            ByteString(issuerProvidedAuthenticationData),
         )
     }
     
@@ -387,7 +386,7 @@ class DeviceRetrievalHelperTest {
                     val generator = DeviceResponseGenerator(
                         Constants.DEVICE_RESPONSE_STATUS_OK
                     )
-                    val staticAuthData = StaticAuthDataParser(mdocCredential.issuerProvidedData)
+                    val staticAuthData = StaticAuthDataParser(mdocCredential.issuerProvidedData.toByteArray())
                         .parse()
                     val deviceSignedData = NameSpacedData.Builder().build()
                     val mergedIssuerNamespaces: Map<String, List<ByteArray>> =

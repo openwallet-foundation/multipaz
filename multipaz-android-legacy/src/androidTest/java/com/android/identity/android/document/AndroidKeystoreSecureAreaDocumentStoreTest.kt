@@ -37,6 +37,7 @@ import org.junit.Before
 import org.junit.Test
 import org.multipaz.device.AndroidKeystoreSecurityLevel
 import org.multipaz.document.buildDocumentStore
+import kotlin.time.Instant
 
 // See DocumentStoreTest in non-Android tests for main tests for DocumentStore. These
 // tests are just for the Android-specific bits including attestation.
@@ -134,6 +135,10 @@ class AndroidKeystoreSecureAreaDocumentStoreTest {
 
         override val credentialType: String
             get() = CREDENTIAL_TYPE
+
+        override suspend fun extractValidityFromIssuerData(): Pair<Instant, Instant> {
+            throw NotImplementedError()
+        }
 
         override suspend fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<Claim> {
             throw NotImplementedError()

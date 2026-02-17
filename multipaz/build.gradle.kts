@@ -90,7 +90,8 @@ kotlin {
                     linkerOpts(
                         "-L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/${platform}/",
                         "-L$rootDir/multipaz/SwiftBridge/build/Release-${platform}/",
-                        "-lSwiftBridge"
+                        "-lSwiftBridge",
+                        "-Wl,-rpath,/usr/lib/swift"
                     )
                 }
             }
