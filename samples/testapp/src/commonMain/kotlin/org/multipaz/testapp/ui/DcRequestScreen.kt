@@ -23,6 +23,7 @@ import org.multipaz.compose.rememberUiBoundCoroutineScope
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.documenttype.DocumentCannedRequest
 import org.multipaz.mdoc.zkp.ZkSystemRepository
@@ -37,6 +38,7 @@ import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.testapp.App
 import org.multipaz.testapp.TestAppUtils
 import org.multipaz.util.Logger
+import org.multipaz.util.toBase64Url
 import org.multipaz.verification.VerificationUtil
 import org.multipaz.testapp.ShowResponseMetadata
 import org.multipaz.testapp.TestAppConfiguration
@@ -270,12 +272,12 @@ private suspend fun doDcRequestFlow(
     val responseEncryptionKey = Crypto.createEcPrivateKey(EcCurve.P256)
     val origin = TestAppConfiguration.getAppToAppOrigin()
     // According to OpenID4VP, Client ID must be set for signed requests and not for unsigned requests
-    val clientId = if (protocol.signRequest){
+    val clientId = if (protocol.signRequest) {
         val cert = appReaderKey.certChain?.certificates?.getOrNull(0)
             ?: throw IllegalArgumentException("Certificate chain is missing or empty")
         val certHash = Crypto.digest(Algorithm.SHA256, cert.encoded.toByteArray()).toBase64Url()
         "x509_hash:$certHash"
-    }else{
+    } else {
         null
     }
 
