@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import org.multipaz.applinks.AppLinksCheck
 import org.multipaz.context.initializeApplication
 import org.multipaz.nfc.handleUsbDeviceAttached
+import org.multipaz.testapp.TestAppConfiguration.ACTION_VIEW_DOCUMENT
 import org.multipaz.testapp.provisioning.ProvisioningSupport
 import org.multipaz.util.Logger
 
@@ -86,7 +87,16 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleIntent(intent: Intent) {
-        if (intent.action == Intent.ACTION_VIEW) {
+        if (intent.action == ACTION_VIEW_DOCUMENT) {
+            val documentId = intent.getStringExtra("documentId")
+            if (documentId != null) {
+                lifecycle.coroutineScope.launch {
+                    val app = App.getInstance()
+                    app.initialize()
+                    app.viewDocument(documentId)
+                }
+            }
+        } else if (intent.action == Intent.ACTION_VIEW) {
             val url = intent.dataString
             if (url != null) {
                 lifecycle.coroutineScope.launch {

@@ -122,3 +122,6 @@ data object NfcReadersDestination: Destination()
 data class NfcReaderDestination(
     val readerId: String
 ): Destination()
+
+@Serializable
+data object DocumentListDestination: Destination()

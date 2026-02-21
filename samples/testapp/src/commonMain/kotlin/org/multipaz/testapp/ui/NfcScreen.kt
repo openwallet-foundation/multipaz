@@ -72,6 +72,12 @@ internal data class NfcReaderExternal(
     }
 }
 
+internal class NfcReaderNoneAvailable: NfcReaderEntry("No NFC readers available") {
+    override suspend fun getNfcTagReader(): NfcTagReader {
+        throw IllegalStateException("No NFC readers available")
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NfcScreen(
@@ -90,9 +96,16 @@ fun NfcScreen(
     externalNfcReaderStore.readers.value.forEach { externalReader ->
         readers.add(NfcReaderExternal(externalReader.displayName, externalReader))
     }
+    if (readers.isEmpty()) {
+        readers.add(NfcReaderNoneAvailable())
+    }
     val readerSelected = remember { mutableStateOf<NfcReaderEntry>(
-        if (lastNfcReaderSelected < readers.size) readers[lastNfcReaderSelected] else readers[0]
-    ) }
+        if (lastNfcReaderSelected < readers.size) {
+            readers[lastNfcReaderSelected]
+        } else {
+            readers[0]
+        }
+    )}
     val readerDropdownExpanded = remember { mutableStateOf(false) }
 
     val sheetState = rememberModalBottomSheetState()

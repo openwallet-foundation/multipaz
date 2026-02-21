@@ -3,4 +3,5 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:shortcutLongLabel="@string/quick_access_wallet_empty_state_text"
     android:shortcutShortLabel="@string/quick_access_wallet_button_text"
+    android:targetActivity="org.multipaz.testapp.MainActivity"
 />

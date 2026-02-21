@@ -20,13 +20,11 @@ import org.multipaz.util.Logger
 import org.multipaz.util.toHex
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
-import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.multipaz.crypto.Algorithm
 import org.multipaz.prompt.Reason
 
 private val TAG = "SoftwareSecureAreaScreen"
 
-@Preview
 @Composable
 fun SoftwareSecureAreaScreen(
     softwareSecureArea: SoftwareSecureArea,

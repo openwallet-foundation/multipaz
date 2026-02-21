@@ -140,6 +140,7 @@ kotlin {
                 implementation(compose.components.resources)
                 implementation(compose.components.uiToolingPreview)
                 implementation(compose.materialIconsExtended)
+                implementation(libs.jetbrains.navigationevent.compose)
                 implementation(libs.jetbrains.navigation.compose)
                 implementation(libs.jetbrains.navigation.runtime)
                 implementation(libs.jetbrains.lifecycle.viewmodel.compose)
@@ -176,7 +177,7 @@ android {
     defaultConfig {
         applicationId = "org.multipaz.testapp"
         manifestPlaceholders["applinkHost"] = applinkHost
-        minSdk = libs.versions.android.minSdk.get().toInt()
+        minSdk = 29
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = projectVersionCode
         versionName = projectVersionName

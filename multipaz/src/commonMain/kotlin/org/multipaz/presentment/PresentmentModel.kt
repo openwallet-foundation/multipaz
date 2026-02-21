@@ -4,8 +4,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.multipaz.document.Document
-import org.multipaz.document.DocumentStore
-import org.multipaz.documenttype.DocumentTypeRepository
 
 /**
  * A model which can be used to drive UI for presentment.
@@ -17,29 +15,22 @@ import org.multipaz.documenttype.DocumentTypeRepository
  */
 class PresentmentModel {
 
-    private var mutableState = MutableStateFlow<State>(State.Reset)
+    private var mutableState = MutableStateFlow<State>(State.Reset(null))
 
     /**
      * The current state of the model.
      */
     val state: StateFlow<State> = mutableState.asStateFlow()
 
-    private var mutableDocumentStore: DocumentStore? = null
-    private var mutableDocumentTypeRepository: DocumentTypeRepository? = null
+    private var mutableSource: PresentmentSource? = null
     private var mutableDocumentsSelected = MutableStateFlow<List<Document>>(emptyList())
     private var mutableNumRequestsServed = MutableStateFlow(0)
 
     /**
-     * The [DocumentStore] being used for presentment.
+     * The source of truth being used for presentment.
      */
-    val documentStore: DocumentStore
-        get() = mutableDocumentStore!!
-
-    /**
-     * The [DocumentTypeRepository] to provide information about document types.
-     */
-    val documentTypeRepository: DocumentTypeRepository
-        get() = mutableDocumentTypeRepository!!
+    val source: PresentmentSource
+        get() = mutableSource!!
 
     /**
      * The set of [Document]s currently selected to be returned.
@@ -60,18 +51,19 @@ class PresentmentModel {
      *
      * This moves the model into the [State.Reset] state.
      *
-     * @param documentStore the [DocumentStore] being used for presentment.
-     * @param documentTypeRepository a [DocumentTypeRepository] to provide information about document types.
+     * @param source the source of truth to use for presentment.
      * @param preselectedDocuments a list of documents that are preselected.
+     * @param showDocumentChooser if not `null`, shows a document chooser. This is for applications of [PresentmentModel]
+     *   when e.g. launching an activity which the user can bring up from a shortcut or hot-key e.g. double-clicking
+     *   the power button.
      */
     fun reset(
-        documentStore: DocumentStore,
-        documentTypeRepository: DocumentTypeRepository,
-        preselectedDocuments: List<Document>
+        source: PresentmentSource,
+        preselectedDocuments: List<Document>,
+        showDocumentChooser: DocumentChooserData? = null,
     ) {
-        mutableState.value = State.Reset
-        mutableDocumentStore = documentStore
-        mutableDocumentTypeRepository = documentTypeRepository
+        mutableState.value = State.Reset(showDocumentChooser)
+        mutableSource = source
         mutableDocumentsSelected.value = preselectedDocuments
         mutableNumRequestsServed.value = 0
     }
@@ -152,7 +144,9 @@ class PresentmentModel {
      */
     sealed class State {
         /** The presentment has just started. */
-        data object Reset: State()
+        data class Reset(
+            val documentChooserData: DocumentChooserData?
+        ): State()
 
         /** Connecting to the credential reader. */
         data object Connecting: State()

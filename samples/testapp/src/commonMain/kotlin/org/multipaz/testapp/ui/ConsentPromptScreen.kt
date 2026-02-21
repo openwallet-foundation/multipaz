@@ -205,7 +205,7 @@ fun ConsentPromptScreen(
         documentTypeRepository.addDocumentType(PhotoID.getDocumentType())
         documentTypeRepository.addDocumentType(UtopiaBoardingPass.getDocumentType())
         documentStore = buildDocumentStore(storage, secureAreaRepository) {}
-        documentModel = DocumentModel(documentStore = documentStore!!, documentTypeRepository = documentTypeRepository)
+        documentModel = DocumentModel.create(documentStore = documentStore!!, documentTypeRepository = documentTypeRepository)
 
         val now = Clock.System.now().truncateToWholeSeconds()
         val iacaCertValidFrom = now - 1.days

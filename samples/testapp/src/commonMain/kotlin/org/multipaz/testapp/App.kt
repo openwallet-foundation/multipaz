@@ -3,6 +3,9 @@ package org.multipaz.testapp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -25,8 +28,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
@@ -58,7 +63,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import multipazproject.samples.testapp.generated.resources.Res
 import org.jetbrains.compose.resources.ExperimentalResourceApi
-import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.OID
 import org.multipaz.cbor.Cbor
@@ -120,6 +124,7 @@ import org.multipaz.testapp.ui.ConsentPromptScreen
 import org.multipaz.testapp.ui.CredentialClaimsViewerScreen
 import org.multipaz.testapp.ui.CredentialViewerScreen
 import org.multipaz.testapp.ui.DcRequestScreen
+import org.multipaz.testapp.ui.VerticalDocumentListScreen
 import org.multipaz.testapp.ui.DocumentStoreScreen
 import org.multipaz.testapp.ui.DocumentViewerScreen
 import org.multipaz.testapp.ui.IsoMdocMultiDeviceTestingScreen
@@ -200,6 +205,8 @@ class App private constructor (val promptModel: PromptModel) {
     private val credentialOffers = Channel<String>()
 
     private val urlsToOpen = Channel<String>()
+
+    private val documentsToView = Channel<String>()
 
     private lateinit var provisioningSupport: ProvisioningSupport
 
@@ -365,7 +372,7 @@ class App private constructor (val promptModel: PromptModel) {
     }
 
     private suspend fun documentModelInit() {
-        documentModel = DocumentModel(
+        documentModel = DocumentModel.create(
             documentStore = documentStore,
             documentTypeRepository = documentTypeRepository,
         )
@@ -838,9 +845,9 @@ class App private constructor (val promptModel: PromptModel) {
     private lateinit var snackbarHostState: SnackbarHostState
 
     @Composable
-    @Preview
     fun Content(navController: NavHostController = rememberNavController()) {
-        var isInitialized = remember { mutableStateOf<Boolean>(false) }
+        val coroutineScope = rememberCoroutineScope()
+        val isInitialized = remember { mutableStateOf<Boolean>(false) }
         if (!isInitialized.value) {
             CoroutineScope(Dispatchers.Main).launch {
                 initialize()
@@ -890,6 +897,14 @@ class App private constructor (val promptModel: PromptModel) {
             }
         }
 
+        LaunchedEffect(true) {
+            while (true) {
+                navController.navigate(DocumentViewerDestination(
+                    documentId = documentsToView.receive()
+                ))
+            }
+        }
+
         snackbarHostState = remember { SnackbarHostState() }
 
         val currentBranding = Branding.Current.collectAsState().value
@@ -918,23 +933,56 @@ class App private constructor (val promptModel: PromptModel) {
                             onDigitalCredentialsReregister = { digitalCredentialsReregister() },
                             onClickAbout = { navController.navigate(AboutDestination) },
                             onClickDocumentStore = { navController.navigate(DocumentStoreDestination) },
-                            onClickTrustedIssuers = { navController.navigate(TrustedIssuersDestination) },
-                            onClickTrustedVerifiers = { navController.navigate(TrustedVerifiersDestination) },
-                            onClickSoftwareSecureArea = { navController.navigate(SoftwareSecureAreaDestination) },
+                            onClickDocumentListScreen = {
+                                navController.navigate(
+                                    DocumentListDestination
+                                )
+                            },
+                            onClickTrustedIssuers = {
+                                navController.navigate(
+                                    TrustedIssuersDestination
+                                )
+                            },
+                            onClickTrustedVerifiers = {
+                                navController.navigate(
+                                    TrustedVerifiersDestination
+                                )
+                            },
+                            onClickSoftwareSecureArea = {
+                                navController.navigate(
+                                    SoftwareSecureAreaDestination
+                                )
+                            },
                             onClickAndroidKeystoreSecureArea = {
                                 navController.navigate(
                                     AndroidKeystoreSecureAreaDestination
                                 )
                             },
-                            onClickCloudSecureArea = { navController.navigate(CloudSecureAreaDestination) },
+                            onClickCloudSecureArea = {
+                                navController.navigate(
+                                    CloudSecureAreaDestination
+                                )
+                            },
                             onClickSecureEnclaveSecureArea = {
                                 navController.navigate(
                                     SecureEnclaveSecureAreaDestination
                                 )
                             },
-                            onClickPassphraseEntryField = { navController.navigate(PassphraseEntryFieldDestination) },
-                            onClickPassphrasePrompt = { navController.navigate(PassphrasePromptDestination) },
-                            onClickConsentSheetList = { navController.navigate(ConsentPromptDestination) },
+                            onClickPassphraseEntryField = {
+                                navController.navigate(
+                                    PassphraseEntryFieldDestination
+                                )
+                            },
+                            onClickPassphrasePrompt = {
+                                navController.navigate(
+                                    PassphrasePromptDestination
+                                )
+                            },
+                            onClickConsentSheetList = {
+                                navController.navigate(
+                                    ConsentPromptDestination
+                                )
+                            },
                             onClickQrCodes = { navController.navigate(QrCodesDestination) },
                             onClickNfc = { navController.navigate(NfcDestination) },
                             onClickIsoMdocProximitySharing = {
@@ -961,6 +1009,18 @@ class App private constructor (val promptModel: PromptModel) {
                             onClickScreenLock = { navController.navigate(ScreenLockDestination) },
                             onClickPickersScreen = { navController.navigate(PickersDestination) },
                             onClickNfcReadersScreen = { navController.navigate(NfcReadersDestination) },
+                            onClickQuickAccessWallet = {
+                                coroutineScope.launch {
+                                    try {
+                                        TestAppConfiguration.launchQuickAccessWallet(
+                                            source = getPresentmentSource(),
+                                            initiallySelectedDocumentId = settingsModel.currentlyFocusedDocumentId.value
+                                        )
+                                    } catch (e: Throwable) {
+                                        showToast("Error launching QuickAccessWallet: ${e.message}")
+                                    }
+                                }
+                            }
                         )
                     }
                 }
@@ -1031,7 +1091,11 @@ class App private constructor (val promptModel: PromptModel) {
                             credentialId = destination.credentialId,
                             showToast = ::showToast,
                             onViewCertificateChain = { encodedCertificateData: String ->
-                                navController.navigate(CertificateViewerDestination(encodedCertificateData))
+                                navController.navigate(
+                                    CertificateViewerDestination(
+                                        encodedCertificateData
+                                    )
+                                )
                             },
                             onViewCredentialClaims = { documentId, credentialId ->
                                 navController.navigate(
@@ -1046,7 +1110,8 @@ class App private constructor (val promptModel: PromptModel) {
                 }
                 composable<CredentialClaimsViewerDestination> { backStackEntry ->
                     WithAppBar(navController, "Credential Claims") {
-                        val destination = backStackEntry.toRoute<CredentialClaimsViewerDestination>()
+                        val destination =
+                            backStackEntry.toRoute<CredentialClaimsViewerDestination>()
                         CredentialClaimsViewerScreen(
                             documentModel = documentModel,
                             documentTypeRepository = documentTypeRepository,
@@ -1119,7 +1184,11 @@ class App private constructor (val promptModel: PromptModel) {
                             promptModel = promptModel,
                             showToast = { message -> showToast(message) },
                             onViewCertificate = { encodedCertificateData ->
-                                navController.navigate(CertificateViewerDestination(encodedCertificateData))
+                                navController.navigate(
+                                    CertificateViewerDestination(
+                                        encodedCertificateData
+                                    )
+                                )
                             }
                         )
                     }
@@ -1135,7 +1204,11 @@ class App private constructor (val promptModel: PromptModel) {
                             app = this@App,
                             showToast = { message -> showToast(message) },
                             onViewCertificate = { encodedCertificateData ->
-                                navController.navigate(CertificateViewerDestination(encodedCertificateData))
+                                navController.navigate(
+                                    CertificateViewerDestination(
+                                        encodedCertificateData
+                                    )
+                                )
                             }
                         )
                     }
@@ -1198,11 +1271,19 @@ class App private constructor (val promptModel: PromptModel) {
                                              metadata: ShowResponseMetadata ->
                                 navController.navigate(
                                     ShowResponseDestination(
-                                        vpResponse = vpToken?.let { Json.encodeToString(it) }?.encodeToByteArray()?.toBase64Url(),
-                                        deviceResponse = deviceResponse?.let { Cbor.encode(it).toBase64Url() },
-                                        sessionTranscript = Cbor.encode(sessionTranscript).toBase64Url(),
+                                        vpResponse = vpToken?.let { Json.encodeToString(it) }
+                                            ?.encodeToByteArray()?.toBase64Url(),
+                                        deviceResponse = deviceResponse?.let {
+                                            Cbor.encode(it).toBase64Url()
+                                        },
+                                        sessionTranscript = Cbor.encode(sessionTranscript)
+                                            .toBase64Url(),
                                         nonce = nonce?.let { nonce.toByteArray().toBase64Url() },
-                                        eReaderKey = eReaderKey?.let { Cbor.encode(eReaderKey.toCoseKey().toDataItem()).toBase64Url() },
+                                        eReaderKey = eReaderKey?.let {
+                                            Cbor.encode(
+                                                eReaderKey.toCoseKey().toDataItem()
+                                            ).toBase64Url()
+                                        },
                                         metadata = Cbor.encode(metadata.toDataItem()).toBase64Url()
                                     )
                                 )
@@ -1223,11 +1304,19 @@ class App private constructor (val promptModel: PromptModel) {
                                              metadata: ShowResponseMetadata ->
                                 navController.navigate(
                                     ShowResponseDestination(
-                                        vpResponse = vpToken?.let { Json.encodeToString(it) }?.encodeToByteArray()?.toBase64Url(),
-                                        deviceResponse = deviceResponse?.let { Cbor.encode(it).toBase64Url() },
-                                        sessionTranscript = Cbor.encode(sessionTranscript).toBase64Url(),
+                                        vpResponse = vpToken?.let { Json.encodeToString(it) }
+                                            ?.encodeToByteArray()?.toBase64Url(),
+                                        deviceResponse = deviceResponse?.let {
+                                            Cbor.encode(it).toBase64Url()
+                                        },
+                                        sessionTranscript = Cbor.encode(sessionTranscript)
+                                            .toBase64Url(),
                                         nonce = nonce?.let { nonce.toByteArray().toBase64Url() },
-                                        eReaderKey = eReaderKey?.let { Cbor.encode(eReaderKey.toCoseKey().toDataItem()).toBase64Url() },
+                                        eReaderKey = eReaderKey?.let {
+                                            Cbor.encode(
+                                                eReaderKey.toCoseKey().toDataItem()
+                                            ).toBase64Url()
+                                        },
                                         metadata = Cbor.encode(metadata.toDataItem()).toBase64Url()
                                     )
                                 )
@@ -1243,8 +1332,10 @@ class App private constructor (val promptModel: PromptModel) {
                                 it.fromBase64Url().decodeToString()
                             )
                         }
-                        val deviceResponse = destination.deviceResponse?.let { Cbor.decode(it.fromBase64Url()) }
-                        val sessionTranscript = Cbor.decode(destination.sessionTranscript.fromBase64Url())
+                        val deviceResponse =
+                            destination.deviceResponse?.let { Cbor.decode(it.fromBase64Url()) }
+                        val sessionTranscript =
+                            Cbor.decode(destination.sessionTranscript.fromBase64Url())
                         val nonce = destination.nonce?.let { ByteString(it.fromBase64Url()) }
                         val eReaderKey = destination.eReaderKey?.let {
                             Cbor.decode(it.fromBase64Url()).asCoseKey.ecPrivateKey
@@ -1262,8 +1353,13 @@ class App private constructor (val promptModel: PromptModel) {
                             documentTypeRepository = documentTypeRepository,
                             zkSystemRepository = zkSystemRepository,
                             onViewCertChain = { certChain ->
-                                val encodedCertificateData = Cbor.encode(certChain.toDataItem()).toBase64Url()
-                                navController.navigate(CertificateViewerDestination(encodedCertificateData))
+                                val encodedCertificateData =
+                                    Cbor.encode(certChain.toDataItem()).toBase64Url()
+                                navController.navigate(
+                                    CertificateViewerDestination(
+                                        encodedCertificateData
+                                    )
+                                )
                             }
                         )
                     }
@@ -1279,7 +1375,11 @@ class App private constructor (val promptModel: PromptModel) {
                     WithAppBar(navController, "CertificateViewer examples") {
                         CertificateViewerExamplesScreen(
                             onViewCertificate = { encodedCertificateData ->
-                                navController.navigate(CertificateViewerDestination(encodedCertificateData))
+                                navController.navigate(
+                                    CertificateViewerDestination(
+                                        encodedCertificateData
+                                    )
+                                )
                             }
                         )
                     }
@@ -1338,8 +1438,31 @@ class App private constructor (val promptModel: PromptModel) {
                         )
                     }
                 }
+                composable<DocumentListDestination>(
+                    enterTransition = { null },
+                    exitTransition = { null },
+                    popEnterTransition = { null },
+                    popExitTransition = { null }
+                ) { backStackEntry ->
+                    // Note: DocumentListScreen has its own AppBar
+                    VerticalDocumentListScreen(
+                        documentStore = documentStore,
+                        documentModel = documentModel,
+                        settingsModel = settingsModel,
+                        onViewDocument = { documentId ->
+                            navController.navigate(DocumentViewerDestination(documentId))
+                        },
+                        onBackPressed = {
+                            navController.navigateUp()
+                        }
+                    )
+                }
             }
         }
+    }
+
+    suspend fun viewDocument(documentId: String) {
+        documentsToView.send(documentId)
     }
 
     private fun showToast(message: String) {
@@ -1399,7 +1522,9 @@ class App private constructor (val promptModel: PromptModel) {
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         ) { innerPadding ->
             Box(
-                modifier = Modifier.padding(innerPadding)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
             ) {
                 content()
             }

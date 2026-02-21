@@ -159,9 +159,16 @@ fun IsoMdocProximityReadingScreen(
     app.externalNfcReaderStore.readers.value.forEach { externalReader ->
         readers.add(NfcReaderExternal(externalReader.displayName, externalReader))
     }
+    if (readers.isEmpty()) {
+        readers.add(NfcReaderNoneAvailable())
+    }
     val readerSelected = remember { mutableStateOf<NfcReaderEntry>(
-        if (lastNfcReaderSelected < readers.size) readers[lastNfcReaderSelected] else readers[0]
-    ) }
+        if (lastNfcReaderSelected < readers.size) {
+            readers[lastNfcReaderSelected]
+        } else {
+            readers[0]
+        }
+    )}
     val readerDropdownExpanded = remember { mutableStateOf(false) }
 
     if (connectionMethodPickerData.value != null) {
@@ -243,7 +250,7 @@ fun IsoMdocProximityReadingScreen(
                             var transferProtocol = ""
                             doReaderFlow(
                                 app = app,
-                                nfcTagReader = readerSelected.value.getNfcTagReader(),
+                                nfcTagReader = readerSelected.value!!.getNfcTagReader(),
                                 encodedDeviceEngagement = ByteString(data.substring(5).fromBase64Url()),
                                 existingTransport = null,
                                 handover = Simple.NULL,
@@ -475,14 +482,18 @@ fun IsoMdocProximityReadingScreen(
                 modifier = Modifier.padding(8.dp)
             ) {
                 item {
-                    ComboBox(
-                        headline = "NFC Reader",
-                        options = readers,
-                        comboBoxSelected = readerSelected,
-                        comboBoxExpanded = readerDropdownExpanded,
-                        getDisplayName = { it.displayName },
-                        onSelected = { index, value -> lastNfcReaderSelected = index }
-                    )
+                    if (readers.size == 0) {
+                        Text("No NFC readers available")
+                    } else {
+                        ComboBox(
+                            headline = "NFC Reader",
+                            options = readers,
+                            comboBoxSelected = readerSelected as MutableState<NfcReaderEntry>,
+                            comboBoxExpanded = readerDropdownExpanded,
+                            getDisplayName = { it.displayName },
+                            onSelected = { index, value -> lastNfcReaderSelected = index }
+                        )
+                    }
                 }
                 item {
                     ComboBox(
@@ -548,7 +559,7 @@ fun IsoMdocProximityReadingScreen(
                                         NfcScanOptions()
                                     }
                                     Logger.i(TAG, "nfcScanOptions: $nfcScanOptions")
-                                    val reader = readerSelected.value.getNfcTagReader()
+                                    val reader = readerSelected.value!!.getNfcTagReader()
                                     val scanResult = reader.scanMdocReader(
                                         message = "Hold near credential holder's phone.",
                                         options = MdocTransportOptions(

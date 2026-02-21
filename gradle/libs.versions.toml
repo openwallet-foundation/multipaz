@@ -9,7 +9,7 @@ androidx-core-ktx = "1.17.0"
 androidx-espresso-core = "3.7.0"
 androidx-material = "1.13.0"
 androidx-test-junit = "1.3.0"
-compose-plugin = "1.9.3"
+compose-plugin = "1.10.1"
 junit = "4.13.2"
 kotlin = "2.2.21"
 kotlinx-coroutines = "1.10.2"
@@ -56,6 +56,7 @@ compottie = "2.0.2"
 kotlin-wrappers = "2025.12.1"
 kotlin-wrappers-rx = "2025.12.1-19.2.0"
 kotlin-wrappers-em = "2025.12.1-11.14.0"
+jetbrains-navigationevent = "1.0.1"
 
 [libraries]
 androidx-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview", version.ref = "uiToolingPreview" }
@@ -114,6 +115,7 @@ compose-test-manifest = { module = "androidx.compose.ui:ui-test-manifest", versi
 jetbrains-navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref="jetbrains-navigation" }
 jetbrains-navigation-runtime = { module = "org.jetbrains.androidx.navigation:navigation-runtime", version.ref="jetbrains-navigation" }
 jetbrains-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref="jetbrains-lifecycle" }
+jetbrains-navigationevent-compose = { module = "org.jetbrains.androidx.navigationevent:navigationevent-compose", version.ref = "jetbrains-navigationevent" }
 androidx-sqlite = { module="androidx.sqlite:sqlite", version.ref = "androidx-sqlite" }
 androidx-sqlite-framework = { module="androidx.sqlite:sqlite-framework", version.ref = "androidx-sqlite" }
 androidx-sqlite-bundled = { module="androidx.sqlite:sqlite-bundled", version.ref = "androidx-sqlite" }

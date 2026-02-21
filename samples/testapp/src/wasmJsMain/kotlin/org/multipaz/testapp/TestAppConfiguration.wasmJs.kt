@@ -4,7 +4,10 @@ import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.engine.js.Js
 import multipazproject.samples.testapp.generated.resources.Res
 import multipazproject.samples.testapp.generated.resources.app_icon
+import org.multipaz.document.DocumentStore
+import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.nfc.NfcTagReader
+import org.multipaz.presentment.PresentmentSource
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.WebPromptModel
 import org.multipaz.util.Platform
@@ -50,5 +53,12 @@ actual object TestAppConfiguration {
 
     actual suspend fun getAppToAppOrigin(): String {
         TODO("Add support for WasmJS")
+    }
+
+    actual suspend fun launchQuickAccessWallet(
+        source: PresentmentSource,
+        initiallySelectedDocumentId: String?
+    ) {
+        throw NotImplementedError("Not implemented on this platform")
     }
 }

@@ -28,6 +28,7 @@ struct ContentView: View {
                 case .aboutScreen: AboutScreen()
                 case .documentStoreScreen: DocumentStoreScreen()
                 case .documentScreen(let documentInfo): DocumentScreen(documentInfo: documentInfo)
+                case .verticalDocumentListScreen: VerticalDocumentListScreen()
                 case .credentialScreen(let credentialInfo): CredentialScreen(credentialInfo: credentialInfo)
                 case .claimsScreen(let credentialInfo): ClaimsScreen(credentialInfo: credentialInfo)
                 case .consentPromptScreen: ConsentPromptScreen()

@@ -30,8 +30,7 @@ actual suspend fun launchAndroidPresentmentActivity(
     onDocumentsInFocus: (documents: List<Document>) -> Unit
 ): CredentialPresentmentSelection? {
     PresentmentActivity.presentmentModel.reset(
-        documentStore = source.documentStore,
-        documentTypeRepository = source.documentTypeRepository,
+        source = source,
         preselectedDocuments = paData.preselectedDocuments
     )
     PresentmentActivity.startActivity()

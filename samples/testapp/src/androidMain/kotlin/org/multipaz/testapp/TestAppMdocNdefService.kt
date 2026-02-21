@@ -26,8 +26,7 @@ class TestAppMdocNdefService: MdocNdefService() {
 
         val source = app.getPresentmentSource()
         PresentmentActivity.presentmentModel.reset(
-            documentStore = source.documentStore,
-            documentTypeRepository = source.documentTypeRepository,
+            source = source,
             // TODO: if user is currently selecting a document, pass it here
             preselectedDocuments = emptyList()
         )

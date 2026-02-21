@@ -13,4 +13,5 @@ case aboutScreen
     case iso18013ProximityPresentmentScreen
     case certificateViewerScreen(certificates: [X509Cert])
     case certificateExamplesScreen
+    case verticalDocumentListScreen
 }

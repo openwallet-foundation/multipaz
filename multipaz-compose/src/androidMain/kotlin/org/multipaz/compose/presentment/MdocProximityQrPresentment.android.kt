@@ -139,8 +139,7 @@ private fun MdocProximityQrPresentmentAndroid(
                             )
 
                             PresentmentActivity.presentmentModel.reset(
-                                documentStore = source.documentStore,
-                                documentTypeRepository = source.documentTypeRepository,
+                                source = source,
                                 preselectedDocuments = preselectedDocuments
                             )
                             val intent = Intent(applicationContext, PresentmentActivity::class.java)
