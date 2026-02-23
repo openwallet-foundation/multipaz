@@ -20,6 +20,8 @@ plugins {
 val projectVersionCode: Int by rootProject.extra
 val projectVersionName: String by rootProject.extra
 
+val disableWebTargets = project.properties["disable.web.targets"]?.toString()?.toBoolean() ?: false
+
 kotlin {
     jvmToolchain(17)
 
@@ -40,22 +42,24 @@ kotlin {
         publishLibraryVariants("release")
     }
 
-    js {
-        outputModuleName = "multipaz-compose"
-        browser {
-            // Currently disabled, see https://youtrack.jetbrains.com/issue/CMP-4906
-            testTask { enabled = false }
+    if (!disableWebTargets) {
+        js {
+            outputModuleName = "multipaz-compose"
+            browser {
+                // Currently disabled, see https://youtrack.jetbrains.com/issue/CMP-4906
+                testTask { enabled = false }
+            }
+            binaries.executable()
         }
-        binaries.executable()
-    }
 
-    wasmJs {
-        outputModuleName = "multipaz-compose"
-        browser {
-            // Currently disabled, see https://youtrack.jetbrains.com/issue/CMP-4906
-            testTask { enabled = false }
+        wasmJs {
+            outputModuleName = "multipaz-compose"
+            browser {
+                // Currently disabled, see https://youtrack.jetbrains.com/issue/CMP-4906
+                testTask { enabled = false }
+            }
+            binaries.executable()
         }
-        binaries.executable()
     }
 
     listOf(

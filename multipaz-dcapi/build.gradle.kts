@@ -12,6 +12,8 @@ plugins {
 val projectVersionCode: Int by rootProject.extra
 val projectVersionName: String by rootProject.extra
 
+val disableWebTargets = project.properties["disable.web.targets"]?.toString()?.toBoolean() ?: false
+
 kotlin {
     jvmToolchain(17)
 
@@ -29,17 +31,19 @@ kotlin {
         publishLibraryVariants("release")
     }
 
-    js {
-        outputModuleName = "multipaz-dcapi"
-        browser {
+    if (!disableWebTargets) {
+        js {
+            outputModuleName = "multipaz-dcapi"
+            browser {
+            }
+            binaries.executable()
         }
-        binaries.executable()
-    }
 
-    wasmJs {
-        browser {
+        wasmJs {
+            browser {
+            }
+            binaries.executable()
         }
-        binaries.executable()
     }
 
     listOf(

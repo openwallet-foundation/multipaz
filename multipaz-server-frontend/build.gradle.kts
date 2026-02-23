@@ -4,37 +4,43 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
 }
 
+val disableWebTargets = project.properties["disable.web.targets"]?.toString()?.toBoolean() ?: false
+
 kotlin {
-    js(IR) {
-        // This is for running in the browser, not server/node.js
-        browser {
-            commonWebpackConfig {
-                cssSupport { enabled.set(true) }
-                outputFileName = "multipaz-web.js"
-            }
-            runTask {
-                devServerProperty.set(KotlinWebpackConfig.DevServer(
-                    port = 3000,
-                    open = false,
-                    static = mutableListOf(
-                        file("src/jsMain/resources").path
+    if (!disableWebTargets) {
+        js(IR) {
+            // This is for running in the browser, not server/node.js
+            browser {
+                commonWebpackConfig {
+                    cssSupport { enabled.set(true) }
+                    outputFileName = "multipaz-web.js"
+                }
+                runTask {
+                    devServerProperty.set(
+                        KotlinWebpackConfig.DevServer(
+                            port = 3000,
+                            open = false,
+                            static = mutableListOf(
+                                file("src/jsMain/resources").path
+                            )
+                        )
                     )
-                ))
+                }
             }
+            binaries.executable()
         }
-        binaries.executable()
-    }
 
-    sourceSets {
-        val jsMain by getting {
-            dependencies {
-                // Multipaz library (provides Crypto, toBase64Url, etc.)
-                implementation(project(":multipaz"))
+        sourceSets {
+            val jsMain by getting {
+                dependencies {
+                    // Multipaz library (provides Crypto, toBase64Url, etc.)
+                    implementation(project(":multipaz"))
 
-                // Kotlin React wrappers
-                implementation(libs.kotlin.wrappers.react)
-                implementation(libs.kotlin.wrappers.react.dom)
-                implementation(libs.kotlin.wrappers.emotion.react.js)
+                    // Kotlin React wrappers
+                    implementation(libs.kotlin.wrappers.react)
+                    implementation(libs.kotlin.wrappers.react.dom)
+                    implementation(libs.kotlin.wrappers.emotion.react.js)
+                }
             }
         }
     }

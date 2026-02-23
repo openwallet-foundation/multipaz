@@ -11,6 +11,8 @@ plugins {
 val projectVersionCode: Int by rootProject.extra
 val projectVersionName: String by rootProject.extra
 
+val disableWebTargets = project.properties["disable.web.targets"]?.toString()?.toBoolean() ?: false
+
 kotlin {
     jvmToolchain(17)
 
@@ -20,18 +22,20 @@ kotlin {
 
     jvm()
 
-    js {
-        outputModuleName = "multipaz-doctypes"
-        browser {
+    if (!disableWebTargets) {
+        js {
+            outputModuleName = "multipaz-doctypes"
+            browser {
+            }
+            binaries.executable()
         }
-        binaries.executable()
-    }
 
-    wasmJs {
-        outputModuleName = "multipaz-doctypes"
-        browser {
+        wasmJs {
+            outputModuleName = "multipaz-doctypes"
+            browser {
+            }
+            binaries.executable()
         }
-        binaries.executable()
     }
 
     listOf(
@@ -82,9 +86,11 @@ kotlin {
             }
         }
 
-        val jsTest by getting {
-            dependencies {
-                implementation(libs.kotlin.wrappers.web)
+        if (!disableWebTargets) {
+            val jsTest by getting {
+                dependencies {
+                    implementation(libs.kotlin.wrappers.web)
+                }
             }
         }
     }
