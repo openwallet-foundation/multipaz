@@ -122,6 +122,35 @@ actual fun AndroidKeystoreSecureAreaScreen(
             }
         }
 
+        for (n in listOf(0, 1)) {
+            val useStrongBox = if (n == 0) false else true
+            val buttonText = if (useStrongBox) "StrongBox Sanity Check" else "Sanity Check"
+            item {
+                TextButton(onClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        coroutineScope.launch {
+                            val t0 = Clock.System.now()
+                            try {
+                                androidKeystoreCapabilities.testKeyAttestationsAndEcdsaSigning(useStrongBox)
+                                val durationMsec = (Clock.System.now() - t0).inWholeMilliseconds
+                                showToast("Sanity check passed ($durationMsec msec)")
+                            } catch (e: Throwable) {
+                                val durationMsec = (Clock.System.now() - t0).inWholeMilliseconds
+                                e.printStackTrace()
+                                showToast("Sanity check failed ($durationMsec msec): ${e.message}")
+                            }
+                        }
+                    } else {
+                        showToast("This is only available on API 28 or later, you are running API ${Build.VERSION.SDK_INT}")
+                    }
+                }) {
+                    Text(
+                        text = buttonText, fontSize = 15.sp
+                    )
+                }
+            }
+        }
+
         item {
             TextButton(onClick = {
                 coroutineScope.launch {

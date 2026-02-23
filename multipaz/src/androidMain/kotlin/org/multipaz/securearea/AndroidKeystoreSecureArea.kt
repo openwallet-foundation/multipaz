@@ -24,6 +24,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
 import android.security.keystore.UserNotAuthenticatedException
+import androidx.annotation.RequiresApi
 import org.multipaz.context.applicationContext
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcCurve
@@ -41,10 +42,15 @@ import kotlinx.coroutines.withContext
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.buildByteString
+import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.ASN1Sequence
+import org.multipaz.crypto.Crypto
+import org.multipaz.device.AndroidKeystoreSecurityLevel
 import org.multipaz.prompt.Reason
+import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.util.validateAndroidKeyAttestation
 import java.io.IOException
 import java.security.InvalidAlgorithmParameterException
 import java.security.KeyFactory
@@ -63,6 +69,7 @@ import java.security.spec.InvalidKeySpecException
 import java.sql.Date
 import javax.crypto.KeyAgreement
 import kotlin.coroutines.coroutineContext
+import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -769,6 +776,112 @@ class AndroidKeystoreSecureArea private constructor(
          */
         val strongBoxCurve25519Supported: Boolean
             get() = sbFeatureLevel >= 200
+
+        /**
+         * Tests if the implementation properly supports key attestations and ECDSA signatures with Curve P-256.
+         *
+         * Key attestations and ECDSA signatures with Curve P-256 are used for ISO mdoc credentials
+         * and this function will check if this is implemented correctly on the device.
+         *
+         * Tests include check that
+         * - key attestations are correct and chains up to the well-known Google root.
+         * - the attestation is for the correct app.
+         * - the attestation says the device is in the Verified Boot GREEN state.
+         * - keys created can can properly sign messages by verifying the signature. Messages of
+         *   varying sizes from 16 bytes to 128 KiB and with random content are tested.
+         *
+         * If the checks pass no exception is thrown. If one of the checks fail [IllegalStateException] is
+         * thrown and the `message` and `cause` fields contains more details.
+         *
+         * This can be slow, observed times on 2025-era hardware is ~200 milliseconds for TEE and
+         * ~2000 milliseconds for StrongBox.
+         *
+         * @param useStrongBox `false` to test normal TEE implementation, `true` to test StrongBox.
+         * @throws IllegalArgumentException if [useStrongBox] is `true` but [strongBoxSupported] is `false`.
+         * @throws IllegalStateException if one of the checks fail.
+         */
+        @RequiresApi(Build.VERSION_CODES.P)
+        suspend fun testKeyAttestationsAndEcdsaSigning(
+            useStrongBox: Boolean
+        ) {
+            if (useStrongBox) {
+                require(strongBoxSupported) { "testStrongBox is true but device does not support StrongBox" }
+            }
+            val storage = EphemeralStorage()
+            val secureArea = create(storage = storage)
+            var keyAliasToCleanUp: String? = null
+            try {
+                val attestationChallenge = "Challenge".encodeToByteString()
+                val keyInfo = try {
+                    secureArea.createKey(
+                        alias = null,
+                        createKeySettings = buildAndroidKeystoreCreateKeySettings(attestationChallenge) {
+                            setAlgorithm(Algorithm.ESP256)
+                            setUseStrongBox(useStrongBox)
+                        }
+                    )
+                } catch (e: Throwable) {
+                    throw IllegalStateException("Error creating key: ${e.message}", e)
+                }
+                keyAliasToCleanUp = keyInfo.alias
+
+                val signatureCertificateDigests = mutableSetOf<ByteString>()
+                val pkg = applicationContext.packageManager
+                    .getPackageInfo(applicationContext.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                pkg.signingInfo!!.apkContentsSigners.forEach { signatureInfo ->
+                    signatureCertificateDigests.add(
+                        ByteString(Crypto.digest(Algorithm.SHA256, signatureInfo.toByteArray()))
+                    )
+                }
+
+                try {
+                    validateAndroidKeyAttestation(
+                        chain = keyInfo.attestation.certChain!!,
+                        challenge = attestationChallenge,
+                        requireGmsAttestation = true,
+                        requireVerifiedBootGreen = true,
+                        requireKeyMintSecurityLevel = if (useStrongBox) {
+                            AndroidKeystoreSecurityLevel.STRONG_BOX
+                        } else {
+                            AndroidKeystoreSecurityLevel.TRUSTED_ENVIRONMENT
+                        },
+                        requireAppSignatureCertificateDigests = signatureCertificateDigests,
+                        requireAppPackages = setOf(pkg.packageName)
+                    )
+                } catch (e: Throwable) {
+                    throw IllegalStateException("Error validating attestation: ${e.message}", e)
+                }
+
+                for (messageLen in listOf(16, 64, 256, 1024, 4*1024, 64*1024, 128*1024)) {
+                    val message = Random.Default.nextBytes(messageLen)
+                    val signature = try {
+                        secureArea.sign(
+                            alias = keyInfo.alias,
+                            dataToSign = message,
+                            unlockReason = Reason.Unspecified
+                        )
+                    } catch (e: Throwable) {
+                        throw IllegalStateException("Error signing message of $messageLen bytes", e)
+                    }
+                    try {
+                        Crypto.checkSignature(
+                            publicKey = keyInfo.publicKey,
+                            message = message,
+                            algorithm = Algorithm.ESP256,
+                            signature = signature
+                        )
+                    } catch (e: Throwable) {
+                        throw IllegalStateException("Error verifying signature for message of $messageLen bytes", e)
+                    }
+                }
+            } catch (e: Throwable) {
+                throw IllegalStateException("Test failed: ${e.message}", e)
+            } finally {
+                if (keyAliasToCleanUp != null) {
+                    secureArea.deleteKey(keyAliasToCleanUp)
+                }
+            }
+        }
     }
 
     companion object {

@@ -48,7 +48,7 @@ class AndroidKeystoreCreateKeySettings private constructor(
 ) : CreateKeySettings(algorithm, attestationChallenge, userAuthenticationRequired, userAuthenticationTimeout, validFrom, validUntil) {
 
     /**
-     * A builder for [CreateKeySettings].
+     * A builder for [AndroidKeystoreCreateKeySettings].
      *
      * @param attestationChallenge challenge to include in attestation for the key.
      */
@@ -199,4 +199,20 @@ class AndroidKeystoreCreateKeySettings private constructor(
             )
         }
     }
+}
+
+/**
+ * Builds a [AndroidKeystoreCreateKeySettings].
+ *
+ * @param attestationChallenge challenge to include in attestation for the key.
+ * @param builderAction the builder action.
+ * @return a [AndroidKeystoreCreateKeySettings].
+ */
+inline fun buildAndroidKeystoreCreateKeySettings(
+    attestationChallenge: ByteString,
+    builderAction: AndroidKeystoreCreateKeySettings.Builder.() -> Unit
+): AndroidKeystoreCreateKeySettings {
+    val builder = AndroidKeystoreCreateKeySettings.Builder(attestationChallenge)
+    builder.builderAction()
+    return builder.build()
 }
