@@ -338,10 +338,16 @@ object OpenID4VP {
             "dc_api", "direct_post" -> null
             "dc_api.jwt", "direct_post.jwt" -> {
                 val clientMetadata = request["client_metadata"]!!.jsonObject
-                if (version == Version.DRAFT_29) {
-                    val jwks = clientMetadata["jwks"]!!.jsonObject
-                    val keys = jwks["keys"]!!.jsonArray
-                    val jwk = keys[0].jsonObject
+                val jwksKeys = clientMetadata["jwks"]
+                    ?.jsonObject
+                    ?.get("keys")
+                    ?.jsonArray
+                if (jwksKeys == null || jwksKeys.isEmpty()) {
+                    throw IllegalStateException(
+                        "No verifier jwks in client_metadata for $responseModeText"
+                    )
+                } else if (version == Version.DRAFT_29) {
+                    val jwk = jwksKeys[0].jsonObject
                     val encKey = EcPublicKey.fromJwk(jwk)
                     reKid = jwk["kid"]?.jsonPrimitive?.content
                     val alg = jwk["alg"]?.jsonPrimitive?.content
@@ -354,8 +360,7 @@ object OpenID4VP {
                     }
 
                      */
-                    // TODO: check encrypted_response_enc_values_supported
-                    reEncAlg = Algorithm.A128GCM
+                    reEncAlg = resolveDraft29EncryptedResponseEncAlgorithm(clientMetadata)
                     encKey
                 } else {
                     val reAlg =
@@ -378,9 +383,7 @@ object OpenID4VP {
 
                     // For now, just use the first key as encryption key (there should be only one). This
                     // will probably be specced out in OpenID4VP.
-                    val jwks = clientMetadata["jwks"]!!.jsonObject
-                    val keys = jwks["keys"]!!.jsonArray
-                    val encKey = keys[0]
+                    val encKey = jwksKeys[0]
                     val x = encKey.jsonObject["x"]!!.jsonPrimitive.content.fromBase64Url()
                     val y = encKey.jsonObject["y"]!!.jsonPrimitive.content.fromBase64Url()
                     EcPublicKeyDoubleCoordinate(EcCurve.P256, x, y)
@@ -477,11 +480,28 @@ object OpenID4VP {
         val compressionLevel = if (usingZk) 9 else null
 
         val walletGeneratedNonce = Random.nextBytes(16).toBase64Url()
+        val directPostJwtClaims = if (responseMode == ResponseMode.DIRECT_POST && reReaderPublicKey != null) {
+            val nowEpochSeconds = Clock.System.now().toEpochMilliseconds() / 1000
+            buildJsonObject {
+                vpToken.jsonObject.forEach { (key, value) ->
+                    put(key, value)
+                }
+                request["state"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }?.let { stateValue ->
+                    put("state", stateValue)
+                }
+                put("nonce", nonce)
+                put("aud", clientId)
+                put("iat", nowEpochSeconds)
+                put("exp", nowEpochSeconds + 300)
+            }
+        } else {
+            vpToken.jsonObject
+        }
         return if (reReaderPublicKey != null) {
             buildJsonObject {
                 put("response",
                     JsonWebEncryption.encrypt(
-                        claimsSet = vpToken.jsonObject,
+                        claimsSet = directPostJwtClaims,
                         recipientPublicKey = reReaderPublicKey,
                         encAlg = reEncAlg,
                         apu = nonce.encodeToByteString(),
@@ -494,6 +514,38 @@ object OpenID4VP {
         } else {
             vpToken
         }
+    }
+
+    private fun resolveDraft29EncryptedResponseEncAlgorithm(
+        clientMetadata: JsonObject
+    ): Algorithm {
+        val supportedByWallet = mapOf(
+            "A128GCM" to Algorithm.A128GCM,
+            "A192GCM" to Algorithm.A192GCM,
+            "A256GCM" to Algorithm.A256GCM,
+        )
+        val advertisedEncValues = sequenceOf(
+            "encrypted_response_enc_values_supported",
+            "authorization_encrypted_response_enc_values_supported"
+        ).mapNotNull { metadataKey ->
+            clientMetadata[metadataKey]?.jsonArray
+        }.firstOrNull()
+        if (advertisedEncValues == null) {
+            return Algorithm.A128GCM
+        }
+        val intersection = advertisedEncValues.mapNotNull { jsonElement ->
+            val advertised = runCatching { jsonElement.jsonPrimitive.content }.getOrNull()
+                ?: return@mapNotNull null
+            supportedByWallet[advertised]
+        }
+        if (intersection.isEmpty()) {
+            throw IllegalStateException(
+                "No supported encrypted response enc value found in verifier metadata"
+            )
+        }
+        val preferredOrder = listOf(Algorithm.A128GCM, Algorithm.A256GCM, Algorithm.A192GCM)
+        return preferredOrder.firstOrNull { preferred -> intersection.contains(preferred) }
+            ?: intersection.first()
     }
 
     private suspend fun openID4VPMsoMdoc(

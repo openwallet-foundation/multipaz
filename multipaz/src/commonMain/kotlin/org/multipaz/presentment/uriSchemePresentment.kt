@@ -96,13 +96,16 @@ suspend fun uriSchemePresentment(
         }
         else -> throw IllegalArgumentException("Unexpected response_mode")
     }
+    val state = response["state"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+        ?: requestObject["state"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
 
     val postResponseResponse = httpClient.post(responseUri) {
         contentType(ContentType.Application.FormUrlEncoded)
         setBody(
             Parameters.build {
                 append("response", responseCs)
-                // TODO: remember state
+                // OpenID4VP direct_post responses should echo request state to the response endpoint.
+                state?.let { append("state", it) }
             }.formUrlEncode().encodeToByteArray()
         )
     }
