@@ -69,6 +69,7 @@ internal class OpenID4VCIProvisioningClient(
     var pkceCodeVerifier: String? = null
     var token: String? = null
     var tokenExpiration: Instant? = null
+    var accessTokenType: String? = null
     var authorizationDPoPNonce: String? = null
     var issuerDPoPNonce: String? = null
     var clientAttestationChallenge: String? = null
@@ -153,62 +154,94 @@ internal class OpenID4VCIProvisioningClient(
         refreshAccessIfNeeded()
         val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
 
-        // without a nonce we may need to retry
-        var retry = true
-        var credentialResponse: HttpResponse
+        var credentialResponse: HttpResponse? = null
+        val tokenType = accessTokenType?.lowercase()
+        val authModes = when (tokenType) {
+            "dpop" -> listOf("dpop")
+            "bearer" -> listOf("bearer")
+            else -> listOf("dpop", "bearer")
+        }
         val credentialMetadata =
             issuerConfiguration.provisioningMetadata.credentials[credentialOffer.configurationId]!!
         val keyProofs = buildKeyProofs(keyInfo)
         val dpopKey = getDPopKey()
-        while (true) {
-            val dpop = OpenID4VCIUtil.generateDPoP(
-                dpopKey = dpopKey,
-                clientId = clientPreferences.clientId,
-                requestUrl = issuerConfiguration.credentialEndpoint,
-                dpopNonce = issuerDPoPNonce,
-                accessToken = token
-            )
-            credentialResponse = httpClient.post(issuerConfiguration.credentialEndpoint) {
-                headers {
-                    append("Authorization", "DPoP $token")
-                    append("DPoP", dpop)
-                    contentType(ContentType.Application.Json)
+        for (mode in authModes) {
+            // without a nonce we may need to retry
+            var retry = true
+            while (true) {
+                val dpop = if (mode == "dpop") {
+                    OpenID4VCIUtil.generateDPoP(
+                        dpopKey = dpopKey,
+                        clientId = clientPreferences.clientId,
+                        requestUrl = issuerConfiguration.credentialEndpoint,
+                        dpopNonce = issuerDPoPNonce,
+                        accessToken = token
+                    )
+                } else {
+                    null
                 }
-                setBody(buildJsonObject {
-                    put("credential_configuration_id", credentialOffer.configurationId)
-                    if (keyProofs != null) {
-                        put("proofs", keyProofs)
-                    }
-                    when (credentialMetadata.format) {
-                        is CredentialFormat.Mdoc -> {
-                            put("format", "mso_mdoc")
-                            put("doctype", credentialMetadata.format.docType)
+                credentialResponse = httpClient.post(issuerConfiguration.credentialEndpoint) {
+                    headers {
+                        append(
+                            "Authorization",
+                            if (mode == "dpop") "DPoP $token" else "Bearer $token"
+                        )
+                        if (dpop != null) {
+                            append("DPoP", dpop)
                         }
-                        is CredentialFormat.SdJwt -> {
-                            put("format", "dc+sd-jwt")
-                            put("vct", credentialMetadata.format.vct)
-                        }
+                        contentType(ContentType.Application.Json)
                     }
-                }.toString())
-            }
-            if (credentialResponse.headers.contains("DPoP-Nonce")) {
-                issuerDPoPNonce = credentialResponse.headers["DPoP-Nonce"]!!
-                if (retry) {
-                    retry = false // don't retry more than once
-                    if (credentialResponse.status != HttpStatusCode.OK) {
-                        Logger.e(TAG, "Retry with a fresh DPoP nonce")
-                        continue  // retry with the nonce
+                    setBody(buildJsonObject {
+                        put("credential_configuration_id", credentialOffer.configurationId)
+                        if (keyProofs != null) {
+                            put("proofs", keyProofs)
+                        }
+                        when (credentialMetadata.format) {
+                            is CredentialFormat.Mdoc -> {
+                                put("format", "mso_mdoc")
+                                put("doctype", credentialMetadata.format.docType)
+                            }
+                            is CredentialFormat.SdJwt -> {
+                                put("format", "dc+sd-jwt")
+                                put("vct", credentialMetadata.format.vct)
+                            }
+                        }
+                    }.toString())
+                }
+                if (credentialResponse.headers.contains("DPoP-Nonce")) {
+                    issuerDPoPNonce = credentialResponse.headers["DPoP-Nonce"]!!
+                    if (mode == "dpop" && retry) {
+                        retry = false // don't retry more than once
+                        if (credentialResponse.status != HttpStatusCode.OK) {
+                            Logger.e(TAG, "Retry with a fresh DPoP nonce")
+                            continue  // retry with the nonce
+                        }
                     }
                 }
+                break
             }
+            if (credentialResponse.status == HttpStatusCode.OK) {
+                break
+            }
+            if (
+                mode == "dpop" &&
+                tokenType != "dpop" &&
+                credentialResponse.status == HttpStatusCode.Unauthorized
+            ) {
+                Logger.w(TAG, "Credential request with DPoP unauthorized, retrying with Bearer")
+                continue
+            }
+            // No further auth modes to try.
             break
         }
 
-        val responseText = credentialResponse.readRawBytes().decodeToString()
-        if (credentialResponse.status != HttpStatusCode.OK) {
-            Logger.e(TAG,"Credential request error: ${credentialResponse.status} $responseText")
+        val finalResponse = credentialResponse
+            ?: throw IllegalStateException("Error getting a credential issued: no response")
+        val responseText = finalResponse.readRawBytes().decodeToString()
+        if (finalResponse.status != HttpStatusCode.OK) {
+            Logger.e(TAG,"Credential request error: ${finalResponse.status} $responseText")
             throw IllegalStateException(
-                "Error getting a credential issued: ${credentialResponse.status} $responseText")
+                "Error getting a credential issued: ${finalResponse.status} $responseText")
         }
         Logger.i(TAG, "Got successful response for credential request")
 
@@ -261,15 +294,25 @@ internal class OpenID4VCIProvisioningClient(
         when (keyInfo) {
             KeyBindingInfo.Keyless -> listOf("")
             is KeyBindingInfo.OpenidProofOfPossession -> keyInfo.jwtList.map { jwt ->
-                val header = Json.parseToJsonElement(jwt.take(jwt.indexOf('.') - 1))
-                // 'kid' must be present and corresponds to the credential id
-                header.jsonObject["kid"]!!.jsonPrimitive.content
+                val headerSegment = jwt.substringBefore('.', missingDelimiterValue = "")
+                require(headerSegment.isNotBlank()) {
+                    "Malformed proof JWT: missing header segment"
+                }
+                val headerJson = headerSegment.fromBase64Url().decodeToString()
+                val header = Json.parseToJsonElement(headerJson).jsonObject
+                header["kid"]?.jsonPrimitive?.content
+                    ?: header["jwk"]?.jsonObject?.get("kid")?.jsonPrimitive?.content
+                    ?: error("No kid found in JWT header or jwk")
             }
             is KeyBindingInfo.Attestation -> keyInfo.attestations.map { it.credentialId }
         }
 
     private suspend fun performPushedAuthorizationRequest(): String {
         maybeObtainClientAttestationChallenge()
+        val parEndpoint = authorizationConfiguration.pushedAuthorizationRequestEndpoint
+            ?: throw IllegalStateException(
+                "Authorization server metadata missing pushed_authorization_request_endpoint"
+            )
 
         pkceCodeVerifier = Random.Default.nextBytes(32).toBase64Url()
         val codeChallenge = Crypto.digest(
@@ -304,7 +347,7 @@ internal class OpenID4VCIProvisioningClient(
             val dpop = OpenID4VCIUtil.generateDPoP(
                 dpopKey = dpopKey,
                 clientId = clientPreferences.clientId,
-                requestUrl = authorizationConfiguration.pushedAuthorizationRequestEndpoint,
+                requestUrl = parEndpoint,
                 dpopNonce = authorizationDPoPNonce,
                 accessToken = null
             )
@@ -328,7 +371,7 @@ internal class OpenID4VCIProvisioningClient(
             this.redirectState = redirectState
 
             response = httpClient.submitForm(
-                url = authorizationConfiguration.pushedAuthorizationRequestEndpoint,
+                url = parEndpoint,
                 formParameters = parameters {
                     if (scope != null) {
                         append("scope", scope)
@@ -391,7 +434,9 @@ internal class OpenID4VCIProvisioningClient(
 
     private suspend fun obtainWalletAttestation(): AsymmetricKey {
         val secureArea = BackendEnvironment.getInterface(SecureAreaProvider::class)!!.get()
-        val endpoint = Url(authorizationConfiguration.pushedAuthorizationRequestEndpoint)
+        val endpointUrl = authorizationConfiguration.pushedAuthorizationRequestEndpoint
+            ?: authorizationConfiguration.tokenEndpoint
+        val endpoint = Url(endpointUrl)
         // https://datatracker.ietf.org/doc/html/draft-ietf-oauth-attestation-based-client-auth-01
         // Section 6.1. "Client Instance Tracking Across Authorization Servers" recommends
         // using different keys for different servers. We go even further and obtain a fresh
@@ -564,6 +609,7 @@ internal class OpenID4VCIProvisioningClient(
             val tokenResponseString = response.readRawBytes().decodeToString()
             val tokenResponse = Json.parseToJsonElement(tokenResponseString) as JsonObject
             token = tokenResponse.string("access_token")
+            accessTokenType = tokenResponse.stringOrNull("token_type")
             val duration = tokenResponse.integer("expires_in")
             tokenExpiration = Clock.System.now() + duration.seconds
             val refreshToken = tokenResponse.stringOrNull("refresh_token")
@@ -726,7 +772,8 @@ internal class OpenID4VCIProvisioningClient(
                 ?: issuerConfig.authorizationServerUrls.first()
             val authorizationConfiguration = AuthorizationConfiguration.get(
                 url = authorizationServerUrl,
-                clientPreferences = clientPreferences
+                clientPreferences = clientPreferences,
+                requireAuthorizationCodeFlow = credentialOffer is CredentialOffer.AuthorizationCode
             )
             return OpenID4VCIProvisioningClient(
                 clientPreferences = clientPreferences,

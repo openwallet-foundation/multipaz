@@ -15,7 +15,7 @@ import org.multipaz.util.Logger
 internal data class AuthorizationConfiguration(
     val identifier: String,
     val challengeEndpoint: String?,
-    val pushedAuthorizationRequestEndpoint: String,
+    val pushedAuthorizationRequestEndpoint: String?,
     val authorizationEndpoint: String,
     val tokenEndpoint: String,
     val dpopSigningAlgorithm: Algorithm,
@@ -23,7 +23,11 @@ internal data class AuthorizationConfiguration(
     val clientAuthentication: ClientAuthenticationType
 ) {
     companion object: JsonParsing("Authorization server metadata") {
-        suspend fun get(url: String, clientPreferences: OpenID4VCIClientPreferences): AuthorizationConfiguration {
+        suspend fun get(
+            url: String,
+            clientPreferences: OpenID4VCIClientPreferences,
+            requireAuthorizationCodeFlow: Boolean
+        ): AuthorizationConfiguration {
             val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
 
             // Fetch issuer metadata
@@ -37,11 +41,11 @@ internal data class AuthorizationConfiguration(
             val identifier = metadata.stringOrNull("issuer") ?: url
             val challengeEndpoint = metadata.stringOrNull("challenge_endpoint")
             val authorizationEndpoint = metadata.string("authorization_endpoint")
-            val parEndpoint = metadata.string("pushed_authorization_request_endpoint")
+            val parEndpoint = metadata.stringOrNull("pushed_authorization_request_endpoint")
             val tokenEndpoint = metadata.string("token_endpoint")
 
             val responseType = metadata.arrayOrNull("response_types_supported")
-            if (responseType != null) {
+            if (requireAuthorizationCodeFlow && responseType != null) {
                 var codeSupported = false
                 for (response in responseType) {
                     if (response is JsonPrimitive && response.content == "code") {
@@ -53,8 +57,8 @@ internal data class AuthorizationConfiguration(
                     throw IllegalStateException("response type 'code' is not supported")
                 }
             }
-            val codeChallengeMethods = metadata.array("code_challenge_methods_supported")
-            if (responseType != null) {
+            if (requireAuthorizationCodeFlow && responseType != null) {
+                val codeChallengeMethods = metadata.array("code_challenge_methods_supported")
                 var challengeSupported = false
                 for (method in codeChallengeMethods) {
                     if (method is JsonPrimitive && method.content == "S256") {
@@ -65,6 +69,11 @@ internal data class AuthorizationConfiguration(
                 if (!challengeSupported) {
                     throw IllegalStateException("challenge type 'S256' is not supported")
                 }
+            }
+            if (requireAuthorizationCodeFlow && parEndpoint == null) {
+                throw IllegalStateException(
+                    "pushed_authorization_request_endpoint is required for authorization code flow"
+                )
             }
 
             val dpopSigningAlgorithm = preferredAlgorithm(

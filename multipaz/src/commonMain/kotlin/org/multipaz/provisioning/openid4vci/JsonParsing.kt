@@ -16,6 +16,37 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.util.fromBase64
 
 internal open class JsonParsing(val source: String) {
+    private fun hexValue(ch: Char): Int = when (ch) {
+        in '0'..'9' -> ch.code - '0'.code
+        in 'a'..'f' -> ch.code - 'a'.code + 10
+        in 'A'..'F' -> ch.code - 'A'.code + 10
+        else -> -1
+    }
+
+    private fun decodePercentEncodedBytes(input: String): ByteArray {
+        val bytes = mutableListOf<Byte>()
+        var index = 0
+        while (index < input.length) {
+            val ch = input[index]
+            if (ch == '%') {
+                if (index + 2 >= input.length) {
+                    throw IllegalStateException("$source: malformed percent encoding in data URI")
+                }
+                val high = hexValue(input[index + 1])
+                val low = hexValue(input[index + 2])
+                if (high < 0 || low < 0) {
+                    throw IllegalStateException("$source: malformed percent encoding in data URI")
+                }
+                bytes.add(((high shl 4) or low).toByte())
+                index += 3
+            } else {
+                bytes.addAll(ch.toString().encodeToByteArray().toList())
+                index += 1
+            }
+        }
+        return bytes.toByteArray()
+    }
+
     fun preferredAlgorithm(
         available: JsonArray?,
         clientPreferences: OpenID4VCIClientPreferences
@@ -150,9 +181,18 @@ internal open class JsonParsing(val source: String) {
             val uri = logoObj.stringOrNull("uri")
             if (uri != null) {
                 if (uri.startsWith("data:")) {
-                    val start = uri.indexOf(",")
-                    if (start > 0) {
-                        logo = ByteString(uri.substring(start + 1).fromBase64())
+                    val separator = uri.indexOf(",")
+                    if (separator > 0) {
+                        val metadata = uri.substring(5, separator)
+                        val payload = uri.substring(separator + 1)
+                        val isBase64 = metadata.split(";").any { it.equals("base64", ignoreCase = true) }
+                        val logoBytes = if (isBase64) {
+                            runCatching { payload.fromBase64() }
+                                .getOrElse { decodePercentEncodedBytes(payload) }
+                        } else {
+                            decodePercentEncodedBytes(payload)
+                        }
+                        logo = ByteString(logoBytes)
                     }
                 } else {
                     val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
