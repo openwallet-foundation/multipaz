@@ -4,6 +4,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.Algorithm
@@ -73,6 +74,29 @@ class CoseTests {
             key.publicKey,
             null,
             coseSignature,
+            Algorithm.ES256
+        )
+    }
+
+    @Test
+    fun coseSign1DecodeTagged() = runTest {
+        val key = Crypto.createEcPrivateKey(EcCurve.P256)
+        val dataToSign = "This is the data to sign.".encodeToByteArray()
+        val coseSignature = Cose.coseSign1Sign(
+            key,
+            dataToSign,
+            true,
+            Algorithm.ES256,
+            emptyMap(),
+            emptyMap(),
+        )
+        val taggedSign1 = Tagged(18, coseSignature.toDataItem())
+        val parsed = CoseSign1.fromDataItem(taggedSign1)
+
+        Cose.coseSign1Check(
+            key.publicKey,
+            null,
+            parsed,
             Algorithm.ES256
         )
     }

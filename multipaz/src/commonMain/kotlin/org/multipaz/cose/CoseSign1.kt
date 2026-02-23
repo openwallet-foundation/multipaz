@@ -6,6 +6,7 @@ import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Simple
+import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
@@ -75,6 +76,8 @@ data class CoseSign1(
     }
 
     companion object {
+        private const val COSE_SIGN1_TAG = 18L
+
         /**
          * Decodes CBOR data into a [CoseSign1]
          *
@@ -82,26 +85,33 @@ data class CoseSign1(
          * @return a [CoseSign1].
          */
         fun fromDataItem(dataItem: DataItem): CoseSign1 {
-            require(dataItem is CborArray)
-            require(dataItem.items.size == 4)
+            val sign1Item = when (dataItem) {
+                is Tagged -> {
+                    require(dataItem.tagNumber == COSE_SIGN1_TAG)
+                    dataItem.taggedItem
+                }
+                else -> dataItem
+            }
+            require(sign1Item is CborArray)
+            require(sign1Item.items.size == 4)
 
             val unprotectedHeaders = mutableMapOf<CoseLabel, DataItem>()
-            val uph = dataItem.items[1] as CborMap
+            val uph = sign1Item.items[1] as CborMap
             uph.items.forEach { (key, value) -> unprotectedHeaders.put(key.asCoseLabel, value) }
 
             val protectedHeaders = mutableMapOf<CoseLabel, DataItem>()
-            val serializedProtectedHeaders = dataItem.items[0].asBstr
+            val serializedProtectedHeaders = sign1Item.items[0].asBstr
             if (serializedProtectedHeaders.isNotEmpty()) {
                 val ph = Cbor.decode(serializedProtectedHeaders) as CborMap
                 ph.items.forEach { (key, value) -> protectedHeaders[key.asCoseLabel] = value }
             }
 
             var payloadOrNil: ByteArray? = null
-            if (dataItem.items[2] is Bstr) {
-                payloadOrNil = dataItem.items[2].asBstr
+            if (sign1Item.items[2] is Bstr) {
+                payloadOrNil = sign1Item.items[2].asBstr
             }
 
-            val signature = dataItem.items[3].asBstr
+            val signature = sign1Item.items[3].asBstr
             return CoseSign1(protectedHeaders, unprotectedHeaders, signature, payloadOrNil)
         }
     }
