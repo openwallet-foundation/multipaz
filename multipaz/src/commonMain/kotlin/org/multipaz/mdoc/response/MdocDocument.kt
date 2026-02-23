@@ -27,6 +27,7 @@ import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.issuersigned.IssuerSignedItem
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
+import org.multipaz.mdoc.mso.MsoPayloadDecoder
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.request.MdocRequestedClaim
@@ -70,8 +71,7 @@ data class MdocDocument(
      * Convenience property for accessing the [MobileSecurityObject] from [issuerAuth].
      */
     val mso: MobileSecurityObject by lazy {
-        val encodedMobileSecurityObject = Cbor.decode(issuerAuth.payload!!).asTagged.asBstr
-        MobileSecurityObject.fromDataItem(Cbor.decode(encodedMobileSecurityObject))
+        MobileSecurityObject.fromDataItem(MsoPayloadDecoder.decode(issuerAuth.payload!!))
     }
 
     /**
@@ -258,8 +258,7 @@ data class MdocDocument(
             //
             val issuerNamespaceDigests = mutableMapOf<String, Map<String, ByteString>>()
             val issuerNamespaces = issuerSigned.getOrNull("nameSpaces")?.let {
-                val encodedMobileSecurityObject = Cbor.decode(issuerAuth.payload!!).asTagged.asBstr
-                val mso = MobileSecurityObject.fromDataItem(Cbor.decode(encodedMobileSecurityObject))
+                val mso = MobileSecurityObject.fromDataItem(MsoPayloadDecoder.decode(issuerAuth.payload!!))
                 for ((namespaceDataItemKey, namespaceDataItemValue) in it.asMap) {
                     val namespaceName = namespaceDataItemKey.asTstr
                     val innerMap = mutableMapOf<String, ByteString>()

@@ -30,6 +30,7 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
+import org.multipaz.mdoc.mso.MsoPayloadDecoder
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
@@ -288,8 +289,7 @@ class MdocCredential : SecureAreaBoundCredential {
      * Convenience property for accessing the [MobileSecurityObject] from [issuerAuth].
      */
     val mso: MobileSecurityObject by lazy {
-        val encodedMobileSecurityObject = Cbor.decode(issuerAuth.payload!!).asTagged.asBstr
-        MobileSecurityObject.fromDataItem(Cbor.decode(encodedMobileSecurityObject))
+        MobileSecurityObject.fromDataItem(MsoPayloadDecoder.decode(issuerAuth.payload!!))
     }
 
     /**

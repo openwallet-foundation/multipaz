@@ -3,6 +3,8 @@ package org.multipaz.mdoc.mso
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
@@ -185,10 +187,10 @@ data class MobileSecurityObject(
             return MobileSecurityObject(
                 version = dataItem["version"].asTstr,
                 docType = dataItem["docType"].asTstr,
-                signedAt = validityInfo["signed"].asDateTimeString,
-                validFrom = validityInfo["validFrom"].asDateTimeString,
-                validUntil = validityInfo["validUntil"].asDateTimeString,
-                expectedUpdate = validityInfo.getOrNull("expectedUpdate")?.asDateTimeString,
+                signedAt = parseDateTimeStringLenient(validityInfo["signed"]),
+                validFrom = parseDateTimeStringLenient(validityInfo["validFrom"]),
+                validUntil = parseDateTimeStringLenient(validityInfo["validUntil"]),
+                expectedUpdate = validityInfo.getOrNull("expectedUpdate")?.let { parseDateTimeStringLenient(it) },
                 digestAlgorithm = dataItem["digestAlgorithm"].asTstr.let {
                     when (it) {
                         "SHA-256" -> Algorithm.SHA256
@@ -204,6 +206,42 @@ data class MobileSecurityObject(
                 deviceKeyInfo = deviceKeyInfo,
                 revocationStatus = revocationStatus
             )
+        }
+
+        private fun parseValidityTimestamp(
+            fieldName: String,
+            item: DataItem,
+            compatibilityOptions: MdocCompatibilityOptions
+        ): Instant {
+            if (item is Tagged) {
+                require(item.tagNumber == Tagged.DATE_TIME_STRING) {
+                    "ValidityInfo.$fieldName must use tdate (tag 0)"
+                }
+                val taggedItem = item.taggedItem
+                require(taggedItem is Tstr) {
+                    "ValidityInfo.$fieldName must be tag 0 string"
+                }
+                return Instant.parse(taggedItem.value)
+            }
+            if (item is Tstr && compatibilityOptions.allowLegacyMsoValidityTimestamps) {
+                // TODO: remove after 2026-07-01 — SITA issuer emits ValidityInfo timestamps
+                // without CBOR tag 0 (tdate) for compatibility with the NEC verifier deployed
+                // at Hong Kong International Airport (HKG). Remove once NEC verifier is updated
+                // to accept canonical tdate-tagged timestamps per ISO/IEC 18013-5 §9.1.2.
+                Logger.w(
+                    TAG,
+                    "Allowing legacy untagged ValidityInfo.$fieldName timestamp (HKG/NEC compat); remove after 2026-07-01"
+                )
+                return Instant.parse(item.value)
+            }
+            if (compatibilityOptions.allowLegacyMsoValidityTimestamps) {
+                Logger.w(
+                    TAG,
+                    "Allowing legacy ValidityInfo.$fieldName timestamp encoded as ${item::class.simpleName} (HKG/NEC compat)"
+                )
+                return item.asDateTimeString
+            }
+            throw IllegalArgumentException("ValidityInfo.$fieldName must use tag 0 tdate")
         }
 
     }
