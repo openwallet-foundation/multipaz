@@ -29,6 +29,7 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.mdoc.mso.MsoPayloadDecoder
 import org.multipaz.mdoc.mso.MobileSecurityObjectParser
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
@@ -162,7 +163,7 @@ class DeviceResponseParser(
             } else {
                 false
             }
-            val encodedMobileSecurityObject = Cbor.decode(issuerAuth.payload!!).asTagged.asBstr
+            val encodedMobileSecurityObject = Cbor.encode(MsoPayloadDecoder.decode(issuerAuth.payload!!))
             val parsedMso = MobileSecurityObjectParser(encodedMobileSecurityObject).parse()
 
             builder.apply {

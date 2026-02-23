@@ -19,6 +19,8 @@ import io.ktor.util.toLowerCasePreservingASCIIRules
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.Tstr
 import org.multipaz.crypto.EcPublicKey
 import kotlin.time.Instant
 import org.multipaz.crypto.Algorithm
@@ -195,19 +197,19 @@ class MobileSecurityObjectParser(
 
         private fun parseValidityInfo(validityInfo: DataItem) {
             signed = Instant.fromEpochMilliseconds(
-                validityInfo["signed"].asDateTimeString
+                parseDateTimeStringLenient(validityInfo["signed"])
                     .toEpochMilliseconds()
             )
             validFrom =
                 Instant.fromEpochMilliseconds(
-                    validityInfo["validFrom"].asDateTimeString.toEpochMilliseconds())
+                    parseDateTimeStringLenient(validityInfo["validFrom"]).toEpochMilliseconds())
             validUntil =
                 Instant.fromEpochMilliseconds(
-                    validityInfo["validUntil"].asDateTimeString.toEpochMilliseconds())
+                    parseDateTimeStringLenient(validityInfo["validUntil"]).toEpochMilliseconds())
             if (validityInfo.getOrNull("expectedUpdate") != null) {
                 expectedUpdate =
                     Instant.fromEpochMilliseconds(
-                        validityInfo["expectedUpdate"].asDateTimeString.toEpochMilliseconds())
+                        parseDateTimeStringLenient(validityInfo["expectedUpdate"]).toEpochMilliseconds())
             } else {
                 expectedUpdate = null
             }
@@ -217,6 +219,20 @@ class MobileSecurityObjectParser(
             require(validUntil > validFrom) {
                 "The validUntil timestamp should be later than the validFrom timestamp"
             }
+        }
+
+        private fun parseDateTimeStringLenient(item: DataItem): Instant {
+            if (item is Tstr) {
+                return Instant.parse(item.value)
+            }
+            if (
+                item is Tagged &&
+                item.tagNumber == Tagged.DATE_TIME_STRING &&
+                item.taggedItem is Tstr
+            ) {
+                return Instant.parse((item.taggedItem as Tstr).value)
+            }
+            return item.asDateTimeString
         }
 
         fun parse(encodedMobileSecurityObject: ByteArray) {

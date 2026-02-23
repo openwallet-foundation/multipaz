@@ -3,6 +3,8 @@ package org.multipaz.mdoc.mso
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
@@ -185,10 +187,10 @@ data class MobileSecurityObject(
             return MobileSecurityObject(
                 version = dataItem["version"].asTstr,
                 docType = dataItem["docType"].asTstr,
-                signedAt = validityInfo["signed"].asDateTimeString,
-                validFrom = validityInfo["validFrom"].asDateTimeString,
-                validUntil = validityInfo["validUntil"].asDateTimeString,
-                expectedUpdate = validityInfo.getOrNull("expectedUpdate")?.asDateTimeString,
+                signedAt = parseDateTimeStringLenient(validityInfo["signed"]),
+                validFrom = parseDateTimeStringLenient(validityInfo["validFrom"]),
+                validUntil = parseDateTimeStringLenient(validityInfo["validUntil"]),
+                expectedUpdate = validityInfo.getOrNull("expectedUpdate")?.let { parseDateTimeStringLenient(it) },
                 digestAlgorithm = dataItem["digestAlgorithm"].asTstr.let {
                     when (it) {
                         "SHA-256" -> Algorithm.SHA256
@@ -204,6 +206,20 @@ data class MobileSecurityObject(
                 deviceKeyInfo = deviceKeyInfo,
                 revocationStatus = revocationStatus
             )
+        }
+
+        private fun parseDateTimeStringLenient(item: DataItem): Instant {
+            if (item is Tstr) {
+                return Instant.parse(item.value)
+            }
+            if (
+                item is Tagged &&
+                item.tagNumber == Tagged.DATE_TIME_STRING &&
+                item.taggedItem is Tstr
+            ) {
+                return Instant.parse((item.taggedItem as Tstr).value)
+            }
+            return item.asDateTimeString
         }
 
     }
