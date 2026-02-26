@@ -65,9 +65,6 @@ data object PassphraseEntryFieldDestination: Destination()
 data object PassphrasePromptDestination: Destination()
 
 @Serializable
-data object ProvisioningTestDestination: Destination()
-
-@Serializable
 data object ConsentPromptDestination: Destination()
 
 @Serializable

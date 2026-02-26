@@ -3,13 +3,11 @@ package org.multipaz.testapp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,7 +25,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
@@ -47,9 +44,7 @@ import io.ktor.http.protocolWithAuthority
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -73,7 +68,7 @@ import org.multipaz.certext.fromCbor
 import org.multipaz.compose.branding.Branding
 import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.prompt.PromptDialogs
-import org.multipaz.compose.provisioning.Provisioning
+import org.multipaz.compose.provisioning.ProvisioningBottomSheet
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -100,7 +95,6 @@ import org.multipaz.mdoc.vical.SignedVical
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
 import org.multipaz.nfc.ExternalNfcReaderStore
-import org.multipaz.nfc.NfcTagReader
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.SimplePresentmentSource
 import org.multipaz.presentment.uriSchemePresentment
@@ -161,7 +155,6 @@ import org.multipaz.util.fromHexByteString
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.toHex
 import kotlin.time.Clock
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * Application singleton.
@@ -886,7 +879,6 @@ class App private constructor (val promptModel: PromptModel) {
                         clientPreferences = provisioningSupport.getOpenID4VCIClientPreferences(),
                         backend = provisioningSupport.getOpenID4VCIBackend()
                     )
-                    navController.navigate(ProvisioningTestDestination)
                 }
             }
         }
@@ -905,6 +897,12 @@ class App private constructor (val promptModel: PromptModel) {
             PromptDialogs(
                 promptModel = promptModel,
                 imageLoader = imageLoader
+            )
+            ProvisioningBottomSheet(
+                provisioningModel = provisioningModel,
+                waitForRedirectLinkInvocation = { state ->
+                    provisioningSupport.waitForAppLinkInvocation(state)
+                }
             )
             NavHost(
                 navController = navController,
@@ -936,7 +934,6 @@ class App private constructor (val promptModel: PromptModel) {
                             },
                             onClickPassphraseEntryField = { navController.navigate(PassphraseEntryFieldDestination) },
                             onClickPassphrasePrompt = { navController.navigate(PassphrasePromptDestination) },
-                            onClickProvisioningTestField = { navController.navigate(ProvisioningTestDestination) },
                             onClickConsentSheetList = { navController.navigate(ConsentPromptDestination) },
                             onClickQrCodes = { navController.navigate(QrCodesDestination) },
                             onClickNfc = { navController.navigate(NfcDestination) },
@@ -1151,42 +1148,6 @@ class App private constructor (val promptModel: PromptModel) {
                 composable<PassphrasePromptDestination> { backStackEntry ->
                     WithAppBar(navController, "PassphrasePrompt use-cases") {
                         PassphrasePromptScreen(showToast = { message -> showToast(message) })
-                    }
-                }
-                composable<ProvisioningTestDestination> { backStackEntry ->
-                    WithAppBar(navController, "Provisioning Test") {
-                        val coroutineScope = rememberCoroutineScope()
-                        val provisioningState = provisioningModel.state.collectAsState().value
-                        LaunchedEffect(provisioningState) {
-                            if (provisioningState == ProvisioningModel.CredentialsIssued) {
-                                delay(1.seconds)
-                                navController.navigate(DocumentStoreDestination)
-                            }
-                        }
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Spacer(modifier = Modifier.weight(1.0f))
-                            Provisioning(
-                                provisioningModel = provisioningModel,
-                                waitForRedirectLinkInvocation = { state ->
-                                    provisioningSupport.waitForAppLinkInvocation(state)
-                                }
-                            )
-                            Spacer(modifier = Modifier.weight(1.0f))
-                            Button(onClick = {
-                                provisioningModel.cancel()
-                                coroutineScope.launch {
-                                    delay(1.seconds)
-                                    navController.navigateUp()
-                                }
-                            }) {
-                                Text("Cancel Provisioning")
-                            }
-                            Spacer(modifier = Modifier.weight(1.0f))
-                        }
                     }
                 }
                 composable<ConsentPromptDestination> { backStackEntry ->

@@ -39,7 +39,6 @@ fun StartScreen(
     onClickSecureEnclaveSecureArea: () -> Unit = {},
     onClickPassphraseEntryField: () -> Unit = {},
     onClickPassphrasePrompt: () -> Unit = {},
-    onClickProvisioningTestField: () -> Unit = {},
     onClickConsentSheetList: () -> Unit = {},
     onClickQrCodes: () -> Unit = {},
     onClickNfc: () -> Unit = {},

@@ -90,8 +90,8 @@
     <string name="passphrase_prompt_too_many_attempts">Too many wrong passphrases attempted, try again later</string>
 
     <!-- Provisioning -->
+    <string name="provisioning_title">Provisioning</string>
     <string name="provisioning_authorization_failed">Authorization failed</string>
-    <string name="provisioning_idle">Waiting</string>
     <string name="provisioning_initial">Starting provisioning...</string>
     <string name="provisioning_connected">Connected to the back-end</string>
     <string name="provisioning_processing_authorization">Processing authorization...</string>

@@ -5,8 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -14,8 +17,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.PassphraseEntryField
@@ -27,7 +32,7 @@ import org.multipaz.multipaz_compose.generated.resources.provisioning_browser
 import org.multipaz.multipaz_compose.generated.resources.provisioning_connected
 import org.multipaz.multipaz_compose.generated.resources.provisioning_credentials_issued
 import org.multipaz.multipaz_compose.generated.resources.provisioning_error
-import org.multipaz.multipaz_compose.generated.resources.provisioning_idle
+import org.multipaz.multipaz_compose.generated.resources.provisioning_title
 import org.multipaz.multipaz_compose.generated.resources.provisioning_initial
 import org.multipaz.multipaz_compose.generated.resources.provisioning_processing_authorization
 import org.multipaz.multipaz_compose.generated.resources.provisioning_requestion_credentials
@@ -36,15 +41,19 @@ import org.multipaz.provisioning.AuthorizationChallenge
 import org.multipaz.provisioning.AuthorizationException
 import org.multipaz.provisioning.AuthorizationResponse
 import org.multipaz.securearea.PassphraseConstraints
+import kotlin.time.Duration.Companion.seconds
 
 /**
- * UI Panel (implemented as Compose [Column]) that interacts with the user and
- * drives credential provisioning in the given [ProvisioningModel].
+ * Bottom sheet that interacts with the user and drives credential provisioning in the given
+ * [ProvisioningModel], only visible when model state is not [ProvisioningModel.Idle].
+ *
+ * If the bottom sheet is dismissed, the provisioning session is canceled.
  *
  * When OpenId-style user authorization is launched, user interacts with the browser, at
  * the end of this interaction, browser is navigated to a redirect URL that the app should
  * intercept. Meanwhile [waitForRedirectLinkInvocation] is invoked (asynchronously), it should
- * return the redirect URL once it was navigated to. Although an exotic possibility, multiple
+ * return the redirect URL once it was navigated to. Although an exotic possibility (and not
+ * supported using [ProvisioningBottomSheet] as UI), multiple
  * authorization sessions can run in parallel (each with its own model). Each authorization
  * session is assigned a unique state value (passed as url parameter on the redirect url). It is
  * important that url with the correct state parameter value is returned by
@@ -56,79 +65,109 @@ import org.multipaz.securearea.PassphraseConstraints
  * @param waitForRedirectLinkInvocation wait for redirect url with the given state parameter
  *     being navigated to in the browser.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Provisioning(
+fun ProvisioningBottomSheet(
     modifier: Modifier = Modifier,
     provisioningModel: ProvisioningModel,
     waitForRedirectLinkInvocation: suspend (state: String) -> String
 ) {
     val provisioningState = provisioningModel.state.collectAsState().value
-    Column(modifier = modifier) {
-        when (provisioningState) {
-            is ProvisioningModel.Authorizing -> {
-                Authorize(
-                    provisioningModel = provisioningModel,
-                    waitForRedirectLinkInvocation = waitForRedirectLinkInvocation,
-                    challenges = provisioningState.authorizationChallenges
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    if (provisioningState !== ProvisioningModel.Idle) {
+        ModalBottomSheet(
+            modifier = modifier,
+            onDismissRequest = { provisioningModel.cancel() },
+            sheetState = sheetState,
+            dragHandle = {},
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = stringResource(Res.string.provisioning_title),
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.headlineMedium,
                 )
-            }
 
-            is ProvisioningModel.Error -> if (provisioningState.err is AuthorizationException) {
-                Text(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(8.dp),
-                    style = MaterialTheme.typography.titleLarge,
-                    text = stringResource(Res.string.provisioning_authorization_failed)
-                )
-                val err = provisioningState.err as AuthorizationException
-                Text(
-                    modifier = Modifier.padding(4.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    text = stringResource(
-                        Res.string.provisioning_error,
-                        err.code
-                    )
-                )
-                err.description?.let {
-                    Text(
-                        modifier = Modifier.padding(4.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        text = it
-                    )
+                when (provisioningState) {
+                    is ProvisioningModel.Authorizing -> {
+                        Authorize(
+                            provisioningModel = provisioningModel,
+                            waitForRedirectLinkInvocation = waitForRedirectLinkInvocation,
+                            challenges = provisioningState.authorizationChallenges
+                        )
+                    }
+
+                    is ProvisioningModel.Error -> {
+                        if (provisioningState.err is AuthorizationException) {
+                            Text(
+                                modifier = Modifier
+                                    .align(Alignment.CenterHorizontally)
+                                    .padding(8.dp),
+                                text = stringResource(Res.string.provisioning_authorization_failed)
+                            )
+                            val err = provisioningState.err as AuthorizationException
+                            Text(
+                                modifier = Modifier.padding(4.dp),
+                                text = stringResource(
+                                    Res.string.provisioning_error,
+                                    err.code
+                                )
+                            )
+                            err.description?.let {
+                                Text(
+                                    modifier = Modifier.padding(4.dp),
+                                    text = it
+                                )
+                            }
+                        } else {
+                            Text(
+                                modifier = Modifier
+                                    .align(Alignment.CenterHorizontally)
+                                    .padding(8.dp),
+                                text = stringResource(
+                                    Res.string.provisioning_error,
+                                    provisioningState.err.message ?: "unknown"
+                                )
+                            )
+                        }
+                        LaunchedEffect(true) {
+                            delay(3.seconds)
+                            provisioningModel.cancel()  // resets to Idle
+                        }
+                    }
+
+                    else -> {
+                        val text = stringResource(
+                            when (provisioningState) {
+                                ProvisioningModel.Idle -> throw IllegalStateException()
+                                ProvisioningModel.Initial -> Res.string.provisioning_initial
+                                ProvisioningModel.Connected -> Res.string.provisioning_connected
+                                ProvisioningModel.ProcessingAuthorization -> Res.string.provisioning_processing_authorization
+                                ProvisioningModel.Authorized -> Res.string.provisioning_authorized
+                                ProvisioningModel.RequestingCredentials -> Res.string.provisioning_requestion_credentials
+                                ProvisioningModel.CredentialsIssued -> Res.string.provisioning_credentials_issued
+                                is ProvisioningModel.Error -> throw IllegalStateException()
+                                is ProvisioningModel.Authorizing -> throw IllegalStateException()
+                            }
+                        )
+                        Text(
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .padding(8.dp),
+                            text = text
+                        )
+                        if (provisioningState == ProvisioningModel.CredentialsIssued) {
+                            LaunchedEffect(true) {
+                                delay(3.seconds)
+                                provisioningModel.cancel()  // resets to Idle
+                            }
+                        }
+                    }
                 }
-            } else {
-                Text(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(8.dp),
-                    style = MaterialTheme.typography.titleLarge,
-                    text = stringResource(
-                        Res.string.provisioning_error,
-                        provisioningState.err.message ?: "unknown"
-                    )
-                )
-            }
-
-            else -> {
-                val text = stringResource(when (provisioningState) {
-                    ProvisioningModel.Idle -> Res.string.provisioning_idle
-                    ProvisioningModel.Initial -> Res.string.provisioning_initial
-                    ProvisioningModel.Connected -> Res.string.provisioning_connected
-                    ProvisioningModel.ProcessingAuthorization -> Res.string.provisioning_processing_authorization
-                    ProvisioningModel.Authorized -> Res.string.provisioning_authorized
-                    ProvisioningModel.RequestingCredentials -> Res.string.provisioning_requestion_credentials
-                    ProvisioningModel.CredentialsIssued -> Res.string.provisioning_credentials_issued
-                    is ProvisioningModel.Error -> throw IllegalStateException()
-                    is ProvisioningModel.Authorizing -> throw IllegalStateException()
-                })
-                Text(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(8.dp),
-                    style = MaterialTheme.typography.titleLarge,
-                    text = text
-                )
             }
         }
     }
@@ -182,8 +221,7 @@ private fun EvidenceRequestWebView(
             Text(
                 text = stringResource(Res.string.provisioning_browser),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(8.dp),
-                style = MaterialTheme.typography.bodyLarge
+                modifier = Modifier.padding(8.dp)
             )
         }
     }
@@ -206,7 +244,6 @@ private fun EvidenceRequestSecretText(
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
                 .padding(8.dp),
-            style = MaterialTheme.typography.titleLarge,
             text = passphraseRequest.description
         )
         if (challenge.retry) {
@@ -214,7 +251,6 @@ private fun EvidenceRequestSecretText(
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
                     .padding(8.dp),
-                style = MaterialTheme.typography.titleLarge,
                 text = stringResource(Res.string.provisioning_retry)
             )
         }
