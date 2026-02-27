@@ -76,6 +76,10 @@ abstract class MdocConnectionMethod {
                 MdocConnectionMethodWifiAware.METHOD_TYPE -> return MdocConnectionMethodWifiAware.fromDeviceEngagement(
                     encodedDeviceRetrievalMethod
                 )
+
+                MdocConnectionMethodHttp.METHOD_TYPE -> return MdocConnectionMethodHttp.fromDeviceEngagement(
+                    encodedDeviceRetrievalMethod
+                )
             }
             Logger.w(TAG, "Unsupported ConnectionMethod type $type in DeviceEngagement")
             return null

@@ -35,8 +35,8 @@ class MdocConnectionMethodTest {
         val cm = MdocConnectionMethodNfc(4096, 32768)
         val decoded = MdocConnectionMethod.fromDeviceEngagement(cm.toDeviceEngagement()) as MdocConnectionMethodNfc?
         assertNotNull(decoded)
-        assertEquals(decoded.commandDataFieldMaxLength, decoded.commandDataFieldMaxLength)
-        assertEquals(decoded.responseDataFieldMaxLength, decoded.responseDataFieldMaxLength)
+        assertEquals(cm.commandDataFieldMaxLength, decoded.commandDataFieldMaxLength)
+        assertEquals(cm.responseDataFieldMaxLength, decoded.responseDataFieldMaxLength)
         assertEquals(
             """[
   1,
@@ -50,6 +50,25 @@ class MdocConnectionMethodTest {
         val ndefRecord = cm.toNdefRecord(listOf(), MdocRole.MDOC, false)!!.first
         val decodedNfc = MdocConnectionMethodNfc.fromNdefRecord(ndefRecord, MdocRole.MDOC)!!
         assertEquals(cm, decodedNfc)
+    }
+
+    @Test
+    fun testConnectionMethodHttp() {
+        val cm = MdocConnectionMethodHttp(uri = "https://www.example.com/foobar")
+        val decoded = MdocConnectionMethod.fromDeviceEngagement(cm.toDeviceEngagement()) as MdocConnectionMethodHttp?
+        assertNotNull(decoded)
+        assertEquals(cm.uri, decoded.uri)
+        assertEquals(
+            """
+                [
+                  4,
+                  1,
+                  {
+                    0: "https://www.example.com/foobar"
+                  }
+                ]
+            """.trimIndent(), Cbor.toDiagnostics(cm.toDeviceEngagement(), setOf(DiagnosticOption.PRETTY_PRINT))
+        )
     }
 
     @Test

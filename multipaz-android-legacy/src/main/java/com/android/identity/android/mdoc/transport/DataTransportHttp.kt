@@ -18,7 +18,6 @@ package com.android.identity.android.mdoc.transport
 import android.content.Context
 import android.net.wifi.WifiManager
 import android.text.format.Formatter
-import com.android.identity.android.mdoc.connectionmethod.MdocConnectionMethodHttp
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.util.Logger
 import com.android.volley.DefaultRetryPolicy
@@ -28,6 +27,7 @@ import com.android.volley.RequestQueue
 import com.android.volley.Response
 import com.android.volley.toolbox.HttpHeaderParser
 import com.android.volley.toolbox.Volley
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodHttp
 import java.io.BufferedReader
 import java.io.IOException
 import java.io.InputStream

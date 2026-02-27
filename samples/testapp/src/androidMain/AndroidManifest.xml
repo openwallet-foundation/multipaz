@@ -148,6 +148,8 @@
                 <!--  Various OpenID4VP schemes -->
                 <data android:scheme="haip-vp"/>
                 <data android:scheme="openid4vp"/>
+                <!-- ISO/IEC TS 18013-7:2025 Annex A (and later) -->
+                <data android:scheme="mdoc"/>
                 <!-- Accept all hosts for any of the defined schemes above -->
                 <data android:host="*"/>
             </intent-filter>

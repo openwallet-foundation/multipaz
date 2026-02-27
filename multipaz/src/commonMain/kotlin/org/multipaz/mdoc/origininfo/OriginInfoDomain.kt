@@ -19,12 +19,12 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborMap
 
-data class OriginInfoDomain(val url: String) : OriginInfo() {
+data class OriginInfoDomain(val domain: String) : OriginInfo() {
     override fun toDataItem() = buildCborMap {
         put("cat", CAT)
         put("type", TYPE)
         putCborMap("details") {
-            put("domain", url)
+            put("domain", domain)
         }
     }
 

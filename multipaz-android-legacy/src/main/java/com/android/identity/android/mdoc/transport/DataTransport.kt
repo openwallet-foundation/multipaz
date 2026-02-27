@@ -17,9 +17,9 @@ package com.android.identity.android.mdoc.transport
 
 import android.content.Context
 import android.os.Build
-import com.android.identity.android.mdoc.connectionmethod.MdocConnectionMethodHttp
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodHttp
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodWifiAware
 import java.util.ArrayDeque

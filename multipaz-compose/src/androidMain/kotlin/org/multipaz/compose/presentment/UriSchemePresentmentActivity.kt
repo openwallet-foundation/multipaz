@@ -122,13 +122,15 @@ abstract class UriSchemePresentmentActivity: FragmentActivity() {
                 origin = origin,
                 httpClientEngineFactory = settings.httpClientEngineFactory,
             )
-            // Open the redirect URI in a browser...
-            startActivity(
-                Intent(
-                    Intent.ACTION_VIEW,
-                    redirectUri.toUri()
+            if (redirectUri != null) {
+                // Open the redirect URI in a browser...
+                startActivity(
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        redirectUri.toUri()
+                    )
                 )
-            )
+            }
         } catch (e: Throwable) {
             Logger.i(TAG, "Error processing request", e)
         } finally {

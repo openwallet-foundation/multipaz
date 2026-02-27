@@ -1,4 +1,4 @@
-package com.android.identity.android.mdoc.connectionmethod
+package org.multipaz.mdoc.connectionmethod
 
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.addCborMap

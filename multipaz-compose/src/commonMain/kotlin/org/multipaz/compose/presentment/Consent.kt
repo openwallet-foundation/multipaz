@@ -106,6 +106,7 @@ import org.multipaz.multipaz_compose.generated.resources.credential_presentment_
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_select_document
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_data_element_icon_description
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_headline_share_with_unknown_requester
+import org.multipaz.multipaz_compose.generated.resources.credential_presentment_headline_share_with_unknown_website
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_info_verifier_in_trust_list
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_info_verifier_in_trust_list_app
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_info_verifier_in_trust_list_website
@@ -470,7 +471,9 @@ private fun ConsentPage(
         )
     } else if (requester.origin != null && isWebOrigin(requester.origin!!)) {
         RequesterDisplayData(
-            name = requester.origin,
+            name = requester.origin!!.ifEmpty {
+                stringResource(Res.string.credential_presentment_headline_share_with_unknown_website)
+            },
         )
     } else if (appInfo != null) {
         RequesterDisplayData(
@@ -1243,4 +1246,5 @@ private fun RelyingPartySection(
     }
 }
 
-private fun isWebOrigin(origin: String) = origin.startsWith("http://") || origin.startsWith("https://")
+private fun isWebOrigin(origin: String) =
+    origin.isEmpty() || origin.startsWith("http://") || origin.startsWith("https://")

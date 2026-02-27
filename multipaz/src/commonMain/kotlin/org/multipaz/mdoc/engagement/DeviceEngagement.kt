@@ -13,7 +13,6 @@ import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
-import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod.Companion.fromDeviceEngagement
 import org.multipaz.mdoc.origininfo.OriginInfo
 import org.multipaz.util.Logger
 
@@ -42,11 +41,6 @@ data class DeviceEngagement private constructor(
 ) {
 
     init {
-        if (originInfos.isEmpty() && capabilities.isEmpty()) {
-            check(version == "1.0") {
-                "DeviceEngagement version must be 1.0 when originInfos and capabilities are both empty"
-            }
-        }
         if (originInfos.isNotEmpty() || capabilities.isNotEmpty()) {
             check(version >= "1.1") {
                 "DeviceEngagement version must be 1.1 or higher when originInfos or capabilities are non-empty"
@@ -109,7 +103,7 @@ data class DeviceEngagement private constructor(
             val connectionMethods = mutableListOf<MdocConnectionMethod>()
             if (connectionMethodsArray != null) {
                 for (cmDataItem in (connectionMethodsArray as CborArray).items) {
-                    val connectionMethod = fromDeviceEngagement(
+                    val connectionMethod = MdocConnectionMethod.fromDeviceEngagement(
                         Cbor.encode(cmDataItem)
                     )
                     if (connectionMethod != null) {

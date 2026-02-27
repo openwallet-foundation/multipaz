@@ -8,6 +8,7 @@
     <string name="credential_presentment_button_more">More</string>
     <string name="credential_presentment_button_share">Share</string>
     <string name="credential_presentment_headline_share_with_unknown_requester">Unknown requester</string>
+    <string name="credential_presentment_headline_share_with_unknown_website">Unknown website</string>
     <string name="credential_presentment_share_with_known_requester">This data will be shared with %1$s:</string>
     <string name="credential_presentment_share_with_unknown_requester">This data will be shared:</string>
     <string name="credential_presentment_share_and_stored_by_known_requester">This data will be stored by %1$s:</string>

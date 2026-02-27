@@ -44,8 +44,16 @@
 				<string>openid4vp</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>org.multipaz.iso.mdoc</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mdoc</string>
+			</array>
+		</dict>
 	</array>
-	<key>CFBundleIdentifier</key>
-	<string>samples/SwiftTestApp/SwiftTestApp/Info.plist</string>
 </dict>
 </plist>

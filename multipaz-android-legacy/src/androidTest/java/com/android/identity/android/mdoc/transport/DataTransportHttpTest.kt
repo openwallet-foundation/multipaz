@@ -17,10 +17,10 @@ package com.android.identity.android.mdoc.transport
 
 import android.os.ConditionVariable
 import androidx.test.platform.app.InstrumentationRegistry
-import com.android.identity.android.mdoc.connectionmethod.MdocConnectionMethodHttp
 import org.multipaz.util.fromHex
 import org.junit.Assert
 import org.junit.Test
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodHttp
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 

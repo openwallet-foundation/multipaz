@@ -12,6 +12,7 @@ import org.multipaz.crypto.X509CertChain
  *   this may be a website origin such as https://www.example.com. Otherwise this is set to the origin
  *   for the native application, for example on Android this will be of the form
  *   "android:apk-key-hash:<sha256_hash-of-apk-signing-cert>".
+ *   If empty it means that the requester is a website but the origin wasn't passed from the web browser.
  */
 data class Requester(
     val certChain: X509CertChain? = null,

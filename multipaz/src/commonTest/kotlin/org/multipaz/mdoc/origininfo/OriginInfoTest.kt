@@ -25,7 +25,7 @@ class OriginInfoTest {
     fun testOriginInfoDomainOrigin() {
         val info = OriginInfoDomain("https://foo.com/bar")
         val decoded = OriginInfoDomain.fromDataItem(info.toDataItem())
-        assertEquals("https://foo.com/bar", decoded!!.url)
+        assertEquals("https://foo.com/bar", decoded!!.domain)
         assertEquals(
             """
                 {

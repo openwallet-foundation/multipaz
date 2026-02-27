@@ -784,9 +784,11 @@ class App private constructor (val promptModel: PromptModel) {
                     credentialOffers.send(url)
                 }
             }
-        } else if (url.startsWith(HAIP_VP_URL_SCHEME) || url.startsWith(OPENID4VP_URL_SCHEME)) {
-            // On Android OpenID4VP is handled by a dedicated activity, so this code
-            // is called only on iOS
+        } else if (
+            url.startsWith(HAIP_VP_URL_SCHEME) ||
+            url.startsWith(OPENID4VP_URL_SCHEME) ||
+            url.startsWith(MDOC_URL_SCHEME)) {
+            // On Android, URI schemes are handled by a dedicated activity, so this code is called only on iOS
             uriSchemePresentation(url)
         } else if (url.startsWith(ProvisioningSupport.APP_LINK_BASE_URL)) {
             CoroutineScope(Dispatchers.Default).launch {
@@ -808,7 +810,9 @@ class App private constructor (val promptModel: PromptModel) {
                     httpClientEngineFactory = TestAppConfiguration.httpClientEngineFactory,
                 )
                 // Open the redirect URI in a browser...
-                urlsToOpen.send(redirectUri)
+                if (redirectUri != null) {
+                    urlsToOpen.send(redirectUri)
+                }
             } catch (e: Throwable) {
                 Logger.i(TAG, "Error processing request", e)
             }
@@ -823,6 +827,7 @@ class App private constructor (val promptModel: PromptModel) {
         private const val HAIP_VCI_URL_SCHEME = "haip-vci://"
         private const val OPENID4VP_URL_SCHEME = "openid4vp://"
         private const val HAIP_VP_URL_SCHEME = "haip-vp://"
+        private const val MDOC_URL_SCHEME = "mdoc://"
 
         private var app: App? = null
         fun getInstance(): App {
