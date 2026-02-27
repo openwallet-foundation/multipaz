@@ -133,7 +133,7 @@ class PresentmentModel {
      * This moves the model into the [State.CanceledByUser] state.
      *
      * The mechanism should watch for this, cancel the transaction, and call [setCompleted] passing a
-     * [PresentmentCanceled] error.
+     * [PresentmentCanceledException] error.
      */
     fun setCanceledByUser() {
         mutableState.value = State.CanceledByUser

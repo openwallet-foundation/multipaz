@@ -14,6 +14,7 @@
     <string name="presentment_activity_info_was_shared">The info was shared</string>
     <string name="presentment_activity_something_went_wrong">Something went wrong</string>
     <string name="presentment_activity_canceled">Cancelled</string>
+    <string name="presentment_activity_cannot_satisfy_request">Cannot satisfy request</string>
     <string name="presentment_activity_open_wallet">Open %1$s</string>
     <string name="presentment_activity_app_name_default">Wallet</string>
     <string name="presentment_activity_no_documents_available">No documents available</string>

@@ -29,6 +29,7 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.JsonWebSignature
+import org.multipaz.document.Document
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodHttp
 import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.engagement.DeviceEngagement
@@ -37,11 +38,13 @@ import org.multipaz.mdoc.origininfo.OriginInfoDomain
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
+import org.multipaz.mdoc.transport.MdocTransportClosedException
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import kotlin.coroutines.cancellation.CancellationException
 
 private const val TAG = "uriSchemePresentment"
 
@@ -52,20 +55,32 @@ private const val TAG = "uriSchemePresentment"
  * @param uri the referrer.
  * @param origin the origin.
  * @param httpClientEngineFactory a [HttpClientEngineFactory].
+ * @param onDocumentsInFocus called with the documents currently selected for the user, including when
+ *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @return the redirect URI, caller should open this in the user's default browser or `null` if this is not required.
+ * @throws PresentmentCanceledException if the user canceled in a consent prompt.
+ * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class,
+    PresentmentCanceledException::class,
+    PresentmentCannotSatisfyRequestException::class
+)
 suspend fun uriSchemePresentment(
     source: PresentmentSource,
     uri: String,
     origin: String?,
     httpClientEngineFactory: HttpClientEngineFactory<*>,
+    onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
 ): String? {
     if (uri.startsWith("mdoc://")) {
         return mdocUriSchemePresentment(
             source = source,
             uri = uri,
             origin = origin,
-            httpClientEngineFactory = httpClientEngineFactory
+            httpClientEngineFactory = httpClientEngineFactory,
+            onDocumentsInFocus = onDocumentsInFocus
         )
     }
     val parameters = uri.parseUrlEncodedParameters()
@@ -109,6 +124,7 @@ suspend fun uriSchemePresentment(
         origin = origin ?: "",
         request = requestObject,
         requesterCertChain = requesterChain,
+        onDocumentsInFocus = onDocumentsInFocus
     )
 
     val responseCs = when (requestObject["response_mode"]!!.jsonPrimitive.content) {
@@ -147,12 +163,13 @@ private suspend fun mdocUriSchemePresentment(
     uri: String,
     origin: String?,
     httpClientEngineFactory: HttpClientEngineFactory<*>,
+    onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
 ): String? {
     val url = Url(uri)
     val readerEngagementEncoded = url.host.fromBase64Url()
     val readerEngagementDataItem = Cbor.decode(readerEngagementEncoded)
 
-    // ReaderEnagement is really the same as DeviceEngagement so just re-use the parser
+    // ReaderEngagement is really the same as DeviceEngagement so just re-use the parser
     val readerEngagement = DeviceEngagement.fromDataItem(readerEngagementDataItem)
     val eReaderKey = readerEngagement.eDeviceKey
 
@@ -254,7 +271,7 @@ private suspend fun mdocUriSchemePresentment(
             requesterOrigin = origin ?: "",
             preselectedDocuments = emptyList(),
             onWaitingForUserInput = {},
-            onDocumentsInFocus = {}
+            onDocumentsInFocus = onDocumentsInFocus
         )
         messageToPost = sessionEncryption.encryptMessage(
             messagePlaintext = Cbor.encode(deviceResponse.toDataItem()),

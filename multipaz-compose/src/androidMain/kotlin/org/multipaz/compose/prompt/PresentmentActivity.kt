@@ -79,7 +79,8 @@ import org.multipaz.context.initializeApplication
 import org.multipaz.document.Document
 import org.multipaz.multipaz_compose.generated.resources.Res
 import org.multipaz.presentment.DocumentChooserData
-import org.multipaz.presentment.PresentmentCanceled
+import org.multipaz.presentment.PresentmentCanceledException
+import org.multipaz.presentment.PresentmentCannotSatisfyRequestException
 import org.multipaz.presentment.PresentmentModel
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.prompt.AndroidPromptModel
@@ -175,7 +176,7 @@ class PresentmentActivity: FragmentActivity() {
                     when (state) {
                         is PresentmentModel.State.CanceledByUser -> {
                             presentmentModel.setCompleted(
-                                PresentmentCanceled(null)
+                                PresentmentCanceledException(null)
                             )
                             modelWatcherJob?.cancel()
                             modelWatcherJob = null
@@ -261,11 +262,15 @@ class PresentmentActivity: FragmentActivity() {
         setContent {
             val currentBranding = Branding.Current.collectAsState().value
             currentBranding.theme {
+                PromptDialogs(
+                    promptModel = promptModel,
+                    imageLoader = imageLoader,
+                )
+
                 PresentmentActivityContent(
                     window = window,
-                    imageLoader = imageLoader,
-                    promptModel = promptModel,
-                    presentmentModel = presentmentModel,
+                    getPresentmentModel = { presentmentModel },
+                    onFadedIn = {},
                     onFinish = { switchToAppOnFinishPendingIntent ->
                         switchToAppOnFinishPendingIntent?.send()
                         finish()
@@ -276,34 +281,44 @@ class PresentmentActivity: FragmentActivity() {
     }
 }
 
+/**
+ * A full-screen composable for credential presentment.
+ *
+ * The [getPresentmentModel] function will be called a single time the first time the composable is shown.
+ *
+ * @param window the [Window] of the activity.
+ * @param getPresentmentModel a function to return the [PresentmentModel] to use.
+ * @param onFadedIn called when the composable has fully faded in.
+ * @param onFinish called when the presentment is finished and fully faded out. The passed-in [PendingIntent]
+ * is non-null if the user clicked the "Open Wallet" button.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PresentmentActivityContent(
     window: Window,
-    imageLoader: ImageLoader,
-    promptModel: PromptModel,
-    presentmentModel: PresentmentModel,
+    getPresentmentModel: suspend () -> PresentmentModel,
+    onFadedIn: () -> Unit,
     onFinish: (switchToAppOnFinishPendingIntent: PendingIntent?) -> Unit
 ) {
+    var presentmentModel by remember { mutableStateOf<PresentmentModel?>(null) }
+    var documentModel by remember { mutableStateOf<DocumentModel?>(null) }
     var switchToAppOnFinishPendingIntent by remember { mutableStateOf<PendingIntent?>(null) }
     val coroutineScope = rememberCoroutineScope()
-    var documentModel by remember { mutableStateOf<DocumentModel?>(null) }
-    val state = presentmentModel.state.collectAsState().value
-    val numRequestsServed = presentmentModel.numRequestsServed.collectAsState().value
     val currentBranding = Branding.Current.collectAsState().value
 
     var startFadeIn by remember { mutableStateOf(false) }
     val fadeInAlpha by animateFloatAsState(
         targetValue = if (startFadeIn) 1.0f else 0.0f,
         animationSpec = tween(
-            durationMillis = 500
-        )
+            durationMillis = 300
+        ),
+        finishedListener = { onFadedIn() }
     )
     var startFadeOut by remember { mutableStateOf(false) }
     val fadeOutAlpha by animateFloatAsState(
         targetValue = if (startFadeOut) 0.0f else 1.0f,
         animationSpec = tween(
-            durationMillis = 500
+            durationMillis = 300
         ),
         finishedListener = { onFinish(switchToAppOnFinishPendingIntent) }
     )
@@ -311,15 +326,19 @@ internal fun PresentmentActivityContent(
 
     // We do the initializations that require suspend functions here and fade in when done...
     LaunchedEffect(Unit) {
+        presentmentModel = getPresentmentModel()
         documentModel = DocumentModel.create(
-            documentStore = presentmentModel.source.documentStore,
-            documentTypeRepository = presentmentModel.source.documentTypeRepository
+            documentStore = presentmentModel!!.source.documentStore,
+            documentTypeRepository = presentmentModel!!.source.documentTypeRepository
         )
         startFadeIn = true
     }
     if (!startFadeIn) {
         return
     }
+
+    val state = presentmentModel!!.state.collectAsState().value
+    val numRequestsServed = presentmentModel!!.numRequestsServed.collectAsState().value
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         window.setBackgroundBlurRadius((80.0 * fadeOutAlpha * fadeInAlpha).roundToInt())
@@ -359,7 +378,7 @@ internal fun PresentmentActivityContent(
         CompositionLocalProvider(
             LocalContentColor provides MaterialTheme.colorScheme.onSurface
         ) {
-            val docsToShow = presentmentModel.documentsSelected.collectAsState().value
+            val docsToShow = presentmentModel!!.documentsSelected.collectAsState().value
             val selectedDocIdFromCardChooser = remember { mutableStateOf<String?>(null) }
 
             Column(
@@ -373,11 +392,6 @@ internal fun PresentmentActivityContent(
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                PromptDialogs(
-                    promptModel = promptModel,
-                    imageLoader = imageLoader,
-                )
-
                 if (state is PresentmentModel.State.Reset && state.documentChooserData != null) {
                     ShowCardChooser(
                         documentModel = documentModel!!,
@@ -406,7 +420,7 @@ internal fun PresentmentActivityContent(
                                             coroutineScope.launch {
                                                 switchToAppOnFinishPendingIntent =
                                                     state.documentChooserData!!.openAppPendingIntentFn(
-                                                        presentmentModel.source.documentStore.lookupDocument(
+                                                        presentmentModel!!.source.documentStore.lookupDocument(
                                                             selectedDocIdFromCardChooser.value!!
                                                         )!!
                                                     )
@@ -453,17 +467,25 @@ internal fun PresentmentActivityContent(
                                 }
                                 is PresentmentModel.State.Completed -> {
                                     if (state.error != null) {
-                                        if (state.error!! !is PresentmentCanceled) {
-                                            ShowFailure(applicationContext.getString(
-                                                R.string.presentment_activity_something_went_wrong
-                                            ))
-                                        } else {
-                                            if (state.error!!.message != null) {
+                                        when (state.error!!) {
+                                            is PresentmentCanceledException -> {
+                                                if (state.error!!.message != null) {
+                                                    ShowFailure(applicationContext.getString(
+                                                        R.string.presentment_activity_canceled
+                                                    ))
+                                                } else {
+                                                    startFadeOut = true
+                                                }
+                                            }
+                                            is PresentmentCannotSatisfyRequestException -> {
                                                 ShowFailure(applicationContext.getString(
-                                                    R.string.presentment_activity_canceled
+                                                    R.string.presentment_activity_cannot_satisfy_request
                                                 ))
-                                            } else {
-                                                startFadeOut = true
+                                            }
+                                            else -> {
+                                                ShowFailure(applicationContext.getString(
+                                                    R.string.presentment_activity_something_went_wrong
+                                                ))
                                             }
                                         }
                                     } else {

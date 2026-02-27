@@ -10,7 +10,7 @@ import org.multipaz.document.Document
 import org.multipaz.presentment.CredentialPresentmentData
 import org.multipaz.presentment.CredentialPresentmentSelection
 import org.multipaz.presentment.PresentmentModel
-import org.multipaz.presentment.PresentmentCanceled
+import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.prompt.promptModelRequestConsent
 import org.multipaz.prompt.showBiometricPrompt
@@ -52,7 +52,7 @@ actual suspend fun launchAndroidPresentmentActivity(
                     },
                 )
                 if (selection == null) {
-                    throw PresentmentCanceled("Presentment cancelled because user dismissed consent prompt")
+                    throw PresentmentCanceledException("Presentment cancelled because user dismissed consent prompt")
                 }
             } else {
                 PresentmentActivity.presentmentModel.setDocumentsSelected(
@@ -68,7 +68,7 @@ actual suspend fun launchAndroidPresentmentActivity(
                     userAuthenticationTypes = setOf(UserAuthenticationType.BIOMETRIC, UserAuthenticationType.LSKF),
                     requireConfirmation = paData.authRequireConfirmation
                 )) {
-                    throw PresentmentCanceled("Presentment cancelled because user dismissed biometric prompt")
+                    throw PresentmentCanceledException("Presentment cancelled because user dismissed biometric prompt")
                 }
             }
 
@@ -77,7 +77,7 @@ actual suspend fun launchAndroidPresentmentActivity(
             PresentmentActivity.presentmentModel.setCompleted(null)
         } catch (e: Throwable) {
             if (e is CancellationException) {
-                PresentmentActivity.presentmentModel.setCompleted(PresentmentCanceled("Presentment was cancelled"))
+                PresentmentActivity.presentmentModel.setCompleted(PresentmentCanceledException("Presentment was cancelled"))
             } else {
                 PresentmentActivity.presentmentModel.setCompleted(e)
             }

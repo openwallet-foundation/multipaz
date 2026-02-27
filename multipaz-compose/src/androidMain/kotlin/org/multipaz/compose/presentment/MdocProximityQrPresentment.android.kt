@@ -30,7 +30,7 @@ import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.advertise
 import org.multipaz.mdoc.transport.waitForConnection
 import org.multipaz.presentment.Iso18013Presentment
-import org.multipaz.presentment.PresentmentCanceled
+import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentModel
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.prompt.PromptModel
@@ -181,7 +181,7 @@ private fun MdocProximityQrPresentmentAndroid(
                         } catch (e: Throwable) {
                             if (e is CancellationException) {
                                 PresentmentActivity.presentmentModel.setCompleted(
-                                    PresentmentCanceled("Presentment was cancelled")
+                                    PresentmentCanceledException("Presentment was cancelled")
                                 )
                             } else {
                                 PresentmentActivity.presentmentModel.setCompleted(e)

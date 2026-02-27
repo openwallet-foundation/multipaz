@@ -34,7 +34,7 @@ import org.multipaz.nfc.CommandApdu
 import org.multipaz.nfc.Nfc
 import org.multipaz.nfc.ResponseApdu
 import org.multipaz.presentment.Iso18013Presentment
-import org.multipaz.presentment.PresentmentCanceled
+import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentModel
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.prompt.PromptModel
@@ -355,7 +355,7 @@ abstract class MdocNdefService: HostApduService() {
         } catch (e: Throwable) {
             Logger.w(TAG, "Caught error while performing 18013-5 transaction", e)
             if (e is CancellationException) {
-                settings.presentmentModel?.setCompleted(PresentmentCanceled("Presentment was cancelled"))
+                settings.presentmentModel?.setCompleted(PresentmentCanceledException("Presentment was cancelled"))
             } else {
                 settings.presentmentModel?.setCompleted(e)
             }

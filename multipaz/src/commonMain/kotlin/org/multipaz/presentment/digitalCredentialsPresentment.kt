@@ -43,16 +43,20 @@ private const val TAG = "digitalCredentialsPresentment"
  * @param preselectedDocuments the list of documents the user may have preselected earlier (for
  *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
  *   if the user didn't preselect.
+ * @param source the source of truth used for presentment.
+ * @param onDocumentsInFocus called with the documents currently selected for the user, including when
+ *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @return a string with JSON with the result, this is a JSON object containing the `protocol` and `data` fields in [DigitalCredential](https://www.w3.org/TR/digital-credentials/#the-digitalcredential-interface) interface.
  * @throws PromptDismissedException if the user dismissed a prompt.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
- * @throws PresentmentCanceled if the user canceled in a consent prompt.
+ * @throws PresentmentCanceledException if the user canceled in a consent prompt.
+ * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
 @Throws(
     CancellationException::class,
     IllegalStateException::class,
-    PresentmentCanceled::class
+    PresentmentCanceledException::class
 )
 suspend fun digitalCredentialsPresentment(
     protocol: String,
@@ -61,6 +65,7 @@ suspend fun digitalCredentialsPresentment(
     origin: String,
     preselectedDocuments: List<Document>,
     source: PresentmentSource,
+    onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
 ): String {
     return Json.encodeToString(
         digitalCredentialsPresentment(
@@ -70,6 +75,7 @@ suspend fun digitalCredentialsPresentment(
             origin = origin,
             preselectedDocuments = preselectedDocuments,
             source = source,
+            onDocumentsInFocus = onDocumentsInFocus
         )
     )
 }
@@ -84,16 +90,21 @@ suspend fun digitalCredentialsPresentment(
  * @param preselectedDocuments the list of documents the user may have preselected earlier (for
  *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
  *   if the user didn't preselect.
+ * @param source the source of truth used for presentment.
+ * @param onDocumentsInFocus called with the documents currently selected for the user, including when
+ *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @return JSON with the result, this is a JSON object containing the `protocol` and `data` fields in [DigitalCredential](https://www.w3.org/TR/digital-credentials/#the-digitalcredential-interface) interface.
  * @throws PromptDismissedException if the user dismissed a prompt.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
- * @throws PresentmentCanceled if the user canceled in a consent prompt.
+ * @throws PresentmentCanceledException if the user canceled in a consent prompt.
+ * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
 @Throws(
     CancellationException::class,
     IllegalStateException::class,
-    PresentmentCanceled::class
+    PresentmentCanceledException::class,
+    PresentmentCannotSatisfyRequestException::class
 )
 suspend fun digitalCredentialsPresentment(
     protocol: String,
@@ -102,6 +113,7 @@ suspend fun digitalCredentialsPresentment(
     origin: String,
     preselectedDocuments: List<Document>,
     source: PresentmentSource,
+    onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
 ): JsonObject {
     when (protocol) {
         "openid4vp", "openid4vp-v1-unsigned", "openid4vp-v1-signed" -> {
@@ -112,6 +124,7 @@ suspend fun digitalCredentialsPresentment(
                 origin = origin,
                 preselectedDocuments = preselectedDocuments,
                 source = source,
+                onDocumentsInFocus = onDocumentsInFocus
             )
         }
         "org.iso.mdoc", "org-iso-mdoc" -> {
@@ -122,6 +135,7 @@ suspend fun digitalCredentialsPresentment(
                 origin = origin,
                 preselectedDocuments = preselectedDocuments,
                 source = source,
+                onDocumentsInFocus = onDocumentsInFocus
             )
         }
         else -> {
@@ -138,6 +152,7 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
     origin: String,
     preselectedDocuments: List<Document>,
     source: PresentmentSource,
+    onDocumentsInFocus: (documents: List<Document>) -> Unit
 ): JsonObject {
     val version = when (protocol) {
         "openid4vp" -> OpenID4VP.Version.DRAFT_24
@@ -169,6 +184,7 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
         origin = origin,
         request = req,
         requesterCertChain = requesterCertChain,
+        onDocumentsInFocus = onDocumentsInFocus
     )
     return buildJsonObject {
         put("protocol", protocol)
@@ -184,6 +200,7 @@ private suspend fun digitalCredentialsMdocApiProtocol(
     origin: String,
     preselectedDocuments: List<Document>,
     source: PresentmentSource,
+    onDocumentsInFocus: (documents: List<Document>) -> Unit
 ): JsonObject {
     val arfRequest = data
     val deviceRequestBase64 = arfRequest["deviceRequest"]!!.jsonPrimitive.content
@@ -225,7 +242,7 @@ private suspend fun digitalCredentialsMdocApiProtocol(
         requesterOrigin = origin,
         preselectedDocuments = preselectedDocuments,
         onWaitingForUserInput = {},
-        onDocumentsInFocus = {},
+        onDocumentsInFocus = onDocumentsInFocus,
     )
 
     val encrypter = Hpke.getEncrypter(

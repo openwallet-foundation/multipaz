@@ -46,14 +46,16 @@ private const val TAG = "Iso180135Presentment"
  * @param onSendingResponse called when sending a response to the remote reader.
  * @throws MdocTransportClosedException if [transport] was closed.
  * @throws Iso18013PresentmentTimeoutException if the reader didn't send a message without the given [timeout].
- * @throws PresentmentCanceled if the user canceled in a consent prompt.
+ * @throws PresentmentCanceledException if the user canceled in a consent prompt.
+ * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
 @Throws(
     CancellationException::class,
     IllegalStateException::class,
     MdocTransportClosedException::class,
     Iso18013PresentmentTimeoutException::class,
-    PresentmentCanceled::class
+    PresentmentCanceledException::class,
+    PresentmentCannotSatisfyRequestException::class
 )
 suspend fun Iso18013Presentment(
     transport: MdocTransport,

@@ -5,4 +5,4 @@ package org.multipaz.presentment
  *
  * @property message message to display or `null`.
  */
-class PresentmentCanceled(message: String?): Exception(message)
+class PresentmentCanceledException(message: String?): Exception(message)

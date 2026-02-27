@@ -1,32 +1,33 @@
 package org.multipaz.compose.presentment
 
 import android.content.Intent
-import android.graphics.Color
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.collectAsState
-import androidx.core.graphics.drawable.toDrawable
-import androidx.fragment.app.FragmentActivity
-import io.ktor.client.engine.HttpClientEngineFactory
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import org.multipaz.compose.prompt.PromptDialogs
-import org.multipaz.context.initializeApplication
-import org.multipaz.presentment.PresentmentSource
-import org.multipaz.util.Logger
-import java.net.URL
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.net.toUri
+import androidx.fragment.app.FragmentActivity
 import coil3.ImageLoader
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import io.ktor.client.HttpClient
+import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.engine.android.Android
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import org.multipaz.compose.branding.Branding
+import org.multipaz.compose.prompt.PresentmentActivityContent
+import org.multipaz.compose.prompt.PromptDialogs
+import org.multipaz.context.initializeApplication
+import org.multipaz.presentment.PresentmentModel
+import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.uriSchemePresentment
 import org.multipaz.prompt.AndroidPromptModel
+import org.multipaz.util.Logger
+import java.net.URL
 
 /**
  * Base class for activity used for credential presentments using URI schemes.
@@ -61,33 +62,79 @@ abstract class UriSchemePresentmentActivity: FragmentActivity() {
 
     private val promptModel = AndroidPromptModel.Builder().apply { addCommonDialogs() }.build()
 
+    val presentmentModel = PresentmentModel()
+
+    var openRedirectUri: String? = null
+
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         initializeApplication(this.applicationContext)
         enableEdgeToEdge()
 
-        window.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            setTranslucent(true)
-        }
+        window.isNavigationBarContrastEnforced = false
 
-        if (intent.action == Intent.ACTION_VIEW) {
-            val url = intent.dataString
-            // This may or may not be set. For example in Chrome it only works
-            // if the website is using Referrer-Policy: unsafe-url
-            //
-            // Reference: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy
-            //
-            @Suppress("DEPRECATION")
-            var referrerUrl: String? = intent.extras?.get(Intent.EXTRA_REFERRER).toString()
-            if (referrerUrl == "null") {
-                referrerUrl = null
-            }
-            if (url != null) {
-                CoroutineScope(Dispatchers.Main + promptModel).launch {
-                    startPresentment(url, referrerUrl, getSettings())
-                }
+        val imageLoader = ImageLoader.Builder(applicationContext).components {
+            add(KtorNetworkFetcherFactory(HttpClient(Android.create())))
+        }.build()
+
+        val startChannel = Channel<Unit>()
+        setContent {
+            val currentBranding = Branding.Current.collectAsState().value
+            currentBranding.theme {
+                val coroutineScope = rememberCoroutineScope()
+
+                PromptDialogs(
+                    promptModel = promptModel,
+                    imageLoader = imageLoader,
+                )
+
+                // Only start presentation once we're fully faded in
+                PresentmentActivityContent(
+                    window = window,
+                    getPresentmentModel = {
+                        val settings = getSettings()
+                        presentmentModel.reset(
+                            source = settings.source,
+                            preselectedDocuments = emptyList(),
+                            showDocumentChooser = null
+                        )
+
+                        CoroutineScope(Dispatchers.IO + promptModel).launch {
+                            // wait until we're faded in
+                            startChannel.receive()
+
+                            val url = intent.dataString
+                            // This may or may not be set. For example in Chrome it only works
+                            // if the website is using Referrer-Policy: unsafe-url
+                            //
+                            // Reference: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy
+                            //
+                            @Suppress("DEPRECATION")
+                            var referrerUrl: String? = intent.extras?.get(Intent.EXTRA_REFERRER).toString()
+                            if (referrerUrl == "null") {
+                                referrerUrl = null
+                            }
+                            if (url != null) {
+                                startPresentment(
+                                    url = url,
+                                    referrerUrl = referrerUrl,
+                                    settings = settings
+                                )
+                            }
+                        }
+
+                        presentmentModel
+                    },
+                    onFadedIn = { coroutineScope.launch { startChannel.send(Unit) } },
+                    onFinish = { _ ->
+                        // Open the redirect URI in a browser...
+                        openRedirectUri?.let {
+                            startActivity(Intent(Intent.ACTION_VIEW, it.toUri()))
+                        }
+                        finish()
+                    }
+                )
             }
         }
     }
@@ -97,44 +144,25 @@ abstract class UriSchemePresentmentActivity: FragmentActivity() {
         referrerUrl: String?,
         settings: Settings
     ) {
-        val imageLoader = ImageLoader.Builder(applicationContext).components {
-            add(KtorNetworkFetcherFactory(HttpClient(Android.create())))
-        }.build()
-
-        setContent {
-            val currentBranding = Branding.Current.collectAsState().value
-            currentBranding.theme {
-                PromptDialogs(
-                    promptModel = promptModel,
-                    imageLoader = imageLoader,
-                )
-            }
-        }
-
         val origin = referrerUrl?.let {
             val url = URL(it)
             "${url.protocol}://${url.host}${if (url.port != -1) ":${url.port}" else ""}"
         }
         try {
-            val redirectUri = uriSchemePresentment(
+            presentmentModel.setWaitingForUserInput()
+            openRedirectUri = uriSchemePresentment(
                 source = settings.source,
                 uri = url,
                 origin = origin,
                 httpClientEngineFactory = settings.httpClientEngineFactory,
+                onDocumentsInFocus = { documents ->
+                    presentmentModel.setDocumentsSelected(documents)
+                }
             )
-            if (redirectUri != null) {
-                // Open the redirect URI in a browser...
-                startActivity(
-                    Intent(
-                        Intent.ACTION_VIEW,
-                        redirectUri.toUri()
-                    )
-                )
-            }
+            presentmentModel.setCompleted(error = null)
         } catch (e: Throwable) {
             Logger.i(TAG, "Error processing request", e)
-        } finally {
-            finish()
+            presentmentModel.setCompleted(error = e)
         }
     }
 

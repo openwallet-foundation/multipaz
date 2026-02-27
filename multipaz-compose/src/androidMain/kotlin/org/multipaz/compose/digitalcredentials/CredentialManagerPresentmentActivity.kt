@@ -1,14 +1,12 @@
 package org.multipaz.compose.digitalcredentials
 
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.core.graphics.drawable.toDrawable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.credentials.DigitalCredential
 import androidx.credentials.ExperimentalDigitalCredentialApi
 import androidx.credentials.GetCredentialResponse
@@ -32,15 +30,16 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.compose.branding.Branding
+import org.multipaz.compose.prompt.PresentmentActivityContent
 import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.context.initializeApplication
 import org.multipaz.digitalcredentials.getAppOrigin
 import org.multipaz.digitalcredentials.lookupForCredmanId
+import org.multipaz.presentment.PresentmentModel
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.digitalCredentialsPresentment
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.util.Logger
-import java.lang.IllegalStateException
 
 /**
  * Base class for activity used for Android Credential Manager presentments using the W3C Digital Credentials API.
@@ -79,39 +78,54 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
 
     private val promptModel = AndroidPromptModel.Builder().apply { addCommonDialogs() }.build()
 
+    val presentmentModel = PresentmentModel()
+
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         initializeApplication(this.applicationContext)
         enableEdgeToEdge()
 
-        window.setBackgroundDrawable(android.graphics.Color.TRANSPARENT.toDrawable())
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            setTranslucent(true)
-        }
+        window.isNavigationBarContrastEnforced = false
 
         val imageLoader = ImageLoader.Builder(applicationContext).components {
             add(KtorNetworkFetcherFactory(HttpClient(Android.create())))
         }.build()
 
         val startChannel = Channel<Unit>()
-
         setContent {
             val currentBranding = Branding.Current.collectAsState().value
             currentBranding.theme {
+                val coroutineScope = rememberCoroutineScope()
+
                 PromptDialogs(
                     promptModel = promptModel,
                     imageLoader = imageLoader,
                 )
-                LaunchedEffect(true) {
-                    startChannel.send(Unit)
-                }
-            }
-        }
 
-        CoroutineScope(Dispatchers.Main + promptModel).launch {
-            startChannel.receive()  // wait until PromptModel is bound
-            startPresentment(getSettings())
+                // Only start presentation once we're fully faded in
+                PresentmentActivityContent(
+                    window = window,
+                    getPresentmentModel = {
+                        val settings = getSettings()
+                        presentmentModel.reset(
+                            source = settings.source,
+                            preselectedDocuments = emptyList(),
+                            showDocumentChooser = null
+                        )
+
+                        CoroutineScope(Dispatchers.IO + promptModel).launch {
+                            // wait until we're faded in
+                            startChannel.receive()
+                            startPresentment(settings = settings)
+                        }
+
+                        presentmentModel
+                    },
+                    onFadedIn = { coroutineScope.launch { startChannel.send(Unit) } },
+                    onFinish = { _ -> finish() }
+                )
+            }
         }
     }
 
@@ -140,13 +154,17 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
             val requestForSelectedEntry = json["requests"]!!.jsonArray.find {
                 (it as JsonObject)["protocol"]!!.jsonPrimitive.content == selectionInfo.protocol
             }!!.jsonObject
+            presentmentModel.setWaitingForUserInput()
             val response = digitalCredentialsPresentment(
                 protocol = requestForSelectedEntry["protocol"]!!.jsonPrimitive.content,
                 data = requestForSelectedEntry["data"]!!.jsonObject,
                 appId = callingPackageName,
                 origin = origin,
                 preselectedDocuments = documents,
-                source = settings.source
+                source = settings.source,
+                onDocumentsInFocus = { documents ->
+                    presentmentModel.setDocumentsSelected(documents)
+                }
             )
             val jsonString = Json.encodeToString(response)
             Logger.i(TAG, "Size of JSON response: ${jsonString.length} bytes")
@@ -154,6 +172,7 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
             val credentialManagerResponse = GetCredentialResponse(DigitalCredential(jsonString))
             PendingIntentHandler.setGetCredentialResponse(resultData, credentialManagerResponse)
             setResult(RESULT_OK, resultData)
+            presentmentModel.setCompleted(error = null)
         } catch (e: Throwable) {
             Logger.i(TAG, "Error processing request", e)
             val resultData = Intent()
@@ -163,8 +182,7 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
             )
             PendingIntentHandler.setGetCredentialException(resultData, credentialManagerException)
             setResult(RESULT_OK, resultData)
-        } finally {
-            finish()
+            presentmentModel.setCompleted(error = e)
         }
     }
 

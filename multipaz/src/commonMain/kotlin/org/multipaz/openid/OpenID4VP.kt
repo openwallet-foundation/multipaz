@@ -38,10 +38,12 @@ import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.response.buildDeviceResponse
 import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
+import org.multipaz.openid.dcql.DcqlCredentialQueryException
 import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.presentment.CredentialMatchSourceOpenID4VP
 import org.multipaz.presentment.CredentialPresentmentSetOptionMemberMatch
-import org.multipaz.presentment.PresentmentCanceled
+import org.multipaz.presentment.PresentmentCanceledException
+import org.multipaz.presentment.PresentmentCannotSatisfyRequestException
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
@@ -277,12 +279,14 @@ object OpenID4VP {
      * @param requesterCertChain the X.509 certificate chain if the request is signed or `null`
      *   if the request is not signed.
      * @return the generated response according to OpenID4VP Section 8 Response.
-     * @throws PresentmentCanceled if the user canceled in a consent prompt.
+     * @throws PresentmentCanceledException if the user canceled in a consent prompt.
+     * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
      */
     @Throws(
         CancellationException::class,
         IllegalStateException::class,
-        PresentmentCanceled::class
+        PresentmentCanceledException::class,
+        PresentmentCannotSatisfyRequestException::class
     )
     @OptIn(ExperimentalEncodingApi::class)
     suspend fun generateResponse(
@@ -293,6 +297,7 @@ object OpenID4VP {
         origin: String?,
         request: JsonObject,
         requesterCertChain: X509CertChain?,
+        onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
     ): JsonObject {
         Logger.iJson(TAG, "request", request)
 
@@ -309,6 +314,7 @@ object OpenID4VP {
                     ?: throw IllegalArgumentException("No response_uri set for $responseModeText")
                 Pair(uri, ResponseMode.DIRECT_POST)
             }
+
             else -> throw IllegalArgumentException("Unexpected response_mode $responseModeText")
         }
         // TODO: in the future, maybe flat out reject requests that doesn't use encrypted response
@@ -401,9 +407,13 @@ object OpenID4VP {
 
         val vpTokens = mutableMapOf<String, String>()
         val dcqlQuery = DcqlQuery.fromJson(request["dcql_query"]!!.jsonObject)
-        val dcqlResponse = dcqlQuery.execute(
-            presentmentSource = source,
-        )
+        val dcqlResponse = try {
+            dcqlQuery.execute(
+                presentmentSource = source,
+            )
+        } catch (e: DcqlCredentialQueryException) {
+            throw PresentmentCannotSatisfyRequestException("Unable to satisfy the request", e)
+        }
 
         val requester = Requester(
             certChain = requesterCertChain,
@@ -416,14 +426,14 @@ object OpenID4VP {
         }
         // TODO: incorporate transaction data into the consent prompt
         val selection = source.showConsentPrompt(
-            requester,
-            source.resolveTrust(requester),
-            dcqlResponse,
-            preselectedDocuments,
-            { selection -> },
+            requester = requester,
+            trustMetadata = source.resolveTrust(requester),
+            credentialPresentmentData = dcqlResponse,
+            preselectedDocuments = preselectedDocuments,
+            onDocumentsInFocus = onDocumentsInFocus
         )
         if (selection == null) {
-            throw PresentmentCanceled("User canceled at document selection time")
+            throw PresentmentCanceledException("User canceled at document selection time")
         }
 
         var usingZk = false
@@ -519,7 +529,8 @@ object OpenID4VP {
         nonce: String,
         reReaderPublicKey: EcPublicKey?,
         responseUri: String?,
-        requestIsForZk: Boolean
+        requestIsForZk: Boolean,
+        onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
     ): String {
         match.source as CredentialMatchSourceOpenID4VP
         var zkSystemMatch: ZkSystem? = null

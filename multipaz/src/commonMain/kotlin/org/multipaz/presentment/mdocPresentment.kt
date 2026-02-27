@@ -8,6 +8,7 @@ import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.response.DeviceResponse
+import org.multipaz.mdoc.response.Iso18015ResponseException
 import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.response.buildDeviceResponse
 import org.multipaz.mdoc.transport.MdocTransportClosedException
@@ -37,14 +38,16 @@ private const val TAG = "mdocPresentment"
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
  * @return a [DeviceResponse].
- * @throws PresentmentCanceled if the user canceled in a consent prompt.
+ * @throws PresentmentCanceledException if the user canceled in a consent prompt.
+ * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
 @Throws(
     CancellationException::class,
     IllegalStateException::class,
     MdocTransportClosedException::class,
     Iso18013PresentmentTimeoutException::class,
-    PresentmentCanceled::class
+    PresentmentCanceledException::class,
+    PresentmentCannotSatisfyRequestException::class
 )
 suspend fun mdocPresentment(
     deviceRequest: DeviceRequest,
@@ -68,6 +71,8 @@ suspend fun mdocPresentment(
                 presentmentSource = source,
                 keyAgreementPossible = keyAgreementPossible
             )
+        } catch (e: Iso18015ResponseException) {
+            throw PresentmentCannotSatisfyRequestException("Error satisfying the request", e)
         } catch (e: Throwable) {
             throw IllegalStateException("Error satisfying request", e)
         }
@@ -85,7 +90,7 @@ suspend fun mdocPresentment(
             onDocumentsInFocus = onDocumentsInFocus
         )
         if (selection == null) {
-            throw PresentmentCanceled("User canceled consent prompt")
+            throw PresentmentCanceledException("User canceled consent prompt")
         }
 
         for (match in selection.matches) {
@@ -141,89 +146,5 @@ suspend fun mdocPresentment(
             }
             match.credential.increaseUsageCount()
         }
-
-
-        /*
-        for (docRequest in deviceRequest.docRequests) {
-            val zkRequested = docRequest.docRequestInfo?.zkRequest != null
-
-            val request = docRequest.toMdocRequest(
-                documentTypeRepository = source.documentTypeRepository,
-                mdocCredential = null
-            )
-
-            val presentmentData = docRequest.getPresentmentData(
-                documentTypeRepository = source.documentTypeRepository,
-                source = source,
-                keyAgreementPossible = keyAgreementPossible
-            )
-            if (presentmentData == null) {
-                Logger.w(TAG, "No document found for docType ${docRequest.docType}")
-                // No document was found
-                continue
-            }
-            onWaitingForUserInput()
-            val selection = source.showConsentPrompt(
-                requester = request.requester,
-                trustMetadata = source.resolveTrust(request.requester),
-                credentialPresentmentData = presentmentData,
-                preselectedDocuments = emptyList(),
-                onDocumentsInFocus = onDocumentsInFocus
-            )
-            if (selection == null) {
-                throw PresentmentCanceled("User canceled consent prompt")
-            }
-            val mdocCredential = selection.matches[0].credential as MdocCredential
-
-            var zkSystemMatch: ZkSystem? = null
-            var zkSystemSpec: ZkSystemSpec? = null
-            if (zkRequested) {
-                val requesterSupportedZkSpecs = docRequest.docRequestInfo!!.zkRequest!!.systemSpecs
-                val zkSystemRepository = source.zkSystemRepository
-                if (zkSystemRepository != null) {
-                    // Find the first ZK System that the requester supports and matches the document
-                    for (zkSpec in requesterSupportedZkSpecs) {
-                        val zkSystem = zkSystemRepository.lookup(zkSpec.system)
-                        if (zkSystem == null) {
-                            continue
-                        }
-                        val matchingZkSystemSpec = zkSystem.getMatchingSystemSpec(
-                            zkSystemSpecs = requesterSupportedZkSpecs,
-                            requestedClaims = request.requestedClaims
-                        )
-                        if (matchingZkSystemSpec != null) {
-                            zkSystemMatch = zkSystem
-                            zkSystemSpec = matchingZkSystemSpec
-                            break
-                        }
-                    }
-                }
-            }
-
-            if (zkRequested && zkSystemSpec == null) {
-                Logger.w(TAG, "Reader requested ZK proof but no compatible ZkSpec was found.")
-            }
-
-            val document = MdocDocument.fromPresentment(
-                sessionTranscript = sessionTranscript,
-                eReaderKey = eReaderKey,
-                credential = mdocCredential,
-                requestedClaims = request.requestedClaims,
-                deviceNamespaces = buildDeviceNamespaces {},
-                errors = mapOf()
-            )
-            if (zkSystemMatch != null) {
-                val zkDocument = zkSystemMatch.generateProof(
-                    zkSystemSpec = zkSystemSpec!!,
-                    document = document,
-                    sessionTranscript = sessionTranscript
-                )
-                addZkDocument(zkDocument)
-            } else {
-                addDocument(document)
-            }
-            mdocCredential.increaseUsageCount()
-        }
-         */
     }
 }
