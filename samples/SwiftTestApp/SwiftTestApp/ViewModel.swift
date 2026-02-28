@@ -19,7 +19,7 @@ class ViewModel {
     var documentTypeRepository: DocumentTypeRepository!
     var documentStore: DocumentStore!
     var documentModel: DocumentModel!
-    var readerTrustManager: TrustManagerLocal!
+    var readerTrustManager: TrustManager!
     var provisioningModel: ProvisioningModel!
     var provisioningSupport: ProvisioningSupport!
 
@@ -49,7 +49,7 @@ class ViewModel {
             storage: storage,
             secureAreaRepository: secureAreaRepository
         ).build()
-        readerTrustManager = TrustManagerLocal(storage: storage, identifier: "default", partitionId: "default_default")
+        readerTrustManager = TrustManager(storage: storage, identifier: "default", partitionId: "default_default")
         try! await readerTrustManager.deleteAll()
         try! await readerTrustManager.addX509Cert(
             certificate: X509Cert.companion.fromPem(

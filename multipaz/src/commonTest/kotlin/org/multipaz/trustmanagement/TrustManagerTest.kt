@@ -1,7 +1,14 @@
 package org.multipaz.trustmanagement
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -14,24 +21,26 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.buildX509Cert
+import org.multipaz.mdoc.rical.Rical
+import org.multipaz.mdoc.rical.RicalCertificateInfo
 import org.multipaz.mdoc.util.MdocUtil
+import org.multipaz.mdoc.rical.SignedRical
 import org.multipaz.mdoc.vical.SignedVical
 import org.multipaz.mdoc.vical.Vical
 import org.multipaz.mdoc.vical.VicalCertificateInfo
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.toHex
 import org.multipaz.util.truncateToWholeSeconds
-import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
-
 
 class TrustManagerTest {
 
@@ -157,7 +166,7 @@ class TrustManagerTest {
 
     @Test
     fun happyFlow() = runTestWithSetup {
-        val trustManager = TrustManagerLocal(EphemeralStorage())
+        val trustManager = TrustManager(EphemeralStorage())
 
         trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
         trustManager.addX509Cert(caCertificate, TrustMetadata())
@@ -172,7 +181,7 @@ class TrustManagerTest {
 
     @Test
     fun validInThePast() = runTestWithSetup {
-        val trustManager = TrustManagerLocal(EphemeralStorage())
+        val trustManager = TrustManager(EphemeralStorage())
 
         trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
         trustManager.addX509Cert(caCertificate, TrustMetadata())
@@ -187,7 +196,7 @@ class TrustManagerTest {
 
     @Test
     fun validInTheFuture() = runTestWithSetup {
-        val trustManager = TrustManagerLocal(EphemeralStorage())
+        val trustManager = TrustManager(EphemeralStorage())
 
         trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
         trustManager.addX509Cert(caCertificate, TrustMetadata())
@@ -202,7 +211,7 @@ class TrustManagerTest {
 
     @Test
     fun happyFlowWithOnlyIntermediateCertificate() = runTestWithSetup {
-        val trustManager = TrustManagerLocal(EphemeralStorage())
+        val trustManager = TrustManager(EphemeralStorage())
 
         trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
 
@@ -216,7 +225,7 @@ class TrustManagerTest {
 
     @Test
     fun happyFlowWithChainOfTwo() = runTestWithSetup {
-        val trustManager = TrustManagerLocal(EphemeralStorage())
+        val trustManager = TrustManager(EphemeralStorage())
 
         trustManager.addX509Cert(caCertificate, TrustMetadata())
 
@@ -230,7 +239,7 @@ class TrustManagerTest {
 
     @Test
     fun trustPointNotCaCert() = runTestWithSetup {
-        val trustManager = TrustManagerLocal(EphemeralStorage())
+        val trustManager = TrustManager(EphemeralStorage())
 
         trustManager.addX509Cert(dsCertificate, TrustMetadata())
 
@@ -244,7 +253,7 @@ class TrustManagerTest {
 
     @Test
     fun happyFlowMultipleCerts() = runTestWithSetup {
-        val trustManager = TrustManagerLocal(EphemeralStorage())
+        val trustManager = TrustManager(EphemeralStorage())
 
         trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
         trustManager.addX509Cert(caCertificate, TrustMetadata())
@@ -267,7 +276,7 @@ class TrustManagerTest {
 
     @Test
     fun noTrustPoints() = runTestWithSetup {
-        val trustManager = TrustManagerLocal(EphemeralStorage())
+        val trustManager = TrustManager(EphemeralStorage())
 
         trustManager.verify(listOf(dsCertificate)).let {
             assertEquals("No trusted root certificate could not be found", it.error?.message)
@@ -280,11 +289,11 @@ class TrustManagerTest {
     @Test
     fun skiAlreadyExists() = runTestWithSetup {
         val storage = EphemeralStorage()
-        val trustManager = TrustManagerLocal(storage)
+        val trustManager = TrustManager(storage)
 
         trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
         trustManager.addX509Cert(caCertificate, TrustMetadata())
-        val e = assertFailsWith(TrustPointAlreadyExistsException::class) {
+        val e = assertFailsWith(TrustEntryAlreadyExistsException::class) {
             trustManager.addX509Cert(caCertificate, TrustMetadata())
         }
         assertEquals("TrustPoint with given SubjectKeyIdentifier already exists", e.message)
@@ -296,9 +305,18 @@ class TrustManagerTest {
         val atlantisIaca: X509Cert,
         val atlantisIacaKey: EcPrivateKey,
         val encodedSignedVical: ByteString,
-
         val elboniaDs: X509Cert,
         val elboniaDsKey: EcPrivateKey,
+    )
+
+    private data class TestRical(
+        val breweryReaderRootCert: X509Cert,
+        val breweryReaderRootKey: EcPrivateKey,
+        val breweryReaderCert: X509Cert,
+        val breweryReaderKey: EcPrivateKey,
+        val plumberReaderRootCert: X509Cert,
+        val plumberReaderRootKey: EcPrivateKey,
+        val encodedSignedRical: ByteString,
     )
 
     private suspend fun createTestIaca(): TestIaca {
@@ -385,10 +403,94 @@ class TrustManagerTest {
         )
     }
 
+    private suspend fun createTestRical(): TestRical {
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val validFrom = now - 10.minutes
+        val validUntil = now + 10.minutes
+
+        val breweryReaderRootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val breweryReaderRootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = AsymmetricKey.anonymous(breweryReaderRootKey),
+            subject = X500Name.fromName("CN=Brewery TrustManager CA"),
+            serial = ASN1Integer.fromRandom(numBits = 128),
+            validFrom = validFrom,
+            validUntil = validUntil,
+            crlUrl = "https://example.com/brewery/crl"
+        )
+        val breweryReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val breweryReaderCert = MdocUtil.generateReaderCertificate(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(
+                privateKey = breweryReaderRootKey,
+                certChain = X509CertChain(listOf(breweryReaderRootCert))
+            ),
+            readerKey = breweryReaderKey.publicKey,
+            subject = X500Name.fromName("CN=Brewery"),
+            serial = ASN1Integer.fromRandom(numBits = 128),
+            validFrom = validFrom,
+            validUntil = validUntil
+        )
+
+        val plumberReaderRootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val plumberReaderRootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = AsymmetricKey.anonymous(plumberReaderRootKey),
+            subject = X500Name.fromName("CN=Plumber TrustManager CA"),
+            serial = ASN1Integer.fromRandom(numBits = 128),
+            validFrom = validFrom,
+            validUntil = validUntil,
+            crlUrl = "https://example.com/plumber/crl"
+        )
+
+        val rical = Rical(
+            type = Rical.RICAL_TYPE_READER_AUTHENTICATION,
+            version = "1",
+            provider = "Test RICAL provider",
+            date = now,
+            nextUpdate = null,
+            notAfter = null,
+            certificateInfos = listOf(
+                RicalCertificateInfo(
+                    certificate = breweryReaderRootCert,
+                ),
+                RicalCertificateInfo(
+                    certificate = plumberReaderRootCert,
+                )
+            ),
+            id = null,
+            latestRicalUrl = null,
+            extensions = emptyMap(),
+        )
+
+        val ricalKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val ricalCert = buildX509Cert(
+            publicKey = ricalKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(ricalKey, ricalKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1),
+            subject = X500Name.fromName("CN=Test RICAL provider"),
+            issuer = X500Name.fromName("CN=Test RICAL provider"),
+            validFrom = validFrom,
+            validUntil = validUntil
+        ) {
+            includeSubjectKeyIdentifier()
+        }
+
+        val signedRical = SignedRical(rical, X509CertChain(listOf(ricalCert)))
+        return TestRical(
+            breweryReaderRootCert = breweryReaderRootCert,
+            breweryReaderRootKey = breweryReaderRootKey,
+            breweryReaderCert = breweryReaderCert,
+            breweryReaderKey = breweryReaderKey,
+            plumberReaderRootCert = plumberReaderRootCert,
+            plumberReaderRootKey = plumberReaderRootKey,
+            encodedSignedRical = ByteString(
+                signedRical.generate(AsymmetricKey.anonymous(ricalKey))
+            ),
+        )
+    }
+
     @Test
     fun updateMetadataX509() = runTestWithSetup {
         val storage = EphemeralStorage()
-        val trustManager = TrustManagerLocal(storage)
+        val trustManager = TrustManager(storage)
 
         val entry = trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
         assertEquals(setOf(
@@ -421,7 +523,7 @@ class TrustManagerTest {
             assertEquals(newEntry.metadata, it.trustPoints[0].metadata)
         }
 
-        val otherTrustManager = TrustManagerLocal(storage)
+        val otherTrustManager = TrustManager(storage)
         assertEquals(1, otherTrustManager.getEntries().size)
         val entryFromOtherTrustManager = otherTrustManager.getEntries().first()
         assertEquals(entryFromOtherTrustManager, newEntry)
@@ -430,7 +532,7 @@ class TrustManagerTest {
     @Test
     fun updateMetadataVical() = runTestWithSetup {
         val storage = EphemeralStorage()
-        val trustManager = TrustManagerLocal(storage)
+        val trustManager = TrustManager(storage)
 
         val testIaca = createTestIaca()
         val entry = trustManager.addVical(testIaca.encodedSignedVical, TrustMetadata())
@@ -450,16 +552,117 @@ class TrustManagerTest {
         assertEquals("https://example.com/privacypolicy", newEntry.metadata.privacyPolicyUrl)
         assertTrue(newEntry.metadata.testOnly)
 
-        val otherTrustManager = TrustManagerLocal(storage)
+        val otherTrustManager = TrustManager(storage)
         assertEquals(1, otherTrustManager.getEntries().size)
         val entryFromOtherTrustManager = otherTrustManager.getEntries().first()
         assertEquals(entryFromOtherTrustManager, newEntry)
     }
 
     @Test
+    fun updateMetadataRical() = runTestWithSetup {
+        val storage = EphemeralStorage()
+        val trustManager = TrustManager(storage)
+
+        val testRicalData = createTestRical()
+        val entry = trustManager.addRical(testRicalData.encodedSignedRical, TrustMetadata())
+
+        val newEntry = trustManager.updateMetadata(entry,
+            TrustMetadata(
+                displayName = "Updated RICAL Name",
+                testOnly = true
+            )
+        )
+
+        assertNotEquals(newEntry, entry)
+        assertEquals(listOf(newEntry), trustManager.getEntries())
+        assertEquals("Updated RICAL Name", newEntry.metadata.displayName)
+        assertTrue(newEntry.metadata.testOnly)
+    }
+
+    @Test
+    fun updateVicalBytes() = runTestWithSetup {
+        val storage = EphemeralStorage()
+        val trustManager = TrustManager(storage)
+
+        // Generate two completely different signed VICALs
+        val testIaca1 = createTestIaca()
+        val testIaca2 = createTestIaca()
+
+        val entry = trustManager.addVical(testIaca1.encodedSignedVical, TrustMetadata(displayName = "VICAL 1"))
+
+        // Verify the original VICAL resolves trust correctly
+        trustManager.verify(listOf(testIaca1.elboniaDs)).let {
+            assertTrue(it.isTrusted)
+        }
+        trustManager.verify(listOf(testIaca2.elboniaDs)).let {
+            assertFalse(it.isTrusted)
+        }
+
+        // Update the underlying bytes of the existing entry
+        val updatedEntry = trustManager.updateVical(entry, testIaca2.encodedSignedVical)
+
+        assertEquals(entry.identifier, updatedEntry.identifier)
+        assertEquals("VICAL 1", updatedEntry.metadata.displayName) // Metadata should be preserved
+
+        // Verify the new VICAL list now provides trust, and the old one no longer does
+        trustManager.verify(listOf(testIaca1.elboniaDs)).let {
+            assertFalse(it.isTrusted)
+        }
+        trustManager.verify(listOf(testIaca2.elboniaDs)).let {
+            assertTrue(it.isTrusted)
+        }
+
+        // Verify updates are correctly persisted
+        val otherTrustManager = TrustManager(storage)
+        otherTrustManager.verify(listOf(testIaca2.elboniaDs)).let {
+            assertTrue(it.isTrusted)
+        }
+    }
+
+    @Test
+    fun updateRicalBytes() = runTestWithSetup {
+        val storage = EphemeralStorage()
+        val trustManager = TrustManager(storage)
+
+        // Generate two completely different signed RICALs
+        val testRical1 = createTestRical()
+        val testRical2 = createTestRical()
+
+        val entry = trustManager.addRical(testRical1.encodedSignedRical, TrustMetadata(displayName = "RICAL 1"))
+
+        // Verify the original RICAL resolves trust correctly
+        trustManager.verify(listOf(testRical1.breweryReaderCert)).let {
+            assertTrue(it.isTrusted)
+        }
+        trustManager.verify(listOf(testRical2.breweryReaderCert)).let {
+            assertFalse(it.isTrusted)
+        }
+
+        // Update the underlying bytes of the existing entry
+        val updatedEntry = trustManager.updateRical(entry, testRical2.encodedSignedRical)
+
+        assertEquals(entry.identifier, updatedEntry.identifier)
+        assertEquals("RICAL 1", updatedEntry.metadata.displayName) // Metadata should be preserved
+
+        // Verify the new RICAL list now provides trust, and the old one no longer does
+        trustManager.verify(listOf(testRical1.breweryReaderCert)).let {
+            assertFalse(it.isTrusted)
+        }
+        trustManager.verify(listOf(testRical2.breweryReaderCert)).let {
+            assertTrue(it.isTrusted)
+        }
+
+        // Verify updates are correctly persisted
+        val otherTrustManager = TrustManager(storage)
+        otherTrustManager.verify(listOf(testRical2.breweryReaderCert)).let {
+            assertTrue(it.isTrusted)
+        }
+    }
+
+    @Test
     fun deleteEntryX509() = runTestWithSetup {
         val storage = EphemeralStorage()
-        val trustManager = TrustManagerLocal(storage)
+        val trustManager = TrustManager(storage)
 
         val entry = trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
         assertEquals(setOf(
@@ -487,7 +690,7 @@ class TrustManagerTest {
         }
 
         // Check it's the same when reloading the TrustManager
-        val otherTrustManager = TrustManagerLocal(storage)
+        val otherTrustManager = TrustManager(storage)
         assertEquals(0, otherTrustManager.getEntries().size)
 
         otherTrustManager.verify(listOf(dsCertificate)).let {
@@ -501,7 +704,7 @@ class TrustManagerTest {
     @Test
     fun deleteEntryVical() = runTestWithSetup {
         val storage = EphemeralStorage()
-        val trustManager = TrustManagerLocal(storage)
+        val trustManager = TrustManager(storage)
 
         val testIaca = createTestIaca()
         val entry = trustManager.addVical(testIaca.encodedSignedVical, TrustMetadata())
@@ -526,7 +729,7 @@ class TrustManagerTest {
         }
 
         // Check it's the same when reloading the TrustManager
-        val otherTrustManager = TrustManagerLocal(storage)
+        val otherTrustManager = TrustManager(storage)
         assertEquals(0, otherTrustManager.getEntries().size)
 
         otherTrustManager.verify(listOf(testIaca.elboniaDs)).let {
@@ -538,9 +741,37 @@ class TrustManagerTest {
     }
 
     @Test
+    fun addAndDeleteRical() = runTestWithSetup {
+        val storage = EphemeralStorage()
+        val trustManager = TrustManager(storage)
+
+        val testRicalData = createTestRical()
+        val entry = trustManager.addRical(testRicalData.encodedSignedRical, TrustMetadata())
+
+        val entries = trustManager.getEntries()
+        assertEquals(1, entries.size)
+        assertTrue(entries[0] is TrustEntryRical)
+
+        trustManager.verify(listOf(testRicalData.breweryReaderCert)).let {
+            assertEquals(null, it.error)
+            assertTrue(it.isTrusted)
+            assertEquals(2, it.trustChain!!.certificates.size)
+            assertEquals(testRicalData.breweryReaderRootCert, it.trustChain.certificates.last())
+        }
+
+        assertTrue(trustManager.deleteEntry(entry))
+        assertEquals(0, trustManager.getEntries().size)
+
+        trustManager.verify(listOf(testRicalData.breweryReaderCert)).let {
+            assertEquals("No trusted root certificate could not be found", it.error?.message)
+            assertFalse(it.isTrusted)
+        }
+    }
+
+    @Test
     fun deleteAll() = runTestWithSetup {
         val storage = EphemeralStorage()
-        val trustManager = TrustManagerLocal(storage)
+        val trustManager = TrustManager(storage)
 
         val entryX509 = trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
         assertEquals(setOf(
@@ -584,7 +815,7 @@ class TrustManagerTest {
         }
 
         // Check it's the same when reloading the TrustManager
-        val otherTrustManager = TrustManagerLocal(storage)
+        val otherTrustManager = TrustManager(storage)
         assertEquals(0, otherTrustManager.getEntries().size)
 
         otherTrustManager.verify(listOf(dsCertificate)).let {
@@ -604,7 +835,7 @@ class TrustManagerTest {
     @Test
     fun persistence() = runTestWithSetup {
         val storage = EphemeralStorage()
-        val trustManager = TrustManagerLocal(storage)
+        val trustManager = TrustManager(storage)
 
         val intermediaCertificateEntry = trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
         val caCertificateEntry = trustManager.addX509Cert(caCertificate, TrustMetadata())
@@ -683,7 +914,7 @@ class TrustManagerTest {
             vicalEntry2
         ), trustManager.getEntries().toSet())
 
-        val otherTrustManager = TrustManagerLocal(storage)
+        val otherTrustManager = TrustManager(storage)
         assertEquals(setOf(
             caCertificate.subjectKeyIdentifier!!.toHex(),
             intermediateCertificate.subjectKeyIdentifier!!.toHex(),
@@ -698,7 +929,7 @@ class TrustManagerTest {
         ), otherTrustManager.getEntries().toSet())
 
         val otherStorage = EphemeralStorage()
-        val yetAnotherTrustManager = TrustManagerLocal(otherStorage)
+        val yetAnotherTrustManager = TrustManager(otherStorage)
         assertEquals(emptySet(), yetAnotherTrustManager.getTrustPoints().map { it.certificate.subjectKeyIdentifier!!.toHex() }.toSet())
     }
 
@@ -786,8 +1017,8 @@ class TrustManagerTest {
 
     @Test
     fun testCompositeTrustManager() = runTestWithSetup {
-        val tm1 = TrustManagerLocal(EphemeralStorage()).apply { addX509Cert(caCertificate, TrustMetadata()) }
-        val tm2 = TrustManagerLocal(EphemeralStorage()).apply { addX509Cert(ca2Certificate, TrustMetadata()) }
+        val tm1 = TrustManager(EphemeralStorage()).apply { addX509Cert(caCertificate, TrustMetadata()) }
+        val tm2 = TrustManager(EphemeralStorage()).apply { addX509Cert(ca2Certificate, TrustMetadata()) }
         val trustManager = CompositeTrustManager(listOf(tm1, tm2))
 
         // Happy flow
@@ -815,5 +1046,65 @@ class TrustManagerTest {
             assertNull(it.trustChain)
             assertEquals(0, it.trustPoints.size)
         }
+    }
+
+    @Test
+    fun concurrentReadsAndWrites() = runTestWithSetup {
+        val storage = EphemeralStorage()
+        val trustManager = TrustManager(storage)
+        val coroutineCount = 50
+
+        val testIaca = createTestIaca()
+
+        // Launch multiple coroutines simultaneously on Default dispatcher
+        withContext(Dispatchers.Default) {
+            val deferreds = (0 until coroutineCount).map { index ->
+                async {
+                    if (index % 2 == 0) {
+                        // Readers hitting the locked collections
+                        val entries = trustManager.getEntries()
+                        assertNotNull(entries)
+                        trustManager.getTrustPoints()
+                    } else {
+                        // Writers dynamically appending entries under load
+                        trustManager.addVical(testIaca.encodedSignedVical, TrustMetadata(displayName = "Concurrent Vical $index"))
+                    }
+                }
+            }
+            deferreds.awaitAll()
+        }
+
+        // Check state integrity
+        val finalEntries = trustManager.getEntries()
+        assertEquals(coroutineCount / 2, finalEntries.size)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun eventFlowEmissions() = runTestWithSetup {
+        val storage = EphemeralStorage()
+        val trustManager = TrustManager(storage)
+        var numEvents = 0
+
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            trustManager.eventFlow.collect { event ->
+                numEvents += 1
+            }
+        }
+
+        // 1. Add Entry
+        val entry = trustManager.addX509Cert(intermediateCertificate, TrustMetadata())
+        assertEquals(1, numEvents)
+
+        // 2. Update Entry
+        val updatedEntry = trustManager.updateMetadata(entry, TrustMetadata(displayName = "Updated Name"))
+        assertEquals(2, numEvents)
+
+        // 3. Delete Entry
+        val deleted = trustManager.deleteEntry(updatedEntry)
+        assertTrue(deleted) // Ensure it actually found and deleted the entry
+        assertEquals(3, numEvents)
+
+        job.cancel()
     }
 }

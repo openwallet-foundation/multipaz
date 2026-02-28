@@ -100,8 +100,8 @@ import org.multipaz.server.common.getBaseUrl
 import org.multipaz.server.enrollment.ServerIdentity
 import org.multipaz.server.enrollment.getServerIdentity
 import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.trustmanagement.TrustManager
-import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.fromHexByteString
 import org.multipaz.verification.VerificationUtil
@@ -1167,12 +1167,12 @@ private suspend fun handleGetReaderRootCert(
 )
 
 private val issuerTrustManagerLock = Mutex()
-private var issuerTrustManager: TrustManager? = null
+private var issuerTrustManager: TrustManagerInterface? = null
 
-private suspend fun getIssuerTrustManager(): TrustManager {
+private suspend fun getIssuerTrustManager(): TrustManagerInterface {
     issuerTrustManagerLock.withLock {
         issuerTrustManager?.let { return it }
-        val trustManager = TrustManagerLocal(EphemeralStorage())
+        val trustManager = TrustManager(EphemeralStorage())
         // TODO: also include certs for issuers on https://issuer.multipaz.org
         trustManager.addX509Cert(
             certificate = X509Cert(encoded = "308202a83082022da003020102021036ead7e431722dbf66c76398266f8020300a06082a8648ce3d040303302e311f301d06035504030c164f5746204d756c746970617a20544553542049414341310b300906035504060c025553301e170d3234313230313030303030305a170d3334313230313030303030305a302e311f301d06035504030c164f5746204d756c746970617a20544553542049414341310b300906035504060c0255533076301006072a8648ce3d020106052b8104002203620004f900f27bbd26d8ed2594f5cc8d58f1559cf79b993a6a04fec2287e2fbf5bee3caa525f7db1b7949e9c5a2c3f9c981dc72b7b70900edf995252a1b05cfbd0838648779b1ea7f98a07e51ba569259385605f332463b1f54e0e4a2c1cb0839db3d5a382010e3082010a300e0603551d0f0101ff04040302010630120603551d130101ff040830060101ff020100304c0603551d1204453043864168747470733a2f2f6769746875622e636f6d2f6f70656e77616c6c65742d666f756e646174696f6e2d6c6162732f6964656e746974792d63726564656e7469616c30560603551d1f044f304d304ba049a047864568747470733a2f2f6769746875622e636f6d2f6f70656e77616c6c65742d666f756e646174696f6e2d6c6162732f6964656e746974792d63726564656e7469616c2f63726c301d0603551d0e04160414ab651be056c29053f1dd7f6ce487be68de60c9f5301f0603551d23041830168014ab651be056c29053f1dd7f6ce487be68de60c9f5300a06082a8648ce3d0403030369003066023100e5fec5304626e9ee0456c0421acffa40f38b1f75b7fec4779dea4dfc463ea1dd94d36b3cadec950e0c87f62e580703450231009ed622dee7f933898b37120a06a8362a6ebae99816c4e2d5f928ffbab4bc9f4591a85d526a90d67dafe8793c85d1a246".fromHexByteString()),

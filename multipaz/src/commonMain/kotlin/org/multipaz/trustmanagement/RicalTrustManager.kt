@@ -7,15 +7,15 @@ import org.multipaz.util.toHex
 import kotlin.time.Instant
 
 /**
- * An implementation of [TrustManager] backed by a RICAL according to ISO/IEC 18013-5 Second Edition Annex F.
+ * An implementation of [TrustManagerInterface] backed by a RICAL according to ISO/IEC 18013-5 Second Edition Annex F.
  *
  * @param signedRical the [SignedRical].
- * @param identifier an identifier for the [TrustManager].
+ * @param identifier an identifier for the [TrustManagerInterface].
  */
 class RicalTrustManager(
     val signedRical: SignedRical,
     override val identifier: String = "default"
-): TrustManager {
+): TrustManagerInterface {
     private val skiToTrustPoint = mutableMapOf<String, TrustPoint>()
 
     init {

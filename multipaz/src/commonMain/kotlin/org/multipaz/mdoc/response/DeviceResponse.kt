@@ -64,7 +64,7 @@ data class DeviceResponse internal constructor(
      *
      * The following checks are expected to be done by the application:
      * - Determining whether the issuer's document signing certificate is trusted.
-     *   An application can use [org.multipaz.trustmanagement.TrustManager] to do this.
+     *   An application can use [org.multipaz.trustmanagement.TrustManagerInterface] to do this.
      * - Checking whether the MSO is revoked, or any of the keys involved are revoked.
      * - Checking the integrity of any Zero-Knowledge Proofs for documents returned in [zkDocuments].
      *   An application can use [org.multipaz.mdoc.zkp.ZkSystem] to do this.

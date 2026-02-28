@@ -54,8 +54,8 @@ import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.trustmanagement.TrustManager
-import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64
@@ -448,10 +448,10 @@ private suspend fun processIsoMdocResponse(
     }
 }
 
-private suspend fun getTrustManager(): TrustManager =
-    BackendEnvironment.cache(TrustManager::class) { configuration, resources ->
+private suspend fun getTrustManager(): TrustManagerInterface =
+    BackendEnvironment.cache(TrustManagerInterface::class) { configuration, resources ->
         // TODO: load from configuration?
-        TrustManagerLocal(EphemeralStorage())
+        TrustManager(EphemeralStorage())
     }
 
 private suspend fun processMdocResponse(

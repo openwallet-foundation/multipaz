@@ -48,8 +48,8 @@ fun NfcReadersScreen(
                         modifier = Modifier.clickable {
                             onReaderClicked(reader.id)
                         },
-                        key = reader.displayName,
-                        valueText = "State: ${state.value}"
+                        heading = reader.displayName,
+                        text = "State: ${state.value}"
                     )
                 }
             }

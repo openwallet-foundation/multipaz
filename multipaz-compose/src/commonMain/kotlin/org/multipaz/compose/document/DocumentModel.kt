@@ -103,11 +103,9 @@ class DocumentModel private constructor(
             updateDocumentInfo(documentId, DocumentAdded(documentId))
         }
 
-        scope.launch {
-            documentStore.eventFlow
-                .onEach { event -> updateDocumentInfo(event = event) }
-                .launchIn(scope)
-        }
+        documentStore.eventFlow
+            .onEach { event -> updateDocumentInfo(event = event) }
+            .launchIn(scope)
     }
 
     private suspend fun updateDocumentInfo(

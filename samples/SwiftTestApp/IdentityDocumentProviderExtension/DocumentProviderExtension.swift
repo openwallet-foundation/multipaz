@@ -33,7 +33,7 @@ func getPresentmentSource() async -> PresentmentSource {
         secureAreaRepository: secureAreaRepository
     ).build()
     
-    let readerTrustManager = TrustManagerLocal(storage: storage, identifier: "default", partitionId: "default_default")
+    let readerTrustManager = TrustManager(storage: storage, identifier: "default", partitionId: "default_default")
     
     let zkSystemRepository = ZkSystemRepository()
     // TODO: the RAM limit for IdentityDocumentProvider is 120 MB and Longfellow uses

@@ -7,15 +7,15 @@ import org.multipaz.util.Logger
 import org.multipaz.util.toHex
 
 /**
- * An implementation of [TrustManager] backed by a VICAL according to ISO/IEC 18013-5 Annex C.
+ * An implementation of [TrustManagerInterface] backed by a VICAL according to ISO/IEC 18013-5 Annex C.
  *
  * @param signedVical the [SignedVical].
- * @param identifier an identifier for the [TrustManager].
+ * @param identifier an identifier for the [TrustManagerInterface].
  */
 class VicalTrustManager(
     val signedVical: SignedVical,
     override val identifier: String = "default"
-): TrustManager {
+): TrustManagerInterface {
     private val skiToTrustPoint = mutableMapOf<String, TrustPoint>()
 
     init {

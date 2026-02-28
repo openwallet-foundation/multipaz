@@ -1,9 +1,9 @@
 <resources>
-    <!-- PassphraseEntryField -->
+    <!-- PassphraseEntryField.kt -->
     <string name="passphrase_entry_field_pin_is_weak">PIN is weak, please choose another</string>
     <string name="passphrase_entry_field_passphrase_is_weak">Passphrase is weak, please choose another</string>
 
-    <!-- ConsentModalBottomSheet -->
+    <!-- Consent.kt -->
     <string name="credential_presentment_button_cancel">Cancel</string>
     <string name="credential_presentment_button_more">More</string>
     <string name="credential_presentment_button_share">Share</string>
@@ -28,7 +28,7 @@
     <string name="credential_presentment_select_document">Select document</string>
     <string name="credential_presentment_requester_information">Requester information</string>
 
-    <!-- CertificateViewer -->
+    <!-- X509CertViewer.kt -->
     <string name="certificate_viewer_sub_basic_info">Basic information</string>
     <string name="certificate_viewer_k_type">Type</string>
     <string name="certificate_viewer_k_serial_number">Serial number</string>
@@ -57,24 +57,7 @@
     <string name="certificate_viewer_value_digital_signature">Digital signature</string>
     <string name="certificate_viewer_validity_in_the_past">This certificate is no longer valid, it expired %1$s</string>
     <string name="certificate_viewer_validity_in_the_future">This certificate is not yet valid, it will be valid %1$s</string>
-    <string name="certificate_viewer_valid_now">Currently valid, will expire %1$s</string>
-
-    <!-- Presentment -->
-    <string name="presentment_connecting_to_reader">Connecting to reader</string>
-    <string name="presentment_success">The information was shared</string>
-    <string name="presentment_error">Something went wrong</string>
-    <string name="presentment_canceled">Presentment was canceled</string>
-    <string name="presentment_timeout">Timed out waiting for reader</string>
-    <string name="presentment_waiting_for_request">Waiting for request</string>
-    <string name="presentment_document_picker_title">Select Document</string>
-    <string name="presentment_document_picker_text">Multiple documents can fulfill the request. Please select one</string>
-    <string name="presentment_document_picker_cancel">Cancel</string>
-    <string name="presentment_document_picker_continue">Continue</string>
-
-    <!-- PassphrasePinScreen -->
-    <string name="passphrase_pin_screen_delete">Delete</string>
-    <string name="passphrase_pin_screen_cancel">Cancel</string>
-    <string name="passphrase_pin_screen_done">Done</string>
+    <string name="certificate_viewer_valid_now">Currently valid, expires %1$s</string>
 
     <!-- PassphrasePromptBottomSheet -->
     <string name="pin_prompt_try_again">Wrong PIN, try again</string>
@@ -90,7 +73,7 @@
     </plurals>
     <string name="passphrase_prompt_too_many_attempts">Too many wrong passphrases attempted, try again later</string>
 
-    <!-- Provisioning -->
+    <!-- ProvisioningBottomSheet -->
     <string name="provisioning_title">Provisioning</string>
     <string name="provisioning_authorization_failed">Authorization failed</string>
     <string name="provisioning_initial">Starting provisioning...</string>
@@ -115,7 +98,6 @@
     <string name="duration_never">never</string>
     <string name="duration_time_ago">%1$s ago</string>
     <string name="duration_time_from_now">%1$s from now</string>
-    <!-- TODO: figure out if we have to have separate string for past and future durations -->
     <plurals name="duration_year">
         <item quantity="one">%1$d year</item>
         <item quantity="other">%1$d years</item>
@@ -140,5 +122,46 @@
         <item quantity="one">%1$d minute</item>
         <item quantity="other">%1$d minutes</item>
     </plurals>
+
+    <!-- Trust management -->
+    <string name="trust_entry_vical_fallback_name">VICAL from %1$s</string>
+    <string name="trust_entry_rical_fallback_name">RICAL from %1$s</string>
+    <string name="trust_entry_details_certificate">Certificate</string>
+    <plurals name="trust_entry_details_vical">
+        <item quantity="one">VICAL containing %1$d certificate</item>
+        <item quantity="other">VICAL containing %1$d certificates</item>
+    </plurals>
+    <plurals name="trust_entry_details_rical">
+        <item quantity="one">RICAL containing %1$d certificate</item>
+        <item quantity="other">RICAL containing %1$d certificates</item>
+    </plurals>
+    <string name="trust_entry_warning_x509_just_imported">This certificate was just imported. Please check its fingerprint to make sure you trust it</string>
+    <string name="trust_entry_warning_vical_just_imported">This VICAL was just imported. Please check the signer certificate chain to make sure you trust the provider</string>
+    <string name="trust_entry_warning_rical_just_imported">This RICAL was just imported. Please check the signer certificate chain to make sure you trust the provider</string>
+    <string name="trust_entry_test_only_label">Test only</string>
+    <string name="trust_entry_yes">Yes</string>
+    <string name="trust_entry_no">No</string>
+    <string name="trust_entry_vical_details_version">Version</string>
+    <string name="trust_entry_vical_details_provider">Provider</string>
+    <string name="trust_entry_vical_details_issue">Issue</string>
+    <string name="trust_entry_vical_details_issued_at">Issued at</string>
+    <string name="trust_entry_vical_details_next_update">Next update</string>
+    <string name="trust_entry_signer">Signer</string>
+    <string name="trust_entry_click_to_view_chain">Click to view certificate chain</string>
+    <string name="trust_entry_vical_data_title">VICAL data</string>
+    <string name="trust_entry_certificates_title">Certificates</string>
+    <string name="trust_entry_rical_details_type">Type</string>
+    <string name="trust_entry_rical_details_id">ID</string>
+    <string name="trust_entry_rical_details_url">URL</string>
+    <string name="trust_entry_rical_details_valid_until">Valid until</string>
+    <string name="trust_entry_rical_data_title">RICAL data</string>
+    <string name="trust_entry_vical_entry_document_types">Document Types</string>
+    <string name="trust_entry_vical_entry_title">VICAL entry</string>
+    <string name="trust_entry_editor_change">Change</string>
+    <string name="trust_entry_editor_remove">Remove</string>
+    <string name="trust_entry_editor_name_label">Name</string>
+    <string name="trust_entry_editor_test_only_x509">This certificate is for testing only</string>
+    <string name="trust_entry_editor_test_only_vical">This VICAL is for testing only</string>
+    <string name="trust_entry_editor_test_only_rical">This RICAL is for testing only</string>
 
 </resources>

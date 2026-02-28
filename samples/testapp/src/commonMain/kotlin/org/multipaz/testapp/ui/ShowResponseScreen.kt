@@ -16,7 +16,7 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.testapp.ShowResponseMetadata
-import org.multipaz.trustmanagement.TrustManager
+import org.multipaz.trustmanagement.TrustManagerInterface
 
 private const val TAG = "ShowResponseScreen"
 
@@ -28,7 +28,7 @@ fun ShowResponseScreen(
     nonce: ByteString?,
     eReaderKey: EcPrivateKey?,
     metadata: ShowResponseMetadata,
-    issuerTrustManager: TrustManager,
+    issuerTrustManager: TrustManagerInterface,
     documentTypeRepository: DocumentTypeRepository?,
     zkSystemRepository: ZkSystemRepository?,
     onViewCertChain: (certChain: X509CertChain) -> Unit

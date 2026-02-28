@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import multipazproject.samples.testapp.generated.resources.Res
@@ -357,9 +358,18 @@ fun SettingsScreen(
                             override val theme: @Composable (content: @Composable () -> Unit) -> Unit
                                 get() = { AppThemeLimeGreen(it) }
 
-                            // TODO: use lime green default cardart?
+                            // TODO: use lime green default cardart
                             override suspend fun renderFallbackCardArt(document: Document): ImageBitmap =
                                 Branding.Default.renderFallbackCardArt(document)
+
+                            // TODO: use random colors from a lime green palette
+                            @Composable
+                            override fun AvatarIcon(
+                                size: Dp,
+                                name: String,
+                                additionalData: ByteArray?,
+                                modifier: Modifier
+                            ) = Branding.Default.AvatarIcon(size, name, additionalData, modifier)
                         })
                     }
                 }) {

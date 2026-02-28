@@ -41,9 +41,30 @@ data object TrustedIssuersDestination: Destination()
 data object TrustedVerifiersDestination: Destination()
 
 @Serializable
-data class TrustPointViewerDestination(
+data class TrustEntryDestination(
     val trustManagerId: String,
-    val trustPointId: String
+    val trustEntryId: String,
+    val justImported: Boolean = false
+): Destination()
+
+@Serializable
+data class TrustEntryEditDestination(
+    val trustManagerId: String,
+    val trustEntryId: String
+): Destination()
+
+@Serializable
+data class TrustEntryVicalEntryDestination(
+    val trustManagerId: String,
+    val trustEntryId: String,
+    val vicalCertNumber: Int
+): Destination()
+
+@Serializable
+data class TrustEntryRicalEntryDestination(
+    val trustManagerId: String,
+    val trustEntryId: String,
+    val ricalCertNumber: Int
 ): Destination()
 
 @Serializable
