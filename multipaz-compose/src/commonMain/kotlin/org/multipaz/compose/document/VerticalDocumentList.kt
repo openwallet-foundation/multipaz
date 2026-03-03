@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -33,16 +34,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
 import kotlin.math.max
@@ -74,6 +83,7 @@ import kotlin.math.roundToInt
  * @param showStackWhileFocused If true, unfocused cards will collapse into a 3D stack at the bottom
  * of the screen when a document is focused. If false, unfocused cards fade away entirely to maximize
  * screen real estate for the detail view. Defaults to true.
+ * @param cardMaxHeight An optional max height constraint for the cards. Useful for foldables and wide screens.
  * @param showDocumentInfo A composable slot that renders the detailed content below the focused card.
  * It is horizontally centered by default.
  * @param emptyDocumentContent A composable slot displayed inside a dashed placeholder card when the
@@ -94,6 +104,7 @@ fun VerticalDocumentList(
     unfocusedVisiblePercent: Int = 25,
     allowDocumentReordering: Boolean = true,
     showStackWhileFocused: Boolean = true,
+    cardMaxHeight: Dp = Dp.Unspecified,
     showDocumentInfo: @Composable (DocumentInfo) -> Unit = {},
     emptyDocumentContent: @Composable () -> Unit = { },
     onDocumentReordered: (documentInfo: DocumentInfo, newPosition: Int) -> Unit = { _, _ -> },
@@ -129,16 +140,48 @@ fun VerticalDocumentList(
     val focusedId = focusedDocument?.document?.identifier
     val focusedIndex = displayOrder.indexOfFirst { it.document.identifier == focusedId }.coerceAtLeast(0)
 
+    // A nested scroll connection to intercept and consume the overscroll effect cleanly
+    val overscrollConsumer = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset = available // Silently consume all leftover scroll at the edges
+
+            override suspend fun onPostFling(
+                consumed: Velocity,
+                available: Velocity
+            ): Velocity = available
+        }
+    }
+
     if (docInfos.isEmpty()) {
-        Box(
+        BoxWithConstraints(
             modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.TopCenter
         ) {
+            val density = LocalDensity.current
+            val maxWidthPx = constraints.maxWidth.toFloat()
+            val paddingHorizontalPx = with(density) { 16.dp.toPx() }
+
+            var cardWidthPx = maxWidthPx - 2 * paddingHorizontalPx
+            var cardHeightPx = cardWidthPx / 1.586f
+
+            // Apply height limitation and scale down width if needed to keep ratio
+            if (cardMaxHeight.isSpecified) {
+                val maxAllowedCardHeightPx = with(density) { cardMaxHeight.toPx() }
+                if (cardHeightPx > maxAllowedCardHeightPx) {
+                    cardHeightPx = maxAllowedCardHeightPx
+                    cardWidthPx = cardHeightPx * 1.586f
+                }
+            }
+
             Box(
                 modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 24.dp)
-                    .fillMaxWidth()
-                    .aspectRatio(1.586f)
+                    .padding(top = 24.dp)
+                    .width(with(density) { cardWidthPx.toDp() })
+                    .height(with(density) { cardHeightPx.toDp() })
                     .drawBehind {
                         drawRoundRect(
                             color = Color.Gray,
@@ -167,8 +210,20 @@ fun VerticalDocumentList(
         val paddingTopPx = with(density) { 24.dp.toPx() }
         val spacingPx = with(density) { 16.dp.toPx() }
 
-        val cardWidthPx = maxWidthPx - 2 * paddingHorizontalPx
-        val cardHeightPx = cardWidthPx / 1.586f
+        var cardWidthPx = maxWidthPx - 2 * paddingHorizontalPx
+        var cardHeightPx = cardWidthPx / 1.586f
+
+        // Apply height limitation and scale down width if needed to keep ratio
+        if (cardMaxHeight.isSpecified) {
+            val maxAllowedCardHeightPx = with(density) { cardMaxHeight.toPx() }
+            if (cardHeightPx > maxAllowedCardHeightPx) {
+                cardHeightPx = maxAllowedCardHeightPx
+                cardWidthPx = cardHeightPx * 1.586f
+            }
+        }
+
+        // Determine X offset to keep the card centered if its width shrank due to max height
+        val cardXOffsetPx = (maxWidthPx - cardWidthPx) / 2f
 
         // --- List Math ---
         val listStepPx = if (unfocusedVisiblePercent == 100) {
@@ -200,6 +255,7 @@ fun VerticalDocumentList(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .nestedScroll(overscrollConsumer)
                 .verticalScroll(scrollState, enabled = !isAnyFocused)
         ) {
             Spacer(
@@ -215,7 +271,7 @@ fun VerticalDocumentList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(with(density) { maxHeightPx.toDp() })
-                    .graphicsLayer { translationY = scrollState.value.toFloat() }
+                    .offset { IntOffset(0, scrollState.value) }
                     .zIndex(50f)
             ) {
                 val topOffsetDp = with(density) { (paddingTopPx + cardHeightPx * 1.05f + 24.dp.toPx()).toDp() }
@@ -289,9 +345,13 @@ fun VerticalDocumentList(
                             .width(with(density) { cardWidthPx.toDp() })
                             .height(with(density) { cardHeightPx.toDp() })
                             .zIndex(if (isDragged) 100f else targetZIndex)
+                            .offset {
+                                IntOffset(
+                                    x = cardXOffsetPx.roundToInt(),
+                                    y = animatedY.roundToInt()
+                                )
+                            }
                             .graphicsLayer {
-                                translationX = paddingHorizontalPx
-                                translationY = animatedY
                                 scaleX = animatedScale
                                 scaleY = animatedScale
                                 shadowElevation = animatedElevation.dp.toPx()

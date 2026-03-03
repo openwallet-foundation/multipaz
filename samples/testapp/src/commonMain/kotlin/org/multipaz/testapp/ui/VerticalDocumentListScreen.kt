@@ -34,7 +34,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigationevent.NavigationEventInfo
@@ -186,12 +188,19 @@ fun VerticalDocumentListScreen(
                 )
             }
 
+            val windowInfo = LocalWindowInfo.current
+            val density = LocalDensity.current
+            val maxCardHeight = with(density) {
+                (windowInfo.containerSize.height / 3f).toDp()
+            }
+
             VerticalDocumentList(
                 documentModel = documentModel,
                 focusedDocument = focusedDocument,
                 unfocusedVisiblePercent = visibilityOptionsSelected.value.visibilityPercentage,
                 allowDocumentReordering = allowDocumentReordering,
                 showStackWhileFocused = showStackWhileFocused,
+                cardMaxHeight = maxCardHeight,
                 showDocumentInfo = { documentInfo ->
                     Column(
                         modifier = Modifier.fillMaxHeight(),

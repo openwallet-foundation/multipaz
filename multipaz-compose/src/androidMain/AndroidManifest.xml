@@ -18,6 +18,14 @@
     android:exported="true">
 
     <application>
+        <!-- Note screenOrientation="portrait" is ignored on Android 16 (API 36) on formfactors
+             with smallest width >= 600dp. Since this doesn't include most phones it will be
+             honored there and PresentmentActivity will show in portrait, as expected. We handle
+             bigger screens too, including foldables, by e.g. restricting card height to one
+             third of the screen size, see PresentmentActivity.kt for details.
+
+             See https://developer.android.com/develop/ui/compose/layouts/adaptive for more info.
+         -->
         <activity
             android:name=".prompt.PresentmentActivity"
             android:showWhenLocked="true"
@@ -27,7 +35,9 @@
             android:theme="@style/NavigationActivityTheme"
             android:taskAffinity=""
             android:excludeFromRecents="true"
-            android:launchMode="singleInstance">
+            android:launchMode="singleInstance"
+            android:screenOrientation="portrait"
+            tools:ignore="DiscouragedApi">
         </activity>
     </application>
 
