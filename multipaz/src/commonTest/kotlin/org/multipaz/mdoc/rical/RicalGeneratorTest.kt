@@ -6,6 +6,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.Uint
+import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.CoseSign1
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
@@ -14,9 +15,11 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.util.truncateToWholeSeconds
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
@@ -26,7 +29,7 @@ class RicalGeneratorTest {
         key: EcPrivateKey,
         subjectAndIssuer: X500Name
     ): X509Cert {
-        val now = Clock.System.now()
+        val now = Clock.System.now().truncateToWholeSeconds()
         val validFrom = now - 10.minutes
         val validUntil = now + 10.minutes
 
@@ -44,14 +47,14 @@ class RicalGeneratorTest {
     @Test
     fun testRicalGenerator() = runTest {
         val ricalKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        val ricalCert = createSelfsignedCert(ricalKey, X500Name.fromName("CN=Test VICAL"))
+        val ricalCert = createSelfsignedCert(ricalKey, X500Name.fromName("CN=Test RICAL"))
 
         val rp1Cert = createSelfsignedCert(
-            Crypto.createEcPrivateKey(EcCurve.P256), X500Name.fromName("CN=Issuer 1 IACA"))
+            Crypto.createEcPrivateKey(EcCurve.P256), X500Name.fromName("CN=RP 1"))
         val rp2Cert = createSelfsignedCert(
-            Crypto.createEcPrivateKey(EcCurve.P256), X500Name.fromName("CN=Issuer 2 IACA"))
+            Crypto.createEcPrivateKey(EcCurve.P256), X500Name.fromName("CN=RP 2"))
         val rp3Cert = createSelfsignedCert(
-            Crypto.createEcPrivateKey(EcCurve.P256), X500Name.fromName("CN=Issuer 3 IACA"))
+            Crypto.createEcPrivateKey(EcCurve.P256), X500Name.fromName("CN=RP 3"))
 
         val ricalDate = Clock.System.now()
         val ricalNextUpdate = ricalDate + 30.days
@@ -61,6 +64,26 @@ class RicalGeneratorTest {
             put("org.example.foo", Tstr("blah"))
             put("org.example.bar", Uint(42UL))
         }
+
+        val lastCertExt = buildMap {
+            put("org.example2.foo", Tstr("bah"))
+            put("org.example2.bar", Uint(43UL))
+        }
+
+        val middleCertTrustConstraints = listOf(
+            RicalTrustConstraint(
+                extensions = buildMap {
+                    put("x", "foo".toDataItem())
+                    put("y", 44.toDataItem())
+                }
+            ),
+            RicalTrustConstraint(
+                extensions = buildMap {
+                    put("y", "bar".toDataItem())
+                    put("v", 45.toDataItem())
+                }
+            )
+        )
 
         val signedRical = SignedRical(
             rical = Rical(
@@ -72,8 +95,14 @@ class RicalGeneratorTest {
                 notAfter = ricalNotAfter,
                 certificateInfos = listOf(
                     RicalCertificateInfo(certificate = rp1Cert),
-                    RicalCertificateInfo(certificate = rp2Cert),
-                    RicalCertificateInfo(certificate = rp3Cert),
+                    RicalCertificateInfo(
+                        certificate = rp2Cert,
+                        trustConstraints = middleCertTrustConstraints,
+                    ),
+                    RicalCertificateInfo(
+                        certificate = rp3Cert,
+                        extensions = lastCertExt
+                    ),
                 ),
                 id = ricalIssueID,
                 latestRicalUrl = null,
@@ -104,15 +133,21 @@ class RicalGeneratorTest {
             rp1Cert,
             decodedSignedRical.rical.certificateInfos[0].certificate
         )
+        assertTrue(decodedSignedRical.rical.certificateInfos[0].trustConstraints.isEmpty())
+        assertTrue(decodedSignedRical.rical.certificateInfos[0].extensions.isEmpty())
 
         assertEquals(
             rp2Cert,
             decodedSignedRical.rical.certificateInfos[1].certificate
         )
+        assertEquals(middleCertTrustConstraints, decodedSignedRical.rical.certificateInfos[1].trustConstraints)
+        assertTrue(decodedSignedRical.rical.certificateInfos[1].extensions.isEmpty())
 
         assertEquals(
             rp3Cert,
             decodedSignedRical.rical.certificateInfos[2].certificate
         )
+        assertTrue(decodedSignedRical.rical.certificateInfos[2].trustConstraints.isEmpty())
+        assertEquals(lastCertExt, decodedSignedRical.rical.certificateInfos[2].extensions)
     }
 }

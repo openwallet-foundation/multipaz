@@ -2,6 +2,7 @@ package org.multipaz.mdoc.vical
 
 import kotlinx.coroutines.test.runTest
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
@@ -10,9 +11,11 @@ import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import kotlin.time.Clock
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.util.truncateToWholeSeconds
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 
@@ -22,7 +25,7 @@ class VicalGeneratorTest {
         key: EcPrivateKey,
         subjectAndIssuer: X500Name
     ): X509Cert {
-        val now = Clock.System.now()
+        val now = Clock.System.now().truncateToWholeSeconds()
         val validFrom = now - 10.minutes
         val validUntil = now + 10.minutes
 
@@ -51,7 +54,18 @@ class VicalGeneratorTest {
 
         val vicalDate = Clock.System.now()
         val vicalNextUpdate = vicalDate + 30.days
+        val vicalNotAfter = vicalDate + 60.days
         val vicalIssueID = 42L
+        val vicalUrl = "https://example.com/vical"
+        val vicalExtensions = buildMap {
+            put("foo", "bar".toDataItem())
+            put("bar", 42.toDataItem())
+        }
+
+        val firstCertExtensions = buildMap {
+            put("fce.foo", "foo".toDataItem())
+            put("fce.bar", 43.toDataItem())
+        }
 
         val signedVical = SignedVical(
             vical = Vical(
@@ -60,10 +74,11 @@ class VicalGeneratorTest {
                 date = vicalDate,
                 nextUpdate = vicalNextUpdate,
                 vicalIssueID = vicalIssueID,
-                listOf(
+                certificateInfos = listOf(
                     VicalCertificateInfo(
                         certificate = issuer1Cert,
                         docTypes = listOf("org.iso.18013.5.1.mDL"),
+                        extensions = firstCertExtensions
                     ),
                     VicalCertificateInfo(
                         certificate = issuer2Cert,
@@ -73,7 +88,10 @@ class VicalGeneratorTest {
                         certificate = issuer3Cert,
                         docTypes = listOf("org.iso.18013.5.1.mDL", "eu.europa.ec.eudi.pid.1"),
                     ),
-                )
+                ),
+                notAfter = vicalNotAfter,
+                vicalUrl = vicalUrl,
+                extensions = vicalExtensions
             ),
             vicalProviderCertificateChain = X509CertChain(listOf(vicalCert))
         )
@@ -92,6 +110,9 @@ class VicalGeneratorTest {
         assertEquals(vicalNextUpdate, decodedSignedVical.vical.nextUpdate)
         assertEquals(vicalIssueID, decodedSignedVical.vical.vicalIssueID)
         assertEquals(3, decodedSignedVical.vical.certificateInfos.size)
+        assertEquals(vicalNotAfter, decodedSignedVical.vical.notAfter)
+        assertEquals(vicalUrl, decodedSignedVical.vical.vicalUrl)
+        assertEquals(vicalExtensions, decodedSignedVical.vical.extensions)
 
         assertEquals(
             issuer1Cert,
@@ -102,6 +123,10 @@ class VicalGeneratorTest {
             decodedSignedVical.vical.certificateInfos[0].docTypes
         )
         assertEquals(null, decodedSignedVical.vical.certificateInfos[0].certificateProfiles)
+        assertEquals(
+            firstCertExtensions,
+            decodedSignedVical.vical.certificateInfos[0].extensions
+        )
 
         assertEquals(
             issuer2Cert,
@@ -112,6 +137,7 @@ class VicalGeneratorTest {
             decodedSignedVical.vical.certificateInfos[1].docTypes
         )
         assertEquals(null, decodedSignedVical.vical.certificateInfos[1].certificateProfiles)
+        assertTrue(decodedSignedVical.vical.certificateInfos[1].extensions.isEmpty())
 
         assertEquals(
             issuer3Cert,
@@ -122,5 +148,6 @@ class VicalGeneratorTest {
             decodedSignedVical.vical.certificateInfos[2].docTypes
         )
         assertEquals(null, decodedSignedVical.vical.certificateInfos[2].certificateProfiles)
+        assertTrue(decodedSignedVical.vical.certificateInfos[2].extensions.isEmpty())
     }
 }

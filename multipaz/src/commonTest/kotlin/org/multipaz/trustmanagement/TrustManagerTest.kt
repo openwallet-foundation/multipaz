@@ -373,7 +373,10 @@ class TrustManagerTest {
                     certificate = atlantisIaca,
                     docTypes = listOf("org.iso.18013.5.1.mDL")
                 )
-            )
+            ),
+            notAfter = null,
+            vicalUrl = null,
+            extensions = emptyMap(),
         )
 
         val vicalKey = Crypto.createEcPrivateKey(EcCurve.P256)
@@ -967,7 +970,10 @@ class TrustManagerTest {
                     certificate = ca2Certificate,
                     docTypes = listOf("org.iso.18013.5.1.mDL")
                 )
-            )
+            ),
+            notAfter = null,
+            vicalUrl = null,
+            extensions = emptyMap(),
         )
         val signedVical = SignedVical(vical, X509CertChain(listOf(vicalCert)))
         val trustManager = VicalTrustManager(signedVical)

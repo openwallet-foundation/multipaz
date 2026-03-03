@@ -47,6 +47,7 @@ data class SignedRical(
                     for (certInfo in rical.certificateInfos) {
                         addCborMap {
                             put("certificate", certInfo.certificate.encoded.toByteArray())
+                            put("isTrustAnchor", certInfo.isTrustAnchor)
                             put(
                                 "serialNumber", Tagged(
                                     Tagged.UNSIGNED_BIGNUM,
@@ -60,9 +61,24 @@ data class SignedRical(
                             ))
                             certInfo.type?.let { put("type", it) }
                             certInfo.name?.let { put("name", it) }
-                            certInfo.extensions?.let {
+                            if (certInfo.extensions.isNotEmpty()) {
                                 putCborMap("extensions") {
-                                    it.forEach { (extName, extValue) -> put(extName, extValue) }
+                                    certInfo.extensions.forEach { (extName, extValue) -> put(extName, extValue) }
+                                }
+                            }
+                            if (certInfo.trustConstraints.isNotEmpty()) {
+                                putCborArray("trustConstraints") {
+                                    certInfo.trustConstraints.forEach { trustConstraint ->
+                                        addCborMap {
+                                            if (trustConstraint.extensions.isNotEmpty()) {
+                                                putCborMap("extensions") {
+                                                    trustConstraint.extensions.forEach { (extName, extValue) ->
+                                                        put(extName, extValue)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -136,8 +152,6 @@ data class SignedRical(
                 )
             }
 
-            //qLogger.iCbor(TAG, "RICAL", ricalPayload)
-
             val ricalMap = Cbor.decode(ricalPayload)
             val version = ricalMap["version"].asTstr
             val provider = ricalMap["provider"].asTstr
@@ -149,22 +163,43 @@ data class SignedRical(
             val latestRicalUrl = ricalMap.getOrNull("latestRicalUrl")?.asTstr
             val extensions = ricalMap.getOrNull("extensions")?.let {
                 it.asMap.entries.associate { (extName, extValue) -> Pair(extName.asTstr, extValue) }
-            }
+            } ?: emptyMap()
 
             val certificateInfos = mutableListOf<RicalCertificateInfo>()
-            for (certInfo in (ricalMap["certificateInfos"] as CborArray).items) {
+            (ricalMap["certificateInfos"] as CborArray).items.forEachIndexed { certInfoIndex, certInfo ->
                 val ski = ByteString(certInfo["ski"].asBstr)
+                // Be lenient about missing isTrustAnchor for now
+                val isTrustAnchor = certInfo.getOrNull("isTrustAnchor")?.asBoolean ?: true.also {
+                    Logger.w(TAG, "isTrustAnchor not present in RICAL entry $certInfoIndex")
+                }
                 val certBytes = certInfo["certificate"].asBstr
                 val extensionsInCertInfo = certInfo.getOrNull("extensions")?.let {
                     it.asMap.entries.associate { (extName, extValue) -> Pair(extName.asTstr, extValue) }
-                }
+                } ?: emptyMap()
                 val serialNumberTaggedItem = certInfo["serialNumber"] as Tagged
+                val trustConstraints = mutableListOf<RicalTrustConstraint>()
+                if (certInfo.hasKey("trustConstraints")) {
+                    for (trustConstraint in (certInfo["trustConstraints"] as CborArray).items) {
+                        val extensionsInTrustConstraint = trustConstraint.getOrNull("extensions")?.let { trustConstraint ->
+                            trustConstraint.asMap.entries.associate { (extName, extValue) ->
+                                Pair(extName.asTstr, extValue)
+                            }
+                        } ?: emptyMap()
+                        trustConstraints.add(
+                            RicalTrustConstraint(
+                                extensions = extensionsInTrustConstraint
+                            )
+                        )
+                    }
+                }
                 require(serialNumberTaggedItem.tagNumber == Tagged.UNSIGNED_BIGNUM)
                 certificateInfos.add(RicalCertificateInfo(
                     certificate = X509Cert(ByteString(certBytes)),
                     serialNumber = ByteString(serialNumberTaggedItem.taggedItem.asBstr),
+                    isTrustAnchor = isTrustAnchor,
                     ski = ski,
                     type = certInfo.getOrNull("type")?.asTstr,
+                    trustConstraints = trustConstraints,
                     name = certInfo.getOrNull("name")?.asTstr,
                     issuingCountry = certInfo.getOrNull("issuingCountry")?.asTstr,
                     stateOrProvinceName = certInfo.getOrNull("stateOrProvinceName")?.asTstr,

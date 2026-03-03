@@ -4,7 +4,7 @@ import org.multipaz.cbor.DataItem
 import kotlin.time.Instant
 
 /**
- * The data in a RICAL according to ISO/IEC 18013-5 Second Edition Annex F..
+ * The data in a RICAL according to ISO/IEC 18013-5 Second Edition Annex F.
  *
  * @property type type of the RICAL, e.g. [RICAL_TYPE_READER_AUTHENTICATION].
  * @property version the version of the RICAL data structure, e.g. "1.0".
@@ -14,7 +14,7 @@ import kotlin.time.Instant
  * @property notAfter date after which the RICAL is not valid, if available.
  * @property certificateInfos CA certificates included in this RICAL.
  * @property id Uniquely identifies the specific issue of the RICAL.
- * @property latestRicalUrl HTTPS URL of the latest RICAL.
+ * @property latestRicalUrl HTTPS URL of the latest RICAL, if available.
  * @property extensions proprietary extensions.
  */
 data class Rical(
@@ -27,9 +27,13 @@ data class Rical(
     val certificateInfos: List<RicalCertificateInfo>,
     val id: Long?,
     val latestRicalUrl: String?,
-    val extensions: Map<String, DataItem>?,
+    val extensions: Map<String, DataItem>
 ) {
     companion object {
+        /**
+         * Defined in ISO/IEC 18013-5 Second Edition Annex F and used for general-purpose RICALs that do
+         * not impose additional validation rules.
+         */
         const val RICAL_TYPE_READER_AUTHENTICATION = "org.iso.18013.5.1.reader_authentication"
     }
 }

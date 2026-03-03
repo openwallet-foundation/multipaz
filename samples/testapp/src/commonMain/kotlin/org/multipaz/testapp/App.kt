@@ -576,14 +576,34 @@ class App private constructor (val promptModel: PromptModel) {
             storage = EphemeralStorage(),
             identifier = "builtInIssuerTrustManager"
         )
-        val encodedSignedVical = Res.readBytes("files/ISO_SC17WG10_Wellington_Test_Event_Nov_2025.vical")
-        builtInIssuerTrustManager.addVical(
-            encodedSignedVical = ByteString(encodedSignedVical),
-            metadata = TrustMetadata(displayName = null)
-        )
         builtInIssuerTrustManager.addX509Cert(
             certificate = iacaKey.certChain.certificates.first(),
             metadata = TrustMetadata(displayName = "OWF Multipaz TestApp Issuer"),
+        )
+        builtInIssuerTrustManager.addX509Cert(
+            certificate = X509Cert.fromPem(
+                """
+                    -----BEGIN CERTIFICATE-----
+                    MIICvTCCAkKgAwIBAgIQGae+XGbhr63RY7K+8qcoGTAKBggqhkjOPQQDAzBOMT8wPQYDVQQDDDZP
+                    cGVuSUQ0VkNJIFJvb3QgYXQgaHR0cHM6Ly9pc3N1ZXIubXVsdGlwYXoub3JnL3JlY29yZHMxCzAJ
+                    BgNVBAYMAlVTMB4XDTI2MDEwNTE2MTkxMVoXDTQxMDEwMTE2MTkxMVowTjE/MD0GA1UEAww2T3Bl
+                    bklENFZDSSBSb290IGF0IGh0dHBzOi8vaXNzdWVyLm11bHRpcGF6Lm9yZy9yZWNvcmRzMQswCQYD
+                    VQQGDAJVUzB2MBAGByqGSM49AgEGBSuBBAAiA2IABJdqwFT75XRwnTtjNrLC0Nxr2Sig+3eAJcCq
+                    hBpf7+/G8JEmH4Qm3RmJCs/x7gG3HRK3i4EF6vpuUdjD9W8r9SpTDeB5HEEFwCBVAGjxXpjHjWgu
+                    QPz0hSNL3kxmLV/TeqOB5DCB4TAOBgNVHQ8BAf8EBAMCAQYwEgYDVR0TAQH/BAgwBgEB/wIBADAu
+                    BgNVHRIEJzAlhiNodHRwczovL2lzc3Vlci5tdWx0aXBhei5vcmcvcmVjb3JkczBLBgNVHR8ERDBC
+                    MECgPqA8hjpodHRwczovL2lzc3Vlci5tdWx0aXBhei5vcmcvcmVjb3Jkcy9jcmwvY3JlZGVudGlh
+                    bF9zaWduaW5nMB0GA1UdDgQWBBQhFDa78rDnSUTQYRLvyQ4q0NDQuzAfBgNVHSMEGDAWgBQhFDa7
+                    8rDnSUTQYRLvyQ4q0NDQuzAKBggqhkjOPQQDAwNpADBmAjEAx0yXAeGEGk6fILMjGhgWurcO8+SG
+                    XNtN+LxjJ44Smvrzso1TRsMuNYrFEM5+TJkUAjEAhr/sIbjOVBifcjZYMyNHitwgCJyY+40MstjX
+                    u/YcDSz6dBNZ5mAillH9vpjOP2uZ
+                    -----END CERTIFICATE-----
+                """.trimIndent()
+            ),
+            metadata = TrustMetadata(
+                displayName = "issuer.multipaz.org",
+                displayIconUrl = "https://www.multipaz.org/multipaz-logo-200x200.png",
+            ),
         )
         userIssuerTrustManager = TrustManager(
             storage = TestAppConfiguration.storage,
@@ -597,11 +617,6 @@ class App private constructor (val promptModel: PromptModel) {
         builtInReaderTrustManager = TrustManager(
             storage = EphemeralStorage(),
             identifier = "builtInReaderTrustManager"
-        )
-        val signedRical = Res.readBytes("files/ISO_SC17WG10_Wellington_Test_Event_Nov_2025.rical")
-        builtInReaderTrustManager.addRical(
-            encodedSignedRical = ByteString(signedRical),
-            metadata = TrustMetadata(displayName = null)
         )
         userReaderTrustManager = TrustManager(
             storage = TestAppConfiguration.storage,
@@ -1167,6 +1182,7 @@ class App private constructor (val promptModel: PromptModel) {
                                     TrustEntryDestination(
                                         trustManagerId = trustEntryInfo.manager.identifier,
                                         trustEntryId = trustEntryInfo.entry.identifier,
+                                        justImported = true
                                     )
                                 )
                             },

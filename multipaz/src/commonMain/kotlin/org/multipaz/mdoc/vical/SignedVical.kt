@@ -8,6 +8,7 @@ import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
+import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.cose.Cose
@@ -18,6 +19,8 @@ import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import kotlin.collections.component1
+import kotlin.collections.component2
 
 /**
  * A signed VICAL according to ISO/IEC 18013-5:2021.
@@ -45,6 +48,7 @@ data class SignedVical(
                 put("vicalProvider", vical.vicalProvider)
                 put("date", vical.date.toDataItemDateTimeString())
                 vical.nextUpdate?.let { put("nextUpdate", it.toDataItemDateTimeString())}
+                vical.notAfter?.let { put("notAfter", it.toDataItemDateTimeString())}
                 vical.vicalIssueID?.let { put("vicalIssueID", it.toDataItem()) }
                 putCborArray("certificateInfos") {
                     for (certInfo in vical.certificateInfos) {
@@ -58,8 +62,18 @@ data class SignedVical(
                             putCborArray("docType") {
                                 certInfo.docTypes.forEach { add(it) }
                             }
-                            end()
+                            if (certInfo.extensions.isNotEmpty()) {
+                                putCborMap("extensions") {
+                                    certInfo.extensions.forEach { (extName, extValue) -> put(extName, extValue) }
+                                }
+                            }
                         }
+                    }
+                }
+                vical.vicalUrl?.let { put("vicalURL", it.toDataItem()) }
+                if (vical.extensions.isNotEmpty()) {
+                    putCborMap("extensions") {
+                        vical.extensions.forEach { (extName, extValue) -> put(extName, extValue) }
                     }
                 }
             }
@@ -129,35 +143,47 @@ data class SignedVical(
             val vicalProvider = vicalMap["vicalProvider"].asTstr
             val date = vicalMap["date"].asDateTimeString
             val nextUpdate = vicalMap.getOrNull("nextUpdate")?.asDateTimeString
+            val notAfter = vicalMap.getOrNull("notAfter")?.asDateTimeString
             val vicalIssueID = vicalMap.getOrNull("vicalIssueID")?.asNumber
+            val vicalUrl = vicalMap.getOrNull("vicalURL")?.asTstr
+            val extensions = vicalMap.getOrNull("extensions")?.let {
+                it.asMap.entries.associate { (extName, extValue) -> Pair(extName.asTstr, extValue) }
+            } ?: emptyMap()
 
             val certificateInfos = mutableListOf<VicalCertificateInfo>()
 
             for (certInfo in (vicalMap["certificateInfos"] as CborArray).items) {
                 val ski = ByteString(certInfo["ski"].asBstr)
                 val certBytes = certInfo["certificate"].asBstr
-                val docType = (certInfo["docType"] as CborArray).items.map { it.asTstr }
+                val docTypes = (certInfo["docType"] as CborArray).items.map { it.asTstr }
                 val certProfiles = certInfo.getOrNull("certificateProfile")?.let {
                     (it as CborArray).items.map { it.asTstr }
                 }
+                val extensionsInCertInfo = certInfo.getOrNull("extensions")?.let {
+                    it.asMap.entries.associate { (extName, extValue) -> Pair(extName.asTstr, extValue) }
+                } ?: emptyMap()
                 certificateInfos.add(VicalCertificateInfo(
                     certificate = X509Cert(ByteString(certBytes)),
+                    docTypes = docTypes,
                     ski = ski,
+                    certificateProfiles = certProfiles,
                     issuingAuthority = certInfo.getOrNull("issuingAuthority")?.asTstr,
                     issuingCountry = certInfo.getOrNull("issuingCountry")?.asTstr,
                     stateOrProvinceName = certInfo.getOrNull("stateOrProvinceName")?.asTstr,
-                    docTypes = docType,
-                    certificateProfiles = certProfiles,
+                    extensions = extensionsInCertInfo
                 ))
             }
 
             val vical = Vical(
-                version,
-                vicalProvider,
-                date,
-                nextUpdate,
-                vicalIssueID,
-                certificateInfos
+                version = version,
+                vicalProvider = vicalProvider,
+                date = date,
+                nextUpdate = nextUpdate,
+                notAfter = notAfter,
+                vicalIssueID = vicalIssueID,
+                certificateInfos = certificateInfos,
+                vicalUrl = vicalUrl,
+                extensions = extensions
             )
 
             return SignedVical(vical, certChain)

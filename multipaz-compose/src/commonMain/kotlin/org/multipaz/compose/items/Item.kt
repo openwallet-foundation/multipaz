@@ -18,6 +18,10 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.compose.text.fromMarkdown
 
 /**
  * A pair of strings intended to go into an [ItemList].

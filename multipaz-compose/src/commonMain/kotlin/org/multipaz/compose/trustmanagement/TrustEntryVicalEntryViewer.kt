@@ -16,6 +16,7 @@ import org.multipaz.compose.certificateviewer.X509CertViewer
 import org.multipaz.compose.items.Item
 import org.multipaz.compose.items.ItemList
 import org.multipaz.multipaz_compose.generated.resources.Res
+import org.multipaz.multipaz_compose.generated.resources.trust_entry_extensions
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_entry_document_types
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_entry_title
 
@@ -62,10 +63,19 @@ fun TrustEntryVicalEntryViewer(
                 text = vicalCertInfo.docTypes.joinToString("\n")
             )
         }
+        if (vicalCertInfo.extensions.isNotEmpty()) {
+            items.add {
+                ItemWithExtensions(
+                    heading = stringResource(Res.string.trust_entry_extensions),
+                    extensions = vicalCertInfo.extensions
+                )
+            }
+        }
         ItemList(
             title = stringResource(Res.string.trust_entry_vical_entry_title),
             items = items
         )
+
         X509CertViewer(certificate = vicalCertInfo.certificate)
     }
 }

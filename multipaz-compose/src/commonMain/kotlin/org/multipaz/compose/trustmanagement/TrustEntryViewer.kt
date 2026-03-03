@@ -28,6 +28,10 @@ import androidx.compose.ui.unit.sp
 import coil3.ImageLoader
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.asn1.OID
+import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.toDataItem
 import org.multipaz.compose.branding.Branding
 import org.multipaz.compose.cards.InfoCard
 import org.multipaz.compose.certificateviewer.X509CertViewer
@@ -45,6 +49,7 @@ import org.multipaz.multipaz_compose.generated.resources.Res
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_certificates_title
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_click_to_view_chain
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_details_certificate
+import org.multipaz.multipaz_compose.generated.resources.trust_entry_extensions
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_no
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_data_title
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_details_id
@@ -58,6 +63,8 @@ import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_detai
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_details_issued_at
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_details_next_update
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_details_provider
+import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_details_update_url
+import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_details_valid_until
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_details_version
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_warning_rical_just_imported
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_warning_vical_just_imported
@@ -66,6 +73,8 @@ import org.multipaz.multipaz_compose.generated.resources.trust_entry_yes
 import org.multipaz.trustmanagement.TrustEntryRical
 import org.multipaz.trustmanagement.TrustEntryVical
 import org.multipaz.trustmanagement.TrustEntryX509Cert
+import kotlin.collections.component1
+import kotlin.collections.component2
 
 /**
  * A Composable that displays the full details of a specific trust entry.
@@ -223,12 +232,34 @@ private fun VicalDetails(
     }
     items.add {
         Item(
+            heading = stringResource(Res.string.trust_entry_vical_details_valid_until),
+            text = signedVical.vical.notAfter?.let {
+                formattedDateTime(it)
+            } ?: AnnotatedString("-")
+        )
+    }
+    items.add {
+        Item(
+            heading = stringResource(Res.string.trust_entry_vical_details_update_url),
+            text = signedVical.vical.vicalUrl ?: "-"
+        )
+    }
+    items.add {
+        Item(
             stringResource(Res.string.trust_entry_signer),
             stringResource(Res.string.trust_entry_click_to_view_chain),
             modifier = Modifier.clickable {
                 onViewCertificateChain(signedVical.vicalProviderCertificateChain)
             }
         )
+    }
+    if (signedVical.vical.extensions.isNotEmpty()) {
+        items.add {
+            ItemWithExtensions(
+                heading = stringResource(Res.string.trust_entry_extensions),
+                extensions = signedVical.vical.extensions
+            )
+        }
     }
     ItemList(
         title = stringResource(Res.string.trust_entry_vical_data_title),
@@ -287,13 +318,6 @@ private fun RicalDetails(
     }
     items.add {
         Item(
-            heading = stringResource(Res.string.trust_entry_rical_details_url),
-            text = signedRical.rical.latestRicalUrl ?: "-"
-        )
-    }
-    // TODO: show extensions
-    items.add {
-        Item(
             heading = stringResource(Res.string.trust_entry_vical_details_issued_at),
             text = formattedDateTime(signedRical.rical.date)
         )
@@ -316,12 +340,26 @@ private fun RicalDetails(
     }
     items.add {
         Item(
+            heading = stringResource(Res.string.trust_entry_rical_details_url),
+            text = signedRical.rical.latestRicalUrl ?: "-"
+        )
+    }
+    items.add {
+        Item(
             stringResource(Res.string.trust_entry_signer),
             stringResource(Res.string.trust_entry_click_to_view_chain),
             modifier = Modifier.clickable {
                 onViewCertificateChain(signedRical.ricalProviderCertificateChain)
             }
         )
+    }
+    if (signedRical.rical.extensions.isNotEmpty()) {
+        items.add {
+            ItemWithExtensions(
+                heading = stringResource(Res.string.trust_entry_extensions),
+                extensions = signedRical.rical.extensions
+            )
+        }
     }
     ItemList(
         title = stringResource(Res.string.trust_entry_rical_data_title),
@@ -344,6 +382,34 @@ private fun RicalDetails(
         items = certItems
     )
 }
+
+/**
+ * Shows a list of VICAL/RICAL extensions.
+ *
+ * @param heading will be shown in bold at the top.
+ * @param extensions the extensions to show.
+ * @param modifier a [Modifier].
+ */
+@Composable
+internal fun ItemWithExtensions(
+    heading: String,
+    extensions: Map<String, DataItem>,
+    modifier: Modifier = Modifier
+) {
+    val sb = StringBuilder()
+    extensions.forEach { (key, value) ->
+        val valueStr = Cbor.toDiagnostics(value, setOf(
+            DiagnosticOption.PRETTY_PRINT
+        ))
+        sb.append("$key: $valueStr\n")
+    }
+    return Item(
+        heading = heading,
+        text = sb.toString(),
+        modifier = modifier
+    )
+}
+
 
 /**
  * Generates an avatar icon for a [VicalCertificateInfo] based on its display name.
