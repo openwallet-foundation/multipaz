@@ -93,7 +93,22 @@ internal data class AuthorizationConfiguration(
                         when (val auth = authMethod.content) {
                             "private_key_jwt" -> clientAssertionSupported = true
                             "attest_jwt_client_auth" -> walletAttestationSupported = true
-                            "none", "public" -> noAuthentication = true
+                            "none" -> noAuthentication = true
+                            "public" -> {
+                                if (clientPreferences.interopOptions.allowPublicTokenEndpointAuthMethodAlias) {
+                                    Logger.w(
+                                        TAG,
+                                        "Accepting non-standard token auth metadata value 'public' as 'none'"
+                                    )
+                                    noAuthentication = true
+                                } else {
+                                    Logger.w(
+                                        TAG,
+                                        "Ignoring non-standard token auth metadata value 'public' " +
+                                            "(enable interop option to accept it)"
+                                    )
+                                }
+                            }
                             else -> Logger.w(TAG, "Unknown auth method: '$auth'")
                         }
                     }

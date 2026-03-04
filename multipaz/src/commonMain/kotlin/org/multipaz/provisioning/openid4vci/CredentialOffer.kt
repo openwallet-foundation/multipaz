@@ -64,10 +64,36 @@ internal sealed class CredentialOffer {
          * a [CredentialOffer].
          */
         suspend fun parseCredentialOffer(
-            offerUri: String
+            offerUri: String,
+            interopOptions: OpenID4VCIInteropOptions = OpenID4VCIInteropOptions()
         ): CredentialOffer {
             try {
-                val params = Url(offerUri).parameters
+                val input = offerUri.trim()
+                if (interopOptions.allowLenientCredentialOfferParsing &&
+                    (input.startsWith("http://") || input.startsWith("https://"))
+                ) {
+                    Logger.w(
+                        TAG,
+                        "Treating plain offer URL as credential_offer_uri (lenient interop mode)"
+                    )
+                    val rewritten =
+                        "openid-credential-offer://?credential_offer_uri=${input.encodeURLParameter()}"
+                    return parseCredentialOffer(rewritten, interopOptions)
+                }
+                val normalizedOfferUri = if (interopOptions.allowLenientCredentialOfferParsing) {
+                    normalizeOfferScheme(input).also { normalized ->
+                        if (normalized != input) {
+                            Logger.w(
+                                TAG,
+                                "Normalizing non-standard credential offer URI scheme (lenient interop mode)"
+                            )
+                        }
+                    }
+                } else {
+                    input
+                }
+
+                val params = Url(normalizedOfferUri).parameters
                 var credentialOfferString = params["credential_offer"]
                 if (credentialOfferString == null) {
                     val url = params["credential_offer_uri"]
@@ -80,29 +106,39 @@ internal sealed class CredentialOffer {
                     }
                     credentialOfferString = response.readRawBytes().decodeToString()
                 }
-                val normalized = credentialOfferString.trim()
-                if (normalized.startsWith("openid-credential-offer:") ||
-                    normalized.startsWith("haip-vci:")
-                ) {
-                    return parseCredentialOffer(normalizeOfferScheme(normalized))
-                }
-                if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
-                    val offerUri =
-                        "openid-credential-offer://?credential_offer_uri=${normalized.encodeURLParameter()}"
-                    return parseCredentialOffer(offerUri)
-                }
-                val parsed = runCatching { Json.parseToJsonElement(normalized) }.getOrNull()
-                val json = when (parsed) {
-                    is JsonObject -> parsed
-                    is JsonPrimitive -> {
-                        if (!parsed.isString) {
-                            throw IllegalStateException("credential offer is not a JSON object")
-                        }
-                        Json.parseToJsonElement(parsed.content).jsonObject
+                if (interopOptions.allowLenientCredentialOfferParsing) {
+                    val normalizedPayload = credentialOfferString.trim()
+                    if (normalizedPayload.startsWith("openid-credential-offer:") ||
+                        normalizedPayload.startsWith("haip-vci:")
+                    ) {
+                        Logger.w(
+                            TAG,
+                            "Parsing nested credential offer URI payload (lenient interop mode)"
+                        )
+                        return parseCredentialOffer(
+                            offerUri = normalizeOfferScheme(normalizedPayload),
+                            interopOptions = interopOptions
+                        )
                     }
-                    null -> throw IllegalStateException("credential offer is not a JSON object")
-                    else -> throw IllegalStateException("credential offer is not a JSON object")
+                    if (normalizedPayload.startsWith("http://") ||
+                        normalizedPayload.startsWith("https://")
+                    ) {
+                        Logger.w(
+                            TAG,
+                            "Treating nested plain offer URL payload as credential_offer_uri (lenient interop mode)"
+                        )
+                        val rewritten =
+                            "openid-credential-offer://?credential_offer_uri=${normalizedPayload.encodeURLParameter()}"
+                        return parseCredentialOffer(
+                            offerUri = rewritten,
+                            interopOptions = interopOptions
+                        )
+                    }
                 }
+                val json = parseCredentialOfferJson(
+                    payload = credentialOfferString,
+                    interopOptions = interopOptions
+                )
                 return parseJson(json)
             } catch (err: CancellationException) {
                 throw err
@@ -160,6 +196,36 @@ internal sealed class CredentialOffer {
             }
         }
 
+        private fun parseCredentialOfferJson(
+            payload: String,
+            interopOptions: OpenID4VCIInteropOptions
+        ): JsonObject {
+            val normalizedPayload = payload.trim()
+            val parsed = runCatching { Json.parseToJsonElement(normalizedPayload) }.getOrNull()
+            if (parsed is JsonObject) {
+                return parsed
+            }
+            if (!interopOptions.allowLenientCredentialOfferParsing) {
+                throw IllegalStateException("credential offer is not a JSON object")
+            }
+            return when (parsed) {
+                is JsonPrimitive -> {
+                    if (!parsed.isString) {
+                        throw IllegalStateException("credential offer is not a JSON object")
+                    }
+                    Logger.w(
+                        TAG,
+                        "Parsing string-wrapped credential offer JSON (lenient interop mode)"
+                    )
+                    Json.parseToJsonElement(parsed.content).jsonObject
+                }
+                null -> {
+                    throw IllegalStateException("credential offer is not a JSON object")
+                }
+                else -> throw IllegalStateException("credential offer is not a JSON object")
+            }
+        }
+
         private fun normalizeOfferScheme(offer: String): String {
             return when {
                 offer.startsWith("openid-credential-offer://") -> offer
@@ -171,5 +237,7 @@ internal sealed class CredentialOffer {
                 else -> offer
             }
         }
+
+        private const val TAG = "CredentialOffer"
     }
 }

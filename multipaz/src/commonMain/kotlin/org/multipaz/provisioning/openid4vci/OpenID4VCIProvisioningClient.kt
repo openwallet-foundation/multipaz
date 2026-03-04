@@ -141,6 +141,23 @@ internal class OpenID4VCIProvisioningClient(
         keyChallenge?.let { return it }
         // obtain c_nonce (serves as challenge for the device-bound key)
         val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
+        if (!clientPreferences.interopOptions.allowNonceEndpointAuthFallback) {
+            val nonceResponse = httpClient.post(issuerConfiguration.nonceEndpoint!!) {}
+            if (nonceResponse.status != HttpStatusCode.OK) {
+                throw IllegalStateException("Error getting a nonce")
+            }
+            Logger.i(TAG, "Got successful response for nonce request")
+            // A fresh DPoP nonce might or might not be given
+            nonceResponse.headers["DPoP-Nonce"]?.let { issuerDPoPNonce = it }
+            val responseText = nonceResponse.readRawBytes().decodeToString()
+            val cNonce = Json.parseToJsonElement(responseText).jsonObject.string("c_nonce")
+            keyChallenge = cNonce
+            return cNonce
+        }
+        Logger.w(
+            TAG,
+            "Using non-standard nonce endpoint auth fallback sequence (DPoP -> Bearer -> none)"
+        )
         val tokenSnapshot = token
         val useDpop = authorizationConfiguration.supportsDPoP
         val authHost = runCatching { Url(authorizationConfiguration.identifier).host }.getOrNull()
@@ -180,6 +197,10 @@ internal class OpenID4VCIProvisioningClient(
             }
             var bodyText = response.readRawBytes().decodeToString()
             if (bodyText.trimStart().startsWith("<")) {
+                Logger.w(
+                    TAG,
+                    "Nonce endpoint returned HTML to POST request; retrying with GET (lenient interop mode)"
+                )
                 val retryResponse = httpClient.get(issuerConfiguration.nonceEndpoint!!) {
                     applyAuth()
                 }
@@ -201,6 +222,12 @@ internal class OpenID4VCIProvisioningClient(
             val trimmed = bodyText.trimStart()
             val isHtml = trimmed.startsWith("<")
             if (resp.status == HttpStatusCode.OK && !isHtml) {
+                if (mode != NonceAuthMode.DPOP) {
+                    Logger.w(
+                        TAG,
+                        "Accepted nonce response via fallback auth mode '$mode' (lenient interop mode)"
+                    )
+                }
                 resp.headers["DPoP-Nonce"]?.let { issuerDPoPNonce = it }
                 cNonce = Json.parseToJsonElement(bodyText).jsonObject.string("c_nonce")
                 break
@@ -468,7 +495,16 @@ internal class OpenID4VCIProvisioningClient(
             }
             response.headers["DPoP-Nonce"]?.let { authorizationDPoPNonce = it }
             response.headers["OAuth-Client-Attestation-Challenge"]?.let { clientAttestationChallenge = it }
-            if (response.status == HttpStatusCode.Created || response.status == HttpStatusCode.OK) {
+            if (response.status == HttpStatusCode.Created) {
+                break
+            }
+            if (response.status == HttpStatusCode.OK &&
+                clientPreferences.interopOptions.allowParHttpStatusOk
+            ) {
+                Logger.w(
+                    TAG,
+                    "Accepting non-standard PAR success status 200 OK (interop option enabled)"
+                )
                 break
             }
             val responseText = response.readRawBytes().decodeToString()
@@ -761,7 +797,10 @@ internal class OpenID4VCIProvisioningClient(
             offerUri: String,
             clientPreferences: OpenID4VCIClientPreferences,
         ): OpenID4VCIProvisioningClient {
-            val credentialOffer = CredentialOffer.parseCredentialOffer(offerUri)
+            val credentialOffer = CredentialOffer.parseCredentialOffer(
+                offerUri = offerUri,
+                interopOptions = clientPreferences.interopOptions
+            )
             val secureArea = BackendEnvironment.getInterface(SecureAreaProvider::class)!!.get()
             return create(
                 secureArea = secureArea,

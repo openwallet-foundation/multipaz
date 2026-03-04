@@ -14,5 +14,7 @@ data class OpenID4VCIClientPreferences(
     /** List of locales in the order of preference that this client supports */
     val locales: List<String>,
     /** Digital signing algorithms that this client supports */
-    val signingAlgorithms: List<Algorithm>
+    val signingAlgorithms: List<Algorithm>,
+    /** Optional compatibility switches for known non-standard server behavior. */
+    val interopOptions: OpenID4VCIInteropOptions = OpenID4VCIInteropOptions()
 )
