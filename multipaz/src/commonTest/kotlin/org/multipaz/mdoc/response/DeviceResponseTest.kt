@@ -345,11 +345,13 @@ class DeviceResponseTest {
                 credential = mdlCredentialSignature,
                 requestedClaims = listOf(
                     MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
                         namespaceName = DrivingLicense.MDL_NAMESPACE,
                         dataElementName = "age_over_18",
                         intentToRetain = false
                     ),
                     MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
                         namespaceName = DrivingLicense.MDL_NAMESPACE,
                         dataElementName = "given_name",
                         intentToRetain = false
@@ -485,6 +487,7 @@ class DeviceResponseTest {
                         credential = mdlCredentialMac,
                         requestedClaims = listOf(
                             MdocRequestedClaim(
+                                docType = DrivingLicense.MDL_DOCTYPE,
                                 namespaceName = DrivingLicense.MDL_NAMESPACE,
                                 dataElementName =  "age_over_18",
                                 intentToRetain = false
@@ -503,6 +506,7 @@ class DeviceResponseTest {
                 credential = mdlCredentialMac,
                 requestedClaims = listOf(
                     MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
                         namespaceName = DrivingLicense.MDL_NAMESPACE,
                         dataElementName =  "age_over_18",
                         intentToRetain = false
@@ -577,11 +581,13 @@ class DeviceResponseTest {
                 credential = mdlCredentialSignature,
                 requestedClaims = listOf(
                     MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
                         namespaceName = DrivingLicense.MDL_NAMESPACE,
                         dataElementName = "age_over_18",
                         intentToRetain = false
                     ),
                     MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
                         namespaceName = DrivingLicense.MDL_NAMESPACE,
                         dataElementName = "given_name",
                         intentToRetain = false
@@ -624,11 +630,13 @@ class DeviceResponseTest {
                 credential = mdlCredentialSignature,
                 requestedClaims = listOf(
                     MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
                         namespaceName = DrivingLicense.MDL_NAMESPACE,
                         dataElementName = "age_over_18",
                         intentToRetain = false
                     ),
                     MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
                         namespaceName = DrivingLicense.MDL_NAMESPACE,
                         dataElementName = "given_name",
                         intentToRetain = false
@@ -639,11 +647,13 @@ class DeviceResponseTest {
                 credential = photoIdCredential,
                 requestedClaims = listOf(
                     MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
                         namespaceName = PhotoID.ISO_23220_2_NAMESPACE,
                         dataElementName = "family_name",
                         intentToRetain = false
                     ),
                     MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
                         namespaceName = PhotoID.ISO_23220_2_NAMESPACE,
                         dataElementName = "given_name",
                         intentToRetain = false
@@ -755,11 +765,13 @@ class DeviceResponseTest {
                 credential = mdlCredentialSignature,
                 requestedClaims = listOf(
                     MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
                         namespaceName = DrivingLicense.MDL_NAMESPACE,
                         dataElementName = "age_over_18",
                         intentToRetain = false
                     ),
                     MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
                         namespaceName = DrivingLicense.MDL_NAMESPACE,
                         dataElementName = "given_name",
                         intentToRetain = false
@@ -907,11 +919,13 @@ class DeviceResponseTest {
                     credential = mdlCredentialSignature,
                     requestedClaims = listOf(
                         MdocRequestedClaim(
+                            docType = DrivingLicense.MDL_DOCTYPE,
                             namespaceName = DrivingLicense.MDL_NAMESPACE,
                             dataElementName = "age_over_18",
                             intentToRetain = false
                         ),
                         MdocRequestedClaim(
+                            docType = DrivingLicense.MDL_DOCTYPE,
                             namespaceName = DrivingLicense.MDL_NAMESPACE,
                             dataElementName = "given_name",
                             intentToRetain = false

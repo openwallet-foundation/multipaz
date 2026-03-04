@@ -54,6 +54,7 @@ fun StartScreen(
     onClickNfcReadersScreen: () -> Unit = {},
     onClickDocumentListScreen: () -> Unit = {},
     onClickQuickAccessWallet: () -> Unit = {},
+    onClickEventLog: () -> Unit = {},
 ) {
     val blePermissionState = rememberBluetoothPermissionState()
     val coroutineScope = rememberCoroutineScope()
@@ -278,6 +279,12 @@ fun StartScreen(
                 item {
                     TextButton(onClick = onClickQuickAccessWallet) {
                         Text("QuickAccessWallet")
+                    }
+                }
+
+                item {
+                    TextButton(onClick = onClickEventLog) {
+                        Text("Event Log")
                     }
                 }
             }

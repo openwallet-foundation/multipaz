@@ -5,6 +5,7 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.eventlog.EventLog
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
@@ -25,12 +26,14 @@ import org.multipaz.trustmanagement.TrustMetadata
  * @property documentStore the [DocumentStore] which holds credentials that can be presented.
  * @property documentTypeRepository a [DocumentTypeRepository] which holds metadata for document types.
  * @property zkSystemRepository a [ZkSystemRepository] with ZKP systems or `null`.
+ * @property eventLog an [EventLog] for logging events or `null`.
  * @see SimplePresentmentSource for one concrete implementation tailored for ISO mdoc and IETF SD-JWT VC credentials.
  */
 abstract class PresentmentSource(
     open val documentStore: DocumentStore,
     open val documentTypeRepository: DocumentTypeRepository,
     open val zkSystemRepository: ZkSystemRepository? = null,
+    open val eventLog: EventLog? = null
 ) {
     /**
      * Determines if a requester is trusted.

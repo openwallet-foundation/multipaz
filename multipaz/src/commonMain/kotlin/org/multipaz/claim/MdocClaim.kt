@@ -18,6 +18,7 @@ import kotlinx.datetime.toLocalDateTime
 /**
  * A claim in an ISO mdoc credential.
  *
+ * @property docType the document type.
  * @property namespaceName the mdoc namespace.
  * @property dataElementName the data element name.
  * @property value the value of the claim.
@@ -25,6 +26,7 @@ import kotlinx.datetime.toLocalDateTime
 data class MdocClaim(
     override val displayName: String,
     override val attribute: DocumentAttribute?,
+    val docType: String,
     val namespaceName: String,
     val dataElementName: String,
     val value: DataItem

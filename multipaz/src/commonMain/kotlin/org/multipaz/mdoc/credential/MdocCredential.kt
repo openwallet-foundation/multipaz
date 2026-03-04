@@ -251,6 +251,7 @@ class MdocCredential : SecureAreaBoundCredential {
                 val claim = MdocClaim(
                     displayName = mdocAttr?.attribute?.displayName ?: dataElementName,
                     attribute = mdocAttr?.attribute,
+                    docType = docType,
                     namespaceName = namespaceName,
                     dataElementName = dataElementName,
                     value = issuerSignedItem.dataElementValue

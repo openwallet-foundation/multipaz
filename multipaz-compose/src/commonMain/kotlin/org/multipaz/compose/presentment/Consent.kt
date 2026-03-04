@@ -469,7 +469,7 @@ private fun ConsentPage(
             iconUrl = trustMetadata.displayIconUrl,
             disclaimer = trustMetadata.disclaimer,
         )
-    } else if (requester.origin != null && isWebOrigin(requester.origin!!)) {
+    } else if (requester.isWebOrigin) {
         RequesterDisplayData(
             name = requester.origin!!.ifEmpty {
                 stringResource(Res.string.credential_presentment_headline_share_with_unknown_website)
@@ -789,7 +789,7 @@ private fun CredentialSetViewer(
                     Res.string.credential_presentment_share_with_known_requester,
                     requesterDisplayData.name
                 )
-            } else if (requester.origin != null && isWebOrigin(requester.origin!!)) {
+            } else if (requester.isWebOrigin) {
                 stringResource(
                     Res.string.credential_presentment_share_with_known_requester,
                     requester.origin!!
@@ -808,7 +808,7 @@ private fun CredentialSetViewer(
                     Res.string.credential_presentment_share_and_stored_by_known_requester,
                     requesterDisplayData.name
                 )
-            } else if (requester.origin != null && isWebOrigin(requester.origin!!)) {
+            } else if (requester.isWebOrigin) {
                 stringResource(
                     Res.string.credential_presentment_share_and_stored_by_known_requester,
                     requester.origin!!
@@ -963,7 +963,7 @@ private fun RelyingPartyTrailer(
     trustMetadata: TrustMetadata?,
 ) {
     if (trustMetadata != null) {
-        var text = if (requester.origin != null && isWebOrigin(requester.origin!!)) {
+        var text = if (requester.isWebOrigin) {
             stringResource(Res.string.credential_presentment_info_verifier_in_trust_list_website)
         } else if (requester.appId != null) {
             stringResource(Res.string.credential_presentment_info_verifier_in_trust_list_app)
@@ -994,7 +994,7 @@ private fun RelyingPartyTrailer(
             )
         }
     } else {
-        val text = if (requester.origin != null && isWebOrigin(requester.origin!!)) {
+        val text = if (requester.isWebOrigin) {
             stringResource(Res.string.credential_presentment_warning_verifier_not_in_trust_list_website)
         } else if (requester.appId != null) {
             stringResource(Res.string.credential_presentment_warning_verifier_not_in_trust_list_app)
@@ -1245,6 +1245,3 @@ private fun RelyingPartySection(
         )
     }
 }
-
-private fun isWebOrigin(origin: String) =
-    origin.isEmpty() || origin.startsWith("http://") || origin.startsWith("https://")

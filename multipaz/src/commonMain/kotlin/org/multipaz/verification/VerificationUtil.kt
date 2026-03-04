@@ -782,6 +782,7 @@ object VerificationUtil {
             claims.add(JsonClaim(
                 displayName = jsonAttr?.displayName ?: claimName,
                 attribute = jsonAttr,
+                vct = vct,
                 claimPath = JsonArray(listOf(JsonPrimitive(claimName))),
                 value = claimValue
             ))
@@ -794,6 +795,7 @@ object VerificationUtil {
                 claims.add(JsonClaim(
                     displayName = jsonAttr?.displayName ?: claimName + " (Device Signed)",
                     attribute = jsonAttr,
+                    vct = vct,
                     claimPath = JsonArray(listOf(JsonPrimitive(claimName))),
                     value = claimValue
                 ))
@@ -849,6 +851,7 @@ object VerificationUtil {
                         MdocClaim(
                             displayName = mdocAttr?.attribute?.displayName ?: dataElementName,
                             attribute = mdocAttr?.attribute,
+                            docType = document.docType,
                             namespaceName = namespaceName,
                             dataElementName = dataElementName,
                             value = issuerSignedItem.dataElementValue
@@ -865,6 +868,7 @@ object VerificationUtil {
                         MdocClaim(
                             displayName = mdocAttr?.attribute?.displayName ?: dataElementName,
                             attribute = mdocAttr?.attribute,
+                            docType = document.docType,
                             namespaceName = namespaceName,
                             dataElementName = dataElementName,
                             value = dataElementValue
@@ -911,6 +915,7 @@ object VerificationUtil {
                         MdocClaim(
                             displayName = mdocAttr?.attribute?.displayName ?: dataElementName,
                             attribute = mdocAttr?.attribute,
+                            docType = zkDocument.documentData.docType,
                             namespaceName = namespaceName,
                             dataElementName = dataElementName,
                             value = value
@@ -927,6 +932,7 @@ object VerificationUtil {
                         MdocClaim(
                             displayName = mdocAttr?.attribute?.displayName ?: dataElementName,
                             attribute = mdocAttr?.attribute,
+                            docType = zkDocument.documentData.docType,
                             namespaceName = namespaceName,
                             dataElementName = dataElementName,
                             value = value

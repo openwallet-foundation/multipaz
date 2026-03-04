@@ -3,6 +3,7 @@ package org.multipaz.claim
 import org.multipaz.documenttype.DocumentAttribute
 import org.multipaz.request.RequestedClaim
 import kotlinx.datetime.TimeZone
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -14,6 +15,10 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.annotation.CborSerializationImplemented
+import org.multipaz.cbor.buildCborMap
+import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 
@@ -23,6 +28,7 @@ import org.multipaz.request.MdocRequestedClaim
  * @property displayName a short human readable string describing the claim.
  * @property attribute a [DocumentAttribute], if the claim is for a well-known attribute.
  */
+@CborSerializationImplemented(schemaId = "")
 sealed class Claim(
     open val displayName: String,
     open val attribute: DocumentAttribute?
@@ -36,6 +42,89 @@ sealed class Claim(
      * @return textual representation of the claim.
      */
     abstract fun render(timeZone: TimeZone = TimeZone.currentSystemDefault()): String
+
+    /**
+     * Serializes [Claim] to CBOR.
+     *
+     * Note that [attribute] won't be serialized.
+     *
+     * @return a [DataItem].
+     */
+    fun toDataItem() = buildCborMap {
+        put("displayName", displayName)
+        when (this@Claim) {
+            is JsonClaim -> {
+                put("type", TYPE_JSON_CLAIM)
+                put("vct", vct)
+                put("claimPath", Json.encodeToString(claimPath))
+                put("value", Json.encodeToString(value))
+            }
+            is MdocClaim -> {
+                put("type", TYPE_MDOC_CLAIM)
+                put("docType", docType)
+                put("namespaceName", namespaceName)
+                put("dataElementName", dataElementName)
+                put("value", value)
+            }
+        }
+    }
+
+    companion object {
+        private const val TYPE_JSON_CLAIM = 0
+        private const val TYPE_MDOC_CLAIM = 1
+
+        /**
+         * Creates a [Claim] previously serialized with [Claim.toDataItem].
+         *
+         * @param dataItem a [DataItem].
+         * @param documentTypeRepository if not `null`, will be used to look up a [DocumentAttribute] for the claim.
+         * @return a [Claim].
+         */
+        fun fromDataItem(
+            dataItem: DataItem,
+            documentTypeRepository: DocumentTypeRepository? = null
+        ): Claim {
+
+            val displayName = dataItem["displayName"].asTstr
+            when (dataItem["type"].asNumber.toInt()) {
+                TYPE_JSON_CLAIM -> {
+                    val vct = dataItem["vct"].asTstr
+                    val claimPath = Json.decodeFromString<JsonArray>(dataItem["claimPath"].asTstr)
+                    val attribute = documentTypeRepository
+                        ?.getDocumentTypeForJson(vct)
+                        ?.jsonDocumentType
+                        ?.claims[claimPath.joinToString(".") { it.jsonPrimitive.content }]
+                    return JsonClaim(
+                        displayName = displayName,
+                        attribute = attribute,
+                        vct = vct,
+                        claimPath = claimPath,
+                        value = Json.decodeFromString<JsonElement>(dataItem["value"].asTstr),
+                    )
+                }
+                TYPE_MDOC_CLAIM -> {
+                    val docType = dataItem["docType"].asTstr
+                    val namespaceName = dataItem["namespaceName"].asTstr
+                    val dataElementName = dataItem["dataElementName"].asTstr
+                    val mdocDocType = documentTypeRepository?.getDocumentTypeForMdoc(docType)
+                        ?: documentTypeRepository?.getDocumentTypeForMdocNamespace(namespaceName)
+                    val attribute = mdocDocType?.mdocDocumentType
+                        ?.namespaces[namespaceName]
+                        ?.dataElements[dataElementName]
+                        ?.attribute
+                    return MdocClaim(
+                        displayName = displayName,
+                        attribute = attribute,
+                        docType = docType,
+                        namespaceName = namespaceName,
+                        dataElementName = dataElementName,
+                        value = dataItem["value"]
+                    )
+                }
+                else -> throw IllegalStateException("Unexpected type")
+            }
+        }
+    }
 }
 
 /**
@@ -165,6 +254,7 @@ private fun jsonFindMatchingClaimValue(
     return JsonClaim(
         displayName = displayName,
         attribute = attribute,
+        vct = ret.vct,
         claimPath = requestedClaim.claimPath,
         value = currentObject
     ).filterValueMatch(requestedClaim.values) as JsonClaim?

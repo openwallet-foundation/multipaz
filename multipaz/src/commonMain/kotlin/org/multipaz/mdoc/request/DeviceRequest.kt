@@ -627,6 +627,7 @@ data class DeviceRequest private constructor(
                 // Base Option (Index 0)
                 val baseClaim = MdocRequestedClaim(
                     id = null, // ID not strictly needed for internal logic
+                    docType = docRequest.docType,
                     namespaceName = namespace,
                     dataElementName = elementName,
                     intentToRetain = intentToRetain,
@@ -644,6 +645,7 @@ data class DeviceRequest private constructor(
                     val altOptionClaims = altSet.map { altElement ->
                         MdocRequestedClaim(
                             id = null,
+                            docType = docRequest.docType,
                             namespaceName = altElement.namespace,
                             dataElementName = altElement.dataElement,
                             intentToRetain = intentToRetain, // Inherit intent from base request

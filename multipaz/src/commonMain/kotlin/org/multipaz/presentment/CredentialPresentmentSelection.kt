@@ -11,5 +11,5 @@ package org.multipaz.presentment
  * @property matches the list of credentials and claims to return to the relying party.
  */
 data class CredentialPresentmentSelection(
-    val matches: List<CredentialPresentmentSetOptionMemberMatch>
+    val matches: List<CredentialPresentmentSetOptionMemberMatch>,
 )

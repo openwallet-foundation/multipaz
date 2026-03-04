@@ -11,6 +11,7 @@ import org.multipaz.claim.JsonClaim
 import org.multipaz.claim.MdocClaim
 import org.multipaz.claim.findMatchingClaim
 import org.multipaz.document.Document
+import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.request.JsonRequestedClaim
@@ -77,6 +78,7 @@ class TestPathSelection {
             "Erika",
             (mdlErikaClaims.findMatchingClaim(
                 requestedClaim = MdocRequestedClaim(
+                    docType = DrivingLicense.MDL_DOCTYPE,
                     namespaceName = "org.iso.18013.5.1",
                     dataElementName = "given_name",
                     intentToRetain = false,
@@ -89,7 +91,8 @@ class TestPathSelection {
             "Erika",
             (mdlErikaClaims.findMatchingClaim(
                 requestedClaim = MdocRequestedClaim(
-                    namespaceName = "org.iso.18013.5.1",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    namespaceName = DrivingLicense.MDL_NAMESPACE,
                     dataElementName = "given_name",
                     intentToRetain = false,
                     values = buildJsonArray { add("Erika") }
@@ -100,7 +103,8 @@ class TestPathSelection {
         assertNull(
             mdlErikaClaims.findMatchingClaim(
                 requestedClaim = MdocRequestedClaim(
-                    namespaceName = "org.iso.18013.5.1",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    namespaceName = DrivingLicense.MDL_NAMESPACE,
                     dataElementName = "given_name",
                     intentToRetain = false,
                     values = buildJsonArray { add("Max") }
@@ -120,6 +124,7 @@ class TestPathSelection {
             JsonPrimitive("Erika"),
             (pidErikaClaims.findMatchingClaim(
                 requestedClaim = JsonRequestedClaim(
+                    vctValues = listOf(EUPersonalID.EUPID_VCT),
                     claimPath = buildJsonArray { add("given_name") },
                 )
             )!! as JsonClaim).value
@@ -129,6 +134,7 @@ class TestPathSelection {
             null,
             pidErikaClaims.findMatchingClaim(
                 requestedClaim = JsonRequestedClaim(
+                    vctValues = listOf(EUPersonalID.EUPID_VCT),
                     claimPath = buildJsonArray { add("does-not-exist") },
                 )
             )
@@ -138,6 +144,7 @@ class TestPathSelection {
             JsonPrimitive("US"),
             (pidErikaClaims.findMatchingClaim(
                 requestedClaim = JsonRequestedClaim(
+                    vctValues = listOf(EUPersonalID.EUPID_VCT),
                     claimPath = buildJsonArray { add("address"); add("country") },
                 )
             )!! as JsonClaim).value
@@ -147,6 +154,7 @@ class TestPathSelection {
             JsonPrimitive("CA"),
             (pidErikaClaims.findMatchingClaim(
                 requestedClaim = JsonRequestedClaim(
+                    vctValues = listOf(EUPersonalID.EUPID_VCT),
                     claimPath = buildJsonArray { add("address"); add("state") },
                 )
             )!! as JsonClaim).value
@@ -156,6 +164,7 @@ class TestPathSelection {
             JsonPrimitive(123),
             (pidErikaClaims.findMatchingClaim(
                 requestedClaim = JsonRequestedClaim(
+                    vctValues = listOf(EUPersonalID.EUPID_VCT),
                     claimPath = buildJsonArray { add("address"); add("house_number") },
                 )
             )!! as JsonClaim).value
@@ -165,6 +174,7 @@ class TestPathSelection {
             null,
             pidErikaClaims.findMatchingClaim(
                 requestedClaim = JsonRequestedClaim(
+                    vctValues = listOf(EUPersonalID.EUPID_VCT),
                     claimPath = buildJsonArray { add("address"); add("does-not-exist") },
                 )
             )
@@ -180,6 +190,7 @@ class TestPathSelection {
             },
             (pidErikaClaims.findMatchingClaim(
                 requestedClaim = JsonRequestedClaim(
+                    vctValues = listOf(EUPersonalID.EUPID_VCT),
                     claimPath = buildJsonArray { add("address") },
                 )
             )!! as JsonClaim).value
@@ -189,6 +200,7 @@ class TestPathSelection {
             JsonPrimitive("American"),
             (pidErikaClaims.findMatchingClaim(
                 requestedClaim = JsonRequestedClaim(
+                    vctValues = listOf(EUPersonalID.EUPID_VCT),
                     claimPath = buildJsonArray { add("nationalities"); add(1) },
                 )
             )!! as JsonClaim).value
@@ -201,6 +213,7 @@ class TestPathSelection {
             },
             (pidErikaClaims.findMatchingClaim(
                 requestedClaim = JsonRequestedClaim(
+                    vctValues = listOf(EUPersonalID.EUPID_VCT),
                     claimPath = buildJsonArray { add("degrees"); add("type") },
                 )
             )!! as JsonClaim).value
@@ -210,6 +223,7 @@ class TestPathSelection {
             JsonPrimitive("Erika"),
             (pidErikaClaims.findMatchingClaim(
                 requestedClaim = JsonRequestedClaim(
+                    vctValues = listOf(EUPersonalID.EUPID_VCT),
                     claimPath = buildJsonArray { add("given_name") },
                     values = buildJsonArray { add("Erika") }
                 )
@@ -220,6 +234,7 @@ class TestPathSelection {
             null,
             pidErikaClaims.findMatchingClaim(
                 requestedClaim = JsonRequestedClaim(
+                    vctValues = listOf(EUPersonalID.EUPID_VCT),
                     claimPath = buildJsonArray { add("given_name") },
                     values = buildJsonArray { add("Max") }
                 )

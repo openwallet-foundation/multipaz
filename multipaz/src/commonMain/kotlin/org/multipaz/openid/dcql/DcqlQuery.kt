@@ -388,6 +388,7 @@ data class DcqlQuery(
                         require(path.size == 2)
                         MdocRequestedClaim(
                             id = claimId,
+                            docType = mdocDocType,
                             namespaceName = path[0].jsonPrimitive.content,
                             dataElementName = path[1].jsonPrimitive.content,
                             intentToRetain = mdocIntentToRetain ?: false,
@@ -396,6 +397,7 @@ data class DcqlQuery(
                     } else {
                         JsonRequestedClaim(
                             id = claimId,
+                            vctValues = vctValues!!,
                             claimPath = path,
                             values = values
                         )

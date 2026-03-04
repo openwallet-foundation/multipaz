@@ -115,9 +115,16 @@ abstract class UriSchemePresentmentActivity: FragmentActivity() {
                             if (referrerUrl == "null") {
                                 referrerUrl = null
                             }
+
+                            val appId = if (referrer?.scheme == "android-app") {
+                                referrer?.host
+                            } else {
+                                null
+                            }
                             if (url != null) {
                                 startPresentment(
                                     url = url,
+                                    appId = appId,
                                     referrerUrl = referrerUrl,
                                     settings = settings
                                 )
@@ -141,6 +148,7 @@ abstract class UriSchemePresentmentActivity: FragmentActivity() {
 
     private suspend fun startPresentment(
         url: String,
+        appId: String?,
         referrerUrl: String?,
         settings: Settings
     ) {
@@ -153,6 +161,7 @@ abstract class UriSchemePresentmentActivity: FragmentActivity() {
             openRedirectUri = uriSchemePresentment(
                 source = settings.source,
                 uri = url,
+                appId = appId,
                 origin = origin,
                 httpClientEngineFactory = settings.httpClientEngineFactory,
                 onDocumentsInFocus = { documents ->

@@ -17,6 +17,8 @@ import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
+import org.multipaz.eventlog.PresentmentEventDigitalCredentialsMdocApi
+import org.multipaz.eventlog.PresentmentEventDigitalCredentialsOpenID4VP
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.prompt.PromptDismissedException
@@ -176,7 +178,7 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
     } else {
         preReq
     }
-    val response = OpenID4VP.generateResponse(
+    val responseObject = OpenID4VP.generateResponse(
         version = version,
         preselectedDocuments = preselectedDocuments,
         source = source,
@@ -186,9 +188,22 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
         requesterCertChain = requesterCertChain,
         onDocumentsInFocus = onDocumentsInFocus
     )
+
+    source.eventLog?.addEvent(
+        PresentmentEventDigitalCredentialsOpenID4VP(
+            data = responseObject.eventData,
+            appId = appId,
+            origin = origin,
+            protocol = protocol,
+            requestJson = Json.encodeToString(data),
+            responseJson = Json.encodeToString(responseObject.response),
+            vpToken = Json.encodeToString(responseObject.vpToken)
+        )
+    )
+
     return buildJsonObject {
         put("protocol", protocol)
-        put("data", response)
+        put("data", responseObject.response)
     }
 }
 
@@ -232,7 +247,7 @@ private suspend fun digitalCredentialsMdocApiProtocol(
 
     val deviceRequest = DeviceRequest.fromDataItem(Cbor.decode(deviceRequestBase64.fromBase64Url()))
     deviceRequest.verifyReaderAuthentication(sessionTranscript)
-    val deviceResponse = mdocPresentment(
+    val responseObject = mdocPresentment(
         deviceRequest = deviceRequest,
         eReaderKey = null,
         sessionTranscript = sessionTranscript,
@@ -251,7 +266,7 @@ private suspend fun digitalCredentialsMdocApiProtocol(
         info = Cbor.encode(sessionTranscript)
     )
     val ciphertext = encrypter.encrypt(
-        plaintext = Cbor.encode(deviceResponse.toDataItem()),
+        plaintext = Cbor.encode(responseObject.deviceResponse.toDataItem()),
         aad = ByteArray(0),
     )
     val encryptedResponse =
@@ -265,11 +280,24 @@ private suspend fun digitalCredentialsMdocApiProtocol(
             }
         )
 
-    val data = buildJsonObject {
+    val responseData = buildJsonObject {
         put("response", encryptedResponse.toBase64Url())
     }
+
+    source.eventLog?.addEvent(
+        PresentmentEventDigitalCredentialsMdocApi(
+            data = responseObject.eventData,
+            appId = appId,
+            origin = origin,
+            protocol = protocol,
+            requestJson = Json.encodeToString(data),
+            responseJson = Json.encodeToString(responseData),
+            deviceResponse = responseObject.deviceResponse.toDataItem()
+        )
+    )
+
     return buildJsonObject {
         put("protocol", protocol)
-        put("data", data)
+        put("data", responseData)
     }
 }

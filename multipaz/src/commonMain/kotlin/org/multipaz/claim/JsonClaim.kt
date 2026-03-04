@@ -18,12 +18,14 @@ import kotlinx.serialization.json.jsonPrimitive
 /**
  * A claim in a JSON-based credential.
  *
+ * @property vct the Verifiable Credential Type.
  * @property claimPath the claim name.
  * @property value the value of the claim
  */
 data class JsonClaim(
     override val displayName: String,
     override val attribute: DocumentAttribute?,
+    val vct: String,
     val claimPath: JsonArray,
     val value: JsonElement
 ) : Claim(displayName, attribute) {

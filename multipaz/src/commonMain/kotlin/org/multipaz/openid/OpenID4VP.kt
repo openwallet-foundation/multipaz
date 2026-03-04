@@ -31,6 +31,7 @@ import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
+import org.multipaz.eventlog.PresentmentEventData
 import org.multipaz.webtoken.buildJwt
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.response.DeviceResponse
@@ -264,6 +265,19 @@ object OpenID4VP {
     }
 
     /**
+     * Represents the response to an OpenID4VP request.
+     *
+     * @property response the response containing [vpToken], possibly encrypted.
+     * @property vpToken the VP Token.
+     * @property eventData a [PresentmentEventData] to be used for logging.
+     */
+    data class OpenID4VPResponse(
+        val response: JsonObject,
+        val vpToken: JsonObject,
+        val eventData: PresentmentEventData
+    )
+
+    /**
      * Generates an OpenID4VP response.
      *
      * @param version the version of OpenID4VP to generate a response for.
@@ -298,7 +312,7 @@ object OpenID4VP {
         request: JsonObject,
         requesterCertChain: X509CertChain?,
         onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
-    ): JsonObject {
+    ): OpenID4VPResponse {
         Logger.iJson(TAG, "request", request)
 
         val nonce = request["nonce"]!!.jsonPrimitive.content
@@ -424,10 +438,11 @@ object OpenID4VP {
         val transactionDataMap = request["transaction_data"]?.let {
             TransactionData.parse(it)
         }
-        // TODO: incorporate transaction data into the consent prompt
+        // TODO: incorporate transaction data into the consent prompt and event logging
+        val trustMetadata = source.resolveTrust(requester)
         val selection = source.showConsentPrompt(
             requester = requester,
-            trustMetadata = source.resolveTrust(requester),
+            trustMetadata = trustMetadata,
             credentialPresentmentData = dcqlResponse,
             preselectedDocuments = preselectedDocuments,
             onDocumentsInFocus = onDocumentsInFocus
@@ -437,6 +452,7 @@ object OpenID4VP {
         }
 
         var usingZk = false
+        val credentialsPresented = mutableSetOf<Credential>()
         selection.matches.forEach { match ->
             match.source as CredentialMatchSourceOpenID4VP
             val requestIsForZk = match.source.credentialQuery.format == "mso_mdoc_zk"
@@ -469,6 +485,7 @@ object OpenID4VP {
                 throw IllegalArgumentException("Expected ISO mdoc or IETF SD-JWT, got neither")
             }
             vpTokens.put(match.source.credentialQuery.id, credentialResponse)
+            credentialsPresented.add(match.credential)
         }
 
         val vpToken = when (version) {
@@ -501,7 +518,7 @@ object OpenID4VP {
         val compressionLevel = if (usingZk) 9 else null
 
         val walletGeneratedNonce = Random.nextBytes(16).toBase64Url()
-        return if (reReaderPublicKey != null) {
+        val response = if (reReaderPublicKey != null) {
             buildJsonObject {
                 put("response",
                     JsonWebEncryption.encrypt(
@@ -518,6 +535,16 @@ object OpenID4VP {
         } else {
             vpToken
         }
+
+        return OpenID4VPResponse(
+            response = response,
+            vpToken = vpToken,
+            eventData = PresentmentEventData.fromPresentmentSelection(
+                selection = selection,
+                requester = requester,
+                trustMetadata = trustMetadata
+            )
+        )
     }
 
     private suspend fun openID4VPMsoMdoc(

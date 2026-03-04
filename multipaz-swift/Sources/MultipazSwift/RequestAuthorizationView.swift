@@ -119,7 +119,8 @@ public struct RequestAuthorizationView : View {
                                     appId: nil,
                                     origin: requestContext.requestingWebsiteOrigin!.getOrigin(),
                                     preselectedDocuments: [],
-                                    source: viewModel.source
+                                    source: viewModel.source,
+                                    onDocumentsInFocus: { documents in }
                                 )
                                 let responseJson = try JSONSerialization.jsonObject(with: responseString.data(using: .utf8)!) as! [String: Any]
                                 let responseData = responseJson["data"] as! [String: Any]

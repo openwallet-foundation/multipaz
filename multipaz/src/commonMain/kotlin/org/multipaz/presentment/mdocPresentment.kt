@@ -4,6 +4,7 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.document.Document
+import org.multipaz.eventlog.PresentmentEventData
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
 import org.multipaz.mdoc.request.DeviceRequest
@@ -37,7 +38,7 @@ private const val TAG = "mdocPresentment"
  * @param onWaitingForUserInput called when waiting for input from the user (consent or authentication)
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
- * @return a [DeviceResponse].
+ * @return a [MdocResponse] containing [DeviceResponse] and [PresentmentEventData].
  * @throws PresentmentCanceledException if the user canceled in a consent prompt.
  * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
@@ -60,8 +61,11 @@ suspend fun mdocPresentment(
     preselectedDocuments: List<Document> = emptyList(),
     onWaitingForUserInput: () -> Unit = {},
     onDocumentsInFocus: (documents: List<Document>) -> Unit
-): DeviceResponse {
-    return buildDeviceResponse(
+): MdocResponse {
+    val credentialsPresented = mutableSetOf<MdocCredential>()
+    lateinit var eventData: PresentmentEventData
+
+    val deviceResponse = buildDeviceResponse(
         sessionTranscript = sessionTranscript,
         status = DeviceResponse.STATUS_OK,
         eReaderKey = eReaderKey,
@@ -82,9 +86,10 @@ suspend fun mdocPresentment(
             origin = requesterOrigin,
         )
         onWaitingForUserInput()
+        val trustMetadata = source.resolveTrust(requester)
         val selection = source.showConsentPrompt(
             requester = requester,
-            trustMetadata = source.resolveTrust(requester),
+            trustMetadata = trustMetadata,
             credentialPresentmentData = presentmentData,
             preselectedDocuments = preselectedDocuments,
             onDocumentsInFocus = onDocumentsInFocus
@@ -145,6 +150,17 @@ suspend fun mdocPresentment(
                 addDocument(document)
             }
             match.credential.increaseUsageCount()
+            credentialsPresented.add(match.credential)
         }
+
+        eventData = PresentmentEventData.fromPresentmentSelection(
+            selection = selection,
+            requester = requester,
+            trustMetadata = trustMetadata
+        )
     }
+    return MdocResponse(
+        deviceResponse = deviceResponse,
+        eventData = eventData
+    )
 }

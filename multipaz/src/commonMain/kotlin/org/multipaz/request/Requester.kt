@@ -18,4 +18,13 @@ data class Requester(
     val certChain: X509CertChain? = null,
     val appId: String? = null,
     val origin: String? = null,
-)
+) {
+
+    /**
+     * Set to `true` if [origin] is a web origin.
+     *
+     * This is true if [origin] is set and is either empty or starts with either `http://` or `https://`.
+     */
+    val isWebOrigin: Boolean
+        get() = origin != null && (origin.isEmpty() || origin.startsWith("http://") || origin.startsWith("https://"))
+}

@@ -146,3 +146,11 @@ data class NfcReaderDestination(
 
 @Serializable
 data object DocumentListDestination: Destination()
+
+@Serializable
+data object EventLogDestination: Destination()
+
+@Serializable
+data class EventViewerDestination(
+    val eventId: String,
+): Destination()

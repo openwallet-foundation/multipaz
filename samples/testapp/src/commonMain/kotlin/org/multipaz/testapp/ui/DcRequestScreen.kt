@@ -290,6 +290,7 @@ private suspend fun doDcRequestFlow(
                         namespaceRequest.dataElementsToRequest.forEach { (mdocDataElement, intentToRetain) ->
                             claims.add(
                                 MdocRequestedClaim(
+                                    docType = request.mdocRequest!!.docType,
                                     namespaceName = namespaceRequest.namespace,
                                     dataElementName = mdocDataElement.attribute.identifier,
                                     intentToRetain = intentToRetain
@@ -326,6 +327,7 @@ private suspend fun doDcRequestFlow(
                         }
                         path.add(JsonPrimitive(documentAttribute.identifier))
                         JsonRequestedClaim(
+                            vctValues = listOf(request.jsonRequest!!.vct),
                             claimPath = JsonArray(path),
                         )
                     }

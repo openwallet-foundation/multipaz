@@ -90,6 +90,7 @@ import org.multipaz.documenttype.knowntypes.IDPass
 import org.multipaz.documenttype.knowntypes.Loyalty
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
+import org.multipaz.eventlog.EventLog
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
@@ -122,6 +123,8 @@ import org.multipaz.testapp.ui.DcRequestScreen
 import org.multipaz.testapp.ui.VerticalDocumentListScreen
 import org.multipaz.testapp.ui.DocumentStoreScreen
 import org.multipaz.testapp.ui.DocumentViewerScreen
+import org.multipaz.testapp.ui.EventLogScreen
+import org.multipaz.testapp.ui.EventViewerScreen
 import org.multipaz.testapp.ui.IsoMdocMultiDeviceTestingScreen
 import org.multipaz.testapp.ui.IsoMdocProximityReadingScreen
 import org.multipaz.testapp.ui.IsoMdocProximitySharingScreen
@@ -225,6 +228,7 @@ class App private constructor (val promptModel: PromptModel) {
             documentStore = documentStore,
             documentTypeRepository = documentTypeRepository,
             zkSystemRepository = zkSystemRepository,
+            eventLog = eventLog,
             showConsentPromptFn = if (settingsModel.presentmentShowConsentPrompt.value) {
                 ::promptModelRequestConsent
             } else {
@@ -303,6 +307,7 @@ class App private constructor (val promptModel: PromptModel) {
                 Pair(::zkSystemRepositoryInit, "zkSystemRepositoryInit"),
                 Pair(::observeModeInit, "observeModeInit"),
                 Pair(::digitalCredentialsInit, "digitalCredentialsInit"),
+                Pair(::eventLoggerInit, "eventLoggerInit"),
             )
 
             val begin = Clock.System.now()
@@ -767,6 +772,12 @@ class App private constructor (val promptModel: PromptModel) {
             }
         }
     }
+    
+    lateinit var eventLog: EventLog
+
+    private suspend fun eventLoggerInit() {
+        eventLog = EventLog(storage = TestAppConfiguration.storage)
+    }
 
     private suspend fun digitalCredentialsReregister() {
         try {
@@ -814,6 +825,7 @@ class App private constructor (val promptModel: PromptModel) {
                 val redirectUri = uriSchemePresentment(
                     source = getPresentmentSource(),
                     uri = requestUrl,
+                    appId = null,
                     origin = origin,
                     httpClientEngineFactory = TestAppConfiguration.httpClientEngineFactory,
                 )
@@ -1033,7 +1045,8 @@ class App private constructor (val promptModel: PromptModel) {
                                         showToast("Error launching QuickAccessWallet: ${e.message}")
                                     }
                                 }
-                            }
+                            },
+                            onClickEventLog = { navController.navigate(EventLogDestination) }
                         )
                     }
                 }
@@ -1578,6 +1591,41 @@ class App private constructor (val promptModel: PromptModel) {
                         onBackPressed = {
                             navController.navigateUp()
                         }
+                    )
+                }
+                composable<EventLogDestination> { backStackEntry ->
+                    // Note: EventLogScreen has its own AppBar
+                    EventLogScreen(
+                        eventLog = eventLog,
+                        imageLoader = imageLoader,
+                        documentModel = documentModel,
+                        onEventClicked = { event ->
+                            navController.navigate(EventViewerDestination(event.identifier))
+                        },
+                        onBack = { navController.navigateUp() },
+                        showToast = { message -> showToast(message) },
+                    )
+                }
+                composable<EventViewerDestination> { backStackEntry ->
+                    val destination = backStackEntry.toRoute<EventViewerDestination>()
+                    // Note: EventViewerScreen has its own AppBar
+                    EventViewerScreen(
+                        eventLog = eventLog,
+                        eventId = destination.eventId,
+                        documentTypeRepository = documentTypeRepository,
+                        documentModel = documentModel,
+                        imageLoader = imageLoader,
+                        onViewCertificateChain = { certChain ->
+                            val encodedCertificateData =
+                                Cbor.encode(certChain.toDataItem()).toBase64Url()
+                            navController.navigate(
+                                CertificateViewerDestination(
+                                    encodedCertificateData
+                                )
+                            )
+                        },
+                        onBack = { navController.navigateUp() },
+                        showToast = { message -> showToast(message) },
                     )
                 }
             }

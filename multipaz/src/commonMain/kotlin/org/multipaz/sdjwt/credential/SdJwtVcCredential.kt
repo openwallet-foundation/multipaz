@@ -50,6 +50,7 @@ interface SdJwtVcCredential {
                 JsonClaim(
                     displayName = dt?.jsonDocumentType?.claims?.get(claimName)?.displayName ?: claimName,
                     attribute = attribute,
+                    vct = vct,
                     claimPath = buildJsonArray { add(claimName) },
                     value = claimValue
                 )

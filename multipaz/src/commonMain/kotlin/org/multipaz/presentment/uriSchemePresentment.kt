@@ -30,6 +30,8 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.document.Document
+import org.multipaz.eventlog.PresentmentEventIso18013AnnexA
+import org.multipaz.eventlog.PresentmentEventUriSchemeOpenID4VP
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodHttp
 import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.engagement.DeviceEngagement
@@ -38,7 +40,6 @@ import org.multipaz.mdoc.origininfo.OriginInfoDomain
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
-import org.multipaz.mdoc.transport.MdocTransportClosedException
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
@@ -53,7 +54,8 @@ private const val TAG = "uriSchemePresentment"
  *
  * @param source the source of truth used for presentment.
  * @param uri the referrer.
- * @param origin the origin.
+ * @param appId the appId of the browser or app which invoked us, if known.
+ * @param origin the origin, if known.
  * @param httpClientEngineFactory a [HttpClientEngineFactory].
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
@@ -70,6 +72,7 @@ private const val TAG = "uriSchemePresentment"
 suspend fun uriSchemePresentment(
     source: PresentmentSource,
     uri: String,
+    appId: String?,
     origin: String?,
     httpClientEngineFactory: HttpClientEngineFactory<*>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
@@ -78,6 +81,7 @@ suspend fun uriSchemePresentment(
         return mdocUriSchemePresentment(
             source = source,
             uri = uri,
+            appId = appId,
             origin = origin,
             httpClientEngineFactory = httpClientEngineFactory,
             onDocumentsInFocus = onDocumentsInFocus
@@ -116,16 +120,17 @@ suspend fun uriSchemePresentment(
 
     val responseUri = requestObject["response_uri"]?.jsonPrimitive?.content
         ?: throw IllegalArgumentException("response_uri not set in request")
-    val response = OpenID4VP.generateResponse(
+    val responseObject = OpenID4VP.generateResponse(
         version = OpenID4VP.Version.DRAFT_29,
         preselectedDocuments = listOf(),
         source = source,
-        appId = null, // TODO: maybe pass the browser's appId if we can
+        appId = appId,
         origin = origin ?: "",
         request = requestObject,
         requesterCertChain = requesterChain,
         onDocumentsInFocus = onDocumentsInFocus
     )
+    val response = responseObject.response
 
     val responseCs = when (requestObject["response_mode"]!!.jsonPrimitive.content) {
         "direct_post" -> {
@@ -155,12 +160,26 @@ suspend fun uriSchemePresentment(
     val bodyText = (postResponseResponse.body() as ByteArray).decodeToString()
     val postResponseBody = Json.decodeFromString<JsonObject>(bodyText)
     val redirectUri = postResponseBody["redirect_uri"]!!.jsonPrimitive.content
+
+    source.eventLog?.addEvent(
+        PresentmentEventUriSchemeOpenID4VP(
+            data = responseObject.eventData,
+            uri = uri,
+            appId = appId,
+            origin = origin,
+            requestJwt = reqJwt,
+            vpToken = Json.encodeToString(responseObject.vpToken),
+            redirectUri = redirectUri
+        )
+    )
+
     return redirectUri
 }
 
 private suspend fun mdocUriSchemePresentment(
     source: PresentmentSource,
     uri: String,
+    appId: String?,
     origin: String?,
     httpClientEngineFactory: HttpClientEngineFactory<*>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
@@ -261,22 +280,37 @@ private suspend fun mdocUriSchemePresentment(
 
         val deviceRequest = DeviceRequest.fromDataItem(Cbor.decode(messageFromReader))
         deviceRequest.verifyReaderAuthentication(sessionTranscript)
-        val deviceResponse = mdocPresentment(
+        val responseObject = mdocPresentment(
             deviceRequest = deviceRequest,
             eReaderKey = eReaderKey,
             sessionTranscript = sessionTranscript,
             source = source,
             keyAgreementPossible = emptyList(), // TODO: support MacKeys
-            requesterAppId = null, // TODO: maybe pass the browser's appId if we can
+            requesterAppId = appId,
             requesterOrigin = origin ?: "",
             preselectedDocuments = emptyList(),
             onWaitingForUserInput = {},
             onDocumentsInFocus = onDocumentsInFocus
         )
         messageToPost = sessionEncryption.encryptMessage(
-            messagePlaintext = Cbor.encode(deviceResponse.toDataItem()),
+            messagePlaintext = Cbor.encode(responseObject.deviceResponse.toDataItem()),
             statusCode = null
         )
+
+        source.eventLog?.addEvent(
+            PresentmentEventIso18013AnnexA(
+                data = responseObject.eventData,
+                uri = uri,
+                request = deviceRequest.toDataItem(),
+                response = responseObject.deviceResponse.toDataItem(),
+                sessionTranscript = sessionTranscript,
+                appId = appId,
+                origin = origin,
+                readerEngagement = readerEngagement.toDataItem()
+            )
+        )
+
     } while (true)
+
     return null
 }

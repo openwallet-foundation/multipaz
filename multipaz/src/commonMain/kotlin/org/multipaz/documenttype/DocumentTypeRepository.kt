@@ -16,6 +16,11 @@
 
 package org.multipaz.documenttype
 
+import kotlinx.serialization.json.jsonPrimitive
+import org.multipaz.request.JsonRequestedClaim
+import org.multipaz.request.MdocRequestedClaim
+import org.multipaz.request.RequestedClaim
+
 /**
  * A class that contains the metadata of Document Types.
  *
@@ -78,6 +83,39 @@ class DocumentTypeRepository {
                 if (nsName == mdocNamespace) {
                     return documentType
                 }
+            }
+        }
+        return null
+    }
+
+    /**
+     * Looks up a [DocumentAttribute] for a [RequestedClaim].
+     *
+     * @param requestedClaim a [RequestedClaim].
+     * @return the [DocumentAttribute], if found.
+     */
+    fun getDocumentAttributeForRequestedClaim(requestedClaim: RequestedClaim): DocumentAttribute? {
+        when (requestedClaim) {
+            is JsonRequestedClaim -> {
+                requestedClaim.vctValues.forEach { vct ->
+                    val documentType = getDocumentTypeForJson(vct)
+                        ?: return null
+                    val jsonDocumentType = documentType.jsonDocumentType!!
+                    val identifier = requestedClaim.claimPath.toList().joinToString(".") {
+                        it.jsonPrimitive.content
+                    }
+                    return jsonDocumentType.getDocumentAttribute(identifier)
+                }
+            }
+            is MdocRequestedClaim -> {
+                val documentType = getDocumentTypeForMdoc(mdocDocType = requestedClaim.docType)
+                    ?: getDocumentTypeForMdocNamespace(mdocNamespace = requestedClaim.namespaceName)
+                    ?: return null
+                val mdocDocumentType = documentType.mdocDocumentType!!
+                return mdocDocumentType
+                    .namespaces[requestedClaim.namespaceName]
+                    ?.dataElements[requestedClaim.dataElementName]
+                    ?.attribute
             }
         }
         return null

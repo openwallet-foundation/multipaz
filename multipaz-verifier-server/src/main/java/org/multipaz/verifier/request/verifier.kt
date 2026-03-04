@@ -1806,6 +1806,7 @@ private suspend fun calcDcRequestNew(
             }
             path.add(JsonPrimitive(documentAttribute.identifier))
             JsonRequestedClaim(
+                vctValues = listOf(request.jsonRequest!!.vct),
                 claimPath = JsonArray(path),
             )
         }
@@ -1826,6 +1827,7 @@ private suspend fun calcDcRequestNew(
             namespaceRequest.dataElementsToRequest.forEach { (mdocDataElement, intentToRetain) ->
                 claims.add(
                     MdocRequestedClaim(
+                        docType = request.mdocRequest!!.docType,
                         namespaceName = namespaceRequest.namespace,
                         dataElementName = mdocDataElement.attribute.identifier,
                         intentToRetain = intentToRetain

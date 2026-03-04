@@ -11,6 +11,7 @@ import org.multipaz.cbor.buildCborArray
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.document.Document
+import org.multipaz.eventlog.PresentmentEventIso18013Proximity
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.EReaderKey
@@ -136,7 +137,7 @@ suspend fun Iso18013Presentment(
             Logger.iCbor(TAG, "DeviceRequest", deviceRequestCbor)
             val deviceRequest = DeviceRequest.fromDataItem(deviceRequestCbor)
             deviceRequest.verifyReaderAuthentication(sessionTranscript)
-            val deviceResponse = mdocPresentment(
+            val responseObject = mdocPresentment(
                 deviceRequest = deviceRequest,
                 eReaderKey = eReaderKey.publicKey,
                 sessionTranscript = sessionTranscript,
@@ -150,11 +151,21 @@ suspend fun Iso18013Presentment(
             onSendingResponse()
             transport.sendMessage(
                 sessionEncryption.encryptMessage(
-                    messagePlaintext = Cbor.encode(deviceResponse.toDataItem()),
+                    messagePlaintext = Cbor.encode(responseObject.deviceResponse.toDataItem()),
                     statusCode = null
                 )
             )
             numRequestsServed += 1
+
+            source.eventLog?.addEvent(
+                PresentmentEventIso18013Proximity(
+                    data = responseObject.eventData,
+                    request = deviceRequest.toDataItem(),
+                    response = responseObject.deviceResponse.toDataItem(),
+                    sessionTranscript = sessionTranscript,
+                )
+            )
+
             Logger.i(TAG, "Response sent, keeping connection open")
         }
     } finally {
