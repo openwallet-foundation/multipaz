@@ -7,6 +7,7 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.prompt.ShowConsentPromptFn
 import org.multipaz.prompt.promptModelRequestConsent
@@ -14,6 +15,7 @@ import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.trustmanagement.TrustMetadata
 
@@ -57,6 +59,18 @@ class SimplePresentmentSource(
     documentTypeRepository = documentTypeRepository,
     zkSystemRepository = zkSystemRepository,
 ) {
+    private suspend fun findCertifiedMdocCredentialFallback(document: Document, now: kotlin.time.Instant): Credential? {
+        return document.getCertifiedCredentials().firstOrNull { credential ->
+            credential is MdocCredential && now >= credential.validFrom && now <= credential.validUntil
+        }
+    }
+
+    private suspend fun findCertifiedJsonCredentialFallback(document: Document): Credential? {
+        return document.getCertifiedCredentials().firstOrNull { credential ->
+            credential is KeylessSdJwtVcCredential || credential is KeyBoundSdJwtVcCredential
+        }
+    }
+
     override suspend fun resolveTrust(requester: Requester): TrustMetadata? {
         return resolveTrustFn(requester)
     }
@@ -89,10 +103,10 @@ class SimplePresentmentSource(
                 CredentialForPresentment(
                     credential = domainMdocSignature?.let {
                         document.findCredential(domain = it, now = now)
-                    },
+                    } ?: findCertifiedMdocCredentialFallback(document, now),
                     credentialKeyAgreement = domainMdocKeyAgreement?.let {
                         document.findCredential(domain = it, now = now)
-                    }
+                    } ?: findCertifiedMdocCredentialFallback(document, now)
                 )
             }
             is JsonRequestedClaim -> {
@@ -100,14 +114,14 @@ class SimplePresentmentSource(
                     CredentialForPresentment(
                         credential = domainKeylessSdJwt?.let {
                             document.findCredential(domain = it, now = now)
-                        },
+                        } ?: findCertifiedJsonCredentialFallback(document),
                         credentialKeyAgreement = null
                     )
                 } else {
                     CredentialForPresentment(
                         credential = domainKeyBoundSdJwt?.let {
                             document.findCredential(domain = it, now = now)
-                        },
+                        } ?: findCertifiedJsonCredentialFallback(document),
                         credentialKeyAgreement = null
                     )
                 }
