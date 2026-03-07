@@ -18,12 +18,12 @@ import kotlin.time.Duration.Companion.seconds
 class AdminCookieInvalid: Exception()
 
 /**
- * Ensures the client supplied valid "admin_auth" cookie.
+ * Ensures the client supplied valid "records_admin_auth" cookie.
  *
  * Throws [AdminCookieInvalid] exception if no valid cookie is present.
  */
 suspend fun validateAdminCookie(call: ApplicationCall) {
-    val cookie = call.request.cookies["admin_auth"] ?: throw AdminCookieInvalid()
+    val cookie = call.request.cookies["records_admin_auth"] ?: throw AdminCookieInvalid()
     try {
         tokenToId(TokenType.ADMIN_COOKIE, cookie)
     } catch (_: IllegalArgumentException) {
@@ -32,7 +32,7 @@ suspend fun validateAdminCookie(call: ApplicationCall) {
 }
 
 /**
- * Issues "admin_auth" cookie to the client upon successful authentication
+ * Issues "records_admin_auth" cookie to the client upon successful authentication
  * (supplied password matching administrative password).
  */
 suspend fun adminAuth(call: ApplicationCall) {

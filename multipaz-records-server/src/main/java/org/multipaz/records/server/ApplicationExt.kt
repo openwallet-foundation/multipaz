@@ -28,6 +28,9 @@ import org.multipaz.records.request.identityOffer
 import org.multipaz.records.request.identityPut
 import org.multipaz.records.request.pushedAuthorizationRequest
 import org.multipaz.records.request.enroll
+import org.multipaz.records.request.identityDump
+import org.multipaz.records.request.identityLoad
+import org.multipaz.records.request.identityToJson
 import org.multipaz.records.request.token
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.server.common.ServerEnvironment
@@ -95,11 +98,24 @@ fun Application.configureRouting(serverEnvironment: Deferred<ServerEnvironment>)
         post("/identity/auth") {
             adminAuth(call)
         }
+        post("/identity/auth_check") {
+            validateAdminCookie(call)
+            call.respondText (
+                contentType = ContentType.Application.Json,
+                text = """{"status": "success"}"""
+            )
+        }
         post("/identity/list") {
             identityList(call)
         }
         post("/identity/get") {
             identityGet(call)
+        }
+        get("/identity/dump") {
+            identityDump(call)
+        }
+        post("/identity/load") {
+            identityLoad(call)
         }
         post("/identity/create") {
             validateAdminCookie(call)

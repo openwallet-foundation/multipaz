@@ -30,7 +30,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 
-private const val OFFER_URL_SCHEMA = "openid-credential-offer:"
+private const val OFFER_URL_SCHEMA = "haip-vci"
 
 /**
  * Server-to-server RPC that System of Record can call to create pre-authorized offers at

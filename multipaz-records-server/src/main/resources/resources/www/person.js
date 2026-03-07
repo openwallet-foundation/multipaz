@@ -128,8 +128,9 @@ function addField(controls, typedefs, attribute, className, sectionDiv, removeFn
                 input = document.createElement("select");
                 for (let id in type.options) {
                     let option = document.createElement("option");
-                    option.value = id;
-                    option.textContent = type.options[id];
+                    let value = type.options[id];
+                    option.value = value == null ? "" : value;
+                    option.textContent = id;
                     input.appendChild(option);
                 }
                 break;

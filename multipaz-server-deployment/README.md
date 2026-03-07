@@ -159,11 +159,16 @@ podman load -i multipaz-server-bundle-amd64.tar
 podman run -d --rm \
     -p 127.0.0.1:8000:8000 \
     -e BASE_URL=https://your-domain.com \
+    -e ADMIN_PASS=<password> \
     multipaz/server-bundle:latest-amd64
 ```
 
 The `-d` flag runs it in the background. Remove `--rm` if you want the container to persist after
 stopping.
+
+Use option `-v </your/db/folder>:/app/data:z` to mount the folder where databases are stored 
+to a folder on your host machine. This way data will not be erased between the container runs.
+Similarly `-v </your/logs/folder>:/app/logs:z` will ensure that log files are preserved.
 
 Note: this will deploy the bundle as HTTP service on port 8000, you would still need to use your
 environment to expose it as HTTP service. Also, if not running on the root of the domain (e.g.

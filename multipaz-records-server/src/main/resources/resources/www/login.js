@@ -6,7 +6,7 @@
 
     const isLoggedIn = function() {
         for (let cookie of document.cookie.split(/\s*;\s*/)) {
-            if (cookie.startsWith("admin_auth=")) {
+            if (cookie.startsWith("records_admin_auth=")) {
                 return true;
             }
         }
@@ -28,7 +28,7 @@
         logOutButton.textContent = "Logout";
         logOutButton.addEventListener("click", function() {
             document.cookie =
-                "admin_auth=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=" + basePath + ";"
+                "records_admin_auth=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=" + basePath + ";"
             loginRefresh();
         });
 
@@ -64,9 +64,9 @@
                 alert("Password incorrect, try again");
             } else {
                 document.cookie =
-                    "admin_auth=" + response.cookie +
+                    "records_admin_auth=" + response.cookie +
                     "; max_age=" + response.expires_in +
-                    "; path=" + basePath + ";"
+                    "; path=/;"
                 prompt.style.display = "none";
                 loginRefresh();
             }

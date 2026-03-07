@@ -4,7 +4,8 @@
 FROM eclipse-temurin:17-jre-jammy
 
 # Install nginx for reverse proxy
-RUN apt-get update && apt-get install -y --no-install-recommends nginx less && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+   nginx less sqlite3 libsqlite3-dev curl && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
 RUN groupadd -r multipaz && useradd -r -g multipaz multipaz
@@ -31,6 +32,9 @@ COPY multipaz-server-deployment/docker/services/csa.conf /etc/multipaz/csa.conf
 COPY multipaz-server-deployment/docker/services/openid4vci.conf /etc/multipaz/openid4vci.conf
 COPY multipaz-server-deployment/docker/services/records.conf /etc/multipaz/records.conf
 COPY multipaz-server-deployment/docker/services/verifier.conf /etc/multipaz/verifier.conf
+
+# Copy initial data
+COPY multipaz-server-deployment/docker/init/records.json /app/init/records.json
 
 # Copy startup script
 COPY multipaz-server-deployment/docker/start-servers.sh /app/start-servers.sh

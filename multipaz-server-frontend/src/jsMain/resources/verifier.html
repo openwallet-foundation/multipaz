@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multipaz Verifier Demo</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+<div id="root" class="multipaz-verifier"
+     data-dcql='
+        {
+          "credentials": [
+            {
+              "id": "mdoc",
+              "format": "mso_mdoc",
+              "meta": {
+                "doctype_value": "org.iso.18013.5.1.mDL"
+              },
+              "claims": [
+                {
+                  "path": [
+                    "org.iso.18013.5.1",
+                    "age_over_21"
+                  ]
+                },
+                {
+                  "path": [
+                    "org.iso.18013.5.1",
+                    "portrait"
+                  ]
+                }
+              ]
+            }
+          ]
+        }'
+></div>
+<script src="multipaz-web.js"></script>
+</body>
+</html>

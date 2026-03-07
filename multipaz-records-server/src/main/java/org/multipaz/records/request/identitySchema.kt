@@ -4,6 +4,7 @@ import io.ktor.http.ContentType
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respondText
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
@@ -38,9 +39,13 @@ import org.multipaz.records.data.tokenToId
  *             "identifier": <field name>,
  *             "display_name": <field description>,
  *             "type": "string"  // can also be "date", "number", "boolean", "blob", or "picture"
- *                  // also "type" can be an object describing a "complex" type using "attributes",
- *                  // or an "options" type, using "options" map (option ids -> labels)
- *                  // complex types can be described in the top-level types array and used by name
+ *                  // also "type" can be an object describing a custom type. In this case
+ *                  // "type" field determines what kind of type this is. It can have one
+ *                  // of the following values: "complex", "list", "options", or "int_options".
+ *                  // "complex" type uses "attributes" array to describe attributes
+ *                  // "list" type uses "elements" value to describe list element type
+ *                  // "options"/"int_options" types use "options" map (option labels -> values)
+ *                  // custom types can be described in the top-level types map and used by name
  *           },
  *           ...
  *         ]
@@ -110,7 +115,7 @@ private fun RecordType.toJson(
                         put("type", "options")
                         putJsonObject("options") {
                             for (option in type.options) {
-                                put(option.value ?: "", option.displayName)
+                                put(option.displayName, option.value)
                             }
                         }
                     }
@@ -129,9 +134,9 @@ private fun RecordType.toJson(
                         putJsonObject("options") {
                             for (option in type.options) {
                                 if (option.value == null) {
-                                    put("", option.displayName)
+                                    put(option.displayName, JsonNull)
                                 } else {
-                                    put(option.value.toString(), option.displayName)
+                                    put(option.displayName, option.value)
                                 }
                             }
                         }

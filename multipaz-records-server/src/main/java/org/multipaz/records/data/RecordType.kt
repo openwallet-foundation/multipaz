@@ -7,13 +7,13 @@ import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.Icon
 
 /**
- * A class that describes type of a particular record or field.
+ * A class that describes the type of particular record or field.
  */
 class RecordType(
     val attribute: DocumentAttribute,
     val subAttributes: Map<String, RecordType> = mapOf()
 ) {
-    // List is represented by an an "attribute" with the name "*"
+    // List is represented by an "attribute" with the name "*"
     val isList: Boolean get() =
         attribute.type == DocumentAttributeType.ComplexType && subAttributes.containsKey("*")
 

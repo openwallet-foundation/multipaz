@@ -45,7 +45,7 @@ val recordTypes = RecordType.buildMap {
         addPrimitive(
             type = DocumentAttributeType.IntegerOptions(Options.SEX_ISO_IEC_5218),
             identifier = "sex",
-            displayName ="Sex",
+            displayName = "Sex",
             description = "Person’s sex",
             icon = Icon.EMERGENCY,
         )
@@ -181,7 +181,7 @@ val recordTypes = RecordType.buildMap {
             icon = Icon.NUMBERS,
         )
         addComplexList(
-            identifier ="driving_privileges",
+            identifier = "driving_privileges",
             displayName = "Driving privileges",
             description = "Driving privileges of the mDL holder",
             icon = Icon.DIRECTIONS_CAR
@@ -206,7 +206,7 @@ val recordTypes = RecordType.buildMap {
         addPrimitive(
             type = DocumentAttributeType.StringOptions(Options.DISTINGUISHING_SIGN_ISO_IEC_18013_1_ANNEX_F),
             identifier = "un_distinguishing_sign",
-            displayName ="UN distinguishing sign",
+            displayName = "UN distinguishing sign",
             description = "Distinguishing sign of the issuing country",
             icon = Icon.LANGUAGE,
         )
@@ -224,13 +224,13 @@ val recordTypes = RecordType.buildMap {
         )
         addNumber(
             identifier = "weight",
-            displayName ="Weight",
+            displayName = "Weight",
             description = "mDL holder’s weight in kilograms",
             icon = Icon.EMERGENCY
         )
         addPrimitive(
             type = DocumentAttributeType.StringOptions(
-        listOf(
+                listOf(
                     StringOption(null, "(not set)"),
                     StringOption("black", "Black"),
                     StringOption("blue", "Blue"),
@@ -374,6 +374,44 @@ val recordTypes = RecordType.buildMap {
             description = "Date when the Loyalty ID expires",
             icon = Icon.TODAY,
         )
-
+    }
+    addComplex("payment") {
+        displayName = "Payment card"
+        addString(
+            "issuer_name",
+            "Issuer name",
+            "Human-readable issuer name.",
+            Icon.ACCOUNT_BALANCE,
+        )
+        addString(
+            "payment_instrument_id",
+            "Payment instrument ID",
+            "Tokenized payment instrument identifier.",
+            Icon.NUMBERS,
+        )
+        addString(
+            "masked_account_reference",
+            "Masked account reference",
+            "Masked account reference, for example PAN last 4.",
+            Icon.NUMBERS,
+        )
+        addString(
+            "holder_name",
+            "Holder name",
+            "Payment account holder name.",
+            Icon.PERSON,
+        )
+        addDate(
+            identifier = "issue_date",
+            displayName = "Date of issue",
+            description = "Date when the payment card was issued",
+            icon = Icon.TODAY,
+        )
+        addDate(
+            identifier = "expiry_date",
+            displayName = "Date of expiry",
+            description = "Date when the payment card expires",
+            icon = Icon.TODAY,
+        )
     }
 }

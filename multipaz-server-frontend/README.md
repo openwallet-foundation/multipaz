@@ -14,10 +14,11 @@ the `multipaz` package using Kotlin to JavaScript compilation.
 ./gradlew :multipaz-server-frontend:jsBrowserDevelopmentRun --continuous
 ```
 
-Opens at http://localhost:3000. Changes to Kotlin files auto-reload. Note that when the code
-is run this way, the back-end is not included.
+Opens at http://localhost:3000. Changes to Kotlin files auto-reload.
 
-TODO: determine how we could run with *both* hot reload *and* back-end.
+Back-end services must be manually started and will be proxied to the port 3000.
+
+TODO: only `records` and `verifier` are proxied at this point, add others.
 
 ### Production build only
 

@@ -16,13 +16,32 @@ kotlin {
                     outputFileName = "multipaz-web.js"
                 }
                 runTask {
+                    // This defines how to run the front-end in development environment
                     devServerProperty.set(
                         KotlinWebpackConfig.DevServer(
                             port = 3000,
                             open = false,
                             static = mutableListOf(
                                 file("src/jsMain/resources").path
-                            )
+                            ),
+                            proxy = mutableListOf(
+                                // Hook locally-running verifier multipaz-verifier-server
+                                KotlinWebpackConfig.DevServer.Proxy(
+                                    context = mutableListOf("/verifier/"),
+                                    target = "http://localhost:8006/",
+                                    pathRewrite = mutableMapOf(
+                                        "^/verifier/" to ""
+                                    )
+                                ),
+                                KotlinWebpackConfig.DevServer.Proxy(
+                                    context = mutableListOf("/records/"),
+                                    target = "http://localhost:8004/",
+                                    pathRewrite = mutableMapOf(
+                                        "^/records/" to ""
+                                    )
+                                ),
+
+                                )
                         )
                     )
                 }

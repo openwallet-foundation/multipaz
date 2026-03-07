@@ -65,6 +65,8 @@ fun runServer(
             Logger.i("Main", "SQL driver: ${Driver()}")
         } else if (jdbc.startsWith("jdbc:postgresql:")) {
             Logger.i("Main", "SQL driver: ${org.postgresql.Driver()}")
+        } else if (jdbc.startsWith("jdbc:sqlite:")) {
+            Logger.i("Main", "SQL driver: ${org.sqlite.JDBC()}")
         }
     }
     if (needAdminPassword) {

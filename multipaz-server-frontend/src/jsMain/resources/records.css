@@ -1,0 +1,386 @@
+@import "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined";
+
+.records-root {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 0.875em;
+}
+
+.records-root p {
+    max-width: 800px
+}
+
+.records-editor {
+    color: #1a1a1a;
+}
+
+/* -- List of records ---------------------------------------- */
+
+.records-table {
+    border-collapse: collapse;
+    margin: 1em;
+    font-size: inherit;
+}
+
+.records-table td, .records-table th {
+    border: 1px solid black;
+    padding: 8px;
+}
+
+
+/* -- Field row: label + control on one line ---------------------- */
+
+.records-field {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 4px 0;
+}
+
+.records-label {
+    min-width: 140px;
+    font-size: 1em;
+    font-weight: 500;
+    color: #444;
+    flex-shrink: 0;
+}
+
+.records-icon {
+    font-size: 1.2em;
+    width: 1.2em;
+    position: relative;
+    top: 0.15em;
+}
+
+/* -- Primitive inputs -------------------------------------------- */
+
+.records-input,
+.records-select,
+.records-date-input {
+    flex: 1;
+    max-width: 320px;
+    padding: 5px 8px;
+    font-size: 1em;
+    font-family: inherit;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    color: #1a1a1a;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.records-input:focus,
+.records-select:focus,
+.records-date-input:focus {
+    border-color: #4a90d9;
+}
+
+.records-input--number {
+    max-width: 160px;
+}
+
+.records-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.records-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: #4a90d9;
+    cursor: pointer;
+}
+
+.records-checkbox-label {
+    font-size: 1em;
+    color: #666;
+    user-select: none;
+}
+
+/* -- File upload (Blob / Picture) -------------------------------- */
+
+.records-file-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    flex: 1;
+    max-width: 320px;
+}
+
+.records-file-input {
+    font-size: 0.875em;
+    font-family: inherit;
+}
+
+.records-file-name {
+    font-size: 0.875em;
+    color: #666;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.records-file-clear {
+    font-size: 0.875em;
+    font-family: inherit;
+    padding: 2px 8px;
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    color: #888;
+    cursor: pointer;
+}
+
+.records-file-clear:hover {
+    border-color: #999;
+    color: #444;
+}
+
+/* -- Picture preview --------------------------------------------- */
+
+.records-picture-preview {
+    max-width: 120px;
+    max-height: 80px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    object-fit: cover;
+}
+
+/* -- Options dropdown -------------------------------------------- */
+
+.records-select {
+    cursor: pointer;
+}
+
+/* -- Compound object block --------------------------------------- */
+
+.records-compound {
+    margin: 4px 0 4px 0;
+}
+
+.records-compound--nested {
+    margin-left: 16px;
+    border-left: 2px solid #e0e0e0;
+    padding-left: 14px;
+}
+
+.records-compound-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.records-compound-header:hover {
+    color: #4a90d9;
+}
+
+.records-chevron {
+    display: inline-block;
+    font-size: 0.75em;
+    color: #999;
+    transition: transform 0.15s;
+    width: 14px;
+    text-align: center;
+}
+
+.records-chevron::before {
+    content: "\25b6"
+}
+
+.records-chevron--open {
+    transform: rotate(90deg);
+}
+
+.records-compound-title {
+    font-size: 1em;
+    font-weight: 600;
+}
+
+.records-record-header {
+    margin-top: 1em;
+    font-size: 1em;
+    font-weight: 600;
+}
+
+.records-compound-body {
+    /* children just flow normally */
+}
+
+/* -- List (array) ------------------------------------------------ */
+
+.records-list {
+    margin: 4px 0;
+}
+
+.records-list-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.records-list-title {
+    font-size: 1em;
+    font-weight: 600;
+    color: #444;
+}
+
+.records-list-count {
+    font-size: 0.75em;
+    font-weight: 500;
+    padding: 1px 6px;
+    background: #eef3fb;
+    color: #4a90d9;
+    border-radius: 4px;
+}
+
+.records-list-add {
+    font-size: 0.875em;
+    font-family: inherit;
+    font-weight: 500;
+    padding: 3px 10px;
+    background: #eef3fb;
+    color: #4a90d9;
+    border: 1px solid #c5d8f0;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.records-list-add:hover {
+    background: #dce8f8;
+}
+
+.records-list-items {
+    margin-left: 16px;
+    border-left: 2px solid #e0e0e0;
+    padding-left: 14px;
+}
+
+.records-list-item {
+    padding: 4px 0;
+    position: relative;
+}
+
+.records-list-item-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+
+.records-list-item-index {
+    font-size: 0.875em;
+    font-weight: 600;
+    color: #999;
+}
+
+.records-list-item-remove {
+    font-size: 0.875em;
+    font-family: inherit;
+    font-weight: 500;
+    padding: 2px 8px;
+    background: none;
+    color: #c44;
+    border: 1px solid #e0c0c0;
+    border-radius: 3px;
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.records-list-item-remove:hover {
+    opacity: 1;
+    background: #fdf0f0;
+}
+
+/* -- List of primitives: compact inline style -------------------- */
+
+.records-list--inline .records-list-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    border-left: none;
+    margin-left: 0;
+    padding-left: 0;
+    align-items: center;
+}
+
+.records-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: #f0f3f7;
+    color: #333;
+    border-radius: 4px;
+    font-size: 0.875em;
+}
+
+.records-tag-remove {
+    background: none;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    font-size: 0.875em;
+    padding: 0 2px;
+    line-height: 1;
+    font-family: inherit;
+}
+
+.records-tag-remove:hover {
+    color: #c44;
+}
+
+.records-tag-input {
+    padding: 2px 8px;
+    font-size: 1em;
+    font-family: inherit;
+    border: 1px solid #4a90d9;
+    border-radius: 4px;
+    outline: none;
+    width: 120px;
+    background: #fff;
+    color: #1a1a1a;
+}
+
+.records-person-buttons {
+    margin-top: 1em;
+    margin-left: 1em;
+}
+
+.records-person-save {
+    font-size: 0.875em;
+    font-family: inherit;
+    font-weight: 500;
+    padding: 3px 10px;
+    background: #eef3fb;
+    color: #4a90d9;
+    border: 1px solid #c5d8f0;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.records-person-save:hover {
+    background: #dce8f8;
+}
+
+.records-person-delete {
+    font-size: 0.875em;
+    font-family: inherit;
+    font-weight: 500;
+    padding: 2px 8px;
+    background: none;
+    color: #c44;
+    border: 1px solid #e0c0c0;
+    border-radius: 3px;
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.records-person-delete:hover {
+    opacity: 1;
+    background: #fdf0f0;
+}
