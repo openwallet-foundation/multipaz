@@ -1,15 +1,11 @@
 package org.multipaz.compose.trustmanagement
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,28 +13,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil3.ImageLoader
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.asn1.OID
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.DiagnosticOption
-import org.multipaz.cbor.toDataItem
 import org.multipaz.compose.branding.Branding
 import org.multipaz.compose.cards.InfoCard
 import org.multipaz.compose.certificateviewer.X509CertViewer
 import org.multipaz.compose.datetime.formattedDateTime
-import org.multipaz.compose.items.Item
-import org.multipaz.compose.items.ItemList
-import org.multipaz.compose.items.ItemWithImageAndText
+import org.multipaz.compose.items.FloatingItemHeadingAndText
+import org.multipaz.compose.items.FloatingItemList
+import org.multipaz.compose.items.FloatingItemTextAndSecondary
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.mdoc.rical.RicalCertificateInfo
@@ -87,10 +79,9 @@ import kotlin.collections.component2
  * @param trustEntryId The unique identifier of the trust entry to display.
  * @param justImported True if the entry was recently added, triggering an informational banner.
  * @param imageLoader a [ImageLoader].
+ * @param onViewSignerCertificateChain Callback invoked to view the signer's certificate chain for a VICAL or RICAL.
  * @param onViewVicalEntry Callback invoked to navigate to a specific certificate within a VICAL.
  * @param onViewRicalEntry Callback invoked to navigate to a specific certificate within a RICAL.
- * @param onViewCertificate Callback invoked to view a standalone X.509 certificate.
- * @param onViewCertificateChain Callback invoked to view the signer's certificate chain.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,10 +90,9 @@ fun TrustEntryViewer(
     trustEntryId: String,
     justImported: Boolean,
     imageLoader: ImageLoader,
+    onViewSignerCertificateChain: (certificateChain: X509CertChain) -> Unit,
     onViewVicalEntry: (vicalCertNum: Int) -> Unit,
     onViewRicalEntry: (ricalCertNum: Int) -> Unit,
-    onViewCertificate: (certificate: X509Cert) -> Unit,
-    onViewCertificateChain: (certificateChain: X509CertChain) -> Unit,
 ) {
     val entryInfo = trustManagerModel.trustManagerInfos.value.find {
         it.entry.identifier == trustEntryId
@@ -137,7 +127,8 @@ fun TrustEntryViewer(
             Text(
                 text = entryInfo.getDisplayName(),
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
             )
         }
 
@@ -147,9 +138,8 @@ fun TrustEntryViewer(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.Start,
         ) {
-            val items = mutableListOf<@Composable () -> Unit>()
-            items.add {
-                Item(stringResource(Res.string.trust_entry_test_only_label),
+            FloatingItemList(title = null) {
+                FloatingItemHeadingAndText(stringResource(Res.string.trust_entry_test_only_label),
                     if (entryInfo.entry.metadata.testOnly) {
                         stringResource(Res.string.trust_entry_yes)
                     } else {
@@ -157,10 +147,6 @@ fun TrustEntryViewer(
                     }
                 )
             }
-            ItemList(
-                title = null,
-                items = items
-            )
 
             when (entryInfo.entry) {
                 is TrustEntryX509Cert -> {
@@ -171,8 +157,7 @@ fun TrustEntryViewer(
                         trustEntry = entryInfo.entry,
                         signedVical = entryInfo.signedVical!!,
                         onViewVicalEntry = onViewVicalEntry,
-                        onViewCertificate = onViewCertificate,
-                        onViewCertificateChain = onViewCertificateChain
+                        onViewCertificateChain = onViewSignerCertificateChain
                     )
                 }
                 is TrustEntryRical -> {
@@ -180,8 +165,7 @@ fun TrustEntryViewer(
                         trustEntry = entryInfo.entry,
                         signedRical = entryInfo.signedRical!!,
                         onViewRicalEntry = onViewRicalEntry,
-                        onViewCertificate = onViewCertificate,
-                        onViewCertificateChain = onViewCertificateChain
+                        onViewCertificateChain = onViewSignerCertificateChain
                     )
                 }
             }
@@ -194,93 +178,66 @@ private fun VicalDetails(
     trustEntry: TrustEntryVical,
     signedVical: SignedVical,
     onViewVicalEntry: (vicalCertNum: Int) -> Unit,
-    onViewCertificate: (certificate: X509Cert) -> Unit,
     onViewCertificateChain: (certificateChain: X509CertChain) -> Unit,
 ) {
-    val items = mutableListOf<@Composable () -> Unit>()
-    items.add {
-        Item(
+    FloatingItemList(title = stringResource(Res.string.trust_entry_vical_data_title)) {
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_vical_details_version),
             text = signedVical.vical.version
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_vical_details_provider),
             text = signedVical.vical.vicalProvider
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_vical_details_issue),
             text = signedVical.vical.vicalIssueID.toString()
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_vical_details_issued_at),
             text = formattedDateTime(signedVical.vical.date)
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_vical_details_next_update),
             text = signedVical.vical.nextUpdate?.let {
                 formattedDateTime(it)
             } ?: AnnotatedString("-")
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_vical_details_valid_until),
             text = signedVical.vical.notAfter?.let {
                 formattedDateTime(it)
             } ?: AnnotatedString("-")
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_vical_details_update_url),
             text = signedVical.vical.vicalUrl ?: "-"
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             stringResource(Res.string.trust_entry_signer),
             stringResource(Res.string.trust_entry_click_to_view_chain),
             modifier = Modifier.clickable {
                 onViewCertificateChain(signedVical.vicalProviderCertificateChain)
             }
         )
-    }
-    if (signedVical.vical.extensions.isNotEmpty()) {
-        items.add {
+        if (signedVical.vical.extensions.isNotEmpty()) {
             ItemWithExtensions(
                 heading = stringResource(Res.string.trust_entry_extensions),
                 extensions = signedVical.vical.extensions
             )
         }
     }
-    ItemList(
-        title = stringResource(Res.string.trust_entry_vical_data_title),
-        items = items
-    )
 
-    val certItems = mutableListOf<@Composable () -> Unit>()
-    signedVical.vical.certificateInfos.forEachIndexed { n, certificateInfo ->
-        certItems.add {
-            ItemWithImageAndText(
+    FloatingItemList(title = stringResource(Res.string.trust_entry_certificates_title)) {
+        signedVical.vical.certificateInfos.forEachIndexed { n, certificateInfo ->
+            FloatingItemTextAndSecondary(
                 modifier = Modifier.clickable { onViewVicalEntry(n) },
                 image = { certificateInfo.RenderIconWithFallback() },
-                heading = certificateInfo.displayNameWithFallback,
-                text = stringResource(Res.string.trust_entry_details_certificate),
+                text = certificateInfo.displayNameWithFallback,
+                secondary = stringResource(Res.string.trust_entry_details_certificate),
             )
         }
     }
-    ItemList(
-        title = stringResource(Res.string.trust_entry_certificates_title),
-        items = certItems
-    )
 }
 
 @Composable
@@ -288,99 +245,70 @@ private fun RicalDetails(
     trustEntry: TrustEntryRical,
     signedRical: SignedRical,
     onViewRicalEntry: (ricalCertNum: Int) -> Unit,
-    onViewCertificate: (certificate: X509Cert) -> Unit,
     onViewCertificateChain: (certificateChain: X509CertChain) -> Unit,
 ) {
-    val items = mutableListOf<@Composable () -> Unit>()
-    items.add {
-        Item(
+    FloatingItemList(title = stringResource(Res.string.trust_entry_rical_data_title)) {
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_rical_details_type),
             text = signedRical.rical.type
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_vical_details_version),
             text = signedRical.rical.version
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_vical_details_provider),
             text = signedRical.rical.provider
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_rical_details_id),
             text = signedRical.rical.id?.toString() ?: "-"
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_vical_details_issued_at),
             text = formattedDateTime(signedRical.rical.date)
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_vical_details_next_update),
             text = signedRical.rical.nextUpdate?.let {
                 formattedDateTime(it)
             } ?: AnnotatedString("-")
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_rical_details_valid_until),
             text = signedRical.rical.notAfter?.let {
                 formattedDateTime(it)
             } ?: AnnotatedString("-")
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             heading = stringResource(Res.string.trust_entry_rical_details_url),
             text = signedRical.rical.latestRicalUrl ?: "-"
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             stringResource(Res.string.trust_entry_signer),
             stringResource(Res.string.trust_entry_click_to_view_chain),
             modifier = Modifier.clickable {
                 onViewCertificateChain(signedRical.ricalProviderCertificateChain)
             }
         )
-    }
-    if (signedRical.rical.extensions.isNotEmpty()) {
-        items.add {
+        if (signedRical.rical.extensions.isNotEmpty()) {
             ItemWithExtensions(
                 heading = stringResource(Res.string.trust_entry_extensions),
                 extensions = signedRical.rical.extensions
             )
         }
     }
-    ItemList(
-        title = stringResource(Res.string.trust_entry_rical_data_title),
-        items = items
-    )
 
-    val certItems = mutableListOf<@Composable () -> Unit>()
-    signedRical.rical.certificateInfos.forEachIndexed { n, certificateInfo ->
-        certItems.add {
-            ItemWithImageAndText(
+    FloatingItemList(title = stringResource(Res.string.trust_entry_certificates_title)) {
+        signedRical.rical.certificateInfos.forEachIndexed { n, certificateInfo ->
+            FloatingItemTextAndSecondary(
                 modifier = Modifier.clickable { onViewRicalEntry(n) },
                 image = { certificateInfo.RenderIconWithFallback() },
-                heading = certificateInfo.displayNameWithFallback,
-                text = stringResource(Res.string.trust_entry_details_certificate),
+                text = certificateInfo.displayNameWithFallback,
+                secondary = stringResource(Res.string.trust_entry_details_certificate),
             )
         }
     }
-    ItemList(
-        title = stringResource(Res.string.trust_entry_certificates_title),
-        items = certItems
-    )
 }
 
 /**
@@ -403,7 +331,7 @@ internal fun ItemWithExtensions(
         ))
         sb.append("$key: $valueStr\n")
     }
-    return Item(
+    return FloatingItemHeadingAndText(
         heading = heading,
         text = sb.toString(),
         modifier = modifier

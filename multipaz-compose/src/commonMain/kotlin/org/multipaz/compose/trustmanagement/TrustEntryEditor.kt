@@ -97,7 +97,7 @@ fun TrustEntryEditor(
     )
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         newMetadata.value.displayIcon.let {
@@ -152,7 +152,7 @@ fun TrustEntryEditor(
         Spacer(modifier = Modifier.height(16.dp))
 
         Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
         ) {
             OutlinedTextField(
                 value = nameText,

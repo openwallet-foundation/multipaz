@@ -11,13 +11,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
-import org.multipaz.compose.items.Item
-import org.multipaz.compose.items.ItemList
+import org.multipaz.compose.items.FloatingItemCenteredText
+import org.multipaz.compose.items.FloatingItemHeadingAndText
+import org.multipaz.compose.items.FloatingItemList
 import org.multipaz.compose.text.fromMarkdown
 import org.multipaz.nfc.ExternalNfcReaderStore
-
 
 @Composable
 fun NfcReadersScreen(
@@ -32,19 +31,15 @@ fun NfcReadersScreen(
     ) {
 
         val readers = externalNfcReaderStore.readers.collectAsState().value
-        val items = mutableListOf<@Composable () -> Unit>()
-        if (readers.isEmpty()) {
-            items.add {
-                Text(
+        FloatingItemList(title = "External NFC Readers") {
+            if (readers.isEmpty()) {
+                FloatingItemCenteredText(
                     text = "No external NFC readers configured",
-                    fontStyle = FontStyle.Italic
                 )
-            }
-        } else {
-            readers.forEach { reader ->
-                val state = reader.observeState().collectAsState(null)
-                items.add {
-                    Item(
+            } else {
+                readers.forEach { reader ->
+                    val state = reader.observeState().collectAsState(null)
+                    FloatingItemHeadingAndText(
                         modifier = Modifier.clickable {
                             onReaderClicked(reader.id)
                         },
@@ -64,10 +59,6 @@ fun NfcReadersScreen(
                 file in the Multipaz GitHub repository.
             """.trimIndent().lines().joinToString(" ")
             )
-        )
-        ItemList(
-            items = items,
-            title = "External NFC Readers",
         )
     }
 }

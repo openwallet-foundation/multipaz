@@ -4,9 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -49,12 +47,13 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.multipaz.cbor.Simple
+import org.multipaz.claim.Claim
 import org.multipaz.compose.decodeImage
 import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.eventlog.EventLogModel
 import org.multipaz.compose.getOutlinedImageVector
-import org.multipaz.compose.items.Item
-import org.multipaz.compose.items.ItemList
+import org.multipaz.compose.items.FloatingItemHeadingAndText
+import org.multipaz.compose.items.FloatingItemList
 import org.multipaz.compose.text.fromMarkdown
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.datetime.FormatStyle
@@ -68,7 +67,6 @@ import org.multipaz.eventlog.PresentmentEventDigitalCredentialsOpenID4VP
 import org.multipaz.eventlog.PresentmentEventIso18013AnnexA
 import org.multipaz.eventlog.PresentmentEventIso18013Proximity
 import org.multipaz.eventlog.PresentmentEventUriSchemeOpenID4VP
-import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
 
@@ -162,13 +160,9 @@ fun EventViewerScreen(
             .padding(innerPadding)
             .padding(8.dp)
         ) {
-            val items = mutableListOf<@Composable () -> Unit>()
-
             when (val currentEvents = events) {
                 null -> {
-                    items.add {
-                        CircularProgressIndicator()
-                    }
+                    CircularProgressIndicator()
                 }
 
                 else -> {
@@ -243,53 +237,48 @@ private fun EventViewer(
             fontWeight = FontWeight.Bold,
         )
 
-        val items = mutableListOf<@Composable () -> Unit>()
-        items.add {
-            Item(
+        FloatingItemList(title = null) {
+            FloatingItemHeadingAndText(
                 heading = "Date and time",
                 text = eventDateTimeString
             )
-        }
-        when (event) {
-            is PresentmentEventDigitalCredentialsMdocApi -> {
-                addOriginAndAppId(items, event.origin, event.appId)
-            }
-            is PresentmentEventDigitalCredentialsOpenID4VP -> {
-                addOriginAndAppId(items, event.origin, event.appId)
-            }
-            is PresentmentEventIso18013AnnexA -> {
-                addOriginAndAppId(items, event.origin, event.appId)
-            }
-            is PresentmentEventUriSchemeOpenID4VP -> {
-                addOriginAndAppId(items, event.origin, event.appId)
-            }
-            is PresentmentEventIso18013Proximity -> {
-                val handover = event.sessionTranscript.asArray[2]
-                if (handover == Simple.NULL) {
-                    items.add {
-                        Item(
+
+            when (event) {
+                is PresentmentEventDigitalCredentialsMdocApi -> {
+                    OriginAndAppIdItem(event.origin, event.appId)
+                }
+                is PresentmentEventDigitalCredentialsOpenID4VP -> {
+                    OriginAndAppIdItem(event.origin, event.appId)
+                }
+                is PresentmentEventIso18013AnnexA -> {
+                    OriginAndAppIdItem(event.origin, event.appId)
+                }
+                is PresentmentEventUriSchemeOpenID4VP -> {
+                    OriginAndAppIdItem(event.origin, event.appId)
+                }
+                is PresentmentEventIso18013Proximity -> {
+                    val handover = event.sessionTranscript.asArray[2]
+                    if (handover == Simple.NULL) {
+                        FloatingItemHeadingAndText(
                             heading = "Shared in-person",
                             text = "Using QR code"
                         )
-                    }
-                } else {
-                    items.add {
-                        Item(
+                    } else {
+                        FloatingItemHeadingAndText(
                             heading = "Shared in-person",
                             text = "Using NFC"
                         )
                     }
                 }
             }
-        }
-        items.add {
+
             if (presentmentEventData.trustMetadata != null) {
-                Item(
+                FloatingItemHeadingAndText(
                     heading = "Requester trusted",
                     text =  "Yes, in trust list"
                 )
             } else {
-                Item(
+                FloatingItemHeadingAndText(
                     heading = "Requester trusted",
                     text = buildAnnotatedString {
                         withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.error)) {
@@ -298,28 +287,24 @@ private fun EventViewer(
                     }
                 )
             }
-        }
-        presentmentEventData.requesterCertChain?.let {
-            items.add {
-                Item(
+
+            presentmentEventData.requesterCertChain?.let {
+                FloatingItemHeadingAndText(
                     heading = "Requester certificate",
                     text = "Click to view",
                     modifier = Modifier.clickable {
                         onViewCertificateChain(it)
                     }
                 )
-            }
-        } ?: {
-            items.add {
-                Item(
+            } ?: run {
+                FloatingItemHeadingAndText(
                     heading = "Requester certificate",
                     text = "Not available",
                 )
             }
-        }
-        presentmentEventData.trustMetadata?.privacyPolicyUrl?.let {
-            items.add {
-                Item(
+
+            presentmentEventData.trustMetadata?.privacyPolicyUrl?.let {
+                FloatingItemHeadingAndText(
                     heading = "Requester privacy policy",
                     text = AnnotatedString.fromMarkdown(
                         markdownString = "[$it]($it)"
@@ -327,10 +312,6 @@ private fun EventViewer(
                 )
             }
         }
-        ItemList(
-            title = null,
-            items = items
-        )
 
         presentmentEventData.requestedDocuments.forEach { requestedDocument ->
             val info = documentModel.documentInfos.collectAsState().value.find {
@@ -350,120 +331,79 @@ private fun EventViewer(
                 )
             }
 
-            val claimsShared = mutableListOf<@Composable () -> Unit>()
-            extractClaims(
-                requestedClaims = requestedDocument.claims.keys.filter { requestedClaim ->
-                    if (requestedClaim is MdocRequestedClaim) {
-                        !requestedClaim.intentToRetain
-                    } else {
-                        true
-                    }
-                },
-                items = claimsShared,
-                documentTypeRepository = documentTypeRepository
-            )
-            if (claimsShared.isNotEmpty()) {
-                ItemList(
-                    title = "This info was shared",
-                    items = claimsShared,
-                )
+            val sharedClaims = requestedDocument.claims.filter { (requestedClaim, _) ->
+                if (requestedClaim is MdocRequestedClaim) !requestedClaim.intentToRetain else true
+            }
+            if (sharedClaims.isNotEmpty()) {
+                FloatingItemList(title = "This info was shared") {
+                    ExtractClaimsItems(sharedClaims, documentTypeRepository)
+                }
             }
 
-            val claimsSharedAndStored = mutableListOf<@Composable () -> Unit>()
-            extractClaims(
-                requestedClaims = requestedDocument.claims.keys.filter { requestedClaim ->
-                    if (requestedClaim is MdocRequestedClaim) {
-                        requestedClaim.intentToRetain
-                    } else {
-                        false
-                    }
-                },
-                items = claimsSharedAndStored,
-                documentTypeRepository = documentTypeRepository
-            )
-            if (claimsSharedAndStored.isNotEmpty()) {
-                ItemList(
-                    title = "This info was shared and stored",
-                    items = claimsSharedAndStored,
-                )
+            val sharedAndStoredClaims = requestedDocument.claims.filter { (requestedClaim, _) ->
+                if (requestedClaim is MdocRequestedClaim) requestedClaim.intentToRetain else false
+            }
+            if (sharedAndStoredClaims.isNotEmpty()) {
+                FloatingItemList(title = "This info was shared and stored") {
+                    ExtractClaimsItems(sharedAndStoredClaims, documentTypeRepository)
+                }
             }
         }
     }
 }
 
-private fun addOriginAndAppId(
-    items: MutableList<@Composable () -> Unit>,
+@Composable
+private fun OriginAndAppIdItem(
     origin: String?,
     appId: String?,
 ) {
     if (origin != null && origin.isNotEmpty() && (origin.startsWith("http://") || origin.startsWith("https://"))) {
-        items.add {
-            Item(
-                heading = "Shared with website",
-                text = AnnotatedString.fromMarkdown("[$origin]($origin)")
-            )
-        }
+        FloatingItemHeadingAndText(
+            heading = "Shared with website",
+            text = AnnotatedString.fromMarkdown("[$origin]($origin)")
+        )
     } else if (origin != null && origin.isNotEmpty()) {
         if (appId != null) {
-            items.add {
-                // TODO: look up details about the application
-                Item(
-                    heading = "Shared with application",
-                    text = appId
-                )
-            }
+            // TODO: look up details about the application
+            FloatingItemHeadingAndText(
+                heading = "Shared with application",
+                text = appId
+            )
         } else {
-            items.add {
-                Item(
-                    heading = "Shared with application",
-                    text = "Unknown application"
-                )
-            }
-        }
-    } else {
-        items.add {
-            Item(
-                heading = "Shared with website",
-                text = "Unknown website"
+            FloatingItemHeadingAndText(
+                heading = "Shared with application",
+                text = "Unknown application"
             )
         }
+    } else {
+        FloatingItemHeadingAndText(
+            heading = "Shared with website",
+            text = "Unknown website"
+        )
     }
 }
 
-private fun extractClaims(
-    requestedClaims: List<RequestedClaim>,
-    items: MutableList<@Composable () -> Unit>,
+@Composable
+private fun ExtractClaimsItems(
+    requestedClaims: Map<RequestedClaim, Claim>,
     documentTypeRepository: DocumentTypeRepository
 ) {
-    requestedClaims.forEach { requestedClaim ->
-        val attribute = documentTypeRepository.getDocumentAttributeForRequestedClaim(requestedClaim)
-        val displayName = attribute?.displayName
-            ?: when (requestedClaim) {
-                is JsonRequestedClaim -> {
-                    requestedClaim.claimPath.toList().joinToString(".")
-                }
-
-                is MdocRequestedClaim -> {
-                    requestedClaim.dataElementName
-                }
-            }
-
-        items.add {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val icon = attribute?.icon ?: Icon.PERSON
+    requestedClaims.forEach { (requestedClaim, claim) ->
+        // Make sure claim.attribute is set, if we know the document type
+        val claim = Claim.fromDataItem(
+            dataItem = claim.toDataItem(),
+            documentTypeRepository = documentTypeRepository
+        )
+        FloatingItemHeadingAndText(
+            heading = claim.displayName,
+            text = claim.render(),
+            image = {
+                val icon = claim.attribute?.icon ?: Icon.PERSON
                 Icon(
                     imageVector = icon.getOutlinedImageVector(),
                     contentDescription = null
                 )
-                Text(
-                    text = displayName,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
             }
-        }
+        )
     }
 }

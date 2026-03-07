@@ -31,7 +31,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
@@ -40,8 +39,9 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.eventlog.EventLogModel
-import org.multipaz.compose.items.ItemList
-import org.multipaz.compose.items.ItemWithImageAndText
+import org.multipaz.compose.items.FloatingItemCenteredText
+import org.multipaz.compose.items.FloatingItemList
+import org.multipaz.compose.items.FloatingItemTextAndSecondary
 import org.multipaz.datetime.formatLocalized
 import org.multipaz.eventlog.Event
 import org.multipaz.eventlog.EventLog
@@ -137,29 +137,22 @@ fun EventLogScreen(
             .verticalScroll(scrollState)
             .fillMaxSize()
             .padding(innerPadding)
+            .padding(8.dp)
         ) {
-            val items = mutableListOf<@Composable () -> Unit>()
-
-            when (val currentEvents = events) {
-                null -> {
-                    items.add {
+            FloatingItemList(title = "Events") {
+                when (val currentEvents = events) {
+                    null -> {
                         CircularProgressIndicator()
                     }
-                }
 
-                emptyList<Event>() -> {
-                    items.add {
-                        Text(
+                    emptyList<Event>() -> {
+                        FloatingItemCenteredText(
                             text = "No events recorded yet",
-                            color = MaterialTheme.colorScheme.secondary,
-                            fontStyle = FontStyle.Italic
                         )
                     }
-                }
 
-                else -> {
-                    currentEvents.forEach { event ->
-                        items.add {
+                    else -> {
+                        currentEvents.forEach { event ->
                             EventItem(
                                 modifier = Modifier
                                     .clickable { onEventClicked(event) },
@@ -171,10 +164,6 @@ fun EventLogScreen(
                     }
                 }
             }
-            ItemList(
-                title = "Events",
-                items = items,
-            )
         }
     }
 }
@@ -206,7 +195,7 @@ private fun EventItem(
 
     val eventDateTimeString = event.timestamp.toLocalDateTime(timeZone = timeZone).formatLocalized()
     val text = "$eventDateTimeString • $sharingType"
-    ItemWithImageAndText(
+    FloatingItemTextAndSecondary(
         modifier = modifier,
         image = {
             firstDocInfo?.cardArt?.let {
@@ -217,8 +206,8 @@ private fun EventItem(
                 )
             } ?: Spacer(modifier = Modifier.size(imageSize))
         },
-        heading = firstDocInfo?.document?.displayName ?: firstDoc?.documentName ?: "Unknown document",
-        text = text,
+        text = firstDocInfo?.document?.displayName ?: firstDoc?.documentName ?: "Unknown document",
+        secondary = text,
     )
 }
 
@@ -236,4 +225,3 @@ private fun getSharingType(
     }
     return "Shared with website"
 }
-

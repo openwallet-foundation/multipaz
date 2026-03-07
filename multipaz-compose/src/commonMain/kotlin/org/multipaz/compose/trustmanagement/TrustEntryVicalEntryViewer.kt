@@ -13,8 +13,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.certificateviewer.X509CertViewer
-import org.multipaz.compose.items.Item
-import org.multipaz.compose.items.ItemList
+import org.multipaz.compose.items.FloatingItemHeadingAndText
+import org.multipaz.compose.items.FloatingItemList
 import org.multipaz.multipaz_compose.generated.resources.Res
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_extensions
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_entry_document_types
@@ -56,25 +56,18 @@ fun TrustEntryVicalEntryViewer(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        val items = mutableListOf<@Composable () -> Unit>()
-        items.add {
-            Item(
+        FloatingItemList(title = stringResource(Res.string.trust_entry_vical_entry_title)) {
+            FloatingItemHeadingAndText(
                 heading = stringResource(Res.string.trust_entry_vical_entry_document_types),
                 text = vicalCertInfo.docTypes.joinToString("\n")
             )
-        }
-        if (vicalCertInfo.extensions.isNotEmpty()) {
-            items.add {
+            if (vicalCertInfo.extensions.isNotEmpty()) {
                 ItemWithExtensions(
                     heading = stringResource(Res.string.trust_entry_extensions),
                     extensions = vicalCertInfo.extensions
                 )
             }
         }
-        ItemList(
-            title = stringResource(Res.string.trust_entry_vical_entry_title),
-            items = items
-        )
 
         X509CertViewer(certificate = vicalCertInfo.certificate)
     }

@@ -13,16 +13,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.certificateviewer.X509CertViewer
-import org.multipaz.compose.items.Item
-import org.multipaz.compose.items.ItemList
+import org.multipaz.compose.items.FloatingItemHeadingAndText
+import org.multipaz.compose.items.FloatingItemList
 import org.multipaz.multipaz_compose.generated.resources.Res
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_extensions
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_entry_title
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_is_trust_anchor
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_is_trust_anchor_false
 import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_is_trust_anchor_true
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_entry_document_types
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_entry_title
 
 /**
  * A Composable that displays the details of a specific individual certificate
@@ -60,9 +58,8 @@ fun TrustEntryRicalEntryViewer(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        val items = mutableListOf<@Composable () -> Unit>()
-        items.add {
-            Item(
+        FloatingItemList(title = stringResource(Res.string.trust_entry_rical_entry_title)) {
+            FloatingItemHeadingAndText(
                 heading = stringResource(Res.string.trust_entry_rical_is_trust_anchor),
                 text = if (ricalCertInfo.isTrustAnchor) {
                     stringResource(Res.string.trust_entry_rical_is_trust_anchor_true)
@@ -70,19 +67,13 @@ fun TrustEntryRicalEntryViewer(
                     stringResource(Res.string.trust_entry_rical_is_trust_anchor_false)
                 }
             )
-        }
-        if (ricalCertInfo.extensions.isNotEmpty()) {
-            items.add {
+            if (ricalCertInfo.extensions.isNotEmpty()) {
                 ItemWithExtensions(
                     heading = stringResource(Res.string.trust_entry_extensions),
                     extensions = ricalCertInfo.extensions
                 )
             }
         }
-        ItemList(
-            title = stringResource(Res.string.trust_entry_rical_entry_title),
-            items = items
-        )
 
         X509CertViewer(certificate = ricalCertInfo.certificate)
     }

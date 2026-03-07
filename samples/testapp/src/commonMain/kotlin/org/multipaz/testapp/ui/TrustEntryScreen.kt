@@ -32,13 +32,10 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.multipaz.compose.trustmanagement.TrustEntryViewer
 import org.multipaz.compose.trustmanagement.TrustManagerModel
-import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
-import org.multipaz.testapp.App
 import org.multipaz.trustmanagement.TrustEntryRical
 import org.multipaz.trustmanagement.TrustEntryVical
 import org.multipaz.trustmanagement.TrustEntryX509Cert
-import org.multipaz.trustmanagement.TrustManager
 
 @OptIn(ExperimentalResourceApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -48,10 +45,9 @@ fun TrustEntryScreen(
     canEditOrDelete: Boolean,
     justImported: Boolean,
     imageLoader: ImageLoader,
+    onViewSignerCertificateChain: (certificateChain: X509CertChain) -> Unit,
     onViewVicalEntry: (vicalCertNum: Int) -> Unit,
     onViewRicalEntry: (ricalCertNum: Int) -> Unit,
-    onViewCertificate: (certificate: X509Cert) -> Unit,
-    onViewCertificateChain: (certificateChain: X509CertChain) -> Unit,
     onEdit: () -> Unit,
     onBack: () -> Unit,
     showToast: (message: String) -> Unit,
@@ -159,17 +155,16 @@ fun TrustEntryScreen(
                 .verticalScroll(scrollState)
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp),
+                .padding(8.dp),
         ) {
             TrustEntryViewer(
                 trustManagerModel = trustManagerModel,
                 trustEntryId = trustEntryId,
                 justImported = justImported,
                 imageLoader = imageLoader,
+                onViewSignerCertificateChain = onViewSignerCertificateChain,
                 onViewVicalEntry = onViewVicalEntry,
                 onViewRicalEntry = onViewRicalEntry,
-                onViewCertificate = onViewCertificate,
-                onViewCertificateChain = onViewCertificateChain
             )
         }
     }

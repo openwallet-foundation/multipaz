@@ -1219,6 +1219,11 @@ class App private constructor (val promptModel: PromptModel) {
                         canEditOrDelete = destination.trustManagerId.startsWith("user"),
                         justImported = destination.justImported,
                         imageLoader = imageLoader,
+                        onViewSignerCertificateChain = { certificateChain ->
+                            navController.navigate(CertificateViewerDestination(
+                                certificateData = Cbor.encode(certificateChain.toDataItem()).toBase64Url()
+                            ))
+                        },
                         onViewVicalEntry = { certNum ->
                             navController.navigate(TrustEntryVicalEntryDestination(
                                 trustManagerId = destination.trustManagerId,
@@ -1231,16 +1236,6 @@ class App private constructor (val promptModel: PromptModel) {
                                 trustManagerId = destination.trustManagerId,
                                 trustEntryId = destination.trustEntryId,
                                 ricalCertNumber = certNum
-                            ))
-                        },
-                        onViewCertificate = { certificate ->
-                            navController.navigate(CertificateViewerDestination(
-                                certificateData = Cbor.encode(certificate.toDataItem()).toBase64Url()
-                            ))
-                        },
-                        onViewCertificateChain = { certificateChain ->
-                            navController.navigate(CertificateViewerDestination(
-                                certificateData = Cbor.encode(certificateChain.toDataItem()).toBase64Url()
                             ))
                         },
                         onEdit = {

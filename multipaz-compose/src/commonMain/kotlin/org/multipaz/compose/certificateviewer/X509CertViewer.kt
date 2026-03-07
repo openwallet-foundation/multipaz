@@ -17,8 +17,8 @@ import org.jetbrains.compose.resources.stringResource
 import org.multipaz.asn1.OID
 import org.multipaz.compose.datetime.durationFromNowText
 import org.multipaz.compose.datetime.formattedDateTime
-import org.multipaz.compose.items.Item
-import org.multipaz.compose.items.ItemList
+import org.multipaz.compose.items.FloatingItemHeadingAndText
+import org.multipaz.compose.items.FloatingItemList
 import org.multipaz.crypto.X509Cert
 import org.multipaz.datetime.FormatStyle
 import org.multipaz.multipaz_compose.generated.resources.Res
@@ -77,21 +77,28 @@ fun X509CertViewer(
 
 @Composable
 private fun BasicInfo(data: CertificateViewData) {
-    val items = mutableListOf<@Composable () -> Unit>()
-    items.add {
-        Item(
+    @Suppress("DEPRECATION")
+    val clipboardManager = LocalClipboardManager.current
+    FloatingItemList(
+        title = stringResource(Res.string.certificate_viewer_sub_basic_info),
+    ) {
+        FloatingItemHeadingAndText(
             stringResource(Res.string.certificate_viewer_k_type),
-            stringResource(Res.string.certificate_viewer_version_text, data.version)
+            stringResource(Res.string.certificate_viewer_version_text, data.version),
+            // Little bit of an easter-egg but very useful: Copy the PEM-encoded certificate
+            // to the clipboard when user taps the "Basic Information" string.
+            //
+            modifier = Modifier.clickable {
+                // TODO: Use LocalClipboard when ClipEntry is available to common,
+                //  code (see https://youtrack.jetbrains.com/issue/CMP-7624 for status)
+                clipboardManager.setText(AnnotatedString(data.pem))
+            },
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             stringResource(Res.string.certificate_viewer_k_serial_number),
             data.serialNumber
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             stringResource(Res.string.certificate_viewer_k_valid_from),
             formattedDateTime(
                 instant = data.validFrom,
@@ -99,9 +106,7 @@ private fun BasicInfo(data: CertificateViewData) {
                 timeStyle = FormatStyle.LONG,
             )
         )
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             stringResource(Res.string.certificate_viewer_k_valid_until),
             formattedDateTime(
                 instant = data.validUntil,
@@ -109,12 +114,10 @@ private fun BasicInfo(data: CertificateViewData) {
                 timeStyle = FormatStyle.LONG,
             )
         )
-    }
 
-    val now = Clock.System.now()
-    if (now > data.validUntil) {
-        items.add {
-            Item(
+        val now = Clock.System.now()
+        if (now > data.validUntil) {
+            FloatingItemHeadingAndText(
                 "Validity Info",
                 buildAnnotatedString {
                     withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.error)) {
@@ -127,10 +130,8 @@ private fun BasicInfo(data: CertificateViewData) {
                     }
                 }
             )
-        }
-    } else if (data.validFrom > now) {
-        items.add {
-            Item(
+        } else if (data.validFrom > now) {
+            FloatingItemHeadingAndText(
                 "Validity Info",
                 buildAnnotatedString {
                     withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.error)) {
@@ -143,10 +144,8 @@ private fun BasicInfo(data: CertificateViewData) {
                     }
                 }
             )
-        }
-    } else {
-        items.add {
-            Item(
+        } else {
+            FloatingItemHeadingAndText(
                 "Validity Info",
                 stringResource(
                     Res.string.certificate_viewer_valid_now,
@@ -155,106 +154,75 @@ private fun BasicInfo(data: CertificateViewData) {
             )
         }
     }
-
-    @Suppress("DEPRECATION")
-    val clipboardManager = LocalClipboardManager.current
-    ItemList(
-        // Little bit of an easter-egg but very useful: Copy the PEM-encoded certificate
-        // to the clipboard when user taps the "Basic Information" string.
-        //
-        modifier = Modifier.clickable {
-            // TODO: Use LocalClipboard when ClipEntry is available to common,
-            //  code (see https://youtrack.jetbrains.com/issue/CMP-7624 for status)
-            clipboardManager.setText(AnnotatedString(data.pem))
-        },
-        title = stringResource(Res.string.certificate_viewer_sub_basic_info),
-        items = items,
-    )
 }
 
 @Composable
 private fun Subject(data: CertificateViewData) {
     if (data.subject.isEmpty()) return
 
-    val items = mutableListOf<@Composable () -> Unit>()
-    data.subject.forEach { (oid, value) ->
-        val res = oidToResourceMap[oid]
-        if (res != null) {
-            items.add {
-                Item(stringResource(res), value)
-            }
-        } else {
-            items.add {
-                Item(stringResource(Res.string.certificate_viewer_k_other_name, oid), value)
+    FloatingItemList(
+        title = stringResource(Res.string.certificate_viewer_sub_subject),
+    ) {
+        data.subject.forEach { (oid, value) ->
+            val res = oidToResourceMap[oid]
+            if (res != null) {
+                FloatingItemHeadingAndText(stringResource(res), value)
+            } else {
+                FloatingItemHeadingAndText(stringResource(Res.string.certificate_viewer_k_other_name, oid), value)
             }
         }
     }
-    ItemList(
-        title = stringResource(Res.string.certificate_viewer_sub_subject),
-        items = items
-    )
 }
 
 @Composable
 private fun Issuer(data: CertificateViewData) {
     if (data.issuer.isEmpty()) return
 
-    val items = mutableListOf<@Composable () -> Unit>()
-    data.issuer.forEach { (oid, value) ->
-        val res = oidToResourceMap[oid]
-        if (res != null) {
-            items.add {
-                Item(stringResource(res), value)
-            }
-        } else {
-            items.add {
-                Item(stringResource(Res.string.certificate_viewer_k_other_name, oid), value)
+    FloatingItemList(
+        title = stringResource(Res.string.certificate_viewer_sub_issuer),
+    ) {
+        data.issuer.forEach { (oid, value) ->
+            val res = oidToResourceMap[oid]
+            if (res != null) {
+                FloatingItemHeadingAndText(stringResource(res), value)
+            } else {
+                FloatingItemHeadingAndText(stringResource(Res.string.certificate_viewer_k_other_name, oid), value)
             }
         }
     }
-    ItemList(
-        title = stringResource(Res.string.certificate_viewer_sub_issuer),
-        items = items
-    )
 }
 
 @Composable
 private fun PublicKeyInfo(data: CertificateViewData) {
-    val items = mutableListOf<@Composable () -> Unit>()
-    items.add {
-        Item(
+    FloatingItemList(
+        title = stringResource(Res.string.certificate_viewer_sub_public_key_info),
+    ) {
+        FloatingItemHeadingAndText(
             stringResource(Res.string.certificate_viewer_k_pk_algorithm),
             data.pkAlgorithm
         )
-    }
-    if (data.pkNamedCurve != null) {
-        items.add {
-            Item(
+        if (data.pkNamedCurve != null) {
+            FloatingItemHeadingAndText(
                 stringResource(Res.string.certificate_viewer_k_pk_named_curve),
                 data.pkNamedCurve
             )
         }
-    }
-    items.add {
-        Item(
+        FloatingItemHeadingAndText(
             stringResource(Res.string.certificate_viewer_k_pk_value),
             data.pkValue
         )
     }
-    ItemList(
-        title = stringResource(Res.string.certificate_viewer_sub_public_key_info),
-        items = items
-    )
 }
 
 @Composable
 private fun Extensions(data: CertificateViewData) {
     if (data.extensions.isEmpty()) return
 
-    val items = mutableListOf<@Composable () -> Unit>()
-    data.extensions.forEach { (isCritical, oid, value) ->
-        items.add {
-            Item(
+    FloatingItemList(
+        title = stringResource(Res.string.certificate_viewer_sub_extensions),
+    ) {
+        data.extensions.forEach { (isCritical, oid, value) ->
+            FloatingItemHeadingAndText(
                 stringResource(Res.string.certificate_viewer_critical),
                 if (isCritical) {
                     stringResource(Res.string.certificate_viewer_critical_yes)
@@ -262,20 +230,16 @@ private fun Extensions(data: CertificateViewData) {
                     stringResource(Res.string.certificate_viewer_critical_no)
                 }
             )
-            Item(
+            FloatingItemHeadingAndText(
                 stringResource(Res.string.certificate_viewer_oid),
                 oid
             )
-            Item(
+            FloatingItemHeadingAndText(
                 stringResource(Res.string.certificate_viewer_value),
                 value
             )
         }
     }
-    ItemList(
-        title = stringResource(Res.string.certificate_viewer_sub_extensions),
-        items = items
-    )
 }
 
 private val oidToResourceMap: Map<String, StringResource> by lazy {

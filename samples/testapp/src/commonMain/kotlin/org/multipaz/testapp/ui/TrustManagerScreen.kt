@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
@@ -39,10 +41,11 @@ import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.multipaz.compose.items.FloatingItemCenteredText
 import org.multipaz.compose.pickers.FilePicker
 import org.multipaz.compose.pickers.rememberFilePicker
 import org.multipaz.compose.trustmanagement.TrustEntryInfo
-import org.multipaz.compose.trustmanagement.TrustManagerList
+import org.multipaz.compose.trustmanagement.TrustEntryList
 import org.multipaz.compose.trustmanagement.TrustManagerModel
 import org.multipaz.crypto.X509Cert
 import org.multipaz.mdoc.rical.SignedRical
@@ -145,6 +148,7 @@ fun TrustManagerScreen(
     showToast: (message: String) -> Unit,
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val scrollState = rememberScrollState()
     val showImportErrorDialog = remember { mutableStateOf<String?>(null) }
     val importCertificateFilePicker = rememberFilePicker(
         types = listOf(
@@ -284,8 +288,11 @@ fun TrustManagerScreen(
 
         Column(
             modifier = Modifier
+                .verticalScroll(scrollState)
+                .fillMaxSize()
+                .padding(8.dp),
         ) {
-            TrustManagerList(
+            TrustEntryList(
                 trustManagerModel = builtIn,
                 title = "Built-in",
                 imageLoader = imageLoader,
@@ -302,17 +309,13 @@ fun TrustManagerScreen(
                     onTrustEntryClicked(trustEntryInfo)
                 }
             )
-            TrustManagerList(
+            TrustEntryList(
                 trustManagerModel = user,
                 title = "Manually imported",
                 imageLoader = imageLoader,
                 noItems = {
-                    Text(
+                    FloatingItemCenteredText(
                         text = "Certificates and trust lists manually imported will appear in this list",
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.secondary,
-                        fontStyle = FontStyle.Italic,
-                        textAlign = TextAlign.Center
                     )
                 },
                 onTrustEntryClicked = { trustEntryInfo ->

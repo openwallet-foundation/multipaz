@@ -136,7 +136,7 @@ fun TrustEntryEditScreen(
                 .verticalScroll(scrollState)
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp),
+                .padding(8.dp),
         ) {
             TrustEntryEditor(
                 trustEntryInfo = info,

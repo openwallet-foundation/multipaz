@@ -9,7 +9,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.multipaz.compose.trustmanagement.TrustEntryRicalEntryViewer
-import org.multipaz.compose.trustmanagement.TrustEntryVicalEntryViewer
 import org.multipaz.compose.trustmanagement.TrustManagerModel
 
 
@@ -24,7 +23,7 @@ fun TrustEntryRicalEntryScreen(
         modifier = Modifier
             .verticalScroll(scrollState)
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(8.dp),
     ) {
         TrustEntryRicalEntryViewer(
             trustManagerModel = trustManagerModel,

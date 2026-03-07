@@ -3,7 +3,6 @@ package org.multipaz.testapp.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -16,11 +15,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.multipaz.compose.items.Item
-import org.multipaz.compose.items.ItemList
+import org.multipaz.compose.items.FloatingItemHeadingAndText
+import org.multipaz.compose.items.FloatingItemList
 import org.multipaz.nfc.ExternalNfcReaderState
 import org.multipaz.nfc.ExternalNfcReaderStore
 import org.multipaz.nfc.ExternalNfcReaderUsb
@@ -45,35 +42,22 @@ fun NfcReaderScreen(
         number.removeLeadingZeros = true
     }
 
-    val items = mutableListOf<@Composable () -> Unit>()
-    items.add {
-        Item("Name", reader.displayName)
-    }
-    if (reader is ExternalNfcReaderUsb) {
-        items.add {
-            Item("Connection", "USB")
-        }
-        items.add {
-            Item("Vendor ID", reader.vendorId.toHexString(hexFormat))
-        }
-        items.add {
-            Item("Product ID", reader.productId.toHexString(hexFormat))
-        }
-    }
     val state = reader.observeState().collectAsState(initial = null).value
-    items.add {
-        Item("State", state.toString())
-    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        ItemList(
-            items = items,
-            title = "External NFC Reader",
-        )
+        FloatingItemList(title = "External NFC Reader") {
+            FloatingItemHeadingAndText("Name", reader.displayName)
+            if (reader is ExternalNfcReaderUsb) {
+                FloatingItemHeadingAndText("Connection", "USB")
+                FloatingItemHeadingAndText("Vendor ID", reader.vendorId.toHexString(hexFormat))
+                FloatingItemHeadingAndText("Product ID", reader.productId.toHexString(hexFormat))
+            }
+            FloatingItemHeadingAndText("State", state.toString())
+        }
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
