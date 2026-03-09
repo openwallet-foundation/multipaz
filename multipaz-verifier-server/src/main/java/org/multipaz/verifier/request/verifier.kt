@@ -35,7 +35,9 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receive
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -68,6 +70,9 @@ import org.multipaz.asn1.ASN1Sequence
 import org.multipaz.asn1.ASN1TagClass
 import org.multipaz.asn1.ASN1TaggedObject
 import org.multipaz.asn1.OID
+import org.multipaz.cbor.Bstr
+import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
@@ -82,10 +87,17 @@ import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.documenttype.knowntypes.IDPass
 import org.multipaz.documenttype.knowntypes.Loyalty
 import org.multipaz.documenttype.knowntypes.wellKnownMultipleDocumentRequests
+import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodHttp
+import org.multipaz.mdoc.engagement.DeviceEngagement
+import org.multipaz.mdoc.engagement.buildDeviceEngagement
+import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequest
+import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.mdoc.response.DeviceResponse
+import org.multipaz.mdoc.role.MdocRole
+import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
@@ -104,6 +116,8 @@ import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.trustmanagement.TrustManager
 import org.multipaz.trustmanagement.TrustMetadata
+import org.multipaz.util.Constants
+import org.multipaz.util.UUID
 import org.multipaz.util.fromHexByteString
 import org.multipaz.verification.VerificationUtil
 import java.net.URLEncoder
@@ -112,6 +126,7 @@ import kotlin.IllegalStateException
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "VerifierServlet"
 
@@ -125,6 +140,9 @@ suspend fun verifierPost(call: ApplicationCall, command: String) {
         "dcBegin" -> handleDcBegin(call, requestData)
         "dcBeginRawDcql" -> handleDcBeginRawDcql(call, requestData)
         "dcGetData" -> handleDcGetData(call, requestData)
+        "annexABegin" -> handleAnnexABegin(call, requestData)
+        "annexARequest" -> handleAnnexARequest(call, requestData)
+        "annexAGetData" -> handleAnnexAGetData(call, requestData)
         else -> throw InvalidRequestException("Unknown command: $command")
     }
 }
@@ -146,6 +164,7 @@ enum class Protocol {
     W3C_DC_MDOC_API_AND_OPENID4VP_29,
     W3C_DC_MDOC_API_AND_OPENID4VP_24,
     URI_SCHEME_OPENID4VP_29,
+    URI_SCHEME_ANNEX_A,
 }
 
 @Serializable
@@ -161,6 +180,24 @@ private data class OpenID4VPBeginRequest(
     val scheme: String,
     val signRequest: Boolean,
     val encryptResponse: Boolean,
+)
+
+@Serializable
+private data class AnnexABeginRequest(
+    val format: String,
+    val docType: String,
+    val requestId: String,
+    val rawDcql: String,
+    val multiDocumentRequestId: String,
+    val protocol: String,
+    val origin: String,
+    val host: String,
+)
+
+@Serializable
+private data class AnnexABeginResponse(
+    val uri: String,
+    val sessionId: String
 )
 
 @Serializable
@@ -213,6 +250,9 @@ data class Session(
     var verifiablePresentations: MutableList<String> = mutableListOf(),
     var sessionTranscript: ByteArray? = null,
     var responseWasEncrypted: Boolean = false,
+    var readerEngagementEncodedBase64: String? = null,
+    var annexAMessageCounter: Int = 0,
+    var annexADeviceEngagementEncodedBase64: String? = null,
 ) {
     companion object
 }
@@ -277,6 +317,11 @@ private data class DCBeginResponse(
     val dcRequestProtocol2: String?,
     val dcRequestString2: String?,
     val error: String? = null
+)
+
+@Serializable
+private data class AnnexAGetDataRequest(
+    val sessionId: String,
 )
 
 @Serializable
@@ -690,6 +735,45 @@ private suspend fun handleDcBeginRawDcql(
     )
 }
 
+private suspend fun handleAnnexAGetData(
+    call: ApplicationCall,
+    requestData: ByteArray
+) {
+    val requestString = String(requestData, 0, requestData.size, Charsets.UTF_8)
+    val request = Json.decodeFromString<AnnexAGetDataRequest>(requestString)
+
+    // Polling for the response is a bit of a hack but it works...
+    val requestStartedAt = Clock.System.now()
+    do {
+        val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
+        val encodedSession = verifierSessionTable.get(request.sessionId)
+            ?: throw InvalidRequestException("No session for sessionId ${request.sessionId}")
+        val session = Session.fromCbor(encodedSession.toByteArray())
+        val timeWaiting = Clock.System.now() - requestStartedAt
+        if (timeWaiting > 30.seconds) {
+            throw IllegalStateException("Timed out waiting for response")
+        }
+        if (session.deviceResponses.isEmpty()) {
+            delay(0.5.seconds)
+            continue
+        }
+        val deviceResponse = session.deviceResponses.first()
+        if (deviceResponse.isEmpty()) {
+            throw IllegalStateException("Something went wrong")
+        }
+
+        val pages = mutableListOf<ResultPage>()
+        pages.addAll(handleGetDataMdoc(session, null))
+
+        val json = Json { ignoreUnknownKeys = true }
+        call.respondText(
+            contentType = ContentType.Application.Json,
+            text = json.encodeToString(OpenID4VPResultData(pages))
+        )
+        break
+    } while (true)
+}
+
 private suspend fun handleDcGetData(
     call: ApplicationCall,
     requestData: ByteArray
@@ -894,6 +978,233 @@ private suspend fun handleDcGetDataOpenID4VPForCredentialResponse(
     } else {
         session.verifiablePresentations.add(credentialResponse)
     }
+}
+
+private suspend fun handleAnnexABegin(
+    call: ApplicationCall,
+    requestData: ByteArray
+) {
+    val requestString = String(requestData, 0, requestData.size, Charsets.UTF_8)
+    val request = Json.decodeFromString<AnnexABeginRequest>(requestString)
+
+    val protocol = when (request.protocol) {
+        // Keep in sync with verifier.html
+        "w3c_dc_mdoc_api" -> Protocol.W3C_DC_MDOC_API
+        "w3c_dc_openid4vp_24" -> Protocol.W3C_DC_OPENID4VP_24
+        "w3c_dc_openid4vp_29" -> Protocol.W3C_DC_OPENID4VP_29
+        "w3c_dc_openid4vp_29_and_mdoc_api" -> Protocol.W3C_DC_OPENID4VP_29_AND_MDOC_API
+        "w3c_dc_openid4vp_24_and_mdoc_api" -> Protocol.W3C_DC_OPENID4VP_24_AND_MDOC_API
+        "w3c_dc_mdoc_api_and_openid4vp_29" -> Protocol.W3C_DC_MDOC_API_AND_OPENID4VP_29
+        "w3c_dc_mdoc_api_and_openid4vp_24" -> Protocol.W3C_DC_MDOC_API_AND_OPENID4VP_24
+        "uri_scheme_openid4vp_29" -> Protocol.URI_SCHEME_OPENID4VP_29
+        "uri_scheme_annex_a" -> Protocol.URI_SCHEME_ANNEX_A
+        else -> throw InvalidRequestException("Unknown protocol '$request.protocol'")
+    }
+
+    val baseUrl = BackendEnvironment.getBaseUrl()
+    val sessionId = UUID.randomUUID().toString()
+    val requestUri = baseUrl + "/verifier/annexARequest?sessionId=${sessionId}"
+
+    val eReaderKey = Crypto.createEcPrivateKey(EcCurve.P256)
+
+    // ReaderEngagement is really the same as DeviceEngagement so just re-use the builder
+    val readerEngagement = buildDeviceEngagement(
+        eDeviceKey = eReaderKey.publicKey,
+        version = "1.1",
+    ) {
+        addConnectionMethod(connectionMethod = MdocConnectionMethodHttp(uri = requestUri))
+    }
+    val readerEngagementEncodedBase64 = Cbor.encode(readerEngagement.toDataItem()).toBase64Url()
+
+    // Create a new session
+    val session = Session(
+        nonce = ByteString(Random.Default.nextBytes(16)),
+        origin = request.origin,
+        host = request.host,
+        encryptionKey = eReaderKey,
+        requestFormat = request.format,
+        requestDocType = request.docType,
+        requestId = request.requestId,
+        rawDcql = request.rawDcql,
+        multiDocumentRequestId = request.multiDocumentRequestId,
+        protocol = protocol,
+        readerEngagementEncodedBase64 = readerEngagementEncodedBase64,
+        annexAMessageCounter = 0,
+    )
+    val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
+    verifierSessionTable.insert(
+        key = sessionId,
+        data = ByteString(session.toCbor()),
+        expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
+    )
+
+    val uri = "mdoc://" + readerEngagementEncodedBase64
+    val json = Json { ignoreUnknownKeys = true }
+    call.respondText(
+        text = json.encodeToString(AnnexABeginResponse(
+            uri = uri,
+            sessionId = sessionId
+        )),
+        contentType = ContentType.Application.Json
+    )
+}
+
+@OptIn(ExperimentalEncodingApi::class)
+private suspend fun handleAnnexARequest(
+    call: ApplicationCall,
+    requestData: ByteArray
+) {
+    val sessionId = call.request.queryParameters["sessionId"]
+        ?: throw InvalidRequestException("No session parameter")
+    val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
+    val encodedSession = verifierSessionTable.get(sessionId)
+        ?: throw InvalidRequestException("No session for sessionId $sessionId")
+    val session = Session.fromCbor(encodedSession.toByteArray())
+
+    if (session.annexAMessageCounter == 0) {
+        // Expect DeviceEngagementMessage, send SessionEstablishment
+        val deviceEngagementMessageEncoded = requestData
+        Logger.iHex(TAG, "requestData", requestData)
+        val deviceEngagementBytesEncoded =
+            Cbor.decode(deviceEngagementMessageEncoded).get("deviceEngagementBytes")
+        val deviceEngagementEncoded = deviceEngagementBytesEncoded.asTagged.asBstr
+
+        session.annexADeviceEngagementEncodedBase64 = deviceEngagementEncoded.toBase64Url()
+        val deviceEngagement = DeviceEngagement.fromDataItem(
+            Cbor.decode(session.annexADeviceEngagementEncodedBase64!!.fromBase64Url())
+        )
+        val deviceEngagementBytesDataItem = Tagged(
+            tagNumber = Tagged.ENCODED_CBOR,
+            taggedItem = Bstr(Cbor.encode(deviceEngagement.toDataItem()))
+        )
+        val readerEngagement = DeviceEngagement.fromDataItem(Cbor.decode(
+            session.readerEngagementEncodedBase64!!.fromBase64Url()
+        ))
+        val engagementToApp = Bstr(
+            Crypto.digest(Algorithm.SHA256, Cbor.encode(
+                Tagged(
+                    tagNumber = Tagged.ENCODED_CBOR,
+                    taggedItem = Bstr(session.readerEngagementEncodedBase64!!.fromBase64Url())
+                ))
+            )
+        )
+        val sessionTranscript = buildCborArray {
+            add(deviceEngagementBytesDataItem)
+            add(Cbor.decode(readerEngagement.eDeviceKeyBytes.toByteArray()))
+            add(engagementToApp)
+        }
+        session.sessionTranscript = Cbor.encode(sessionTranscript)
+
+        val readerAuthKey = createSingleUseReaderKey(session.host)
+
+        val deviceRequest = AnnexACalcRequest(
+            requestFormat = session.requestFormat,
+            requestDocType = session.requestDocType,
+            requestId = session.requestId,
+            multiDocumentRequestId = session.multiDocumentRequestId,
+            rawDcql = session.rawDcql,
+            readerAuthKey = readerAuthKey,
+            sessionTranscript = sessionTranscript
+        )
+
+        val sessionEncryption = SessionEncryption(
+            role = MdocRole.MDOC_READER,
+            eSelfKey = session.encryptionKey,
+            remotePublicKey = deviceEngagement.eDeviceKey,
+            encodedSessionTranscript = Cbor.encode(sessionTranscript)
+        )
+        sessionEncryption.setSendSessionEstablishment(false)
+        val sessionDataMessage = sessionEncryption.encryptMessage(
+            messagePlaintext = Cbor.encode(deviceRequest.toDataItem()),
+            statusCode = null
+        )
+        session.annexAMessageCounter += 1
+        call.respondBytes(
+            bytes = sessionDataMessage,
+            contentType = ContentType.Application.Cbor
+        )
+    } else if (session.annexAMessageCounter == 1) {
+        // Expect SessionData, send SessionData
+
+        val deviceEngagement = DeviceEngagement.fromDataItem(
+            Cbor.decode(session.annexADeviceEngagementEncodedBase64!!.fromBase64Url())
+        )
+        val deviceEngagementBytesDataItem = Tagged(
+            tagNumber = Tagged.ENCODED_CBOR,
+            taggedItem = Bstr(Cbor.encode(deviceEngagement.toDataItem()))
+        )
+        val readerEngagement = DeviceEngagement.fromDataItem(Cbor.decode(
+            session.readerEngagementEncodedBase64!!.fromBase64Url()
+        ))
+        val engagementToApp = Bstr(
+            Crypto.digest(Algorithm.SHA256, Cbor.encode(
+                Tagged(
+                    tagNumber = Tagged.ENCODED_CBOR,
+                    taggedItem = Bstr(session.readerEngagementEncodedBase64!!.fromBase64Url())
+                ))
+            )
+        )
+        val sessionTranscript = buildCborArray {
+            add(deviceEngagementBytesDataItem)
+            add(Cbor.decode(readerEngagement.eDeviceKeyBytes.toByteArray()))
+            add(engagementToApp)
+        }
+
+        val sessionEncryption = SessionEncryption(
+            role = MdocRole.MDOC_READER,
+            eSelfKey = session.encryptionKey,
+            remotePublicKey = deviceEngagement.eDeviceKey,
+            encodedSessionTranscript = Cbor.encode(sessionTranscript)
+        )
+        sessionEncryption.setSendSessionEstablishment(false)
+        sessionEncryption.setEncryptionCounters(
+            decryptedCounter = session.annexAMessageCounter,
+            encryptedCounter = session.annexAMessageCounter
+        )
+        val (sessionDataMessage, statusCode) = sessionEncryption.decryptMessage(
+            messageData = requestData
+        )
+        if (sessionDataMessage != null) {
+            session.deviceResponses.add(sessionDataMessage)
+        } else if (statusCode != null) {
+            Logger.e(TAG, "Unexpected status code $statusCode")
+            if (session.deviceResponses.isNotEmpty()) {
+                session.deviceResponses.add(byteArrayOf())
+            }
+        } else {
+            Logger.e(TAG, "Unexpected empty status code and empty message")
+            if (session.deviceResponses.isNotEmpty()) {
+                session.deviceResponses.add(byteArrayOf())
+            }
+        }
+
+        // In either case, terminate the session
+        val replySessionDataMessage = SessionEncryption.encodeStatus(
+            Constants.SESSION_DATA_STATUS_SESSION_TERMINATION
+        )
+        session.annexAMessageCounter += 1
+        call.respondBytes(
+            bytes = replySessionDataMessage,
+            contentType = ContentType.Application.Cbor
+        )
+    } else {
+        // annexAMessageCounter >= 2
+        Logger.e(TAG, "Unexpected annexAMessageCounter")
+        val replySessionDataMessage = SessionEncryption.encodeStatus(
+            Constants.SESSION_DATA_STATUS_SESSION_TERMINATION
+        )
+        session.annexAMessageCounter += 1
+        call.respondBytes(
+            bytes = replySessionDataMessage,
+            contentType = ContentType.Application.Cbor
+        )
+    }
+
+    verifierSessionTable.update(
+        key = sessionId,
+        data = ByteString(session.toCbor()),
+        expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
+    )
 }
 
 private suspend fun handleOpenID4VPBegin(
@@ -2095,6 +2406,69 @@ private suspend fun mdocCalcDcRequestStringMdocApi(
     top.put("deviceRequest", base64DeviceRequest)
     top.put("encryptionInfo", base64EncryptionInfo)
     return top.toString(JSONStyle.NO_COMPRESS)
+}
+
+private suspend fun AnnexACalcRequest(
+    requestFormat: String,
+    requestDocType: String,
+    requestId: String,
+    multiDocumentRequestId: String,
+    rawDcql: String,
+    readerAuthKey: AsymmetricKey.X509Certified,
+    sessionTranscript: DataItem
+): DeviceRequest {
+    if (requestId.isNotEmpty()) {
+        val request = lookupWellknownRequest(requestFormat, requestDocType, requestId)
+
+        val zkSystemSpecs: List<ZkSystemSpec> = if (request.mdocRequest!!.useZkp) {
+            getZkSystemRepository().getAllZkSystemSpecs()
+        } else {
+            emptyList()
+        }
+
+        val itemsToRequest = mutableMapOf<String, MutableMap<String, Boolean>>()
+        for (ns in request.mdocRequest!!.namespacesToRequest) {
+            for ((de, intentToRetain) in ns.dataElementsToRequest) {
+                itemsToRequest.getOrPut(ns.namespace) { mutableMapOf() }
+                    .put(de.attribute.identifier, intentToRetain)
+            }
+        }
+
+        val zkRequest = if (request.mdocRequest!!.useZkp) {
+            ZkRequest(
+                systemSpecs = zkSystemSpecs,
+                zkRequired = false
+            )
+        } else {
+            null
+        }
+
+        return buildDeviceRequest(
+            sessionTranscript = sessionTranscript
+        ) {
+            addDocRequest(
+                docType = request.mdocRequest!!.docType,
+                nameSpaces = itemsToRequest,
+                docRequestInfo = DocRequestInfo(
+                    zkRequest = zkRequest
+                ),
+                readerKey = readerAuthKey
+            )
+            addReaderAuthAll(readerKey = readerAuthKey)
+        }
+    } else {
+        val dcql = if (multiDocumentRequestId.isNotEmpty()) {
+            wellKnownMultipleDocumentRequests.find { it.id == multiDocumentRequestId }!!.dcqlString
+        } else {
+            rawDcql
+        }
+        return buildDeviceRequestFromDcql(
+            dcql = Json.decodeFromString<JsonObject>(dcql),
+            sessionTranscript = sessionTranscript
+        ) {
+            addReaderAuthAll(readerKey = readerAuthKey)
+        }
+    }
 }
 
 private const val BROWSER_HANDOVER_V1 = "BrowserHandoverv1"

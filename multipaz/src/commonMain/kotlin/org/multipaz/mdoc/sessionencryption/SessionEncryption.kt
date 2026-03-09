@@ -103,6 +103,25 @@ class SessionEncryption(
     }
 
     /**
+     * Configure the encryption and decryption counters.
+     *
+     * This is useful if the verifier cannot persist the [SessionEncryption] object, for example
+     * if used in a Servlet setup.
+     *
+     * The default value for these counters for a fresh [SessionEncryption] object are both 1.
+     *
+     * @param decryptedCounter the value to use for the decryption counter.
+     * @param encryptedCounter the value to use for the decryption counter.
+     */
+    fun setEncryptionCounters(
+        decryptedCounter: Int,
+        encryptedCounter: Int,
+    ) {
+        this.decryptedCounter = decryptedCounter
+        this.encryptedCounter = encryptedCounter
+    }
+
+    /**
      * Encrypt a message intended for the remote device.
      *
      *

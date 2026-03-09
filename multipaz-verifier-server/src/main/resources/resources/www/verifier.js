@@ -23,7 +23,8 @@ async function onLoad() {
             selected === 'w3c_dc_openid4vp_24_and_mdoc_api' ||
             selected === 'w3c_dc_mdoc_api_and_openid4vp_29' ||
             selected === 'w3c_dc_mdoc_api_and_openid4vp_24' ||
-            selected === 'uri_scheme_openid4vp_29'
+            selected === 'uri_scheme_openid4vp_29' ||
+            selected === 'uri_scheme_annex_a'
         ) {
             selectedProtocol = selected
             preferredProtocol = selectedProtocol
@@ -1033,6 +1034,28 @@ async function requestDocument(format, docType, requestId, rawDcql, multiDocumen
             }
         )
         window.location = response.uri
+    } else if (selectedProtocol === 'uri_scheme_annex_a') {
+        const response = await callServer(
+            'annexABegin',
+            {
+                format: format,
+                docType: docType,
+                requestId: requestId,
+                rawDcql: rawDcql != null ? rawDcql : "",
+                multiDocumentRequestId: multiDocumentRequestId != null ? multiDocumentRequestId : "",
+                protocol: selectedProtocol,
+                origin: location.origin,
+                host: location.host,
+            }
+        )
+        window.location = response.uri
+        const credentialResponse = await callServer(
+            'annexAGetData',
+            {
+                sessionId: response.sessionId,
+            }
+        )
+        showResponse(credentialResponse)
     } else if (selectedProtocol === "w3c_dc_mdoc_api" ||
                selectedProtocol === "w3c_dc_openid4vp_24" ||
                selectedProtocol === 'w3c_dc_openid4vp_29' ||
@@ -1130,12 +1153,16 @@ async function dcProcessResponse(sessionId, credentialResponse) {
             credentialResponse: dataStr
         }
     )
+    showResponse(response)
+}
+
+async function showResponse(credentialResponse) {
     var modalTitle = document.getElementById('dcResultModalLabel')
-    modalTitle.innerHTML = 'Received ' + response.pages.length + ' credentials'
+    modalTitle.innerHTML = 'Received ' + credentialResponse.pages.length + ' credentials'
     var modalBody = document.getElementById('dcResultModal').querySelector('.list-group')
     modalBody.innerHTML = ''
     var pageNum = 0
-    for (const page of response.pages) {
+    for (const page of credentialResponse.pages) {
         if (pageNum++ != 0) {
           modalBody.innerHTML += '<li class="list-group-item d-flex justify-content-between align-items-start"><div class="ms-2 me-auto"><div class="fw-bold">===========</div></div></li>'
         }
