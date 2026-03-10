@@ -54,10 +54,11 @@ invoke `multipazctl` like any other system tool.
 
 ## Library releases, Versioning, and Stability
 
-Libraries are released on [GMaven](https://maven.google.com/) with a two-month cadence
-and [Semantic Versioning](https://en.wikipedia.org/wiki/Software_versioning#Semantic_versioning)
+Libraries are released on [Maven Central](https://mvnrepository.com/artifact/org.multipaz/multipaz)
+usually every 4-8 weeks. Releases up until and including 0.97.0 can be found on [GMaven](https://maven.google.com/).
+[Semantic Versioning](https://en.wikipedia.org/wiki/Software_versioning#Semantic_versioning)
 is used. At this time we're in pre-1.0 territory but we expect to hit 1.0 around
-early 2026.
+late 2026 or early 2027.
 
 We are also making Multipaz available as a [Swift package](https://github.com/openwallet-foundation/multipaz/blob/main/Package.swift)
 which includes an the `multipaz`, `multipaz-doctypes`, `multipaz-doctypes`,
