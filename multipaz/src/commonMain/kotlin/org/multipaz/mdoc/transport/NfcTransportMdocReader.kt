@@ -91,7 +91,7 @@ class NfcTransportMdocReader(
                 _state.value = State.CONNECTING
                 tag.selectApplication(Nfc.ISO_MDOC_NFC_DATA_TRANSFER_APPLICATION_ID)
                 _state.value = State.CONNECTED
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 failTransport(error)
                 throw error.wrapUnlessCancellationException("Failed while opening transport")
             }
@@ -104,7 +104,7 @@ class NfcTransportMdocReader(
                     val responseMessage = nfcTransceive(messageToSend)
                     incomingMessages.send(responseMessage)
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
                 Logger.i(TAG, "Error while waiting for message to send", e)
                 e.printStackTrace()
                 mutex.withLock {
@@ -228,7 +228,7 @@ class NfcTransportMdocReader(
             return incomingMessages.receive().toByteArray()
         } catch (error: CancellationException) {
             throw error
-        } catch (error: Throwable) {
+        } catch (error: Exception) {
             if (_state.value == State.CLOSED) {
                 throw MdocTransportClosedException("Transport was closed while waiting for message")
             } else {

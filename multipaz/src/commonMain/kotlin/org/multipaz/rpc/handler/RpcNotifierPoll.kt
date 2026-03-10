@@ -56,7 +56,7 @@ class RpcNotifierPoll(private val poll: RpcPoll) : RpcNotifier {
                     // important to rethrow this one
                     Logger.w(TAG, "Polling cancelled", e)
                     throw e
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
                     Logger.w(TAG, "Error polling, retrying in 5s...", e)
                     delay(5.seconds)
                     continue

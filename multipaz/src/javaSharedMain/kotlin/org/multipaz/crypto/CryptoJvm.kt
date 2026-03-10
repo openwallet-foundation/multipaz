@@ -1,10 +1,12 @@
 package org.multipaz.crypto
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.ASN1ObjectIdentifier
 import org.multipaz.asn1.ASN1OctetString
 import org.multipaz.asn1.ASN1Sequence
+import java.security.GeneralSecurityException
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.Security
@@ -201,6 +203,7 @@ actual object Crypto {
                 doFinal(messageCiphertext)
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalStateException("Error decrypting", e)
         }
     }
@@ -253,8 +256,9 @@ actual object Crypto {
                 update(message)
                 verify(rawSignature)
             }
-        } catch (e: Throwable) {
-            throw IllegalStateException("Error occurred verifying signature", e)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            throw IllegalArgumentException("Error occurred verifying signature", e)
         }
         if (!verified) {
             throw SignatureVerificationException("Signature verification failed")
@@ -381,7 +385,8 @@ actual object Crypto {
                     sign()
                 }
                 EcSignature.fromDerEncoded(key.curve.bitSize, derEncodedSignature)
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 throw IllegalStateException("Unexpected Exception", e)
             }
         }
@@ -398,7 +403,8 @@ actual object Crypto {
                     rawSignature.sliceArray(IntRange(0, rawSignature.size/2 - 1)),
                     rawSignature.sliceArray(IntRange(rawSignature.size/2, rawSignature.size - 1))
                 )
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 throw IllegalStateException("Unexpected Exception", e)
             }
         }
@@ -415,7 +421,8 @@ actual object Crypto {
                     rawSignature.sliceArray(IntRange(0, rawSignature.size/2 - 1)),
                     rawSignature.sliceArray(IntRange(rawSignature.size/2, rawSignature.size - 1))
                 )
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 throw IllegalStateException("Unexpected Exception", e)
             }
         }
@@ -450,7 +457,8 @@ actual object Crypto {
                     ka.init(key.javaPrivateKey)
                     ka.doPhase(otherKey.javaPublicKey, true)
                     ka.generateSecret()
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     throw IllegalStateException("Unexpected Exception", e)
                 }
             }
@@ -467,7 +475,8 @@ actual object Crypto {
                     ka.init(key.javaPrivateKey)
                     ka.doPhase(otherKey.javaPublicKey, true)
                     ka.generateSecret()
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     throw IllegalStateException("Unexpected Exception", e)
                 }
             }
@@ -479,7 +488,8 @@ actual object Crypto {
                     ka.init(key.javaPrivateKey)
                     ka.doPhase(otherKey.javaPublicKey, true)
                     ka.generateSecret()
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     throw IllegalStateException("Unexpected Exception", e)
                 }
             }
@@ -493,7 +503,8 @@ actual object Crypto {
                 val certSignedBy = javaCerts[n + 1]
                 try {
                     cert.verify(certSignedBy.publicKey)
-                } catch (_: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     return false
                 }
             }

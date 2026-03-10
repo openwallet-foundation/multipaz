@@ -120,7 +120,7 @@ internal class BleTransportPeripheralMdocReader(
                         _state.value = State.CONNECTED
                     }
                 }
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 throw error.unwrapCancellationException().let {
                     failTransport(it)
                     it.wrapUnlessCancellationException("Failed while opening transport")
@@ -139,7 +139,7 @@ internal class BleTransportPeripheralMdocReader(
             return centralManager.incomingMessages.receive()
         } catch (error: CancellationException) {
             throw error
-        } catch (error: Throwable) {
+        } catch (error: Exception) {
             if (_state.value == State.CLOSED) {
                 throw MdocTransportClosedException("Transport was closed while waiting for message")
             } else {
@@ -167,7 +167,7 @@ internal class BleTransportPeripheralMdocReader(
                         }
                     }
                 }
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 throw error.unwrapCancellationException().let {
                     failTransport(it)
                     it.wrapUnlessCancellationException("Failed while sending message")

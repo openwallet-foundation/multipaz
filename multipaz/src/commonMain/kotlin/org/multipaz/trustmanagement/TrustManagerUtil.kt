@@ -15,6 +15,7 @@
  */
 package org.multipaz.trustmanagement
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509KeyUsage
 import kotlin.time.Instant
@@ -88,9 +89,11 @@ internal object TrustManagerUtil {
     suspend fun verifySignature(certificate: X509Cert, caCertificate: X509Cert) =
         try {
             certificate.verify(caCertificate.ecPublicKey)
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalStateException(
-                "Certificate '${certificate.subject}' could not be verified with the public key of CA certificate '${caCertificate.subject}'"
+                "Certificate '${certificate.subject}' could not be verified with the public key of CA certificate '${caCertificate.subject}'",
+                e
             )
         }
 
@@ -110,7 +113,8 @@ internal object TrustManagerUtil {
                     trustPoints = trustPoints,
                     trustChain = X509CertChain(completeChain)
                 )
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 // there are validation errors, but the trust chain could be built.
                 return TrustResult(
                     isTrusted = false,
@@ -119,7 +123,8 @@ internal object TrustManagerUtil {
                     error = e
                 )
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             // No CA certificate found for the passed in chain.
             //
             // However, handle the case where the passed in chain _is_ a trust point. This won't

@@ -1,5 +1,6 @@
 package org.multipaz.testapp.ui
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -71,7 +72,8 @@ fun NfcReaderScreen(
                             if (!reader.requestPermission()) {
                                 showToast("User did not grant permission")
                             }
-                        } catch (e: Throwable) {
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             showToast("Error requesting permission: ${e.message}")
                         }
                     }

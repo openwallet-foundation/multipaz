@@ -2,6 +2,7 @@
 
 package org.multipaz.tools
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.util.fromHex
@@ -16,6 +17,7 @@ fun cborToDiagnostic(text: String): String {
         return Cbor.toDiagnostics(dataItem,
         setOf(DiagnosticOption.EMBEDDED_CBOR, DiagnosticOption.PRETTY_PRINT))
     } catch (e: Exception) {
+        if (e is CancellationException) throw e
         return "Error decoding: ${e.message}"
     }
 }

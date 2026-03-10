@@ -1,5 +1,6 @@
 package org.multipaz.compose.digitalcredentials
 
+import kotlinx.coroutines.CancellationException
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
@@ -173,7 +174,8 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
             PendingIntentHandler.setGetCredentialResponse(resultData, credentialManagerResponse)
             setResult(RESULT_OK, resultData)
             presentmentModel.setCompleted(error = null)
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Logger.i(TAG, "Error processing request", e)
             val resultData = Intent()
             val credentialManagerException = GetCredentialCustomException(

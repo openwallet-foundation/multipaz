@@ -1,6 +1,7 @@
 package org.multipaz.compose.document
 
 import androidx.compose.ui.graphics.ImageBitmap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,7 +60,8 @@ private data class DocumentModelStorageData(
                         key.asTstr to value.asNumber.toInt()
                     }.toMap()
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Logger.e(TAG, "Error decoding sortingOrder", e)
             }
             return DocumentModelStorageData(sortingOrder)

@@ -1,5 +1,6 @@
 package org.multipaz.testapp
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -731,7 +732,8 @@ class App private constructor (val promptModel: PromptModel) {
                     documentTypeRepository = documentTypeRepository,
                     selectedProtocols = settingsModel.dcApiProtocols.value
                 )
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Logger.w(TAG, "Error registering with W3C DC API", e)
             }
 
@@ -746,7 +748,8 @@ class App private constructor (val promptModel: PromptModel) {
                                 documentTypeRepository = documentTypeRepository,
                                 selectedProtocols = settingsModel.dcApiProtocols.value
                             )
-                        } catch (e: Throwable) {
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             Logger.w(TAG, "Error registering with W3C DC API", e)
                         }
                     }
@@ -765,7 +768,8 @@ class App private constructor (val promptModel: PromptModel) {
                                 documentTypeRepository = documentTypeRepository,
                                 selectedProtocols = settingsModel.dcApiProtocols.value
                             )
-                        } catch (e: Throwable) {
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             Logger.w(TAG, "Error registering with W3C DC API", e)
                         }
                     }
@@ -786,7 +790,8 @@ class App private constructor (val promptModel: PromptModel) {
                 documentTypeRepository = documentTypeRepository,
                 selectedProtocols = settingsModel.dcApiProtocols.value
             )
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Logger.w(TAG, "Error registering with W3C DC API", e)
         }
     }
@@ -833,7 +838,8 @@ class App private constructor (val promptModel: PromptModel) {
                 if (redirectUri != null) {
                     urlsToOpen.send(redirectUri)
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Logger.i(TAG, "Error processing request", e)
             }
         }
@@ -1041,7 +1047,8 @@ class App private constructor (val promptModel: PromptModel) {
                                             source = getPresentmentSource(),
                                             initiallySelectedDocumentId = settingsModel.currentlyFocusedDocumentId.value
                                         )
-                                    } catch (e: Throwable) {
+                                    } catch (e: Exception) {
+                                        if (e is CancellationException) throw e
                                         showToast("Error launching QuickAccessWallet: ${e.message}")
                                     }
                                 }

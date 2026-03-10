@@ -1,5 +1,6 @@
 package org.multipaz.nfc
 
+import kotlinx.coroutines.CancellationException
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import kotlinx.coroutines.CoroutineScope
@@ -83,7 +84,8 @@ internal class NfcTagReaderUsb(
                                     // This is to properly handle emulated tags - such as on Android - which may be showing
                                     // disambiguation UI if multiple applications have registered for the same AID.
                                     Logger.w(TAG, "Tag lost", e)
-                                } catch (e: Throwable) {
+                                } catch (e: Exception) {
+                                    if (e is CancellationException) throw e
                                     continuation.resumeWithException(e)
                                 }
                                 readJob = null
@@ -103,7 +105,8 @@ internal class NfcTagReaderUsb(
             }
             driver.disconnect()
             return result
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             driver.disconnect()
             throw e
         }

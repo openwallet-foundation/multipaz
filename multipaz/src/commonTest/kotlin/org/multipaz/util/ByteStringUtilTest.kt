@@ -786,7 +786,7 @@ class ByteStringBuilderExtensionsTest {
 private fun assertDoesNotThrow(block: () -> Unit) {
     try {
         block()
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
         kotlin.test.fail("Expected no exception, but got: $e")
     }
 }

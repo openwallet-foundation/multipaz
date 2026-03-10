@@ -1,5 +1,6 @@
 package org.multipaz.testapp.ui
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -196,7 +197,8 @@ fun DocumentStoreScreen(
                             numCredentialsPerDomain = numCredentialsPerDomain.value,
                             showDocumentCreationDialog = showDocumentCreationDialog,
                         )
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         e.printStackTrace()
                         showToast("${e.message}")
                     }
@@ -576,7 +578,8 @@ private suspend fun provisionTestDocuments(
             }
         }
         showProvisioningResult.value = provisioningResult
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
         e.printStackTrace()
         showToast("Error provisioning documents: $e")
     }

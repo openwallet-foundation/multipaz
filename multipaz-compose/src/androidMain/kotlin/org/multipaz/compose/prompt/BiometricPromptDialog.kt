@@ -1,5 +1,6 @@
 package org.multipaz.compose.prompt
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,7 +40,8 @@ internal fun BiometricPromptDialog(
                         requireConfirmation = dialogParameters.requireConfirmation
                     )
                     dialogStateValue.resultChannel.send(result)
-                } catch (err: Throwable) {
+                } catch (err: Exception) {
+                    if (err is CancellationException) throw err
                     dialogStateValue.resultChannel.send(false)
                 }
             }

@@ -1,5 +1,6 @@
 package org.multipaz.compose
 
+import android.content.pm.PackageManager.NameNotFoundException
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -26,12 +27,16 @@ import kotlin.coroutines.CoroutineContext
 private const val TAG = "Util"
 
 actual fun getApplicationInfo(appId: String): ApplicationInfo {
-    val ai = applicationContext.packageManager.getApplicationInfo(appId, 0)
-    val icon = applicationContext.packageManager.getApplicationIcon(ai)
-    return ApplicationInfo(
-        name = applicationContext.packageManager.getApplicationLabel(ai).toString(),
-        icon = icon.toBitmap().asImageBitmap()
-    )
+    try {
+        val ai = applicationContext.packageManager.getApplicationInfo(appId, 0)
+        val icon = applicationContext.packageManager.getApplicationIcon(ai)
+        return ApplicationInfo(
+            name = applicationContext.packageManager.getApplicationLabel(ai).toString(),
+            icon = icon.toBitmap().asImageBitmap()
+        )
+    } catch (e: NameNotFoundException) {
+        throw IllegalArgumentException("Application not found", e)
+    }
 }
 
 actual fun decodeImage(encodedData: ByteArray): ImageBitmap {

@@ -1,5 +1,6 @@
 package org.multipaz.testapp.ui
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,7 +55,8 @@ fun AppUpdateCard() {
                 Logger.i(TAG, "Latest available version from $updateWebsiteUrl is ${latestVersionString.value} " +
                         "and our version is $currentVersion")
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Logger.e(TAG, "Error checking latest version from $updateWebsiteUrl", e)
         }
     }

@@ -137,7 +137,7 @@ class ProvisioningModel(
             } catch(err: CancellationException) {
                 mutableState.emit(Idle)
                 throw err
-            } catch(err: Throwable) {
+            } catch (err: Exception) {
                 Logger.e(TAG, "Error provisioning", err)
                 mutableState.emit(Error(err))
                 throw err
@@ -289,8 +289,8 @@ class ProvisioningModel(
                     documentAuthorizationData = provisioningClient.getAuthorizationData()
                 )
             }
-        } catch (err: Throwable) {
-            // Clean-up after failed provisioning
+        } catch (err: Exception) {
+            // Clean-up after failed provisioning and then rethrow - so we also handle CancellationException here
             if (targetDocument == null) {
                 // Initial provisioning: failed
                 documentProvisioningHandler.cleanupDocumentOnError(document, err)

@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.transport
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Tagged
@@ -220,7 +221,8 @@ internal class BlePeripheralManagerIos: BlePeripheralManager {
                     val data = attRequest.value?.toByteArray() ?: byteArrayOf()
                     try {
                         handleIncomingData(data)
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         onError(Error("Error processing incoming data", e))
                     }
                 } else {
@@ -493,7 +495,8 @@ internal class BlePeripheralManagerIos: BlePeripheralManager {
                 val message = l2capSource!!.readByteArray(length)
                 incomingMessages.send(message)
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             onError(Error("Reading from L2CAP channel failed", e))
         }
     }

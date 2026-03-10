@@ -1,5 +1,6 @@
 package org.multipaz.device
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1OctetString
 import org.multipaz.asn1.ASN1Sequence
@@ -54,7 +55,8 @@ data class DeviceAttestationIos(
             if (!X509CertChain(x5c).validate()) {
                 throw DeviceAttestationException("Invalid certificate chain")
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw DeviceAttestationException("Error validating certificate chain", e)
         }
         try {
@@ -170,7 +172,7 @@ data class DeviceAttestationIos(
         val hash = Crypto.digest(Algorithm.SHA256, composite.toByteArray())
         try {
             Crypto.checkSignature(publicKey, hash, Algorithm.ES256, signature)
-        } catch (e: Throwable) {
+        } catch (e: SignatureVerificationException) {
             throw DeviceAssertionException("Error validating signature", e)
         }
     }

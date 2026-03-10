@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.transport
 
+import kotlinx.coroutines.CancellationException
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
@@ -154,13 +155,15 @@ internal class BleCentralManagerAndroid : BleCentralManager {
             Logger.i(TAG, "Closing deferred L2CAP socket (via init)")
             try {
                 deferredCloseSocket?.close()
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Logger.e(TAG, "Error closing L2CAP socket (via init)", e)
             }
             deferredCloseSocket = null
             try {
                 deferredCloseJob?.cancel()
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Logger.e(TAG, "Error canceling deferred closing job (via init)", e)
             }
             deferredCloseJob = null
@@ -181,7 +184,8 @@ internal class BleCentralManagerAndroid : BleCentralManager {
                 } else {
                     Logger.w(TAG, "onScanResult but not waiting")
                 }
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
                 onError(Error("onScanResult failed", error))
             }
         }
@@ -194,7 +198,8 @@ internal class BleCentralManagerAndroid : BleCentralManager {
                 } else {
                     Logger.w(TAG, "onScanFailed but not waiting")
                 }
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
                 onError(Error("onScanFailed failed", error))
             }
         }
@@ -227,7 +232,8 @@ internal class BleCentralManagerAndroid : BleCentralManager {
                         Logger.w(TAG, "onConnectionStateChange(): Unexpected newState $newState")
                     }
                 }
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
                 onError(Error("onConnectionStateChange failed", error))
             }
         }
@@ -253,7 +259,8 @@ internal class BleCentralManagerAndroid : BleCentralManager {
                 } else {
                     Logger.w(TAG, "onMtuChanged but not waiting")
                 }
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
                 onError(Error("onMtuChanged failed", error))
             }
         }
@@ -270,7 +277,8 @@ internal class BleCentralManagerAndroid : BleCentralManager {
                 } else {
                     Logger.w(TAG, "onServicesDiscovered but not waiting")
                 }
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
                 onError(Error("onServicesDiscovered failed", error))
             }
         }
@@ -327,7 +335,8 @@ internal class BleCentralManagerAndroid : BleCentralManager {
                         Logger.w(TAG, "onCharacteristicRead for ident but not waiting")
                     }
                 }
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
                 onError(Error("onCharacteristicRead failed", error))
             }
         }
@@ -397,7 +406,8 @@ internal class BleCentralManagerAndroid : BleCentralManager {
                         Logger.w(TAG, "Ignoring unexpected write to state characteristic")
                     }
                 }
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
                 onError(Error("onCharacteristicChanged failed", error))
             }
         }
@@ -705,7 +715,8 @@ internal class BleCentralManagerAndroid : BleCentralManager {
                 Logger.i(TAG, "Closing deferred L2CAP socket (via delay)")
                 try {
                     deferredCloseSocket?.close()
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Logger.e(TAG, "Error closing L2CAP socket (via delay)", e)
                 }
                 deferredCloseSocket = null
@@ -753,7 +764,8 @@ internal class BleCentralManagerAndroid : BleCentralManager {
                 val message = inputStream.readNOctets(length)
                 incomingMessages.send(message)
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             onError(Error("Reading from L2CAP socket failed", e))
         }
     }

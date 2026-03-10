@@ -1,5 +1,6 @@
 package org.multipaz.testapp.ui
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -135,7 +136,8 @@ fun ShowResponse(
                     issuerTrustManager = issuerTrustManager,
                     onViewCertChain = onViewCertChain
                 )
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Logger.e(TAG, "Error parsing response", e)
                 verificationError.value = e
             }

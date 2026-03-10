@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.nfc
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Simple
 import org.multipaz.crypto.EcPublicKey
@@ -351,7 +352,8 @@ class MdocNfcEngagementHelper(
             bsb.append(responseNdefMessagePayload)
             selectedFilePayload = bsb.toByteString()
             return ResponseApdu(Nfc.RESPONSE_STATUS_SUCCESS)
-        } catch (error: Throwable) {
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
             raiseError(error.message!!, error)
             return ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_NO_PRECISE_DIAGNOSIS)
         }
@@ -439,7 +441,8 @@ class MdocNfcEngagementHelper(
             }
             raiseError("Command APDU $command not supported, returning 6d00")
             return ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_INSTRUCTION_NOT_SUPPORTED_OR_INVALID)
-        } catch (error: Throwable) {
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
             raiseError("Error processing APDU: ${error.message}", error)
             return ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_NO_PRECISE_DIAGNOSIS)
         }

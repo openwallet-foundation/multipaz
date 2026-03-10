@@ -135,7 +135,8 @@ data class DeviceRequest private constructor(
                         signature = readerAuthAllSignature,
                         signatureAlgorithm = alg
                     )
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     throw SignatureVerificationException(
                         message = "Error verifying ReaderAuthAll at index $readerAuthAllIndex",
                         cause = e
@@ -161,7 +162,8 @@ data class DeviceRequest private constructor(
                         signature = docRequest.readerAuth_,
                         signatureAlgorithm = docRequest.readerAuthAlgorithm!!
                     )
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     throw SignatureVerificationException(
                         message = "Error verifying reader authentication for DocRequest at index $docRequestIndex",
                         cause = e

@@ -1,5 +1,6 @@
 package org.multipaz.claim
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.datetime.formatLocalized
 import org.multipaz.documenttype.DocumentAttribute
 import org.multipaz.documenttype.DocumentAttributeType
@@ -90,7 +91,8 @@ data class JsonClaim(
                 }
 
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             val fallback = value.toString()
             "$fallback (fallback, error occurred during rendering: ${e.message})"
         }

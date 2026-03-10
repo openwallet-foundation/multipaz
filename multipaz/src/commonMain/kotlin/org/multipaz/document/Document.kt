@@ -15,6 +15,7 @@
  */
 package org.multipaz.document
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -495,9 +496,15 @@ class Document internal constructor(
     companion object {
         private const val TAG = "Document"
 
+        /**
+         * Migration function to update to 0.97.0.
+         */
         var customSchema0_97_0_MigrationFn:
                 ((documentId: String, data: ByteString) -> ByteString)? = null
 
+        /**
+         * The default [StorageTableSpec] to use for [Document].
+         */
         val defaultTableSpec = object: StorageTableSpec(
             name = "Documents",
             supportPartitions = false,
@@ -562,6 +569,7 @@ class Document internal constructor(
                                     metadata = existing.other
                                 )
                             } catch (err: Exception) {
+                                if (err is CancellationException) throw err
                                 Logger.e(TAG, "Error parsing document '$documentId'", err)
                                 // keep the document as not provisioned; this will have to be handled by
                                 // the app (e.g. consult credentials, delete document,
@@ -572,6 +580,7 @@ class Document internal constructor(
                         try {
                             table.update(documentId, ByteString(newData.toCbor()))
                         } catch (err: Exception) {
+                            if (err is CancellationException) throw err
                             Logger.e(TAG, "Error writing document '$documentId'", err)
                             table.delete(documentId)
                         }

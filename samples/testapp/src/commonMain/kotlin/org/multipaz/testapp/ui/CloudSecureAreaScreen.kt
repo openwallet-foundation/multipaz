@@ -1,5 +1,6 @@
 package org.multipaz.secure_area_test_app.ui
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -114,7 +115,8 @@ fun CloudSecureAreaScreen(
                         connectText =
                             "Connected to ${cloudSecureArea!!.serverUrl}"
                         connectColor = Color.Blue
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         e.printStackTrace()
                         cloudSecureArea = null
                         showToast("${e.message}")
@@ -160,7 +162,8 @@ fun CloudSecureAreaScreen(
                                 onViewCertificate(Cbor.encode(attestation.certChain!!.toDataItem()).toBase64Url())
                             }
                         }
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         e.printStackTrace()
                         showToast("${e.message}")
                     }
@@ -430,7 +433,8 @@ private suspend fun csaTest(
         csaTestUnguarded(
             algorithm, authRequired, authTypes, passphraseRequired, showToast
         )
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
         showToast("${e.message}")
     }
 }

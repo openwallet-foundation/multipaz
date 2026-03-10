@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.response
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborMap
@@ -85,7 +86,8 @@ data class DeviceResponse internal constructor(
         documents_.forEachIndexed { index, document ->
             try {
                 document.verify(sessionTranscript, eReaderKey, atTime)
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 throw IllegalStateException("Error verifying document $index in DeviceResponse", e)
             }
         }

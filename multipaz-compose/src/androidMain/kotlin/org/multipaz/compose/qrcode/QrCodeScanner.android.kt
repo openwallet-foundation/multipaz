@@ -1,5 +1,6 @@
 package org.multipaz.compose.qrcode
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,7 +55,8 @@ actual fun QrCodeScanner(
                     onCodeScanned(result.text)
                     lastCodeScanned = result.text
                 }
-            } catch (_ : Throwable) {
+            } catch (e : Exception) {
+                if (e is CancellationException) throw e
                 // QR code not found in this frame
                 if (lastCodeScanned != null) {
                     onCodeScanned(null)

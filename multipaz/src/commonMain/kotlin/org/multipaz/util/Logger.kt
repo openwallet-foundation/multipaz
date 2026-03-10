@@ -15,6 +15,7 @@
  */
 package org.multipaz.util
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DiagnosticOption
 import kotlin.time.Clock
@@ -140,7 +141,8 @@ object Logger {
             try {
                 fileWriter!!.write((logLine + "\n").encodeToByteArray())
                 fileWriter!!.flush()
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 printer.print(Level.ERROR, tag, "Error writing log message to file", e)
                 e.printStackTrace()
             }

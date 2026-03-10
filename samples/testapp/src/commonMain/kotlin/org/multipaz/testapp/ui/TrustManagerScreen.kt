@@ -1,5 +1,6 @@
 package org.multipaz.testapp.ui
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -178,7 +179,8 @@ fun TrustManagerScreen(
                         )
                     } catch (_: TrustEntryAlreadyExistsException) {
                         showImportErrorDialog.value = "A certificate with this Subject Key Identifier already exists"
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         e.printStackTrace()
                         showImportErrorDialog.value = "Importing certificate failed: $e"
                     }
@@ -213,7 +215,8 @@ fun TrustManagerScreen(
                         onTrustEntryAdded(
                             updatedInfos.find { it.entry.identifier == entry.identifier }!!
                         )
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         e.printStackTrace()
                         showImportErrorDialog.value = "Importing VICAL failed: $e"
                     }
@@ -248,7 +251,8 @@ fun TrustManagerScreen(
                         onTrustEntryAdded(
                             updatedInfos.find { it.entry.identifier == entry.identifier }!!
                         )
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         e.printStackTrace()
                         showImportErrorDialog.value = "Importing RICAL failed: $e"
                     }

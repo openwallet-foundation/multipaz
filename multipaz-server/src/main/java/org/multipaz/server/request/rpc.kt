@@ -44,7 +44,7 @@ fun Routing.rpc(path: String, httpHandler: Deferred<HttpTransport>) {
         } catch (_: HttpTransport.TimeoutException) {
             Logger.e(TAG, "POST $path/$endpoint/$method status 500 (TimeoutException)")
             call.respond(HttpStatusCode.InternalServerError, "TimeoutException")
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             Logger.e(TAG, "POST $path/$endpoint/$method status 500", e)
             e.printStackTrace()
             call.respond(HttpStatusCode.InternalServerError, e.message ?: "")

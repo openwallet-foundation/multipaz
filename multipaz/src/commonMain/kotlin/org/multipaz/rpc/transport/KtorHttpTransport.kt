@@ -71,7 +71,7 @@ class KtorHttpTransport: HttpTransport {
             throw HttpTransport.TimeoutException("Timed out", e)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             throw HttpTransport.ConnectionException("Error", e)
         }
         HttpTransport.processStatus(url, response.status.value, response.status.description)

@@ -77,7 +77,8 @@ suspend fun mdocPresentment(
             )
         } catch (e: Iso18015ResponseException) {
             throw PresentmentCannotSatisfyRequestException("Error satisfying the request", e)
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalStateException("Error satisfying request", e)
         }
         val requester = Requester(

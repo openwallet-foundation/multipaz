@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.transport
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Tagged
@@ -195,7 +196,8 @@ internal class BleCentralManagerIos : BleCentralManager {
             if (characteristic == readCharacteristic) {
                 try {
                     handleIncomingData(characteristic.value!!.toByteArray())
-                } catch (error: Throwable) {
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
                     onError(error)
                 }
             } else {
@@ -476,7 +478,8 @@ internal class BleCentralManagerIos : BleCentralManager {
                 val value = l2capCharacteristic!!.value!!.toByteArray()
                 _l2capPsm = value.getUInt32(0).toInt()
                 Logger.i(TAG, "L2CAP PSM is $_l2capPsm")
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Logger.i(TAG, "L2CAP not available on peripheral", e)
             }
         }
@@ -629,7 +632,8 @@ internal class BleCentralManagerIos : BleCentralManager {
                 val message = l2capSource!!.readByteArray(length)
                 incomingMessages.send(message)
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             onError(Error("Reading from L2CAP channel failed", e))
         }
     }

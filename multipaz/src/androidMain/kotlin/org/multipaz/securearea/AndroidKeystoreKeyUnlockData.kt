@@ -1,5 +1,6 @@
 package org.multipaz.securearea
 
+import kotlinx.coroutines.CancellationException
 import androidx.biometric.BiometricPrompt
 import org.multipaz.crypto.Algorithm
 import org.multipaz.securearea.KeyUnlockData
@@ -67,6 +68,7 @@ class AndroidKeystoreKeyUnlockData(
             cryptoObjectForSigning = BiometricPrompt.CryptoObject(signature!!)
             return cryptoObjectForSigning
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalStateException(e)
         }
     }
@@ -114,6 +116,7 @@ class AndroidKeystoreKeyUnlockData(
                 //  b/282058146 and b/400115331 for details.
                 throw IllegalStateException("ECDH for keys with timeout 0 is not currently supported")
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 throw IllegalStateException(e)
             }
         }

@@ -1,5 +1,6 @@
 package org.multipaz.nfc
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.util.ByteDataReader
 import org.multipaz.util.appendByteString
 import org.multipaz.util.appendUInt32
@@ -132,7 +133,8 @@ data class NdefRecord(
                                 }
                             }
                             return null
-                        } catch (e: Throwable) {
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             return null
                         }
                     }
@@ -175,6 +177,7 @@ data class NdefRecord(
          *
          * @param encoded the encoded NDEF message
          * @return a list of records.
+         * @throws IllegalArgumentException if the message is invalid.
          */
         internal fun fromEncoded(encoded: ByteArray): List<NdefRecord> {
             try {
@@ -195,7 +198,7 @@ data class NdefRecord(
                     var tnf = Tnf.entries[flags.and(0x07)]
 
                     if (records.size == 0 && chunkBsb == null) {
-                        check(isMessageBegin)
+                        require(isMessageBegin) { "First record must be message begin" }
                     }
 
                     val typeLength = reader.getUInt8().toInt()
@@ -217,7 +220,7 @@ data class NdefRecord(
                     var payload = reader.getByteString(payloadLength)
 
                     if (reader.exhausted()) {
-                        check(isMessageEnd)
+                        require(isMessageEnd) { "Last record must be message end" }
                     }
 
                     if (tnf == Tnf.EMPTY && id.size != 0) {
@@ -262,7 +265,8 @@ data class NdefRecord(
                     throw IllegalArgumentException("No records in message")
                 }
                 return records
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 throw IllegalArgumentException("Parsing NdefMessage failed", e)
             }
         }

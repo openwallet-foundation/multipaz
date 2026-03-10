@@ -1,5 +1,6 @@
 package org.multipaz.securearea.cloud
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.OID
 import org.multipaz.cbor.Cbor
@@ -184,7 +185,8 @@ class CloudSecureAreaServer(
                     androidRequiredKeyMintSecurityLevel = androidKeystoreSecurityLevel
                 )
             )
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Logger.w(TAG, "$remoteHost: RegisterRequest1: Device Attestation did not validate", e)
             e.printStackTrace()
             return Pair(403, e.message!!.toByteArray())
@@ -207,7 +209,8 @@ class CloudSecureAreaServer(
                 // Check that device created the key without user authentication.
                 val attestation = AndroidAttestationExtensionParser(request1.deviceBindingKeyAttestation!!.certificates[0])
                 check(attestation.getUserAuthenticationType() == 0L)
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Logger.w(TAG, "$remoteHost: RegisterRequest1: Android Keystore attestation did not validate", e)
                 return Pair(403, e.message!!.toByteArray())
             }
@@ -473,7 +476,8 @@ class CloudSecureAreaServer(
                 } else {
                     check(attestation.getUserAuthenticationType() == 0L)
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 throw IllegalStateException("doCreateKeyRequest1: Android Keystore attestation did not validate", e)
             }
         }
@@ -593,7 +597,8 @@ class CloudSecureAreaServer(
                     } else {
                         check(attestation.getUserAuthenticationType() == 0L)
                     }
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     throw IllegalStateException("doBatchCreateKeyRequest1: Android Keystore attestation did not validate", e)
                 }
             }
@@ -812,7 +817,8 @@ class CloudSecureAreaServer(
                 e2eeState.encrypt()
             )
             return Pair(200, encryptedResponse1.toCbor())
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalStateException(e)
         }
     }
@@ -955,7 +961,8 @@ class CloudSecureAreaServer(
                 e2eeState.encrypt()
             )
             return Pair(200, encryptedResponse1.toCbor())
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalStateException(e)
         }
     }

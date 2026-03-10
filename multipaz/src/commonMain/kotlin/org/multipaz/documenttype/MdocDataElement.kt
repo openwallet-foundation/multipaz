@@ -16,6 +16,7 @@
 
 package org.multipaz.documenttype
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.DataItem
@@ -145,7 +146,8 @@ data class MdocDataElement(
                     option?.displayName ?: value.asTstr
                 }
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             val diagnosticsString = Cbor.toDiagnostics(value, diagnosticsOptions)
             Logger.w(TAG, "Error decoding value $diagnosticsString for data element " +
                     "${attribute.identifier}, falling back to diagnostics", e)

@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.response
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
@@ -80,7 +81,8 @@ data class EncryptedDocuments internal constructor(
         encDocsPt.documents.forEachIndexed { index, document ->
             try {
                 document.verify(encSessionTranscript, null, atTime)
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 throw IllegalStateException("Error verifying document $index in decrypted DeviceResponse", e)
             }
         }

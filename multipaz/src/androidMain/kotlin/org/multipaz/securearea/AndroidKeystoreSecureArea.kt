@@ -15,6 +15,7 @@
  */
 package org.multipaz.securearea
 
+import kotlinx.coroutines.CancellationException
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.pm.FeatureInfo
@@ -53,6 +54,7 @@ import org.multipaz.prompt.Reason
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.validateAndroidKeyAttestation
 import java.io.IOException
+import java.security.GeneralSecurityException
 import java.security.InvalidAlgorithmParameterException
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
@@ -298,17 +300,13 @@ class AndroidKeystoreSecureArea private constructor(
                 builder.setKeyValidityEnd(notAfter)
                 builder.setCertificateNotAfter(notAfter)
             }
-            try {
-                kpg.initialize(builder.build())
-            } catch (e: InvalidAlgorithmParameterException) {
-                throw IllegalStateException(e)
-            }
+            kpg.initialize(builder.build())
             kpg.generateKeyPair()
-        } catch (e: NoSuchAlgorithmException) {
-            throw IllegalStateException("Error creating key", e)
-        } catch (e: NoSuchProviderException) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalStateException("Error creating key", e)
         }
+
         val attestationCerts = mutableListOf<X509Cert>()
         try {
             val ks = KeyStore.getInstance("AndroidKeyStore")
@@ -319,6 +317,7 @@ class AndroidKeystoreSecureArea private constructor(
                 attestationCerts.add(X509Cert(ByteString(certificate.encoded)))
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalStateException(e)
         }
         //Logger.d(TAG, "EC key with alias '$alias' created")
@@ -351,26 +350,13 @@ class AndroidKeystoreSecureArea private constructor(
         val entry = ks.getEntry(existingAlias, null)
             ?: throw IllegalArgumentException("A key with this alias doesn't exist")
 
-        val keyInfo: KeyInfo = try {
+        val keyInfo = try {
             val privateKey = (entry as KeyStore.PrivateKeyEntry).privateKey
             val factory = KeyFactory.getInstance(privateKey.algorithm, "AndroidKeyStore")
-            try {
-                factory.getKeySpec(privateKey, KeyInfo::class.java)
-            } catch (e: InvalidKeySpecException) {
-                throw IllegalStateException("Given key is not an Android Keystore key", e)
-            }
-        } catch (e: UnrecoverableEntryException) {
-            throw IllegalStateException(e.message, e)
-        } catch (e: CertificateException) {
-            throw IllegalStateException(e.message, e)
-        } catch (e: KeyStoreException) {
-            throw IllegalStateException(e.message, e)
-        } catch (e: IOException) {
-            throw IllegalStateException(e.message, e)
-        } catch (e: NoSuchAlgorithmException) {
-            throw IllegalStateException(e.message, e)
-        } catch (e: NoSuchProviderException) {
-            throw IllegalStateException(e.message, e)
+            factory.getKeySpec(privateKey, KeyInfo::class.java)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            throw IllegalStateException("Given key is not an Android Keystore key", e)
         }
 
         // Need to generate the data which getKeyInfo() reads from disk.
@@ -388,6 +374,7 @@ class AndroidKeystoreSecureArea private constructor(
                 attestationCerts.add(X509Cert(ByteString(certificate.encoded)))
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalStateException(e)
         }
 
@@ -443,14 +430,9 @@ class AndroidKeystoreSecureArea private constructor(
             }
             ks.deleteEntry(alias)
             storageTable.delete(alias, partitionId)
-        } catch (e: CertificateException) {
-            throw IllegalStateException("Error loading keystore", e)
-        } catch (e: IOException) {
-            throw IllegalStateException("Error loading keystore", e)
-        } catch (e: NoSuchAlgorithmException) {
-            throw IllegalStateException("Error loading keystore", e)
-        } catch (e: KeyStoreException) {
-            throw IllegalStateException("Error loading keystore", e)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            throw IllegalStateException( e)
         }
         Logger.d(TAG, "EC key with alias '$alias' deleted")
     }
@@ -512,6 +494,7 @@ class AndroidKeystoreSecureArea private constructor(
             }
             throw IllegalStateException(e.message, e)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalArgumentException(e)
         }
     }
@@ -556,6 +539,7 @@ class AndroidKeystoreSecureArea private constructor(
             }
             throw IllegalArgumentException(e)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalArgumentException(e)
         }
     }
@@ -596,7 +580,7 @@ class AndroidKeystoreSecureArea private constructor(
     override suspend fun getKeyInvalidated(alias: String): Boolean {
         try {
             loadKey(alias)
-        } catch (e: KeyInvalidatedException) {
+        } catch (_: KeyInvalidatedException) {
             return true
         }
         return false
@@ -662,6 +646,7 @@ class AndroidKeystoreSecureArea private constructor(
                 validUntil
             )
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalStateException(e)
         }
     }
@@ -821,7 +806,8 @@ class AndroidKeystoreSecureArea private constructor(
                             setUseStrongBox(useStrongBox)
                         }
                     )
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     throw IllegalStateException("Error creating key: ${e.message}", e)
                 }
                 keyAliasToCleanUp = keyInfo.alias
@@ -849,7 +835,8 @@ class AndroidKeystoreSecureArea private constructor(
                         requireAppSignatureCertificateDigests = signatureCertificateDigests,
                         requireAppPackages = setOf(pkg.packageName)
                     )
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     throw IllegalStateException("Error validating attestation: ${e.message}", e)
                 }
 
@@ -861,7 +848,8 @@ class AndroidKeystoreSecureArea private constructor(
                             dataToSign = message,
                             unlockReason = Reason.Unspecified
                         )
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         throw IllegalStateException("Error signing message of $messageLen bytes", e)
                     }
                     try {
@@ -871,11 +859,13 @@ class AndroidKeystoreSecureArea private constructor(
                             algorithm = Algorithm.ESP256,
                             signature = signature
                         )
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         throw IllegalStateException("Error verifying signature for message of $messageLen bytes", e)
                     }
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 throw IllegalStateException("Test failed: ${e.message}", e)
             } finally {
                 if (keyAliasToCleanUp != null) {

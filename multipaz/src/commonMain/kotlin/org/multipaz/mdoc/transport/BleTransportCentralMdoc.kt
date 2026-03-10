@@ -121,7 +121,7 @@ internal class BleTransportCentralMdoc(
                         _state.value = State.CONNECTED
                     }
                 }
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 error.unwrapCancellationException().let {
                     failTransport(it)
                     throw it.wrapUnlessCancellationException("Failed while opening transport")
@@ -140,7 +140,7 @@ internal class BleTransportCentralMdoc(
             return centralManager.incomingMessages.receive()
         } catch (error: CancellationException) {
             throw error
-        } catch (error: Throwable) {
+        } catch (error: Exception) {
             if (_state.value == State.CLOSED) {
                 throw MdocTransportClosedException("Transport was closed while waiting for message")
             } else {
@@ -168,7 +168,7 @@ internal class BleTransportCentralMdoc(
                         }
                     }
                 }
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 throw error.unwrapCancellationException().let {
                     failTransport(it)
                     it.wrapUnlessCancellationException("Failed while sending message")

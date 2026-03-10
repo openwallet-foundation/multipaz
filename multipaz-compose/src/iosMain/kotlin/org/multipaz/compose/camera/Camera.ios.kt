@@ -1,5 +1,6 @@
 package org.multipaz.compose.camera
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -481,7 +482,8 @@ private class CameraManager(
                 rotation = videoOrientation.toRotationAngle(),
                 previewTransformation = previewTransformation,
             )
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Logger.e(TAG, "Error preparing frame data", e)
             isProcessingFrame.value = false // Release lock on error during prep.
             return
@@ -590,7 +592,8 @@ private fun CMSampleBufferRef.toUIImage(): UIImage? {
             return null
         }
         UIImage(cGImage = videoImage)
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
         Logger.e(TAG, "Error during image creation", e)
         return null
     } finally {
@@ -599,7 +602,9 @@ private fun CMSampleBufferRef.toUIImage(): UIImage? {
                 CGImageRelease(it)
             }
         }
-        catch (_: Throwable) { }
+        catch (e: Exception) {
+            if (e is CancellationException) throw e
+        }
     }
     return finalUiImage
 }

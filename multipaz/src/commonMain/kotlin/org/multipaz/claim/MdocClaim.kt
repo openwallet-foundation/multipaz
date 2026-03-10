@@ -1,5 +1,6 @@
 package org.multipaz.claim
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.DataItem
@@ -142,7 +143,8 @@ data class MdocClaim(
                 }
 
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             val fallback = Cbor.toDiagnostics(value, setOf(DiagnosticOption.BSTR_PRINT_LENGTH))
             "$fallback (fallback, error occurred during rendering: ${e.message})"
         }

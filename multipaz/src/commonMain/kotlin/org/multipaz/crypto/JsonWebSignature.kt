@@ -1,5 +1,6 @@
 package org.multipaz.crypto
 
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -99,26 +100,30 @@ object JsonWebSignature {
      *
      * @param jws the compact serialization of the JWS.
      * @param publicKey the key to use for verification
-     * @throws Throwable if verification fails.
+     * @throws IllegalArgumentException if the JWS is malformed.
+     * @throws SignatureVerificationException if the signature check fails.
      */
     suspend fun verify(
         jws: String,
         publicKey: EcPublicKey
     ) {
-        val splits = jws.split(".")
-        require(splits.size == 3) { "Malformed JWS" }
-        val (headerStr, bodyStr, signatureStr) = splits
-        val headerObj = Json.decodeFromString(JsonObject.serializer(), headerStr.fromBase64Url().decodeToString())
-
-        val toBeVerified = "$headerStr.$bodyStr".encodeToByteArray()
-        val signature = EcSignature.fromCoseEncoded(signatureStr.fromBase64Url())
-        val algorithm = Algorithm.fromJoseAlgorithmIdentifier(headerObj["alg"]!!.jsonPrimitive.content)
-        Crypto.checkSignature(
-            publicKey = publicKey,
-            message = toBeVerified,
-            algorithm = algorithm,
-            signature = signature
-        )
+        try {
+            val splits = jws.split(".")
+            require(splits.size == 3) { "Malformed JWS" }
+            val (headerStr, bodyStr, signatureStr) = splits
+            val headerObj = Json.decodeFromString(JsonObject.serializer(), headerStr.fromBase64Url().decodeToString())
+            val toBeVerified = "$headerStr.$bodyStr".encodeToByteArray()
+            val signature = EcSignature.fromCoseEncoded(signatureStr.fromBase64Url())
+            val algorithm = Algorithm.fromJoseAlgorithmIdentifier(headerObj["alg"]!!.jsonPrimitive.content)
+            Crypto.checkSignature(
+                publicKey = publicKey,
+                message = toBeVerified,
+                algorithm = algorithm,
+                signature = signature
+            )
+        } catch (e: SerializationException) {
+            throw IllegalArgumentException("Malformed JWS", e)
+        }
     }
 
     /**

@@ -176,7 +176,7 @@ internal class ClientImpl(
                                 output.write(bytes)
                             } catch (err: CancellationException) {
                                 throw err
-                            } catch (err: Throwable) {
+                            } catch (err: Exception) {
                                 Logger.e(TAG, "Error loading resource '$path'", err)
                             } finally {
                                 output.close()

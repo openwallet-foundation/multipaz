@@ -15,6 +15,7 @@
  */
 package org.multipaz.mdoc.request
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
@@ -23,6 +24,7 @@ import org.multipaz.cbor.buildCborArray
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 
@@ -154,7 +156,8 @@ class DeviceRequestParser(
                                 signatureAlgorithm
                             )
                             true
-                        } catch (_: Throwable) {
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             false
                         }
                     }

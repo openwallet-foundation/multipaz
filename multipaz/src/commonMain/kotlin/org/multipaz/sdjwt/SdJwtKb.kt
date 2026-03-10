@@ -1,5 +1,6 @@
 package org.multipaz.sdjwt
 
+import kotlinx.coroutines.CancellationException
 import kotlin.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -64,7 +65,8 @@ class SdJwtKb private constructor(
     ): JsonObject {
         try {
             JsonWebSignature.verify("$kbHeader.$kbBody.$kbSignature", sdJwt.kbKey!!)
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw SignatureVerificationException("Error validating KB signature", e)
         }
 

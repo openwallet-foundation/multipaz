@@ -155,7 +155,7 @@ class RpcDispatcherLocal private constructor(
                     )
                 } catch (err: CancellationException) {
                     throw err
-                } catch (err: Throwable) {
+                } catch (err: Exception) {
                     val newStateBlob = stateDataItem(cipher, argList[0], decryptedState, state)
                     return owner.exceptionMap.exceptionReturn(newStateBlob, err)
                 }
@@ -178,7 +178,7 @@ class RpcDispatcherLocal private constructor(
                     )
                 } catch (err: CancellationException) {
                     throw err
-                } catch (err: Throwable) {
+                } catch (err: Exception) {
                     val newStateBlob = stateDataItem(cipher, argList[0], decryptedState, state)
                     return owner.exceptionMap.exceptionReturn(
                         newStateBlob, err, nextNonce)
@@ -197,7 +197,7 @@ class RpcDispatcherLocal private constructor(
                         RpcReturnCode.RESULT.ordinal.toDataItem(), result)
                 } catch (err: CancellationException) {
                     throw err
-                } catch (err: Throwable) {
+                } catch (err: Exception) {
                     val newStateBlob = stateDataItem(cipher, argList[0], decryptedState, state)
                     return owner.exceptionMap.exceptionReturn(newStateBlob, err)
                 }

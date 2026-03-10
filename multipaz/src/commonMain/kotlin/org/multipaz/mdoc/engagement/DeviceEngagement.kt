@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.engagement
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
@@ -121,7 +122,8 @@ data class DeviceEngagement private constructor(
                         if (originInfo != null) {
                             originInfos.add(originInfo)
                         }
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         Logger.w(TAG, "OriginInfo is incorrectly formatted", e)
                     }
                 }

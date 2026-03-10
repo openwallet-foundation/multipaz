@@ -1,5 +1,6 @@
 package org.multipaz.util
 
+import kotlinx.coroutines.CancellationException
 import js.array.jsArrayOf
 import js.buffer.ArrayBuffer
 import js.typedarrays.Int8Array
@@ -15,6 +16,8 @@ import web.http.BodyInit
 import web.http.Response
 import web.http.arrayBuffer
 import web.streams.ReadableWritablePair
+import kotlin.js.ExperimentalWasmJsInterop
+import kotlin.js.JsException
 import kotlin.js.unsafeCast
 
 actual suspend fun ByteArray.deflate(compressionLevel: Int): ByteArray {
@@ -31,6 +34,7 @@ actual suspend fun ByteArray.deflate(compressionLevel: Int): ByteArray {
     return Int8Array(compressedBuffer).toByteArray()
 }
 
+@OptIn(ExperimentalWasmJsInterop::class)
 actual suspend fun ByteArray.inflate(): ByteArray {
     val jsData = this.toUint8Array()
     val blob = Blob(jsArrayOf(jsData))
@@ -41,7 +45,10 @@ actual suspend fun ByteArray.inflate(): ByteArray {
         val outputStream = inputStream.pipeThrough(transform)
         val decompressedBuffer = Response(outputStream as BodyInit?).arrayBuffer()
         return Int8Array(decompressedBuffer).toByteArray()
-    } catch (e: Throwable) {
+    } catch (e: JsException) {
+        throw IllegalArgumentException("Error decompressing data", e)
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
         throw IllegalArgumentException("Error decompressing data", e)
     }
 }

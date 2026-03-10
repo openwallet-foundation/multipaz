@@ -1,5 +1,6 @@
 package org.multipaz.compose.presentment
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
@@ -137,7 +138,8 @@ internal fun MdocProximityQrPresentmentDefault(
                                 keyAgreementPossible = listOf(eDeviceKeyCurve),
                             )
 
-                        } catch (e: Throwable) {
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             transactionError = e
                         } finally {
                             state = State.COMPLETED

@@ -7,6 +7,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CancellationException
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -97,8 +98,9 @@ object AppLinksCheck {
             } else {
                 response.readRawBytes().decodeToString()
             }
-        } catch (err: Exception) {
-            Logger.e(TAG, "Error connecting to $appLinkServer", err)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Logger.e(TAG, "Error connecting to $appLinkServer", e)
             // Assume we are offline, don't complain.
             return true
         }
@@ -130,8 +132,9 @@ object AppLinksCheck {
                     Logger.i(TAG, "Server app link setup is validated")
                     return true
                 }
-            } catch (err: Exception) {
-                Logger.e(TAG, "Parsing error", err)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Logger.e(TAG, "Parsing error", e)
                 continue
             }
         }

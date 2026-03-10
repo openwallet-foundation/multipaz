@@ -1,5 +1,6 @@
 package org.multipaz.testapp.ui
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -61,7 +62,8 @@ fun SettingsScreen(
                     app.settingsModel.cryptoPreferBouncyCastle.value = it
                     try {
                         TestAppConfiguration.restartApp()
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         showToast("An error occurred: $e")
                     }
                 },

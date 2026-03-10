@@ -1,5 +1,6 @@
 package org.multipaz.compose.mdoc
 
+import kotlinx.coroutines.CancellationException
 import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
 import org.multipaz.mdoc.transport.NfcTransportMdoc
@@ -35,7 +36,8 @@ open class MdocNfcDataTransferService: HostApduService() {
                 commandApdu = commandApdu,
                 sendResponse = { responseApdu -> sendResponseApdu(responseApdu) }
             )
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Logger.e(TAG, "processCommandApdu", e)
             e.printStackTrace()
         }

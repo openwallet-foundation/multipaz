@@ -275,7 +275,7 @@ class MultiDeviceTestsServer(
         } catch (e: TimeoutCancellationException) {
             Logger.w(TAG, "Iteration timeout")
             numHolderTimeouts += 1
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             Logger.w(TAG, "Iteration failed", e)
             e.printStackTrace()
             numHolderErrors += 1

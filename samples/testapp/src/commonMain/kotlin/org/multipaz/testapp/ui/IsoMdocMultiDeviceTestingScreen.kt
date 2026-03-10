@@ -29,6 +29,7 @@ import io.ktor.network.selector.SelectorManager
 import io.ktor.network.sockets.InetSocketAddress
 import io.ktor.network.sockets.Socket
 import io.ktor.network.sockets.aSocket
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
@@ -97,8 +98,9 @@ fun IsoMdocMultiDeviceTestingScreen(
                                     multiDeviceTestClient,
                                     showToast
                                 )
-                            } catch (error: Throwable) {
-                                showToast("Error: ${error.message}")
+                            } catch (e: Exception) {
+                                if (e is CancellationException) throw e
+                                showToast("Error: ${e.message}")
                             }
                         }
                     }
@@ -135,8 +137,9 @@ fun IsoMdocMultiDeviceTestingScreen(
                         multiDeviceTestResults,
                         showToast
                     )
-                } catch (error: Throwable) {
-                    showToast("Error: ${error.message}")
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    showToast("Error: ${e.message}")
                 }
             }
         }
@@ -293,10 +296,11 @@ private suspend fun runMultiDeviceTestsServer(
     multiDeviceTestsServer.value = server
     try {
         server.run()
-    } catch (error: Throwable) {
-        Logger.i(TAG, "Multi-Device Tests failed", error)
-        error.printStackTrace()
-        showToast("Multi-Device-Tests failed: ${error.message}")
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        Logger.i(TAG, "Multi-Device Tests failed", e)
+        e.printStackTrace()
+        showToast("Multi-Device-Tests failed: ${e.message}")
     }
     // Keep multiDeviceTestServer around so user has a chance to review the results...
     // multiDeviceTestsServer.value = null
@@ -314,10 +318,11 @@ private suspend fun runMultiDeviceTestsClient(
     multiDeviceTestsClient.value = client
     try {
         client.run()
-    } catch (error: Throwable) {
-        Logger.i(TAG, "Multi-Device Tests failed", error)
-        error.printStackTrace()
-        showToast("Multi-Device-Tests failed: ${error.message}")
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        Logger.i(TAG, "Multi-Device Tests failed", e)
+        e.printStackTrace()
+        showToast("Multi-Device-Tests failed: ${e.message}")
     }
     multiDeviceTestsClient.value = null
 }

@@ -1,5 +1,6 @@
 package org.multipaz.testapp.ui
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -390,7 +391,8 @@ fun ConsentPromptScreen(
                             onDocumentsInFocus = documents
                         },
                     )
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     e.printStackTrace()
                     showToast("Error evaluating query: $e")
                 } finally {

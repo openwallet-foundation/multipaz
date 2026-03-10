@@ -15,6 +15,7 @@
  */
 package org.multipaz.mdoc.engagement
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.DataItem
@@ -111,6 +112,7 @@ class EngagementParser(private val encodedEngagement: ByteArray) {
                                 ois.add(originInfo)
                             }
                         } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             Logger.w(TAG, "OriginInfo is incorrectly formatted.", e)
                         }
                     }

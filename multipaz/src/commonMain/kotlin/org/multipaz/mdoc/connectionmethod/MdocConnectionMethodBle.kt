@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.connectionmethod
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.nfc.NdefRecord
 import org.multipaz.nfc.Nfc
 import org.multipaz.util.Logger
@@ -250,7 +251,8 @@ data class MdocConnectionMethodBle(
                         try {
                             val mdocBleServiceData = Cbor.decode(encodedMdocBleServiceData.toByteArray())
                             psm = mdocBleServiceData.getOrNull(0)?.asNumber?.toInt()
-                        } catch (e: Throwable) {
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             Logger.w(TAG, "Error decoding BleServiceData CBOR", e)
                         }
                     }

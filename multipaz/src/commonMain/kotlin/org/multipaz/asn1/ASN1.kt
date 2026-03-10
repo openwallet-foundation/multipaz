@@ -1,5 +1,6 @@
 package org.multipaz.asn1
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.util.toHex
 import kotlinx.io.bytestring.ByteStringBuilder
@@ -171,7 +172,8 @@ object ASN1 {
     fun decode(derEncoded: ByteArray): ASN1Object? {
         val (newOffset, obj) = try {
             decode(derEncoded, 0)
-        } catch(e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalArgumentException("Unexpected error decoding", e)
         }
         if (newOffset != derEncoded.size) {
@@ -323,7 +325,8 @@ object ASN1 {
                 try {
                     val decodedObject = ASN1.decode(obj.content)
                     print(sb, indent + 2, decodedObject!!)
-                } catch (_: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     for (n in IntRange(1, indent + 2)) {
                         sb.append(" ")
                     }

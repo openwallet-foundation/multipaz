@@ -15,6 +15,7 @@
  */
 package org.multipaz.mdoc.response
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
@@ -156,9 +157,10 @@ class DeviceResponseParser(
                         signatureAlgorithm
                     )
                     true
-                } catch (_: Throwable) {
-                    false
-                }
+                 } catch (e: Exception) {
+                     if (e is CancellationException) throw e
+                     false
+                 }
             } else {
                 false
             }

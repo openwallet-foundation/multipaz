@@ -72,7 +72,8 @@ private class IosTagReader<T>(
                             } else {
                                 session.restartPolling()
                             }
-                        } catch (e: Throwable) {
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             continuation?.resumeWithException(e)
                             continuation = null
                         }
@@ -116,7 +117,7 @@ private class IosTagReader<T>(
         } catch (e: CancellationException) {
             session.invalidateSessionWithErrorMessage("Dialog was canceled")
             throw e
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             e.message?.let { session.invalidateSessionWithErrorMessage(it) } ?: session.invalidateSession()
             throw e
         }

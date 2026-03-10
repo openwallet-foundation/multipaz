@@ -1,5 +1,6 @@
 package org.multipaz.storage.jdbc
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.storage.base.BaseStorage
 import org.multipaz.storage.base.BaseStorageTable
 import org.multipaz.storage.StorageTableSpec
@@ -87,7 +88,8 @@ class JdbcStorage(
                             )
                         )
                     }
-                } catch (error: Throwable) {
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
                     continuation.resumeWithException(error)
                     // Close after exceptions instead of returning to the pool
                     connection.close()
@@ -95,7 +97,8 @@ class JdbcStorage(
                 for (staleConnection in staleConnections) {
                     try {
                         staleConnection.close()
-                    } catch (err: Throwable) {
+                    } catch (err: Exception) {
+                        if (err is CancellationException) throw err
                         // ignore all errors
                     }
                 }

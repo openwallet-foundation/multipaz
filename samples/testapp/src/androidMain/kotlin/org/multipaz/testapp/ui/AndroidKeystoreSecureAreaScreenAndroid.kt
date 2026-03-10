@@ -1,5 +1,6 @@
 package org.multipaz.testapp.ui
 
+import kotlinx.coroutines.CancellationException
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.FeatureInfo
@@ -134,7 +135,8 @@ actual fun AndroidKeystoreSecureAreaScreen(
                                 androidKeystoreCapabilities.testKeyAttestationsAndEcdsaSigning(useStrongBox)
                                 val durationMsec = (Clock.System.now() - t0).inWholeMilliseconds
                                 showToast("Sanity check passed ($durationMsec msec)")
-                            } catch (e: Throwable) {
+                            } catch (e: Exception) {
+                                if (e is CancellationException) throw e
                                 val durationMsec = (Clock.System.now() - t0).inWholeMilliseconds
                                 e.printStackTrace()
                                 showToast("Sanity check failed ($durationMsec msec): ${e.message}")
@@ -160,7 +162,8 @@ actual fun AndroidKeystoreSecureAreaScreen(
                         withContext(Dispatchers.Main) {
                             onViewCertificate(Cbor.encode(attestation.certChain!!.toDataItem()).toBase64Url())
                         }
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         e.printStackTrace();
                         showToast("${e.message}")
                     }
@@ -183,7 +186,8 @@ actual fun AndroidKeystoreSecureAreaScreen(
                         withContext(Dispatchers.Main) {
                             onViewCertificate(Cbor.encode(attestation.certChain!!.toDataItem()).toBase64Url())
                         }
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         e.printStackTrace();
                         showToast("${e.message}")
                     }
@@ -208,7 +212,8 @@ actual fun AndroidKeystoreSecureAreaScreen(
                                 Cbor.encode(attestation.certChain!!.toDataItem()).toBase64Url()
                             )
                         }
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         e.printStackTrace();
                         showToast("${e.message}")
                     }
@@ -233,7 +238,8 @@ actual fun AndroidKeystoreSecureAreaScreen(
                                 Cbor.encode(attestation.certChain!!.toDataItem()).toBase64Url()
                             )
                         }
-                    } catch (e: Throwable) {
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         e.printStackTrace();
                         showToast("${e.message}")
                     }
@@ -604,7 +610,8 @@ private suspend fun aksTest(
     try {
         aksTestUnguarded(algorithm, authRequired, authTimeout, userAuthType,
             biometricConfirmationRequired, strongBox, showToast)
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
         e.printStackTrace();
         showToast("${e.message}")
     }

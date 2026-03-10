@@ -1,5 +1,6 @@
 package org.multipaz.cbor
 
+import kotlinx.coroutines.CancellationException
 import kotlin.math.pow
 import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.util.appendUInt16
@@ -190,7 +191,8 @@ object Cbor {
             return Pair(newOffset, item)
         } catch (e: IndexOutOfBoundsException) {
             throw IllegalArgumentException("Out of bounds decoding data", e)
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalArgumentException("Error occurred when decoding CBOR", e)
         }
     }
@@ -303,6 +305,7 @@ object Cbor {
                                 val embeddedItem = decode(item.value)
                                 toDiagnostics(sb, indent, embeddedItem, null, options)
                             } catch (e: Exception) {
+                                if (e is CancellationException) throw e
                                 // Never throw an exception
                                 sb.append("Error Decoding CBOR")
                             }

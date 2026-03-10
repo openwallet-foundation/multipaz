@@ -1,5 +1,6 @@
 package org.multipaz.testapp.ui
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -141,6 +142,7 @@ private fun StatusListCheckSection(
                                 else -> "Unexpected status $code"
                             }
                         } catch (err: Exception) {
+                            if (err is CancellationException) throw err
                             Logger.e(TAG, "Failed to parse status list", err)
                             statusText.value = "Failed to parse status list"
                         }
@@ -199,6 +201,7 @@ fun IdentifierListCheckSection(
                                 "Valid"
                             }
                         } catch (err: Exception) {
+                            if (err is CancellationException) throw err
                             Logger.e(TAG, "Failed to parse identifier list", err)
                             statusText.value = "Failed to parse identifier list"
                         }

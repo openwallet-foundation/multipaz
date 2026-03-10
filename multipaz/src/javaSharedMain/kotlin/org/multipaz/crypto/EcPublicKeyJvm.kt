@@ -1,5 +1,6 @@
 package org.multipaz.crypto
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.io.bytestring.ByteStringBuilder
 import java.math.BigInteger
 import java.security.AlgorithmParameters
@@ -111,6 +112,7 @@ val EcPublicKey.javaPublicKey: PublicKey
                 val kf = KeyFactory.getInstance("EC")
                 kf.generatePublic(keySpec)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 throw IllegalStateException("Unexpected error", e)
             }
         }
@@ -149,6 +151,7 @@ val EcPublicKey.javaPublicKey: PublicKey
                 bsb.append(x)
                 kf.generatePublic(X509EncodedKeySpec(bsb.toByteString().toByteArray()))
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 // any exception, such as NoSuchAlgorithmException, InvalidKeySpecException, IOException, NoSuchProviderException
                 throw IllegalStateException("Unexpected error", e)
             }

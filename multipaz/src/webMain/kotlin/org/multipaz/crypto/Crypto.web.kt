@@ -4,6 +4,7 @@ import js.array.jsArrayOf
 import js.buffer.toByteArray
 import js.objects.unsafeJso
 import kotlinx.browser.window
+import kotlinx.coroutines.CancellationException
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1BitString
 import org.multipaz.asn1.ASN1ObjectIdentifier
@@ -38,6 +39,7 @@ import web.crypto.sign
 import web.crypto.spki
 import web.crypto.verify
 import kotlin.js.ExperimentalWasmJsInterop
+import kotlin.js.JsException
 import kotlin.js.toJsString
 import kotlin.js.unsafeCast
 
@@ -189,6 +191,7 @@ actual object Crypto {
         ).toByteArray()
     }
 
+    @OptIn(ExperimentalWasmJsInterop::class)
     actual suspend fun decrypt(
         algorithm: Algorithm,
         key: ByteArray,
@@ -215,7 +218,10 @@ actual object Crypto {
                 key = key,
                 data = messageCiphertext.toBufferSource()
             ).toByteArray()
-        } catch (e : Throwable) {
+        } catch (e : JsException) {
+            throw IllegalStateException("Error decrypting", e)
+        } catch (e : Exception) {
+            if (e is CancellationException) throw e
             throw IllegalStateException("Error decrypting", e)
         }
     }

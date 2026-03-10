@@ -1,5 +1,6 @@
 package org.multipaz.compose.certificateviewer
 
+import kotlinx.coroutines.CancellationException
 import kotlin.time.Instant
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Boolean
@@ -65,7 +66,7 @@ internal data class CertificateViewData(
 
             val issuer = cert.issuer.components.mapValues { it.value.value }
 
-            val pkAlgorithm: String = OID.Companion.lookupByOid(cert.signatureAlgorithmOid)?.description
+            val pkAlgorithm: String = OID.lookupByOid(cert.signatureAlgorithmOid)?.description
                     ?: "Unexpected algorithm OID ${cert.signatureAlgorithmOid}"
 
             val pkNamedCurve: String? = runCatching { cert.ecPublicKey.curve.name }.getOrNull()
@@ -110,7 +111,8 @@ internal data class CertificateViewData(
                                     sb.append("pathLenConstraint: ${(seq.elements[1] as ASN1Integer).toLong()}\n")
                                 }
                                 sb.toString()
-                            } catch (e: Throwable) {
+                            } catch (e: Exception) {
+                                if (e is CancellationException) throw e
                                 "Error decoding: $e"
                             }
                         }
@@ -135,13 +137,14 @@ internal data class CertificateViewData(
                                 // Most extensions are ASN.1 so we opportunistically try and decode
                                 // and if it works, pretty print that.
                                 ASN1.print(ASN1.decode(ext.data.toByteArray())!!)
-                            } catch (_: Throwable) {
+                            } catch (e: Exception) {
+                                if (e is CancellationException) throw e
                                 // If decoding fails, fall back to hex encoding.
                                 ext.data.toByteArray().toHex(byteDivider = " ", decodeAsString = true)
                             }
                         }
                     }
-                    val oidEntry = OID.Companion.lookupByOid(ext.oid)
+                    val oidEntry = OID.lookupByOid(ext.oid)
                     val oid = if (oidEntry != null) {
                         "${ext.oid} ${oidEntry.description}"
                     } else {

@@ -1,5 +1,6 @@
 package org.multipaz.device
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcSignature
@@ -25,8 +26,9 @@ data class DeviceAttestationAndroid(
                 requireAppSignatureCertificateDigests = validationData.androidAppSignatureCertificateDigests,
                 requireAppPackages = validationData.androidAppPackageNames
             )
-        } catch (err: Exception) {
-            throw DeviceAttestationException("Failed Android device attestation", err)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            throw DeviceAttestationException("Failed Android device attestation", e)
         }
     }
 

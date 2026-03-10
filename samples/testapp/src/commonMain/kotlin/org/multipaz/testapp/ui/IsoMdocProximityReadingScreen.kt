@@ -1,5 +1,6 @@
 package org.multipaz.testapp.ui
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -301,7 +302,8 @@ fun IsoMdocProximityReadingScreen(
                                     )
                                 )
                             }
-                        } catch (error: Throwable) {
+                        } catch (error: Exception) {
+                            if (error is CancellationException) throw error
                             Logger.e(TAG, "Caught exception", error)
                             showToast("Error: ${error.message}")
                         }
@@ -392,7 +394,8 @@ fun IsoMdocProximityReadingScreen(
                                             statusCode = null
                                         )
                                     )
-                                } catch (error: Throwable) {
+                                } catch (error: Exception) {
+                                    if (error is CancellationException) throw error
                                     Logger.e(TAG, "Caught exception", error)
                                     showToast("Error: ${error.message}")
                                 }
@@ -410,7 +413,8 @@ fun IsoMdocProximityReadingScreen(
                                         SessionEncryption.encodeStatus(Constants.SESSION_DATA_STATUS_SESSION_TERMINATION)
                                     )
                                     readerTransport.value!!.close()
-                                } catch (error: Throwable) {
+                                } catch (error: Exception) {
+                                    if (error is CancellationException) throw error
                                     Logger.e(TAG, "Caught exception", error)
                                     showToast("Error: ${error.message}")
                                 }
@@ -426,7 +430,8 @@ fun IsoMdocProximityReadingScreen(
                                 try {
                                     readerTransport.value!!.sendMessage(byteArrayOf())
                                     readerTransport.value!!.close()
-                                } catch (error: Throwable) {
+                                } catch (error: Exception) {
+                                    if (error is CancellationException) throw error
                                     Logger.e(TAG, "Caught exception", error)
                                     showToast("Error: ${error.message}")
                                 }
@@ -441,7 +446,8 @@ fun IsoMdocProximityReadingScreen(
                             coroutineScope.launch {
                                 try {
                                     readerTransport.value!!.close()
-                                } catch (error: Throwable) {
+                                } catch (error: Exception) {
+                                    if (error is CancellationException) throw error
                                     Logger.e(TAG, "Caught exception", error)
                                     showToast("Error: ${error.message}")
                                 }
@@ -645,7 +651,8 @@ fun IsoMdocProximityReadingScreen(
                                         // when cancelled/dismissed
                                         readerJob = null
                                     }
-                                } catch (e: Throwable) {
+                                } catch (e: Exception) {
+                                    if (e is CancellationException) throw e
                                     Logger.e(TAG, "NFC engagement failed", e)
                                     showToast("NFC engagement failed with $e")
                                     readerJob = null

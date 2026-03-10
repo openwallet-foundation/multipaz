@@ -105,7 +105,7 @@ expect object Crypto {
      * @param algorithm the signature algorithm to use.
      * @param signature the signature.
      * @throws SignatureVerificationException if the signature check fails.
-     * @throws IllegalStateException if an error occurred during the check, for example if data is malformed.
+     * @throws IllegalArgumentException if an error occurred during the check, for example if data is malformed.
      */
     suspend fun checkSignature(
         publicKey: EcPublicKey,

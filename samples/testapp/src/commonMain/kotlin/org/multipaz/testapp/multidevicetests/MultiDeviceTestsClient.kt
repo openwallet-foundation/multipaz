@@ -14,6 +14,7 @@ import io.ktor.network.sockets.openReadChannel
 import io.ktor.network.sockets.openWriteChannel
 import io.ktor.utils.io.readUTF8Line
 import io.ktor.utils.io.writeStringUtf8
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
@@ -174,7 +175,8 @@ class MultiDeviceTestsClient(
                     }
                 } catch (e: TimeoutCancellationException) {
                     sendChannel.writeStringUtf8("TestPresentationTimeout\n")
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Logger.w(TAG, "Iteration failed", e)
                     e.printStackTrace()
                     sendChannel.writeStringUtf8("TestPresentationFailed\n")

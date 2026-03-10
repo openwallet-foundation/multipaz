@@ -1,5 +1,6 @@
 package org.multipaz.testapp.ui
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -174,7 +175,8 @@ fun NfcScreen(
                             showToast("NDEF CC file: ${ccFile.toHex()}")
                         } catch (e: PromptDismissedException) {
                             showToast("Dialog dismissed by user")
-                        } catch (e: Throwable) {
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             Logger.e(TAG, "Fail", e)
                             e.printStackTrace()
                             showToast("Fail: ${e.message}")
@@ -212,7 +214,8 @@ fun NfcScreen(
                             showToast("NDEF CC file: ${ccFile.toHex()}")
                         } catch (e: PromptDismissedException) {
                             showToast("Dialog dismissed by user")
-                        } catch (e: Throwable) {
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             Logger.e(TAG, "Fail", e)
                             e.printStackTrace()
                             showToast("Fail: ${e.message}")
@@ -253,7 +256,8 @@ fun NfcScreen(
                             showToast("NDEF CC file: ${ccFile.toHex()}")
                         } catch (e: PromptDismissedException) {
                             showToast("Dialog dismissed by user")
-                        } catch (e: Throwable) {
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             Logger.e(TAG, "Fail", e)
                             e.printStackTrace()
                             showToast("Fail: ${e.message}")

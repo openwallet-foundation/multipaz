@@ -1,5 +1,6 @@
 package org.multipaz.securearea.cloud
 
+import kotlinx.coroutines.CancellationException
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngineFactory
@@ -183,6 +184,7 @@ open class CloudSecureArea protected constructor(
             val responseBody: ByteArray = httpResponse.body()
             return Pair(responseStatus, responseBody)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw CloudException("Error communicating with Cloud Secure Area", e)
         }
     }
@@ -306,7 +308,8 @@ open class CloudSecureArea protected constructor(
                 partitionId = identifier,
                 data = ByteString(passphraseConstraints.toCbor())
             )
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw CloudException(e)
         }
     }
@@ -443,6 +446,7 @@ open class CloudSecureArea protected constructor(
             encryptedCounter = 1
             decryptedCounter = 1
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw CloudException(e)
         }
     }
@@ -579,6 +583,7 @@ open class CloudSecureArea protected constructor(
             saveKeyMetadata(newKeyAlias, cSettings, response1.remoteKeyAttestation)
             return getKeyInfo(newKeyAlias)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw CloudException(e)
         }
     }
@@ -672,6 +677,7 @@ open class CloudSecureArea protected constructor(
                 openid4vciKeyAttestationJws = response1.openid4vciKeyAttestationCompactSerialization
             )
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw CloudException(e)
         }
     }

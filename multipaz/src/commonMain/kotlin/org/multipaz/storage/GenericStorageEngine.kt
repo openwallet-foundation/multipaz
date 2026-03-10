@@ -15,6 +15,7 @@
  */
 package org.multipaz.storage
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborMap
 import org.multipaz.util.Logger
@@ -67,14 +68,16 @@ open class GenericStorageEngine(
                     for ((key, value) in map) {
                         data!!.put(key.asTstr, value.asBstr)
                     }
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Logger.w(TAG, "Error decoding data at $path - treating as zeroed data", e)
                 }
             }
-        } catch (e: FileNotFoundException) {
+        } catch (_: FileNotFoundException) {
             // No problem, we all start from zero at some point...
             data = mutableMapOf()
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw IllegalStateException("Error loading data", e)
         }
     }

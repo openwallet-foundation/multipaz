@@ -1,5 +1,6 @@
 package org.multipaz.testapp.ui
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -123,7 +124,8 @@ private fun seTest(
     coroutineScope.launch {
         try {
             seTestUnguarded(algorithm, userAuthTypes, showToast)
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             e.printStackTrace();
             showToast("${e.message}")
         }

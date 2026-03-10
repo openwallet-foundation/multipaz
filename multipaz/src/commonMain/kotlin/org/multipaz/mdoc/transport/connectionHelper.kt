@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.transport
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.util.Logger
@@ -83,7 +84,8 @@ suspend fun List<MdocTransport>.waitForConnection(
                 try {
                     Logger.i(TAG, "opening connection ${transport.connectionMethod}")
                     transport.open(eSenderKey)
-                } catch (error: Throwable) {
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
                     Logger.e(TAG, "Caught exception while opening connection ${transport.connectionMethod}", error)
                 }
             }

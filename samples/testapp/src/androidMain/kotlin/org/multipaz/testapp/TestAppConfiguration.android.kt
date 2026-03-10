@@ -99,7 +99,7 @@ actual object TestAppConfiguration {
                 if (!inetAddress.isLoopbackAddress) {
                     val address = inetAddress.hostAddress
                     if (address != null && address.indexOf(':') < 0) {
-                        address
+                        return@lazy address
                     }
                 }
             }

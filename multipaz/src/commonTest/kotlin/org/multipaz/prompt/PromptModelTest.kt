@@ -39,7 +39,7 @@ class PromptModelTest {
         val exception = try {
             PromptModel.get()
             null
-        } catch (err: Throwable) {
+        } catch (err: Exception) {
             err
         }
         assertTrue(exception is PromptModelNotAvailableException)
@@ -55,7 +55,7 @@ class PromptModelTest {
                 passphraseEvaluator = null
             )
             null
-        } catch (err: Throwable) {
+        } catch (err: Exception) {
             err
         }
         assertTrue(exception is PromptUiNotAvailableException)
@@ -162,7 +162,7 @@ class PromptModelTest {
                     passphraseEvaluator = null
                 )
                 null
-            } catch (err: Throwable) {
+            } catch (err: Exception) {
                 err
             }
         }
@@ -244,7 +244,7 @@ class PromptModelTest {
             } catch (err: CancellationException) {
                 pendingResultChannel?.close(PromptDismissedException())
                 throw err
-            } catch (err: Throwable) {
+            } catch (err: Exception) {
                 fail("Unexpected error", err)
             }
         }

@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.mso
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.DataItem
@@ -173,7 +174,8 @@ data class MobileSecurityObject(
             val revocationStatus = if (dataItem.hasKey("status")) {
                 try {
                     RevocationStatus.fromDataItem(dataItem["status"])
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Logger.w(TAG, "Ignoring malformed status field in MSO", e)
                     Logger.iCbor(TAG, "The malformed status field is", dataItem["status"])
                     null

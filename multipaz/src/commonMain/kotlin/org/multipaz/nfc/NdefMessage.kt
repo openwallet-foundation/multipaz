@@ -32,6 +32,7 @@ data class NdefMessage(
          *
          * @param encoded the encoded messages.
          * @return the decoded message
+         * @throws IllegalArgumentException if the message is invalid.
          */
         fun fromEncoded(encoded: ByteArray): NdefMessage {
             return NdefMessage(NdefRecord.fromEncoded(encoded))

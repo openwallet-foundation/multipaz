@@ -352,7 +352,7 @@ abstract class MdocNdefService: HostApduService() {
                 onSendingResponse = { settings.presentmentModel?.setSending() }
             )
             settings.presentmentModel?.setCompleted(null)
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             Logger.w(TAG, "Caught error while performing 18013-5 transaction", e)
             if (e is CancellationException) {
                 settings.presentmentModel?.setCompleted(PresentmentCanceledException("Presentment was cancelled"))
@@ -400,7 +400,8 @@ abstract class MdocNdefService: HostApduService() {
                 val responseApdu = it.processApdu(commandApdu)
                 return responseApdu
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Logger.e(TAG, "Error processing APDU in MdocNfcEngagementHelper", e)
         }
         return null
@@ -410,7 +411,8 @@ abstract class MdocNdefService: HostApduService() {
     private suspend fun processDeactivated(reason: Int) {
         try {
             engagement?.processDeactivated(reason)
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Logger.e(TAG, "Error processing deactivation event in MdocNfcEngagementHelper", e)
         }
     }

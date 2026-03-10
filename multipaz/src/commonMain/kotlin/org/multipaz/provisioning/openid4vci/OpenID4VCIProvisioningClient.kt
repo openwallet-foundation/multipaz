@@ -1,5 +1,6 @@
 package org.multipaz.provisioning.openid4vci
 
+import kotlinx.coroutines.CancellationException
 import io.ktor.client.HttpClient
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.headers
@@ -707,6 +708,7 @@ internal class OpenID4VCIProvisioningClient(
                     keys.forEach { secureArea.deleteKey(it) }
                 }
             } catch (err: Exception) {
+                if (err is CancellationException) throw err
                 Logger.e(TAG, "Failed to clean up authorization data", err)
             }
         }

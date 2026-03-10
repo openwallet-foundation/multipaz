@@ -839,7 +839,7 @@ class CloudSecureAreaTest {
             try {
                 body()
                 Assert.fail("Expected exception $clazz, no exception was thrown")
-            } catch (err: Throwable) {
+            } catch (err: Exception) {
                 if (!clazz.isInstance(err)) {
                     throw err
                 }

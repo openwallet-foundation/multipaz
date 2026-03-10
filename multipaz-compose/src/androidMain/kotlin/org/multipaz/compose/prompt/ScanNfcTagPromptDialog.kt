@@ -132,7 +132,7 @@ private fun ScanNfcTagPromptDialogShown(
             dialogStateValue.resultChannel.close(PromptDismissedException())
             // coroutine cancellation should not be swallowed
             throw e
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
             Logger.e(TAG, "Error scanning", e)
             icon.value = ScanNfcTagDialogIcon.ERROR
             message.value = e.message ?: e.toString()
@@ -206,7 +206,8 @@ class NfcReaderCallback<T>(
                         dialogMessage.value = initialMessage
                     }
                     Logger.w(TAG, "Tag lost", e)
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Logger.e(TAG, "Error in interaction func", e)
                     continuation.resumeWithException(e)
                 }

@@ -175,7 +175,8 @@ suspend fun Iso18013Presentment(
                 transport.sendMessage(
                     SessionEncryption.encodeStatus(Constants.SESSION_DATA_STATUS_SESSION_TERMINATION)
                 )
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Logger.w(TAG, "Caught error while sending session-termination", e)
             }
         }

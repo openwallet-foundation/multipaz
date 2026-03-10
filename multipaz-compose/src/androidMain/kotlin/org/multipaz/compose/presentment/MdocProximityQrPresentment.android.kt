@@ -178,7 +178,7 @@ private fun MdocProximityQrPresentmentAndroid(
                                 onSendingResponse = { PresentmentActivity.presentmentModel.setSending() }
                             )
                             PresentmentActivity.presentmentModel.setCompleted(null)
-                        } catch (e: Throwable) {
+                        } catch (e: Exception) {
                             if (e is CancellationException) {
                                 PresentmentActivity.presentmentModel.setCompleted(
                                     PresentmentCanceledException("Presentment was cancelled")

@@ -1,5 +1,6 @@
 package org.multipaz.compose.claim
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -50,6 +51,7 @@ fun RenderClaimValue(
                 }
                 decodeImage(bytes)
             } catch (err: Exception) {
+                if (err is CancellationException) throw err
                 Text(
                     text = "Image decoding: $err",
                     color = MaterialTheme.colorScheme.error,

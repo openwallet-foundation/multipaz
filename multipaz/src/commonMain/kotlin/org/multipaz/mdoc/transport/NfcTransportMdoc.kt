@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.transport
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import org.multipaz.crypto.EcPublicKey
@@ -317,7 +318,7 @@ class NfcTransportMdoc(
             }
             failTransport(Error("Command APDU $command not supported, returning 6d00"))
             return ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_INSTRUCTION_NOT_SUPPORTED_OR_INVALID)
-        } catch (error: Throwable) {
+        } catch (error: Exception) {
             error.printStackTrace()
             failTransport(Error("Error processing APDU: ${error.message}", error))
             val status = if (error is NfcError) {

@@ -1,5 +1,6 @@
 package org.multipaz.compose.camera
 
+import kotlinx.coroutines.CancellationException
 import android.util.Size
 import android.view.OrientationEventListener
 import android.view.Surface
@@ -147,6 +148,7 @@ actual fun Camera(
                     )
                 }
             } catch (exc: Exception) {
+                if (exc is CancellationException) throw exc
                 Logger.e(TAG, "Use case binding failed", exc)
             }
 

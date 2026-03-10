@@ -1,5 +1,6 @@
 package org.multipaz.util
 
+import kotlinx.coroutines.CancellationException
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.zip.Deflater
@@ -36,7 +37,8 @@ actual suspend fun ByteArray.inflate(): ByteArray {
             }
         } while (length > 0)
         iis.close();
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
         throw IllegalArgumentException("Error decompressing data", e)
     }
     return baos.toByteArray()

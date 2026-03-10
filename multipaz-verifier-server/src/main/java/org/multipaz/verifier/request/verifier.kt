@@ -1,5 +1,6 @@
 package org.multipaz.verifier.request
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DiagnosticOption
@@ -595,7 +596,8 @@ private suspend fun handleDcBegin(
             contentType = ContentType.Application.Json,
             text = json.encodeToString(beginResponse)
         )
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
         val beginResponse = DCBeginResponse(
             sessionId = sessionId,
             dcRequestProtocol = "",
@@ -837,7 +839,8 @@ private suspend fun handleDcGetDataOpenID4VPForCredentialResponse(
     val isMdoc = try {
         val decodedCbor = Cbor.decode(credentialResponse.fromBase64Url())
         true
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
         false
     }
     Logger.i(TAG, "isMdoc: $isMdoc")
@@ -1067,7 +1070,8 @@ private suspend fun handleOpenID4VPResponse(
     val isMdoc = try {
         val decodedCbor = Cbor.decode(vpTokenForCred.fromBase64Url())
         true
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
         false
     }
     Logger.i(TAG, "isMdoc: $isMdoc")
@@ -1264,7 +1268,8 @@ private suspend fun handleGetDataMdoc(
                     "Verified"
                 )
             )
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             lines.add(
                 ResultLine(
                     "Device Response",
@@ -1288,7 +1293,8 @@ private suspend fun handleGetDataMdoc(
                         lines.add(ResultLine("Issuer", "Not signed by issuer"))
                     }
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 lines.add(
                     ResultLine(
                         "Document",
@@ -1381,7 +1387,8 @@ private suspend fun handleGetDataMdoc(
                     }
                 }
                 // TODO: also iterate over DeviceSigned items
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 e.printStackTrace()
                 lines.add(
                     ResultLine(
@@ -1458,7 +1465,8 @@ private suspend fun handleGetDataSdJwt(
                     val claimValueStr = prettyJson.encodeToString(claimValue)
                     lines.add(ResultLine(claimName, claimValueStr))
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 lines.add(ResultLine("Key Binding", "Error validating: $e"))
             }
         } else if (issuerCert != null) {
@@ -1468,7 +1476,8 @@ private suspend fun handleGetDataSdJwt(
                     val claimValueStr = prettyJson.encodeToString(claimValue)
                     lines.add(ResultLine(claimName, claimValueStr))
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 lines.add(ResultLine("Error", "Error validating signature: $e"))
             }
         }

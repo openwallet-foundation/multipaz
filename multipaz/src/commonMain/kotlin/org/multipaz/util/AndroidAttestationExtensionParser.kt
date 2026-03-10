@@ -15,6 +15,7 @@
  */
 package org.multipaz.util
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Boolean
 import org.multipaz.asn1.ASN1Integer
@@ -336,7 +337,8 @@ class AndroidAttestationExtensionParser(cert: X509Cert) {
             } else {
                 return "  $tag: ${ASN1.print(value).trim()}\n"
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             return "  $tag: Error rendering: ${e.message}"
         }
     }

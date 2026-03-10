@@ -1,5 +1,6 @@
 package org.multipaz.verifier.request
 
+import kotlinx.coroutines.CancellationException
 import io.ktor.http.ContentType
 import io.ktor.http.Url
 import io.ktor.server.application.ApplicationCall
@@ -464,6 +465,7 @@ private suspend fun processMdocResponse(
     try {
         deviceResponse.verify(sessionTranscript = mdocSessionTranscript)
     } catch (err: Exception) {
+        if (err is CancellationException) throw err
         Logger.e(TAG, "Device response verification failed", err)
     }
     return deviceResponse.documents.zip(documentRequests).map { (document, request) ->
@@ -471,7 +473,8 @@ private suspend fun processMdocResponse(
             try {
                 val trustResult = trustManager.verify(document.issuerCertChain.certificates)
                 put("_trusted", trustResult.isTrusted)
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Logger.e(TAG, "Trust verification failed", e)
             }
 

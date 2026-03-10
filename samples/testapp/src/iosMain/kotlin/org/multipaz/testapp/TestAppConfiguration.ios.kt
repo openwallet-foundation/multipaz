@@ -120,7 +120,7 @@ actual object TestAppConfiguration {
 
         for (address in addresses) {
             if (address.startsWith("192.168") || address.startsWith("10.") || address.startsWith("172.")) {
-                address
+                return@lazy address
             }
         }
         throw IllegalStateException("Unable to determine local address")

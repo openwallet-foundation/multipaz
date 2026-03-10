@@ -1,5 +1,6 @@
 package org.multipaz.testapp.ui
 
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -228,7 +229,8 @@ fun DcRequestScreen(
                                 zkSystemRepository = app.zkSystemRepository,
                                 showResponse = showResponse
                             )
-                        } catch (error: Throwable) {
+                        } catch (error: Exception) {
+                            if (error is CancellationException) throw error
                             Logger.e(TAG, "Error requesting credentials", error)
                             showToast("Error: ${error.message}")
                         }

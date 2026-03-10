@@ -79,7 +79,7 @@ class CloudSecureAreaSettings(private val conf: Configuration) {
         }
         try {
             return value.toInt()
-        } catch (e: Throwable) {
+        } catch (_: NumberFormatException) {
             Logger.d(TAG, "getInt: Unexpected value '$value' with key $key, return default value $defaultValue")
         }
         return defaultValue

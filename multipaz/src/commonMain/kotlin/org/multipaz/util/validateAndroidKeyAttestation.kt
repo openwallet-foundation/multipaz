@@ -1,5 +1,6 @@
 package org.multipaz.util
 
+import kotlinx.coroutines.CancellationException
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import kotlinx.io.bytestring.ByteString
@@ -37,7 +38,8 @@ suspend fun validateAndroidKeyAttestation(
     // Check the Attestation Extension...
     val parser = try {
         AndroidAttestationExtensionParser(chain.certificates.first())
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
         throw IllegalArgumentException("Error parsing Android Attestation Extension", e)
     }
 

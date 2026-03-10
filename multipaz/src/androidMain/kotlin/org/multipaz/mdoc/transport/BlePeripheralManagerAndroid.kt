@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.transport
 
+import kotlinx.coroutines.CancellationException
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
@@ -161,13 +162,15 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
             Logger.i(TAG, "Closing deferred L2CAP socket (via init)")
             try {
                 deferredCloseSocket?.close()
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Logger.e(TAG, "Error closing L2CAP socket (via init)", e)
             }
             deferredCloseSocket = null
             try {
                 deferredCloseJob?.cancel()
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Logger.e(TAG, "Error canceling deferred closing job (via init)", e)
             }
             deferredCloseJob = null
@@ -288,7 +291,8 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
             } else if (characteristic.uuid == client2ServerCharacteristicUuid.toJavaUuid()) {
                 try {
                     handleIncomingData(value)
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     onError(Error("Error processing incoming data", e))
                 }
             }
@@ -580,7 +584,8 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
                 Logger.i(TAG, "Closing deferred L2CAP socket (via delay)")
                 try {
                     deferredCloseSocket?.close()
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Logger.e(TAG, "Error closing L2CAP socket (via delay)", e)
                 }
                 deferredCloseSocket = null
@@ -631,7 +636,8 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
                 val message = inputStream.readNOctets(inputStream.readNOctets(4U).getUInt32(0))
                 incomingMessages.send(message)
             }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             if (l2capNotUsed) {
                 Logger.d(TAG, "Ignoring error since l2capNotUsed is true", e)
             } else {

@@ -1,5 +1,7 @@
 package org.multipaz.asn1
 
+import kotlinx.coroutines.CancellationException
+
 /**
  * Registry of known OIDs.
  *
@@ -81,7 +83,8 @@ enum class OID(
             for (component in components) {
                 try {
                     component.toLong(10)
-                } catch (_: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     return false
                 }
             }

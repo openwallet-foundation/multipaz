@@ -75,7 +75,8 @@ actual suspend fun launchAndroidPresentmentActivity(
             PresentmentActivity.presentmentModel.setSending()
             delay(paData.sendResponseDuration)
             PresentmentActivity.presentmentModel.setCompleted(null)
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             if (e is CancellationException) {
                 PresentmentActivity.presentmentModel.setCompleted(PresentmentCanceledException("Presentment was cancelled"))
             } else {

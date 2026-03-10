@@ -15,6 +15,7 @@
  */
 package org.multipaz.securearea.software
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
@@ -132,7 +133,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
             )
             return getKeyInfo(newAlias)
         } catch (e: Exception) {
-            // such as NoSuchAlgorithmException, CertificateException, InvalidAlgorithmParameterException, OperatorCreationException, IOException, NoSuchProviderException
+            if (e is CancellationException) throw e
             throw IllegalStateException("Unexpected exception", e)
         }
     }
@@ -183,6 +184,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
             val encodedPrivateKey = try {
                 Crypto.decrypt(Algorithm.A128GCM, secretKey, iv, encryptedPrivateKey)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 throw KeyLockedException("Error decrypting private key - wrong passphrase?", e)
             }
             EcPrivateKey.fromDataItem(Cbor.decode(encodedPrivateKey))
@@ -315,7 +317,8 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
                         try {
                             secureArea.loadKey(alias, SoftwareKeyUnlockData(enteredPassphrase))
                             PassphraseEvaluation.OK
-                        } catch (_: Throwable) {
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             // TODO: translations
                             PassphraseEvaluation.TryAgain
                         }

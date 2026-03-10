@@ -1,5 +1,6 @@
 package org.multipaz.sdjwt
 
+import kotlinx.coroutines.CancellationException
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.serialization.json.Json
@@ -148,7 +149,8 @@ class SdJwt private constructor(
         // TODO: make sure we perform all checks in Section 7.1
         try {
             JsonWebSignature.verify("$header.$body.$signature", issuerKey)
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw SignatureVerificationException("Error validating issuer signature", e)
         }
         return processObject(
