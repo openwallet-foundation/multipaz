@@ -45,7 +45,6 @@ import kotlin.time.Duration.Companion.hours
 @CborSerializable
 data class Session(
     val nonce: ByteString,
-    val ephemeralPrivateKey: EcPrivateKey,
     val encryptionPrivateKey: EcPrivateKey,
     val dcqlQuery: String,
     val transactionData: List<String>?,
@@ -53,54 +52,6 @@ data class Session(
     var response: ByteString? = null,
     var result: String? = null
 ) {
-    /**
-     * X509-certifies [ephemeralPrivateKey].
-     */
-    suspend fun getIdentity(id: String): AsymmetricKey.X509Certified {
-        val now = Clock.System.now()
-        val validFrom = now.plus(DateTimePeriod(minutes = -10), TimeZone.currentSystemDefault())
-        val validUntil = now.plus(DateTimePeriod(minutes = 10), TimeZone.currentSystemDefault())
-        val readerKeySubject = "CN=OWF Multipaz Online Verifier Single-Use Reader Key [$id]"
-
-        val readerIdentity = getServerIdentity(ServerIdentity.VERIFIER)
-        val host = Url(BackendEnvironment.getBaseUrl()).host
-        val cert = readerIdentity.certChain.certificates.first()
-        val readerKeyCertificate = X509Cert.Builder(
-            publicKey = ephemeralPrivateKey.publicKey,
-            signingKey = readerIdentity,
-            serialNumber = ASN1Integer(1L),
-            subject = X500Name.fromName(readerKeySubject),
-            issuer = cert.subject,
-            validFrom = validFrom,
-            validUntil = validUntil
-        )
-            .includeSubjectKeyIdentifier()
-            .setAuthorityKeyIdentifierToCertificate(cert)
-            .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
-            .addExtension(
-                OID.X509_EXTENSION_SUBJECT_ALT_NAME.oid,
-                false,
-                ASN1.encode(
-                    ASN1Sequence(
-                        listOf(
-                            ASN1TaggedObject(
-                                ASN1TagClass.CONTEXT_SPECIFIC,
-                                ASN1Encoding.PRIMITIVE,
-                                2, // dNSName
-                                host.encodeToByteArray()
-                            )
-                        )
-                    )
-                )
-            )
-            .build()
-
-        return AsymmetricKey.X509CertifiedExplicit(
-            privateKey = ephemeralPrivateKey,
-            certChain = X509CertChain(listOf(readerKeyCertificate) + readerIdentity.certChain.certificates)
-        )
-    }
-
     companion object {
         /**
          * Creates a new session in the storage.
@@ -115,7 +66,6 @@ data class Session(
         ): Pair<String, Session> {
             val session = Session(
                 nonce = ByteString(Random.nextBytes(15)),
-                ephemeralPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256),
                 encryptionPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256),
                 dcqlQuery = dcqlQuery,
                 transactionData = transactionData

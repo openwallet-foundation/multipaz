@@ -302,12 +302,10 @@ private suspend fun createRootIdentity(
         includeAuthorityKeyIdentifierAsSubjectKeyIdentifier()
         // For IACA mandated in 18013-5 table B.1
         setKeyUsage(setOf(X509KeyUsage.CRL_SIGN, X509KeyUsage.KEY_CERT_SIGN))
-        if (serverIdentity == ServerIdentity.VERIFIER
-            || serverIdentity == ServerIdentity.KEY_ATTESTATION) {
-            // Verifier root certificate is used to issue reader certificate, which is used to
-            // issue ephemeral key certificates, so there is one intermediate certificate required.
-            // Key attestation certificate is also use in CSA to generate additional certificate
-            // in the chain.
+        if (serverIdentity == ServerIdentity.KEY_ATTESTATION
+            || serverIdentity == ServerIdentity.CLOUD_SECURE_AREA_BINDING) {
+            // Key attestation and cloud secure are binding certificates are used to
+            // to generate additional certificate in the chain.
             setBasicConstraints(true, 1)
         } else {
             // For IACA mandated in 18013-5 table B.1: critical, CA=true, pathLenConstraint=0
@@ -399,12 +397,11 @@ suspend fun generateServerIdentityLeafCertificate(
         includeSubjectKeyIdentifier()
         setAuthorityKeyIdentifierToCertificate(issuerCert)
         when (serverIdentity) {
-            ServerIdentity.VERIFIER ->
-                // Reader certificate is used to issue ephemeral key certificates
-                setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
-            ServerIdentity.KEY_ATTESTATION ->
+            ServerIdentity.KEY_ATTESTATION, ServerIdentity.CLOUD_SECURE_AREA_BINDING -> {
                 // CSA issues additional certificate for the certified key, allow that
                 setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN, X509KeyUsage.DIGITAL_SIGNATURE))
+                setBasicConstraints(true, 0)
+            }
             else ->
                 // For DS mandated in 18013-5 table B.3: critical: digital signature bits set
                 setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
@@ -438,7 +435,7 @@ suspend fun generateServerIdentityLeafCertificate(
                     )
                 )
 
-            ServerIdentity.VERIFIER ->
+            ServerIdentity.VERIFIER -> {
                 // 18013-5 table B.3: non-critical, Extended Key usage
                 addExtension(
                     OID.X509_EXTENSION_EXTENDED_KEY_USAGE.oid,
@@ -452,6 +449,22 @@ suspend fun generateServerIdentityLeafCertificate(
                         )
                     )
                 )
+                val dnsName = Url(enrollmentRequest.url).host
+                addExtension(
+                    OID.X509_EXTENSION_SUBJECT_ALT_NAME.oid,
+                    false,
+                    ASN1.encode(
+                        ASN1Sequence(listOf(
+                            ASN1TaggedObject(
+                                ASN1TagClass.CONTEXT_SPECIFIC,
+                                ASN1Encoding.PRIMITIVE,
+                                2, // dNSName
+                                dnsName.encodeToByteArray()
+                            )
+                        ))
+                    )
+                )
+            }
 
             else -> {}
         }

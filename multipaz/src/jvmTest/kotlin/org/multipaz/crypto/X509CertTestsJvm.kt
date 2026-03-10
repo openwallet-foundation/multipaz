@@ -148,6 +148,7 @@ A01EUDAKBggqhkjOPQQDAgNIADBFAiEAnX3+E4E5dQ+5G1rmStJTW79ZAiDTabyL
                 .includeSubjectKeyIdentifier()
                 .addExtension("2.5.29.19", false, caExtBytes.toByteString().toByteArray())
                 .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+                .setBasicConstraints(true, 0)
                 .build()
 
         val leafKey = Crypto.createEcPrivateKey(EcCurve.P256)
@@ -169,7 +170,9 @@ A01EUDAKBggqhkjOPQQDAgNIADBFAiEAnX3+E4E5dQ+5G1rmStJTW79ZAiDTabyL
             .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
             .build()
 
-        assertTrue(X509CertChain(listOf(leafCertificate, caCertificate)).validate())
+        X509CertChain(listOf(leafCertificate, caCertificate)).validate(
+            validateAt = Instant.parse("2026-01-01T12:00:00Z")
+        )
 
         // To manually test with OpenSSL:
         // (1) Uncomment the following two lines, adjusting folder name.

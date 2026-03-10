@@ -80,6 +80,7 @@ import org.multipaz.util.appendUInt32
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.crypto.Hkdf
+import org.multipaz.crypto.X509CertChainValidationException
 import org.multipaz.prompt.PassphraseEvaluation
 import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.prompt.PromptModel
@@ -343,8 +344,10 @@ open class CloudSecureArea protected constructor(
         expectedDeviceChallenge: ByteArray,
         onAuthorizeRootOfTrust: (cloudSecureAreaRootOfTrust: X509Cert) -> Boolean,
     ) {
-        if (!attestation.validate()) {
-            throw CloudException("Error verifying attestation chain")
+        try {
+            attestation.validate()
+        } catch (err: X509CertChainValidationException) {
+            throw CloudException("Error verifying attestation chain: $err")
         }
 
         val rootX509Cert = attestation.certificates.last()

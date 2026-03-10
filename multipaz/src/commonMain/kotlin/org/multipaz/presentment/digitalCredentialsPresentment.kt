@@ -171,9 +171,7 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
         check(info.x5c != null) { "x5c missing in JWS" }
         JsonWebSignature.verify(jws.jsonPrimitive.content, info.x5c.certificates.first().ecPublicKey)
         requesterCertChain = info.x5c
-        for (cert in requesterCertChain.certificates) {
-            println("cert: ${cert.toPem()}")
-        }
+        info.x5c.validate()
         info.claimsSet
     } else {
         preReq

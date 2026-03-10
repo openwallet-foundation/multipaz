@@ -54,6 +54,8 @@ import org.multipaz.rpc.handler.SimpleCipher
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.server.common.getBaseUrl
+import org.multipaz.server.enrollment.ServerIdentity
+import org.multipaz.server.enrollment.getServerIdentity
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.trustmanagement.TrustManager
@@ -101,7 +103,6 @@ suspend fun makeRequest(call: ApplicationCall) {
     val encodedSessionId = encodeSessionId(sessionId)
     val dcRequest = generateRequest(
         encodedSessionId = encodedSessionId,
-        sessionId = sessionId,
         session = session,
         responseMode = OpenID4VP.ResponseMode.DC_API,
         exchangeProtocols = protocols
@@ -165,7 +166,6 @@ suspend fun getRequest(call: ApplicationCall, encodedSessionId: String) {
         ?: throw InvalidRequestException("Session '$encodedSessionId' is missing or expired")
     val requestObject = generateRequest(
         encodedSessionId = encodedSessionId,
-        sessionId = sessionId,
         session = session,
         responseMode = OpenID4VP.ResponseMode.DIRECT_POST,
         exchangeProtocols = listOf()  // N/A for custom url schemes
@@ -248,12 +248,11 @@ suspend fun getResult(call: ApplicationCall, encodedSessionId: String) {
 
 private suspend fun generateRequest(
     encodedSessionId: String,
-    sessionId: String,
     session: Session,
     responseMode: OpenID4VP.ResponseMode,
     exchangeProtocols: List<String>,  // needed for DC API
 ): JsonObject {
-    val sessionIdentity = session.getIdentity(sessionId)
+    val sessionIdentity = getServerIdentity(ServerIdentity.VERIFIER)
     val baseUrl = BackendEnvironment.getBaseUrl()
     val query = Json.parseToJsonElement(session.dcqlQuery).jsonObject
     return if (responseMode == OpenID4VP.ResponseMode.DC_API) {
@@ -450,7 +449,7 @@ private suspend fun processIsoMdocResponse(
 }
 
 private suspend fun getTrustManager(): TrustManagerInterface =
-    BackendEnvironment.cache(TrustManagerInterface::class) { configuration, resources ->
+    BackendEnvironment.cache(TrustManagerInterface::class) { _, _ ->
         // TODO: load from configuration?
         TrustManager(EphemeralStorage())
     }

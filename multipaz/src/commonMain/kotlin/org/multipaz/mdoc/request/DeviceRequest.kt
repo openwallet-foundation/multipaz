@@ -129,6 +129,7 @@ data class DeviceRequest private constructor(
                             CoseNumberLabel(Cose.COSE_LABEL_ALG)
                         ]!!.asNumber.toInt()
                     )
+                    certChain.validate()
                     Cose.coseSign1Check(
                         publicKey = certChain.certificates.first().ecPublicKey,
                         detachedData = readerAuthenticationAllBytes,

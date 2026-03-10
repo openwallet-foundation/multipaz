@@ -596,6 +596,7 @@ object MdocUtil {
      * @param readerRootKey the reader root certificate and the corresponding private key.
      * @param readerKey the public part of the reader key.
      * @param subject the value to use for subject, e.g. "CN=Test Reader,C=ZZ".
+     * @param dnsName name of the host where this certificate will run (if any)
      * @param serial the serial number to use for the certificate.
      * @param validFrom the point in time the certificate should be valid from.
      * @param validUntil the point in time the certificate should be valid until.
@@ -606,6 +607,7 @@ object MdocUtil {
         readerRootKey: AsymmetricKey.X509Certified,
         readerKey: EcPublicKey,
         subject: X500Name,
+        dnsName: String?,
         serial: ASN1Integer,
         validFrom: Instant,
         validUntil: Instant,
@@ -636,6 +638,24 @@ object MdocUtil {
                 false,
                 readerRootCert.getExtensionValue(OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid)!!
             )
+        if (dnsName != null) {
+            builder.addExtension(
+                OID.X509_EXTENSION_SUBJECT_ALT_NAME.oid,
+                false,
+                ASN1.encode(
+                    ASN1Sequence(
+                        listOf(
+                            ASN1TaggedObject(
+                                ASN1TagClass.CONTEXT_SPECIFIC,
+                                ASN1Encoding.PRIMITIVE,
+                                2, // dNSName
+                                dnsName.encodeToByteArray()
+                            )
+                        )
+                    )
+                )
+            )
+        }
         for (extension in extensions) {
             builder.addExtension(
                 oid = extension.oid,

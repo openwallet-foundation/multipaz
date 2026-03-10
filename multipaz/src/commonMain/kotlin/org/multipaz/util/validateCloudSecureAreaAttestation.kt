@@ -19,9 +19,7 @@ suspend fun validateCloudKeyAttestation(
     nonce: ByteString,
     trustedRootKeys: Set<ByteString>
 ) {
-    check(chain.validate()) {
-        "Certificate chain did not validate"
-    }
+    chain.validate()
     val certificates = chain.certificates
     val leafX509Cert = certificates.first()
     val extensionDerEncodedString = leafX509Cert.getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid)

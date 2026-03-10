@@ -418,6 +418,7 @@ class MdocUtilTest {
             ),
             readerKey = readerKey.publicKey,
             subject = X500Name.fromName("CN=TEST Reader Certificate,C=XG-US,ST=MA"),
+            dnsName = "localhost",
             serial = ASN1Integer(1),
             validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
             validUntil = LocalDateTime(2029, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
@@ -452,6 +453,15 @@ class MdocUtilTest {
             "BIT STRING (1 bit) 1",
             ASN1.print(ASN1.decode(readerCert.getExtensionValue(
                 OID.X509_EXTENSION_KEY_USAGE.oid)!!)!!).trim()
+        )
+        assertEquals(
+            """
+            SEQUENCE (1 elem)
+              [2] (1 elem)
+                6c 6f 63 61 6c 68 6f 73 74 ("localhost")
+            """.trimIndent(),
+            ASN1.print(ASN1.decode(readerCert.getExtensionValue(
+                OID.X509_EXTENSION_SUBJECT_ALT_NAME.oid)!!)!!).trim()
         )
     }
 

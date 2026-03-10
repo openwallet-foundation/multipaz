@@ -51,6 +51,7 @@ import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.KeyUnlockDataProvider
 import org.multipaz.prompt.Reason
 import org.multipaz.securearea.SecureArea
+import org.multipaz.util.truncateToWholeSeconds
 import java.io.IOException
 import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
@@ -71,6 +72,8 @@ private const val VCI_KA_CERTIFICATION = "https://certification-agency.example.o
 
 // TODO: Move to commonTests once [CloudSecureAreaServer] is also multiplatform
 class CloudSecureAreaTest {
+    val referenceTime = Clock.System.now().truncateToWholeSeconds()
+
     @Before
     fun setup() {
         // Load BouncyCastle to ensure we can test full curve support
@@ -106,7 +109,7 @@ class CloudSecureAreaTest {
 
             val attestationRootSubject = "CN=Cloud Secure Area Attestation Root"
             val attestationKeySubject = "CN=Cloud Secure Area Attestation"
-            val attestationKeyValidFrom = Clock.System.now()
+            val attestationKeyValidFrom = referenceTime
             val attestationKeyValidUntil = attestationKeyValidFrom + 365.days*5
             val attestationKeyPrivate = Crypto.createEcPrivateKey(EcCurve.P256)
             attestationRootKey = AsymmetricKey.ephemeral()
@@ -121,6 +124,7 @@ class CloudSecureAreaTest {
             ) {
                 includeSubjectKeyIdentifier()
                 setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+                setBasicConstraints(true, 1)
             }
             attestationKey = attestationKeyPrivate.publicKey
             attestationKeyCertChain = X509CertChain(
@@ -136,6 +140,7 @@ class CloudSecureAreaTest {
                     )
                         .includeSubjectKeyIdentifier()
                         .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+                        .setBasicConstraints(true, 0)
                         .build(),
                     attestationRootCert
                 )
@@ -162,6 +167,7 @@ class CloudSecureAreaTest {
                     )
                         .includeSubjectKeyIdentifier()
                         .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+                        .setBasicConstraints(true, 1)
                         .build(),
                 )
             )
@@ -232,7 +238,7 @@ class CloudSecureAreaTest {
         csa.initialize()
         csa.register("", PassphraseConstraints.NONE) { true }
 
-        val validFrom = Instant.parse("2025-02-05T23:36:10Z")
+        val validFrom = referenceTime
         val validUntil = validFrom + 30.days
         for (algorithm in csa.supportedAlgorithms) {
             if (!Crypto.supportedCurves.contains(algorithm.curve!!)) {
@@ -341,7 +347,7 @@ class CloudSecureAreaTest {
                 val keyInfo = csa.createKey("test", settings)
                 // First check the certificate chain is well-formed and has the expected root
                 val attestationCertificateChain = keyInfo.attestation.certChain!!
-                Assert.assertTrue(attestationCertificateChain.validate())
+                attestationCertificateChain.validate(validFrom)
                 Assert.assertEquals(csa.attestationRootKey.publicKey, attestationCertificateChain.certificates.last().ecPublicKey)
 
                 // Then check for the extensions in the leaf certificate
@@ -394,7 +400,7 @@ class CloudSecureAreaTest {
             "xyz123",
             PassphraseConstraints.NONE) { true }
         val challenge = ByteString(1, 2, 3)
-        val validFrom = Instant.parse("2025-02-05T23:36:10Z")
+        val validFrom = referenceTime
         val validUntil = validFrom + 30.days
         val settings = CloudCreateKeySettings.Builder(challenge)
             .setValidityPeriod(validFrom, validUntil)

@@ -189,6 +189,7 @@ class DeviceRequestGeneratorTest {
             ),
             readerKey = testKeyInfo.publicKey,
             subject = X500Name.fromName("CN=TEST Reader Certificate,C=XG-US,ST=MA"),
+            dnsName = "localhost",
             serial = ASN1Integer(1),
             validFrom = LocalDateTime(2024, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),
             validUntil = LocalDateTime(2029, 1, 1, 0, 0, 0, 0).toInstant(TimeZone.UTC),

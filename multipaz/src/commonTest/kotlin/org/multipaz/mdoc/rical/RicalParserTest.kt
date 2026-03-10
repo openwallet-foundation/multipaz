@@ -8,6 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 class RicalParserTest {
     companion object {
@@ -50,7 +51,7 @@ DK+pCMrWxNz63+qbAFu4ant+3Vvr2A0CjUSj2wjgnOg=
         assertEquals(1, certChain.certificates.size)
         val rootCert = X509Cert.fromPem(RICAL_SIGNER_CERT_PEM_ISO_SC17WG10_TEST_EVENT_WELLINGTON_NZ_NOV_2025)
         val certChainWithRoot = X509CertChain(listOf(certChain.certificates.first(), rootCert))
-        assertTrue(certChainWithRoot.validate())
+        certChainWithRoot.validate(Instant.parse("2026-03-09T00:00:00Z"))
 
         // Check RICAL data
         val r = signedRical.rical

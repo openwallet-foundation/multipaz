@@ -4,10 +4,29 @@ import kotlinx.coroutines.CancellationException
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.crypto.X509CertChainValidationException
 import org.multipaz.device.AndroidKeystoreSecurityLevel
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 private const val TAG = "validateAndroidKeyAttestation"
 
+/**
+ * Checks if Android key attestation is valid according to the given criteria.
+ *
+ * // TODO: use revocation list from https://android.googleapis.com/attestation/status
+ *
+ * @param chain Android key attestation
+ * @param challenge challenge/nonce used during key creation
+ * @param requireGmsAttestation check that certificate chain is rooted in a known Google key
+ * @param requireVerifiedBootGreen check that the device has booted securely
+ * @param requireKeyMintSecurityLevel identifies acceptable security level
+ * @param requireAppSignatureCertificateDigests identifies trusted app signing keys
+ * @param requireAppPackages identifies trusted app package names
+ * @param validateAt time instant used to validate certificate validity intervals
+ *
+ * @throws IllegalStateException if Android key attestation is not valid
+ */
 suspend fun validateAndroidKeyAttestation(
     chain: X509CertChain,
     challenge: ByteString?,
@@ -15,24 +34,28 @@ suspend fun validateAndroidKeyAttestation(
     requireVerifiedBootGreen: Boolean,
     requireKeyMintSecurityLevel: AndroidKeystoreSecurityLevel,
     requireAppSignatureCertificateDigests: Set<ByteString>,
-    requireAppPackages: Set<String>
+    requireAppPackages: Set<String>,
+    validateAt: Instant = Clock.System.now()
 ) {
-    if (requireGmsAttestation) {
-        // Google root certificate uses RSA private key (and not EC key that we currently support
-        // in Kotlin Multiplatform code). Instead of comparing the keys, just replace the root
-        // in the chain with the known root certificate before validation.
-        // TODO: add functionality to extract the public key in any format from the certificate.
-        // Then we  can compare the key in the root certificate instead of injecting the known root
-        // certificate and worry about its expiration date.
-        val truncatedChain = chain.certificates.subList(0, chain.certificates.lastIndex)
-        val chainToVerify = truncatedChain + listOf(GOOGLE_ATTESTATION_ROOT_CERTIFICATE)
-        check(X509CertChain(chainToVerify).validate()) {
-            "Certificate chain did not validate"
+    try {
+        if (requireGmsAttestation) {
+            // Google root certificate uses RSA private key (and not EC key that we currently support
+            // in Kotlin Multiplatform code). Instead of comparing the keys, just replace the root
+            // in the chain with the known root certificate before validation.
+            // TODO: add functionality to extract the public key in any format from the certificate.
+            // Then we can compare the key in the root certificate instead of injecting the known root
+            // certificate and worry about its expiration date.
+            val truncatedChain = chain.certificates.subList(0, chain.certificates.lastIndex)
+            val trustedRoot =
+                GOOGLE_ATTESTATION_ROOT_CERTIFICATES[chain.certificates.last().subject]
+                    ?: throw IllegalArgumentException("No trusted root in Android Key Attestation")
+            val chainToVerify = truncatedChain + listOf(trustedRoot)
+            X509CertChain(chainToVerify).validate(validateAt)
+        } else {
+            chain.validate(validateAt)
         }
-    } else {
-        check(chain.validate()) {
-            "Certificate chain did not validate"
-        }
+    } catch (err: X509CertChainValidationException) {
+        throw IllegalStateException("Android key attestation certificate chain is invalid", err)
     }
 
     // Check the Attestation Extension...
@@ -90,40 +113,62 @@ suspend fun validateAndroidKeyAttestation(
     }
 }
 
-// This certificate is from https://developer.android.com/training/articles/security-key-attestation
-// We really only care about the private key in this certificate.
-// Note that this certificate expires on May 24 2026 GMT.
-private val GOOGLE_ATTESTATION_ROOT_CERTIFICATE = X509Cert.fromPem(
-"""
-    -----BEGIN CERTIFICATE-----
-    MIIFYDCCA0igAwIBAgIJAOj6GWMU0voYMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNV
-    BAUTEGY5MjAwOWU4NTNiNmIwNDUwHhcNMTYwNTI2MTYyODUyWhcNMjYwNTI0MTYy
-    ODUyWjAbMRkwFwYDVQQFExBmOTIwMDllODUzYjZiMDQ1MIICIjANBgkqhkiG9w0B
-    AQEFAAOCAg8AMIICCgKCAgEAr7bHgiuxpwHsK7Qui8xUFmOr75gvMsd/dTEDDJdS
-    Sxtf6An7xyqpRR90PL2abxM1dEqlXnf2tqw1Ne4Xwl5jlRfdnJLmN0pTy/4lj4/7
-    tv0Sk3iiKkypnEUtR6WfMgH0QZfKHM1+di+y9TFRtv6y//0rb+T+W8a9nsNL/ggj
-    nar86461qO0rOs2cXjp3kOG1FEJ5MVmFmBGtnrKpa73XpXyTqRxB/M0n1n/W9nGq
-    C4FSYa04T6N5RIZGBN2z2MT5IKGbFlbC8UrW0DxW7AYImQQcHtGl/m00QLVWutHQ
-    oVJYnFPlXTcHYvASLu+RhhsbDmxMgJJ0mcDpvsC4PjvB+TxywElgS70vE0XmLD+O
-    JtvsBslHZvPBKCOdT0MS+tgSOIfga+z1Z1g7+DVagf7quvmag8jfPioyKvxnK/Eg
-    sTUVi2ghzq8wm27ud/mIM7AY2qEORR8Go3TVB4HzWQgpZrt3i5MIlCaY504LzSRi
-    igHCzAPlHws+W0rB5N+er5/2pJKnfBSDiCiFAVtCLOZ7gLiMm0jhO2B6tUXHI/+M
-    RPjy02i59lINMRRev56GKtcd9qO/0kUJWdZTdA2XoS82ixPvZtXQpUpuL12ab+9E
-    aDK8Z4RHJYYfCT3Q5vNAXaiWQ+8PTWm2QgBR/bkwSWc+NpUFgNPN9PvQi8WEg5Um
-    AGMCAwEAAaOBpjCBozAdBgNVHQ4EFgQUNmHhAHyIBQlRi0RsR/8aTMnqTxIwHwYD
-    VR0jBBgwFoAUNmHhAHyIBQlRi0RsR/8aTMnqTxIwDwYDVR0TAQH/BAUwAwEB/zAO
-    BgNVHQ8BAf8EBAMCAYYwQAYDVR0fBDkwNzA1oDOgMYYvaHR0cHM6Ly9hbmRyb2lk
-    Lmdvb2dsZWFwaXMuY29tL2F0dGVzdGF0aW9uL2NybC8wDQYJKoZIhvcNAQELBQAD
-    ggIBACDIw41L3KlXG0aMiS//cqrG+EShHUGo8HNsw30W1kJtjn6UBwRM6jnmiwfB
-    Pb8VA91chb2vssAtX2zbTvqBJ9+LBPGCdw/E53Rbf86qhxKaiAHOjpvAy5Y3m00m
-    qC0w/Zwvju1twb4vhLaJ5NkUJYsUS7rmJKHHBnETLi8GFqiEsqTWpG/6ibYCv7rY
-    DBJDcR9W62BW9jfIoBQcxUCUJouMPH25lLNcDc1ssqvC2v7iUgI9LeoM1sNovqPm
-    QUiG9rHli1vXxzCyaMTjwftkJLkf6724DFhuKug2jITV0QkXvaJWF4nUaHOTNA4u
-    JU9WDvZLI1j83A+/xnAJUucIv/zGJ1AMH2boHqF8CY16LpsYgBt6tKxxWH00XcyD
-    CdW2KlBCeqbQPcsFmWyWugxdcekhYsAWyoSf818NUsZdBWBaR/OukXrNLfkQ79Iy
-    ZohZbvabO/X+MVT3rriAoKc8oE2Uws6DF+60PV7/WIPjNvXySdqspImSN78mflxD
-    qwLqRBYkA3I75qppLGG9rp7UCdRjxMl8ZDBld+7yvHVgt1cVzJx9xnyGCC23Uaic
-    MDSXYrB4I4WHXPGjxhZuCuPBLTdOLU8YRvMYdEvYebWHMpvwGCF6bAx3JBpIeOQ1
-    wDB5y0USicV3YgYGmi+NZfhA4URSh77Yd6uuJOJENRaNVTzk
-    -----END CERTIFICATE-----
-""".trimIndent())
+// This certificates are from
+// https://developer.android.com/training/articles/security-key-attestation
+// (pointing to https://android.googleapis.com/attestation/root)
+// They both must be trusted
+private val GOOGLE_ATTESTATION_ROOT_CERTIFICATES = listOf(
+    // Note that this certificate expires on Mar 15 2042.
+    X509Cert.fromPem(
+    """
+            -----BEGIN CERTIFICATE-----
+            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
+            w1IdYIg2Wxg7yHcQZemFQg==
+            -----END CERTIFICATE-----
+        """.trimIndent()
+    ),
+    // Note that this certificate expires on Jul 15 2035.
+    X509Cert.fromPem("""
+        -----BEGIN CERTIFICATE-----
+        MIICIjCCAaigAwIBAgIRAISp0Cl7DrWK5/8OgN52BgUwCgYIKoZIzj0EAwMwUjEc
+        MBoGA1UEAwwTS2V5IEF0dGVzdGF0aW9uIENBMTEQMA4GA1UECwwHQW5kcm9pZDET
+        MBEGA1UECgwKR29vZ2xlIExMQzELMAkGA1UEBhMCVVMwHhcNMjUwNzE3MjIzMjE4
+        WhcNMzUwNzE1MjIzMjE4WjBSMRwwGgYDVQQDDBNLZXkgQXR0ZXN0YXRpb24gQ0Ex
+        MRAwDgYDVQQLDAdBbmRyb2lkMRMwEQYDVQQKDApHb29nbGUgTExDMQswCQYDVQQG
+        EwJVUzB2MBAGByqGSM49AgEGBSuBBAAiA2IABCPaI3FO3z5bBQo8cuiEas4HjqCt
+        G/mLFfRT0MsIssPBEEU5Cfbt6sH5yOAxqEi5QagpU1yX4HwnGb7OtBYpDTB57uH5
+        Eczm34A5FNijV3s0/f0UPl7zbJcTx6xwqMIRq6NCMEAwDwYDVR0TAQH/BAUwAwEB
+        /zAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0OBBYEFFIyuyz7RkOb3NaBqQ5lZuA0QepA
+        MAoGCCqGSM49BAMDA2gAMGUCMETfjPO/HwqReR2CS7p0ZWoD/LHs6hDi422opifH
+        EUaYLxwGlT9SLdjkVpz0UUOR5wIxAIoGyxGKRHVTpqpGRFiJtQEOOTp/+s1GcxeY
+        uR2zh/80lQyu9vAFCj6E4AXc+osmRg==
+        -----END CERTIFICATE-----
+    """.trimIndent()
+    )
+).associateBy { it.subject }

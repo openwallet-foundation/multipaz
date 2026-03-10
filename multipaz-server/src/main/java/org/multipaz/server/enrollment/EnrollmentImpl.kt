@@ -5,6 +5,7 @@ import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
 import io.ktor.http.parameters
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -20,11 +21,16 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.multipaz.asn1.ASN1
+import org.multipaz.asn1.ASN1Sequence
+import org.multipaz.asn1.ASN1TaggedObject
+import org.multipaz.asn1.OID
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.rpc.annotation.RpcState
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
@@ -220,13 +226,22 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
                 Json.parseToJsonElement(it).jsonObject[keyName]?.let { keyJson ->
                     val secureAreaRepository =
                         backendEnvironment.getInterface(SecureAreaRepository::class)
-                    val loadedKey = AsymmetricKey.parse(keyJson, secureAreaRepository)
-                    return ServerIdentityRecord.fromKey(loadedKey)
+                    val loadedKey = AsymmetricKey.parse(keyJson, secureAreaRepository) as AsymmetricKey.X509Certified
+                    return ServerIdentityRecord.fromKey(loadedKey).also {
+                        val cert = loadedKey.certChain.certificates.first()
+                        // If configuration is wrong, it has to be re-configured correctly
+                        if(!isValid(cert, serverIdentity, configuration)) {
+                            val message = "Configuration error: certificate for 'server_identities.${serverIdentity.jsonName}' is not generated correctly"
+                            Logger.w(TAG, message)
+                            throw IllegalStateException(message)
+                        }
+                    }
                 }
             }
 
             // Then, try to load from the database
-            val enrolled = storage.getTable(enrollmentsTable).get(serverIdentity.name)
+            val table = storage.getTable(enrollmentsTable)
+            val enrolled = table.get(serverIdentity.name)
             if (enrolled != null) {
                 val keyData = SigningKeyData.fromCbor(enrolled.toByteArray())
                 val secureArea = backendEnvironment.getInterface(SecureAreaProvider::class)!!.get()
@@ -235,7 +250,13 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
                     keyInfo = secureArea.getKeyInfo(keyData.alias),
                     certChain = keyData.certChain
                 )
-                return ServerIdentityRecord.fromKey(loadedKey)
+                val cert = loadedKey.certChain.certificates.first()
+                if (isValid(cert, serverIdentity, configuration)) {
+                    return ServerIdentityRecord.fromKey(loadedKey)
+                } else {
+                    table.delete(serverIdentity.name)
+                    Logger.w(TAG, "Invalid certificate for $serverIdentity, re-enrolling...")
+                }
             }
 
             // Request enrollment from the server
@@ -299,7 +320,14 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
                             throw IllegalStateException("Could not enroll '$serverIdentity'")
                         }
                     }
-                    responseChannel.receive()
+                    responseChannel.receive().also {
+                        val cert = it.certChain.certificates.first()
+                        if(!isValid(cert, serverIdentity, configuration)) {
+                            val message = "Enrollment error: certificate for $serverIdentity was not generated correctly"
+                            Logger.w(TAG, message)
+                            throw IllegalStateException(message)
+                        }
+                    }
                 }
             }
             return ServerIdentityRecord(
@@ -307,6 +335,38 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
                 requestId = requestId,
                 responseChannel = responseChannel
             )
+        }
+
+        private fun isValid(
+            cert: X509Cert,
+            identity: ServerIdentity,
+            configuration: Configuration
+        ): Boolean {
+            if (identity != ServerIdentity.VERIFIER) {
+                return true
+            }
+            // check that the certificate satisfies the requirements
+            if (!cert.keyUsage.contains(X509KeyUsage.DIGITAL_SIGNATURE)) {
+                Logger.w(TAG, "Reader certificate key usage is wrong")
+                return false
+            }
+            val subjectAltNameExt = cert.getExtensionValue(OID.X509_EXTENSION_SUBJECT_ALT_NAME.oid)
+            if (subjectAltNameExt == null) {
+                Logger.w(TAG, "Reader certificate subject alt name is missing")
+                return false
+            }
+            val dnsName = Url(configuration.baseUrl).host
+            val value = (ASN1.decode(subjectAltNameExt) as? ASN1Sequence)?.elements?.get(0)
+            if (value is ASN1TaggedObject) {
+                if (!dnsName.encodeToByteArray().contentEquals(value.content)) {
+                    Logger.w(TAG, "Reader certificate subject alt name does not match server url")
+                    return false
+                }
+            } else {
+                Logger.w(TAG, "Reader certificate subject alt name is invalid")
+                return false
+            }
+            return true
         }
 
         private val provisioningServerKeyLock = Mutex()

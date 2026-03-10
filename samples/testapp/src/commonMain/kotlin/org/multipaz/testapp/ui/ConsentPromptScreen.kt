@@ -801,6 +801,7 @@ private suspend fun calculateRequester(
         readerRootKey = readerRootSigningKey,
         readerKey =readerKey.publicKey,
         subject = X500Name.fromName("CN=Multipaz Reader Single-Use key"),
+        dnsName = null,
         serial = ASN1Integer.fromRandom(128),
         validFrom = validFrom,
         validUntil = validUntil
@@ -809,6 +810,7 @@ private suspend fun calculateRequester(
         readerRootKey = readerRootSigningKey,
         readerKey = readerKey.publicKey,
         subject = X500Name.fromName("CN=Multipaz Reader Single-Use key"),
+        dnsName = null,
         serial = ASN1Integer.fromRandom(128),
         validFrom = validFrom,
         validUntil = validUntil,

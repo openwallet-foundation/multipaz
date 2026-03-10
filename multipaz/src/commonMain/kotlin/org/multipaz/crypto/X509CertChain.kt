@@ -10,8 +10,11 @@ import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.annotation.CborSerializationImplemented
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.util.fromBase64
 import kotlin.io.encoding.Base64
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * A chain of certificates.
@@ -69,12 +72,67 @@ data class X509CertChain(
     }
 
     /**
-     * Validates that every certificate in the chain is signed by the next one.
+     * Performs basic certificate chain validation.
      *
-     * @return true if every certificate in the chain is signed by the next one, false otherwise.
+     * Specifically, these checks are performed:
+     *  - every certificate in the chain is signed by the next one,
+     *  - signer certificate's subject matches signed certificate's issuer,
+     *  - certificates are within their validity period (already valid and not yet expired),
+     *  - signer certificate have `CERT_SIGN` key usage
+     *  - non-leaf certificate must have basic constrains extension with
+     *    - CA flag set to true
+     *    - path length constraint that is sufficient for number of certificates in the chain
+     *
+     * This method does not check certificate revocation lists.
+     *
+     * @param validateAt time of the validation
+     * @param requireBasicConstraints if non-leaf certificates must use basic constrains extension
+     * @throws [X509CertChainValidationException] if validation fails.
      */
-    // TODO: also include other checks including validity dates, etc
-    suspend fun validate(): Boolean = Crypto.validateCertChain(this)
+    suspend fun validate(
+        validateAt: Instant = Clock.System.now(),
+        requireBasicConstraints: Boolean = true
+    ) {
+        if (!Crypto.validateCertChainSignatures(this)) {
+            throw X509CertChainValidationException.Signature()
+        }
+        var previous: X509Cert? = null
+        for ((index, certificate) in certificates.withIndex()) {
+            if (previous != null) {
+                if (previous.issuer != certificate.subject) {
+                    throw X509CertChainValidationException.SubjectIssuerMismatch()
+                }
+                if (!certificate.keyUsage.contains(X509KeyUsage.KEY_CERT_SIGN)) {
+                    throw X509CertChainValidationException.KeyUsageMissing()
+                }
+                val basicConstraints = certificate.basicConstraints
+                if (basicConstraints == null) {
+                    if (requireBasicConstraints) {
+                        throw X509CertChainValidationException.BasicConstraintsMissing()
+                    }
+                } else {
+                    if (!basicConstraints.first) {
+                        throw X509CertChainValidationException.BasicConstraintsNotCA()
+                    }
+                    val maxPathLength = basicConstraints.second
+                    if (maxPathLength != null) {
+                        // the leaf is not counted in path length constraints
+                        val pathLength = index - 1
+                        if (pathLength > maxPathLength) {
+                            throw X509CertChainValidationException.BasicConstraintsPathLength()
+                        }
+                    }
+                }
+            }
+            previous = certificate
+            if (certificate.validityNotAfter < validateAt) {
+                throw X509CertChainValidationException.Expired(certificate.validityNotAfter)
+            }
+            if (certificate.validityNotBefore > validateAt) {
+                throw X509CertChainValidationException.NotYetValid(certificate.validityNotBefore)
+            }
+        }
+    }
 
     companion object {
         /**

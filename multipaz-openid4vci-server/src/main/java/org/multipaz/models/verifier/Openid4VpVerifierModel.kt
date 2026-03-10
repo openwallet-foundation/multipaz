@@ -72,8 +72,8 @@ class Openid4VpVerifierModel(
     ): String = buildJwt(
             type = "oauth-authz-req+jwt",
             key = AsymmetricKey.X509CertifiedExplicit(
-                privateKey = ephemeralPrivateKey,
-                certChain = createCertificateChain(readerIdentity)
+                privateKey = readerIdentity.privateKey,
+                certChain = readerIdentity.certificateChain
             )
         ) {
             put("client_id", clientId)
@@ -192,34 +192,7 @@ class Openid4VpVerifierModel(
             }
         }
     }
-
-    private suspend fun createCertificateChain(readerIdentity: ReaderIdentity): X509CertChain {
-        val now = Clock.System.now()
-        val validFrom = now.plus(DateTimePeriod(minutes = -10), TimeZone.currentSystemDefault())
-        val validUntil = now.plus(DateTimePeriod(minutes = 10), TimeZone.currentSystemDefault())
-        val readerKey = ephemeralPrivateKey
-        val readerKeySubject = "CN=OWF IC Online Verifier Single-Use Reader Key"
-
-        val readerKeyCertificate = MdocUtil.generateReaderCertificate(
-            readerRootKey = AsymmetricKey.X509CertifiedExplicit(
-                privateKey = readerIdentity.privateKey,
-                certChain = readerIdentity.certificateChain
-            ),
-            readerKey = readerKey.publicKey,
-            subject = X500Name.fromName(readerKeySubject),
-            serial = ASN1Integer(1L),
-            validFrom = validFrom,
-            validUntil = validUntil
-        )
-
-        return X509CertChain(
-            buildList {
-                add(readerKeyCertificate)
-                addAll(readerIdentity.certificateChain.certificates)
-            }
-        )
-    }
-
+    
     private suspend fun buildClientMetadata(): JsonObject {
         val vpFormats = buildJsonObject {
             putJsonObject("mso_mdoc") {

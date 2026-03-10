@@ -55,6 +55,7 @@ class JsonWebSignatureTestsNimbus {
             validUntil = now + 1.days
         ).includeSubjectKeyIdentifier()
             .setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            .setBasicConstraints(true, null)
             .build()
         val signingKeyCert = X509Cert.Builder(
             publicKey = signingKey.publicKey,
@@ -68,7 +69,7 @@ class JsonWebSignatureTestsNimbus {
             .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
             .build()
         val certChain = X509CertChain(listOf(signingKeyCert, rootCert))
-        certChain.validate()
+        certChain.validate(now)
 
         val claimsSet = buildJsonObject {
             put("vp_token", buildJsonObject {

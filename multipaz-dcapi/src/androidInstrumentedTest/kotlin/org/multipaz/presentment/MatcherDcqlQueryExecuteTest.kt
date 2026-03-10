@@ -68,6 +68,7 @@ class MatcherDcqlQueryExecuteTest {
                 readerRootKey = harness.readerRootKey,
                 readerKey = key.publicKey,
                 subject = X500Name.fromName("CN=Multipaz Reader Cert Single-Use key"),
+                dnsName = "localhost",
                 serial = ASN1Integer.fromRandom(128),
                 validFrom = readerRootCerts.first().validityNotBefore,
                 validUntil = readerRootCerts.first().validityNotAfter

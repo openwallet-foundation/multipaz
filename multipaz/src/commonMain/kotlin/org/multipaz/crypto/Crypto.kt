@@ -2,8 +2,6 @@
 
 package org.multipaz.crypto
 
-import org.multipaz.util.UUID
-
 /**
  * Cryptographic support routines.
  *
@@ -150,6 +148,12 @@ expect object Crypto {
         otherKey: EcPublicKey
     ): ByteArray
 
-    // TODO: replace with non-platform specific code
-    internal suspend fun validateCertChain(certChain: X509CertChain): Boolean
+    /**
+     * Validate that each certificate in the chain is signed by the next one.
+     *
+     * Note: some certificates may use RSA keys.
+     *
+     * TODO: replace with non-platform specific code
+     */
+    internal suspend fun validateCertChainSignatures(certChain: X509CertChain): Boolean
 }

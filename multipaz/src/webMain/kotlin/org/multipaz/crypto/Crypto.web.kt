@@ -516,7 +516,7 @@ actual object Crypto {
     }
 
     @OptIn(ExperimentalWasmJsInterop::class)
-    internal actual suspend fun validateCertChain(certChain: X509CertChain): Boolean {
+    internal actual suspend fun validateCertChainSignatures(certChain: X509CertChain): Boolean {
         val certificates = certChain.certificates
         for (n in 1..certificates.lastIndex) {
             val toVerify = certificates[n - 1]

@@ -72,6 +72,7 @@ class TrustManagerTest {
         ) {
             includeSubjectKeyIdentifier()
             setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
         }
 
         val intermediateKey = Crypto.createEcPrivateKey(EcCurve.P384)
@@ -87,6 +88,7 @@ class TrustManagerTest {
             includeSubjectKeyIdentifier()
             setAuthorityKeyIdentifierToCertificate(caCertificate)
             setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
         }
 
         val dsKey = Crypto.createEcPrivateKey(EcCurve.P384)
@@ -146,6 +148,7 @@ class TrustManagerTest {
         ) {
             includeSubjectKeyIdentifier()
             setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
         }
 
         val ds2Key = Crypto.createEcPrivateKey(EcCurve.P384)
@@ -427,6 +430,7 @@ class TrustManagerTest {
                 certChain = X509CertChain(listOf(breweryReaderRootCert))
             ),
             readerKey = breweryReaderKey.publicKey,
+            dnsName = "brewery.multipaz.org",
             subject = X500Name.fromName("CN=Brewery"),
             serial = ASN1Integer.fromRandom(numBits = 128),
             validFrom = validFrom,

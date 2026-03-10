@@ -17,6 +17,7 @@ import org.multipaz.crypto.EcSignature
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.X509CertChainValidationException
 import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
@@ -264,16 +265,7 @@ internal suspend fun caPublicKey(
 }
 
 /**
- * Performs basic certificate chain validation.
- *
- * Specifically, these checks are performed:
- *  - every certificate in the chain is signed by the next one,
- *  - signer certificate's subject matches signed certificate's issuer,
- *  - certificates are not expired,
- *  - signer certificate have `CERT_SIGN` key usage
- *  - if the lst certificate is self-signed (root) and has basic constrains extension
- *    - CA flag is set to true
- *    - number of certificates in the chain satisfies path length constraint
+ * Performs basic certificate chain validation using [X509CertChain.validate].
  *
  * @return `false` (meaning this function cannot find the root certificate and establish trust)
  * @throws InvalidRequestException if the certificate chain is not valid
@@ -282,42 +274,10 @@ suspend fun basicCertificateChainValidator(
     certificateChain: X509CertChain,
     now: Instant
 ): Boolean {
-    if (!certificateChain.validate()) {
-        throw InvalidRequestException("invalid certificate chain")
-    }
-    var last: X509Cert? = null
-    for (certificate in certificateChain.certificates) {
-        if (last != null) {
-            if (last.issuer != certificate.subject) {
-                throw InvalidRequestException("subject/issuer mismatch")
-            }
-            if (!certificate.keyUsage.contains(X509KeyUsage.KEY_CERT_SIGN)) {
-                throw InvalidRequestException("missing CERT_SIGN usage")
-            }
-        }
-        last = certificate
-        if (certificate.validityNotAfter < now) {
-            throw InvalidRequestException("expired certificate")
-        }
-        if (certificate.validityNotBefore > now) {
-            throw InvalidRequestException("not-yet-valid certificate")
-        }
-    }
-    if (last != null && last.subject == last.issuer) {
-        val basicConstraints = last.basicConstraints
-        if (basicConstraints != null) {
-            if (!basicConstraints.first) {
-                throw InvalidRequestException("BasicConstrains CA is false on root certificate")
-            }
-            val maxPathLength = basicConstraints.second
-            if (maxPathLength != null) {
-                // the leaf and the root are not counted in path length constraints
-                val pathLength = certificateChain.certificates.size.toLong() - 2
-                if (pathLength > maxPathLength) {
-                    throw InvalidRequestException("BasicConstrains CA path length exceeded")
-                }
-            }
-        }
+    try {
+        certificateChain.validate(now)
+    } catch (err: X509CertChainValidationException) {
+        throw InvalidRequestException(err.message)
     }
     return false  // Certificate chain is valid, but no trust is established
 }

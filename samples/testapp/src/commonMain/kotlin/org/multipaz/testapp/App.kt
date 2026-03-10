@@ -564,6 +564,7 @@ class App private constructor (val promptModel: PromptModel) {
                     readerRootKey = readerRootKey,
                     readerKey = readerPrivateKey.publicKey,
                     subject = X500Name.fromName("CN=OWF Multipaz TestApp Reader Cert"),
+                    dnsName = null,
                     serial = ASN1Integer.fromRandom(numBits = 128),
                     validFrom = certsValidFrom,
                     validUntil = certsValidUntil,

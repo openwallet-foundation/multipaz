@@ -289,6 +289,7 @@ object MultipazCtl {
             getArg(args, "out_certificate", "reader_certificate.pem")
         val privateKeyOutputFilename =
             getArg(args, "out_private_key", "reader_private_key.pem")
+        val dnsName = getArg(args, "dns_name", "localhost")
 
         // Requirements for the Reader Root certificate is defined in ISO/IEC 18013-5:2021 Annex B
 
@@ -316,6 +317,7 @@ object MultipazCtl {
                 ),
                 readerKey = readerKey.publicKey,
                 subject = subject,
+                dnsName = dnsName,
                 serial = serial,
                 validFrom = validFrom,
                 validUntil = validUntil
@@ -411,6 +413,7 @@ Generate a reader certificate and corresponding private key:
         [--out_certificate reader_certificate.pem]
         [--out_private_key reader_private_key.pem]
         [--subject 'CN=OWF Multipaz TEST Reader,C=US']
+        [--dns_name localhost]
         [--validity_in_years 1]
         [--curve P-256]
 

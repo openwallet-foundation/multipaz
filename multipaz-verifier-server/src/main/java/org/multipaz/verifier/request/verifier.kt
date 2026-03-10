@@ -1,7 +1,6 @@
 package org.multipaz.verifier.request
 
 import kotlinx.coroutines.CancellationException
-import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.Simple
@@ -14,8 +13,6 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.JsonWebEncryption
-import org.multipaz.crypto.X500Name
-import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUCertificateOfResidence
@@ -42,9 +39,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
-import kotlinx.datetime.DateTimePeriod
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.plus
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
@@ -64,12 +58,6 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import net.minidev.json.JSONObject
 import net.minidev.json.JSONStyle
-import org.multipaz.asn1.ASN1
-import org.multipaz.asn1.ASN1Encoding
-import org.multipaz.asn1.ASN1Sequence
-import org.multipaz.asn1.ASN1TagClass
-import org.multipaz.asn1.ASN1TaggedObject
-import org.multipaz.asn1.OID
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
@@ -81,7 +69,6 @@ import org.multipaz.cbor.putCborMap
 import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509Cert
-import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.documenttype.SingleDocumentCannedRequest
 import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.documenttype.knowntypes.IDPass
@@ -401,50 +388,6 @@ private suspend fun clientId(): String {
 private suspend fun getReaderIdentity(): AsymmetricKey.X509Certified =
     getServerIdentity(ServerIdentity.VERIFIER)
 
-private suspend fun createSingleUseReaderKey(dnsName: String): AsymmetricKey.X509Certified {
-    val now = Clock.System.now()
-    val validFrom = now.plus(DateTimePeriod(minutes = -10), TimeZone.currentSystemDefault())
-    val validUntil = now.plus(DateTimePeriod(minutes = 10), TimeZone.currentSystemDefault())
-    val readerKey = Crypto.createEcPrivateKey(EcCurve.P256)
-    val readerKeySubject = "CN=OWF Multipaz Online Verifier Single-Use Reader Key"
-
-    val readerIdentity = getReaderIdentity()
-
-    val cert = readerIdentity.certChain.certificates.first()
-    val readerKeyCertificate = X509Cert.Builder(
-        publicKey = readerKey.publicKey,
-        signingKey = readerIdentity,
-        serialNumber = ASN1Integer(1L),
-        subject = X500Name.fromName(readerKeySubject),
-        issuer = cert.subject,
-        validFrom = validFrom,
-        validUntil = validUntil
-    )
-        .includeSubjectKeyIdentifier()
-        .setAuthorityKeyIdentifierToCertificate(cert)
-        .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
-        .addExtension(
-            OID.X509_EXTENSION_SUBJECT_ALT_NAME.oid,
-            false,
-            ASN1.encode(
-                ASN1Sequence(listOf(
-                    ASN1TaggedObject(
-                        ASN1TagClass.CONTEXT_SPECIFIC,
-                        ASN1Encoding.PRIMITIVE,
-                        2, // dNSName
-                        dnsName.encodeToByteArray()
-                    )
-                ))
-            )
-        )
-        .build()
-
-    return AsymmetricKey.X509CertifiedExplicit(
-        privateKey = readerKey,
-        certChain = X509CertChain(listOf(readerKeyCertificate) + readerIdentity.certChain.certificates)
-    )
-}
-
 private suspend fun handleGetAvailableRequests(
     call: ApplicationCall,
     requestData: ByteArray
@@ -549,7 +492,7 @@ private suspend fun handleDcBegin(
     )
 
     try {
-        val readerAuthKey = createSingleUseReaderKey(session.host)
+        val readerAuthKey = getReaderIdentity()
 
         // Uncomment when making test vectors...
         //Logger.iCbor(TAG, "readerKey: ", Cbor.encode(session.encryptionKey.toCoseKey().toDataItem()))
@@ -699,7 +642,7 @@ private suspend fun handleDcBeginRawDcql(
         expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
     )
 
-    val readerAuthKey = createSingleUseReaderKey(session.host)
+    val readerAuthKey = getReaderIdentity()
 
     val dcRequestString = calcDcRequestStringOpenID4VPforDCQL(
         version = version,
@@ -1095,7 +1038,7 @@ private suspend fun handleAnnexARequest(
         }
         session.sessionTranscript = Cbor.encode(sessionTranscript)
 
-        val readerAuthKey = createSingleUseReaderKey(session.host)
+        val readerAuthKey = getReaderIdentity()
 
         val deviceRequest = AnnexACalcRequest(
             requestFormat = session.requestFormat,
@@ -1281,7 +1224,7 @@ private suspend fun handleOpenID4VPRequest(
     val session = Session.fromCbor(encodedSession.toByteArray())
     val baseUrl = BackendEnvironment.getBaseUrl()
 
-    val readerAuthKey = createSingleUseReaderKey(session.host)
+    val readerAuthKey = getReaderIdentity()
 
     var request: SingleDocumentCannedRequest? = null
 
@@ -1478,7 +1421,7 @@ private suspend fun handleGetReaderRootCert(
     call: ApplicationCall
 ) = call.respondText(
     contentType = ContentType.Text.Plain,
-    text = getReaderIdentity().certChain.certificates.joinToString { it.toPem() }
+    text = getReaderIdentity().certChain.certificates.last().toPem()
 )
 
 private val issuerTrustManagerLock = Mutex()

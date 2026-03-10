@@ -495,7 +495,7 @@ actual object Crypto {
             }
         }
 
-    internal actual suspend fun validateCertChain(certChain: X509CertChain): Boolean {
+    internal actual suspend fun validateCertChainSignatures(certChain: X509CertChain): Boolean {
         val javaCerts = certChain.javaX509Certificates
         for (n in javaCerts.indices) {
             if (n < javaCerts.size - 1) {

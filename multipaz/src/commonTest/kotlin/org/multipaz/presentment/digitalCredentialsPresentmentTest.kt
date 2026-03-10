@@ -44,6 +44,7 @@ class DigitalCredentialsPresentmentTest {
         private const val TAG = "DigitalCredentialsPresentmentTest"
 
         private const val CLIENT_ID = "x509_san_dns:verifier.multipaz.org"
+        private const val DNS_NAME = "verifier.multipaz.org"
         private const val ORIGIN = "https://verifier.multipaz.org"
         private const val APP_ID = "org.multipaz.testApp"
     }
@@ -88,7 +89,7 @@ class DigitalCredentialsPresentmentTest {
             domainKeyBoundSdJwt = "sdjwt",
         )
 
-        val nonce = Random.Default.nextBytes(16).toBase64Url()
+        val nonce = Random.nextBytes(16).toBase64Url()
 
         val readerAuthKey = if (signRequest) {
             val key = Crypto.createEcPrivateKey(EcCurve.P256)
@@ -97,6 +98,7 @@ class DigitalCredentialsPresentmentTest {
                 readerRootKey = documentStoreTestHarness.readerRootKey,
                 readerKey = key.publicKey,
                 subject = X500Name.fromName("CN=Multipaz Reader Cert Single-Use key"),
+                dnsName = DNS_NAME,
                 serial = ASN1Integer.fromRandom(128),
                 validFrom = readerRootCerts.first().validityNotBefore,
                 validUntil = readerRootCerts.first().validityNotAfter

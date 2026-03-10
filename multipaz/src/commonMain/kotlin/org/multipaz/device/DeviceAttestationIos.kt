@@ -25,12 +25,17 @@ import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.util.getInt16
 import org.multipaz.util.getInt32
 import org.multipaz.crypto.SignatureVerificationException
+import org.multipaz.crypto.X509CertChainValidationException
+import kotlin.time.Instant
 
 /** On iOS device attestation is the result of Apple's DeviceCheck API. */
 data class DeviceAttestationIos(
     val blob: ByteString
 ): DeviceAttestation() {
-    override suspend fun validate(validationData: DeviceAttestationValidationData) {
+    override suspend fun validate(
+        validationData: DeviceAttestationValidationData,
+        validateAt: Instant
+    ) {
         val attestationDict = Cbor.decode(blob.toByteArray())
         val format = attestationDict["fmt"]
         val attStmt = attestationDict["attStmt"]
@@ -52,11 +57,12 @@ data class DeviceAttestationIos(
             }
         }
         try {
-            if (!X509CertChain(x5c).validate()) {
-                throw DeviceAttestationException("Invalid certificate chain")
-            }
+            X509CertChain(x5c).validate(validateAt)
+        } catch (e: X509CertChainValidationException) {
+            throw DeviceAttestationException("Invalid certificate chain", e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            if (e is CancellationException) throw e
             throw DeviceAttestationException("Error validating certificate chain", e)
         }
         try {

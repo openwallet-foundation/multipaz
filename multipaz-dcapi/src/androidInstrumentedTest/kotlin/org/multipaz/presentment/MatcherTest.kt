@@ -69,7 +69,7 @@ class MatcherTest {
         harness.initialize()
         harnessInitializer(harness)
 
-        val nonce = Random.Default.nextBytes(16).toBase64Url()
+        val nonce = Random.nextBytes(16).toBase64Url()
         val readerAuthKey = if (signRequest) {
             val key = Crypto.createEcPrivateKey(EcCurve.P256)
             val readerRootCert = harness.readerRootKey.certChain.certificates.first()
@@ -77,6 +77,7 @@ class MatcherTest {
                 readerRootKey = harness.readerRootKey,
                 readerKey = key.publicKey,
                 subject = X500Name.fromName("CN=Multipaz Reader Cert Single-Use key"),
+                dnsName = "localhost",
                 serial = ASN1Integer.fromRandom(128),
                 validFrom = readerRootCert.validityNotBefore,
                 validUntil = readerRootCert.validityNotAfter
@@ -141,7 +142,7 @@ class MatcherTest {
         harness.initialize()
         harnessInitializer(harness)
 
-        val nonce = Random.Default.nextBytes(16).toBase64Url()
+        val nonce = Random.nextBytes(16).toBase64Url()
         val readerAuthKey = if (signRequest) {
             val key = Crypto.createEcPrivateKey(EcCurve.P256)
             val readerRootCert = harness.readerRootKey.certChain.certificates.first()
@@ -149,6 +150,7 @@ class MatcherTest {
                 readerRootKey = harness.readerRootKey,
                 readerKey = key.publicKey,
                 subject = X500Name.fromName("CN=Multipaz Reader Cert Single-Use key"),
+                dnsName = "localhost",
                 serial = ASN1Integer.fromRandom(128),
                 validFrom = readerRootCert.validityNotBefore,
                 validUntil = readerRootCert.validityNotAfter
