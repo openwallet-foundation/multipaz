@@ -1,4 +1,23 @@
 <resources>
+    <!-- showBiometricPrompt.kt -->
+    <string name="biometric_prompt_negative_btn_lskf">Use PIN</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">Cancel</string>
+
+    <!-- NfcTagReaderModalBottomSheet -->
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">Ready to Scan</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">Cancel</string>
+
+    <!-- PresentmentActivity -->
+    <string name="presentment_activity_hold_to_reader">Hold to reader</string>
+    <string name="presentment_activity_connecting_to_reader">Connecting to reader</string>
+    <string name="presentment_activity_info_was_shared">The info was shared</string>
+    <string name="presentment_activity_something_went_wrong">Something went wrong</string>
+    <string name="presentment_activity_canceled">Cancelled</string>
+    <string name="presentment_activity_cannot_satisfy_request">Cannot satisfy request</string>
+    <string name="presentment_activity_open_wallet">Open %1$s</string>
+    <string name="presentment_activity_app_name_default">Wallet</string>
+    <string name="presentment_activity_no_documents_available">No documents available</string>
+
     <!-- PassphraseEntryField.kt -->
     <string name="passphrase_entry_field_pin_is_weak">PIN is weak, please choose another</string>
     <string name="passphrase_entry_field_passphrase_is_weak">Passphrase is weak, please choose another</string>

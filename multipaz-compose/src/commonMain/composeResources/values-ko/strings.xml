@@ -172,4 +172,24 @@
         <item quantity="one">RICAL containing %1$d certificate</item>
         <item quantity="other">RICAL에 인증서 %1$d개 포함</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">PIN 사용</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">취소</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">스캔 준비 완료</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">취소</string>
+    <string name="presentment_activity_hold_to_reader">리더기에 대세요</string>
+    <string name="presentment_activity_connecting_to_reader">리더기에 연결 중</string>
+    <string name="presentment_activity_info_was_shared">정보가 공유되었습니다</string>
+    <string name="presentment_activity_something_went_wrong">문제가 발생했습니다</string>
+    <string name="presentment_activity_canceled">취소됨</string>
+    <string name="presentment_activity_cannot_satisfy_request">요청을 처리할 수 없습니다</string>
+    <string name="presentment_activity_open_wallet">%1$s 열기</string>
+    <string name="presentment_activity_app_name_default">지갑</string>
+    <string name="presentment_activity_no_documents_available">사용 가능한 문서 없음</string>
+    <string name="trust_entry_extensions">확장 기능</string>
+    <string name="trust_entry_vical_details_valid_until">유효 기한</string>
+    <string name="trust_entry_vical_details_update_url">업데이트 URL</string>
+    <string name="trust_entry_rical_entry_title">RICAL 항목</string>
+    <string name="trust_entry_rical_is_trust_anchor">신뢰 앵커</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">예</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">아니요</string>
 </resources>

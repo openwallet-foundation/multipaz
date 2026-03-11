@@ -172,4 +172,24 @@
         <item quantity="one">RICAL contendo %1$d certificado</item>
         <item quantity="other">RICAL contendo %1$d certificados</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">Usar PIN</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">Cancelar</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">Pronto para Ler</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">Cancelar</string>
+    <string name="presentment_activity_hold_to_reader">Aproxime do leitor</string>
+    <string name="presentment_activity_connecting_to_reader">Conectando ao leitor</string>
+    <string name="presentment_activity_info_was_shared">As informações foram compartilhadas</string>
+    <string name="presentment_activity_something_went_wrong">Algo deu errado</string>
+    <string name="presentment_activity_canceled">Cancelado</string>
+    <string name="presentment_activity_cannot_satisfy_request">Não foi possível atender à solicitação</string>
+    <string name="presentment_activity_open_wallet">Abrir %1$s</string>
+    <string name="presentment_activity_app_name_default">Carteira</string>
+    <string name="presentment_activity_no_documents_available">Nenhum documento disponível</string>
+    <string name="trust_entry_extensions">Extensões</string>
+    <string name="trust_entry_vical_details_valid_until">Válido até</string>
+    <string name="trust_entry_vical_details_update_url">URL de atualização</string>
+    <string name="trust_entry_rical_entry_title">Entrada RICAL</string>
+    <string name="trust_entry_rical_is_trust_anchor">Âncora de confiança</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">Sim</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">Não</string>
 </resources>

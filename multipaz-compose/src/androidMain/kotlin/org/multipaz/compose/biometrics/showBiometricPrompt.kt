@@ -12,7 +12,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import org.multipaz.compose.R
+import org.jetbrains.compose.resources.getString
+import org.multipaz.multipaz_compose.generated.resources.Res
+import org.multipaz.multipaz_compose.generated.resources.biometric_prompt_negative_btn_lskf
+import org.multipaz.multipaz_compose.generated.resources.biometric_prompt_negative_btn_no_lskf
 import kotlin.coroutines.resumeWithException
 
 /**
@@ -36,6 +39,8 @@ suspend fun showBiometricPrompt(
     userAuthenticationTypes: Set<UserAuthenticationType>,
     requireConfirmation: Boolean
 ): Boolean {
+    val negativeButtonText = getString(Res.string.biometric_prompt_negative_btn_lskf)
+    val negativeButtonTextNoLskf = getString(Res.string.biometric_prompt_negative_btn_no_lskf)
     // BiometricPrompt must be called from the UI thread.
     return withContext(Dispatchers.Main) {
         suspendCancellableCoroutine { continuation ->
@@ -44,6 +49,8 @@ suspend fun showBiometricPrompt(
                 activity = activity,
                 title = title,
                 subtitle = subtitle,
+                negativeButtonText = negativeButtonText,
+                negativeButtonTextNoLskf = negativeButtonTextNoLskf,
                 userAuthenticationTypes = userAuthenticationTypes,
                 requireConfirmation = requireConfirmation,
                 onSuccess = { continuation.resume(true, null) },
@@ -58,6 +65,8 @@ private fun showBiometricPromptAsync(
     activity: FragmentActivity,
     title: String,
     subtitle: String,
+    negativeButtonText: String,
+    negativeButtonTextNoLskf: String,
     cryptoObject: CryptoObject?,
     userAuthenticationTypes: Set<UserAuthenticationType>,
     requireConfirmation: Boolean,
@@ -76,6 +85,8 @@ private fun showBiometricPromptAsync(
         activity = activity,
         title = title,
         subtitle = subtitle,
+        negativeButtonText = negativeButtonText,
+        negativeButtonTextNoLskf = negativeButtonTextNoLskf,
         cryptoObject = cryptoObject,
         userAuthenticationTypes = userAuthenticationTypes,
         requireConfirmation = requireConfirmation,
@@ -89,6 +100,8 @@ private class ShowBiometricPrompt(
     private val activity: FragmentActivity,
     private val title: String,
     private val subtitle: String,
+    private val negativeButtonText: String,
+    private val negativeButtonTextNoLskf: String,
     private val cryptoObject: CryptoObject?,
     private val userAuthenticationTypes: Set<UserAuthenticationType>,
     private val requireConfirmation: Boolean,
@@ -149,10 +162,9 @@ private class ShowBiometricPrompt(
     private fun authenticateBiometric() {
         val negativeTxt =
             if (lskfOnNegativeBtn) {
-                activity.applicationContext.resources.getString(R.string.biometric_prompt_negative_btn_lskf)
-            }
-            else {
-                activity.applicationContext.resources.getString(R.string.biometric_prompt_negative_btn_no_lskf)
+                negativeButtonText
+            } else {
+                negativeButtonTextNoLskf
             }
 
         val biometricPromptInfo = BiometricPrompt.PromptInfo.Builder()

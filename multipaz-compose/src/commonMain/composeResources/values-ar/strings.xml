@@ -212,4 +212,24 @@
         <item quantity="few">RICAL يتضمن %1$d شهادات</item>
         <item quantity="many">RICAL يتضمن %1$d شهادات</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">استخدام رمز PIN</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">إلغاء</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">جاهز للمسح الضوئي</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">إلغاء</string>
+    <string name="presentment_activity_hold_to_reader">امسك بالقارئ</string>
+    <string name="presentment_activity_connecting_to_reader">جارٍ الاتصال بالقارئ</string>
+    <string name="presentment_activity_info_was_shared">تمت مشاركة المعلومات</string>
+    <string name="presentment_activity_something_went_wrong">حدث خطأ ما</string>
+    <string name="presentment_activity_canceled">تم الإلغاء</string>
+    <string name="presentment_activity_cannot_satisfy_request">تعذر تلبية الطلب</string>
+    <string name="presentment_activity_open_wallet">فتح %1$s</string>
+    <string name="presentment_activity_app_name_default">المحفظة</string>
+    <string name="presentment_activity_no_documents_available">لا توجد مستندات متاحة</string>
+    <string name="trust_entry_extensions">الإضافات</string>
+    <string name="trust_entry_vical_details_valid_until">صالح حتى</string>
+    <string name="trust_entry_vical_details_update_url">رابط التحديث</string>
+    <string name="trust_entry_rical_entry_title">إدخال RICAL</string>
+    <string name="trust_entry_rical_is_trust_anchor">مرسى الثقة</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">نعم</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">لا</string>
 </resources>

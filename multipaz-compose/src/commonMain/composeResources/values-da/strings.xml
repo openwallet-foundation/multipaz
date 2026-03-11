@@ -170,4 +170,24 @@
         <item quantity="one">RICAL indeholdende %1$d certifikat</item>
         <item quantity="other">RICAL indeholdende %1$d certifikater</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">Brug pinkode</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">Annuller</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">Klar til scanning</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">Annuller</string>
+    <string name="presentment_activity_hold_to_reader">Hold mod læser</string>
+    <string name="presentment_activity_connecting_to_reader">Opretter forbindelse til læser</string>
+    <string name="presentment_activity_info_was_shared">Oplysningerne blev delt</string>
+    <string name="presentment_activity_something_went_wrong">Noget gik galt</string>
+    <string name="presentment_activity_canceled">Annulleret</string>
+    <string name="presentment_activity_cannot_satisfy_request">Kan ikke imødekomme anmodning</string>
+    <string name="presentment_activity_open_wallet">Åbn %1$s</string>
+    <string name="presentment_activity_app_name_default">Pung</string>
+    <string name="presentment_activity_no_documents_available">Ingen dokumenter tilgængelige</string>
+    <string name="trust_entry_extensions">Udvidelser</string>
+    <string name="trust_entry_vical_details_valid_until">Gyldig til</string>
+    <string name="trust_entry_vical_details_update_url">Opdaterings-URL</string>
+    <string name="trust_entry_rical_entry_title">RICAL-post</string>
+    <string name="trust_entry_rical_is_trust_anchor">Tillidsanker</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">Ja</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">Nej</string>
 </resources>

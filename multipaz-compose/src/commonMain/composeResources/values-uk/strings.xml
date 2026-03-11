@@ -192,4 +192,24 @@
         <item quantity="few">RICAL, що містить %1$d сертифікати</item>
         <item quantity="many">RICAL, що містить %1$d сертифікатів</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">Використати PIN</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">Скасувати</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">Готово до сканування</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">Скасувати</string>
+    <string name="presentment_activity_hold_to_reader">Піднесіть до зчитувача</string>
+    <string name="presentment_activity_connecting_to_reader">Підключення до зчитувача</string>
+    <string name="presentment_activity_info_was_shared">Інформацію було передано</string>
+    <string name="presentment_activity_something_went_wrong">Щось пішло не так</string>
+    <string name="presentment_activity_canceled">Скасовано</string>
+    <string name="presentment_activity_cannot_satisfy_request">Не вдається виконати запит</string>
+    <string name="presentment_activity_open_wallet">Відкрити %1$s</string>
+    <string name="presentment_activity_app_name_default">Гаманець</string>
+    <string name="presentment_activity_no_documents_available">Немає доступних документів</string>
+    <string name="trust_entry_extensions">Розширення</string>
+    <string name="trust_entry_vical_details_valid_until">Дійсний до</string>
+    <string name="trust_entry_vical_details_update_url">URL оновлення</string>
+    <string name="trust_entry_rical_entry_title">Запис RICAL</string>
+    <string name="trust_entry_rical_is_trust_anchor">Якір довіри</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">Так</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">Ні</string>
 </resources>

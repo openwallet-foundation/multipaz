@@ -172,4 +172,24 @@
         <item quantity="one">RICAL containing %1$d certificate</item>
         <item quantity="other">RICAL 包含 %1$d 个证书</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">使用 PIN 码</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">取消</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">准备扫描</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">取消</string>
+    <string name="presentment_activity_hold_to_reader">靠近读卡器</string>
+    <string name="presentment_activity_connecting_to_reader">正在连接读卡器</string>
+    <string name="presentment_activity_info_was_shared">信息已共享</string>
+    <string name="presentment_activity_something_went_wrong">出错了</string>
+    <string name="presentment_activity_canceled">已取消</string>
+    <string name="presentment_activity_cannot_satisfy_request">无法满足请求</string>
+    <string name="presentment_activity_open_wallet">打开%1$s</string>
+    <string name="presentment_activity_app_name_default">钱包</string>
+    <string name="presentment_activity_no_documents_available">无可用文件</string>
+    <string name="trust_entry_extensions">扩展</string>
+    <string name="trust_entry_vical_details_valid_until">有效期至</string>
+    <string name="trust_entry_vical_details_update_url">更新网址</string>
+    <string name="trust_entry_rical_entry_title">RICAL 条目</string>
+    <string name="trust_entry_rical_is_trust_anchor">信任锚点</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">是</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">否</string>
 </resources>

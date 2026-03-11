@@ -172,4 +172,24 @@
         <item quantity="one">RICAL containing %1$d certificate</item>
         <item quantity="other">RICAL: %1$d 個の証明書を格納</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">PINを使用</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">キャンセル</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">スキャン準備完了</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">キャンセル</string>
+    <string name="presentment_activity_hold_to_reader">リーダーにかざしてください</string>
+    <string name="presentment_activity_connecting_to_reader">リーダーに接続中</string>
+    <string name="presentment_activity_info_was_shared">情報が共有されました</string>
+    <string name="presentment_activity_something_went_wrong">問題が発生しました</string>
+    <string name="presentment_activity_canceled">キャンセルされました</string>
+    <string name="presentment_activity_cannot_satisfy_request">リクエストに応じられません</string>
+    <string name="presentment_activity_open_wallet">%1$sを開く</string>
+    <string name="presentment_activity_app_name_default">ウォレット</string>
+    <string name="presentment_activity_no_documents_available">利用可能な書類はありません</string>
+    <string name="trust_entry_extensions">拡張機能</string>
+    <string name="trust_entry_vical_details_valid_until">有効期限</string>
+    <string name="trust_entry_vical_details_update_url">更新URL</string>
+    <string name="trust_entry_rical_entry_title">RICALエントリ</string>
+    <string name="trust_entry_rical_is_trust_anchor">トラストアンカー</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">はい</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">いいえ</string>
 </resources>

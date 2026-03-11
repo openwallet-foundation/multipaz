@@ -172,4 +172,24 @@
         <item quantity="one">RICAL berisi %1$d sertifikat</item>
         <item quantity="other">RICAL berisi %1$d sertifikat</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">Gunakan PIN</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">Batal</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">Siap Memindai</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">Batal</string>
+    <string name="presentment_activity_hold_to_reader">Dekatkan ke pembaca</string>
+    <string name="presentment_activity_connecting_to_reader">Menghubungkan ke pembaca</string>
+    <string name="presentment_activity_info_was_shared">Informasi berhasil dibagikan</string>
+    <string name="presentment_activity_something_went_wrong">Terjadi kesalahan</string>
+    <string name="presentment_activity_canceled">Dibatalkan</string>
+    <string name="presentment_activity_cannot_satisfy_request">Tidak dapat memenuhi permintaan</string>
+    <string name="presentment_activity_open_wallet">Buka %1$s</string>
+    <string name="presentment_activity_app_name_default">Dompet</string>
+    <string name="presentment_activity_no_documents_available">Tidak ada dokumen yang tersedia</string>
+    <string name="trust_entry_extensions">Ekstensi</string>
+    <string name="trust_entry_vical_details_valid_until">Berlaku hingga</string>
+    <string name="trust_entry_vical_details_update_url">URL Pembaruan</string>
+    <string name="trust_entry_rical_entry_title">Entri RICAL</string>
+    <string name="trust_entry_rical_is_trust_anchor">Jangkar kepercayaan</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">Ya</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">Tidak</string>
 </resources>

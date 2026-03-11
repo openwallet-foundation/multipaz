@@ -180,4 +180,24 @@
         <item quantity="one">RICAL obsahující %1$d certifikát</item>
         <item quantity="other">RICAL obsahující %1$d certifikátů</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">Použít PIN</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">Zrušit</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">Připraveno ke skenování</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">Zrušit</string>
+    <string name="presentment_activity_hold_to_reader">Přiložte ke čtečce</string>
+    <string name="presentment_activity_connecting_to_reader">Připojování ke čtečce</string>
+    <string name="presentment_activity_info_was_shared">Informace byly sdíleny</string>
+    <string name="presentment_activity_something_went_wrong">Něco se pokazilo</string>
+    <string name="presentment_activity_canceled">Zrušeno</string>
+    <string name="presentment_activity_cannot_satisfy_request">Nelze vyhovět požadavku</string>
+    <string name="presentment_activity_open_wallet">Otevřít %1$s</string>
+    <string name="presentment_activity_app_name_default">Peněženka</string>
+    <string name="presentment_activity_no_documents_available">Žádné dokumenty nejsou k dispozici</string>
+    <string name="trust_entry_extensions">Rozšíření</string>
+    <string name="trust_entry_vical_details_valid_until">Platné do</string>
+    <string name="trust_entry_vical_details_update_url">Adresa URL pro aktualizaci</string>
+    <string name="trust_entry_rical_entry_title">Položka RICAL</string>
+    <string name="trust_entry_rical_is_trust_anchor">Důvěryhodná kotva</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">Ano</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">Ne</string>
 </resources>

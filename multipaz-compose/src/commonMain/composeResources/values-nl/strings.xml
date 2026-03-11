@@ -172,4 +172,24 @@
         <item quantity="one">RICAL bevat %1$d certificaat</item>
         <item quantity="other">RICAL bevat %1$d certificaten</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">PIN gebruiken</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">Annuleren</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">Klaar om te scannen</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">Annuleren</string>
+    <string name="presentment_activity_hold_to_reader">Houd bij de lezer</string>
+    <string name="presentment_activity_connecting_to_reader">Verbinden met lezer</string>
+    <string name="presentment_activity_info_was_shared">De info is gedeeld</string>
+    <string name="presentment_activity_something_went_wrong">Er is iets misgegaan</string>
+    <string name="presentment_activity_canceled">Geannuleerd</string>
+    <string name="presentment_activity_cannot_satisfy_request">Kan verzoek niet voltooien</string>
+    <string name="presentment_activity_open_wallet">Open %1$s</string>
+    <string name="presentment_activity_app_name_default">Portemonnee</string>
+    <string name="presentment_activity_no_documents_available">Geen documenten beschikbaar</string>
+    <string name="trust_entry_extensions">Extensies</string>
+    <string name="trust_entry_vical_details_valid_until">Geldig tot</string>
+    <string name="trust_entry_vical_details_update_url">Update-URL</string>
+    <string name="trust_entry_rical_entry_title">RICAL-item</string>
+    <string name="trust_entry_rical_is_trust_anchor">Vertrouwensanker</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">Ja</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">Nee</string>
 </resources>

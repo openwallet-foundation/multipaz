@@ -192,4 +192,24 @@
         <item quantity="few">RICAL zawierający %1$d certyfikaty</item>
         <item quantity="many">RICAL zawierający %1$d certyfikatów</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">Użyj kodu PIN</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">Anuluj</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">Gotowe do skanowania</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">Anuluj</string>
+    <string name="presentment_activity_hold_to_reader">Przytrzymaj przy czytniku</string>
+    <string name="presentment_activity_connecting_to_reader">Łączę z czytnikiem</string>
+    <string name="presentment_activity_info_was_shared">Informacje zostały udostępnione</string>
+    <string name="presentment_activity_something_went_wrong">Coś poszło nie tak</string>
+    <string name="presentment_activity_canceled">Anulowano</string>
+    <string name="presentment_activity_cannot_satisfy_request">Nie można zrealizować żądania</string>
+    <string name="presentment_activity_open_wallet">Otwórz %1$s</string>
+    <string name="presentment_activity_app_name_default">Portfel</string>
+    <string name="presentment_activity_no_documents_available">Brak dostępnych dokumentów</string>
+    <string name="trust_entry_extensions">Rozszerzenia</string>
+    <string name="trust_entry_vical_details_valid_until">Ważne do</string>
+    <string name="trust_entry_vical_details_update_url">Adres URL aktualizacji</string>
+    <string name="trust_entry_rical_entry_title">Wpis RICAL</string>
+    <string name="trust_entry_rical_is_trust_anchor">Kotwica zaufania</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">Tak</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">Nie</string>
 </resources>

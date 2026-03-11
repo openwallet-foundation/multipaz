@@ -72,7 +72,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
-import org.multipaz.compose.R
+import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.branding.Branding
 import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.document.VerticalDocumentList
@@ -81,6 +81,15 @@ import org.multipaz.context.applicationContext
 import org.multipaz.context.initializeApplication
 import org.multipaz.document.Document
 import org.multipaz.multipaz_compose.generated.resources.Res
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_app_name_default
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_canceled
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_cannot_satisfy_request
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_connecting_to_reader
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_hold_to_reader
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_info_was_shared
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_no_documents_available
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_open_wallet
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_something_went_wrong
 import org.multipaz.presentment.DocumentChooserData
 import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentCannotSatisfyRequestException
@@ -444,9 +453,9 @@ internal fun PresentmentActivityContent(
                                         ) {
                                             Text(
                                                 modifier = Modifier.padding(vertical = 8.dp),
-                                                text = applicationContext.getString(
-                                                    R.string.presentment_activity_open_wallet,
-                                                    currentBranding.appName ?: R.string.presentment_activity_app_name_default
+                                                text = stringResource(
+                                                    Res.string.presentment_activity_open_wallet,
+                                                    currentBranding.appName ?: Res.string.presentment_activity_app_name_default
                                                 ),
                                                 style = MaterialTheme.typography.titleMedium
                                             )
@@ -484,21 +493,21 @@ internal fun PresentmentActivityContent(
                                             when (state.error!!) {
                                                 is PresentmentCanceledException -> {
                                                     if (state.error!!.message != null) {
-                                                        ShowFailure(applicationContext.getString(
-                                                            R.string.presentment_activity_canceled
+                                                        ShowFailure(stringResource(
+                                                            Res.string.presentment_activity_canceled
                                                         ))
                                                     } else {
                                                         startFadeOut = true
                                                     }
                                                 }
                                                 is PresentmentCannotSatisfyRequestException -> {
-                                                    ShowFailure(applicationContext.getString(
-                                                        R.string.presentment_activity_cannot_satisfy_request
+                                                    ShowFailure(stringResource(
+                                                        Res.string.presentment_activity_cannot_satisfy_request
                                                     ))
                                                 }
                                                 else -> {
-                                                    ShowFailure(applicationContext.getString(
-                                                        R.string.presentment_activity_something_went_wrong
+                                                    ShowFailure(stringResource(
+                                                        Res.string.presentment_activity_something_went_wrong
                                                     ))
                                                 }
                                             }
@@ -578,8 +587,8 @@ private fun ShowCardChooser(
         cardMaxHeight = maxCardHeight,
         showDocumentInfo = { documentInfo -> contentBelow() },
         emptyDocumentContent = {
-            Text(applicationContext.getString(
-                R.string.presentment_activity_no_documents_available
+            Text(stringResource(
+                Res.string.presentment_activity_no_documents_available
             ))
         },
         onDocumentFocused = { documentInfo ->
@@ -600,7 +609,7 @@ private fun ShowCardChooser(
 @Composable
 private fun ShowShared() {
     ShowLottieAnimation(
-        message = applicationContext.getString(R.string.presentment_activity_info_was_shared),
+        message = stringResource(Res.string.presentment_activity_info_was_shared),
         animationPath = "files/success_animation.json",
         repeat = false
     )
@@ -628,7 +637,7 @@ private fun ShowWaiting() {
 private fun ShowHoldToReader() {
     val isDarkTheme = isSystemInDarkTheme()
     ShowLottieAnimation(
-        message = applicationContext.getString(R.string.presentment_activity_hold_to_reader),
+        message = stringResource(Res.string.presentment_activity_hold_to_reader),
         animationPath = if (isDarkTheme) {
             "files/nfc_animation_dark.json"
         } else {
@@ -642,7 +651,7 @@ private fun ShowHoldToReader() {
 private fun ShowConnectingToReader() {
     val isDarkTheme = isSystemInDarkTheme()
     ShowLottieAnimation(
-        message = applicationContext.getString(R.string.presentment_activity_connecting_to_reader),
+        message = stringResource(Res.string.presentment_activity_connecting_to_reader),
         animationPath = if (isDarkTheme) {
             "files/nfc_animation_dark.json"
         } else {

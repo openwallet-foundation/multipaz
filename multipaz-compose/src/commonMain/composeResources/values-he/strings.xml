@@ -188,4 +188,24 @@
         <item quantity="one">RICAL מכיל %1$d תעודה</item>
         <item quantity="other">RICAL מכיל %1$d תעודות</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">השתמש ב-PIN</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">ביטול</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">מוכן לסריקה</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">ביטול</string>
+    <string name="presentment_activity_hold_to_reader">החזק ליד הקורא</string>
+    <string name="presentment_activity_connecting_to_reader">מתחבר לקורא</string>
+    <string name="presentment_activity_info_was_shared">המידע שותף</string>
+    <string name="presentment_activity_something_went_wrong">משהו השתבש</string>
+    <string name="presentment_activity_canceled">בוטל</string>
+    <string name="presentment_activity_cannot_satisfy_request">לא ניתן למלא את הבקשה</string>
+    <string name="presentment_activity_open_wallet">לפתוח את %1$s</string>
+    <string name="presentment_activity_app_name_default">ארנק</string>
+    <string name="presentment_activity_no_documents_available">אין מסמכים זמינים</string>
+    <string name="trust_entry_extensions">הרחבות</string>
+    <string name="trust_entry_vical_details_valid_until">תקף עד</string>
+    <string name="trust_entry_vical_details_update_url">כתובת אתר עדכון</string>
+    <string name="trust_entry_rical_entry_title">רשומת RICAL</string>
+    <string name="trust_entry_rical_is_trust_anchor">עוגן אמון</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">כן</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">לא</string>
 </resources>

@@ -172,4 +172,24 @@
         <item quantity="one">RICAL containing %1$d certificate</item>
         <item quantity="other">RICAL chứa %1$d chứng chỉ</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">Dùng mã PIN</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">Hủy</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">Sẵn sàng quét</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">Hủy</string>
+    <string name="presentment_activity_hold_to_reader">Giữ gần đầu đọc</string>
+    <string name="presentment_activity_connecting_to_reader">Đang kết nối với đầu đọc</string>
+    <string name="presentment_activity_info_was_shared">Thông tin đã được chia sẻ</string>
+    <string name="presentment_activity_something_went_wrong">Đã xảy ra lỗi</string>
+    <string name="presentment_activity_canceled">Đã hủy</string>
+    <string name="presentment_activity_cannot_satisfy_request">Không thể xử lý yêu cầu</string>
+    <string name="presentment_activity_open_wallet">Mở %1$s</string>
+    <string name="presentment_activity_app_name_default">Ví</string>
+    <string name="presentment_activity_no_documents_available">Không có tài liệu nào</string>
+    <string name="trust_entry_extensions">Phần mở rộng</string>
+    <string name="trust_entry_vical_details_valid_until">Có hiệu lực đến</string>
+    <string name="trust_entry_vical_details_update_url">URL cập nhật</string>
+    <string name="trust_entry_rical_entry_title">Mục RICAL</string>
+    <string name="trust_entry_rical_is_trust_anchor">Neo tin cậy</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">Có</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">Không</string>
 </resources>

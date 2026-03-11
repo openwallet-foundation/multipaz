@@ -172,4 +172,24 @@
         <item quantity="one">RICAL में %1$d प्रमाणपत्र</item>
         <item quantity="other">RICAL में %1$d प्रमाणपत्र</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">पिन का उपयोग करें</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">रद्द करें</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">स्कैन करने के लिए तैयार</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">रद्द करें</string>
+    <string name="presentment_activity_hold_to_reader">रीडर के पास रखें</string>
+    <string name="presentment_activity_connecting_to_reader">रीडर से कनेक्ट हो रहा है</string>
+    <string name="presentment_activity_info_was_shared">जानकारी साझा की गई</string>
+    <string name="presentment_activity_something_went_wrong">कुछ गड़बड़ हो गई</string>
+    <string name="presentment_activity_canceled">रद्द किया गया</string>
+    <string name="presentment_activity_cannot_satisfy_request">अनुरोध पूरा नहीं किया जा सकता</string>
+    <string name="presentment_activity_open_wallet">खोलें %1$s</string>
+    <string name="presentment_activity_app_name_default">वॉलेट</string>
+    <string name="presentment_activity_no_documents_available">कोई दस्तावेज़ उपलब्ध नहीं</string>
+    <string name="trust_entry_extensions">एक्सटेंशन</string>
+    <string name="trust_entry_vical_details_valid_until">तक वैध</string>
+    <string name="trust_entry_vical_details_update_url">अपडेट यूआरएल</string>
+    <string name="trust_entry_rical_entry_title">रिकल एंट्री</string>
+    <string name="trust_entry_rical_is_trust_anchor">ट्रस्ट एंकर</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">हाँ</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">नहीं</string>
 </resources>

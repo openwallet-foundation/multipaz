@@ -172,4 +172,24 @@
         <item quantity="one">RICAL που περιέχει %1$d πιστοποιητικό</item>
         <item quantity="other">RICAL που περιέχει %1$d πιστοποιητικά</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">Χρήση PIN</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">Ακύρωση</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">Έτοιμο για σάρωση</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">Ακύρωση</string>
+    <string name="presentment_activity_hold_to_reader">Κρατήστε στον αναγνώστη</string>
+    <string name="presentment_activity_connecting_to_reader">Σύνδεση με αναγνώστη</string>
+    <string name="presentment_activity_info_was_shared">Οι πληροφορίες κοινοποιήθηκαν</string>
+    <string name="presentment_activity_something_went_wrong">Κάτι πήγε στραβά</string>
+    <string name="presentment_activity_canceled">Ακυρώθηκε</string>
+    <string name="presentment_activity_cannot_satisfy_request">Δεν είναι δυνατή η ικανοποίηση του αιτήματος</string>
+    <string name="presentment_activity_open_wallet">Άνοιγμα %1$s</string>
+    <string name="presentment_activity_app_name_default">Πορτοφόλι</string>
+    <string name="presentment_activity_no_documents_available">Δεν υπάρχουν διαθέσιμα έγγραφα</string>
+    <string name="trust_entry_extensions">Επεκτάσεις</string>
+    <string name="trust_entry_vical_details_valid_until">Ισχύει έως</string>
+    <string name="trust_entry_vical_details_update_url">URL ενημέρωσης</string>
+    <string name="trust_entry_rical_entry_title">Καταχώριση RICAL</string>
+    <string name="trust_entry_rical_is_trust_anchor">Άγκυρα εμπιστοσύνης</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">Ναι</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">Όχι</string>
 </resources>

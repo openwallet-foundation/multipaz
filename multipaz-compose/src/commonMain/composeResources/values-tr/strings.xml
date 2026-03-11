@@ -172,4 +172,24 @@
         <item quantity="one">RICAL, %1$d sertifika içeren</item>
         <item quantity="other">RICAL, %1$d sertifika içeren</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">PIN kullan</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">İptal</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">Taramaya Hazır</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">İptal</string>
+    <string name="presentment_activity_hold_to_reader">Okuyucuya Yaklaştırın</string>
+    <string name="presentment_activity_connecting_to_reader">Okuyucuya Bağlanılıyor</string>
+    <string name="presentment_activity_info_was_shared">Bilgiler paylaşıldı</string>
+    <string name="presentment_activity_something_went_wrong">Bir şeyler yanlış gitti</string>
+    <string name="presentment_activity_canceled">İptal Edildi</string>
+    <string name="presentment_activity_cannot_satisfy_request">İstek karşılanamıyor</string>
+    <string name="presentment_activity_open_wallet">%1$s'i Aç</string>
+    <string name="presentment_activity_app_name_default">Cüzdan</string>
+    <string name="presentment_activity_no_documents_available">Belge yok</string>
+    <string name="trust_entry_extensions">Uzantılar</string>
+    <string name="trust_entry_vical_details_valid_until">Şu tarihe kadar geçerli</string>
+    <string name="trust_entry_vical_details_update_url">Güncelleme URL'si</string>
+    <string name="trust_entry_rical_entry_title">RICAL girişi</string>
+    <string name="trust_entry_rical_is_trust_anchor">Güven çapası</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">Evet</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">Hayır</string>
 </resources>

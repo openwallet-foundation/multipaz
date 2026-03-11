@@ -16,11 +16,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import org.multipaz.compose.R
+import org.jetbrains.compose.resources.stringResource
+import org.multipaz.multipaz_compose.generated.resources.Res
+import org.multipaz.multipaz_compose.generated.resources.nfc_tag_reader_modal_bottom_sheet_cancel
+import org.multipaz.multipaz_compose.generated.resources.nfc_tag_reader_modal_bottom_sheet_ready_to_scan
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,7 +45,7 @@ fun NfcTagReaderModalBottomSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = stringResource(R.string.nfc_tag_reader_modal_bottom_sheet_ready_to_scan),
+                text = stringResource(Res.string.nfc_tag_reader_modal_bottom_sheet_ready_to_scan),
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.headlineLarge,
             )
@@ -60,7 +62,7 @@ fun NfcTagReaderModalBottomSheet(
             FilledTonalButton(
                 onClick = { onDismissed() }
             ) {
-                Text(text = stringResource(R.string.nfc_tag_reader_modal_bottom_sheet_cancel))
+                Text(text = stringResource(Res.string.nfc_tag_reader_modal_bottom_sheet_cancel))
             }
         }
     }

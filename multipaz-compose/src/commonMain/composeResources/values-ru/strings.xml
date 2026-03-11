@@ -192,4 +192,24 @@
         <item quantity="few">RICAL, содержащий %1$d сертификата</item>
         <item quantity="many">RICAL, содержащий %1$d сертификатов</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">Использовать PIN</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">Отмена</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">Готово к сканированию</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">Отмена</string>
+    <string name="presentment_activity_hold_to_reader">Приложите к считывателю</string>
+    <string name="presentment_activity_connecting_to_reader">Подключение к считывателю</string>
+    <string name="presentment_activity_info_was_shared">Информация была передана</string>
+    <string name="presentment_activity_something_went_wrong">Что-то пошло не так</string>
+    <string name="presentment_activity_canceled">Отменено</string>
+    <string name="presentment_activity_cannot_satisfy_request">Не удалось выполнить запрос</string>
+    <string name="presentment_activity_open_wallet">Открыть %1$s</string>
+    <string name="presentment_activity_app_name_default">Кошелек</string>
+    <string name="presentment_activity_no_documents_available">Документы недоступны</string>
+    <string name="trust_entry_extensions">Расширения</string>
+    <string name="trust_entry_vical_details_valid_until">Действительно до</string>
+    <string name="trust_entry_vical_details_update_url">URL-адрес обновления</string>
+    <string name="trust_entry_rical_entry_title">Запись RICAL</string>
+    <string name="trust_entry_rical_is_trust_anchor">Якорь доверия</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">Да</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">Нет</string>
 </resources>

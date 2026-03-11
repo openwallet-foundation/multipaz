@@ -164,4 +164,24 @@
         <item quantity="one">RICAL containing %1$d certificate</item>
         <item quantity="other">RICAL บรรจุใบรับรอง %1$d ใบ</item>
     </plurals>
+    <string name="biometric_prompt_negative_btn_lskf">ใช้ PIN</string>
+    <string name="biometric_prompt_negative_btn_no_lskf">ยกเลิก</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_ready_to_scan">พร้อมสแกน</string>
+    <string name="nfc_tag_reader_modal_bottom_sheet_cancel">ยกเลิก</string>
+    <string name="presentment_activity_hold_to_reader">แตะกับเครื่องอ่าน</string>
+    <string name="presentment_activity_connecting_to_reader">กำลังเชื่อมต่อกับเครื่องอ่าน</string>
+    <string name="presentment_activity_info_was_shared">แชร์ข้อมูลแล้ว</string>
+    <string name="presentment_activity_something_went_wrong">เกิดข้อผิดพลาด</string>
+    <string name="presentment_activity_canceled">ยกเลิกแล้ว</string>
+    <string name="presentment_activity_cannot_satisfy_request">ไม่สามารถดำเนินการตามคำขอได้</string>
+    <string name="presentment_activity_open_wallet">เปิด %1$s</string>
+    <string name="presentment_activity_app_name_default">กระเป๋าสตางค์</string>
+    <string name="presentment_activity_no_documents_available">ไม่มีเอกสารให้ใช้งาน</string>
+    <string name="trust_entry_extensions">ส่วนขยาย</string>
+    <string name="trust_entry_vical_details_valid_until">ใช้ได้ถึง</string>
+    <string name="trust_entry_vical_details_update_url">อัปเดต URL</string>
+    <string name="trust_entry_rical_entry_title">รายการ RICAL</string>
+    <string name="trust_entry_rical_is_trust_anchor">จุดยึดความน่าเชื่อถือ</string>
+    <string name="trust_entry_rical_is_trust_anchor_true">ใช่</string>
+    <string name="trust_entry_rical_is_trust_anchor_false">ไม่</string>
 </resources>
