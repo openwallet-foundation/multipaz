@@ -141,6 +141,7 @@ import org.multipaz.testapp.ui.RichTextScreen
 import org.multipaz.testapp.ui.ScreenLockScreen
 import org.multipaz.testapp.ui.SecureEnclaveSecureAreaScreen
 import org.multipaz.testapp.ui.SettingsScreen
+import org.multipaz.testapp.ui.ShareSheetScreen
 import org.multipaz.testapp.ui.ShowResponseScreen
 import org.multipaz.testapp.ui.SoftwareSecureAreaScreen
 import org.multipaz.testapp.ui.StartScreen
@@ -1053,7 +1054,8 @@ class App private constructor (val promptModel: PromptModel) {
                                     }
                                 }
                             },
-                            onClickEventLog = { navController.navigate(EventLogDestination) }
+                            onClickEventLog = { navController.navigate(EventLogDestination) },
+                            onClickShareSheet = { navController.navigate(ShareSheetDestination) }
                         )
                     }
                 }
@@ -1627,8 +1629,18 @@ class App private constructor (val promptModel: PromptModel) {
                             )
                         },
                         onBack = { navController.navigateUp() },
+                        promptModel = promptModel,
                         showToast = { message -> showToast(message) },
                     )
+                }
+                composable<ShareSheetDestination> { backStackEntry ->
+                    WithAppBar(navController, "Share sheet") {
+                        ShareSheetScreen(
+                            onBack = { navController.navigateUp() },
+                            promptModel = promptModel,
+                            showToast = { message -> showToast(message) },
+                        )
+                    }
                 }
             }
         }

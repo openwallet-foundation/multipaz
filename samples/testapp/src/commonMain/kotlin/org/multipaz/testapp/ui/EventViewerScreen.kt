@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,7 +46,14 @@ import coil3.ImageLoader
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.format
+import kotlinx.datetime.format.DateTimeComponents
+import kotlinx.datetime.format.FormatStringsInDatetimeFormats
+import kotlinx.datetime.format.byUnicodePattern
+import kotlinx.datetime.offsetAt
 import kotlinx.datetime.toLocalDateTime
+import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.Simple
 import org.multipaz.claim.Claim
 import org.multipaz.compose.decodeImage
@@ -54,6 +62,8 @@ import org.multipaz.compose.eventlog.EventLogModel
 import org.multipaz.compose.getOutlinedImageVector
 import org.multipaz.compose.items.FloatingItemHeadingAndText
 import org.multipaz.compose.items.FloatingItemList
+import org.multipaz.compose.rememberUiBoundCoroutineScope
+import org.multipaz.compose.sharemanager.ShareManager
 import org.multipaz.compose.text.fromMarkdown
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.datetime.FormatStyle
@@ -67,10 +77,13 @@ import org.multipaz.eventlog.PresentmentEventDigitalCredentialsOpenID4VP
 import org.multipaz.eventlog.PresentmentEventIso18013AnnexA
 import org.multipaz.eventlog.PresentmentEventIso18013Proximity
 import org.multipaz.eventlog.PresentmentEventUriSchemeOpenID4VP
+import org.multipaz.eventlog.toDataItem
+import org.multipaz.prompt.PromptModel
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
+import kotlin.time.Clock
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, FormatStringsInDatetimeFormats::class)
 @Composable
 fun EventViewerScreen(
     eventLog: EventLog,
@@ -80,9 +93,10 @@ fun EventViewerScreen(
     imageLoader: ImageLoader,
     onViewCertificateChain: (certChain: X509CertChain) -> Unit,
     onBack: () -> Unit,
+    promptModel: PromptModel,
     showToast: (message: String) -> Unit
 ) {
-    val coroutineScope = rememberCoroutineScope()
+    val coroutineScope = rememberUiBoundCoroutineScope { promptModel }
     val model = EventLogModel(eventLog, coroutineScope)
     val events by model.events.collectAsState()
     var showDeleteConfirmationDialog by remember { mutableStateOf(false) }
@@ -141,6 +155,39 @@ fun EventViewerScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                val event = eventLog.getEvents().find { it.identifier == eventId }
+                                if (event != null) {
+                                    // For TestApp, just do a text file for now. In the future we might define
+                                    // a binary format and provide tools for offline analysis.
+                                    val format = DateTimeComponents.Format {
+                                        byUnicodePattern("yyyyMMdd-HHmmss")
+                                    }
+                                    val timeStampString = event.timestamp.format(
+                                        format = format,
+                                        offset = TimeZone.currentSystemDefault().offsetAt(Clock.System.now())
+                                    )
+                                    val shareManager = ShareManager()
+                                    shareManager.shareDocument(
+                                        content = Cbor.toDiagnostics(
+                                            item = event.toDataItem(),
+                                            options = setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR)
+                                        ).encodeToByteArray(),
+                                        filename = "mpztestapp-event-${timeStampString}.txt",
+                                        mimeType = "text/plain",
+                                        title = "Multipaz TestApp Event recorded ${event.timestamp}"
+                                    )
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Share,
+                            contentDescription = null
+                        )
+                    }
                     IconButton(
                         onClick = { showDeleteConfirmationDialog = true }
                     ) {

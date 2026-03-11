@@ -154,3 +154,7 @@ data object EventLogDestination: Destination()
 data class EventViewerDestination(
     val eventId: String,
 ): Destination()
+
+@Serializable
+data object ShareSheetDestination: Destination()
+

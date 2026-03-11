@@ -29,7 +29,7 @@ func getPresentmentSource() async -> PresentmentSource {
     ).build()
     
     let ephemeralStorage = EphemeralStorage(clock: KotlinClockCompanion().getSystem())
-    let readerTrustManager = TrustManagerLocal(storage: ephemeralStorage, identifier: "default", partitionId: "default_default")
+    let readerTrustManager = TrustManager(storage: ephemeralStorage, identifier: "default", partitionId: "default_default")
     try! await readerTrustManager.addX509Cert(
         certificate: X509Cert.companion.fromPem(
             pemEncoding: """
