@@ -124,13 +124,20 @@ subprojects {
             val signingKey = providers.gradleProperty("signingKey")
             val signingPassword = providers.gradleProperty("signingPassword")
 
-            if (signingKey.isPresent && signingPassword.isPresent) {
-                useInMemoryPgpKeys(signingKey.get(), signingPassword.get())
-            } else {
-                useGpgCmd()
-            }
+            val hasKeys = signingKey.isPresent && signingPassword.isPresent
+            val isPortalBuild = gradle.startParameter.taskNames.any { it.contains("createPortalBundle") }
 
-            sign(extensions.getByType<PublishingExtension>().publications)
+            // Only sign if the developer has configured keys OR is explicitly building a portal bundle
+            if (hasKeys) {
+                useInMemoryPgpKeys(signingKey.get(), signingPassword.get())
+                sign(extensions.getByType<PublishingExtension>().publications)
+            } else if (isPortalBuild) {
+                useGpgCmd()
+                sign(extensions.getByType<PublishingExtension>().publications)
+            } else {
+                // Silently skip signing to allow local development for contributors without keys
+                println("Skipping artifact signing for ${project.name}: No signing keys configured.")
+            }
         }
     }
 }
@@ -145,7 +152,6 @@ val detektModules = listOf(
 
 subprojects {
     if (path in detektModules) {
-
         apply(plugin = "io.gitlab.arturbosch.detekt")
 
         extensions.configure<io.gitlab.arturbosch.detekt.extensions.DetektExtension> {
