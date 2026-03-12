@@ -406,12 +406,13 @@ suspend fun generateServerIdentityLeafCertificate(
                 // For DS mandated in 18013-5 table B.3: critical: digital signature bits set
                 setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
         }
-        // For DS mandated in 18013-5 table B.3: non-critical, Email or URL
-        addExtension(
-            OID.X509_EXTENSION_ISSUER_ALT_NAME.oid,
-            false,
-            issuerCert.getExtensionValue(OID.X509_EXTENSION_ISSUER_ALT_NAME.oid)!!
-        )
+        val issuerAltName = issuerCert.getExtensionValue(OID.X509_EXTENSION_ISSUER_ALT_NAME.oid)
+        if (issuerAltName == null) {
+            Logger.w(TAG, "No alt issuer name in the root certificate for $serverIdentity")
+        } else {
+            // For DS mandated in 18013-5 table B.3: non-critical, Email or URL
+            addExtension(OID.X509_EXTENSION_ISSUER_ALT_NAME.oid, false, issuerAltName)
+        }
         // For DS defined in 18013-5 table B.3: non-critical, The ‘reasons’ and ‘cRL Issuer’
         // fields shall not be used.
         addExtension(
