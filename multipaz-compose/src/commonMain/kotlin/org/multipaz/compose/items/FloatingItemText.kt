@@ -4,29 +4,28 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 /**
- * An item showing a heading in bold with text below it.
+ * An item showing a text, with smaller secondary text below.
  *
- * @param heading will be shown in bold at the top.
- * @param text will be shown below the heading.
+ * @param text text to be shown.
+ * @param secondary optional text to show below the main text, in secondary color and smaller font.
  * @param modifier a [Modifier].
  * @param image optional image, shown to the left of the text.
  */
 @Composable
-fun FloatingItemHeadingAndText(
-    heading: String,
+fun FloatingItemText(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
+    secondary: String? = null,
     image: @Composable () -> Unit = {}
 ) {
     FloatingItemContainer(modifier = modifier) {
@@ -36,18 +35,24 @@ fun FloatingItemHeadingAndText(
             verticalAlignment = Alignment.CenterVertically
         ) {
             image()
-            Column(
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            if (secondary == null) {
                 Text(
-                    text = heading,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
+                    text = text,
+                    textAlign = TextAlign.Start
                 )
-                SelectionContainer {
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
                         text = text,
-                        style = MaterialTheme.typography.bodyMedium
+                        textAlign = TextAlign.Start
+                    )
+                    Text(
+                        text = secondary,
+                        textAlign = TextAlign.Start,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
                     )
                 }
             }
@@ -56,24 +61,24 @@ fun FloatingItemHeadingAndText(
 }
 
 /**
- * An item showing a heading in bold with text below it.
+ * An item showing a text, with smaller secondary text below.
  *
- * @param heading will be shown in bold at the top.
- * @param text will be shown below the heading.
+ * @param text text to be shown.
+ * @param secondary optional text to show below the main text, in secondary color and smaller font.
  * @param modifier a [Modifier].
  * @param image optional image, shown to the left of the text.
  */
 @Composable
-fun FloatingItemHeadingAndText(
-    heading: String,
+fun FloatingItemText(
     text: String,
     modifier: Modifier = Modifier,
+    secondary: String? = null,
     image: @Composable () -> Unit = {}
 ) {
-    FloatingItemHeadingAndText(
-        heading = heading,
+    FloatingItemText(
         text = AnnotatedString(text),
         modifier = modifier,
+        secondary = secondary,
         image = image
     )
 }

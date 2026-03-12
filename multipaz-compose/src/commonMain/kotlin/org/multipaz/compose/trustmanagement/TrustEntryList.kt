@@ -15,7 +15,7 @@ import coil3.compose.AsyncImage
 import org.multipaz.compose.branding.Branding
 import org.multipaz.compose.decodeImage
 import org.multipaz.compose.items.FloatingItemList
-import org.multipaz.compose.items.FloatingItemTextAndSecondary
+import org.multipaz.compose.items.FloatingItemText
 
 /**
  * A Composable that displays a scrollable list of trust entries managed by a [TrustManagerModel].
@@ -49,7 +49,7 @@ fun TrustEntryList(
             noItems()
         } else {
             infos.forEach { trustEntryInfo ->
-                FloatingItemTextAndSecondary(
+                FloatingItemText(
                     modifier = Modifier.clickable { onTrustEntryClicked(trustEntryInfo) },
                     image = {
                         trustEntryInfo.RenderImage(

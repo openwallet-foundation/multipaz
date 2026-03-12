@@ -41,7 +41,7 @@ import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.eventlog.EventLogModel
 import org.multipaz.compose.items.FloatingItemCenteredText
 import org.multipaz.compose.items.FloatingItemList
-import org.multipaz.compose.items.FloatingItemTextAndSecondary
+import org.multipaz.compose.items.FloatingItemText
 import org.multipaz.datetime.formatLocalized
 import org.multipaz.eventlog.Event
 import org.multipaz.eventlog.EventLog
@@ -195,7 +195,7 @@ private fun EventItem(
 
     val eventDateTimeString = event.timestamp.toLocalDateTime(timeZone = timeZone).formatLocalized()
     val text = "$eventDateTimeString • $sharingType"
-    FloatingItemTextAndSecondary(
+    FloatingItemText(
         modifier = modifier,
         image = {
             firstDocInfo?.cardArt?.let {

@@ -30,8 +30,7 @@ import org.multipaz.compose.certificateviewer.X509CertViewer
 import org.multipaz.compose.datetime.formattedDateTime
 import org.multipaz.compose.items.FloatingItemHeadingAndText
 import org.multipaz.compose.items.FloatingItemList
-import org.multipaz.compose.items.FloatingItemTextAndSecondary
-import org.multipaz.crypto.X509Cert
+import org.multipaz.compose.items.FloatingItemText
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.mdoc.rical.RicalCertificateInfo
 import org.multipaz.mdoc.rical.SignedRical
@@ -230,7 +229,7 @@ private fun VicalDetails(
 
     FloatingItemList(title = stringResource(Res.string.trust_entry_certificates_title)) {
         signedVical.vical.certificateInfos.forEachIndexed { n, certificateInfo ->
-            FloatingItemTextAndSecondary(
+            FloatingItemText(
                 modifier = Modifier.clickable { onViewVicalEntry(n) },
                 image = { certificateInfo.RenderIconWithFallback() },
                 text = certificateInfo.displayNameWithFallback,
@@ -301,7 +300,7 @@ private fun RicalDetails(
 
     FloatingItemList(title = stringResource(Res.string.trust_entry_certificates_title)) {
         signedRical.rical.certificateInfos.forEachIndexed { n, certificateInfo ->
-            FloatingItemTextAndSecondary(
+            FloatingItemText(
                 modifier = Modifier.clickable { onViewRicalEntry(n) },
                 image = { certificateInfo.RenderIconWithFallback() },
                 text = certificateInfo.displayNameWithFallback,

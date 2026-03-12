@@ -307,7 +307,7 @@ fun VerticalDocumentList(
                     if (isAnyFocused) {
                         if (isFocused) {
                             targetY = viewportTop + paddingTopPx
-                            targetScale = 1.05f
+                            targetScale = 1.025f
                             targetElevation = 24f
                             targetZIndex = 100f
                             targetAlpha = 1f

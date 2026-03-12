@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
  *
  * The list will be displayed in a list in a floating box with rounded corners.
  *
- * See [FloatingItemHeadingAndText], [FloatingItemTextAndSecondary], [FloatingItemCenteredText] for things that are normally
+ * See [FloatingItemHeadingAndText], [FloatingItemText], [FloatingItemCenteredText] for things that are normally
  * used inside this container. For your own composable, simply wrap it in [FloatingItemContainer].
  *
  * @param modifier a [Modifier].
