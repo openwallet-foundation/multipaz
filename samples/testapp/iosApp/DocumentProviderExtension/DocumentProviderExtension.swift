@@ -49,7 +49,7 @@ func getPresentmentSource() async -> PresentmentSource {
                 """.trimmingCharacters(in: .whitespacesAndNewlines)
         ),
         metadata: TrustMetadata(
-            displayName: "Multipaz Identity Verifier",
+            displayName: "Multipaz Verifier",
             displayIcon: nil,
             displayIconUrl: "https://www.multipaz.org/multipaz-logo-200x200.png",
             privacyPolicyUrl: "https://apps.multipaz.org",
