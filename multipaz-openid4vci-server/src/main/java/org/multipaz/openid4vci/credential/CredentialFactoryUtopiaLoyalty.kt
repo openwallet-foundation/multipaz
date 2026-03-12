@@ -51,7 +51,7 @@ internal class CredentialFactoryUtopiaLoyalty : CredentialFactory {
         get() = listOf("cose_key")
 
     override val name: String
-        get() = "Utopia Wholesale Loyalty ID"
+        get() = "Wholesale card"
 
     override val logo: String
         get() = "card_utopia_wholesale.png"

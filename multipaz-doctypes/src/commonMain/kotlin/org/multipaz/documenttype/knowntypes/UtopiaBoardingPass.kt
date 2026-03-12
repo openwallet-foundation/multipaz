@@ -16,7 +16,7 @@ object UtopiaBoardingPass {
     const val BOARDING_PASS_NS = "org.multipaz.example.boarding-pass.1"
 
     fun getDocumentType(): DocumentType {
-        return DocumentType.Builder("Boarding Pass").apply {
+        return DocumentType.Builder("Boarding pass").apply {
             addMdocDocumentType(BOARDING_PASS_DOCTYPE)
             addMdocAttribute(
                 DocumentAttributeType.String,

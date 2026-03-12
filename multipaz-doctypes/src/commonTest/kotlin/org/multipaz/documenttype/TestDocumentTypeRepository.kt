@@ -40,7 +40,7 @@ class TestDocumentTypeRepository {
         documentTypeRepository.addDocumentType(DrivingLicense.getDocumentType())
         val documentTypes = documentTypeRepository.documentTypes
         assertEquals(1, documentTypes.count())
-        assertEquals("Driving License", documentTypes[0].displayName)
+        assertEquals("Driving license", documentTypes[0].displayName)
         assertEquals("org.iso.18013.5.1.mDL", documentTypes[0].mdocDocumentType?.docType)
         assertEquals(
             "org.iso.18013.5.1",
@@ -70,7 +70,7 @@ class TestDocumentTypeRepository {
         val mdoc = documentType.mdocDocumentType
         assertNotNull(mdoc)
 
-        assertEquals("Payment Card Credential", documentType.displayName)
+        assertEquals("Payment card", documentType.displayName)
         assertEquals(DigitalPaymentCredential.CARD_DOCTYPE, mdoc.docType)
         assertTrue(mdoc.namespaces.containsKey(DigitalPaymentCredential.CARD_NAMESPACE))
 

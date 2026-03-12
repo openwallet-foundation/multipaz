@@ -18,13 +18,13 @@ object DigitalPaymentCredential {
     const val CARD_NAMESPACE = "org.multipaz.payment.sca.1"
 
     fun getDocumentType(): DocumentType {
-        return DocumentType.Builder("Payment Card Credential")
+        return DocumentType.Builder("Payment card")
             .addMdocDocumentType(CARD_DOCTYPE)
 
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "issuer_name",
-                "Issuer Name",
+                "Issuer name",
                 "Human-readable issuer name.",
                 true,
                 CARD_NAMESPACE,
@@ -34,7 +34,7 @@ object DigitalPaymentCredential {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "payment_instrument_id",
-                "Payment Instrument ID",
+                "Payment instrument ID",
                 "Tokenized payment instrument identifier.",
                 false,
                 CARD_NAMESPACE,
@@ -44,7 +44,7 @@ object DigitalPaymentCredential {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "masked_account_reference",
-                "Masked Account Reference",
+                "Masked account reference",
                 "Masked account reference, for example PAN last 4.",
                 true,
                 CARD_NAMESPACE,
@@ -54,7 +54,7 @@ object DigitalPaymentCredential {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "holder_name",
-                "Holder Name",
+                "Holder name",
                 "Payment account holder name.",
                 true,
                 CARD_NAMESPACE,
@@ -64,7 +64,7 @@ object DigitalPaymentCredential {
             .addMdocAttribute(
                 DocumentAttributeType.Date,
                 "issue_date",
-                "Issue Date",
+                "Issue date",
                 "Date when this credential was issued.",
                 true,
                 CARD_NAMESPACE,
@@ -74,7 +74,7 @@ object DigitalPaymentCredential {
             .addMdocAttribute(
                 DocumentAttributeType.Date,
                 "expiry_date",
-                "Expiry Date",
+                "Expiry date",
                 "Date when this credential expires.",
                 true,
                 CARD_NAMESPACE,
@@ -84,7 +84,7 @@ object DigitalPaymentCredential {
 
             .addSampleRequest(
                 id = "payment_sca_minimal",
-                displayName = "Payment SCA (Minimal)",
+                displayName = "Payment SCA (minimal)",
                 mdocDataElements = mapOf(
                     CARD_NAMESPACE to mapOf(
                         "issuer_name" to false,
@@ -98,7 +98,7 @@ object DigitalPaymentCredential {
             )
             .addSampleRequest(
                 id = "payment_sca_full",
-                displayName = "Payment SCA (All Data Elements)",
+                displayName = "Payment SCA (all data elements)",
                 mdocDataElements = mapOf(
                     CARD_NAMESPACE to mapOf()
                 )

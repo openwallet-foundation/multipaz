@@ -19,7 +19,7 @@ object IDPass {
             .addMdocNamespace(mDLNamespace)
             .addSampleRequest(
                 id = "age_over_18",
-                displayName ="Age Over 18",
+                displayName ="Age over 18",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "age_over_18" to false,
@@ -28,7 +28,7 @@ object IDPass {
             )
             .addSampleRequest(
                 id = "age_over_21",
-                displayName ="Age Over 21",
+                displayName ="Age over 21",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "age_over_21" to false,
@@ -37,7 +37,7 @@ object IDPass {
             )
             .addSampleRequest(
                 id = "age_over_18_zkp",
-                displayName ="Age Over 18 (ZKP)",
+                displayName ="Age over 18 (ZKP)",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "age_over_18" to false,
@@ -47,7 +47,7 @@ object IDPass {
             )
             .addSampleRequest(
                 id = "age_over_21_zkp",
-                displayName ="Age Over 21 (ZKP)",
+                displayName ="Age over 21 (ZKP)",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "age_over_21" to false,
@@ -57,7 +57,7 @@ object IDPass {
             )
             .addSampleRequest(
                 id = "age_over_18_and_portrait",
-                displayName ="Age Over 18 + Portrait",
+                displayName ="Age over 18 + portrait",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "age_over_18" to false,
@@ -67,7 +67,7 @@ object IDPass {
             )
             .addSampleRequest(
                 id = "age_over_21_and_portrait",
-                displayName ="Age Over 21 + Portrait",
+                displayName ="Age over 21 + portrait",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "age_over_21" to false,
@@ -77,7 +77,7 @@ object IDPass {
             )
             .addSampleRequest(
                 id = "mandatory",
-                displayName = "Mandatory Data Elements",
+                displayName = "Mandatory data elements",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "family_name" to false,
@@ -96,7 +96,7 @@ object IDPass {
             )
             .addSampleRequest(
                 id = "full",
-                displayName ="All Data Elements",
+                displayName ="All data elements",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(),
                 )

@@ -19,12 +19,12 @@ object UtopiaMovieTicket {
      * Build the Movie Ticket Document Type.
      */
     fun getDocumentType(): DocumentType {
-        return DocumentType.Builder("Movie Ticket")
+        return DocumentType.Builder("Movie ticket")
             .addJsonDocumentType(type = MOVIE_TICKET_VCT, keyBound = false)
             .addJsonAttribute(
                 DocumentAttributeType.String,
                 "ticket_id",
-                "Ticket Number",
+                "Ticket number",
                 "Ticket identification/reference number issued at the purchase time.",
                 Icon.NUMBERS,
                 JsonPrimitive(SampleData.TICKET_NUMBER)
@@ -32,7 +32,7 @@ object UtopiaMovieTicket {
             .addJsonAttribute(
                 DocumentAttributeType.String,
                 "cinema",
-                "Cinema Theater",
+                "Cinema theater",
                 "Cinema theater name, and/or address/location of the admission.",
                 Icon.PLACE,
                 JsonPrimitive(SampleData.CINEMA)
@@ -40,7 +40,7 @@ object UtopiaMovieTicket {
             .addJsonAttribute(
                 DocumentAttributeType.String,
                 "movie",
-                "Movie Title",
+                "Movie title",
                 "Movie name, title, and any other show identification information.",
                 Icon.TODAY,
                 JsonPrimitive(SampleData.MOVIE)
@@ -65,7 +65,7 @@ object UtopiaMovieTicket {
                     )
                 ),
                 "movie_rating",
-                "Age Rating Code",
+                "Age rating code",
                 "Movie rating code for age restrictions.",
                 Icon.TODAY,
                 JsonPrimitive(SampleData.MOVIE_RATING)
@@ -97,25 +97,25 @@ object UtopiaMovieTicket {
             .addJsonAttribute(
                 DocumentAttributeType.Picture,
                 "poster",
-                "Movie Poster",
+                "Movie poster",
                 description = "Movie Poster",
                 Icon.IMAGE
             )
             .addSampleRequest(
                 id = "is_parking_prepaid",
-                displayName = "Prepaid Parking",
+                displayName = "Prepaid parking",
                 jsonClaims = listOf("parking_option")
             )
             .addSampleRequest(
                 id = "ticket_id",
-                displayName = "Ticket Number",
+                displayName = "Ticket number",
                 jsonClaims = listOf(
                     "ticket_id",
                 )
             )
             .addSampleRequest(
                 id = "full",
-                displayName = "All Data Elements",
+                displayName = "All data elements",
                 jsonClaims = listOf()
             )
             .build()

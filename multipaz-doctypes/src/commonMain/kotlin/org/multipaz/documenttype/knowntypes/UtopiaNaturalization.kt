@@ -15,12 +15,12 @@ object UtopiaNaturalization {
      * Build the Utopia Naturalization Certificate Document Type.
      */
     fun getDocumentType(): DocumentType {
-        return DocumentType.Builder("Utopia Naturalization Certificate")
+        return DocumentType.Builder("Naturalization certificate")
             .addJsonDocumentType(type = VCT, keyBound = true)
             .addJsonAttribute(
                 DocumentAttributeType.String,
                 "family_name",
-                "Family Name",
+                "Family name",
                 "Current last name(s), surname(s), or primary identifier of the naturalized person",
                 Icon.PERSON,
                 JsonPrimitive(SampleData.FAMILY_NAME)
@@ -28,7 +28,7 @@ object UtopiaNaturalization {
             .addJsonAttribute(
                 DocumentAttributeType.String,
                 "given_name",
-                "Given Names",
+                "Given names",
                 "Current first name(s), other name(s), or secondary identifier of the naturalized person",
                 Icon.PERSON,
                 JsonPrimitive(SampleData.GIVEN_NAME)
@@ -36,7 +36,7 @@ object UtopiaNaturalization {
             .addJsonAttribute(
                 DocumentAttributeType.Date,
                 "birth_date",
-                "Date of Birth",
+                "Date of birth",
                 "Day, month, and year on which the naturalized person was born. If unknown, approximate date of birth.",
                 Icon.TODAY,
                 JsonPrimitive(SampleData.BIRTH_DATE)
@@ -44,14 +44,14 @@ object UtopiaNaturalization {
             .addJsonAttribute(
                 DocumentAttributeType.Date,
                 "naturalization_date",
-                "Date of Naturalization",
+                "Date of naturalization",
                 "Date (and possibly time) when the person was naturalized.",
                 Icon.DATE_RANGE,
                 JsonPrimitive(SampleData.ISSUE_DATE)
             )
             .addSampleRequest(
                 id = "full",
-                displayName = "All Data Elements",
+                displayName = "All data elements",
                 jsonClaims = listOf()
             )
             .build()

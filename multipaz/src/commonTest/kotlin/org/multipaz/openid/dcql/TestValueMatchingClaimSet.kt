@@ -143,12 +143,12 @@ class TestValueMatchingClaimSet {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       nameSpace: org.iso.18013.5.1.us
@@ -163,12 +163,12 @@ class TestValueMatchingClaimSet {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Max
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       nameSpace: org.iso.18013.5.1.eu
@@ -206,12 +206,12 @@ class TestValueMatchingClaimSet {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       nameSpace: org.iso.18013.5.1.us
@@ -249,12 +249,12 @@ class TestValueMatchingClaimSet {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Max
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       nameSpace: org.iso.18013.5.1.eu

@@ -175,11 +175,11 @@ class TestSingleSdJwtVcQuery {
                                   claims:
                                     claim:
                                       path: ["given_name"]
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       path: ["address","street_address"]
-                                      displayName: Resident Street
+                                      displayName: Resident street
                                       value: Sample Street 123
             """.trimIndent().trim(),
             singlePidQuery().execute(
@@ -212,11 +212,11 @@ class TestSingleSdJwtVcQuery {
                                   claims:
                                     claim:
                                       path: ["given_name"]
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       path: ["address","street_address"]
-                                      displayName: Resident Street
+                                      displayName: Resident street
                                       value: Sample Street 123
                               match:
                                 credential:
@@ -225,11 +225,11 @@ class TestSingleSdJwtVcQuery {
                                   claims:
                                     claim:
                                       path: ["given_name"]
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Max
                                     claim:
                                       path: ["address","street_address"]
-                                      displayName: Resident Street
+                                      displayName: Resident street
                                       value: Sample Street 456
             """.trimIndent().trim(),
             singlePidQuery().execute(
@@ -262,11 +262,11 @@ class TestSingleSdJwtVcQuery {
                                   claims:
                                     claim:
                                       path: ["given_name"]
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       path: ["address","street_address"]
-                                      displayName: Resident Street
+                                      displayName: Resident street
                                       value: Sample Street 123
             """.trimIndent().trim(),
             singlePidQuery().execute(
@@ -298,7 +298,7 @@ class TestSingleSdJwtVcQuery {
                                   claims:
                                     claim:
                                       path: ["given_name"]
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       path: ["address"]

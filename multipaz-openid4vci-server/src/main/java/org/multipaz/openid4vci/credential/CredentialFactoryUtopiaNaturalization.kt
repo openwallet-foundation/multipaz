@@ -34,7 +34,7 @@ internal class CredentialFactoryUtopiaNaturalization : CredentialFactory {
         get() = listOf("jwk")
 
     override val name: String
-        get() = "Utopia Naturalization Certificate"
+        get() = "Naturalization certificate"
 
     override val logo: String
         get() = "naturalization.png"

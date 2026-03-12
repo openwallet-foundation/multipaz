@@ -14,19 +14,19 @@ val recordTypes = RecordType.buildMap {
         displayName = "Core personal information"
         addString(
             identifier = "family_name",
-            displayName = "Family Name",
+            displayName = "Family name",
             description = "Last name, surname, or primary identifier, of the person.",
             icon = Icon.PERSON,
         )
         addString(
             identifier = "given_name",
-            displayName = "Given Names",
+            displayName = "Given names",
             description = "First name(s), other name(s), or secondary identifier, of the person",
             icon = Icon.PERSON,
         )
         addDate(
             identifier = "birth_date",
-            displayName = "Date of Birth",
+            displayName = "Date of birth",
             description = "Day, month and year on which the person was born. If unknown, approximate date of birth",
             icon = Icon.TODAY,
         )
@@ -38,7 +38,7 @@ val recordTypes = RecordType.buildMap {
         )
         addDate(
             identifier = "portrait_capture_date",
-            displayName = "Portrait Image Timestamp",
+            displayName = "Portrait image timestamp",
             description = "Date when portrait was taken",
             icon = Icon.TODAY,
         )
@@ -51,7 +51,7 @@ val recordTypes = RecordType.buildMap {
         )
         addString(
             identifier = "birth_place",
-            displayName = "Place of Birth",
+            displayName = "Place of birth",
             description = "Country and municipality or state/province where the person was born",
             icon = Icon.PLACE,
         )
@@ -86,7 +86,7 @@ val recordTypes = RecordType.buildMap {
             )
             addString(
                 identifier = "postal_code",
-                displayName = "Postal Code",
+                displayName = "Postal code",
                 description = "National postal code",
                 icon = Icon.NUMBERS,
             )
@@ -98,32 +98,32 @@ val recordTypes = RecordType.buildMap {
             )
             addString(
                 identifier = "house_number",
-                displayName = "House Number",
+                displayName = "House number",
                 description = "House Number",
                 icon = Icon.HOUSE,
             )
             addString(
                 identifier = "unit",
-                displayName = "Apartment Number",
+                displayName = "Apartment number",
                 description = "Apartment/Unit Number",
                 icon = Icon.APARTMENT,
             )
             addString(
                 identifier = "us_county_code",
-                displayName = "If in US, County Code",
+                displayName = "If in US, county code",
                 description = "Three-digit code",
                 icon = Icon.NUMBERS,
             )
         }
         addString(
             identifier = "family_name_national_character",
-            displayName = "Family Name (Local)",
+            displayName = "Family name (local)",
             description = "The family name spelled in national alphabet",
             icon = Icon.LANGUAGE_JAPANESE_KANA,
         )
         addString(
             identifier = "given_name_national_character",
-            displayName = "Given Name (Local)",
+            displayName = "Given name (local)",
             description = "The given name spelled in national alphabet",
             icon = Icon.LANGUAGE_JAPANESE_KANA,
         )
@@ -142,77 +142,77 @@ val recordTypes = RecordType.buildMap {
         )
         addString(
             identifier = "utopia_id_number",
-            displayName = "Utopia id number",
+            displayName = "Utopia ID number",
             description = "Unique and immutable number assigned to everyone by Utopia Registry",
             icon = Icon.ACCOUNT_BOX,
         )
     }
     addComplex("mDL") {
-        displayName = "Driver's License"
+        displayName = "Driver's license"
         addDate(
             identifier = "issue_date",
-            displayName = "Date of Issue",
+            displayName = "Date of issue",
             description = "Date when mDL was issued",
             icon = Icon.TODAY,
         )
         addDate(
             identifier = "expiry_date",
-            displayName = "Date of Expiry",
+            displayName = "Date of expiry",
             description = "Date when mDL expires",
             icon = Icon.TODAY,
         )
         addPrimitive(
             type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
             identifier = "issuing_country",
-            displayName = "Issuing Country",
+            displayName = "Issuing country",
             description = "Alpha-2 country code, as defined in ISO 3166-1, of the issuing authority’s country or territory",
             icon = Icon.ACCOUNT_BALANCE,
         )
         addString(
             identifier = "issuing_authority",
-            displayName = "Issuing Authority",
+            displayName = "Issuing authority",
             description = "Issuing authority name.",
             icon = Icon.ACCOUNT_BALANCE,
         )
         addString(
             identifier = "document_number",
-            displayName = "License Number",
+            displayName = "License number",
             description = "The number assigned or calculated by the issuing authority.",
             icon = Icon.NUMBERS,
         )
         addComplexList(
             identifier ="driving_privileges",
-            displayName = "Driving Privileges",
+            displayName = "Driving privileges",
             description = "Driving privileges of the mDL holder",
             icon = Icon.DIRECTIONS_CAR
         ) {
             addPrimitive(
                 type = DocumentAttributeType.StringOptions(Options.VEHICLE_CATEGORY_CODE_ISO_IEC_18013_1_ANNEX_B),
                 "vehicle_category_code",
-                displayName = "Vehicle Category",
+                displayName = "Vehicle category",
                 description = "Vehicle type that mDL holder is licensed to drive"
             )
             addDate(
                 identifier = "issue_date",
-                displayName = "Date of Issue",
+                displayName = "Date of issue",
                 description = "Date when mDL holder was licensed for this type of vehicle",
             )
             addDate(
                 identifier = "expiry_date",
-                displayName = "Date of Expiry",
+                displayName = "Date of expiry",
                 description = "Date until mDL holder is licensed for this type of vehicle",
             )
         }
         addPrimitive(
             type = DocumentAttributeType.StringOptions(Options.DISTINGUISHING_SIGN_ISO_IEC_18013_1_ANNEX_F),
             identifier = "un_distinguishing_sign",
-            displayName ="UN Distinguishing Sign",
+            displayName ="UN distinguishing sign",
             description = "Distinguishing sign of the issuing country",
             icon = Icon.LANGUAGE,
         )
         addString(
             identifier = "administrative_number",
-            displayName = "Administrative Number",
+            displayName = "Administrative number",
             description = "An audit control number assigned by the issuing authority",
             icon = Icon.NUMBERS
         )
@@ -245,7 +245,7 @@ val recordTypes = RecordType.buildMap {
                 )
             ),
             identifier = "eye_colour",
-            displayName = "Eye Color",
+            displayName = "Eye color",
             description = "mDL holder’s eye color",
             icon = Icon.PERSON,
         )
@@ -266,25 +266,25 @@ val recordTypes = RecordType.buildMap {
                 )
             ),
             identifier = "hair_colour",
-            displayName = "Hair Color",
+            displayName = "Hair color",
             description = "mDL holder’s hair color",
             icon = Icon.PERSON,
         )
     }
     addComplex("naturalization") {
-        displayName = "Utopia Naturalization"
+        displayName = "Naturalization"
         addDate(
             identifier = "naturalization_date",
-            displayName = "Date of Naturalization",
+            displayName = "Date of naturalization",
             description = "Date when the person was granted Utopia citizenship",
             icon = Icon.TODAY,
         )
     }
     addComplex("movie") {
-        displayName = "Movie Ticket"
+        displayName = "Movie ticket"
         addString(
             identifier = "movie_title",
-            displayName = "Movie Title",
+            displayName = "Movie title",
             description = "Title of the movie for which the ticket is valid",
             icon = Icon.PANORAMA_WIDE_ANGLE,
         )
@@ -296,13 +296,13 @@ val recordTypes = RecordType.buildMap {
         )
         addString(
             identifier = "ticket_id",
-            displayName = "Ticket Number",
+            displayName = "Ticket number",
             description = "Ticket identification/reference number issued at the purchase time.",
             icon = Icon.NUMBERS,
         )
         addString(
             identifier = "cinema",
-            displayName = "Cinema Theater",
+            displayName = "Cinema theater",
             description = "Cinema theater name, and/or address/location of the admission.",
             icon = Icon.PLACE,
         )
@@ -318,7 +318,7 @@ val recordTypes = RecordType.buildMap {
                 )
             ),
             identifier = "movie_rating",
-            displayName = "Age Rating Code",
+            displayName = "Age rating code",
             description = "Movie rating code for age restrictions.",
             icon = Icon.TODAY,
         )
@@ -343,13 +343,13 @@ val recordTypes = RecordType.buildMap {
         )
         addPicture(
             identifier = "poster",
-            displayName = "Movie Poster",
+            displayName = "Movie poster",
             description = "Poster for the movie",
             icon = Icon.IMAGE,
         )
     }
     addComplex("wholesale") {
-        displayName = "Utopia Wholesale Loyalty ID"
+        displayName = "Loyalty card"
         addString(
             identifier = "membership_number",
             displayName = "Membership ID",
@@ -364,13 +364,13 @@ val recordTypes = RecordType.buildMap {
         )
         addDate(
             identifier = "issue_date",
-            displayName = "Date of Issue",
+            displayName = "Date of issue",
             description = "Date when the Loyalty ID was issued",
             icon = Icon.TODAY,
         )
         addDate(
             identifier = "expiry_date",
-            displayName = "Date of Expiry",
+            displayName = "Date of expiry",
             description = "Date when the Loyalty ID expires",
             icon = Icon.TODAY,
         )

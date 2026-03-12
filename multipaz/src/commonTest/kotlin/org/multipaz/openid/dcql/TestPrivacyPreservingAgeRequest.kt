@@ -126,12 +126,12 @@ class TestPrivacyPreservingAgeRequest {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: David
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: age_over_18
-                                      displayName: Older Than 18 Years
+                                      displayName: Older than 18 years
                                       value: True
             """.trimIndent().trim(),
             ageMdlQuery().execute(
@@ -163,12 +163,12 @@ class TestPrivacyPreservingAgeRequest {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: David
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: age_in_years
-                                      displayName: Age in Years
+                                      displayName: Age in years
                                       value: 48
             """.trimIndent().trim(),
             ageMdlQuery().execute(
@@ -206,12 +206,12 @@ class TestPrivacyPreservingAgeRequest {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: David
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: birth_date
-                                      displayName: Date of Birth
+                                      displayName: Date of birth
                                       value: $dateValue
             """.trimIndent().trim(),
             result

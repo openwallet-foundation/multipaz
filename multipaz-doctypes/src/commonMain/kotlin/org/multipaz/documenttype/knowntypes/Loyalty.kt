@@ -16,14 +16,14 @@ object Loyalty {
      * Build the Loyalty ID Document Type.
      */
     fun getDocumentType(): DocumentType {
-        return DocumentType.Builder("Loyalty")
+        return DocumentType.Builder("Loyalty card")
             .addMdocDocumentType(LOYALTY_DOCTYPE)
             // Core holder data relevant for a loyalty card
             //
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "family_name",
-                "Family Name",
+                "Family name",
                 "Last name, surname, or primary identifier, of the document holder",
                 true,
                 LOYALTY_NAMESPACE,
@@ -33,7 +33,7 @@ object Loyalty {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "given_name",
-                "Given Names",
+                "Given names",
                 "First name(s), other name(s), or secondary identifier, of the document holder",
                 true,
                 LOYALTY_NAMESPACE,
@@ -43,7 +43,7 @@ object Loyalty {
             .addMdocAttribute(
                 DocumentAttributeType.Picture,
                 "portrait",
-                "Photo of Holder",
+                "Photo of holder",
                 "A reproduction of the document holder’s portrait.",
                 true,
                 LOYALTY_NAMESPACE,
@@ -75,7 +75,7 @@ object Loyalty {
             .addMdocAttribute(
                 DocumentAttributeType.Date,
                 "issue_date",
-                "Date of Issue",
+                "Date of issue",
                 "Date when document was issued",
                 true,
                 LOYALTY_NAMESPACE,
@@ -85,7 +85,7 @@ object Loyalty {
             .addMdocAttribute(
                 DocumentAttributeType.Date,
                 "expiry_date",
-                "Date of Expiry",
+                "Date of expiry",
                 "Date when document expires",
                 true,
                 LOYALTY_NAMESPACE,
@@ -96,22 +96,22 @@ object Loyalty {
             //
             .addSampleRequest(
                 id = "mandatory",
-                displayName = "Mandatory Data Elements",
+                displayName = "Mandatory data elements",
                 mdocDataElements = mapOf(
                     LOYALTY_NAMESPACE to mapOf(
-                            "family_name" to false,
-                            "given_name" to false,
-                            "portrait" to false,
-                            "membership_number" to false,
-                            "tier" to false,
-                            "issue_date" to false,
-                            "expiry_date" to false,
+                        "family_name" to false,
+                        "given_name" to false,
+                        "portrait" to false,
+                        "membership_number" to false,
+                        "tier" to false,
+                        "issue_date" to false,
+                        "expiry_date" to false,
                     )
                 )
             )
             .addSampleRequest(
                 id = "full",
-                displayName ="All Data Elements",
+                displayName ="All data elements",
                 mdocDataElements = mapOf(
                     LOYALTY_NAMESPACE to mapOf()
                 )

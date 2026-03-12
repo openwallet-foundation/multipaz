@@ -251,8 +251,8 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __mDL__
-                    Older Than 21 Years: true
-                    Photo of Holder: 5318 bytes
+                    Older than 21 years: true
+                    Photo of holder: 5318 bytes
                 """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -301,12 +301,12 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID__
-                    Older Than 18: true
-                    Photo of Holder: Image (5318 bytes)
+                    Older than 18: true
+                    Photo of holder: Image (5318 bytes)
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID 2__
-                    Older Than 18: true
-                    Photo of Holder: Image (5318 bytes)
+                    Older than 18: true
+                    Photo of holder: Image (5318 bytes)
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -387,16 +387,16 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __mDL__
-                    Given Names: Erika
-                    Family Name: Mustermann
+                    Given names: Erika
+                    Family name: Mustermann
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID__
-                    Family Name: Mustermann
-                    Given Names: Erika
+                    Family name: Mustermann
+                    Given names: Erika
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID 2__
-                    Family Name: Mustermann
-                    Given Names: Max
+                    Family name: Mustermann
+                    Given names: Max
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -474,16 +474,16 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __mDL__
-                    Given Names: Erika
-                    Family Name: Mustermann
+                    Given names: Erika
+                    Family name: Mustermann
                   SetEntry set_index 1
                     cred_id 0 openid4vp-v1-signed __EU PID__
-                    Family Name: Mustermann
-                    Given Names: Erika
+                    Family name: Mustermann
+                    Given names: Erika
                   SetEntry set_index 1
                     cred_id 0 openid4vp-v1-signed __EU PID 2__
-                    Family Name: Mustermann
-                    Given Names: Max
+                    Family name: Mustermann
+                    Given names: Max
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -560,19 +560,19 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID__
-                    Older Than 18: true
+                    Older than 18: true
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID 2__
-                    Older Than 18: true
+                    Older than 18: true
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __mDL__
-                    Older Than 18 Years: true
+                    Older than 18 years: true
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __Photo ID__
-                    Older Than 18 Years: true
+                    Older than 18 years: true
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __Photo ID 2__
-                    Older Than 18 Years: true
+                    Older than 18 years: true
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -686,29 +686,29 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __mDL__
-                    Family Name: Mustermann
-                    Given Names: Erika
-                    Photo of Holder: 5318 bytes
+                    Family name: Mustermann
+                    Given names: Erika
+                    Photo of holder: 5318 bytes
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID__
-                    Family Name: Mustermann
-                    Given Names: Erika
-                    Photo of Holder: 5318 bytes
+                    Family name: Mustermann
+                    Given names: Erika
+                    Photo of holder: 5318 bytes
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID 2__
-                    Family Name: Mustermann
-                    Given Names: Max
-                    Photo of Holder: 5318 bytes
+                    Family name: Mustermann
+                    Given names: Max
+                    Photo of holder: 5318 bytes
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __Photo ID__
-                    Family Name: Mustermann
-                    Given Names: Erika
-                    Photo of Holder: 5318 bytes
+                    Family name: Mustermann
+                    Given names: Erika
+                    Photo of holder: 5318 bytes
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __Photo ID 2__
-                    Family Name: Mustermann
-                    Given Names: Max
-                    Photo of Holder: 5318 bytes
+                    Family name: Mustermann
+                    Given names: Max
+                    Photo of holder: 5318 bytes
                   SetEntry set_index 1
                     cred_id 0 openid4vp-v1-signed __my-movie-ticket-1__
                     ticket_number: 12345
@@ -835,9 +835,9 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __mDL__
-                    Family Name: Mustermann
-                    Given Names: Erika
-                    Photo of Holder: 5318 bytes
+                    Family name: Mustermann
+                    Given names: Erika
+                    Photo of holder: 5318 bytes
                   SetEntry set_index 1
                     cred_id 0 openid4vp-v1-signed __my-movie-ticket-1__
                     ticket_number: 12345
@@ -850,14 +850,14 @@ class MatcherTest {
                   set_id 1 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 1 openid4vp-v1-signed __EU PID__
-                    Family Name: Mustermann
-                    Given Names: Erika
-                    Photo of Holder: 5318 bytes
+                    Family name: Mustermann
+                    Given names: Erika
+                    Photo of holder: 5318 bytes
                   SetEntry set_index 0
                     cred_id 1 openid4vp-v1-signed __EU PID 2__
-                    Family Name: Mustermann
-                    Given Names: Max
-                    Photo of Holder: 5318 bytes
+                    Family name: Mustermann
+                    Given names: Max
+                    Photo of holder: 5318 bytes
                   SetEntry set_index 1
                     cred_id 1 openid4vp-v1-signed __my-movie-ticket-1__
                     ticket_number: 12345
@@ -870,14 +870,14 @@ class MatcherTest {
                   set_id 2 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 2 openid4vp-v1-signed __Photo ID__
-                    Family Name: Mustermann
-                    Given Names: Erika
-                    Photo of Holder: 5318 bytes
+                    Family name: Mustermann
+                    Given names: Erika
+                    Photo of holder: 5318 bytes
                   SetEntry set_index 0
                     cred_id 2 openid4vp-v1-signed __Photo ID 2__
-                    Family Name: Mustermann
-                    Given Names: Max
-                    Photo of Holder: 5318 bytes
+                    Family name: Mustermann
+                    Given names: Max
+                    Photo of holder: 5318 bytes
                   SetEntry set_index 1
                     cred_id 2 openid4vp-v1-signed __my-movie-ticket-1__
                     ticket_number: 12345
@@ -989,8 +989,8 @@ class MatcherTest {
               set_id 0 openid4vp-v1-signed
               SetEntry set_index 0
                 cred_id 0 openid4vp-v1-signed __my-mDL__
-                Given Names: David
-                Older Than 18 Years: true
+                Given names: David
+                Older than 18 years: true
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1013,8 +1013,8 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __my-mDL-no-age-over__
-                    Given Names: David
-                    Age in Years: 48
+                    Given names: David
+                    Age in years: 48
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1037,8 +1037,8 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __my-mDL-only-birth-date__
-                    Given Names: David
-                    Date of Birth: 1976-03-02
+                    Given names: David
+                    Date of birth: 1976-03-02
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1336,10 +1336,10 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __Photo ID__
-                    Given Names: Erika
-                    Family Name: Mustermann
+                    Given names: Erika
+                    Family name: Mustermann
                     Sex: Female
-                    Older Than 25 Years: false
+                    Older than 25 years: false
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1381,10 +1381,10 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __Photo ID 2__
-                    Given Names: Max
-                    Family Name: Mustermann
+                    Given names: Max
+                    Family name: Mustermann
                     Sex: Male
-                    Older Than 25 Years: true
+                    Older than 25 years: true
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1426,10 +1426,10 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __Photo ID 2__
-                    Given Names: Max
-                    Family Name: Mustermann
+                    Given names: Max
+                    Family name: Mustermann
                     Sex: Male
-                    Older Than 25 Years: true
+                    Older than 25 years: true
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1471,10 +1471,10 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __Photo ID__
-                    Given Names: Erika
-                    Family Name: Mustermann
+                    Given names: Erika
+                    Family name: Mustermann
                     Sex: Female
-                    Older Than 25 Years: false
+                    Older than 25 years: false
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1517,7 +1517,7 @@ class MatcherTest {
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID__
                     Sex: Female
-                    Given Names: Erika
+                    Given names: Erika
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1560,7 +1560,7 @@ class MatcherTest {
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID 2__
                     Sex: Male
-                    Given Names: Max
+                    Given names: Max
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1635,8 +1635,8 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID Max__
-                    Given Names: Max
-                    Older Than 18: true
+                    Given names: Max
+                    Older than 18: true
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1678,8 +1678,8 @@ class MatcherTest {
                   set_id 0 openid4vp-v1-signed
                   SetEntry set_index 0
                     cred_id 0 openid4vp-v1-signed __EU PID Erika__
-                    Given Names: Erika
-                    Older Than 18: false
+                    Given names: Erika
+                    Older than 18: false
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1709,8 +1709,8 @@ class MatcherTest {
                   set_id 0 org-iso-mdoc
                   SetEntry set_index 0
                     cred_id 0 org-iso-mdoc __mDL__
-                    Older Than 21 Years: true
-                    Photo of Holder: 5318 bytes
+                    Older than 21 years: true
+                    Photo of holder: 5318 bytes
                 """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1789,16 +1789,16 @@ class MatcherTest {
                   set_id 0 org-iso-mdoc
                   SetEntry set_index 0
                     cred_id 0 org-iso-mdoc __mDL__
-                    Given Names: Erika
-                    Family Name: Mustermann
+                    Given names: Erika
+                    Family name: Mustermann
                   SetEntry set_index 0
                     cred_id 0 org-iso-mdoc __EU PID__
-                    Given Names: Erika
-                    Family Name: Mustermann
+                    Given names: Erika
+                    Family name: Mustermann
                   SetEntry set_index 0
                     cred_id 0 org-iso-mdoc __EU PID 2__
-                    Given Names: Max
-                    Family Name: Mustermann
+                    Given names: Max
+                    Family name: Mustermann
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1874,16 +1874,16 @@ class MatcherTest {
                   set_id 0 org-iso-mdoc
                   SetEntry set_index 0
                     cred_id 0 org-iso-mdoc __mDL__
-                    Given Names: Erika
-                    Family Name: Mustermann
+                    Given names: Erika
+                    Family name: Mustermann
                   SetEntry set_index 1
                     cred_id 0 org-iso-mdoc __EU PID__
-                    Given Names: Erika
-                    Family Name: Mustermann
+                    Given names: Erika
+                    Family name: Mustermann
                   SetEntry set_index 1
                     cred_id 0 org-iso-mdoc __EU PID 2__
-                    Given Names: Max
-                    Family Name: Mustermann
+                    Given names: Max
+                    Family name: Mustermann
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1958,19 +1958,19 @@ class MatcherTest {
                   set_id 0 org-iso-mdoc
                   SetEntry set_index 0
                     cred_id 0 org-iso-mdoc __EU PID__
-                    Older Than 18: true
+                    Older than 18: true
                   SetEntry set_index 0
                     cred_id 0 org-iso-mdoc __EU PID 2__
-                    Older Than 18: true
+                    Older than 18: true
                   SetEntry set_index 0
                     cred_id 0 org-iso-mdoc __mDL__
-                    Older Than 18 Years: true
+                    Older than 18 years: true
                   SetEntry set_index 0
                     cred_id 0 org-iso-mdoc __Photo ID__
-                    Older Than 18 Years: true
+                    Older than 18 years: true
                   SetEntry set_index 0
                     cred_id 0 org-iso-mdoc __Photo ID 2__
-                    Older Than 18 Years: true
+                    Older than 18 years: true
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -1991,8 +1991,8 @@ class MatcherTest {
               set_id 0 org-iso-mdoc
               SetEntry set_index 0
                 cred_id 0 org-iso-mdoc __my-mDL__
-                Given Names: David
-                Older Than 18 Years: true
+                Given names: David
+                Older than 18 years: true
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -2013,8 +2013,8 @@ class MatcherTest {
                   set_id 0 org-iso-mdoc
                   SetEntry set_index 0
                     cred_id 0 org-iso-mdoc __my-mDL-no-age-over__
-                    Given Names: David
-                    Age in Years: 48
+                    Given names: David
+                    Age in years: 48
             """.trimIndent().trim() + "\n",
             matcherResult
         )
@@ -2035,8 +2035,8 @@ class MatcherTest {
                   set_id 0 org-iso-mdoc
                   SetEntry set_index 0
                     cred_id 0 org-iso-mdoc __my-mDL-only-birth-date__
-                    Given Names: David
-                    Date of Birth: 1976-03-02
+                    Given names: David
+                    Date of birth: 1976-03-02
             """.trimIndent().trim() + "\n",
             matcherResult
         )

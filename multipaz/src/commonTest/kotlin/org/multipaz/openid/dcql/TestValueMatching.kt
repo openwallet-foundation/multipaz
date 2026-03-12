@@ -290,12 +290,12 @@ class TestValueMatching {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       nameSpace: org.iso.18013.5.1
@@ -334,12 +334,12 @@ class TestValueMatching {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Max
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       nameSpace: org.iso.18013.5.1
@@ -378,12 +378,12 @@ class TestValueMatching {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       nameSpace: org.iso.18013.5.1
@@ -398,12 +398,12 @@ class TestValueMatching {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Max
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       nameSpace: org.iso.18013.5.1
@@ -444,17 +444,17 @@ class TestValueMatching {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: resident_postal_code
-                                      displayName: Resident Postal Code
+                                      displayName: Resident postal code
                                       value: 90210
                               match:
                                 credential:
@@ -464,17 +464,17 @@ class TestValueMatching {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: OG
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: resident_postal_code
-                                      displayName: Resident Postal Code
+                                      displayName: Resident postal code
                                       value: 90210
             """.trimIndent().trim(),
             mdl_match_PostalCode90210().execute(
@@ -510,22 +510,22 @@ class TestValueMatching {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: resident_postal_code
-                                      displayName: Resident Postal Code
+                                      displayName: Resident postal code
                                       value: 90210
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: resident_country
-                                      displayName: Resident Country
+                                      displayName: Resident country
                                       value: United States of America
                               match:
                                 credential:
@@ -535,22 +535,22 @@ class TestValueMatching {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Max
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: resident_postal_code
-                                      displayName: Resident Postal Code
+                                      displayName: Resident postal code
                                       value: 94043
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: resident_country
-                                      displayName: Resident Country
+                                      displayName: Resident country
                                       value: United States of America
             """.trimIndent().trim(),
             mdl_match_PostalCode90210And94043_CountryUS().execute(
@@ -586,22 +586,22 @@ class TestValueMatching {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: resident_postal_code
-                                      displayName: Resident Postal Code
+                                      displayName: Resident postal code
                                       value: 90210
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: resident_country
-                                      displayName: Resident Country
+                                      displayName: Resident country
                                       value: United States of America
             """.trimIndent().trim(),
             mdl_match_PostalCode90210_CountryUS().execute(

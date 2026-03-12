@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -42,13 +42,13 @@ object EUPersonalID {
      * Build the EU Personal ID Document Type.
      */
     fun getDocumentType(): DocumentType {
-        return DocumentType.Builder("EU Personal ID")
+        return DocumentType.Builder("Personal ID")
             .addMdocDocumentType(EUPID_DOCTYPE)
             .addJsonDocumentType(type = EUPID_VCT, keyBound = true)
             .addAttribute(
                 type = DocumentAttributeType.String,
                 identifier = "family_name",
-                displayName = "Family Name",
+                displayName = "Family name",
                 description = "Current last name(s), surname(s), or primary identifier of the PID holder",
                 mandatory = true,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -59,7 +59,7 @@ object EUPersonalID {
             .addAttribute(
                 type = DocumentAttributeType.String,
                 identifier = "given_name",
-                displayName = "Given Names",
+                displayName = "Given names",
                 description = "Current first name(s), other name(s), or secondary identifier of the PID holder",
                 mandatory = true,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -71,7 +71,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.Date,
                 mdocIdentifier = "birth_date",
                 jsonIdentifier = "birthdate",
-                displayName = "Date of Birth",
+                displayName = "Date of birth",
                 description = "Day, month, and year on which the PID holder was born. If unknown, approximate date of birth.",
                 mandatory = true,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -82,7 +82,7 @@ object EUPersonalID {
             .addAttribute(
                 type = DocumentAttributeType.Number,
                 identifier = "age_in_years",
-                displayName = "Age in Years",
+                displayName = "Age in years",
                 description = "The age of the PID holder in years",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -93,7 +93,7 @@ object EUPersonalID {
             .addAttribute(
                 type = DocumentAttributeType.Number,
                 identifier = "age_birth_year",
-                displayName = "Year of Birth",
+                displayName = "Year of birth",
                 description = "The year when the PID holder was born",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -104,7 +104,7 @@ object EUPersonalID {
             .addJsonAttribute(
                 type = DocumentAttributeType.ComplexType,
                 identifier = "age_equal_or_over",
-                displayName = "Older Than Age Attestations",
+                displayName = "Older than age attestations",
                 description = "Older Than Age Attestations",
                 icon = Icon.TODAY,
                 sampleValue = buildJsonObject {
@@ -116,7 +116,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.Boolean,
                 mdocIdentifier = "age_over_18",
                 jsonIdentifier = "age_equal_or_over.18",
-                displayName = "Older Than 18",
+                displayName = "Older than 18",
                 description = "Age over 18?",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -128,7 +128,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.Boolean,
                 mdocIdentifier = "age_over_21",
                 jsonIdentifier = "age_equal_or_over.21",
-                displayName = "Older Than 21",
+                displayName = "Older than 21",
                 description = "Age over 21?",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -140,7 +140,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.String,
                 mdocIdentifier = "family_name_birth",
                 jsonIdentifier = "birth_family_name",
-                displayName = "Family Name at Birth",
+                displayName = "Family name at birth",
                 description = "Last name(s), surname(s), or primary identifier of the PID holder at birth",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -152,7 +152,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.String,
                 mdocIdentifier = "given_name_birth",
                 jsonIdentifier = "birth_given_name",
-                displayName = "First Name at Birth",
+                displayName = "First name at birth",
                 description = "First name(s), other name(s), or secondary identifier of the PID holder at birth",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -163,7 +163,7 @@ object EUPersonalID {
             .addMdocAttribute(
                 type = DocumentAttributeType.String,
                 identifier = "birth_place",
-                displayName = "Place of Birth",
+                displayName = "Place of birth",
                 description = "Country and municipality or state/province where the PID holder was born",
                 mandatory = true,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -173,7 +173,7 @@ object EUPersonalID {
             .addJsonAttribute(
                 type = DocumentAttributeType.ComplexType,
                 identifier = "place_of_birth",
-                displayName = "Place of Birth",
+                displayName = "Place of birth",
                 description = "Country and municipality or state/province where the PID holder was born",
                 icon = Icon.PLACE,
                 sampleValue = buildJsonObject {
@@ -186,7 +186,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
                 mdocIdentifier = "birth_country",
                 jsonIdentifier = "place_of_birth.country",
-                displayName = "Country of Birth",
+                displayName = "Country of birth",
                 description = "The country where the PID User was born, as an Alpha-2 country code as specified in ISO 3166-1",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -198,7 +198,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.String,
                 mdocIdentifier = "birth_state",
                 jsonIdentifier = "place_of_birth.region",
-                displayName = "State of Birth",
+                displayName = "State of birth",
                 description = "The state, province, district, or local area where the PID User was born",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -210,7 +210,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.String,
                 mdocIdentifier = "birth_city",
                 jsonIdentifier = "place_of_birth.locality",
-                displayName = "City of Birth",
+                displayName = "City of birth",
                 description = "The municipality, city, town, or village where the PID User was born",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -238,7 +238,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.String,
                 mdocIdentifier = "resident_address",
                 jsonIdentifier = "address.formatted",
-                displayName = "Resident Address",
+                displayName = "Resident address",
                 description = "The full address of the place where the PID holder currently resides and/or may be contacted (street/house number, municipality etc.)",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -250,7 +250,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
                 mdocIdentifier = "resident_country",
                 jsonIdentifier = "address.country",
-                displayName = "Resident Country",
+                displayName = "Resident country",
                 description = "The country where the PID User currently resides, as an Alpha-2 country code as specified in ISO 3166-1",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -262,7 +262,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.String,
                 mdocIdentifier = "resident_state",
                 jsonIdentifier = "address.region",
-                displayName = "Resident State",
+                displayName = "Resident state",
                 description = "The state, province, district, or local area where the PID User currently resides.",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -274,7 +274,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.String,
                 mdocIdentifier = "resident_city",
                 jsonIdentifier = "address.locality",
-                displayName = "Resident City",
+                displayName = "Resident city",
                 description = "The city where the PID holder currently resides",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -286,7 +286,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.String,
                 mdocIdentifier = "resident_postal_code",
                 jsonIdentifier = "address.postal_code",
-                displayName = "Resident Postal Code",
+                displayName = "Resident postal code",
                 description = "The postal code of the place where the PID holder currently resides",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -298,7 +298,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.String,
                 mdocIdentifier = "resident_street",
                 jsonIdentifier = "address.street_address",
-                displayName = "Resident Street",
+                displayName = "Resident street",
                 description = "The name of the street where the PID User currently resides.",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -310,7 +310,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.String,
                 mdocIdentifier = "resident_house_number",
                 jsonIdentifier = "address.house_number",
-                displayName = "Resident House Number",
+                displayName = "Resident house number",
                 description = "The house number where the PID User currently resides, including any affix or suffix",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -351,7 +351,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.Date,
                 mdocIdentifier = "issuance_date",
                 jsonIdentifier = "date_of_issuance",
-                displayName = "Date of Issue",
+                displayName = "Date of issue",
                 description = "Date (and possibly time) when the PID was issued.",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -363,7 +363,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.Date,
                 mdocIdentifier = "expiry_date",
                 jsonIdentifier = "date_of_expiry",
-                displayName = "Date of Expiry",
+                displayName = "Date of expiry",
                 description = "Date (and possibly time) when the PID will expire.",
                 mandatory = true,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -374,7 +374,7 @@ object EUPersonalID {
             .addAttribute(
                 type = DocumentAttributeType.String,
                 identifier = "issuing_authority",
-                displayName = "Issuing Authority",
+                displayName = "Issuing authority",
                 description = "Name of the administrative authority that has issued this PID instance, or the " +
                         "ISO 3166 Alpha-2 country code of the respective Member State if there is" +
                         "no separate authority authorized to issue PIDs.",
@@ -387,7 +387,7 @@ object EUPersonalID {
             .addAttribute(
                 type = DocumentAttributeType.String,
                 identifier = "document_number",
-                displayName = "Document Number",
+                displayName = "Document number",
                 description = "A number for the PID, assigned by the PID Provider.",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -398,7 +398,7 @@ object EUPersonalID {
             .addAttribute(
                 type = DocumentAttributeType.String,
                 identifier = "personal_administrative_number",
-                displayName = "Personal Administrative Number",
+                displayName = "Personal administrative number",
                 description = "A number assigned by the PID Provider for audit control or other purposes.",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -409,7 +409,7 @@ object EUPersonalID {
             .addAttribute(
                 type = DocumentAttributeType.String,
                 identifier = "issuing_jurisdiction",
-                displayName = "Issuing Jurisdiction",
+                displayName = "Issuing jurisdiction",
                 description = "Country subdivision code of the jurisdiction that issued the PID, as defined in " +
                         "ISO 3166-2:2020, Clause 8. The first part of the code SHALL be the same " +
                         "as the value for issuing_country.",
@@ -422,7 +422,7 @@ object EUPersonalID {
             .addAttribute(
                 type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
                 identifier = "issuing_country",
-                displayName = "Issuing Country",
+                displayName = "Issuing country",
                 description = "Alpha-2 country code, as defined in ISO 3166-1, of the issuing authority’s " +
                         "country or territory",
                 mandatory = true,
@@ -435,7 +435,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.Picture,
                 mdocIdentifier = "portrait",
                 jsonIdentifier = "picture",
-                displayName = "Photo of Holder",
+                displayName = "Photo of holder",
                 description = "A reproduction of the PID holder’s portrait.",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -447,7 +447,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.String,
                 mdocIdentifier = "email_address",
                 jsonIdentifier = "email",
-                displayName = "Email Address of Holder",
+                displayName = "Email address of holder",
                 description = "Electronic mail address of the user to whom the person identification data relates, in conformance with [RFC 5322].",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -459,7 +459,7 @@ object EUPersonalID {
                 type = DocumentAttributeType.String,
                 mdocIdentifier = "mobile_phone_number",
                 jsonIdentifier = "phone_number",
-                displayName = "Mobile Phone of Holder",
+                displayName = "Mobile phone of holder",
                 description = "Mobile telephone number of the User to whom the person identification data relates, starting with the '+' symbol as the international code prefix and the country code, followed by numbers only.",
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
@@ -469,7 +469,7 @@ object EUPersonalID {
             )
             .addSampleRequest(
                 id = "age_over_18",
-                displayName = "Age Over 18",
+                displayName = "Age over 18",
                 mdocDataElements = mapOf(
                     EUPID_NAMESPACE to mapOf(
                         "age_over_18" to false,
@@ -479,7 +479,7 @@ object EUPersonalID {
             )
             .addSampleRequest(
                 id = "age_over_18_zkp",
-                displayName = "Age Over 18 (ZKP)",
+                displayName = "Age over 18 (ZKP)",
                 mdocDataElements = mapOf(
                     EUPID_NAMESPACE to mapOf(
                         "age_over_18" to false,
@@ -490,7 +490,7 @@ object EUPersonalID {
             )
             .addSampleRequest(
                 id = "age_over_18_and_portrait",
-                displayName = "Age Over 18 + Portrait",
+                displayName = "Age over 18 + portrait",
                 mdocDataElements = mapOf(
                     EUPID_NAMESPACE to mapOf(
                         "age_over_18" to false,
@@ -501,7 +501,7 @@ object EUPersonalID {
             )
             .addSampleRequest(
                 id = "mandatory",
-                displayName = "Mandatory Data Elements",
+                displayName = "Mandatory data elements",
                 mdocDataElements = mapOf(
                     EUPID_NAMESPACE to mapOf(
                         "family_name" to false,
@@ -527,7 +527,7 @@ object EUPersonalID {
             )
             .addSampleRequest(
                 id = "full",
-                displayName = "All Data Elements",
+                displayName = "All data elements",
                 mdocDataElements = mapOf(
                     EUPID_NAMESPACE to mapOf()
                 ),

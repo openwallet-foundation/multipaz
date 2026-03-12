@@ -35,7 +35,7 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactory {
         get() = listOf()  // keyless
 
     override val name: String
-        get() = "Utopia Movie Ticket"
+        get() = "Movie ticket"
 
     override val logo: String
         get() = "movie_ticket.png"

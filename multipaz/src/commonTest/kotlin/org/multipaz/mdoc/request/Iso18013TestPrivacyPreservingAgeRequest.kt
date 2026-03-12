@@ -205,12 +205,12 @@ class Iso18013TestPrivacyPreservingAgeRequest {
                                     claim:
                                       nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: David
                                     claim:
                                       nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: age_over_18
-                                      displayName: Older Than 18 Years
+                                      displayName: Older than 18 years
                                       value: True
             """.trimIndent().trim(),
             ageMdlQuery().execute(
@@ -242,12 +242,12 @@ class Iso18013TestPrivacyPreservingAgeRequest {
                                     claim:
                                       nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: David
                                     claim:
                                       nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: age_in_years
-                                      displayName: Age in Years
+                                      displayName: Age in years
                                       value: 48
             """.trimIndent().trim(),
             ageMdlQuery().execute(
@@ -285,12 +285,12 @@ class Iso18013TestPrivacyPreservingAgeRequest {
                                     claim:
                                       nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: David
                                     claim:
                                       nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: birth_date
-                                      displayName: Date of Birth
+                                      displayName: Date of birth
                                       value: $dateValue
             """.trimIndent().trim(),
             result

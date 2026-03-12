@@ -58,7 +58,7 @@ internal class CredentialFactoryMdocPid : CredentialFactory {
         get() = listOf("cose_key")
 
     override val name: String
-        get() = "Personal ID (mDoc)"
+        get() = "Personal ID"
 
     override val logo: String
         get() = "card-pid.png"

@@ -48,7 +48,7 @@ internal class CredentialFactoryAgeVerification : CredentialFactory {
         get() = listOf("cose_key")
 
     override val name: String
-        get() = "Age Verification Credential (mDoc)"
+        get() = "Age verification"
 
     override val logo: String
         get() = "card-age-verification.png"

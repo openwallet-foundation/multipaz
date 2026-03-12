@@ -183,12 +183,12 @@ class Iso18013TestSingleMdlQuery {
                                     claim:
                                       nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: resident_address
-                                      displayName: Resident Address
+                                      displayName: Resident address
                                       value: Sample Street 123
             """.trimIndent().trim(),
             singleMdlQuery().execute(
@@ -222,12 +222,12 @@ class Iso18013TestSingleMdlQuery {
                                     claim:
                                       nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: resident_address
-                                      displayName: Resident Address
+                                      displayName: Resident address
                                       value: Sample Street 123
                               match:
                                 credential:
@@ -237,12 +237,12 @@ class Iso18013TestSingleMdlQuery {
                                     claim:
                                       nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Max
                                     claim:
                                       nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: resident_address
-                                      displayName: Resident Address
+                                      displayName: Resident address
                                       value: Sample Street 456
             """.trimIndent().trim(),
             singleMdlQuery().execute(
@@ -276,12 +276,12 @@ class Iso18013TestSingleMdlQuery {
                                     claim:
                                       nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                       dataElement: resident_address
-                                      displayName: Resident Address
+                                      displayName: Resident address
                                       value: Sample Street 123
             """.trimIndent().trim(),
             singleMdlQuery().execute(

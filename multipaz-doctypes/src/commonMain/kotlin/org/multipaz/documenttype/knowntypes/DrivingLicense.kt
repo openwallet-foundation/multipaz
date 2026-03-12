@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -46,7 +46,7 @@ object DrivingLicense {
      * Build the Driving License Document Type. This is ISO mdoc only.
      */
     fun getDocumentType(): DocumentType {
-        return DocumentType.Builder("Driving License")
+        return DocumentType.Builder("Driving license")
             .addMdocDocumentType(MDL_DOCTYPE)
             /*
              * First the attributes that the mDL and VC Credential Type have in common
@@ -54,7 +54,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "family_name",
-                "Family Name",
+                "Family name",
                 "Last name, surname, or primary identifier, of the mDL holder.",
                 true,
                 MDL_NAMESPACE,
@@ -64,7 +64,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "given_name",
-                "Given Names",
+                "Given names",
                 "First name(s), other name(s), or secondary identifier, of the mDL holder",
                 true,
                 MDL_NAMESPACE,
@@ -74,7 +74,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Date,
                 "birth_date",
-                "Date of Birth",
+                "Date of birth",
                 "Day, month and year on which the mDL holder was born. If unknown, approximate date of birth",
                 true,
                 MDL_NAMESPACE,
@@ -84,7 +84,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Date,
                 "issue_date",
-                "Date of Issue",
+                "Date of issue",
                 "Date when mDL was issued",
                 true,
                 MDL_NAMESPACE,
@@ -94,7 +94,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Date,
                 "expiry_date",
-                "Date of Expiry",
+                "Date of expiry",
                 "Date when mDL expires",
                 true,
                 MDL_NAMESPACE,
@@ -104,7 +104,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
                 "issuing_country",
-                "Issuing Country",
+                "Issuing country",
                 "Alpha-2 country code, as defined in ISO 3166-1, of the issuing authority’s country or territory",
                 true,
                 MDL_NAMESPACE,
@@ -114,7 +114,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "issuing_authority",
-                "Issuing Authority",
+                "Issuing authority",
                 "Issuing authority name.",
                 true,
                 MDL_NAMESPACE,
@@ -124,7 +124,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "document_number",
-                "License Number",
+                "License number",
                 "The number assigned or calculated by the issuing authority.",
                 true,
                 MDL_NAMESPACE,
@@ -134,7 +134,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Picture,
                 "portrait",
-                "Photo of Holder",
+                "Photo of holder",
                 "A reproduction of the mDL holder’s portrait.",
                 true,
                 MDL_NAMESPACE,
@@ -144,7 +144,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.ComplexType,
                 "driving_privileges",
-                "Driving Privileges",
+                "Driving privileges",
                 "Driving privileges of the mDL holder",
                 true,
                 MDL_NAMESPACE,
@@ -165,7 +165,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.StringOptions(Options.DISTINGUISHING_SIGN_ISO_IEC_18013_1_ANNEX_F),
                 "un_distinguishing_sign",
-                "UN Distinguishing Sign",
+                "UN distinguishing sign",
                 "Distinguishing sign of the issuing country",
                 true,
                 MDL_NAMESPACE,
@@ -175,7 +175,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "administrative_number",
-                "Administrative Number",
+                "Administrative number",
                 "An audit control number assigned by the issuing authority",
                 false,
                 MDL_NAMESPACE,
@@ -229,7 +229,7 @@ object DrivingLicense {
                     )
                 ),
                 "eye_colour",
-                "Eye Color",
+                "Eye color",
                 "mDL holder’s eye color",
                 false,
                 MDL_NAMESPACE,
@@ -253,7 +253,7 @@ object DrivingLicense {
                     )
                 ),
                 "hair_colour",
-                "Hair Color",
+                "Hair color",
                 "mDL holder’s hair color",
                 false,
                 MDL_NAMESPACE,
@@ -263,7 +263,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "birth_place",
-                "Place of Birth",
+                "Place of birth",
                 "Country and municipality or state/province where the mDL holder was born",
                 false,
                 MDL_NAMESPACE,
@@ -273,7 +273,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "resident_address",
-                "Resident Address",
+                "Resident address",
                 "The place where the mDL holder resides and/or may be contacted (street/house number, municipality etc.)",
                 false,
                 MDL_NAMESPACE,
@@ -283,7 +283,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Date,
                 "portrait_capture_date",
-                "Portrait Image Timestamp",
+                "Portrait image timestamp",
                 "Date when portrait was taken",
                 false,
                 MDL_NAMESPACE,
@@ -293,7 +293,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Number,
                 "age_in_years",
-                "Age in Years",
+                "Age in years",
                 "The age of the mDL holder",
                 false,
                 MDL_NAMESPACE,
@@ -303,7 +303,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Number,
                 "age_birth_year",
-                "Year of Birth",
+                "Year of birth",
                 "The year when the mDL holder was born",
                 false,
                 MDL_NAMESPACE,
@@ -313,7 +313,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Boolean,
                 "age_over_13",
-                "Older Than 13 Years",
+                "Older than 13 years",
                 "Indication whether the mDL holder is as old or older than 13",
                 false,
                 MDL_NAMESPACE,
@@ -323,7 +323,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Boolean,
                 "age_over_16",
-                "Older Than 16 Years",
+                "Older than 16 years",
                 "Indication whether the mDL holder is as old or older than 16",
                 false,
                 MDL_NAMESPACE,
@@ -333,7 +333,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Boolean,
                 "age_over_18",
-                "Older Than 18 Years",
+                "Older than 18 years",
                 "Indication whether the mDL holder is as old or older than 18",
                 false,
                 MDL_NAMESPACE,
@@ -343,7 +343,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Boolean,
                 "age_over_21",
-                "Older Than 21 Years",
+                "Older than 21 years",
                 "Indication whether the mDL holder is as old or older than 21",
                 false,
                 MDL_NAMESPACE,
@@ -353,7 +353,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Boolean,
                 "age_over_25",
-                "Older Than 25 Years",
+                "Older than 25 years",
                 "Indication whether the mDL holder is as old or older than 25",
                 false,
                 MDL_NAMESPACE,
@@ -363,7 +363,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Boolean,
                 "age_over_60",
-                "Older Than 60 Years",
+                "Older than 60 years",
                 "Indication whether the mDL holder is as old or older than 60",
                 false,
                 MDL_NAMESPACE,
@@ -373,7 +373,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Boolean,
                 "age_over_62",
-                "Older Than 62 Years",
+                "Older than 62 years",
                 "Indication whether the mDL holder is as old or older than 62",
                 false,
                 MDL_NAMESPACE,
@@ -383,7 +383,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Boolean,
                 "age_over_65",
-                "Older Than 65 Years",
+                "Older than 65 years",
                 "Indication whether the mDL holder is as old or older than 65",
                 false,
                 MDL_NAMESPACE,
@@ -393,7 +393,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Boolean,
                 "age_over_68",
-                "Older Than 68 Years",
+                "Older than 68 years",
                 "Indication whether the mDL holder is as old or older than 68",
                 false,
                 MDL_NAMESPACE,
@@ -403,7 +403,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "issuing_jurisdiction",
-                "Issuing Jurisdiction",
+                "Issuing jurisdiction",
                 "Country subdivision code of the jurisdiction that issued the mDL",
                 false,
                 MDL_NAMESPACE,
@@ -423,7 +423,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "resident_city",
-                "Resident City",
+                "Resident city",
                 "The city where the mDL holder lives",
                 false,
                 MDL_NAMESPACE,
@@ -433,7 +433,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "resident_state",
-                "Resident State",
+                "Resident state",
                 "The state/province/district where the mDL holder lives",
                 false,
                 MDL_NAMESPACE,
@@ -443,7 +443,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "resident_postal_code",
-                "Resident Postal Code",
+                "Resident postal code",
                 "The postal code of the mDL holder",
                 false,
                 MDL_NAMESPACE,
@@ -453,7 +453,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
                 "resident_country",
-                "Resident Country",
+                "Resident country",
                 "The country where the mDL holder lives",
                 false,
                 MDL_NAMESPACE,
@@ -463,7 +463,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "family_name_national_character",
-                "Family Name National Characters",
+                "Family name national characters",
                 "The family name of the mDL holder",
                 false,
                 MDL_NAMESPACE,
@@ -473,7 +473,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "given_name_national_character",
-                "Given Name National Characters",
+                "Given name national characters",
                 "The given name of the mDL holder",
                 false,
                 MDL_NAMESPACE,
@@ -483,7 +483,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Picture,
                 "signature_usual_mark",
-                "Signature / Usual Mark",
+                "Signature / usual mark",
                 "Image of the signature or usual mark of the mDL holder,",
                 false,
                 MDL_NAMESPACE,
@@ -493,7 +493,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.ComplexType,
                 "domestic_driving_privileges",
-                "Domestic Driving Privileges",
+                "Domestic driving privileges",
                 "Vehicle types the license holder is authorized to operate",
                 true,
                 AAMVA_NAMESPACE,
@@ -503,7 +503,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.StringOptions(Options.AAMVA_NAME_SUFFIX),
                 "name_suffix",
-                "Name Suffix",
+                "Name suffix",
                 "Name suffix of the individual that has been issued the driver license or identification document.",
                 false,
                 AAMVA_NAMESPACE,
@@ -518,7 +518,7 @@ object DrivingLicense {
                     )
                 ),
                 "organ_donor",
-                "Organ Donor",
+                "Organ donor",
                 "An indicator that denotes whether the credential holder is an organ donor.",
                 false,
                 AAMVA_NAMESPACE,
@@ -550,7 +550,7 @@ object DrivingLicense {
                     )
                 ),
                 "family_name_truncation",
-                "Family Name Truncation",
+                "Family name truncation",
                 "A code that indicates whether the field has been truncated",
                 true,
                 AAMVA_NAMESPACE,
@@ -567,7 +567,7 @@ object DrivingLicense {
                     )
                 ),
                 "given_name_truncation",
-                "Given Name Truncation",
+                "Given name truncation",
                 "A code that indicates whether either the first name or the middle name(s) have been truncated",
                 true,
                 AAMVA_NAMESPACE,
@@ -577,7 +577,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "aka_family_name",
-                "Alias / AKA Family Name",
+                "Alias / AKA family name",
                 "Other family name by which credential holder is known.",
                 false,
                 AAMVA_NAMESPACE,
@@ -587,7 +587,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "aka_given_name",
-                "Alias / AKA Given Name",
+                "Alias / AKA given name",
                 "Other given name by which credential holder is known.",
                 false,
                 AAMVA_NAMESPACE,
@@ -597,7 +597,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.StringOptions(Options.AAMVA_NAME_SUFFIX),
                 "aka_suffix",
-                "Alias / AKA Suffix Name",
+                "Alias / AKA suffix name",
                 "Other suffix by which credential holder is known.",
                 false,
                 AAMVA_NAMESPACE,
@@ -621,7 +621,7 @@ object DrivingLicense {
                     )
                 ),
                 "weight_range",
-                "Weight Range",
+                "Weight range",
                 "Indicates the approximate weight range of the cardholder",
                 false,
                 AAMVA_NAMESPACE,
@@ -642,7 +642,7 @@ object DrivingLicense {
                     )
                 ),
                 "race_ethnicity",
-                "Race / Ethnicity",
+                "Race / ethnicity",
                 "Codes for race or ethnicity of the cardholder",
                 false,
                 AAMVA_NAMESPACE,
@@ -658,7 +658,7 @@ object DrivingLicense {
                     )
                 ),
                 "DHS_compliance",
-                "Compliance Type",
+                "Compliance type",
                 "DHS required field that indicates compliance",
                 false,
                 AAMVA_NAMESPACE,
@@ -673,7 +673,7 @@ object DrivingLicense {
                     )
                 ),
                 "DHS_temporary_lawful_status",
-                "Limited Duration Document Indicator",
+                "Limited duration document indicator",
                 "DHS required field that denotes whether the credential holder has temporary lawful status. 1: Temporary lawful status",
                 false,
                 AAMVA_NAMESPACE,
@@ -689,7 +689,7 @@ object DrivingLicense {
                     )
                 ),
                 "EDL_credential",
-                "EDL Indicator",
+                "EDL indicator",
                 "Present if the credential is an EDL",
                 false,
                 AAMVA_NAMESPACE,
@@ -699,7 +699,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "resident_county",
-                "Resident County",
+                "Resident county",
                 "The 3-digit county code of the county where the mDL holder lives",
                 false,
                 AAMVA_NAMESPACE,
@@ -709,7 +709,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Date,
                 "hazmat_endorsement_expiration_date",
-                "HAZMAT Endorsement Expiration Date",
+                "HAZMAT endorsement expiration date",
                 "Date on which the hazardous material endorsement granted by the document is no longer valid.",
                 true,
                 AAMVA_NAMESPACE,
@@ -732,7 +732,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Picture,
                 "biometric_template_face",
-                "Biometric Template Face",
+                "Biometric template face",
                 "Facial biometric information of the mDL holder",
                 false,
                 MDL_NAMESPACE,
@@ -742,7 +742,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Picture,
                 "biometric_template_finger",
-                "Biometric Template Fingerprint",
+                "Biometric template fingerprint",
                 "Fingerprint of the mDL holder",
                 false,
                 MDL_NAMESPACE,
@@ -752,7 +752,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Picture,
                 "biometric_template_signature_sign",
-                "Biometric Template Signature/Sign",
+                "Biometric template signature/sign",
                 "Signature/sign of the mDL holder",
                 false,
                 MDL_NAMESPACE,
@@ -762,7 +762,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Picture,
                 "biometric_template_iris",
-                "Biometric Template Iris",
+                "Biometric template iris",
                 "Iris of the mDL holder",
                 false,
                 MDL_NAMESPACE,
@@ -772,7 +772,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.String,
                 "audit_information",
-                "Audit Information",
+                "Audit information",
                 "A string of letters and/or numbers that identifies when, where, and by whom the credential was initially provisioned.",
                 false,
                 AAMVA_NAMESPACE,
@@ -782,7 +782,7 @@ object DrivingLicense {
             .addMdocAttribute(
                 DocumentAttributeType.Number,
                 "aamva_version",
-                "AAMVA Version Number",
+                "AAMVA version number",
                 "A number identifying the version of the AAMVA mDL data element set",
                 true,
                 AAMVA_NAMESPACE,
@@ -791,7 +791,7 @@ object DrivingLicense {
             )
             .addSampleRequest(
                 id = "us-transportation",
-                displayName = "US Transportation",
+                displayName = "US transportation",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "sex" to false,
@@ -811,7 +811,7 @@ object DrivingLicense {
             )
             .addSampleRequest(
                 id = "age_over_18",
-                displayName ="Age Over 18",
+                displayName ="Age over 18",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "age_over_18" to false,
@@ -820,7 +820,7 @@ object DrivingLicense {
             )
             .addSampleRequest(
                 id = "age_over_21",
-                displayName ="Age Over 21",
+                displayName ="Age over 21",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "age_over_21" to false,
@@ -829,7 +829,7 @@ object DrivingLicense {
             )
             .addSampleRequest(
                 id = "age_over_18_zkp",
-                displayName ="Age Over 18 (ZKP)",
+                displayName ="Age over 18 (ZKP)",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "age_over_18" to false,
@@ -839,7 +839,7 @@ object DrivingLicense {
             )
             .addSampleRequest(
                 id = "age_over_21_zkp",
-                displayName ="Age Over 21 (ZKP)",
+                displayName ="Age over 21 (ZKP)",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "age_over_21" to false,
@@ -849,7 +849,7 @@ object DrivingLicense {
             )
             .addSampleRequest(
                 id = "age_over_18_and_portrait",
-                displayName ="Age Over 18 + Portrait",
+                displayName ="Age over 18 + portrait",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "age_over_18" to false,
@@ -859,7 +859,7 @@ object DrivingLicense {
             )
             .addSampleRequest(
                 id = "age_over_21_and_portrait",
-                displayName ="Age Over 21 + Portrait",
+                displayName ="Age over 21 + portrait",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "age_over_21" to false,
@@ -869,7 +869,7 @@ object DrivingLicense {
             )
             .addSampleRequest(
                 id = "mandatory",
-                displayName = "Mandatory Data Elements",
+                displayName = "Mandatory data elements",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "family_name" to false,
@@ -888,7 +888,7 @@ object DrivingLicense {
             )
             .addSampleRequest(
                 id = "full",
-                displayName ="All Data Elements",
+                displayName ="All data elements",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(),
                     AAMVA_NAMESPACE to mapOf()
@@ -896,7 +896,7 @@ object DrivingLicense {
             )
             .addSampleRequest(
                 id = "name-and-address-partially-stored",
-                displayName = "Name and Address (Partially Stored)",
+                displayName = "Name and address (partially stored)",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "family_name" to true,
@@ -916,7 +916,7 @@ object DrivingLicense {
             )
             .addSampleRequest(
                 id = "name-and-address-all-stored",
-                displayName = "Name and Address (All Stored)",
+                displayName = "Name and address (all stored)",
                 mdocDataElements = mapOf(
                     MDL_NAMESPACE to mapOf(
                         "family_name" to true,
@@ -937,4 +937,3 @@ object DrivingLicense {
             .build()
     }
 }
-

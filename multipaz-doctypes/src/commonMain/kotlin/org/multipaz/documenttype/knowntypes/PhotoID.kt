@@ -32,7 +32,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "family_name",
-            "Family Name",
+            "Family name",
             "Last name, surname, or primary identifier, of the document holder",
             true,
             ISO_23220_2_NAMESPACE,
@@ -42,7 +42,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "family_name_viz",
-            "Family Name (VIZ)",
+            "Family name (VIZ)",
             "Family name as defined for VIZ (visual inspection zone) in ICAO 9303",
             false,
             ISO_23220_2_NAMESPACE,
@@ -52,7 +52,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "given_name",
-            "Given Names",
+            "Given names",
             "First name(s), other name(s), or secondary identifier, of the document holder",
             true,
             ISO_23220_2_NAMESPACE,
@@ -62,7 +62,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "given_name_viz",
-            "Given Name (VIZ)",
+            "Given name (VIZ)",
             "Given name as defined for VIZ (visual inspection zone) in ICAO 9303",
             false,
             ISO_23220_2_NAMESPACE,
@@ -85,7 +85,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.Date,   // TODO: this is a more complex type
             "birth_date",
-            "Date of Birth",
+            "Date of birth",
             "Day, month and year on which the document holder was born. If unknown, approximate date of birth",
             true,
             ISO_23220_2_NAMESPACE,
@@ -97,7 +97,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.Picture,
             "portrait",
-            "Photo of Holder",
+            "Photo of holder",
             "A reproduction of the document holder’s portrait",
             true,
             ISO_23220_2_NAMESPACE,
@@ -107,7 +107,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.Date,
             "issue_date",
-            "Date of Issue",
+            "Date of issue",
             "Date when document was issued",
             true,
             ISO_23220_2_NAMESPACE,
@@ -117,7 +117,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.Date,
             "expiry_date",
-            "Date of Expiry",
+            "Date of expiry",
             "Date when document expires",
             true,
             ISO_23220_2_NAMESPACE,
@@ -127,7 +127,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "issuing_authority_unicode",
-            "Issuing Authority",
+            "Issuing authority",
             "Issuing authority name",
             true,
             ISO_23220_2_NAMESPACE,
@@ -137,7 +137,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
             "issuing_country",
-            "Issuing Country",
+            "Issuing country",
             "Alpha-2 country code, as defined in ISO 3166-1, of the issuing authority’s country or territory",
             true,
             ISO_23220_2_NAMESPACE,
@@ -147,7 +147,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.Number,
             "age_in_years",
-            "Age in Years",
+            "Age in years",
             "The age of the document holder",
             false,
             ISO_23220_2_NAMESPACE,
@@ -161,7 +161,7 @@ object PhotoID {
             addMdocAttribute(
                 type = DocumentAttributeType.Boolean,
                 identifier = "age_over_${if (age < 10) "0$age" else "$age"}",
-                displayName = "Older Than $age Years",
+                displayName = "Older than $age years",
                 description = "Indication whether the document holder is as old or older than $age",
                 mandatory = (age == 18),
                 mdocNamespace = ISO_23220_2_NAMESPACE,
@@ -176,7 +176,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.Number,
             "age_birth_year",
-            "Year of Birth",
+            "Year of birth",
             "The year when the document holder was born",
             false,
             ISO_23220_2_NAMESPACE,
@@ -196,7 +196,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "birthplace",
-            "Place of Birth",
+            "Place of birth",
             "Country and municipality or state/province where the document holder was born",
             false,
             ISO_23220_2_NAMESPACE,
@@ -206,7 +206,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "name_at_birth",
-            "Name at Birth",
+            "Name at birth",
             "The name(s) which holder was born",
             false,
             ISO_23220_2_NAMESPACE,
@@ -216,7 +216,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "resident_address",
-            "Resident Address",
+            "Resident address",
             "The place where the document holder resides and/or may be contacted (street/house number, municipality etc.)",
             false,
             ISO_23220_2_NAMESPACE,
@@ -226,7 +226,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "resident_city",
-            "Resident City",
+            "Resident city",
             "The city/municipality (or equivalent) where the holder lives",
             false,
             ISO_23220_2_NAMESPACE,
@@ -236,7 +236,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "resident_postal_code",
-            "Resident Postal Code",
+            "Resident postal code",
             "The postal code of the document holder",
             false,
             ISO_23220_2_NAMESPACE,
@@ -246,7 +246,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
             "resident_country",
-            "Resident Country",
+            "Resident country",
             "The country where the document holder lives",
             false,
             ISO_23220_2_NAMESPACE,
@@ -256,7 +256,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "resident_city_latin1",
-            "Resident City",
+            "Resident city",
             "The city/municipality (or equivalent) where the holder lives",
             false,
             ISO_23220_2_NAMESPACE,
@@ -286,7 +286,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "document_number",
-            "Document Number",
+            "Document number",
             "The number assigned or calculated by the issuing authority",
             false,
             ISO_23220_2_NAMESPACE,
@@ -296,7 +296,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "issuing_subdivision",
-            "Issuing Subdivision",
+            "Issuing subdivision",
             "Subdivision code as defined in ISO 3166-2, which issued " +
                     "the mobile eID document or within which the issuing " +
                     "authority is located",
@@ -308,7 +308,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "family_name_latin1",
-            "Family Name",
+            "Family name",
             "Last name, surname, or primary identifier, of the document holder",
             false,
             ISO_23220_2_NAMESPACE,
@@ -318,7 +318,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "given_name_latin1",
-            "Given Names",
+            "Given names",
             "First name(s), other name(s), or secondary identifier, of the document holder",
             false,
             ISO_23220_2_NAMESPACE,
@@ -341,7 +341,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
             "birth_country",
-            "Birth Country",
+            "Birth country",
             "The country where the Photo ID holder was born, as an Alpha-2 country code as specified in ISO 3166-1",
             false,
             PHOTO_ID_NAMESPACE,
@@ -351,7 +351,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "birth_state",
-            "Birth State",
+            "Birth state",
             "The state, province, district, or local area where the Photo ID holder was born",
             false,
             PHOTO_ID_NAMESPACE,
@@ -361,7 +361,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "birth_city",
-            "Birth City",
+            "Birth city",
             "The municipality, city, town, or village where the Photo ID holder was born",
             false,
             PHOTO_ID_NAMESPACE,
@@ -371,7 +371,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "administrative_number",
-            "Administrative Number",
+            "Administrative number",
             "A number assigned by the Photo ID issuer for audit control or other purposes",
             false,
             PHOTO_ID_NAMESPACE,
@@ -381,7 +381,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "resident_street",
-            "Resident Street",
+            "Resident street",
             "The name of the street where the Photo ID holder currently resides",
             false,
             PHOTO_ID_NAMESPACE,
@@ -391,7 +391,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "resident_house_number",
-            "Resident House Number",
+            "Resident house number",
             "The house number where the Photo ID holder currently resides, including any affix or suffix",
             false,
             PHOTO_ID_NAMESPACE,
@@ -401,7 +401,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "travel_document_type",
-            "Travel Document Type",
+            "Travel document type",
             "Identifier of the type of source document, (if associated to or derived from a travel document)",
             false,
             PHOTO_ID_NAMESPACE,
@@ -411,7 +411,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "travel_document_number",
-            "Travel Document Number",
+            "Travel document number",
             "The number of the travel document to which the Photo ID is associated (if associated to or " +
                     "derived from a travel document)",
             false,
@@ -422,7 +422,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "travel_document_mrz",
-            "Travel Document MRZ",
+            "Travel document MRZ",
             "Machine readable zone as the text printed on the physical document",
             false,
             PHOTO_ID_NAMESPACE,
@@ -432,7 +432,7 @@ object PhotoID {
         addMdocAttribute(
             DocumentAttributeType.String,
             "resident_state",
-            "Resident State",
+            "Resident state",
             "The state/province/district where the Photo ID holder lives",
             false,
             PHOTO_ID_NAMESPACE,
@@ -628,7 +628,7 @@ object PhotoID {
         //
         addSampleRequest(
             id = "age_over_18",
-            displayName = "Age Over 18",
+            displayName = "Age over 18",
             mdocDataElements = mapOf(
                 ISO_23220_2_NAMESPACE to mapOf(
                     "age_over_18" to false,
@@ -637,7 +637,7 @@ object PhotoID {
         )
         addSampleRequest(
             id = "age_over_18_zkp",
-            displayName = "Age Over 18 (ZKP)",
+            displayName = "Age over 18 (ZKP)",
             mdocDataElements = mapOf(
                 ISO_23220_2_NAMESPACE to mapOf(
                     "age_over_18" to false,
@@ -647,7 +647,7 @@ object PhotoID {
         )
         addSampleRequest(
             id = "age_over_18_and_portrait",
-            displayName = "Age Over 18 + Portrait",
+            displayName = "Age over 18 + portrait",
             mdocDataElements = mapOf(
                 ISO_23220_2_NAMESPACE to mapOf(
                     "age_over_18" to false,
@@ -657,7 +657,7 @@ object PhotoID {
         )
         addSampleRequest(
             id = "mandatory",
-            displayName = "Mandatory Data Elements",
+            displayName = "Mandatory data elements",
             mdocDataElements = mapOf(
                 ISO_23220_2_NAMESPACE to mapOf(
                     "family_name" to false,
@@ -674,7 +674,7 @@ object PhotoID {
         )
         addSampleRequest(
             id = "full",
-            displayName = "All Data Elements",
+            displayName = "All data elements",
             mdocDataElements = mapOf(
                 ISO_23220_2_NAMESPACE to mapOf(),
                 PHOTO_ID_NAMESPACE to mapOf(),

@@ -126,12 +126,12 @@ class TestMdlOrPid {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
             """.trimIndent().trim(),
             mdlOrPidQuery().execute(
@@ -162,11 +162,11 @@ class TestMdlOrPid {
                                   claims:
                                     claim:
                                       path: ["family_name"]
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       path: ["given_name"]
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
             """.trimIndent().trim(),
             mdlOrPidQuery().execute(
@@ -199,12 +199,12 @@ class TestMdlOrPid {
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: given_name
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
                                     claim:
                                       nameSpace: org.iso.18013.5.1
                                       dataElement: family_name
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                       option:
                         members:
@@ -217,11 +217,11 @@ class TestMdlOrPid {
                                   claims:
                                     claim:
                                       path: ["family_name"]
-                                      displayName: Family Name
+                                      displayName: Family name
                                       value: Mustermann
                                     claim:
                                       path: ["given_name"]
-                                      displayName: Given Names
+                                      displayName: Given names
                                       value: Erika
             """.trimIndent().trim(),
             mdlOrPidQuery().execute(

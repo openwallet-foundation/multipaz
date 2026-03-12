@@ -201,12 +201,12 @@ class Iso18013TestMdlOrPid {
                                 claim:
                                   nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                   dataElement: given_name
-                                  displayName: Given Names
+                                  displayName: Given names
                                   value: Erika
                                 claim:
                                   nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                   dataElement: resident_address
-                                  displayName: Resident Address
+                                  displayName: Resident address
                                   value: Sample Street 123
         """.trimIndent().trim(),
             mdlOrPidQuery().execute(
@@ -238,12 +238,12 @@ class Iso18013TestMdlOrPid {
                                 claim:
                                   nameSpace: ${EUPersonalID.EUPID_NAMESPACE}
                                   dataElement: given_name
-                                  displayName: Given Names
+                                  displayName: Given names
                                   value: Erika
                                 claim:
                                   nameSpace: ${EUPersonalID.EUPID_NAMESPACE}
                                   dataElement: resident_address
-                                  displayName: Resident Address
+                                  displayName: Resident address
                                   value: Sample Street 123
         """.trimIndent().trim(),
             mdlOrPidQuery().execute(
@@ -276,12 +276,12 @@ class Iso18013TestMdlOrPid {
                                 claim:
                                   nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                   dataElement: given_name
-                                  displayName: Given Names
+                                  displayName: Given names
                                   value: Erika
                                 claim:
                                   nameSpace: ${DrivingLicense.MDL_NAMESPACE}
                                   dataElement: resident_address
-                                  displayName: Resident Address
+                                  displayName: Resident address
                                   value: Sample Street 123
                   option:
                     members:
@@ -295,12 +295,12 @@ class Iso18013TestMdlOrPid {
                                 claim:
                                   nameSpace: ${EUPersonalID.EUPID_NAMESPACE}
                                   dataElement: given_name
-                                  displayName: Given Names
+                                  displayName: Given names
                                   value: Erika
                                 claim:
                                   nameSpace: ${EUPersonalID.EUPID_NAMESPACE}
                                   dataElement: resident_address
-                                  displayName: Resident Address
+                                  displayName: Resident address
                                   value: Sample Street 123
         """.trimIndent().trim(),
             mdlOrPidQuery().execute(

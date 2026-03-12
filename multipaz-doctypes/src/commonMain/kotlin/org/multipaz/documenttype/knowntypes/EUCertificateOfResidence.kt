@@ -22,13 +22,13 @@ object EUCertificateOfResidence {
      * Build the EU Certificate of Residency Document Type.
      */
     fun getDocumentType(): DocumentType {
-        return DocumentType.Builder("EU Certificate of Residency")
+        return DocumentType.Builder("Certificate of residency")
             .addMdocDocumentType(DOCTYPE)
             .addJsonDocumentType(type = VCT, keyBound = true)
             .addAttribute(
                 DocumentAttributeType.String,
                 "family_name",
-                "Family Name",
+                "Family name",
                 "Current last name(s), surname(s), or primary identifier of the COR holder",
                 true,
                 NAMESPACE,
@@ -38,7 +38,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.String,
                 "given_name",
-                "Given Names",
+                "Given names",
                 "Current first name(s), other name(s), or secondary identifier of the COR holder",
                 true,
                 NAMESPACE,
@@ -48,7 +48,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.Date,
                 "birth_date",
-                "Date of Birth",
+                "Date of birth",
                 "Day, month, and year on which the COR holder was born. If unknown, approximate date of birth.",
                 true,
                 NAMESPACE,
@@ -58,7 +58,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.Boolean,
                 "age_over_18",
-                "Older Than 18",
+                "Older than 18",
                 "Age over 18?",
                 false,
                 NAMESPACE,
@@ -68,7 +68,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.Boolean,
                 "age_over_21",
-                "Older Than 21",
+                "Older than 21",
                 "Age over 21?",
                 false,
                 NAMESPACE,
@@ -78,7 +78,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.Date,
                 "arrival_date",
-                "Date of Arrival",
+                "Date of arrival",
                 "Day, month, and year on which the COR holder arrived to the EU.",
                 false,
                 NAMESPACE,
@@ -88,7 +88,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.String,
                 "resident_address",
-                "Resident Address",
+                "Resident address",
                 "The full address of the place where the COR holder currently resides and/or may be contacted (street/house number, municipality etc.)",
                 false,
                 NAMESPACE,
@@ -98,7 +98,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
                 "resident_country",
-                "Resident Country",
+                "Resident country",
                 "The country where the user currently resides, as an Alpha-2 country code as specified in ISO 3166-1",
                 false,
                 NAMESPACE,
@@ -108,7 +108,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.String,
                 "resident_state",
-                "Resident State",
+                "Resident state",
                 "The state, province, district, or local area where the user currently resides.",
                 false,
                 NAMESPACE,
@@ -118,7 +118,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.String,
                 "resident_city",
-                "Resident City",
+                "Resident city",
                 "The city where the COR holder currently resides",
                 false,
                 NAMESPACE,
@@ -128,7 +128,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.String,
                 "resident_postal_code",
-                "Resident Postal Code",
+                "Resident postal code",
                 "The postal code of the place where the COR holder currently resides",
                 false,
                 NAMESPACE,
@@ -138,7 +138,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.String,
                 "resident_street",
-                "Resident Street",
+                "Resident street",
                 "The name of the street where the user currently resides.",
                 false,
                 NAMESPACE,
@@ -148,7 +148,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.String,
                 "resident_house_number",
-                "Resident House Number",
+                "Resident house number",
                 "The house number where the user currently resides, including any affix or suffix",
                 false,
                 NAMESPACE,
@@ -158,7 +158,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.String,
                 "birth_place",
-                "Place of Birth",
+                "Place of birth",
                 "The place where the COR holder was born.",
                 false,
                 NAMESPACE,
@@ -188,7 +188,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.Date,
                 "issuance_date",
-                "Date of Issue",
+                "Date of issue",
                 "Date (and possibly time) when the COR was issued.",
                 true,
                 NAMESPACE,
@@ -198,7 +198,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.Date,
                 "expiry_date",
-                "Date of Expiry",
+                "Date of expiry",
                 "Date (and possibly time) when the COR will expire.",
                 true,
                 NAMESPACE,
@@ -208,7 +208,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.String,
                 "issuing_authority",
-                "Issuing Authority",
+                "Issuing authority",
                 "Name of the administrative authority that has issued this COR instance, or the " +
                         "ISO 3166 Alpha-2 country code of the respective Member State if there is" +
                         "no separate authority authorized to issue CORs.",
@@ -220,7 +220,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.String,
                 "document_number",
-                "Document Number",
+                "Document number",
                 "A number for the COR, assigned by the COR Provider.",
                 false,
                 NAMESPACE,
@@ -230,7 +230,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.String,
                 "administrative_number",
-                "Administrative Number",
+                "Administrative number",
                 "A number assigned by the COR Provider for audit control or other purposes.",
                 false,
                 NAMESPACE,
@@ -240,7 +240,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.String,
                 "issuing_jurisdiction",
-                "Issuing Jurisdiction",
+                "Issuing jurisdiction",
                 "Country subdivision code of the jurisdiction that issued the COR, as defined in " +
                         "ISO 3166-2:2020, Clause 8. The first part of the code SHALL be the same " +
                         "as the value for issuing_country.",
@@ -252,7 +252,7 @@ object EUCertificateOfResidence {
             .addAttribute(
                 DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
                 "issuing_country",
-                "Issuing Country",
+                "Issuing country",
                 "Alpha-2 country code, as defined in ISO 3166-1, of the issuing authority’s " +
                         "country or territory",
                 true,
@@ -262,7 +262,7 @@ object EUCertificateOfResidence {
             )
             .addSampleRequest(
                 id = "age_over_18",
-                displayName = "Age Over 18",
+                displayName = "Age over 18",
                 mdocDataElements = mapOf(
                     NAMESPACE to mapOf(
                         "age_over_18" to false,
@@ -272,7 +272,7 @@ object EUCertificateOfResidence {
             )
             .addSampleRequest(
                 id = "mandatory",
-                displayName = "Mandatory Data Elements",
+                displayName = "Mandatory data elements",
                 mdocDataElements = mapOf(
                     NAMESPACE to mapOf(
                         "family_name" to false,
@@ -298,7 +298,7 @@ object EUCertificateOfResidence {
             )
             .addSampleRequest(
                 id = "full",
-                displayName = "All Data Elements",
+                displayName = "All data elements",
                 mdocDataElements = mapOf(
                     NAMESPACE to mapOf()
                 ),

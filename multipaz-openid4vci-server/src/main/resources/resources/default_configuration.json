@@ -5,7 +5,7 @@
     "sorotokin.com/**"
   ],
   "credential_mdl": {
-    "title": "{core.given_name}'s Driver License",
+    "title": "{core.given_name}'s driver license",
     "card_art": {
       "blank": "blank_mdl.png",
       "content": [
@@ -138,7 +138,7 @@
     }
   },
   "credential_naturalization": {
-    "title": "{core.given_name}'s Naturalization",
+    "title": "{core.given_name}'s naturalization",
     "card_art": {
       "blank": "blank_naturalization.png",
       "content": [
@@ -170,7 +170,7 @@
     }
   },
   "credential_payment": {
-    "title": "{core.given_name}'s Payment Card",
+    "title": "{core.given_name}'s payment card",
     "card_art": {
       "blank": "card_payment_sca.png",
       "content": [

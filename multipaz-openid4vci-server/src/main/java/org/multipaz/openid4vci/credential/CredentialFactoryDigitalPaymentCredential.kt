@@ -51,7 +51,7 @@ internal class CredentialFactoryDigitalPaymentCredential : CredentialFactory {
         get() = listOf("cose_key")
 
     override val name: String
-        get() = "Digital Payment Credential (SCA)"
+        get() = "Payment card"
 
     override val logo: String
         get() = "card_payment_sca_v2.png"

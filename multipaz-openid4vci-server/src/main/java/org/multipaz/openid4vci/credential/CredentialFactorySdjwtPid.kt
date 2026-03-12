@@ -58,7 +58,7 @@ internal class CredentialFactorySdjwtPid : CredentialFactory {
         get() = listOf("jwk")
 
     override val name: String
-        get() = "Personal ID (SD-JWT)"
+        get() = "Personal ID"
 
     override val logo: String
         get() = "card-pid.png"
