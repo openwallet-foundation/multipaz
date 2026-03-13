@@ -30,7 +30,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,7 +57,7 @@ import org.multipaz.cbor.Simple
 import org.multipaz.claim.Claim
 import org.multipaz.compose.decodeImage
 import org.multipaz.compose.document.DocumentModel
-import org.multipaz.compose.eventlog.EventLogModel
+import org.multipaz.compose.eventlogger.SimpleEventLoggerModel
 import org.multipaz.compose.getOutlinedImageVector
 import org.multipaz.compose.items.FloatingItemHeadingAndText
 import org.multipaz.compose.items.FloatingItemList
@@ -70,14 +69,15 @@ import org.multipaz.datetime.FormatStyle
 import org.multipaz.datetime.formatLocalized
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.Icon
-import org.multipaz.eventlog.Event
-import org.multipaz.eventlog.EventLog
-import org.multipaz.eventlog.PresentmentEventDigitalCredentialsMdocApi
-import org.multipaz.eventlog.PresentmentEventDigitalCredentialsOpenID4VP
-import org.multipaz.eventlog.PresentmentEventIso18013AnnexA
-import org.multipaz.eventlog.PresentmentEventIso18013Proximity
-import org.multipaz.eventlog.PresentmentEventUriSchemeOpenID4VP
-import org.multipaz.eventlog.toDataItem
+import org.multipaz.eventlogger.Event
+import org.multipaz.eventlogger.EventPresentment
+import org.multipaz.eventlogger.SimpleEventLogger
+import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsMdocApi
+import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsOpenID4VP
+import org.multipaz.eventlogger.EventPresentmentIso18013AnnexA
+import org.multipaz.eventlogger.EventPresentmentIso18013Proximity
+import org.multipaz.eventlogger.EventPresentmentUriSchemeOpenID4VP
+import org.multipaz.eventlogger.toDataItem
 import org.multipaz.prompt.PromptModel
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
@@ -86,7 +86,7 @@ import kotlin.time.Clock
 @OptIn(ExperimentalMaterial3Api::class, FormatStringsInDatetimeFormats::class)
 @Composable
 fun EventViewerScreen(
-    eventLog: EventLog,
+    eventLogger: SimpleEventLogger,
     eventId: String,
     documentTypeRepository: DocumentTypeRepository,
     documentModel: DocumentModel,
@@ -97,7 +97,7 @@ fun EventViewerScreen(
     showToast: (message: String) -> Unit
 ) {
     val coroutineScope = rememberUiBoundCoroutineScope { promptModel }
-    val model = EventLogModel(eventLog, coroutineScope)
+    val model = SimpleEventLoggerModel(eventLogger, coroutineScope)
     val events by model.events.collectAsState()
     var showDeleteConfirmationDialog by remember { mutableStateOf(false) }
 
@@ -116,8 +116,8 @@ fun EventViewerScreen(
                     onClick = {
                         coroutineScope.launch {
                             showDeleteConfirmationDialog = false
-                            eventLog.getEvents().find { it.identifier == eventId }?.let {
-                                eventLog.deleteEvent(it)
+                            eventLogger.getEvents().find { it.identifier == eventId }?.let {
+                                eventLogger.deleteEvent(it)
                                 onBack()
                             }
                         }
@@ -158,7 +158,7 @@ fun EventViewerScreen(
                     IconButton(
                         onClick = {
                             coroutineScope.launch {
-                                val event = eventLog.getEvents().find { it.identifier == eventId }
+                                val event = eventLogger.getEvents().find { it.identifier == eventId }
                                 if (event != null) {
                                     // For TestApp, just do a text file for now. In the future we might define
                                     // a binary format and provide tools for offline analysis.
@@ -246,12 +246,16 @@ private fun EventViewer(
         timeStyle = FormatStyle.LONG
     )
 
-    val presentmentEventData = when (event) {
-        is PresentmentEventDigitalCredentialsMdocApi -> event.data
-        is PresentmentEventDigitalCredentialsOpenID4VP -> event.data
-        is PresentmentEventIso18013AnnexA -> event.data
-        is PresentmentEventIso18013Proximity -> event.data
-        is PresentmentEventUriSchemeOpenID4VP -> event.data
+    // Right now the all events are presentment events. This will change in the future as we add
+    // support for logging other events
+    val presentmentData = (event as EventPresentment).presentmentData
+
+    val protocol = when (event) {
+        is EventPresentmentDigitalCredentialsMdocApi -> "W3C DC API w/ ISO/IEC 18013-7:2025 Annex C"
+        is EventPresentmentDigitalCredentialsOpenID4VP -> "W3C DC API w/ OpenID4VP"
+        is EventPresentmentUriSchemeOpenID4VP -> "URI scheme w/ OpenID4VP"
+        is EventPresentmentIso18013AnnexA -> "URI scheme w/ ISO/IEC 18013-7:2025 Annex A"
+        is EventPresentmentIso18013Proximity -> "Proximity w/ ISO/IEC 18013-5:2021"
     }
 
     Column(
@@ -260,14 +264,14 @@ private fun EventViewer(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         val imageSize = 80.dp
-        presentmentEventData.trustMetadata?.displayIcon?.let {
+        presentmentData.trustMetadata?.displayIcon?.let {
             val bitmap = remember { decodeImage(it.toByteArray()) }
             Image(
                 modifier = Modifier.size(imageSize),
                 bitmap = bitmap,
                 contentDescription = null
             )
-        } ?: presentmentEventData.trustMetadata?.displayIconUrl?.let {
+        } ?: presentmentData.trustMetadata?.displayIconUrl?.let {
             AsyncImage(
                 modifier = Modifier.size(imageSize),
                 model = it,
@@ -278,7 +282,7 @@ private fun EventViewer(
         }
 
         Text(
-            text = presentmentEventData.requesterName ?: "Unknown requester",
+            text = presentmentData.requesterName ?: "Unknown requester",
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
@@ -291,19 +295,19 @@ private fun EventViewer(
             )
 
             when (event) {
-                is PresentmentEventDigitalCredentialsMdocApi -> {
+                is EventPresentmentDigitalCredentialsMdocApi -> {
                     OriginAndAppIdItem(event.origin, event.appId)
                 }
-                is PresentmentEventDigitalCredentialsOpenID4VP -> {
+                is EventPresentmentDigitalCredentialsOpenID4VP -> {
                     OriginAndAppIdItem(event.origin, event.appId)
                 }
-                is PresentmentEventIso18013AnnexA -> {
+                is EventPresentmentIso18013AnnexA -> {
                     OriginAndAppIdItem(event.origin, event.appId)
                 }
-                is PresentmentEventUriSchemeOpenID4VP -> {
+                is EventPresentmentUriSchemeOpenID4VP -> {
                     OriginAndAppIdItem(event.origin, event.appId)
                 }
-                is PresentmentEventIso18013Proximity -> {
+                is EventPresentmentIso18013Proximity -> {
                     val handover = event.sessionTranscript.asArray[2]
                     if (handover == Simple.NULL) {
                         FloatingItemHeadingAndText(
@@ -319,7 +323,12 @@ private fun EventViewer(
                 }
             }
 
-            if (presentmentEventData.trustMetadata != null) {
+            FloatingItemHeadingAndText(
+                heading = "Presentment protocol",
+                text =  protocol
+            )
+
+            if (presentmentData.trustMetadata != null) {
                 FloatingItemHeadingAndText(
                     heading = "Requester trusted",
                     text =  "Yes, in trust list"
@@ -335,7 +344,7 @@ private fun EventViewer(
                 )
             }
 
-            presentmentEventData.requesterCertChain?.let {
+            presentmentData.requesterCertChain?.let {
                 FloatingItemHeadingAndText(
                     heading = "Requester certificate",
                     text = "Click to view",
@@ -350,7 +359,7 @@ private fun EventViewer(
                 )
             }
 
-            presentmentEventData.trustMetadata?.privacyPolicyUrl?.let {
+            presentmentData.trustMetadata?.privacyPolicyUrl?.let {
                 FloatingItemHeadingAndText(
                     heading = "Requester privacy policy",
                     text = AnnotatedString.fromMarkdown(
@@ -360,7 +369,7 @@ private fun EventViewer(
             }
         }
 
-        presentmentEventData.requestedDocuments.forEach { requestedDocument ->
+        presentmentData.requestedDocuments.forEach { requestedDocument ->
             val info = documentModel.documentInfos.collectAsState().value.find {
                 it.document.identifier == requestedDocument.documentId
             }

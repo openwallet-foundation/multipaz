@@ -1,4 +1,4 @@
-package org.multipaz.eventlog
+package org.multipaz.eventlogger
 
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.annotation.CborSerializationImplemented
@@ -17,13 +17,13 @@ import org.multipaz.request.RequestedClaim
  * @property claims the requested claims.
  */
 @CborSerializationImplemented(schemaId = "")
-data class PresentmentEventDocument(
+data class EventPresentmentDataDocument(
     val documentId: String,
     val documentName: String?,
     val claims: Map<RequestedClaim, Claim>,
 ) {
     /**
-     * Serializes [PresentmentEventDocument] to CBOR.
+     * Serializes [EventPresentmentDataDocument] to CBOR.
      *
      * Note that [DocumentAttribute] values in [claims] won't be serialized.
      *
@@ -43,23 +43,23 @@ data class PresentmentEventDocument(
 
     companion object {
         /**
-         * Creates a [PresentmentEventDocument] previously serialized with [PresentmentEventDocument.toDataItem].
+         * Creates a [EventPresentmentDataDocument] previously serialized with [EventPresentmentDataDocument.toDataItem].
          *
          * @param dataItem a [DataItem].
          * @param documentTypeRepository if not `null`, will be used to look up a [DocumentAttribute] for the claim.
-         * @return a new [PresentmentEventDocument].
+         * @return a new [EventPresentmentDataDocument].
          */
         fun fromDataItem(
             dataItem: DataItem,
             documentTypeRepository: DocumentTypeRepository? = null
-        ): PresentmentEventDocument {
+        ): EventPresentmentDataDocument {
             val documentId = dataItem["documentId"].asTstr
             val documentName = dataItem.getOrNull("documentName")?.asTstr
             val claims = dataItem["requestedClaims"].asMap.entries.associate { (requestedClaimDataItem, claimDataItem) ->
                 RequestedClaim.fromDataItem(requestedClaimDataItem) to
                         Claim.fromDataItem(claimDataItem, documentTypeRepository)
             }
-            return PresentmentEventDocument(
+            return EventPresentmentDataDocument(
                 documentId = documentId,
                 documentName = documentName,
                 claims = claims

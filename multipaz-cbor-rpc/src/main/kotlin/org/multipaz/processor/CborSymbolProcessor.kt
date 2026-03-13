@@ -26,7 +26,6 @@ import org.multipaz.graphhash.Leaf
 import org.multipaz.graphhash.Node
 import org.multipaz.graphhash.UnassignedLoopException
 import java.security.MessageDigest
-import kotlin.collections.set
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.Base64.PaddingOption
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -496,14 +495,28 @@ class CborSymbolProcessor(
                             clazz
                         )
                     } else {
-                        // Annotated subclass
-                        allSealedSubclasses.getOrPut(superDeclaration) { mutableSetOf() }
-                            .add(clazz)
+                        // Annotated subclass - skip intermediates which are sealed
+                        if (!clazz.modifiers.contains(Modifier.SEALED)) {
+                            allSealedSubclasses.getOrPut(superDeclaration) { mutableSetOf() }
+                                .add(clazz)
+                        }
                         return@Declaration
                     }
                 }
                 if (clazz.modifiers.contains(Modifier.SEALED)) {
-                    val subclasses = clazz.getSealedSubclasses()
+                    // Note: getSealedSubclasses() only returns the immediate subclasses but we might have
+                    // a whole hierarchy for example
+                    //
+                    //  sealed class Event
+                    //  sealed class EventPresentment: Event
+                    //  sealed class EventPresentmentIso18013: EventPresentment
+                    //  sealed class EventPresentmentOpenID4VP: EventPresentment
+                    //
+                    // In this setup getSealedSubclasses() only returns EventPresentment but our
+                    // extension getAllSealedSubclasses() returns all of them.
+                    //
+                    val subclasses = clazz.getAllSealedSubclasses()
+                        .filterNot { it.modifiers.contains(Modifier.SEALED) }
                     for (subclass in subclasses) {
                         // if annotated, it will be processed in another branch
                         if (findAnnotation(subclass, ANNOTATION_SERIALIZABLE) == null) {
@@ -942,8 +955,8 @@ class CborSymbolProcessor(
         var extra: ByteString? = null
         if (clazz.modifiers.contains(Modifier.SEALED)) {
             // For sealed class, the schema is a union of subclasses
-            val annotation = findAnnotation(clazz, ANNOTATION_SERIALIZABLE)!!
-            extra = getTypeKey(annotation).encodeToByteString()
+            val annotation = findAnnotation(clazz, ANNOTATION_SERIALIZABLE)
+            extra = annotation?.let { getTypeKey(it).encodeToByteString() }
             for (subclass in clazz.getSealedSubclasses()) {
                 val subclassQualifiedName = subclass.qualifiedName!!.asString()
                 val subclassTypeInfo = schemaTypeInfoCache[qualifiedName] ?:
@@ -1161,3 +1174,14 @@ class CborSymbolProcessor(
     class ForceAddSerializableClass(val declaration: KSClassDeclaration): Exception()
 }
 
+private fun KSClassDeclaration.getAllSealedSubclasses(): Sequence<KSClassDeclaration> {
+    return this.getSealedSubclasses().flatMap { subclass ->
+        if (subclass.modifiers.contains(Modifier.SEALED)) {
+            // It's another sealed class, recurse!
+            sequenceOf(subclass) + subclass.getAllSealedSubclasses()
+        } else {
+            // It's a concrete class (or object), just return it
+            sequenceOf(subclass)
+        }
+    }
+}

@@ -128,6 +128,31 @@ data class SingleStringList(val a: List<String>) {
     companion object
 }
 
+// Check that intermediate classes can be sealed.
+@CborSerializable
+sealed class IscRoot(
+    open val stuff: String
+) {
+    companion object
+}
+
+sealed class IscIntermediate(
+    override val stuff: String,
+    open val moreStuff: Int
+): IscRoot(stuff)
+
+data class IscInheritsIntermediate(
+    override val stuff: String,
+    override val moreStuff: Int,
+    val leafStuff: Boolean
+): IscIntermediate(stuff, moreStuff)
+
+data class IscInheritsRoot(
+    override val stuff: String,
+    val foo: Boolean
+): IscRoot(stuff)
+
+
 class CborSerializationTest {
     @Test
     fun structuralEquivalency() {
@@ -258,6 +283,28 @@ class CborSerializationTest {
         assertEquals(
             ByteString("MfUotQQy34Na2r6Q-rDGrHog3hbbCpI0WTnTwsGTx8o".fromBase64Url()),
             SingleStringList.cborSchemaId
+        )
+    }
+
+    @Test
+    fun intermediateSealedClasses() {
+        val inheritsRoot = IscInheritsRoot(
+            stuff = "foo",
+            foo = true
+        )
+        assertEquals(
+            IscRoot.fromDataItem(inheritsRoot.toDataItem()),
+            inheritsRoot
+        )
+
+        val inheritsIntermediate = IscInheritsIntermediate(
+            stuff = "foo",
+            moreStuff = 5,
+            leafStuff = false
+        )
+        assertEquals(
+            IscRoot.fromDataItem(inheritsIntermediate.toDataItem()),
+            inheritsIntermediate
         )
     }
 }

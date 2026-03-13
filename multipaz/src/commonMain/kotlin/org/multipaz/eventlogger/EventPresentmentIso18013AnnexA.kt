@@ -1,4 +1,4 @@
-package org.multipaz.eventlog
+package org.multipaz.eventlogger
 
 import org.multipaz.cbor.DataItem
 import kotlin.time.Instant
@@ -8,7 +8,7 @@ import kotlin.time.Instant
  *
  * @property identifier A unique identifier for the event.
  * @property timestamp The timestamp when the event was recorded.
- * @property data Data about the presentment.
+ * @property presentmentData Data about the presentment.
  * @property uri the URI used to invoke the presentment.
  * @property request The raw request data.
  * @property response The raw response data.
@@ -17,10 +17,11 @@ import kotlin.time.Instant
  * @property origin the origin of the website making the request, if known.
  * @property readerEngagement The raw reader engagement data.
  */
-data class PresentmentEventIso18013AnnexA(
+data class EventPresentmentIso18013AnnexA(
     override val identifier: String = "",
     override val timestamp: Instant = Instant.DISTANT_PAST,
-    val data: PresentmentEventData,
+    override val appData: Map<String, DataItem> = emptyMap(),
+    override val presentmentData: EventPresentmentData,
     // The raw data from the presentment event.
     val uri: String,
     val request: DataItem,
@@ -29,9 +30,11 @@ data class PresentmentEventIso18013AnnexA(
     val appId: String?,
     val origin: String?,
     val readerEngagement: DataItem
-): Event(identifier, timestamp) {
-    override fun copy(eventIdentifier: String, timestamp: Instant) = copy(
-        identifier = eventIdentifier,
-        timestamp = timestamp
+): EventPresentment(identifier, timestamp, appData, presentmentData) {
+    override fun copy(identifier: String, timestamp: Instant, appData: Map<String, DataItem>): Event = copy(
+        identifier = identifier,
+        timestamp = timestamp,
+        appData = appData,
+        presentmentData = this.presentmentData
     )
 }

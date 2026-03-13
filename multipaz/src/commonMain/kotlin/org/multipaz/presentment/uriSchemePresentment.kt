@@ -30,8 +30,8 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.document.Document
-import org.multipaz.eventlog.PresentmentEventIso18013AnnexA
-import org.multipaz.eventlog.PresentmentEventUriSchemeOpenID4VP
+import org.multipaz.eventlogger.EventPresentmentIso18013AnnexA
+import org.multipaz.eventlogger.EventPresentmentUriSchemeOpenID4VP
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodHttp
 import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.engagement.DeviceEngagement
@@ -161,9 +161,9 @@ suspend fun uriSchemePresentment(
     val postResponseBody = Json.decodeFromString<JsonObject>(bodyText)
     val redirectUri = postResponseBody["redirect_uri"]!!.jsonPrimitive.content
 
-    source.eventLog?.addEvent(
-        PresentmentEventUriSchemeOpenID4VP(
-            data = responseObject.eventData,
+    source.eventLogger?.addEventAsync(
+        EventPresentmentUriSchemeOpenID4VP(
+            presentmentData = responseObject.eventData,
             uri = uri,
             appId = appId,
             origin = origin,
@@ -297,9 +297,9 @@ private suspend fun mdocUriSchemePresentment(
             statusCode = null
         )
 
-        source.eventLog?.addEvent(
-            PresentmentEventIso18013AnnexA(
-                data = responseObject.eventData,
+        source.eventLogger?.addEventAsync(
+            EventPresentmentIso18013AnnexA(
+                presentmentData = responseObject.eventData,
                 uri = uri,
                 request = deviceRequest.toDataItem(),
                 response = responseObject.deviceResponse.toDataItem(),

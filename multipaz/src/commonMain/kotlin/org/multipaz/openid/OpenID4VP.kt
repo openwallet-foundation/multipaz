@@ -31,7 +31,7 @@ import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
-import org.multipaz.eventlog.PresentmentEventData
+import org.multipaz.eventlogger.EventPresentmentData
 import org.multipaz.webtoken.buildJwt
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.response.DeviceResponse
@@ -269,12 +269,12 @@ object OpenID4VP {
      *
      * @property response the response containing [vpToken], possibly encrypted.
      * @property vpToken the VP Token.
-     * @property eventData a [PresentmentEventData] to be used for logging.
+     * @property eventData a [EventPresentmentData] to be used for logging.
      */
     data class OpenID4VPResponse(
         val response: JsonObject,
         val vpToken: JsonObject,
-        val eventData: PresentmentEventData
+        val eventData: EventPresentmentData
     )
 
     /**
@@ -539,7 +539,7 @@ object OpenID4VP {
         return OpenID4VPResponse(
             response = response,
             vpToken = vpToken,
-            eventData = PresentmentEventData.fromPresentmentSelection(
+            eventData = EventPresentmentData.fromPresentmentSelection(
                 selection = selection,
                 requester = requester,
                 trustMetadata = trustMetadata

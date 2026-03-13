@@ -1,4 +1,4 @@
-package org.multipaz.eventlog
+package org.multipaz.eventlogger
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.toList
@@ -15,34 +15,36 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.assertNull
+import kotlin.test.assertNotNull
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class EventLogTests {
+class SimpleEventLoggerTests {
 
     @Test
     fun testAddEventEmitsToFlowAndAssignsId() = runTest {
         val fakeClock = FakeClock(Instant.fromEpochMilliseconds(1000))
         val ephemeralStorage = EphemeralStorage(fakeClock)
-        val logger = EventLog(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
+        val logger = SimpleEventLogger(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
 
         val emissions = mutableListOf<Unit>()
         val job = launch(UnconfinedTestDispatcher(testScheduler)) {
             logger.eventFlow.toList(emissions)
         }
 
-        val event = PresentmentEventIso18013Proximity(
+        val event = EventPresentmentIso18013Proximity(
             identifier = "",
             timestamp = Instant.DISTANT_PAST,
-            data = PresentmentEventData(
+            presentmentData = EventPresentmentData(
                 requesterName = "Test Requester",
                 requesterCertChain = null,
                 trustMetadata = null,
                 requestedDocuments = listOf(
-                    PresentmentEventDocument(
+                    EventPresentmentDataDocument(
                         documentId = "test-document-id",
                         documentName = "Test Document",
                         claims = mapOf(
@@ -71,6 +73,7 @@ class EventLogTests {
         val savedEvent = logger.addEvent(event)
 
         // Verify the event was modified with a new ID and timestamp
+        assertNotNull(savedEvent)
         assertTrue(savedEvent.identifier.isNotEmpty())
         assertEquals(Instant.fromEpochMilliseconds(1000), savedEvent.timestamp)
 
@@ -89,17 +92,17 @@ class EventLogTests {
     fun testDeleteEventEmitsToFlowAndRemovesData() = runTest {
         val fakeClock = FakeClock(Instant.fromEpochMilliseconds(1000))
         val ephemeralStorage = EphemeralStorage(fakeClock)
-        val logger = EventLog(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
+        val logger = SimpleEventLogger(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
 
-        val event = PresentmentEventIso18013Proximity(
+        val event = EventPresentmentIso18013Proximity(
             identifier = "",
             timestamp = Instant.DISTANT_PAST,
-            data = PresentmentEventData(
+            presentmentData = EventPresentmentData(
                 requesterName = "Test Requester",
                 requesterCertChain = null,
                 trustMetadata = null,
                 requestedDocuments = listOf(
-                    PresentmentEventDocument(
+                    EventPresentmentDataDocument(
                         documentId = "test-document-id",
                         documentName = "Test Document",
                         claims = mapOf(
@@ -126,6 +129,7 @@ class EventLogTests {
         )
 
         val savedEvent = logger.addEvent(event)
+        assertNotNull(savedEvent)
 
         val emissions = mutableListOf<Unit>()
         val job = launch(UnconfinedTestDispatcher(testScheduler)) {
@@ -145,22 +149,22 @@ class EventLogTests {
     fun testDeleteNonExistentEventDoesNotEmit() = runTest {
         val fakeClock = FakeClock(Instant.fromEpochMilliseconds(1000))
         val ephemeralStorage = EphemeralStorage(fakeClock)
-        val logger = EventLog(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
+        val logger = SimpleEventLogger(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
 
         val emissions = mutableListOf<Unit>()
         val job = launch(UnconfinedTestDispatcher(testScheduler)) {
             logger.eventFlow.toList(emissions)
         }
 
-        val dummyEvent = PresentmentEventIso18013Proximity(
+        val dummyEvent = EventPresentmentIso18013Proximity(
             identifier = "",
             timestamp = Instant.DISTANT_PAST,
-            data = PresentmentEventData(
+            presentmentData = EventPresentmentData(
                 requesterName = "Test Requester",
                 requesterCertChain = null,
                 trustMetadata = null,
                 requestedDocuments = listOf(
-                    PresentmentEventDocument(
+                    EventPresentmentDataDocument(
                         documentId = "test-document-id",
                         documentName = "Test Document",
                         claims = mapOf(
@@ -198,17 +202,17 @@ class EventLogTests {
     fun testDeleteAllEventsClearsPartitionAndEmits() = runTest {
         val fakeClock = FakeClock(Instant.fromEpochMilliseconds(1000))
         val ephemeralStorage = EphemeralStorage(fakeClock)
-        val logger = EventLog(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
+        val logger = SimpleEventLogger(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
 
-        val event = PresentmentEventIso18013Proximity(
+        val event = EventPresentmentIso18013Proximity(
             identifier = "",
             timestamp = Instant.DISTANT_PAST,
-            data = PresentmentEventData(
+            presentmentData = EventPresentmentData(
                 requesterName = "Test Requester",
                 requesterCertChain = null,
                 trustMetadata = null,
                 requestedDocuments = listOf(
-                    PresentmentEventDocument(
+                    EventPresentmentDataDocument(
                         documentId = "test-document-id",
                         documentName = "Test Document",
                         claims = mapOf(
@@ -253,17 +257,17 @@ class EventLogTests {
     fun testGetEventsReturnsChronologicallySortedList() = runTest {
         val fakeClock = FakeClock(Instant.fromEpochMilliseconds(3000))
         val ephemeralStorage = EphemeralStorage(fakeClock)
-        val logger = EventLog(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
+        val logger = SimpleEventLogger(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
 
-        val eventBase = PresentmentEventIso18013Proximity(
+        val eventBase = EventPresentmentIso18013Proximity(
             identifier = "",
             timestamp = Instant.DISTANT_PAST,
-            data = PresentmentEventData(
+            presentmentData = EventPresentmentData(
                 requesterName = "Test Requester",
                 requesterCertChain = null,
                 trustMetadata = null,
                 requestedDocuments = listOf(
-                    PresentmentEventDocument(
+                    EventPresentmentDataDocument(
                         documentId = "test-document-id",
                         documentName = "Test Document",
                         claims = mapOf(
@@ -306,26 +310,26 @@ class EventLogTests {
         // Assert that the items are sorted chronologically. Because our storage engine keys
         // are now prefixed with the ISO-8601 timestamp, the database native retrieval matches
         // our expected chronological order perfectly.
-        assertEquals(event1.identifier, sortedEvents[0].identifier)
-        assertEquals(event2.identifier, sortedEvents[1].identifier)
-        assertEquals(event3.identifier, sortedEvents[2].identifier)
+        assertEquals(event1?.identifier, sortedEvents[0].identifier)
+        assertEquals(event2?.identifier, sortedEvents[1].identifier)
+        assertEquals(event3?.identifier, sortedEvents[2].identifier)
     }
 
     @Test
     fun testGetEventsPagination() = runTest {
         val fakeClock = FakeClock(Instant.fromEpochMilliseconds(1000))
         val ephemeralStorage = EphemeralStorage(fakeClock)
-        val logger = EventLog(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
+        val logger = SimpleEventLogger(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
 
-        val eventBase = PresentmentEventIso18013Proximity(
+        val eventBase = EventPresentmentIso18013Proximity(
             identifier = "",
             timestamp = Instant.DISTANT_PAST,
-            data = PresentmentEventData(
+            presentmentData = EventPresentmentData(
                 requesterName = "Test Requester",
                 requesterCertChain = null,
                 trustMetadata = null,
                 requestedDocuments = listOf(
-                    PresentmentEventDocument(
+                    EventPresentmentDataDocument(
                         documentId = "test-document-id",
                         documentName = "Test Document",
                         claims = emptyMap()
@@ -342,7 +346,7 @@ class EventLogTests {
         val insertedEvents = mutableListOf<Event>()
         for (i in 1..5) {
             fakeClock.currentTime = Instant.fromEpochMilliseconds(1000L * i)
-            insertedEvents.add(logger.addEvent(eventBase))
+            logger.addEvent(eventBase)?.let { insertedEvents.add(it) }
         }
 
         // Fetch page 1 (limit 2)
@@ -367,22 +371,22 @@ class EventLogTests {
     fun testEventExpiration() = runTest {
         val fakeClock = FakeClock(Instant.fromEpochMilliseconds(1000))
         val ephemeralStorage = EphemeralStorage(fakeClock)
-        val logger = EventLog(
+        val logger = SimpleEventLogger(
             storage = ephemeralStorage,
             partitionId = "test-partition",
             expireAfter = 1.days,
             clock = fakeClock
         )
 
-        val eventBase = PresentmentEventIso18013Proximity(
+        val eventBase = EventPresentmentIso18013Proximity(
             identifier = "",
             timestamp = Instant.DISTANT_PAST,
-            data = PresentmentEventData(
+            presentmentData = EventPresentmentData(
                 requesterName = "Test Requester",
                 requesterCertChain = null,
                 trustMetadata = null,
                 requestedDocuments = listOf(
-                    PresentmentEventDocument(
+                    EventPresentmentDataDocument(
                         documentId = "test-document-id",
                         documentName = "Test Document",
                         claims = emptyMap()
@@ -409,6 +413,102 @@ class EventLogTests {
         // Because EphemeralStorage relies on the injected clock to evaluate TTL,
         // it should prune or filter out the expired event.
         assertTrue(logger.getEvents().isEmpty(), "Expected event to be expired and removed")
+    }
+
+    @Test
+    fun testOnAddEventInjectsAppData() = runTest {
+        val fakeClock = FakeClock(Instant.fromEpochMilliseconds(1000))
+        val ephemeralStorage = EphemeralStorage(fakeClock)
+        val expectedAppData = mapOf("test_key" to "test_value".toDataItem())
+
+        val logger = SimpleEventLogger(
+            storage = ephemeralStorage,
+            partitionId = "test-partition",
+            clock = fakeClock,
+            onAddEvent = { _ -> expectedAppData }
+        )
+
+        val eventBase = EventPresentmentIso18013Proximity(
+            identifier = "",
+            timestamp = Instant.DISTANT_PAST,
+            presentmentData = EventPresentmentData(
+                requesterName = "Test Requester",
+                requesterCertChain = null,
+                trustMetadata = null,
+                requestedDocuments = listOf(
+                    EventPresentmentDataDocument(
+                        documentId = "test-document-id",
+                        documentName = "Test Document",
+                        claims = emptyMap()
+                    )
+                ),
+            ),
+            request = Simple.NULL,
+            response = Simple.NULL,
+            sessionTranscript = Simple.NULL
+        )
+
+        val savedEvent = logger.addEvent(eventBase)
+
+        // Verify returned event contains the injected appData
+        assertNotNull(savedEvent)
+        assertEquals(expectedAppData, savedEvent.appData)
+
+        // Verify storage state contains the injected appData
+        val eventsInDb = logger.getEvents()
+        assertEquals(1, eventsInDb.size)
+        assertEquals(expectedAppData, eventsInDb.first().appData)
+    }
+
+    @Test
+    fun testOnAddEventDropsEvent() = runTest {
+        val fakeClock = FakeClock(Instant.fromEpochMilliseconds(1000))
+        val ephemeralStorage = EphemeralStorage(fakeClock)
+
+        val logger = SimpleEventLogger(
+            storage = ephemeralStorage,
+            partitionId = "test-partition",
+            clock = fakeClock,
+            onAddEvent = { _ -> null }
+        )
+
+        val emissions = mutableListOf<Unit>()
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            logger.eventFlow.toList(emissions)
+        }
+
+        val eventBase = EventPresentmentIso18013Proximity(
+            identifier = "",
+            timestamp = Instant.DISTANT_PAST,
+            presentmentData = EventPresentmentData(
+                requesterName = "Test Requester",
+                requesterCertChain = null,
+                trustMetadata = null,
+                requestedDocuments = listOf(
+                    EventPresentmentDataDocument(
+                        documentId = "test-document-id",
+                        documentName = "Test Document",
+                        claims = emptyMap()
+                    )
+                ),
+            ),
+            request = Simple.NULL,
+            response = Simple.NULL,
+            sessionTranscript = Simple.NULL
+        )
+
+        val savedEvent = logger.addEvent(eventBase)
+
+        // Verify the event was dropped
+        assertNull(savedEvent)
+
+        // Verify no flow emission
+        assertEquals(0, emissions.size)
+
+        // Verify storage state is empty
+        assertTrue(logger.getEvents().isEmpty())
+
+        job.cancel()
     }
 
     // --- Fakes ---

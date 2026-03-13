@@ -7,7 +7,7 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.eventlog.EventLog
+import org.multipaz.eventlogger.SimpleEventLogger
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.prompt.ShowConsentPromptFn
 import org.multipaz.prompt.promptModelRequestConsent
@@ -33,7 +33,7 @@ private data class CredentialForPresentment(
  * @property documentStore the [DocumentStore] which holds credentials that can be presented.
  * @property documentTypeRepository a [DocumentTypeRepository] which holds metadata for document types.
  * @property zkSystemRepository the [ZkSystemRepository] to use or `null`.
- * @property eventLog an [EventLog] for logging events or `null`.
+ * @property eventLogger an [SimpleEventLogger] for logging events or `null`.
  * @property resolveTrustFn a function which can be used to determine if a requester is trusted.
  * @property showConsentPrompt a [ShowConsentPromptFn] used show a consent prompt is required.
  * @property preferSignatureToKeyAgreement whether to use mdoc ECDSA authentication even if mdoc MAC authentication
@@ -47,7 +47,7 @@ class SimplePresentmentSource(
     override val documentStore: DocumentStore,
     override val documentTypeRepository: DocumentTypeRepository,
     override val zkSystemRepository: ZkSystemRepository? = null,
-    override val eventLog: EventLog? = null,
+    override val eventLogger: SimpleEventLogger? = null,
     private val resolveTrustFn: suspend (requester: Requester) -> TrustMetadata? = { requester -> null },
     private val showConsentPromptFn: ShowConsentPromptFn = ::promptModelRequestConsent,
     val preferSignatureToKeyAgreement: Boolean = true,

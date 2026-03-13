@@ -38,23 +38,24 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.multipaz.compose.document.DocumentModel
-import org.multipaz.compose.eventlog.EventLogModel
+import org.multipaz.compose.eventlogger.SimpleEventLoggerModel
 import org.multipaz.compose.items.FloatingItemCenteredText
 import org.multipaz.compose.items.FloatingItemList
 import org.multipaz.compose.items.FloatingItemText
 import org.multipaz.datetime.formatLocalized
-import org.multipaz.eventlog.Event
-import org.multipaz.eventlog.EventLog
-import org.multipaz.eventlog.PresentmentEventDigitalCredentialsMdocApi
-import org.multipaz.eventlog.PresentmentEventDigitalCredentialsOpenID4VP
-import org.multipaz.eventlog.PresentmentEventIso18013AnnexA
-import org.multipaz.eventlog.PresentmentEventIso18013Proximity
-import org.multipaz.eventlog.PresentmentEventUriSchemeOpenID4VP
+import org.multipaz.eventlogger.Event
+import org.multipaz.eventlogger.EventPresentment
+import org.multipaz.eventlogger.SimpleEventLogger
+import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsMdocApi
+import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsOpenID4VP
+import org.multipaz.eventlogger.EventPresentmentIso18013AnnexA
+import org.multipaz.eventlogger.EventPresentmentIso18013Proximity
+import org.multipaz.eventlogger.EventPresentmentUriSchemeOpenID4VP
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EventLogScreen(
-    eventLog: EventLog,
+fun EventLoggerScreen(
+    eventLogger: SimpleEventLogger,
     imageLoader: ImageLoader,
     documentModel: DocumentModel,
     onEventClicked: (event: Event) -> Unit,
@@ -62,7 +63,7 @@ fun EventLogScreen(
     showToast: (message: String) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val model = EventLogModel(eventLog, coroutineScope)
+    val model = SimpleEventLoggerModel(eventLogger, coroutineScope)
     val events by model.events.collectAsState()
     var showDeleteConfirmationDialog by remember { mutableStateOf(false) }
 
@@ -81,7 +82,7 @@ fun EventLogScreen(
                     onClick = {
                         coroutineScope.launch {
                             showDeleteConfirmationDialog = false
-                            eventLog.deleteAllEvents()
+                            eventLogger.deleteAllEvents()
                         }
                     }
                 ) {
@@ -178,15 +179,19 @@ private fun EventItem(
     timeZone: TimeZone = TimeZone.currentSystemDefault(),
     modifier: Modifier = Modifier
 ) {
-    val (presentmentEventData, sharingType) = when (event) {
-        is PresentmentEventDigitalCredentialsMdocApi -> Pair(event.data, getSharingType(event.origin))
-        is PresentmentEventDigitalCredentialsOpenID4VP -> Pair(event.data, getSharingType(event.origin))
-        is PresentmentEventIso18013AnnexA -> Pair(event.data, getSharingType(event.origin))
-        is PresentmentEventIso18013Proximity -> Pair(event.data, "Shared in-person")
-        is PresentmentEventUriSchemeOpenID4VP -> Pair(event.data, getSharingType(event.origin))
+    // Right now the all events are presentment events. This will change in the future as we add
+    // support for logging other events
+    val presentmentData = (event as EventPresentment).presentmentData
+
+    val sharingType = when (event) {
+        is EventPresentmentDigitalCredentialsMdocApi -> getSharingType(event.origin)
+        is EventPresentmentDigitalCredentialsOpenID4VP -> getSharingType(event.origin)
+        is EventPresentmentIso18013AnnexA -> getSharingType(event.origin)
+        is EventPresentmentIso18013Proximity -> "Shared in-person"
+        is EventPresentmentUriSchemeOpenID4VP ->getSharingType(event.origin)
     }
 
-    val firstDoc = presentmentEventData.requestedDocuments.firstOrNull()
+    val firstDoc = presentmentData.requestedDocuments.firstOrNull()
     val firstDocInfo = firstDoc?.let { requestedDocument ->
         documentModel.documentInfos.collectAsState().value.find {
             it.document.identifier == requestedDocument.documentId
@@ -211,9 +216,7 @@ private fun EventItem(
     )
 }
 
-private fun getSharingType(
-    origin: String?,
-): String {
+private fun getSharingType(origin: String?): String {
     if (origin != null) {
         if (origin.isNotEmpty() && (origin.startsWith("http://") || origin.startsWith("https://"))) {
             return "Shared with website"

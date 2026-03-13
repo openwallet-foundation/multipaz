@@ -11,7 +11,7 @@ import org.multipaz.cbor.buildCborArray
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.document.Document
-import org.multipaz.eventlog.PresentmentEventIso18013Proximity
+import org.multipaz.eventlogger.EventPresentmentIso18013Proximity
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.EReaderKey
@@ -157,9 +157,9 @@ suspend fun Iso18013Presentment(
             )
             numRequestsServed += 1
 
-            source.eventLog?.addEvent(
-                PresentmentEventIso18013Proximity(
-                    data = responseObject.eventData,
+            source.eventLogger?.addEventAsync(
+                EventPresentmentIso18013Proximity(
+                    presentmentData = responseObject.eventData,
                     request = deviceRequest.toDataItem(),
                     response = responseObject.deviceResponse.toDataItem(),
                     sessionTranscript = sessionTranscript,

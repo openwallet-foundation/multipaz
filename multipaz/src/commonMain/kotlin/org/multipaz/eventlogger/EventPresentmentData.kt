@@ -1,4 +1,4 @@
-package org.multipaz.eventlog
+package org.multipaz.eventlogger
 
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.crypto.X509CertChain
@@ -19,28 +19,28 @@ import org.multipaz.trustmanagement.TrustMetadata
  * @property requestedDocuments list of requested documents and claims.
  */
 @CborSerializable
-data class PresentmentEventData(
+data class EventPresentmentData(
     val requesterName: String?,
     val requesterCertChain: X509CertChain?,
     val trustMetadata: TrustMetadata?,
-    val requestedDocuments: List<PresentmentEventDocument>
+    val requestedDocuments: List<EventPresentmentDataDocument>
     // TODO: include high-level view of transaction data in this data structure.
 ) {
 
     companion object {
         /**
-         * Creates a [PresentmentEventData] from a [CredentialPresentmentSelection].
+         * Creates a [EventPresentmentData] from a [CredentialPresentmentSelection].
          *
-         * @param selection the [CredentialPresentmentSelection] to create the [PresentmentEventData] from.
+         * @param selection the [CredentialPresentmentSelection] to create the [EventPresentmentData] from.
          * @param requester the requester of the data.
          * @param trustMetadata a [TrustMetadata] or `null`.
-         * @return a [PresentmentEventData].
+         * @return a [EventPresentmentData].
          */
         fun fromPresentmentSelection(
             selection: CredentialPresentmentSelection,
             requester: Requester,
             trustMetadata: TrustMetadata?,
-        ): PresentmentEventData {
+        ): EventPresentmentData {
             var requesterName: String? = null
             if (trustMetadata != null) {
                 requesterName = trustMetadata.displayName
@@ -48,16 +48,16 @@ data class PresentmentEventData(
                 requesterName = requester.origin
             }
 
-            val requestedDocuments = mutableListOf<PresentmentEventDocument>()
+            val requestedDocuments = mutableListOf<EventPresentmentDataDocument>()
             selection.matches.forEach { match ->
-                requestedDocuments.add(PresentmentEventDocument(
+                requestedDocuments.add(EventPresentmentDataDocument(
                     documentId = match.credential.document.identifier,
                     documentName = match.credential.document.displayName,
                     claims = match.claims
                 ))
             }
 
-            return PresentmentEventData(
+            return EventPresentmentData(
                 requesterName = requesterName,
                 requesterCertChain = requester.certChain,
                 trustMetadata = trustMetadata,

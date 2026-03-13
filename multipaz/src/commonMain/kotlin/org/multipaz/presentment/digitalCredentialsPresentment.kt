@@ -17,8 +17,8 @@ import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
-import org.multipaz.eventlog.PresentmentEventDigitalCredentialsMdocApi
-import org.multipaz.eventlog.PresentmentEventDigitalCredentialsOpenID4VP
+import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsMdocApi
+import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsOpenID4VP
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.prompt.PromptDismissedException
@@ -187,9 +187,9 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
         onDocumentsInFocus = onDocumentsInFocus
     )
 
-    source.eventLog?.addEvent(
-        PresentmentEventDigitalCredentialsOpenID4VP(
-            data = responseObject.eventData,
+    source.eventLogger?.addEventAsync(
+        EventPresentmentDigitalCredentialsOpenID4VP(
+            presentmentData = responseObject.eventData,
             appId = appId,
             origin = origin,
             protocol = protocol,
@@ -282,9 +282,9 @@ private suspend fun digitalCredentialsMdocApiProtocol(
         put("response", encryptedResponse.toBase64Url())
     }
 
-    source.eventLog?.addEvent(
-        PresentmentEventDigitalCredentialsMdocApi(
-            data = responseObject.eventData,
+    source.eventLogger?.addEventAsync(
+        EventPresentmentDigitalCredentialsMdocApi(
+            presentmentData = responseObject.eventData,
             appId = appId,
             origin = origin,
             protocol = protocol,

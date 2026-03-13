@@ -4,7 +4,7 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.document.Document
-import org.multipaz.eventlog.PresentmentEventData
+import org.multipaz.eventlogger.EventPresentmentData
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
 import org.multipaz.mdoc.request.DeviceRequest
@@ -38,7 +38,7 @@ private const val TAG = "mdocPresentment"
  * @param onWaitingForUserInput called when waiting for input from the user (consent or authentication)
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
- * @return a [MdocResponse] containing [DeviceResponse] and [PresentmentEventData].
+ * @return a [MdocResponse] containing [DeviceResponse] and [EventPresentmentData].
  * @throws PresentmentCanceledException if the user canceled in a consent prompt.
  * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
@@ -63,7 +63,7 @@ suspend fun mdocPresentment(
     onDocumentsInFocus: (documents: List<Document>) -> Unit
 ): MdocResponse {
     val credentialsPresented = mutableSetOf<MdocCredential>()
-    lateinit var eventData: PresentmentEventData
+    lateinit var eventData: EventPresentmentData
 
     val deviceResponse = buildDeviceResponse(
         sessionTranscript = sessionTranscript,
@@ -154,7 +154,7 @@ suspend fun mdocPresentment(
             credentialsPresented.add(match.credential)
         }
 
-        eventData = PresentmentEventData.fromPresentmentSelection(
+        eventData = EventPresentmentData.fromPresentmentSelection(
             selection = selection,
             requester = requester,
             trustMetadata = trustMetadata

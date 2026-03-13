@@ -1,6 +1,6 @@
 package org.multipaz.presentment
 
-import org.multipaz.eventlog.PresentmentEventData
+import org.multipaz.eventlogger.EventPresentmentData
 import org.multipaz.mdoc.response.DeviceResponse
 
 /**
@@ -11,5 +11,5 @@ import org.multipaz.mdoc.response.DeviceResponse
  */
 data class MdocResponse(
     val deviceResponse: DeviceResponse,
-    val eventData: PresentmentEventData
+    val eventData: EventPresentmentData
 )
