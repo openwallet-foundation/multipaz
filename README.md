@@ -66,6 +66,13 @@ which includes an the `multipaz`, `multipaz-doctypes`, `multipaz-doctypes`,
 [SKIE](https://skie.touchlab.co/). Be careful relying on this as Swift/Kotlin
 interop technology might change in the near future.
 
+The Swift package exposes two products:
+
+- `Multipaz` includes the higher-level `multipaz-swift` wrapper APIs.
+- `MultipazCore` exposes the core binary target directly for applications that
+  build their own UI and only need the lower-level APIs. When using this
+  product, the module import remains `import Multipaz`.
+
 At this point both API interfaces and data stored on disk is subject to change
 but we expect to provide stability guarantees post 1.0. We only expect minor changes
 for example conversion from `ByteArray` to `ByteString` and similar things.
@@ -132,4 +139,3 @@ a number of samples for different platforms.
 ## Note
 
 This is not an official or supported Google product.
-

@@ -7,7 +7,8 @@ let package = Package(
     .iOS(.v26),
    ],
    products: [
-      .library(name: "Multipaz", targets: ["MultipazSwift"])
+      .library(name: "Multipaz", targets: ["MultipazSwift"]),
+      .library(name: "MultipazCore", targets: ["Multipaz"])
    ],
    targets: [
         .target(
