@@ -33,7 +33,7 @@ func getIconName(claim: Claim) -> String {
         case .globe: return "globe"
         case .phone: return "phone"
         case .badge: return "person.crop.circle"
-        case .email return "envelope"
+        case .email: return "envelope"
         case .none: return "gear"
         }
     }
