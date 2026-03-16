@@ -775,6 +775,10 @@ public class KeystoreIdentityCredential extends IdentityCredential {
         mData.storeStaticAuthenticationData(authenticationKey, expirationDate, staticAuthData);
     }
 
+    public @Nullable byte[] getProofOfProvisioningSha256() {
+        return mData.mProofOfProvisioningSha256;
+    }
+
     @Override
     public @NonNull
     int[] getAuthenticationDataUsageCount() {

@@ -112,7 +112,7 @@ class CredentialData {
     private String mDocType = "";
     private String mCredentialKeyAlias = "";
     private Collection<X509Certificate> mCertificateChain = null;
-    private byte[] mProofOfProvisioningSha256 = null;
+    byte[] mProofOfProvisioningSha256 = null;
     private AbstractList<AccessControlProfile> mAccessControlProfiles = new ArrayList<>();
     private AbstractMap<Integer, AccessControlProfile> mProfileIdToAcpMap = new HashMap<>();
     private AbstractList<PersonalizationData.NamespaceData> mNamespaceDatas = new ArrayList<>();
