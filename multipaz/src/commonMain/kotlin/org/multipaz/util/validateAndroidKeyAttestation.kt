@@ -80,7 +80,7 @@ suspend fun validateAndroidKeyAttestation(
     }
 
     check(parser.keymasterSecurityLevel >= requireKeyMintSecurityLevel) {
-        "KeyMint security level is below required"
+        "KeyMint security level is ${parser.keymasterSecurityLevel} but must be at least $requireKeyMintSecurityLevel"
     }
 
     if (requireAppSignatureCertificateDigests.isNotEmpty()) {
@@ -89,7 +89,7 @@ suspend fun validateAndroidKeyAttestation(
         }
         for (digest in parser.applicationSignatureDigests) {
             check (requireAppSignatureCertificateDigests.contains(digest))
-            { "Signing certificate '${digest.toByteArray().toBase64Url()}' is not trusted" }
+            { "Signing certificate '${digest.toByteArray().toHex(byteDivider = ":")}' is not trusted" }
         }
     }
 
