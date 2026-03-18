@@ -11,7 +11,7 @@ extension SimplePresentmentSource.Companion {
     ///   - documetStore: the [DocumentStore] which holds credentials that can be presented.
     ///   - documentTypeRepository: a [DocumentTypeRepository] which holds metadata for document types.
     ///   - zkSystemRepository: the [ZkSystemRepository] to use or `nil`.
-    ///   - eventLog: an [EventLog] for logging events or `nil`.
+    ///   - eventLogger: an [EventLogger] for logging events or `nil`.
     ///   - resolveTrustFn: a function which can be used to determine if a requester is trusted.
     ///   - showConsentPromptFn: a [ShowConsentPromptFn] used show a consent prompt is required.
     ///   - preferSignatureToKeyAgreement: whether to use mdoc ECDSA authentication even if mdoc MAC authentication is possible (ISO mdoc only).
@@ -23,7 +23,7 @@ extension SimplePresentmentSource.Companion {
         documentStore: DocumentStore,
         documentTypeRepository: DocumentTypeRepository,
         zkSystemRepository: ZkSystemRepository? = nil,
-        eventLog: EventLog? = nil,
+        eventLogger: EventLogger? = nil,
         resolveTrustFn: @escaping @Sendable (
             _ requester: Requester
         ) async -> TrustMetadata?,
@@ -44,7 +44,7 @@ extension SimplePresentmentSource.Companion {
             documentStore: documentStore,
             documentTypeRepository: documentTypeRepository,
             zkSystemRepository: zkSystemRepository,
-            eventLog: eventLog,
+            eventLogger: eventLogger,
             resolveTrustFn: ResolveTrustHandler(f: resolveTrustFn),
             showConsentPromptFn: ShowConsentPromptHandler(f: showConsentPromptFn),
             preferSignatureToKeyAgreement: preferSignatureToKeyAgreement,
