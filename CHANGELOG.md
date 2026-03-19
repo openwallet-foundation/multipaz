@@ -5,9 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.98.0] - Expected early March 2026
-Changes since Multipaz 0.97.0 include:
-- TODO
+## [0.98.0] - 2026-03-19
+Significant changes since Multipaz 0.97.0 include:
+
+- Add translation infrastructure and translations for 21 languages
+- Add support for ISO/IEC 18013-5 Second Edition query language
+- Add support ISO/IEC 18013-7:2025 Annex A on verifier.multipaz.org and in TestApp
+- Add support for USB-connected NFC readers, (https://www.youtube.com/watch?v=KR8U-dZM6f4)
+- New vertical document list composable/view for both Compose and SwiftUI including support
+  for QuickAccessWallet on Android (https://www.youtube.com/watch?v=YUkJMlIxr0A,
+  https://youtu.be/rdLyNJPpEsQ)
+- Unification of proximity and online presentment UI/UX (https://youtu.be/nbNL2e7Ckjs)
+- TrustManager enhancements including composables for editing trust lists in multipaz-compose
+- New event logging framework for recording significant user events such as presentment
+- Support for sharing files on Android and iOS
+- Better exception handling throughout the library
+- Preliminary support for Digital Payment Credentials
+- Support for Aadhaar doctype, including in https://verifier.multipaz.org
+
+Starting with Multipaz 0.98.0 we are now doing releases on [Maven Central](https://mvnrepository.com/artifact/org.multipaz/multipaz) instead
+of [GMaven](https://maven.google.com/).
 
 ## [0.97.0] - 2026-02-17
 Changes since Multipaz 0.96.0 include:
