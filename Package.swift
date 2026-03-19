@@ -21,8 +21,7 @@ let package = Package(
         ),
         .binaryTarget(
             name: "Multipaz",
-            url: "https://apps.multipaz.org/xcf/Multipaz-0.98.0.xcframework.zip",
-            checksum:"cf31660f72b010a4ef9ee1c3e2c6e86759be6be60f008357637e43bb5387e1f5"
+            path: "xcframework/build/XCFrameworks/release/Multipaz.xcframework"
          )
    ]
 )
