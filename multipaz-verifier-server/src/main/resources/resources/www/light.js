@@ -30,6 +30,96 @@ const examples = {
            ]
         }
     },
+    "Payment SCA (minimal)": {
+        "dcql": {
+            "credentials": [
+                {
+                    "id": "payment",
+                    "format": "mso_mdoc",
+                    "meta": {
+                        "doctype_value": "org.multipaz.payment.sca.1"
+                    },
+                    "claims": [
+                        {
+                            "path": [
+                                "org.multipaz.payment.sca.1",
+                                "issuer_name"
+                            ]
+                        },
+                        {
+                            "path": [
+                                "org.multipaz.payment.sca.1",
+                                "masked_account_reference"
+                            ]
+                        },
+                        {
+                            "path": [
+                                "org.multipaz.payment.sca.1",
+                                "holder_name"
+                            ]
+                        },
+                        {
+                            "path": [
+                                "org.multipaz.payment.sca.1",
+                                "expiry_date"
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    },
+    "Payment SCA (full)": {
+        "dcql": {
+            "credentials": [
+                {
+                    "id": "payment",
+                    "format": "mso_mdoc",
+                    "meta": {
+                        "doctype_value": "org.multipaz.payment.sca.1"
+                    },
+                    "claims": [
+                        {
+                            "path": [
+                                "org.multipaz.payment.sca.1",
+                                "issuer_name"
+                            ]
+                        },
+                        {
+                            "path": [
+                                "org.multipaz.payment.sca.1",
+                                "payment_instrument_id"
+                            ]
+                        },
+                        {
+                            "path": [
+                                "org.multipaz.payment.sca.1",
+                                "masked_account_reference"
+                            ]
+                        },
+                        {
+                            "path": [
+                                "org.multipaz.payment.sca.1",
+                                "holder_name"
+                            ]
+                        },
+                        {
+                            "path": [
+                                "org.multipaz.payment.sca.1",
+                                "issue_date"
+                            ]
+                        },
+                        {
+                            "path": [
+                                "org.multipaz.payment.sca.1",
+                                "expiry_date"
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    },
     "Movie ticket + EU PID age": {
         "dcql": {
           "credentials": [

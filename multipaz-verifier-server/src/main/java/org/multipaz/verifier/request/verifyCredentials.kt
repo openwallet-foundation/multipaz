@@ -34,6 +34,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Nint
 import org.multipaz.cbor.Simple
+import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.Uint
 import org.multipaz.cbor.addCborArray
@@ -493,6 +494,11 @@ private suspend fun processMdocResponse(
                     Simple.TRUE -> JsonPrimitive(true)
                     Simple.FALSE -> JsonPrimitive(false)
                     Simple.NULL -> JsonPrimitive(null as String?)
+                    is Tagged -> when (item.tagNumber) {
+                        Tagged.DATE_TIME_STRING,
+                        Tagged.FULL_DATE_STRING -> JsonPrimitive((item.taggedItem as Tstr).asTstr)
+                        else -> JsonPrimitive("<unsupported>")
+                    }
                     else -> JsonPrimitive("<unsupported>")
                 }
                 val id = claim.id ?: claim.path.last().asTstr
