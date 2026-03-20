@@ -251,7 +251,9 @@ fun IsoMdocProximityReadingScreen(
                             var transferProtocol = ""
                             doReaderFlow(
                                 app = app,
-                                nfcTagReader = readerSelected.value!!.getNfcTagReader(),
+                                nfcTagReader = readerSelected.value
+                                    .takeUnless { it is NfcReaderNoneAvailable }
+                                    ?.getNfcTagReader(),
                                 encodedDeviceEngagement = ByteString(data.substring(5).fromBase64Url()),
                                 existingTransport = null,
                                 handover = Simple.NULL,
