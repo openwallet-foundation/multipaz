@@ -4,22 +4,22 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
-import kotlinx.io.bytestring.ByteString
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.openid.wellKnown
 import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.provisioning.CredentialMetadata
-import org.multipaz.provisioning.Display
 import org.multipaz.provisioning.KeyBindingType
 import org.multipaz.provisioning.ProvisioningMetadata
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.util.Logger
 
 internal data class IssuerConfiguration(
+    val url: String,
     val nonceEndpoint: String?,
     val credentialEndpoint: String,
     val provisioningMetadata: ProvisioningMetadata,
@@ -28,9 +28,23 @@ internal data class IssuerConfiguration(
 ) {
     companion object: JsonParsing("Issuer metadata") {
         private const val TAG = "IssuerConfiguration"
+        private val cacheLock = Mutex()
+        private var cachedIssuerConfiguration: IssuerConfiguration? = null
+        private var cachedClientPreferences: OpenID4VCIClientPreferences? = null
 
-        suspend fun get(url: String, clientPreferences: OpenID4VCIClientPreferences): IssuerConfiguration {
-            val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
+        suspend fun get(
+            url: String,
+            httpClient: HttpClient,
+            clientPreferences: OpenID4VCIClientPreferences
+        ): IssuerConfiguration {
+            cacheLock.withLock {
+                if (cachedClientPreferences === clientPreferences) {
+                    val issuerConfiguration = cachedIssuerConfiguration
+                    if (issuerConfiguration?.url == url) {
+                        return issuerConfiguration
+                    }
+                }
+            }
 
             // Fetch issuer metadata
             val issuerMetadataUrl = wellKnown(url, "openid-credential-issuer")
@@ -79,6 +93,7 @@ internal data class IssuerConfiguration(
                 credentials[id] = CredentialMetadata(
                     display = extractDisplay(
                         element = config.objOrNull("credential_metadata") ?: config,
+                        httpClient = httpClient,
                         clientPreferences = clientPreferences
                     ),
                     format = format,
@@ -89,16 +104,22 @@ internal data class IssuerConfiguration(
 
 
             val provisioningMetadata = ProvisioningMetadata(
-                display = extractDisplay(credentialMetadata, clientPreferences),
+                display = extractDisplay(credentialMetadata, httpClient, clientPreferences),
                 credentials = credentials.toMap()
             )
             return IssuerConfiguration(
+                url = url,
                 nonceEndpoint = nonceEndpoint,
                 credentialEndpoint = credentialEndpoint,
                 provisioningMetadata = provisioningMetadata,
                 authorizationServerUrls = authorizationServerUrls,
                 credentialConfigurations = credentialConfigurations.toMap()
-            )
+            ).also {
+                cacheLock.withLock {
+                    cachedClientPreferences = clientPreferences
+                    cachedIssuerConfiguration = it
+                }
+            }
         }
 
         private fun extractFormat(config: JsonObject): CredentialFormat =

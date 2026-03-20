@@ -945,6 +945,7 @@ class App private constructor (val promptModel: PromptModel) {
 
         snackbarHostState = remember { SnackbarHostState() }
 
+        val provisioningIssuerUrl = remember { mutableStateOf<String?>(null) }
         val currentBranding = Branding.Current.collectAsState().value
         currentBranding.theme {
             PromptDialogs(
@@ -955,7 +956,16 @@ class App private constructor (val promptModel: PromptModel) {
                 provisioningModel = provisioningModel,
                 waitForRedirectLinkInvocation = { state ->
                     provisioningSupport.waitForAppLinkInvocation(state)
-                }
+                },
+                onFinishedProvisioning = { document, isNewlyIssued ->
+                    provisioningIssuerUrl.value = null
+                    if (document != null && isNewlyIssued) {
+                        navController.navigate(DocumentViewerDestination(document.identifier))
+                    }
+                },
+                issuerUrl = provisioningIssuerUrl.value,
+                clientPreferences = provisioningSupport.getOpenID4VCIClientPreferences(),
+                backend = provisioningSupport.getOpenID4VCIBackend()
             )
             NavHost(
                 navController = navController,
@@ -1061,7 +1071,7 @@ class App private constructor (val promptModel: PromptModel) {
                                 }
                             },
                             onClickEventLog = { navController.navigate(EventLogDestination) },
-                            onClickShareSheet = { navController.navigate(ShareSheetDestination) }
+                            onClickShareSheet = { navController.navigate(ShareSheetDestination) },
                         )
                     }
                 }
@@ -1089,6 +1099,9 @@ class App private constructor (val promptModel: PromptModel) {
                             showToast = { message: String -> showToast(message) },
                             onViewDocument = { documentId ->
                                 navController.navigate(DocumentViewerDestination(documentId))
+                            },
+                            onIssuerSelected = { issuerUrl ->
+                                provisioningIssuerUrl.value = issuerUrl
                             }
                         )
                     }

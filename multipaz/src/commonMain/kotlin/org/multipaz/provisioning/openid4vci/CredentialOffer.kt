@@ -69,9 +69,7 @@ internal sealed class CredentialOffer {
                 var credentialOfferString = params["credential_offer"]
                 if (credentialOfferString == null) {
                     val url = params["credential_offer_uri"]
-                    if (url == null) {
-                        throw IllegalStateException("Neither 'credential_offer' nor 'credential_offer_uri' are given")
-                    }
+                        ?: throw IllegalStateException("Neither 'credential_offer' nor 'credential_offer_uri' are given")
                     val response = HttpClient().get(url) {}
                     if (response.status != HttpStatusCode.OK) {
                         throw IllegalStateException("Error retrieving '$url'")

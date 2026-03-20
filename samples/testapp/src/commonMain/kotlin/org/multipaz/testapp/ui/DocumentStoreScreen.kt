@@ -17,6 +17,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
@@ -84,6 +85,8 @@ private val userAuthenticationTimeoutValues = mapOf(
     "No auth" to null
 )
 
+private const val INITIAL_ISSUER_URL = "https://issuer.multipaz.org/issuer"
+
 @Composable
 fun DocumentStoreScreen(
     documentStore: DocumentStore,
@@ -93,6 +96,7 @@ fun DocumentStoreScreen(
     iacaKey: AsymmetricKey.X509Certified,
     showToast: (message: String) -> Unit,
     onViewDocument: (documentId: String) -> Unit,
+    onIssuerSelected: (issuerUrl: String) -> Unit
 ) {
     // TODO: Use the same coroutine scope as what the storage layer uses to make it faster.
     val coroutineScope = rememberCoroutineScope()
@@ -121,6 +125,34 @@ fun DocumentStoreScreen(
         )
     }
 
+    val showIssuanceDialog = remember { mutableStateOf(false) }
+    if (showIssuanceDialog.value) {
+        val issuingServerUrl = remember { mutableStateOf(INITIAL_ISSUER_URL) }
+        AlertDialog(
+            onDismissRequest = { showIssuanceDialog.value = false },
+            title = { Text("Select Issuer") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showIssuanceDialog.value = false
+                        onIssuerSelected(issuingServerUrl.value)
+                    }) {
+                    Text("Start")
+                }
+            },
+            text = {
+                TextField(
+                    modifier = Modifier.padding(4.dp),
+                    value = issuingServerUrl.value,
+                    onValueChange = { issuingServerUrl.value = it },
+                    label = {
+                        Text("Issuer server URL")
+                    }
+                )
+            }
+        )
+    }
+
     showProvisioningResult.value?.let {
         val scrollState = rememberScrollState()
         AlertDialog(
@@ -141,7 +173,10 @@ fun DocumentStoreScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = { showProvisioningResult.value = null }) {
+                    onClick = {
+                        showProvisioningResult.value = null
+                    }
+                ) {
                     Text("Close")
                 }
             }
@@ -269,6 +304,13 @@ fun DocumentStoreScreen(
                 }
             }) {
                 Text(text = "Delete all Documents")
+            }
+        }
+        item {
+            TextButton(onClick = {
+                showIssuanceDialog.value = true
+            }) {
+                Text(text = "Provision a Document from an Issuer")
             }
         }
         item {

@@ -225,7 +225,7 @@ internal class OpenID4VCIProvisioningClient(
             }
         }
         val display = if (response.containsKey("display")) {
-            JsonParsing("Credentials").extractDisplay(response, clientPreferences)
+            JsonParsing("Credentials").extractDisplay(response, httpClient, clientPreferences)
         } else {
             null
         }
@@ -272,7 +272,7 @@ internal class OpenID4VCIProvisioningClient(
     private suspend fun performPushedAuthorizationRequest(): String {
         maybeObtainClientAttestationChallenge()
 
-        pkceCodeVerifier = Random.Default.nextBytes(32).toBase64Url()
+        pkceCodeVerifier = Random.nextBytes(32).toBase64Url()
         val codeChallenge = Crypto.digest(
             Algorithm.SHA256,
             pkceCodeVerifier!!.encodeToByteArray()
@@ -636,7 +636,7 @@ internal class OpenID4VCIProvisioningClient(
 
         private suspend fun createUniqueStateValue(): String {
             while (true) {
-                val state = Random.Default.nextBytes(15).toBase64Url()
+                val state = Random.nextBytes(15).toBase64Url()
                 stateLock.withLock {
                     if (states.add(state)) {
                         return state
@@ -651,11 +651,47 @@ internal class OpenID4VCIProvisioningClient(
             }
         }
 
+        suspend fun getMetadata(
+            issuerUrl: String,
+            httpClient: HttpClient,
+            clientPreferences: OpenID4VCIClientPreferences
+        ): ProvisioningMetadata =
+            IssuerConfiguration.get(
+                url = issuerUrl,
+                httpClient = httpClient,
+                clientPreferences = clientPreferences
+            ).provisioningMetadata
+
         suspend fun createFromOffer(
             offerUri: String,
             clientPreferences: OpenID4VCIClientPreferences,
         ): OpenID4VCIProvisioningClient {
             val credentialOffer = CredentialOffer.parseCredentialOffer(offerUri)
+            val secureArea = BackendEnvironment.getInterface(SecureAreaProvider::class)!!.get()
+            return create(
+                secureArea = secureArea,
+                credentialOffer = credentialOffer,
+                clientPreferences = clientPreferences,
+                authorizationData = OpenID4VCIAuthorizationData(
+                    issuerUri = credentialOffer.issuerUri,
+                    configurationId = credentialOffer.configurationId,
+                    authorizationServer = credentialOffer.authorizationServer,
+                    secureAreaId = secureArea.identifier
+                )
+            )
+        }
+
+        suspend fun createFromCredentialId(
+            issuerUrl: String,
+            credentialId: String,
+            clientPreferences: OpenID4VCIClientPreferences,
+        ): OpenID4VCIProvisioningClient {
+            val credentialOffer = CredentialOffer.AuthorizationCode(
+                issuerUri = issuerUrl,
+                configurationId = credentialId,
+                authorizationServer = null,
+                issuerState = null
+            )
             val secureArea = BackendEnvironment.getInterface(SecureAreaProvider::class)!!.get()
             return create(
                 secureArea = secureArea,
@@ -722,6 +758,7 @@ internal class OpenID4VCIProvisioningClient(
             require(authorizationData.secureAreaId == secureArea.identifier)
             val issuerConfig = IssuerConfiguration.get(
                 url = credentialOffer.issuerUri,
+                httpClient = BackendEnvironment.getInterface(HttpClient::class)!!,
                 clientPreferences = clientPreferences
             )
             val authorizationServerUrl = credentialOffer.authorizationServer

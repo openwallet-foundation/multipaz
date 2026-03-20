@@ -69,7 +69,7 @@ internal open class JsonParsing(val source: String) {
         throw IllegalStateException("$source: $name must be an integer")
     }
 
-    fun JsonObject.integerOrNull(name: String): Int {
+    fun JsonObject.integerOrNull(name: String): Int? {
         val value = this[name]
         if (value is JsonPrimitive && !value.isString) {
             val intValue = value.intOrNull
@@ -77,7 +77,7 @@ internal open class JsonParsing(val source: String) {
                 return intValue
             }
         }
-        throw IllegalStateException("$source: $name must be an integer")
+        return null
     }
 
     fun JsonObject.obj(name: String): JsonObject {
@@ -114,6 +114,7 @@ internal open class JsonParsing(val source: String) {
 
     suspend fun extractDisplay(
         element: JsonObject?,
+        httpClient: HttpClient,
         clientPreferences: OpenID4VCIClientPreferences
     ): Display {
         val displayJson = element?.arrayOrNull("display")
@@ -155,7 +156,6 @@ internal open class JsonParsing(val source: String) {
                         logo = ByteString(uri.substring(start + 1).fromBase64())
                     }
                 } else {
-                    val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
                     val response = httpClient.get(uri)
                     if (response.status == HttpStatusCode.OK) {
                         logo = ByteString(response.readRawBytes())

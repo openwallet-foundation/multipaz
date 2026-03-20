@@ -92,6 +92,10 @@
     </plurals>
     <string name="passphrase_prompt_too_many_attempts">Too many wrong passphrases attempted, try again later</string>
 
+    <!-- ProvisioningBottomSheet when selecting issuer -->
+    <string name="issuer_loading">Loading issuer metadata...</string>
+    <string name="issuer_loading_failed">Loading issuer metadata failed</string>
+
     <!-- ProvisioningBottomSheet -->
     <string name="provisioning_title">Provisioning</string>
     <string name="provisioning_authorization_failed">Authorization failed</string>
@@ -104,6 +108,8 @@
     <string name="provisioning_browser">Launching browser, continue there</string>
     <string name="provisioning_retry">Please retry</string>
     <string name="provisioning_error">Error provisioning (error code: %1$s)</string>
+    <string name="provisioning_select_credential">Select credential to provision:</string>
+    <string name="provisioning_cancel_button">Cancel provisioning</string>
 
     <!-- durationFromNowText -->
     <string name="duration_just_now">just now</string>

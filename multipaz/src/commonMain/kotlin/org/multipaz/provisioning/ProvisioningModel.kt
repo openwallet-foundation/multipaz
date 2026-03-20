@@ -6,12 +6,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.buildJsonObject
@@ -57,9 +59,13 @@ class ProvisioningModel(
     private val authorizationSecureArea: SecureArea
 ) {
     private var mutableState = MutableStateFlow<State>(Idle)
+    private var mutableMetadata = MutableStateFlow<ProvisioningMetadata?>(null)
 
     /** State of the model */
     val state: StateFlow<State> get() = mutableState.asStateFlow()
+
+    /** Issuer and credential metadata for the credential being provisioned (if any) */
+    val metadata: StateFlow<ProvisioningMetadata?> get() = mutableMetadata.asStateFlow()
 
     private val authorizationResponseChannel = Channel<AuthorizationResponse>()
 
@@ -86,6 +92,27 @@ class ProvisioningModel(
         launch(createCoroutineContext(clientPreferences, backend)) {
             targetDocument = null
             OpenID4VCI.createClientFromOffer(offerUri, clientPreferences)
+        }
+
+    /**
+     * Launch provisioning session to provision credentials to a new [Document] using
+     * OpenID4VCI protocol.
+     *
+     * @param issuerUrl issuer server URL
+     * @param credentialId credential configuration id
+     * @param clientPreferences configuration parameters for OpenID4VCI client
+     * @param backend interface to the wallet back-end service
+     * @return deferred [Document] value
+     */
+    fun launchOpenID4VCIProvisioning(
+        issuerUrl: String,
+        credentialId: String,
+        clientPreferences: OpenID4VCIClientPreferences,
+        backend: OpenID4VCIBackend,
+    ): Deferred<Document> =
+        launch(createCoroutineContext(clientPreferences, backend)) {
+            targetDocument = null
+            OpenID4VCI.createClientCredentialId(issuerUrl, credentialId, clientPreferences)
         }
 
     /**
@@ -133,19 +160,39 @@ class ProvisioningModel(
                 mutableState.emit(Initial)
                 targetDocument = document
                 val provisioningClient = provisioningClientFactory.invoke()
+                mutableMetadata.emit(provisioningClient.getMetadata())
                 runProvisioning(provisioningClient)
             } catch(err: CancellationException) {
-                mutableState.emit(Idle)
+                launch(NonCancellable) {
+                    mutableState.emit(Idle)
+                    mutableMetadata.emit(null)
+                }
                 throw err
             } catch (err: Exception) {
                 Logger.e(TAG, "Error provisioning", err)
                 mutableState.emit(Error(err))
+                mutableMetadata.emit(null)
                 throw err
             }
         }
         this.job = deferred
         return deferred
     }
+
+    /**
+     * Gets metadata for the given issuer.
+     *
+     * @param issuerUrl issuer identifier (server URL)
+     * @param clientPreferences OpenID4VCI client parameters
+     * @returns metadata that includes all supported credential configurations
+     */
+    suspend fun getOpenID4VCIIssuerMetadata(
+        issuerUrl: String,
+        clientPreferences: OpenID4VCIClientPreferences,
+    ): ProvisioningMetadata =
+        OpenID4VCI.getMetadata(issuerUrl, httpClient, clientPreferences)
+
+
 
     /**
      * Cancel currently-running provisioning session (if any) and sets the state to [Idle].
@@ -159,6 +206,7 @@ class ProvisioningModel(
                 it.cancel()
             } else {
                 CoroutineScope(Dispatchers.Default).launch {
+                    mutableMetadata.emit(null)
                     mutableState.emit(Idle)
                 }
             }
@@ -300,7 +348,7 @@ class ProvisioningModel(
             }
             throw err
         }
-        mutableState.emit(CredentialsIssued)
+        mutableState.emit(CredentialsIssued(document, targetDocument == null))
         return document
     }
 
@@ -339,8 +387,16 @@ class ProvisioningModel(
     /** Credentials are being requested from the provisioning server */
     data object RequestingCredentials: State()
 
-    /** Credentials are issued, provisioning has stopped */
-    data object CredentialsIssued: State()
+    /**
+     * Credentials are issued, provisioning has stopped
+     *
+     * @param document [Document] to which new credentials belong
+     * @param isNewlyIssued if this is a newly issued document (as opposed to refreshed credentials)
+     */
+    data class CredentialsIssued(
+        val document: Document,
+        val isNewlyIssued: Boolean
+    ): State()
 
     /** Error occurred when provisioning, provisioning has stopped */
     data class Error(
