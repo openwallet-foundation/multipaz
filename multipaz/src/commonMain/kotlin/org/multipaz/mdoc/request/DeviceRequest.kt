@@ -32,6 +32,7 @@ import org.multipaz.cose.CoseSign1
 import org.multipaz.cose.toCoseLabel
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcCurve
@@ -147,14 +148,14 @@ data class DeviceRequest private constructor(
 
         docRequests.forEachIndexed { docRequestIndex, docRequest ->
             if (docRequest.readerAuth_ != null) {
+                val readerAuthentication = buildCborArray {
+                    add("ReaderAuthentication")
+                    add(sessionTranscript)
+                    add(docRequest.itemsRequestBytes)
+                }
+                val readerAuthenticationBytes =
+                    Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(readerAuthentication))))
                 try {
-                    val readerAuthentication = buildCborArray {
-                        add("ReaderAuthentication")
-                        add(sessionTranscript)
-                        add(docRequest.itemsRequestBytes)
-                    }
-                    val readerAuthenticationBytes =
-                        Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(readerAuthentication))))
                     Cose.coseSign1Check(
                         publicKey = docRequest.readerAuthCertChain!!.certificates.first().ecPublicKey,
                         detachedData = readerAuthenticationBytes,
