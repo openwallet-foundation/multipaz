@@ -1,4 +1,3 @@
-@preconcurrency import Multipaz
 
 // Swift-friendly version of SimplePresentmentSource() constructor which takes
 // suspend functions as parameters.

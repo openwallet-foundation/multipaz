@@ -1,4 +1,3 @@
-@preconcurrency import Multipaz
 import UIKit
 import Combine
 

@@ -26,8 +26,8 @@ The project provides libraries written in [Kotlin Multiplatform](https://kotlinl
 - `multipaz-longfellow` bundles the [Google Longfellow-ZK](https://github.com/google/longfellow-zk) library
   and integrates with the core `multipaz` for Zero-Knowledge Proofs
   according to latest available [ISO/IEC 18013-5 Second Edition draft](https://github.com/ISOWG10/ISO-18013).
-- `multipaz-swift` contains Swift and [SwiftUI](https://developer.apple.com/swiftui/)
-  functionality to easier use Multipaz in Swift applications on iOS.
+- `multipaz-swiftui` contains SwiftUI components which can be used in
+  Swift applications.
 
 ## Command-line tool
 
@@ -62,16 +62,9 @@ late 2026 or early 2027.
 
 We are also making Multipaz available as a [Swift package](https://github.com/openwallet-foundation/multipaz/blob/main/Package.swift)
 which includes an the `multipaz`, `multipaz-doctypes`, `multipaz-doctypes`,
-`multipaz-longfellow`, and `multipaz-swift` libraries. This is built using
-[SKIE](https://skie.touchlab.co/). Be careful relying on this as Swift/Kotlin
-interop technology might change in the near future.
-
-The Swift package exposes two products:
-
-- `Multipaz` includes the higher-level `multipaz-swift` wrapper APIs.
-- `MultipazCore` exposes the core binary target directly for applications that
-  build their own UI and only need the lower-level APIs. When using this
-  product, the module import remains `import Multipaz`.
+`multipaz-longfellow`, and `multipaz-swiftui` libraries. This is built using
+[SKIE](https://skie.touchlab.co/). Be careful relying on this as Swift/Kotlin interop technology
+might change in the near future with e.g. [Swift Export](https://kotlinlang.org/docs/native-swift-export.html).
 
 At this point both API interfaces and data stored on disk is subject to change
 but we expect to provide stability guarantees post 1.0. We only expect minor changes
@@ -100,12 +93,16 @@ developers and as such has a lot of options and settings. It's intended to
 exercise all code in the libraries. Prebuilt APKs are available from
 https://apps.multipaz.org.
 
+For a SwiftUI version of `samples/testapp` see `samples/SwiftTestApp` which works
+on iOS and is a testbed for the Swift bindings as well as the SwiftUI components
+in `multipaz-swiftui`.
+
 For a fully-featured proximity reader app using Multipaz, see
 [MpzIdentityReader](https://github.com/openwallet-foundation/multipaz-identity-reader/).
 Prebuilt APKs are available from https://apps.multipaz.org.
 
 For an over-the-Internet verifier supporting OpenID4VP (both W3C DC API and
-URI schemes) and ISO/IEC 18013-7 Annex C see https://verifier.multipaz.org.
+URI schemes) and ISO/IEC 18013-7 Annex A and C see https://verifier.multipaz.org.
 
 To see how to use the Multipaz in a 3rd party project, see
 https://github.com/openwallet-foundation/multipaz-samples/ which includes

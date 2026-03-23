@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		512DAED62F2A31B30061F72B /* IdentityDocumentProviderExtension.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = 512DAECF2F2A31B30061F72B /* IdentityDocumentProviderExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		512DAEDE2F2A33330061F72B /* Multipaz in Frameworks */ = {isa = PBXBuildFile; productRef = 512DAEDD2F2A33330061F72B /* Multipaz */; };
+		51A18EFB2F7157FF0050476D /* Multipaz in Frameworks */ = {isa = PBXBuildFile; productRef = 51A18EFA2F7157FF0050476D /* Multipaz */; };
 		51B36B2A2F2A3CD50022E192 /* Multipaz in Frameworks */ = {isa = PBXBuildFile; productRef = 51BD5C182F21DB3E0082DE19 /* Multipaz */; };
 		51BD5C5E2F22604F0082DE19 /* AdditionalConfig.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 51BD5C5C2F22604F0082DE19 /* AdditionalConfig.xcconfig */; };
 		51BD5C5F2F22604F0082DE19 /* DeveloperConfig.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 51BD5C5D2F22604F0082DE19 /* DeveloperConfig.xcconfig */; };
@@ -87,6 +87,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				51A18EFB2F7157FF0050476D /* Multipaz in Frameworks */,
 				51C6CAF82F2B1566003EAB7A /* Multipaz in Frameworks */,
 				51B36B2A2F2A3CD50022E192 /* Multipaz in Frameworks */,
 			);
@@ -96,7 +97,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				512DAEDE2F2A33330061F72B /* Multipaz in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -155,6 +155,7 @@
 			packageProductDependencies = (
 				51BD5C182F21DB3E0082DE19 /* Multipaz */,
 				5168E4AF2F269CE60096DAC0 /* Multipaz */,
+				51A18EFA2F7157FF0050476D /* Multipaz */,
 			);
 			productName = SwiftTestApp;
 			productReference = 51100E672F21D4A5006B2ADD /* SwiftTestApp.app */;
@@ -177,7 +178,6 @@
 			);
 			name = IdentityDocumentProviderExtension;
 			packageProductDependencies = (
-				512DAEDD2F2A33330061F72B /* Multipaz */,
 			);
 			productName = IdentityDocumentProviderExtension;
 			productReference = 512DAECF2F2A31B30061F72B /* IdentityDocumentProviderExtension.appex */;
@@ -211,7 +211,7 @@
 			mainGroup = 51100E5E2F21D4A5006B2ADD;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				5168E4AE2F269CE60096DAC0 /* XCLocalSwiftPackageReference "../../../multipaz" */,
+				51A18EF92F7157FF0050476D /* XCLocalSwiftPackageReference "../../../multipaz" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 51100E682F21D4A5006B2ADD /* Products */;
@@ -559,19 +559,18 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		5168E4AE2F269CE60096DAC0 /* XCLocalSwiftPackageReference "../../../multipaz" */ = {
+		51A18EF92F7157FF0050476D /* XCLocalSwiftPackageReference "../../../multipaz" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../../multipaz;
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		512DAEDD2F2A33330061F72B /* Multipaz */ = {
+		5168E4AF2F269CE60096DAC0 /* Multipaz */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 5168E4AE2F269CE60096DAC0 /* XCLocalSwiftPackageReference "../../../multipaz" */;
 			productName = Multipaz;
 		};
-		5168E4AF2F269CE60096DAC0 /* Multipaz */ = {
+		51A18EFA2F7157FF0050476D /* Multipaz */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Multipaz;
 		};

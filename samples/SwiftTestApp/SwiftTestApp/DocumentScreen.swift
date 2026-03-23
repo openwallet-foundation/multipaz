@@ -1,6 +1,5 @@
 import SwiftUI
 import Multipaz
-import MultipazSwift
 
 struct DocumentScreen: View {
     @Environment(ViewModel.self) private var viewModel

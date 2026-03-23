@@ -22,6 +22,7 @@ kotlin {
             export(project(":multipaz-dcapi"))
             export(project(":multipaz-doctypes"))
             export(project(":multipaz-longfellow"))
+            export(project(":multipaz-swiftui"))
             export(libs.kotlinx.io.bytestring)
             export(libs.kotlinx.io.core)
             export(libs.kotlinx.datetime)
@@ -34,11 +35,11 @@ kotlin {
             binaryOption("bundleVersion", projectVersionCode.toString())
             binaryOption("bundleShortVersionString", projectVersionName)
             freeCompilerArgs += listOf(
-                // This is how we specify the minimum iOS version as 16.0
+                // This is how we specify the minimum iOS version as 26.0
                 "-Xoverride-konan-properties=" +
-                        "osVersionMin.ios_arm64=16.0;" +
-                        "osVersionMin.ios_simulator_arm64=16.0;" +
-                        "osVersionMin.ios_x64=16.0",
+                        "osVersionMin.ios_arm64=26.0;" +
+                        "osVersionMin.ios_simulator_arm64=26.0;" +
+                        "osVersionMin.ios_x64=26.0",
                 // Uncomment the following to get Garbage Collection logging when using the framework:
                 //
                 // "-Xruntime-logs=gc=info"
@@ -55,6 +56,7 @@ kotlin {
                 api(project(":multipaz-dcapi"))
                 api(project(":multipaz-doctypes"))
                 api(project(":multipaz-longfellow"))
+                api(project(":multipaz-swiftui"))
                 api(libs.kotlinx.io.bytestring)
                 api(libs.kotlinx.io.core)
                 api(libs.kotlinx.datetime)

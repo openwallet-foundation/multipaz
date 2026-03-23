@@ -1,5 +1,4 @@
 import SwiftUI
-@preconcurrency import Multipaz
 
 private struct ConsentPromptDialogData: Identifiable, Equatable {
     let id = UUID()

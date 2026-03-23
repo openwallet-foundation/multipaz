@@ -1,5 +1,4 @@
 import Foundation
-@preconcurrency import Multipaz
 
 extension URL {
     /// Gets the serialized origin according to the [WHATWG HTML standard](https://html.spec.whatwg.org/multipage/browsers.html#origin).

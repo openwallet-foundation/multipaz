@@ -1,6 +1,5 @@
 import SwiftUI
 import Multipaz
-import MultipazSwift
 
 struct Iso18013ProximityPresentmentScreen: View {
     @Environment(ViewModel.self) private var viewModel

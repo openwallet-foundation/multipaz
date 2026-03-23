@@ -1,9 +1,8 @@
 import Multipaz
-import MultipazSwift
 
 enum Destination: Hashable {
     case startScreen
-case aboutScreen
+    case aboutScreen
     case documentStoreScreen
     case documentScreen(documentInfo: DocumentInfo)
     case credentialScreen(credentialInfo: CredentialInfo)

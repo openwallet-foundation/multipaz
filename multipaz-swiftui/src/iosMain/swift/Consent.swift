@@ -1,4 +1,3 @@
-import Multipaz
 import SwiftUI
 
 func getIconName(claim: Claim) -> String {

@@ -1,6 +1,5 @@
 import SwiftUI
 import Multipaz
-import MultipazSwift
 
 struct PassphrasePromptScreen: View {
     @Environment(ViewModel.self) private var viewModel

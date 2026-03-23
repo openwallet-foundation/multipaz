@@ -1,5 +1,4 @@
 import SwiftUI
-@preconcurrency import Multipaz
 
 private struct PassphrasePromptDialogData: Identifiable, Equatable {
     let id = UUID()

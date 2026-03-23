@@ -1,6 +1,5 @@
 import SwiftUI
 import Combine
-@preconcurrency import Multipaz
 
 // MARK: - Internal State Management
 // These remain private/internal as they are implementation details of the View.

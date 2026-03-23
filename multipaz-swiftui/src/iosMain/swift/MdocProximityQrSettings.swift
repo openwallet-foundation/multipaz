@@ -1,4 +1,3 @@
-import Multipaz
 
 public struct MdocProximityQrSettings {
     let availableConnectionMethods: [MdocConnectionMethod]

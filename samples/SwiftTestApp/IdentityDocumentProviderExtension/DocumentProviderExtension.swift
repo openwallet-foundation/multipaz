@@ -10,7 +10,7 @@ import IdentityDocumentServices
 import IdentityDocumentServicesUI
 import SwiftUI
 @preconcurrency import Multipaz
-import MultipazSwift
+import Multipaz
 
 func getPresentmentSource() async -> PresentmentSource {
     let storage = IosStorage(

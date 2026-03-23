@@ -1,6 +1,5 @@
 import SwiftUI
 import Multipaz
-import MultipazSwift
 
 struct AboutScreen: View {
     @Environment(ViewModel.self) private var viewModel

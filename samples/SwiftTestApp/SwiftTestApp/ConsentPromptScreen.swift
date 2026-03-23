@@ -1,6 +1,5 @@
 import SwiftUI
 import Multipaz
-import MultipazSwift
 
 private enum RequestType: String, CaseIterable {
     case mdlUsTransportation = "mDL: US transportation"

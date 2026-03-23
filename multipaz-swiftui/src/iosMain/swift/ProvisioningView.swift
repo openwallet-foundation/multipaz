@@ -1,9 +1,8 @@
 import SwiftUI
-@preconcurrency import Multipaz
 
 /// A UI Panel (implemented as a SwiftUI `VStack`) that interacts with the user and
 /// drives credential provisioning via the provided ``ProvisioningModel``.
-public struct Provisioning: View {
+public struct ProvisioningView: View {
     
     /// The model managing the credential provisioning logic.
     public let provisioningModel: ProvisioningModel

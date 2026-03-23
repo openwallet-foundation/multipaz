@@ -7,18 +7,9 @@ let package = Package(
     .iOS(.v26),
    ],
    products: [
-      .library(name: "Multipaz", targets: ["MultipazSwift"]),
-      .library(name: "MultipazCore", targets: ["Multipaz"])
+      .library(name: "Multipaz", targets: ["Multipaz"]),
    ],
    targets: [
-        .target(
-            name: "MultipazSwift",
-            dependencies: ["Multipaz"],
-            path: "multipaz-swift/Sources/MultipazSwift",
-            resources: [
-                .process("Resources/default_card_art.png")
-            ]
-        ),
         .binaryTarget(
             name: "Multipaz",
             path: "xcframework/build/XCFrameworks/release/Multipaz.xcframework"

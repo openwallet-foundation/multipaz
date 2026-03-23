@@ -1,4 +1,3 @@
-@preconcurrency import Multipaz
 
 extension PromptModel {
     public func requestPassphrase(

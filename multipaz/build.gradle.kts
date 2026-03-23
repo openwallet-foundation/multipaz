@@ -14,6 +14,7 @@ plugins {
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.ksp)
     alias(libs.plugins.buildconfig)
+    alias(libs.plugins.skie)
     id("maven-publish")
     id("org.jetbrains.dokka") version "2.1.0"
 }

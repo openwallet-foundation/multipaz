@@ -2,7 +2,6 @@ import ExtensionKit
 import IdentityDocumentServices
 import IdentityDocumentServicesUI
 import SwiftUI
-@preconcurrency import Multipaz
 import Combine
 
 @MainActor

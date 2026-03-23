@@ -1,6 +1,5 @@
 import SwiftUI
 import Combine
-import Multipaz
 
 private let oidToPrettyName = [
     OID.commonName.oid: "Common Name",

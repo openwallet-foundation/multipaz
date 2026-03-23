@@ -1,6 +1,5 @@
 import SwiftUI
 import Multipaz
-import MultipazSwift
 
 struct CertificateViewerScreen: View {
     let certificates: [X509Cert]

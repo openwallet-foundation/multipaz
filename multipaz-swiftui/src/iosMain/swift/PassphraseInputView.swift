@@ -1,5 +1,4 @@
 import SwiftUI
-import Multipaz
 
 /// A flexible SwiftUI view for inputting PIN or passphrases with built-in validation.
 ///

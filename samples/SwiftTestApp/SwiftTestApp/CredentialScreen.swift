@@ -1,6 +1,5 @@
 import SwiftUI
 import Multipaz
-import MultipazSwift
 
 struct CredentialScreen: View {
     @Environment(ViewModel.self) private var viewModel

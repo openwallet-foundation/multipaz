@@ -1,7 +1,6 @@
 import Foundation
 import UIKit
 import Multipaz
-import MultipazSwift
 import Observation
 import SwiftUI
 

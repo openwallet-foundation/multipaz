@@ -1,5 +1,4 @@
 import SwiftUI
-import Multipaz
 
 public struct PromptDialogs: View {
     let promptModel: PromptModel

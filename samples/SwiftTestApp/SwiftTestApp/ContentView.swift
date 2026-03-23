@@ -1,6 +1,5 @@
 import SwiftUI
 import Multipaz
-import MultipazSwift
 
 struct ContentView: View {
     @State private var viewModel = ViewModel()
@@ -47,7 +46,7 @@ struct ContentView: View {
             ) {
                 NavigationStack {
                     VStack {
-                        Provisioning(
+                        ProvisioningView(
                             provisioningModel: viewModel.provisioningModel,
                             waitForRedirectLinkInvocation: { state in
                                 return await viewModel.provisioningSupport.waitForAppLinkInvocation(state: state)

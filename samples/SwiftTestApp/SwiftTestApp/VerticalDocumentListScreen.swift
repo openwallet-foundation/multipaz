@@ -1,6 +1,5 @@
 import SwiftUI
 import Multipaz
-import MultipazSwift
 
 struct VerticalDocumentListScreen: View {
     @Environment(ViewModel.self) private var viewModel
