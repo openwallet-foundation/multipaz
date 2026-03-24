@@ -99,7 +99,7 @@ private fun MdocProximityQrPresentmentAndroid(
     showCompleted: @Composable (error: Throwable?, reset: () -> Unit) -> Unit,
     preselectedDocuments: List<Document>,
     eDeviceKeyCurve: EcCurve,
-    transportFactory: MdocTransportFactory
+    transportFactory: MdocTransportFactory,
 ) {
     val coroutineScope = rememberCoroutineScope { PresentmentActivity.promptModel }
     var state by remember { mutableStateOf<StateAndroid>(StateAndroid.PREPARE_SETTINGS) }

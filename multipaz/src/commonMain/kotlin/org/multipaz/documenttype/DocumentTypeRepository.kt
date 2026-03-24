@@ -22,15 +22,16 @@ import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
 
 /**
- * A class that contains the metadata of Document Types.
+ * A class that contains the metadata of Document and transaction types.
  *
  * The repository is initially empty, but in the [org.multipaz.documenttype.knowntypes] package
  * there are well known document types which can be added using the [addDocumentType] method.
  *
- * Applications also may add their own document types.
+ * Applications also may add their own document and transaction types.
  */
 class DocumentTypeRepository {
     private val _documentTypes: MutableList<DocumentType> = mutableListOf()
+    private val _transactionTypes: MutableList<TransactionType> = mutableListOf()
 
     /**
      * Get all the Document Types that are in the repository.
@@ -39,12 +40,33 @@ class DocumentTypeRepository {
         get() = _documentTypes
 
     /**
+     * All the transaction types in the repository.
+     */
+    val transactionTypes: List<TransactionType>
+        get() = _transactionTypes
+
+    /**
      * Add a Document Type to the repository.
      *
      * @param documentType the Document Type to add
      */
     fun addDocumentType(documentType: DocumentType) =
         _documentTypes.add(documentType)
+
+    /**
+     * Add a [TransactionType] to the registry.
+     *
+     * @param transactionType new [TransactionType]
+     */
+    fun addTransactionType(transactionType: TransactionType) {
+        for (existingType in transactionTypes) {
+            check(existingType.identifier != transactionType.identifier)
+            check(existingType.kbJwtResponseClaimName != transactionType.kbJwtResponseClaimName)
+            check(existingType.mdocResponseNamespace != transactionType.mdocResponseNamespace)
+            check(existingType.mdocRequestInfoKeyName != transactionType.mdocRequestInfoKeyName)
+        }
+        _transactionTypes.add(transactionType)
+    }
 
     /**
      * Gets the first [DocumentType] in [documentTypes] with a given ISO mdoc doc type.
@@ -120,4 +142,13 @@ class DocumentTypeRepository {
         }
         return null
     }
+
+    /**
+     * Find a transaction type by identifier
+     *
+     * @param identifier transaction identifier, see [TransactionType.identifier]
+     * @return registered [TransactionType] or null, if not found in the repository
+     */
+    fun getTransactionTypeByIdentifier(identifier: String): TransactionType? =
+        _transactionTypes.find { it.identifier == identifier }
 }

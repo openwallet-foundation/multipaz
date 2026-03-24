@@ -6,15 +6,22 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.Simple
+import org.multipaz.cbor.Uint
 import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
@@ -24,6 +31,10 @@ import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
+import org.multipaz.documenttype.DocumentAttribute
+import org.multipaz.documenttype.DocumentAttributeType
+import org.multipaz.documenttype.MdocDataElement
+import org.multipaz.documenttype.TransactionType
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.OpenID4VP
@@ -38,8 +49,63 @@ import kotlin.collections.iterator
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class DigitalCredentialsPresentmentTest {
+    private object FooTransactionType: TransactionType(
+        displayName = "Foo",
+        identifier = "foo",
+        attributes = transactionDataElements,
+        kbJwtResponseClaimName = "kb_foo",
+        mdocResponseNamespace = "FooNS"
+    ) {
+        override suspend fun isApplicable(
+            transactionData: TransactionData,
+            credential: Credential
+        ): Boolean {
+            return transactionData.getBoolean("succeed")!!
+        }
+
+        override suspend fun applyCbor(
+            transactionData: TransactionData,
+            credential: Credential
+        ): Map<String, DataItem> = buildMap {
+            put("result", Uint(42UL))
+        }
+    }
+
+    private object BarTransactionType: TransactionType(
+        displayName = "Bar",
+        identifier = "bar",
+        attributes = transactionDataElements
+    ) {
+        override suspend fun isApplicable(
+            transactionData: TransactionData,
+            credential: Credential
+        ): Boolean {
+            return transactionData.getBoolean("succeed")!!
+        }
+
+        override suspend fun applyCbor(
+            transactionData: TransactionData,
+            credential: Credential
+        ): Map<String, DataItem> = buildMap {
+            put("result", Uint(57UL))
+        }
+    }
+
+    // Unregistered transaction type, will cause an error
+    private object BuzTransactionType: TransactionType(
+        displayName = "Buz",
+        identifier = "buz",
+        attributes = transactionDataElements
+    ) {
+        override suspend fun isApplicable(
+            transactionData: TransactionData,
+            credential: Credential
+        ): Boolean = true
+    }
+
     companion object {
         private const val TAG = "DigitalCredentialsPresentmentTest"
 
@@ -47,6 +113,16 @@ class DigitalCredentialsPresentmentTest {
         private const val DNS_NAME = "verifier.multipaz.org"
         private const val ORIGIN = "https://verifier.multipaz.org"
         private const val APP_ID = "org.multipaz.testApp"
+
+        private val transactionDataElements = listOf(MdocDataElement(
+            attribute = DocumentAttribute(
+                type = DocumentAttributeType.Boolean,
+                identifier = "succeed",
+                displayName = "succeed",
+                description = "if false, transaction will be rejected"
+            ),
+            mandatory = true
+        ))
     }
 
     val documentStoreTestHarness = DocumentStoreTestHarness()
@@ -57,6 +133,8 @@ class DigitalCredentialsPresentmentTest {
     private suspend fun setup() {
         documentStoreTestHarness.initialize()
         documentStoreTestHarness.provisionStandardDocuments()
+        documentStoreTestHarness.documentTypeRepository.addTransactionType(FooTransactionType)
+        documentStoreTestHarness.documentTypeRepository.addTransactionType(BarTransactionType)
     }
 
     private data class ShownConsentPrompt(
@@ -78,7 +156,8 @@ class DigitalCredentialsPresentmentTest {
         version: OpenID4VP.Version,
         signRequest: Boolean,
         encryptionKey: EcPrivateKey?,
-        dcql: JsonObject
+        dcql: JsonObject,
+        transactionData: List<String>
     ): TestOpenID4VPResponse {
         val presentmentSource = SimplePresentmentSource(
             documentStore = documentStoreTestHarness.documentStore,
@@ -120,7 +199,8 @@ class DigitalCredentialsPresentmentTest {
             requestSigningKey = readerAuthKey,
             responseMode = OpenID4VP.ResponseMode.DC_API,
             responseUri = null,
-            dclqQuery = dcql
+            dclqQuery = dcql,
+            jsonTransactionData = transactionData
         )
 
         val protocol = when (version) {
@@ -222,13 +302,15 @@ class DigitalCredentialsPresentmentTest {
         signRequest: Boolean,
         encryptionKey: EcPrivateKey?,
         dcql: String,
+        transactionData: List<String>,
         expectedMdocResponse: String
     ) {
         val response = testOpenID4VP(
             version = version,
             signRequest = signRequest,
             encryptionKey = encryptionKey,
-            dcql = Json.decodeFromString(JsonObject.serializer(), dcql)
+            dcql = Json.decodeFromString(JsonObject.serializer(), dcql),
+            transactionData = transactionData
         )
         assertEquals(1, response.vpToken.keys.size)
         val credId = response.vpToken.keys.first()
@@ -272,7 +354,19 @@ class DigitalCredentialsPresentmentTest {
         }
 
         val deviceResponse = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
-        deviceResponse.verify(sessionTranscript)
+        deviceResponse.verify(
+            sessionTranscript = sessionTranscript,
+            transactionDataList = if (transactionData.isEmpty()) {
+                emptyList()
+            } else {
+                TransactionDataJson.parse(
+                    base64UrlEncodedJson = transactionData.map {
+                        it.encodeToByteArray().toBase64Url()
+                    },
+                    documentTypeRepository = documentStoreTestHarness.documentTypeRepository
+                ).values.toList()
+            }
+        )
         assertEquals(DeviceResponse.STATUS_OK, deviceResponse.status)
         assertEquals(1, deviceResponse.documents.size)
         val doc = deviceResponse.documents[0]
@@ -288,13 +382,16 @@ class DigitalCredentialsPresentmentTest {
         signRequest: Boolean,
         encryptionKey: EcPrivateKey?,
         dcql: String,
-        expectedSdJwtResponse: String
+        transactionData: List<String>,
+        expectedSdJwtResponse: String,
+        expectedKbJwtResponse: String?
     ) {
         val response = testOpenID4VP(
             version = version,
             signRequest = signRequest,
             encryptionKey = encryptionKey,
-            dcql = Json.decodeFromString(JsonObject.serializer(), dcql)
+            dcql = Json.decodeFromString(JsonObject.serializer(), dcql),
+            transactionData = transactionData
         )
         assertEquals(1, response.vpToken.keys.size)
         val credId = response.vpToken.keys.first()
@@ -312,6 +409,16 @@ class DigitalCredentialsPresentmentTest {
                     expectedAudience == audience
             },
             checkCreationTime = { creationTime -> true },
+            transactionData = if (transactionData.isEmpty()) {
+                emptyList()
+            } else {
+                TransactionDataJson.parse(
+                    base64UrlEncodedJson = transactionData.map {
+                        it.encodeToByteArray().toBase64Url()
+                    },
+                    documentTypeRepository = documentStoreTestHarness.documentTypeRepository
+                ).values.first()
+            }
         ).filterKeys { key -> !setOf("iat", "nbf", "exp", "cnf").contains(key) }  // filter out variable claims
         assertEquals(
             expectedSdJwtResponse,
@@ -320,6 +427,17 @@ class DigitalCredentialsPresentmentTest {
                 prettyPrintIndent = "  "
             }.encodeToString(processedJwt)
         )
+        if (expectedKbJwtResponse != null) {
+            val filterOut = setOf("iat", "nonce", "aud", "sd_hash")
+            val kbJwt = sdJwtKb.jwtBody.filterKeys { key -> !filterOut.contains(key) }
+            assertEquals(
+                expectedKbJwtResponse,
+                Json {
+                    prettyPrint = true
+                    prettyPrintIndent = "  "
+                }.encodeToString(kbJwt)
+            )
+        }
     }
 
     suspend fun test_OID4VP_mDL(
@@ -349,6 +467,7 @@ class DigitalCredentialsPresentmentTest {
                             { "path": ["org.iso.18013.5.1", "portrait"] }
                     ]}]}
                 """.trimIndent().trim(),
+            transactionData = listOf(),
             expectedMdocResponse =
                 """
                     Document 0:
@@ -357,6 +476,58 @@ class DigitalCredentialsPresentmentTest {
                         org.iso.18013.5.1:
                           age_over_21: true
                           portrait: 5318 bytes
+                """.trimIndent().trim(),
+        )
+    }
+
+    suspend fun test_OID4VP_mDL_withTransaction(
+        versionDraftNumber: Int,
+        signRequest: Boolean,
+        encryptResponse: Boolean,
+    ) {
+        val version = when (versionDraftNumber) {
+            24 -> OpenID4VP.Version.DRAFT_24
+            29 -> OpenID4VP.Version.DRAFT_29
+            else -> throw IllegalArgumentException("Unknown draft number")
+        }
+        val encryptionKey = if (encryptResponse) Crypto.createEcPrivateKey(EcCurve.P256) else null
+        test_OpenID4VP_mdoc(
+            version = version,
+            signRequest = signRequest,
+            encryptionKey = encryptionKey,
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "org.iso.18013.5.1.mDL" },
+                          "claims": [
+                            { "path": ["org.iso.18013.5.1", "age_over_21"] },
+                            { "path": ["org.iso.18013.5.1", "portrait"] }
+                    ]}]}
+                """.trimIndent().trim(),
+            transactionData = listOf(
+                makeTransactionData(FooTransactionType, "mDL"),
+                makeTransactionData(BarTransactionType, "mDL",
+                    algorithms = listOf(Algorithm.SHA384, Algorithm.SHA512))
+            ),
+            expectedMdocResponse =
+                """
+                    Document 0:
+                      DocType: org.iso.18013.5.1.mDL
+                      IssuerSigned:
+                        org.iso.18013.5.1:
+                          age_over_21: true
+                          portrait: 5318 bytes
+                      DeviceNamespaces:
+                        FooNS:
+                          transaction_data_hash: 32 bytes
+                          result: 42
+                        bar:
+                          transaction_data_hash_alg: -43
+                          transaction_data_hash: 48 bytes
+                          result: 57
                 """.trimIndent().trim(),
         )
     }
@@ -389,6 +560,7 @@ class DigitalCredentialsPresentmentTest {
                             { "path": ["family_name"] }
                     ]}]}                
                 """.trimIndent().trim(),
+            transactionData = listOf(),
             expectedSdJwtResponse =
                 """
                     {
@@ -401,8 +573,167 @@ class DigitalCredentialsPresentmentTest {
                       }
                     }
                 """.trimIndent().trim(),
+            expectedKbJwtResponse = null
         )
     }
+
+    suspend fun test_OID4VP_SDJWT_withTransaction(
+        versionDraftNumber: Int,
+        signRequest: Boolean,
+        encryptResponse: Boolean,
+    ) {
+        val version = when (versionDraftNumber) {
+            24 -> OpenID4VP.Version.DRAFT_24
+            29 -> OpenID4VP.Version.DRAFT_29
+            else -> throw IllegalArgumentException("Unknown draft number")
+        }
+        val encryptionKey = if (encryptResponse) Crypto.createEcPrivateKey(EcCurve.P256) else null
+        test_OpenID4VP_sdJwt(
+            version = version,
+            signRequest = signRequest,
+            encryptionKey = encryptionKey,
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "meta": { "vct_values": [ "urn:eudi:pid:1" ] },
+                          "claims": [
+                            { "path": ["age_equal_or_over", "18"] },
+                            { "path": ["given_name"] },
+                            { "path": ["family_name"] }
+                    ]}]}                
+                """.trimIndent().trim(),
+            transactionData = listOf(
+                makeTransactionData(FooTransactionType, "pid",
+                    algorithms = listOf(Algorithm.SHA384, Algorithm.SHA512)),
+                makeTransactionData(BarTransactionType, "pid",
+                    algorithms = listOf(Algorithm.SHA384, Algorithm.SHA512))
+            ),
+            expectedSdJwtResponse =
+                """
+                    {
+                      "iss": "https://example-issuer.com",
+                      "vct": "urn:eudi:pid:1",
+                      "family_name": "Mustermann",
+                      "given_name": "Erika",
+                      "age_equal_or_over": {
+                        "18": true
+                      }
+                    }
+                """.trimIndent().trim(),
+            expectedKbJwtResponse = """
+                {
+                  "kb_foo": {
+                    "result": 42
+                  },
+                  "bar": {
+                    "result": 57
+                  },
+                  "transaction_data_hashes_alg": "sha-384",
+                  "transaction_data_hashes": [
+                    "u7YpNRo4AwUtcGu5pvec-utbtMgp-9igj_mDLK2mm5juySa9b6ORQIQco1Jowz77",
+                    "qY4IVRKWfa4jaq8MEJNc3a-Zsf6hXmo5cEPZ_GzN5ytDtHvg94nwPjN_rg7SlRuE"
+                  ]
+                }
+            """.trimIndent().trim()
+        )
+    }
+
+    suspend fun test_OID4VP_SDJWT_unknownTransaction(
+        versionDraftNumber: Int,
+        signRequest: Boolean,
+        encryptResponse: Boolean,
+    ) {
+        val version = when (versionDraftNumber) {
+            24 -> OpenID4VP.Version.DRAFT_24
+            29 -> OpenID4VP.Version.DRAFT_29
+            else -> throw IllegalArgumentException("Unknown draft number")
+        }
+        val encryptionKey = if (encryptResponse) Crypto.createEcPrivateKey(EcCurve.P256) else null
+        assertFailsWith(IllegalStateException::class) {
+            test_OpenID4VP_sdJwt(
+                version = version,
+                signRequest = signRequest,
+                encryptionKey = encryptionKey,
+                dcql =
+                    """
+                    {
+                      "credentials": [{
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "meta": { "vct_values": [ "urn:eudi:pid:1" ] },
+                          "claims": [
+                            { "path": ["age_equal_or_over", "18"] },
+                            { "path": ["given_name"] },
+                            { "path": ["family_name"] }
+                    ]}]}                
+                """.trimIndent().trim(),
+                transactionData = listOf(makeTransactionData(BuzTransactionType, "pid")),
+                expectedSdJwtResponse = "",
+                expectedKbJwtResponse = null
+            )
+        }
+    }
+
+    suspend fun test_OID4VP_SDJWT_failingTransaction(
+        versionDraftNumber: Int,
+        signRequest: Boolean,
+        encryptResponse: Boolean,
+    ) {
+        val version = when (versionDraftNumber) {
+            24 -> OpenID4VP.Version.DRAFT_24
+            29 -> OpenID4VP.Version.DRAFT_29
+            else -> throw IllegalArgumentException("Unknown draft number")
+        }
+        val encryptionKey = if (encryptResponse) Crypto.createEcPrivateKey(EcCurve.P256) else null
+        assertFailsWith(PresentmentCannotSatisfyRequestException::class) {
+            test_OpenID4VP_sdJwt(
+                version = version,
+                signRequest = signRequest,
+                encryptionKey = encryptionKey,
+                dcql =
+                    """
+                    {
+                      "credentials": [{
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "meta": { "vct_values": [ "urn:eudi:pid:1" ] },
+                          "claims": [
+                            { "path": ["age_equal_or_over", "18"] },
+                            { "path": ["given_name"] },
+                            { "path": ["family_name"] }
+                    ]}]}                
+                """.trimIndent().trim(),
+                transactionData = listOf(
+                    makeTransactionData(FooTransactionType, "pid", succeed = false)
+                ),
+                expectedSdJwtResponse = "",
+                expectedKbJwtResponse = null
+            )
+        }
+    }
+
+    private fun makeTransactionData(
+        transactionType: TransactionType,
+        credentialId: String,
+        succeed: Boolean = true,
+        algorithms: List<Algorithm>? = null
+    ) = buildJsonObject {
+            put("type", transactionType.identifier)
+            putJsonArray("credential_ids") {
+                add(credentialId)
+            }
+            put("succeed", succeed)
+            algorithms?.let {
+                putJsonArray("transaction_data_hashes_alg") {
+                    for (alg in it) {
+                        add(alg.hashAlgorithmName)
+                    }
+                }
+            }
+        }.toString()
 
     @Test fun OID4VP_24_NoSignedRequest_NoEncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(24, false, false) }
     @Test fun OID4VP_24_NoSignedRequest_EncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(24, false, true) }
@@ -419,11 +750,24 @@ class DigitalCredentialsPresentmentTest {
     @Test fun OID4VP_29_SignedRequest_NoEncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(29, true, false) }
     @Test fun OID4VP_29_SignedRequest_EncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(29, true, true) }
 
+    @Test fun OID4VP_29_NoSignedRequest_NoEncryptedResponse_mDL_withTransaction() = runTestWithSetup { test_OID4VP_mDL_withTransaction(29, false, false) }
+    @Test fun OID4VP_29_NoSignedRequest_EncryptedResponse_mDL_withTransaction() = runTestWithSetup { test_OID4VP_mDL_withTransaction(29, false, true ) }
+    @Test fun OID4VP_29_SignedRequest_NoEncryptedResponse_mDL_withTransaction() = runTestWithSetup { test_OID4VP_mDL_withTransaction(29, true, false) }
+    @Test fun OID4VP_29_SignedRequest_EncryptedResponse_mDL_withTransaction() = runTestWithSetup { test_OID4VP_mDL_withTransaction(29, true, true) }
+
     @Test fun OID4VP_29_NoSignedRequest_NoEncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(29, false, false) }
     @Test fun OID4VP_29_NoSignedRequest_EncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(29, false, true) }
     @Test fun OID4VP_29_SignedRequest_NoEncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(29, true, false) }
     @Test fun OID4VP_29_SignedRequest_EncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(29, true, true) }
 
+    @Test fun OID4VP_29_NoSignedRequest_NoEncryptedResponse_SDJWT_withTransaction() = runTestWithSetup { test_OID4VP_SDJWT_withTransaction(29, false, false) }
+    @Test fun OID4VP_29_NoSignedRequest_EncryptedResponse_SDJWT_withTransaction() = runTestWithSetup { test_OID4VP_SDJWT_withTransaction(29, false, true) }
+    @Test fun OID4VP_29_SignedRequest_NoEncryptedResponse_SDJWT_withTransaction() = runTestWithSetup { test_OID4VP_SDJWT_withTransaction(29, true, false) }
+    @Test fun OID4VP_29_SignedRequest_EncryptedResponse_SDJWT_withTransaction() = runTestWithSetup { test_OID4VP_SDJWT_withTransaction(29, true, true) }
+
+    @Test fun OID4VP_29_SignedRequest_EncryptedResponse_SDJWT_unknownTransaction() = runTestWithSetup { test_OID4VP_SDJWT_unknownTransaction(29, true, true) }
+
+    @Test fun OID4VP_29_SignedRequest_EncryptedResponse_SDJWT_failingTransaction() = runTestWithSetup { test_OID4VP_SDJWT_failingTransaction(29, true, true) }
 }
 
 private fun DeviceResponse.prettyPrint(): String {
@@ -438,6 +782,15 @@ private fun DeviceResponse.prettyPrint(): String {
             sb.appendLine("    $namespaceName:")
             issuerSignedItemsMap.forEach { (dataElementName, issuerSignedItem) ->
                 sb.appendLine("      $dataElementName: ${Cbor.toDiagnostics(issuerSignedItem.dataElementValue, diagOptions)}")
+            }
+        }
+        if (doc.deviceNamespaces.data.isNotEmpty()) {
+            sb.appendLine("  DeviceNamespaces:")
+            doc.deviceNamespaces.data.forEach { (namespaceName, itemsMap) ->
+                sb.appendLine("    $namespaceName:")
+                itemsMap.forEach { (name, item) ->
+                    sb.appendLine("      $name: ${Cbor.toDiagnostics(item, diagOptions)}")
+                }
             }
         }
     }

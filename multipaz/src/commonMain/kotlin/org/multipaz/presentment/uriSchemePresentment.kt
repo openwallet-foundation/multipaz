@@ -141,7 +141,7 @@ suspend fun uriSchemePresentment(
             "$headerb64.$bodyb64."
         }
         "direct_post.jwt" -> {
-            response.get("response")!!.jsonPrimitive.content
+            response["response"]!!.jsonPrimitive.content
         }
         else -> throw IllegalArgumentException("Unexpected response_mode")
     }
@@ -159,7 +159,7 @@ suspend fun uriSchemePresentment(
     check(postResponseResponse.contentType()!! == ContentType.Application.Json)
     val bodyText = (postResponseResponse.body() as ByteArray).decodeToString()
     val postResponseBody = Json.decodeFromString<JsonObject>(bodyText)
-    val redirectUri = postResponseBody["redirect_uri"]!!.jsonPrimitive.content
+    val redirectUri = postResponseBody["redirect_uri"]?.jsonPrimitive?.content
 
     source.eventLogger?.addEventAsync(
         EventPresentmentUriSchemeOpenID4VP(

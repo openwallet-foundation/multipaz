@@ -28,9 +28,9 @@ import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.issuersigned.IssuerSignedItem
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
+import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.request.MdocRequestedClaim
-import kotlin.time.Clock
 import kotlin.time.Instant
 
 /**
@@ -125,9 +125,10 @@ data class MdocDocument(
 
     internal suspend fun verify(
         sessionTranscript: DataItem,
-        eReaderKey: AsymmetricKey? = null,
-        atTime: Instant = Clock.System.now(),
-    ) {
+        eReaderKey: AsymmetricKey?,
+        transactionData: List<TransactionData>,
+        atTime: Instant,
+    ): Map<String, Map<String, DataItem>> {
         // First check the issuer signature..
         val issuerAuthorityCertChain =
             issuerAuth.unprotectedHeaders[
@@ -239,6 +240,24 @@ data class MdocDocument(
                 }
             }
         }
+
+        // Check transaction data and return transaction processing responses
+        return buildMap {
+            for (transaction in transactionData) {
+                val response = deviceNamespaces.data[transaction.type.mdocResponseNamespace]
+                    ?: throw IllegalStateException("No transaction response for '${transaction.type.identifier}'")
+                val hashAlg = response["transaction_data_hash_alg"]?.let {
+                    Algorithm.fromCoseAlgorithmIdentifier(it.asNumber.toInt())
+                }
+                val hash = response["transaction_data_hash"] as? Bstr
+                    ?: throw IllegalStateException("Invalid response for transaction '${transaction.type.identifier}'")
+                val expectedHash = transaction.getHash(hashAlg ?: Algorithm.SHA256)
+                if (ByteString(hash.asBstr) != expectedHash) {
+                    throw IllegalStateException("Transaction hash failed to verify for '${transaction.type.identifier}'")
+                }
+                put(transaction.type.identifier, response)
+            }
+        }
     }
 
     companion object {
@@ -269,9 +288,9 @@ data class MdocDocument(
                             algorithm = mso.digestAlgorithm,
                             message = Cbor.encode(issuerSignedItemBytes)
                         )
-                        innerMap.put(issuerSignedItem.dataElementIdentifier, ByteString(digest))
+                        innerMap[issuerSignedItem.dataElementIdentifier] = ByteString(digest)
                     }
-                    issuerNamespaceDigests.put(namespaceName, innerMap)
+                    issuerNamespaceDigests[namespaceName] = innerMap
                 }
                 IssuerNamespaces.fromDataItem(it)
             } ?: buildIssuerNamespaces {}
@@ -296,7 +315,7 @@ data class MdocDocument(
                 deviceAuth = deviceAuth,
                 deviceNamespaces = deviceNamespaces,
                 errors = errors ?: emptyMap(),
-                issuerNamespaceDigests = issuerNamespaceDigests
+                issuerNamespaceDigests = issuerNamespaceDigests,
             )
         }
 

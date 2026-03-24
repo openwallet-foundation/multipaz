@@ -1,13 +1,16 @@
 package org.multipaz.openid
 
+import io.ktor.utils.io.core.toByteArray
 import kotlinx.io.bytestring.decodeToString
 import kotlin.time.Clock
 import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -52,6 +55,8 @@ import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.presentment.PresentmentUnlockReason
+import org.multipaz.presentment.TransactionDataJson
+import org.multipaz.presentment.computeTransactionResponse
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
@@ -84,7 +89,8 @@ object OpenID4VP {
      * @param responseMode the response mode.
      * @param responseUri the response URI or `null`.
      * @param dclqQuery the DCQL query.
-     * @param transactionData strings from `transaction_data` array, see OpenID4VP 1.0 section 8.4.
+     * @param jsonTransactionData strings from `transaction_data` array *before* base64url encoding,
+     *   see OpenID4VP 1.0 section 8.4.
      * @return the OpenID4VP request.
      */
     suspend fun generateRequest(
@@ -97,9 +103,10 @@ object OpenID4VP {
         responseMode: ResponseMode,
         responseUri: String?,
         dclqQuery: JsonObject,
-        transactionData: List<String> = emptyList()
+        jsonTransactionData: List<String> = emptyList()
     ): JsonObject {
         if (version == Version.DRAFT_24) {
+            check(jsonTransactionData.isEmpty())
             return generateRequestDraft24(
                 origin = origin,
                 clientId = clientId,
@@ -166,9 +173,9 @@ object OpenID4VP {
                     }
                 }
             }
-            if (transactionData.isNotEmpty()) {
-                put("transaction_data", JsonArray(transactionData.map {
-                    JsonPrimitive(it)
+            if (jsonTransactionData.isNotEmpty()) {
+                put("transaction_data", JsonArray(jsonTransactionData.map {
+                    JsonPrimitive(it.toByteArray().toBase64Url())
                 }))
             }
         }
@@ -421,9 +428,17 @@ object OpenID4VP {
 
         val vpTokens = mutableMapOf<String, String>()
         val dcqlQuery = DcqlQuery.fromJson(request["dcql_query"]!!.jsonObject)
+        val transactionDataMap = request["transaction_data"]?.let {
+            try {
+                TransactionDataJson.parse(it, source.documentTypeRepository)
+            } catch (err: IllegalArgumentException) {
+                throw IllegalStateException("Problem processing transaction(s)", err)
+            }
+        } ?: emptyMap()
         val dcqlResponse = try {
             dcqlQuery.execute(
                 presentmentSource = source,
+                transactionDataMap = transactionDataMap
             )
         } catch (e: DcqlCredentialQueryException) {
             throw PresentmentCannotSatisfyRequestException("Unable to satisfy the request", e)
@@ -435,10 +450,6 @@ object OpenID4VP {
             origin = origin
         )
 
-        val transactionDataMap = request["transaction_data"]?.let {
-            TransactionData.parse(it)
-        }
-        // TODO: incorporate transaction data into the consent prompt and event logging
         val trustMetadata = source.resolveTrust(requester)
         val selection = source.showConsentPrompt(
             requester = requester,
@@ -469,7 +480,7 @@ object OpenID4VP {
                     nonce = nonce,
                     reReaderPublicKey = reReaderPublicKey,
                     responseUri = responseUri,
-                    requestIsForZk = requestIsForZk
+                    requestIsForZk = requestIsForZk,
                 )
             } else if (match.source.credentialQuery.vctValues != null) {
                 openID4VPSdJwt(
@@ -479,12 +490,11 @@ object OpenID4VP {
                     clientId = clientId,
                     nonce = nonce,
                     responseMode = responseMode,
-                    transactionData = transactionDataMap?.get(match.source.credentialQuery.id)
                 )
             } else {
                 throw IllegalArgumentException("Expected ISO mdoc or IETF SD-JWT, got neither")
             }
-            vpTokens.put(match.source.credentialQuery.id, credentialResponse)
+            vpTokens[match.source.credentialQuery.id] = credentialResponse
             credentialsPresented.add(match.credential)
         }
 
@@ -563,6 +573,7 @@ object OpenID4VP {
         var zkSystemMatch: ZkSystem? = null
         var zkSystemSpec: ZkSystemSpec? = null
         if (requestIsForZk) {
+            check(match.transactionData.isEmpty())
             val requesterSupportedZkSpecs = mutableListOf<ZkSystemSpec>()
             for (entry in match.source.credentialQuery.meta["zk_system_type"]!!.jsonArray) {
                 entry as JsonObject
@@ -581,10 +592,7 @@ object OpenID4VP {
             if (zkSystemRepository != null) {
                 // Find the first ZK System that the requester supports and matches the document
                 for (zkSpec in requesterSupportedZkSpecs) {
-                    val zkSystem = zkSystemRepository.lookup(zkSpec.system)
-                    if (zkSystem == null) {
-                        continue
-                    }
+                    val zkSystem = zkSystemRepository.lookup(zkSpec.system) ?: continue
 
                     val matchingZkSystemSpec = zkSystem.getMatchingSystemSpec(
                         zkSystemSpecs = requesterSupportedZkSpecs,
@@ -603,9 +611,9 @@ object OpenID4VP {
             }
         }
 
-        val reReaderPublicKeJwkThumbprint = reReaderPublicKey?.let {
-            it.toJwkThumbprint(Algorithm.SHA256).toByteArray()
-        }
+        val reReaderPublicKeJwkThumbprint = reReaderPublicKey
+            ?.toJwkThumbprint(Algorithm.SHA256)
+            ?.toByteArray()
         val handoverInfo = Cbor.encode(
             when (version) {
                 Version.DRAFT_29 -> {
@@ -664,6 +672,7 @@ object OpenID4VP {
             sessionTranscript = Cbor.decode(encodedSessionTranscript),
             credential = mdocCredential,
             requestedClaims = match.source.credentialQuery.claims as List<MdocRequestedClaim>,
+            deviceNamespaces = computeTransactionResponse(match)
         )
         val deviceResponse = buildDeviceResponse(
             sessionTranscript = Cbor.decode(encodedSessionTranscript),
@@ -692,7 +701,6 @@ object OpenID4VP {
         clientId: String,
         nonce: String,
         responseMode: ResponseMode,
-        transactionData: List<TransactionData>?
     ): String {
         match.source as CredentialMatchSourceOpenID4VP
         val sdjwtVcCredential = match.credential as SdJwtVcCredential
@@ -703,6 +711,32 @@ object OpenID4VP {
         val filteredSdJwt = sdJwt.filter(pathsToDisclose)
 
         (sdjwtVcCredential as Credential).increaseUsageCount()
+
+        val transactionResponse = mutableMapOf<String, JsonElement>()
+        for (data in match.transactionData) {
+            data.type.applyJson(data, (sdjwtVcCredential as Credential))?.let {
+                transactionResponse[data.type.kbJwtResponseClaimName] = it
+            }
+        }
+        val hashAlgorithm = match.transactionData.firstNotNullOfOrNull {
+            it.getHashAlgorithm()
+        }
+        if (hashAlgorithm != null) {
+            // Non-default hash algorithm; ensure all transaction data items are
+            // using the same one
+            match.transactionData.forEach { data ->
+                check(hashAlgorithm == (data.getHashAlgorithm() ?: Algorithm.SHA256))
+            }
+            transactionResponse["transaction_data_hashes_alg"] =
+                JsonPrimitive(hashAlgorithm.hashAlgorithmName)
+        }
+        transactionResponse["transaction_data_hashes"] = buildJsonArray {
+            match.transactionData.forEach {
+                data -> add(data.getHash(
+                    hashAlgorithm ?: Algorithm.SHA256).toByteArray().toBase64Url())
+            }
+        }
+
         return if (sdjwtVcCredential is SecureAreaBoundCredential) {
             filteredSdJwt.present(
                 signingKey = AsymmetricKey.anonymous(
@@ -725,17 +759,9 @@ object OpenID4VP {
                 },
                 creationTime = Clock.System.now()
             ) {
-                transactionData?.let { dataArray ->
-                    putJsonArray("transaction_data_hashes") {
-                        dataArray.forEach { data -> add(data.hash.toByteArray().toBase64Url()) }
-                    }
-                    dataArray.firstNotNullOfOrNull { it.hashAlgorithm }?.let { hashAlgorithm ->
-                        // Non-default hash algorithm; ensure all transaction data items are
-                        // using the same one
-                        dataArray.forEach { data ->
-                            check(hashAlgorithm == (data.hashAlgorithm ?: Algorithm.SHA256))
-                        }
-                        put("transaction_data_hashes_alg", hashAlgorithm.hashAlgorithmName)
+                if (!match.transactionData.isEmpty()) {
+                    for ((key, response) in transactionResponse) {
+                        put(key, response)
                     }
                 }
             }.compactSerialization

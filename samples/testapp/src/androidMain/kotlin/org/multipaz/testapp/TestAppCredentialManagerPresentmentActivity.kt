@@ -4,7 +4,7 @@ import org.multipaz.compose.digitalcredentials.CredentialManagerPresentmentActiv
 
 class TestAppCredentialManagerPresentmentActivity: CredentialManagerPresentmentActivity() {
     override suspend fun getSettings(): Settings {
-        val app = App.Companion.getInstance()
+        val app = App.getInstance()
         app.initialize()
 
         val stream = assets.open("privilegedUserAgents.json")
@@ -15,7 +15,7 @@ class TestAppCredentialManagerPresentmentActivity: CredentialManagerPresentmentA
 
         return Settings(
             source = app.getPresentmentSource(),
-            privilegedAllowList = privilegedAllowList
+            privilegedAllowList = privilegedAllowList,
         )
     }
 }

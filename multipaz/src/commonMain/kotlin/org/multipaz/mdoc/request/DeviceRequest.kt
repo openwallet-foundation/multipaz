@@ -36,6 +36,7 @@ import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.response.Iso18015ResponseException
 import org.multipaz.mdoc.util.mdocVersionCompareTo
@@ -48,6 +49,8 @@ import org.multipaz.presentment.CredentialPresentmentSetOption
 import org.multipaz.presentment.CredentialPresentmentSetOptionMember
 import org.multipaz.presentment.CredentialPresentmentSetOptionMemberMatch
 import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.TransactionData
+import org.multipaz.presentment.TransactionDataCbor
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
 import org.multipaz.util.Logger
@@ -352,7 +355,7 @@ data class DeviceRequest private constructor(
             val protectedHeaders = mutableMapOf<CoseLabel, DataItem>()
             // ISO 18013-5 requires use of non-fully-specified algorithms, e.g. -7 instead of -9
             val signatureAlgorithm = readerKey.algorithm.curve!!.defaultSigningAlgorithm
-            protectedHeaders.put(Cose.COSE_LABEL_ALG.toCoseLabel, signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem())
+            protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel] = signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
             val unprotectedHeaders = mutableMapOf<CoseLabel, DataItem>()
             readerKey.certChain?.let {
                 unprotectedHeaders.put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, it.toDataItem())
@@ -409,7 +412,7 @@ data class DeviceRequest private constructor(
             val protectedHeaders = mutableMapOf<CoseLabel, DataItem>()
             // ISO 18013-5 requires use of non-fully-specified algorithms, e.g. -7 instead of -9
             val signatureAlgorithm = readerKey.algorithm.curve!!.defaultSigningAlgorithm
-            protectedHeaders.put(Cose.COSE_LABEL_ALG.toCoseLabel, signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem())
+            protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel] = signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
             val unprotectedHeaders = mutableMapOf<CoseLabel, DataItem>()
             readerKey.certChain?.let {
                 unprotectedHeaders.put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, it.toDataItem())
@@ -457,7 +460,8 @@ data class DeviceRequest private constructor(
     private data class DocRequestMatch(
         val credential: Credential,
         val claims: Map<RequestedClaim, Claim>,
-        val docRequest: DocRequest
+        val docRequest: DocRequest,
+        val transactionData: List<TransactionData>
     )
 
     private data class DocRequestResult(
@@ -478,17 +482,21 @@ data class DeviceRequest private constructor(
      * @param presentmentSource the [PresentmentSource] to use as a source of truth for presentment.
      * @param keyAgreementPossible if non-empty, a credential using Key Agreement may be returned provided
      *   its private key is using one of the given curves.
-     * @return the resulting [Iso18013Response] if the query was successful.
+     * @return the resulting [CredentialPresentmentData] if the query was successful.
      * @throws [Iso18015ResponseException] if it's not possible satisfy the query.
      */
     @Throws(Iso18015ResponseException::class, CancellationException::class)
     suspend fun execute(
         presentmentSource: PresentmentSource,
-        keyAgreementPossible: List<EcCurve> = emptyList()
+        keyAgreementPossible: List<EcCurve> = emptyList(),
     ): CredentialPresentmentData {
         // First find all matches for all DocRequests
         val docRequestResults = docRequests.map { docRequest ->
-            findMatchesForDocRequest(docRequest, presentmentSource, keyAgreementPossible)
+            findMatchesForDocRequest(
+                docRequest = docRequest,
+                presentmentSource = presentmentSource,
+                keyAgreementPossible = keyAgreementPossible,
+            )
         }
 
         val credentialSets = mutableListOf<CredentialPresentmentSet>()
@@ -511,7 +519,8 @@ data class DeviceRequest private constructor(
                 CredentialPresentmentSetOptionMemberMatch(
                     credential = match.credential as MdocCredential,
                     claims = match.claims,
-                    source = CredentialMatchSourceIso18013(docRequest = match.docRequest)
+                    source = CredentialMatchSourceIso18013(docRequest = match.docRequest),
+                    transactionData = match.transactionData
                 )
             }
             val member = CredentialPresentmentSetOptionMember(memberMatches)
@@ -544,7 +553,8 @@ data class DeviceRequest private constructor(
                                 CredentialPresentmentSetOptionMemberMatch(
                                     credential = match.credential as MdocCredential,
                                     claims = match.claims,
-                                    source = CredentialMatchSourceIso18013(docRequest = match.docRequest)
+                                    source = CredentialMatchSourceIso18013(docRequest = match.docRequest),
+                                    transactionData = match.transactionData
                                 )
                             }
                             CredentialPresentmentSetOptionMember(matches)
@@ -575,7 +585,7 @@ data class DeviceRequest private constructor(
     private suspend fun findMatchesForDocRequest(
         docRequest: DocRequest,
         presentmentSource: PresentmentSource,
-        keyAgreementPossible: List<EcCurve>
+        keyAgreementPossible: List<EcCurve>,
     ): DocRequestResult {
         // Find credentials matching the requested DocType
         val candidates = mutableListOf<Credential>()
@@ -592,13 +602,14 @@ data class DeviceRequest private constructor(
         val matches = mutableListOf<DocRequestMatch>()
         // Sort by displayName to ensure deterministic order
         for (cred in candidates.sortedBy { it.document.displayName }) {
-            val bestMatch = findBestMatchingClaims(cred, docRequest, presentmentSource, keyAgreementPossible)
+            val bestMatch = findBestMatchingClaims(
+                cred = cred,
+                docRequest = docRequest,
+                presentmentSource = presentmentSource,
+                keyAgreementPossible = keyAgreementPossible,
+            )
             if (bestMatch != null) {
-                matches.add(DocRequestMatch(
-                    credential = bestMatch.first,
-                    claims = bestMatch.second,
-                    docRequest = bestMatch.third
-                ))
+                matches.add(bestMatch)
             }
         }
         return DocRequestResult(docRequest, matches)
@@ -615,8 +626,8 @@ data class DeviceRequest private constructor(
         cred: Credential,
         docRequest: DocRequest,
         presentmentSource: PresentmentSource,
-        keyAgreementPossible: List<EcCurve>
-    ): Triple<Credential, Map<RequestedClaim, Claim>, DocRequest>? {
+        keyAgreementPossible: List<EcCurve>,
+    ): DocRequestMatch? {
         val claimsInCredential = cred.getClaims(documentTypeRepository = presentmentSource.documentTypeRepository)
 
         // 1. Build Logical Requirements
@@ -703,6 +714,17 @@ data class DeviceRequest private constructor(
                 }
             }
 
+            val transactionData = extractTransactionData(
+                docRequest.docRequestInfo,
+                presentmentSource.documentTypeRepository
+            )
+            for (transaction in transactionData) {
+                if (!transaction.type.isApplicable(transaction, cred)) {
+                    didNotMatch = true
+                    break
+                }
+            }
+
             if (!didNotMatch) {
                 // Success! Select the credential with these specific claims
                 val selectedCred = presentmentSource.selectCredential(
@@ -711,12 +733,39 @@ data class DeviceRequest private constructor(
                     keyAgreementPossible = keyAgreementPossible
                 )
                 if (selectedCred != null) {
-                    return Triple(selectedCred, matchingClaimValues, docRequest)
+                    return DocRequestMatch(
+                        credential = selectedCred,
+                        claims = matchingClaimValues,
+                        docRequest = docRequest,
+                        transactionData = transactionData
+                    )
                 }
             }
         }
 
         return null
+    }
+
+    private fun extractTransactionData(
+        requestInfo: DocRequestInfo?,
+        documentTypeRepository: DocumentTypeRepository?
+    ): List<TransactionData> {
+        if (requestInfo == null || documentTypeRepository == null) {
+            return emptyList()
+        }
+        val list = mutableListOf<TransactionData>()
+        for (knownType in documentTypeRepository.transactionTypes) {
+            if (!requestInfo.otherInfo.containsKey(knownType.mdocRequestInfoKeyName)) {
+                continue
+            }
+            val transactionCbor = requestInfo.otherInfo[knownType.mdocRequestInfoKeyName]!!
+            if (transactionCbor !is Tagged || transactionCbor.tagNumber != Tagged.ENCODED_CBOR
+                || transactionCbor.taggedItem !is Bstr) {
+                throw IllegalArgumentException("Incorrectly encoded transaction data '${knownType.identifier}'")
+            }
+            list.add(TransactionDataCbor(knownType, transactionCbor))
+        }
+        return list.toList()
     }
 
     fun getRequester(): X509CertChain? {
@@ -765,7 +814,6 @@ data class DeviceRequest private constructor(
             }
         }
     }
-
 }
 
 private fun JsonArrayBuilder.addDcqlCredentialRequest(docRequest: DocRequest, credId: String) {
@@ -925,7 +973,9 @@ inline fun buildDeviceRequest(
  *
  * @param sessionTranscript the `SessionTranscript` CBOR.
  * @param dcql the DCQL query to convert.
- * @property otherInfo other request info to go into [DeviceRequestInfo].
+ * @param otherInfo other request info to go into [DeviceRequestInfo].
+ * @param docRequestOtherInfo other request info to go into [DocRequestInfo] indexed by DCQL
+ *  credential query id
  * @param builderAction optional builder action to configure the request (e.g. add reader authentication).
  * @return the configured [DeviceRequest].
  * @throws IllegalArgumentException if [dcql] contains features not supported by [DeviceRequest], for
@@ -936,15 +986,16 @@ inline fun buildDeviceRequestFromDcql(
     sessionTranscript: DataItem,
     dcql: JsonObject,
     otherInfo: Map<String, DataItem> = emptyMap(),
+    docRequestOtherInfo: Map<String, Map<String, DataItem>> = emptyMap(),
     builderAction: DeviceRequest.Builder.() -> Unit = {}
 ): DeviceRequest {
     val dcqlQuery = DcqlQuery.fromJson(dcql)
     val deviceRequestInfo = deviceRequestCalcDeviceRequestInfo(dcqlQuery, otherInfo)
     val builder = DeviceRequest.Builder(
         sessionTranscript = sessionTranscript,
-        deviceRequestInfo = deviceRequestInfo
+        deviceRequestInfo = deviceRequestInfo,
     )
-    deviceRequestAddQueries(dcqlQuery, builder)
+    deviceRequestAddQueries(dcqlQuery, docRequestOtherInfo, builder)
     builder.builderAction()
     return builder.build()
 }
@@ -967,12 +1018,14 @@ inline fun buildDeviceRequestFromDcql(
     sessionTranscript: DataItem,
     dcqlString: String,
     otherInfo: Map<String, DataItem> = emptyMap(),
+    docRequestOtherInfo: Map<String, Map<String, DataItem>> = emptyMap(),
     builderAction: DeviceRequest.Builder.() -> Unit = {}
 ): DeviceRequest {
     return buildDeviceRequestFromDcql(
         sessionTranscript = sessionTranscript,
         dcql = Json.decodeFromString<JsonObject>(dcqlString),
         otherInfo = otherInfo,
+        docRequestOtherInfo = docRequestOtherInfo,
         builderAction = builderAction
     )
 }
@@ -1027,6 +1080,7 @@ internal fun deviceRequestCalcDeviceRequestInfo(
 @PublishedApi
 internal fun deviceRequestAddQueries(
     dcqlQuery: DcqlQuery,
+    docRequestOtherInfo: Map<String, Map<String, DataItem>>,
     builder: DeviceRequest.Builder
 ) {
     for (credQuery in dcqlQuery.credentialQueries) {
@@ -1159,10 +1213,14 @@ internal fun deviceRequestAddQueries(
             null
         }
 
-        val docRequestInfo = if (alternativeDataElements.isNotEmpty() || zkRequest != null) {
+        val otherInfo = docRequestOtherInfo[credQuery.id]
+
+        val docRequestInfo = if (alternativeDataElements.isNotEmpty()
+            || zkRequest != null || otherInfo != null) {
             DocRequestInfo(
                 alternativeDataElements = alternativeDataElements,
-                zkRequest = zkRequest
+                zkRequest = zkRequest,
+                otherInfo = otherInfo ?: emptyMap()
             )
         } else {
             null

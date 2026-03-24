@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.backend.Resources
@@ -15,6 +16,7 @@ import org.multipaz.rpc.handler.RpcAuthInspector
 import org.multipaz.rpc.handler.RpcAuthInspectorAssertion
 import org.multipaz.rpc.handler.RpcNotifications
 import org.multipaz.rpc.handler.RpcNotificationsLocalPoll
+import org.multipaz.rpc.handler.RpcPoll
 import org.multipaz.rpc.handler.SimpleCipher
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaProvider
@@ -30,86 +32,87 @@ import kotlin.reflect.cast
 /**
  * [BackendEnvironment] implementation for the server.
  */
-class ServerEnvironment(
-    private val configuration: Configuration,
-    private val storage: Storage,
-    private val httpClient: HttpClient,
-    private val secureAreaProvider: SecureAreaProvider<SecureArea>,
-    private val secureAreaRepository: SecureAreaRepository,
-    val notifications: RpcNotificationsLocalPoll,
-    val cipher: SimpleCipher
-): BackendEnvironment {
+class ServerEnvironment(): BackendEnvironment {
+    private val instances = mutableMapOf<KClass<*>, Any>()
 
     override fun <T : Any> getInterface(clazz: KClass<T>): T? {
-        return clazz.cast(when(clazz) {
-            Configuration::class -> configuration
-            Resources::class -> ServerResources
-            Storage::class -> storage
-            RpcNotifications::class -> notifications
-            HttpClient::class -> httpClient
-            SecureAreaProvider::class -> secureAreaProvider
-            SecureAreaRepository::class -> secureAreaRepository
-            RpcAuthInspector::class -> RpcAuthInspectorAssertion.Default
-            SimpleCipher::class -> cipher
-            else -> return null
-        })
+        return instances[clazz]?.let { clazz.cast(it) }
+    }
+
+    private class Initializer(
+        private val instances: MutableMap<KClass<*>, Any>
+    ): ServerEnvironmentInitializer {
+        override fun<T: Any> add(clazz: KClass<T>, instance: T) {
+            check(!instances.containsKey(clazz))
+            instances[clazz] = instance
+        }
     }
 
     companion object {
-        fun create(configuration: Configuration): Deferred<ServerEnvironment> {
+        fun create(
+            configuration: Configuration,
+            initializer: suspend ServerEnvironmentInitializer.() -> Unit = {}
+        ): Deferred<ServerEnvironment> {
             return CoroutineScope(Dispatchers.Default).async {
-                initialize(configuration)
+                initialize(configuration, initializer = initializer)
             }
         }
 
         private suspend fun initialize(
             configuration: Configuration,
-            additionalSecureAreas: List<SecureAreaProvider<SecureArea>> = listOf()
+            additionalSecureAreas: List<SecureAreaProvider<SecureArea>> = listOf(),
+            initializer: suspend ServerEnvironmentInitializer.() -> Unit
         ): ServerEnvironment {
+            val env = ServerEnvironment()
+            val init = Initializer(env.instances)
+            init.add(Configuration::class, configuration)
+            init.add(Resources::class, ServerResources)
+            init.add(RpcAuthInspector::class, RpcAuthInspectorAssertion.Default)
 
-            val storage = when (val engine = configuration.getValue("database_engine")) {
-                "jdbc", null -> JdbcStorage(
-                    configuration.getValue("database_connection") ?: defaultDatabase(),
-                    configuration.getValue("database_user") ?: "",
-                    configuration.getValue("database_password") ?: ""
-                )
-                "ephemeral" -> EphemeralStorage()
-                else -> throw IllegalArgumentException("Unknown database engine: $engine")
-            }
+            withContext(env) {
+                val storage = when (val engine = configuration.getValue("database_engine")) {
+                    "jdbc", null -> JdbcStorage(
+                        configuration.getValue("database_connection") ?: defaultDatabase(),
+                        configuration.getValue("database_user") ?: "",
+                        configuration.getValue("database_password") ?: ""
+                    )
 
-            val httpClient = HttpClient(Java) {
-                install(HttpTimeout)
-                followRedirects = false
-            }
-
-            val secureAreaProvider = SecureAreaProvider(Dispatchers.Default) {
-                SoftwareSecureArea.create(storage)
-            }
-
-            val secureAreaRepository = SecureAreaRepository.Builder()
-                .add(secureAreaProvider.get())
-                .also {
-                    for (secureArea in additionalSecureAreas) {
-                        it.add(secureArea.get())
-                    }
+                    "ephemeral" -> EphemeralStorage()
+                    else -> throw IllegalArgumentException("Unknown database engine: $engine")
                 }
-                .build()
+                init.add(Storage::class, storage)
 
-            // Need to pass storage explicitly as ServerEnvironment is not yet set up
-            val messageEncryptionKey = persistentServerKey(name = "rpc", storage = storage)
-            val cipher = AesGcmCipher(messageEncryptionKey.toByteArray())
+                val httpClient = HttpClient(Java) {
+                    install(HttpTimeout)
+                    followRedirects = false
+                }
+                init.add(HttpClient::class, httpClient)
 
-            val localPoll = RpcNotificationsLocalPoll(cipher)
+                val secureAreaProvider = SecureAreaProvider(Dispatchers.Default) {
+                    SoftwareSecureArea.create(storage)
+                }
+                init.add(SecureAreaProvider::class, secureAreaProvider)
 
-            val env = ServerEnvironment(
-                configuration,
-                storage,
-                httpClient,
-                secureAreaProvider,
-                secureAreaRepository,
-                localPoll,
-                cipher,
-            )
+                val secureAreaRepository = SecureAreaRepository.Builder()
+                    .add(secureAreaProvider.get())
+                    .also {
+                        for (secureArea in additionalSecureAreas) {
+                            it.add(secureArea.get())
+                        }
+                    }
+                    .build()
+                init.add(SecureAreaRepository::class, secureAreaRepository)
+
+                val messageEncryptionKey = persistentServerKey(name = "rpc")
+                val cipher = AesGcmCipher(messageEncryptionKey.toByteArray())
+                init.add(SimpleCipher::class, cipher)
+
+                val localPoll = RpcNotificationsLocalPoll(cipher)
+                init.add(RpcPoll::class, localPoll)
+                init.add(RpcNotifications::class, localPoll)
+
+                initializer.invoke(init)
+            }
 
             return env
         }

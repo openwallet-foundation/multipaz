@@ -141,7 +141,7 @@ suspend fun digitalCredentialsPresentment(
             )
         }
         else -> {
-            throw Error("Protocol ${protocol} is not supported")
+            throw Error("Protocol $protocol is not supported")
         }
     }
 }
@@ -159,7 +159,7 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
     val version = when (protocol) {
         "openid4vp" -> OpenID4VP.Version.DRAFT_24
         "openid4vp-v1-unsigned", "openid4vp-v1-signed" -> OpenID4VP.Version.DRAFT_29
-        else -> throw IllegalStateException("Unexpected protocol ${protocol}")
+        else -> throw IllegalStateException("Unexpected protocol $protocol")
     }
     var requesterCertChain: X509CertChain? = null
     val preReq = data
@@ -221,11 +221,11 @@ private suspend fun digitalCredentialsMdocApiProtocol(
 
     val encryptionInfo = Cbor.decode(encryptionInfoBase64.fromBase64Url())
     Logger.iCbor(TAG, "encryptionInfo", encryptionInfo)
-    if (encryptionInfo.asArray.get(0).asTstr != "dcapi") {
+    if (encryptionInfo.asArray[0].asTstr != "dcapi") {
         throw IllegalArgumentException("Malformed EncryptionInfo")
     }
-    val recipientPublicKey = encryptionInfo.asArray.get(1).asMap.get(Tstr
-        ("recipientPublicKey"))!!.asCoseKey.ecPublicKey
+    val recipientPublicKey = encryptionInfo.asArray[1].asMap[Tstr("recipientPublicKey")]!!
+        .asCoseKey.ecPublicKey
 
     val dcapiInfo = buildCborArray {
         add(encryptionInfoBase64)

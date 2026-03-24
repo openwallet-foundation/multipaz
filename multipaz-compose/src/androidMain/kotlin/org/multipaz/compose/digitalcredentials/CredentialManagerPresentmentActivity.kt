@@ -65,7 +65,7 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
      *   in the Android Credential Manager APIs. For an example, see the
      *   [public list of browsers trusted by Google Password Manager](https://gstatic.com/gpm-passkeys-privileged-apps/apps.json).
      */
-    data class Settings(
+    class Settings(
         val source: PresentmentSource,
         val privilegedAllowList: String,
     )

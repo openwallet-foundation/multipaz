@@ -17,6 +17,7 @@ import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.request.EncryptionParameters
 import org.multipaz.mdoc.zkp.ZkDocument
+import org.multipaz.presentment.TransactionData
 import org.multipaz.request.MdocRequestedClaim
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -49,6 +50,7 @@ data class EncryptedDocuments internal constructor(
      * @param recipientPrivateKey the private key used for decryption.
      * @param encryptionParameters the same [EncryptionParameters] as transferred in the [org.multipaz.mdoc.request.DeviceRequest].
      * @param sessionTranscript the session transcript.
+     * @param transactionDataList list of transaction for each document in this [EncryptedDocuments]
      * @param atTime the point in time for validating the whether returned documents are valid.
      * @return a [EncryptedDocumentsPlaintext].
      */
@@ -56,6 +58,7 @@ data class EncryptedDocuments internal constructor(
         recipientPrivateKey: AsymmetricKey,
         encryptionParameters: EncryptionParameters,
         sessionTranscript: DataItem,
+        transactionDataList: List<List<TransactionData>> = emptyList(),
         atTime: Instant = Clock.System.now()
     ): EncryptedDocumentsPlaintext {
         val encSessionTranscript = buildCborArray {
@@ -80,7 +83,12 @@ data class EncryptedDocuments internal constructor(
 
         encDocsPt.documents.forEachIndexed { index, document ->
             try {
-                document.verify(encSessionTranscript, null, atTime)
+                val transactionData = if (index < transactionDataList.size) {
+                    transactionDataList[index]
+                } else {
+                    emptyList()
+                }
+                document.verify(encSessionTranscript, null, transactionData, atTime)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 throw IllegalStateException("Error verifying document $index in decrypted DeviceResponse", e)

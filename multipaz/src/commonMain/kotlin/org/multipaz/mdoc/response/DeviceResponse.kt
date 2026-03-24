@@ -15,6 +15,7 @@ import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.request.EncryptionParameters
 import org.multipaz.mdoc.response.DeviceResponse.Companion.STATUS_OK
 import org.multipaz.mdoc.zkp.ZkDocument
+import org.multipaz.presentment.TransactionData
 import org.multipaz.request.MdocRequestedClaim
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -62,6 +63,8 @@ data class DeviceResponse internal constructor(
      * - The MSO is validity period includes the passed-in [atTime].
      * - The data returned in [MdocDocument.issuerNamespaces] is checked against digests in the MSO.
      * - The device-authentication structures (ECDSA or MAC) are checked.
+     * - For each transaction data in the list, verifies that transaction hash is present in the
+     *    response and matches the hash of the source transaction data
      *
      * The following checks are expected to be done by the application:
      * - Determining whether the issuer's document signing certificate is trusted.
@@ -74,18 +77,28 @@ data class DeviceResponse internal constructor(
      *
      * @param sessionTranscript the session transcript to use.
      * @param eReaderKey the ephemeral reader key or `null` if not using session encryption.
+     * @param transactionDataList list of transactions for each document in this [DeviceResponse]
      * @param atTime the point in time for validating the whether returned documents are valid.
+     * @return list of per-document transaction responses; each response is a map; a key in this
+     *  map is a transaction identifier, and the value is a map with an entry for each item in
+     *  the transaction response data, including "transaction_data_hash".
      * @throws IllegalStateException if validation fails.
      */
     suspend fun verify(
         sessionTranscript: DataItem,
         eReaderKey: AsymmetricKey? = null,
+        transactionDataList: List<List<TransactionData>> = emptyList(),
         atTime: Instant = Clock.System.now(),
-    ) {
+    ): List<Map<String, Map<String, DataItem>>> {
         numTimesVerifyCalled += 1
-        documents_.forEachIndexed { index, document ->
+        return documents_.mapIndexed { index, document ->
             try {
-                document.verify(sessionTranscript, eReaderKey, atTime)
+                val transactionData = if (index < transactionDataList.size) {
+                    transactionDataList[index]
+                } else {
+                    emptyList()
+                }
+                document.verify(sessionTranscript, eReaderKey, transactionData, atTime)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 throw IllegalStateException("Error verifying document $index in DeviceResponse", e)

@@ -23,6 +23,7 @@ import org.multipaz.presentment.CredentialPresentmentSetOption
 import org.multipaz.presentment.CredentialPresentmentSetOptionMember
 import org.multipaz.presentment.CredentialPresentmentSetOptionMemberMatch
 import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.TransactionData
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
@@ -39,7 +40,8 @@ private data class QueryResponse(
 
 private data class QueryResponseMatch(
     val credential: Credential,
-    val claims: Map<RequestedClaim, Claim>
+    val claims: Map<RequestedClaim, Claim>,
+    val transactionData: List<TransactionData>
 )
 
 private fun DcqlCredentialSetOption.isSatisfied(
@@ -103,14 +105,16 @@ data class DcqlQuery(
      *
      * @param presentmentSource the [PresentmentSource] to use as a source of truth for presentment.
      * @param keyAgreementPossible if non-empty, a credential using Key Agreement may be returned provided
-     * its private key is using one of the given curves.
+     *  its private key is using one of the given curves.
+     * @param transactionDataMap list of transaction data for each queried document by query id
      * @return the resulting [CredentialPresentmentData] if the query was successful.
      * @throws [DcqlCredentialQueryException] if it's not possible satisfy the query.
      */
     @Throws(DcqlCredentialQueryException::class, CancellationException::class)
     suspend fun execute(
         presentmentSource: PresentmentSource,
-        keyAgreementPossible: List<EcCurve> = emptyList()
+        keyAgreementPossible: List<EcCurve> = emptyList(),
+        transactionDataMap: Map<String, List<TransactionData>> = emptyMap()
     ): CredentialPresentmentData {
         val credentialQueryIdToResponse = mutableMapOf<String, QueryResponse>()
         for (credentialQuery in credentialQueries) {
@@ -156,7 +160,14 @@ data class DcqlQuery(
                         if (matchingCredentialClaimValue != null) {
                             matchingClaimValues[requestedClaim] = matchingCredentialClaimValue
                         } else {
-                            Logger.w(TAG, "Error resolving requested claim ${requestedClaim}")
+                            Logger.w(TAG, "Error resolving requested claim $requestedClaim")
+                            didNotMatch = true
+                            break
+                        }
+                    }
+                    val transactionData = transactionDataMap[credentialQuery.id] ?: emptyList()
+                    for (transaction in transactionData) {
+                        if (!transaction.type.isApplicable(transaction, cred)) {
                             didNotMatch = true
                             break
                         }
@@ -174,7 +185,8 @@ data class DcqlQuery(
                         matches.add(
                             QueryResponseMatch(
                                 credential = credential,
-                                claims = matchingClaimValues
+                                claims = matchingClaimValues,
+                                transactionData = transactionData
                             )
                         )
                     }
@@ -198,6 +210,13 @@ data class DcqlQuery(
                                 break
                             }
                         }
+                        val transactionData = transactionDataMap[credentialQuery.id] ?: emptyList()
+                        for (transaction in transactionData) {
+                            if (!transaction.type.isApplicable(transaction, cred)) {
+                                didNotMatch = true
+                                break
+                            }
+                        }
                         if (!didNotMatch) {
                             // All claims matched, we have a candidate
                             matches.add(
@@ -207,7 +226,8 @@ data class DcqlQuery(
                                         requestedClaims = credentialQuery.claims,
                                         keyAgreementPossible = keyAgreementPossible
                                     )!!,
-                                    claims = matchingClaimValues
+                                    claims = matchingClaimValues,
+                                    transactionData = transactionData
                                 )
                             )
                             break
@@ -215,13 +235,10 @@ data class DcqlQuery(
                     }
                 }
             }
-            credentialQueryIdToResponse.put(
-                credentialQuery.id,
-                QueryResponse(
-                    credentialQuery = credentialQuery,
-                    credentialSetQuery = null,
-                    matches = matches
-                )
+            credentialQueryIdToResponse[credentialQuery.id] = QueryResponse(
+                credentialQuery = credentialQuery,
+                credentialSetQuery = null,
+                matches = matches
             )
         }
 
@@ -243,7 +260,8 @@ data class DcqlQuery(
                     matches.add(CredentialPresentmentSetOptionMemberMatch(
                         credential = match.credential,
                         claims = match.claims,
-                        source = CredentialMatchSourceOpenID4VP(credentialQuery = response.credentialQuery)
+                        source = CredentialMatchSourceOpenID4VP(credentialQuery = response.credentialQuery),
+                        transactionData = match.transactionData
                     ))
                 }
                 val options = mutableListOf<CredentialPresentmentSetOption>()
@@ -292,7 +310,8 @@ data class DcqlQuery(
                                 matches.add(CredentialPresentmentSetOptionMemberMatch(
                                     credential = match.credential,
                                     claims = match.claims,
-                                    source = CredentialMatchSourceOpenID4VP(credentialQuery = response.credentialQuery)
+                                    source = CredentialMatchSourceOpenID4VP(credentialQuery = response.credentialQuery),
+                                    transactionData = match.transactionData
                                 ))
                             }
                             members.add(
@@ -310,7 +329,7 @@ data class DcqlQuery(
                         "No credentials match required credential_set query"
                     )
                 }
-                if (options.size > 0) {
+                if (options.isNotEmpty()) {
                     credentialSets.add(
                         CredentialPresentmentSet(
                             optional = !csq.required,
@@ -377,7 +396,7 @@ data class DcqlQuery(
                 val dcqlClaimSets = mutableListOf<DcqlClaimSet>()
 
                 val claims = c["claims"]!!.jsonArray
-                check(claims.size > 0)
+                check(claims.isNotEmpty())
                 for (claim in claims) {
                     val cl = claim.jsonObject
                     val claimId = cl["id"]?.jsonPrimitive?.content
@@ -404,7 +423,7 @@ data class DcqlQuery(
                     }
                     dcqlClaims.add(requestedClaim)
                     if (claimId != null) {
-                        dcqlClaimIdToClaim.put(claimId, requestedClaim)
+                        dcqlClaimIdToClaim[claimId] = requestedClaim
                     }
                 }
 

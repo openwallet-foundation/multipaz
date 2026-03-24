@@ -173,7 +173,7 @@ fun IsoMdocProximitySharingScreen(
                     }
                 },
                 eDeviceKeyCurve = settingsModel.presentmentSessionEncryptionCurve.value,
-                disablePlatformSpecificImplementation = disablePlatformImplementation
+                disablePlatformSpecificImplementation = disablePlatformImplementation,
             )
         }
     }

@@ -55,6 +55,7 @@ fun runServer(
     args: Array<String>,
     needAdminPassword: Boolean = false,
     checkConfiguration: (ServerConfiguration) -> Unit = {},
+    environmentInitializer: suspend ServerEnvironmentInitializer.() -> Unit = {},
     applicationConfigurationAction: Application.(env: Deferred<ServerEnvironment>) -> Unit
 ) {
     val configuration = ServerConfiguration(args)
@@ -76,7 +77,7 @@ fun runServer(
             }
     }
     val host = configuration.serverHost ?: "0.0.0.0"
-    val serverEnvironment = ServerEnvironment.create(configuration)
+    val serverEnvironment = ServerEnvironment.create(configuration, environmentInitializer)
     launchBackgroundJob(serverEnvironment)
     embeddedServer(
         factory = Netty,

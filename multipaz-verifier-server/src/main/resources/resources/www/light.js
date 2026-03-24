@@ -118,7 +118,14 @@ const examples = {
                     ]
                 }
             ]
-        }
+        },
+        "transaction_data": [
+            {
+                "type": "org.multipaz.transaction.ping",
+                "credential_ids": ["payment"],
+                "string": "foobar"
+            }
+        ]
     },
     "Movie ticket + EU PID age": {
         "dcql": {
@@ -165,8 +172,9 @@ const examples = {
         },
         "transaction_data": [
             {
-                "type": "org.multipaz.transaction_data.test",
-                "credential_ids": ["pid"]
+                "type": "org.multipaz.transaction.ping",
+                "credential_ids": ["pid"],
+                "string": "foobar"
             }
         ]
     }
@@ -216,11 +224,11 @@ async function run() {
     if (transactionDataPresent.checked && transactionDataText.trim().length !== 0) {
         req["transaction_data"] = JSON.parse(transactionDataText);
     }
-    const response = await multipazVerifyCredentials(req);
     const result = document.getElementById("result");
     result.innerHTML = "";
-    for (let label in response.result) {
-        renderContent(result, label, response.result[label], 0);
+    const response = await multipazVerifyCredentials(req);
+    for (let label in response) {
+        renderContent(result, label, response[label], 0);
     }
 }
 

@@ -41,7 +41,6 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -70,14 +69,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.LinkAnnotation
-import androidx.compose.ui.text.LinkInteractionListener
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLinkStyles
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
@@ -117,6 +110,7 @@ import org.multipaz.multipaz_compose.generated.resources.credential_presentment_
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_share_and_stored_by_unknown_requester
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_share_with_known_requester
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_share_with_unknown_requester
+import org.multipaz.multipaz_compose.generated.resources.credential_presentment_transaction_data
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_verifier_icon_description
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_warning_verifier_not_in_trust_list
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_warning_verifier_not_in_trust_list_anonymous
@@ -178,7 +172,7 @@ private fun CredentialPresentmentData.generateCombinations(preselectedDocuments:
         ))
     }
 
-    if (preselectedDocuments.size == 0) {
+    if (preselectedDocuments.isEmpty()) {
         return combinations
     }
 
@@ -290,7 +284,7 @@ fun Consent(
         currentBranding.appName?.let { appName ->
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Companion.CenterVertically,
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(bottom = 8.dp)
             ) {
                 currentBranding.appIconPainter?.let { appIconPainter ->
@@ -298,13 +292,13 @@ fun Consent(
                         modifier = Modifier.size(20.dp),
                         painter = appIconPainter,
                         contentDescription = null,
-                        contentScale = ContentScale.Companion.Fit,
+                        contentScale = ContentScale.Fit,
                     )
                 }
                 Text(
                     text = appName,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Companion.ExtraBold,
+                    fontWeight = FontWeight.ExtraBold,
                 )
             }
         }
@@ -361,7 +355,7 @@ private fun ShowRequesterInfoPage(
             horizontalArrangement = Arrangement.spacedBy(
                 8.dp,
             ),
-            verticalAlignment = Alignment.Companion.CenterVertically
+            verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBackClicked) {
                 Icon(
@@ -824,11 +818,45 @@ private fun CredentialSetViewer(
                 stringResource(Res.string.credential_presentment_share_and_stored_by_unknown_requester)
             }
 
+        val transactionData = combinationElement.matches[matchNum].transactionData
+        if (transactionData.isNotEmpty()) {
+            // Fallback transaction data display. This is acceptable for testing, but it is
+            // unexpected in real-life wallet applications. Generally an wallet should reject
+            // transaction types that it does not understand (so they will not even show up
+            // as a viable choice) and it should provide custom consent prompt for transactions
+            // that it does understand.
+            entries.add {
+                Column(
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.error)
+                        .padding(8.dp)
+                        .fillMaxWidth()
+                ) {
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = stringResource(Res.string.credential_presentment_transaction_data),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onError,
+                        fontWeight = FontWeight.Bold
+                    )
+                    for (data in transactionData) {
+                        Text(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp, 0.dp, 0.dp, 0.dp),
+                            text = "\u2022 ${data.type.displayName}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onError,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
         entries.add {
-            if (storedClaims.size == 0) {
+            if (storedClaims.isEmpty()) {
                 SharedStoredText(text = sharedWithText)
                 ClaimsGridView(claims = notStoredClaims, useColumns = true)
-            } else if (notStoredClaims.size == 0) {
+            } else if (notStoredClaims.isEmpty()) {
                 SharedStoredText(text = sharedWithAndStoredByText)
                 ClaimsGridView(claims = storedClaims, useColumns = true)
             } else {
@@ -884,8 +912,8 @@ private fun CredentialViewer(
 
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Companion.Start),
-        verticalAlignment = Alignment.Companion.CenterVertically
+        horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Column(
             modifier = Modifier.weight(1.0f)
@@ -893,9 +921,9 @@ private fun CredentialViewer(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(
                     8.dp,
-                    alignment = Alignment.Companion.Start
+                    alignment = Alignment.Start
                 ),
-                verticalAlignment = Alignment.Companion.CenterVertically
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 var cardArtBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
                 LaunchedEffect(Unit) {
@@ -926,7 +954,7 @@ private fun CredentialViewer(
                         text = credential.document.displayName
                             ?: "No Document Title",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Companion.Bold
+                        fontWeight = FontWeight.Bold
                     )
                     credential.document.typeDisplayName?.let {
                         Text(
@@ -955,7 +983,7 @@ private fun SharedStoredText(text: String) {
         modifier = Modifier.fillMaxWidth(),
         text = text,
         style = MaterialTheme.typography.bodyMedium,
-        fontWeight = FontWeight.Companion.Bold
+        fontWeight = FontWeight.Bold
     )
 }
 
@@ -1039,7 +1067,7 @@ private fun EntryList(
             modifier = modifier.padding(top = 16.dp, bottom = 8.dp),
             text = title,
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Companion.Bold,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.secondary,
         )
     }
@@ -1056,7 +1084,7 @@ private fun EntryList(
                 .clip(shape = RoundedCornerShape(firstRounded, firstRounded, endRound, endRound))
                 .background(MaterialTheme.colorScheme.surfaceContainerLowest)
                 .padding(8.dp),
-            horizontalAlignment = Alignment.Companion.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             CompositionLocalProvider(
                 LocalContentColor provides MaterialTheme.colorScheme.onSurface
@@ -1172,7 +1200,7 @@ private fun ClaimsView(
     claim: Claim,
 ) {
     Row(
-        verticalAlignment = Alignment.Companion.CenterVertically,
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start,
         modifier = modifier.padding(4.dp),
     ) {
@@ -1184,7 +1212,7 @@ private fun ClaimsView(
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = claim.displayName,
-            fontWeight = FontWeight.Companion.Normal,
+            fontWeight = FontWeight.Normal,
             style = MaterialTheme.typography.bodySmall
         )
     }

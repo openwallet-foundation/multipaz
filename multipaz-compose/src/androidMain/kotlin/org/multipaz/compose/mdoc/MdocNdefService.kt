@@ -53,7 +53,7 @@ import kotlin.time.Duration
  */
 abstract class MdocNdefService: HostApduService() {
     companion object {
-        private val TAG = "MdocNdefService"
+        private const val TAG = "MdocNdefService"
     }
 
     private fun vibrate(pattern: List<Int>) {
@@ -91,7 +91,7 @@ abstract class MdocNdefService: HostApduService() {
     private var engagement: MdocNfcEngagementHelper? = null
 
     // Channel used for bouncing data from processCommandApdu() and onDeactivated() to engagementJob coroutine.
-    private val channel = Channel<Data>(Channel.Factory.UNLIMITED)
+    private val channel = Channel<Data>(Channel.UNLIMITED)
 
     private sealed class Data
 
@@ -135,7 +135,7 @@ abstract class MdocNdefService: HostApduService() {
         val staticHandoverBlePeripheralServerModeEnabled: Boolean,
         val staticHandoverNfcDataTransferEnabled: Boolean,
 
-        val transportOptions: MdocTransportOptions
+        val transportOptions: MdocTransportOptions,
     )
 
     /**
@@ -165,8 +165,7 @@ abstract class MdocNdefService: HostApduService() {
         //
         engagementJob = CoroutineScope(Dispatchers.IO).launch {
             while (true) {
-                val data = channel.receive()
-                when (data) {
+                when (val data = channel.receive()) {
                     is CommandApduData -> {
                         processCommandApdu(data.commandApdu)?.let { responseApdu ->
                             sendResponseApdu(responseApdu.encode())
@@ -237,7 +236,7 @@ abstract class MdocNdefService: HostApduService() {
         var staticHandoverConnectionMethods: List<MdocConnectionMethod>? = null
         if (!settings.useNegotiatedHandover) {
             staticHandoverConnectionMethods = mutableListOf<MdocConnectionMethod>()
-            val bleUuid = UUID.Companion.randomUUID()
+            val bleUuid = UUID.randomUUID()
             if (settings.staticHandoverBleCentralClientModeEnabled) {
                 staticHandoverConnectionMethods.add(
                     MdocConnectionMethodBle(
@@ -394,7 +393,7 @@ abstract class MdocNdefService: HostApduService() {
                     val responseApdu = it.processApdu(firstCommandApdu!!)
                     if (responseApdu != ResponseApdu(status = Nfc.RESPONSE_STATUS_SUCCESS)) {
                         Logger.w(TAG, "Expected response 9000 to SELECT APPLICATION, " +
-                                " got ${responseApdu}")
+                                " got $responseApdu")
                     }
                 }
                 val responseApdu = it.processApdu(commandApdu)

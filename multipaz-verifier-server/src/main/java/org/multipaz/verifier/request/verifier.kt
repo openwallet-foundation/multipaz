@@ -102,6 +102,7 @@ import org.multipaz.server.common.getBaseUrl
 import org.multipaz.server.enrollment.ServerIdentity
 import org.multipaz.server.enrollment.getServerIdentity
 import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.transactiontype.knowntypes.PingTransaction
 import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.trustmanagement.TrustManager
 import org.multipaz.trustmanagement.TrustMetadata
@@ -334,7 +335,7 @@ private val verifierSessionTableSpec = StorageTableSpec(
     supportExpiration = true
 )
 
-private val documentTypeRepo: DocumentTypeRepository by lazy {
+val documentTypeRepo: DocumentTypeRepository by lazy {
     val repo =  DocumentTypeRepository()
     repo.addDocumentType(DrivingLicense.getDocumentType())
     repo.addDocumentType(EUPersonalID.getDocumentType())
@@ -348,6 +349,7 @@ private val documentTypeRepo: DocumentTypeRepository by lazy {
     repo.addDocumentType(Loyalty.getDocumentType())
     repo.addDocumentType(Aadhaar.getDocumentType())
     repo.addDocumentType(DigitalPaymentCredential.getDocumentType())
+    repo.addTransactionType(PingTransaction)
     repo
 }
 
@@ -1715,6 +1717,7 @@ private suspend fun handleGetDataSdJwt(
                     checkNonce = { nonce -> true },
                     checkAudience = { audience -> receivedAudience = audience; true },
                     checkCreationTime = { creationTime -> true },
+                    transactionData = listOf()
                 )
                 lines.add(ResultLine("Key Binding", "Verified"))
                 lines.add(ResultLine("Audience", receivedAudience))

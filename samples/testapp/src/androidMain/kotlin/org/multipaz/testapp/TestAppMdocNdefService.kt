@@ -45,7 +45,7 @@ class TestAppMdocNdefService: MdocNdefService() {
             transportOptions = MdocTransportOptions(
                 bleUseL2CAP = app.settingsModel.presentmentBleL2CapEnabled.value,
                 bleUseL2CAPInEngagement = app.settingsModel.presentmentBleL2CapInEngagementEnabled.value
-            )
+            ),
         )
     }
 }

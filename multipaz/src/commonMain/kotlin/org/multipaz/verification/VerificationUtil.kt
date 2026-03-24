@@ -44,6 +44,7 @@ import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.OpenID4VP
+import org.multipaz.presentment.TransactionData
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.sdjwt.SdJwt
@@ -153,7 +154,9 @@ object VerificationUtil {
      *   if this is `null` for such protocols
      * @param readerAuthenticationKey an optional key to use for reader authentication and its
      *    certificate chain.
-     * @param transactionData base64url-encoded transaction data if any.
+     * @param jsonTransactionData JSON-formatted transaction data, *before* base64url encoding,
+     *   see OpenID4VP 1.0 section 8.4.
+     * @param docRequestOtherInfo transaction data encoded for use in requestInfo` map in ISO 18013-7.
      * @throws IllegalArgumentException if [dcql] contains features not supported by [DeviceRequest], for
      *   example a request for credentials that aren't ISO mdocs.
      * @return a [JsonObject] with the request.
@@ -167,7 +170,8 @@ object VerificationUtil {
         clientId: String?,
         responseEncryptionKey: EcPublicKey?,
         readerAuthenticationKey: AsymmetricKey.X509Compatible?,
-        transactionData: List<String> = listOf(),
+        jsonTransactionData: List<String> = emptyList(),
+        docRequestOtherInfo: Map<String, Map<String, DataItem>> = emptyMap()
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
             generateSingleRequestDcql(
@@ -178,7 +182,8 @@ object VerificationUtil {
                 clientId = clientId,
                 responseEncryptionKey = responseEncryptionKey,
                 readerAuthenticationKey = readerAuthenticationKey,
-                transactionData = transactionData
+                jsonTransactionData = jsonTransactionData,
+                docRequestOtherInfo = docRequestOtherInfo,
             )
         }
         return buildJsonObject {
@@ -194,7 +199,8 @@ object VerificationUtil {
         clientId: String?,
         responseEncryptionKey: EcPublicKey?,
         readerAuthenticationKey: AsymmetricKey.X509Compatible?,
-        transactionData: List<String>,
+        jsonTransactionData: List<String>,
+        docRequestOtherInfo: Map<String, Map<String, DataItem>>
     ): JsonObject = buildJsonObject {
         put("protocol", exchangeProtocol)
         when (exchangeProtocol) {
@@ -217,7 +223,7 @@ object VerificationUtil {
                         responseMode = OpenID4VP.ResponseMode.DC_API,
                         responseUri = null,
                         dclqQuery = dcql,
-                        transactionData = transactionData
+                        jsonTransactionData = jsonTransactionData
                     )
                 )
             }
@@ -225,9 +231,6 @@ object VerificationUtil {
             "org-iso-mdoc" -> {
                 if (responseEncryptionKey == null) {
                     throw IllegalArgumentException("Response encryption is mandatory for org-iso-mdoc")
-                }
-                if (transactionData.isNotEmpty()) {
-                    throw IllegalArgumentException("Transaction data is not yet supported")
                 }
                 val encryptionInfo = buildCborArray {
                     add("dcapi")
@@ -253,7 +256,8 @@ object VerificationUtil {
                 val encodedDeviceRequest = Cbor.encode(
                     buildDeviceRequestFromDcql(
                         sessionTranscript = sessionTranscript,
-                        dcql = dcql
+                        dcql = dcql,
+                        docRequestOtherInfo = docRequestOtherInfo,
                         // TODO: sign individual requests with readerAuthenticationKey
                     ) {
                         if (readerAuthenticationKey != null) {
@@ -712,6 +716,7 @@ object VerificationUtil {
                         compactSerialization = credBase64,
                         nonce = nonce,
                         documentTypeRepository = documentTypeRepository,
+                        transactionData = emptyList()
                     )
                     verifiedPresentations.add(sdjwtVerifiedPresentations)
                 } else {
@@ -744,6 +749,7 @@ object VerificationUtil {
         compactSerialization: String,
         nonce: ByteString,
         documentTypeRepository: DocumentTypeRepository?,
+        transactionData: List<TransactionData>
     ): VerifiedPresentation {
         val (sdJwt, sdJwtKb) = if (compactSerialization.endsWith("~")) {
             Pair(SdJwt.fromCompactSerialization(compactSerialization), null)
@@ -761,7 +767,8 @@ object VerificationUtil {
                 issuerKey = issuerCertChain.certificates.first().ecPublicKey,
                 checkNonce = { nonceInCredential -> nonceInCredential == nonce.toByteArray().toBase64Url() },
                 checkAudience = { true }, // TODO
-                checkCreationTime = { true }
+                checkCreationTime = { true },
+                transactionData = transactionData
             )
         } else {
             sdJwt.verify(
@@ -774,7 +781,6 @@ object VerificationUtil {
         val validUntil = processedPayload["exp"]?.jsonPrimitive?.intOrNull?.let { Instant.fromEpochSeconds(it.toLong()) }
         val signedAt = processedPayload["iat"]?.jsonPrimitive?.intOrNull?.let { Instant.fromEpochSeconds(it.toLong()) }
         val dt = documentTypeRepository?.getDocumentTypeForJson(vct)
-
 
         val claims = mutableListOf<JsonClaim>()
         for ((claimName, claimValue) in processedPayload) {

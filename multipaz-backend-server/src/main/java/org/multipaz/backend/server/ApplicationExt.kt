@@ -2,7 +2,6 @@ package org.multipaz.backend.server
 
 import io.ktor.http.ContentType
 import io.ktor.server.application.Application
-import io.ktor.server.application.call
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
@@ -27,14 +26,14 @@ import org.multipaz.backend.openid4vci.register
 import org.multipaz.rpc.handler.HttpHandler
 import org.multipaz.rpc.handler.RpcDispatcherLocal
 import org.multipaz.rpc.handler.RpcExceptionMap
+import org.multipaz.rpc.handler.RpcPoll
+import org.multipaz.rpc.handler.SimpleCipher
 import org.multipaz.rpc.server.register
 import org.multipaz.server.common.ServerEnvironment
 import org.multipaz.server.request.certificateAuthority
 import org.multipaz.server.request.push
 import org.multipaz.server.request.rpc
 import java.util.Locale
-
-private const val TAG = "ApplicationExt"
 
 /**
  * Defines server entry points for HTTP GET and POST.
@@ -73,13 +72,13 @@ private fun initAndCreateHttpHandler(
         }
         val exceptionMap = buildExceptionMap()
         val dispatcherBuilder = buildDispatcher()
-        val notifications = env.notifications
+        val rpcPoll = env.getInterface(RpcPoll::class)!!
         val localDispatcher = dispatcherBuilder.build(
             env,
-            env.cipher,
+            env.getInterface(SimpleCipher::class)!!,
             exceptionMap
         )
-        HttpHandler(localDispatcher, notifications)
+        HttpHandler(localDispatcher, rpcPoll)
     }
 }
 

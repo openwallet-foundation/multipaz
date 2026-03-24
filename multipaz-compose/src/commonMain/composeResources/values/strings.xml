@@ -46,6 +46,7 @@
     <string name="credential_presentment_warning_icon_description">Warning icon</string>
     <string name="credential_presentment_select_document">Select document</string>
     <string name="credential_presentment_requester_information">Requester information</string>
+    <string name="credential_presentment_transaction_data">Includes transaction data:</string>
 
     <!-- X509CertViewer.kt -->
     <string name="certificate_viewer_sub_basic_info">Basic information</string>

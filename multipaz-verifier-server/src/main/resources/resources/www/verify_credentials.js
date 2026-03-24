@@ -53,7 +53,7 @@
                 if (res["status"] != "not_ready") {
                     return res;
                 }
-                // add a bit of a delay to rate-limit a bit if something goes terribly wrong
+                // add a delay to rate-limit a bit if something goes terribly wrong
                 delay(100);
             }
         } else {

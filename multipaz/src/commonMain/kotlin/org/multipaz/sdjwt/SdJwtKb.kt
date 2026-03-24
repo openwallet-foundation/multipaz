@@ -1,16 +1,19 @@
 package org.multipaz.sdjwt
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.io.bytestring.ByteString
 import kotlin.time.Instant
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.SignatureVerificationException
+import org.multipaz.presentment.TransactionData
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 
@@ -53,6 +56,7 @@ class SdJwtKb private constructor(
      * @param checkNonce a function to check that the nonce in the KB JWT is as expected.
      * @param checkAudience a function to check that the audience in the KB JWT is as expected.
      * @param checkCreationTime a function to check that the creation time in the KB JWT is as expected.
+     * @param transactionData transaction data that was sent with the request
      * @return the processed SD-JWT payload,
      * @throws SignatureVerificationException if the issuer signature or key-binding signature failed to validate.
      * @throws IllegalStateException if [checkNonce], [checkAudience], or [checkCreationTime] returns false.
@@ -61,7 +65,8 @@ class SdJwtKb private constructor(
         issuerKey: EcPublicKey,
         checkNonce: (nonce: String) -> Boolean,
         checkAudience: (audience: String) -> Boolean,
-        checkCreationTime: (creationTime: Instant) -> Boolean
+        checkCreationTime: (creationTime: Instant) -> Boolean,
+        transactionData: List<TransactionData> = listOf()
     ): JsonObject {
         try {
             JsonWebSignature.verify("$kbHeader.$kbBody.$kbSignature", sdJwt.kbKey!!)
@@ -88,6 +93,35 @@ class SdJwtKb private constructor(
             throw IllegalStateException("Failed verification of creationTime")
         }
 
+        val hashes = jwtBody["transaction_data_hashes"]
+        if (hashes == null) {
+            if (transactionData.isNotEmpty()) {
+                throw IllegalStateException("Transaction data was not processed")
+            }
+        } else {
+            hashes as? JsonArray
+                ?: throw IllegalStateException("Invalid 'transaction_data_hashes'")
+            if (hashes.size != transactionData.size) {
+                throw IllegalStateException("Unexpected 'transaction_data_hashes' size")
+            }
+            val hashAlgorithm = try {
+                jwtBody["transaction_data_hashes_alg"]?.jsonPrimitive?.content?.let {
+                    Algorithm.fromHashAlgorithmIdentifier(it)
+                } ?: Algorithm.SHA256
+            } catch (err: Exception) {
+                throw IllegalStateException("Unknown or invalid transaction data hash algorithm", err)
+            }
+            transactionData.zip(hashes).forEach { (transaction, hash) ->
+                if (hash !is JsonPrimitive || !hash.isString) {
+                    throw IllegalStateException("Invalid transaction data hash value")
+                }
+                val responseHash = ByteString(hash.content.fromBase64Url())
+                if (transaction.getHash(hashAlgorithm) != responseHash) {
+                    throw IllegalStateException("Transaction data hash mismatch")
+                }
+            }
+        }
+
         return sdJwt.verify(issuerKey)
     }
 
@@ -103,7 +137,7 @@ class SdJwtKb private constructor(
                 throw IllegalArgumentException("Given compact serialization appears to be a SD-JWT, not SD-JWT+KB")
             }
             val lastTilde = compactSerialization.lastIndexOf('~')
-            val sdJwtCompactSerialization = compactSerialization.substring(0, lastTilde + 1)
+            val sdJwtCompactSerialization = compactSerialization.take(lastTilde + 1)
             val kbJwt = compactSerialization.substring(lastTilde + 1, compactSerialization.length)
 
             val sdJwt = SdJwt.fromCompactSerialization(sdJwtCompactSerialization)
