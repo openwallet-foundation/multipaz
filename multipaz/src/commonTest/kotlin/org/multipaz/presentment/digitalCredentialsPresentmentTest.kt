@@ -85,8 +85,8 @@ class DigitalCredentialsPresentmentTest {
             documentTypeRepository = documentStoreTestHarness.documentTypeRepository,
             showConsentPromptFn = ::promptModelSilentConsent,
             preferSignatureToKeyAgreement = true,
-            domainMdocSignature = "mdoc",
-            domainKeyBoundSdJwt = "sdjwt",
+            domainsMdocSignature = listOf("mdoc"),
+            domainsKeyBoundSdJwt = listOf("sdjwt"),
         )
 
         val nonce = Random.nextBytes(16).toBase64Url()

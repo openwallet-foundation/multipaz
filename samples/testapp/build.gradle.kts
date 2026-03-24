@@ -61,12 +61,24 @@ kotlin {
         iosSimulatorArm64()
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
+            freeCompilerArgs += listOf(
+                // This is how we specify the minimum iOS version as 26.0
+                "-Xoverride-konan-properties=" +
+                        "osVersionMin.ios_arm64=26.0;" +
+                        "osVersionMin.ios_simulator_arm64=26.0;" +
+                        "osVersionMin.ios_x64=26.0",
+                // Uncomment the following to get Garbage Collection logging when using the framework:
+                //
+                // "-Xruntime-logs=gc=info"
+            )
+            linkerOpts("-lsqlite3")
             baseName = "Multipaz"
             isStatic = true
             export(project(":multipaz"))
             export(project(":multipaz-doctypes"))
             export(project(":multipaz-longfellow"))
             export(project(":multipaz-dcapi"))
+            export(project(":multipaz-swiftui"))
             export(libs.ktor.client.darwin)
             export(libs.kotlinx.io.bytestring)
             export(libs.kotlinx.datetime)
@@ -89,6 +101,7 @@ kotlin {
                 api(project(":multipaz-doctypes"))
                 api(project(":multipaz-longfellow"))
                 api(project(":multipaz-dcapi"))
+                api(project(":multipaz-swiftui"))
                 api(libs.ktor.client.darwin)
                 api(libs.kotlinx.io.bytestring)
                 api(libs.kotlinx.datetime)
@@ -153,6 +166,7 @@ kotlin {
                 implementation(project(":multipaz-dcapi"))
                 implementation(project(":multipaz-doctypes"))
                 implementation(project(":multipaz-longfellow"))
+                implementation(project(":multipaz-swiftui"))
                 implementation(libs.kotlinx.datetime)
                 implementation(libs.kotlinx.io.core)
                 implementation(libs.ktor.client.core)

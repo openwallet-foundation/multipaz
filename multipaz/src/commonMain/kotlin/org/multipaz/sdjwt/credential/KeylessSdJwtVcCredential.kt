@@ -1,5 +1,6 @@
 package org.multipaz.sdjwt.credential
 
+import kotlinx.io.bytestring.decodeToString
 import org.multipaz.cbor.CborBuilder
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.MapBuilder
@@ -7,6 +8,9 @@ import org.multipaz.claim.JsonClaim
 import org.multipaz.credential.Credential
 import org.multipaz.document.Document
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.mpzpass.MpzPass
+import org.multipaz.mpzpass.MpzPassSdJwtVc
+import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.SecureArea
 import kotlin.time.Instant
 
@@ -62,6 +66,19 @@ class KeylessSdJwtVcCredential : Credential, SdJwtVcCredential {
 
     override suspend fun extractValidityFromIssuerData(): Pair<Instant, Instant> =
         extractValidityFromIssuerDataImpl()
+
+    override suspend fun exportToMpzPass(keyUnlockData: KeyUnlockData?): MpzPass {
+        return MpzPass(
+            name = document.displayName,
+            typeName = document.typeDisplayName,
+            cardArt = document.cardArt,
+            sdJwtVc = listOf(MpzPassSdJwtVc(
+                vct = vct,
+                deviceKeyPrivate = null,
+                compactSerialization = issuerProvidedData.decodeToString()
+            ))
+        )
+    }
 
     companion object {
         const val CREDENTIAL_TYPE: String = "KeylessSdJwtVcCredential"

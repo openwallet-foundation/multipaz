@@ -1,6 +1,5 @@
 package org.multipaz.testapp
 
-import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +42,7 @@ import io.ktor.client.HttpClient
 import io.ktor.http.Url
 import io.ktor.http.decodeURLPart
 import io.ktor.http.protocolWithAuthority
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -86,10 +86,10 @@ import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.Aadhaar
 import org.multipaz.documenttype.knowntypes.AgeVerification
+import org.multipaz.documenttype.knowntypes.DigitalPaymentCredential
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.IDPass
-import org.multipaz.documenttype.knowntypes.DigitalPaymentCredential
 import org.multipaz.documenttype.knowntypes.Loyalty
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
@@ -97,6 +97,7 @@ import org.multipaz.eventlogger.SimpleEventLogger
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
+import org.multipaz.mpzpass.MpzPass
 import org.multipaz.nfc.ExternalNfcReaderStore
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.SimplePresentmentSource
@@ -123,11 +124,11 @@ import org.multipaz.testapp.ui.ConsentPromptScreen
 import org.multipaz.testapp.ui.CredentialClaimsViewerScreen
 import org.multipaz.testapp.ui.CredentialViewerScreen
 import org.multipaz.testapp.ui.DcRequestScreen
-import org.multipaz.testapp.ui.VerticalDocumentListScreen
 import org.multipaz.testapp.ui.DocumentStoreScreen
 import org.multipaz.testapp.ui.DocumentViewerScreen
 import org.multipaz.testapp.ui.EventLoggerScreen
 import org.multipaz.testapp.ui.EventViewerScreen
+import org.multipaz.testapp.ui.GenerateMpzPassScreen
 import org.multipaz.testapp.ui.IsoMdocMultiDeviceTestingScreen
 import org.multipaz.testapp.ui.IsoMdocProximityReadingScreen
 import org.multipaz.testapp.ui.IsoMdocProximitySharingScreen
@@ -149,9 +150,10 @@ import org.multipaz.testapp.ui.SoftwareSecureAreaScreen
 import org.multipaz.testapp.ui.StartScreen
 import org.multipaz.testapp.ui.TrustEntryEditScreen
 import org.multipaz.testapp.ui.TrustEntryRicalEntryScreen
-import org.multipaz.testapp.ui.TrustManagerScreen
 import org.multipaz.testapp.ui.TrustEntryScreen
 import org.multipaz.testapp.ui.TrustEntryVicalEntryScreen
+import org.multipaz.testapp.ui.TrustManagerScreen
+import org.multipaz.testapp.ui.VerticalDocumentListScreen
 import org.multipaz.trustmanagement.CompositeTrustManager
 import org.multipaz.trustmanagement.TrustManager
 import org.multipaz.trustmanagement.TrustMetadata
@@ -216,6 +218,8 @@ class App private constructor (val promptModel: PromptModel) {
 
     private val credentialOffers = Channel<String>()
 
+    private val mpzPassesToImport = Channel<ByteString>()
+
     private val urlsToOpen = Channel<String>()
 
     private val documentsToView = Channel<String>()
@@ -240,21 +244,21 @@ class App private constructor (val promptModel: PromptModel) {
             },
             resolveTrustFn = ::resolveTrust,
             preferSignatureToKeyAgreement = settingsModel.presentmentPreferSignatureToKeyAgreement.value,
-            domainMdocSignature = if (useAuth) {
-                TestAppUtils.CREDENTIAL_DOMAIN_MDOC_USER_AUTH
+            domainsMdocSignature = if (useAuth) {
+                listOf(TestAppUtils.CREDENTIAL_DOMAIN_MDOC_USER_AUTH, TestAppUtils.CREDENTIAL_DOMAIN_MDOC_SOFTWARE)
             } else {
-                TestAppUtils.CREDENTIAL_DOMAIN_MDOC_NO_USER_AUTH
+                listOf(TestAppUtils.CREDENTIAL_DOMAIN_MDOC_NO_USER_AUTH, TestAppUtils.CREDENTIAL_DOMAIN_MDOC_SOFTWARE)
             },
-            domainMdocKeyAgreement = if (useAuth) {
-                TestAppUtils.CREDENTIAL_DOMAIN_MDOC_MAC_USER_AUTH
+            domainsMdocKeyAgreement = if (useAuth) {
+                listOf(TestAppUtils.CREDENTIAL_DOMAIN_MDOC_MAC_USER_AUTH, TestAppUtils.CREDENTIAL_DOMAIN_MDOC_SOFTWARE)
             } else {
-                TestAppUtils.CREDENTIAL_DOMAIN_MDOC_MAC_NO_USER_AUTH
+                listOf(TestAppUtils.CREDENTIAL_DOMAIN_MDOC_MAC_NO_USER_AUTH, TestAppUtils.CREDENTIAL_DOMAIN_MDOC_SOFTWARE)
             },
-            domainKeylessSdJwt = TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_KEYLESS,
-            domainKeyBoundSdJwt = if (useAuth) {
-                TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_USER_AUTH
+            domainsKeylessSdJwt = listOf(TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_KEYLESS),
+            domainsKeyBoundSdJwt = if (useAuth) {
+                listOf(TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_USER_AUTH, TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_SOFTWARE)
             } else {
-                TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_NO_USER_AUTH
+                listOf(TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_NO_USER_AUTH, TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_SOFTWARE)
             },
         )
     }
@@ -806,7 +810,7 @@ class App private constructor (val promptModel: PromptModel) {
     }
 
     /**
-     * Handle a link (either a app link, universal link, or custom URL schema link).
+     * Handle a link (either a app link, universal link or custom URL schema link).
      */
     fun handleUrl(url: String) {
         if (url.startsWith(OID4VCI_CREDENTIAL_OFFER_URL_SCHEME)
@@ -829,6 +833,12 @@ class App private constructor (val promptModel: PromptModel) {
             }
         } else {
             Logger.e(TAG, "Unhandled URL: '$url'")
+        }
+    }
+
+    fun importMpzPass(encodedMpzPass: ByteArray) {
+        CoroutineScope(Dispatchers.Default).launch {
+            mpzPassesToImport.send(ByteString(encodedMpzPass))
         }
     }
 
@@ -926,6 +936,27 @@ class App private constructor (val promptModel: PromptModel) {
                         clientPreferences = provisioningSupport.getOpenID4VCIClientPreferences(),
                         backend = provisioningSupport.getOpenID4VCIBackend()
                     )
+                }
+            }
+        }
+
+        LaunchedEffect(true) {
+            while (true) {
+                val mpzPassToImport = mpzPassesToImport.receive()
+                try {
+                    val mpzPass = MpzPass.fromDataItem(Cbor.decode(mpzPassToImport.toByteArray()))
+                    val document = documentStore.importMpzPass(
+                        mpzPass = mpzPass,
+                        isoMdocDomain = TestAppUtils.CREDENTIAL_DOMAIN_MDOC_SOFTWARE,
+                        sdJwtVcDomain = TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_SOFTWARE,
+                        keylessSdJwtVcDomain = TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_KEYLESS
+                    )
+                    navController.navigate(DocumentViewerDestination(document.identifier))
+                    showToast("MpzPass file successfully imported")
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    e.printStackTrace()
+                    showToast("Error importing mpzpass: ${e.message}")
                 }
             }
         }
@@ -1074,6 +1105,7 @@ class App private constructor (val promptModel: PromptModel) {
                             },
                             onClickEventLog = { navController.navigate(EventLogDestination) },
                             onClickShareSheet = { navController.navigate(ShareSheetDestination) },
+                            onClickCredentialContainer = { navController.navigate(GenerateMpzPassDestination) }
                         )
                     }
                 }
@@ -1659,6 +1691,15 @@ class App private constructor (val promptModel: PromptModel) {
                         ShareSheetScreen(
                             onBack = { navController.navigateUp() },
                             promptModel = promptModel,
+                            showToast = { message -> showToast(message) },
+                        )
+                    }
+                }
+                composable<GenerateMpzPassDestination> { backStackEntry ->
+                    WithAppBar(navController, "MpzPass generation") {
+                        GenerateMpzPassScreen(
+                            promptModel = promptModel,
+                            documentTypeRepository = documentTypeRepository,
                             showToast = { message -> showToast(message) },
                         )
                     }

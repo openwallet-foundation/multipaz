@@ -10,3 +10,5 @@ fun MainViewController() = ComposeUIViewController {
 }
 
 fun HandleUrl(url: String) = app.handleUrl(url)
+
+fun processMpzPassPayload(encodedMpzPass: ByteArray) = app.importMpzPass(encodedMpzPass)

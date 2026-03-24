@@ -141,10 +141,10 @@ class DocumentStoreTestHarness {
             documentTypeRepository = documentTypeRepository,
             showConsentPromptFn = ::promptModelSilentConsent,
             preferSignatureToKeyAgreement = true,
-            domainMdocSignature = "mdoc",
-            domainMdocKeyAgreement = "mdoc_key_agreement",
-            domainKeylessSdJwt = "sdjwt_keyless",
-            domainKeyBoundSdJwt = "sdjwt"
+            domainsMdocSignature = listOf("mdoc"),
+            domainsMdocKeyAgreement = listOf("mdoc_key_agreement"),
+            domainsKeylessSdJwt = listOf("sdjwt_keyless"),
+            domainsKeyBoundSdJwt = listOf("sdjwt")
         )
 
         val now = Clock.System.now().truncateToWholeSeconds()

@@ -14,6 +14,7 @@ class ViewModel {
 
     var storage: Storage!
     var secureArea: SecureArea!
+    var softwareSecureArea: SecureArea!
     var secureAreaRepository: SecureAreaRepository!
     var documentTypeRepository: DocumentTypeRepository!
     var documentStore: DocumentStore!
@@ -36,8 +37,10 @@ class ViewModel {
             excludeFromBackup: true
         )
         secureArea = try! await Platform.shared.getSecureArea(storage: storage)
+        softwareSecureArea = try! await SoftwareSecureArea.companion.create(storage: storage)
         secureAreaRepository = SecureAreaRepository.Builder()
             .add(secureArea: secureArea)
+            .add(secureArea: softwareSecureArea)
             .build()
         documentTypeRepository = DocumentTypeRepository()
         documentTypeRepository.addDocumentType(documentType: DrivingLicense.shared.getDocumentType())
@@ -310,7 +313,7 @@ class ViewModel {
                 )
             },
             preferSignatureToKeyAgreement: false,
-            domainMdocSignature: "mdoc",
+            domainsMdocSignature: ["mdoc"],
         )
     }
 }

@@ -86,11 +86,17 @@ object TestAppUtils {
     // This domain is for MdocCredential using mdoc MAC authentication and not requiring user authentication.
     const val CREDENTIAL_DOMAIN_MDOC_MAC_NO_USER_AUTH = "mdoc_mac_no_user_auth"
 
+    // This domain is for MdocCredential with software-backed keys (no auth)
+    const val CREDENTIAL_DOMAIN_MDOC_SOFTWARE = "mdoc_software"
+
     // This domain is for KeyBoundSdJwtVcCredential and requiring user authentication.
     const val CREDENTIAL_DOMAIN_SDJWT_USER_AUTH = "sdjwt_user_auth"
 
     // This domain is for KeyBoundSdJwtVcCredential and not requiring user authentication.
     const val CREDENTIAL_DOMAIN_SDJWT_NO_USER_AUTH = "sdjwt_no_user_auth"
+
+    // This domain is for KeyBoundSdJwtVcCredential with software-backed keys (no auth)
+    const val CREDENTIAL_DOMAIN_SDJWT_SOFTWARE = "sdjwt_software"
 
     // This domain is for KeylessSdJwtVcCredential
     const val CREDENTIAL_DOMAIN_SDJWT_KEYLESS = "sdjwt_keyless"

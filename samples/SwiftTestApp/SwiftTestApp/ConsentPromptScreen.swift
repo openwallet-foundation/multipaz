@@ -581,8 +581,8 @@ private func calcConsentData(
                 onDocumentsInFocus: { documents in onDocumentsInFocus(documents) }
             )
         },
-        domainMdocSignature: "mdoc",
-        domainKeyBoundSdJwt: "sdjwt"
+        domainsMdocSignature: ["mdoc"],
+        domainsKeyBoundSdJwt: ["sdjwt"]
     )
 
     let query = try! DcqlQuery.companion.fromJsonString(dcql: dcqlString)

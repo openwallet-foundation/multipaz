@@ -158,3 +158,6 @@ data class EventViewerDestination(
 @Serializable
 data object ShareSheetDestination: Destination()
 
+
+@Serializable
+data object GenerateMpzPassDestination: Destination()

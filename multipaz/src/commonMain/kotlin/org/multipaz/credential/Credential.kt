@@ -31,8 +31,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.mpzpass.MpzPass
+import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.tags.Tags
 import kotlin.concurrent.Volatile
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Base class for credentials.
@@ -326,7 +330,7 @@ abstract class Credential {
 
     // Deleted identifier for which this one is a replacement
     // Called by Document.deleteCredential()
-    suspend fun replacementForDeleted() {
+    internal suspend fun replacementForDeleted() {
         lock.withLock {
             replacementForIdentifier = null
             save()
@@ -340,6 +344,22 @@ abstract class Credential {
      * @param builder a [MapBuilder] which can be used to add data.
      */
     open fun addSerializedData(builder: MapBuilder<CborBuilder>) {}
+
+    /**
+     * Exports the credential as a [MpzPass] which can be shared with other applications.
+     *
+     * Note: If the credential is using key-binding, it must be backed by a [SoftwareSecureArea] in order
+     * for this to work.
+     *
+     * @param keyUnlockData Optional unlock data required to read the underlying private key, if applicable.
+     * @return The generated [MpzPass].
+     * @throws IllegalStateException if the credential does not use a SoftwareSecureArea or if the credential
+     * doesn't support being exported.
+     */
+    @Throws(IllegalStateException::class, CancellationException::class)
+    open suspend fun exportToMpzPass(keyUnlockData: KeyUnlockData? = null): MpzPass {
+        throw IllegalStateException("This credential does not support export")
+    }
 
     /**
      * Serializes the credential.

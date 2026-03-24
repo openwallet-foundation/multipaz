@@ -87,7 +87,7 @@ func getPresentmentSource() async -> PresentmentSource {
             )
         },
         preferSignatureToKeyAgreement: false,
-        domainMdocSignature: "mdoc"
+        domainsMdocSignature: ["mdoc"]
     )
 }
 

@@ -41,6 +41,7 @@ import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.PromptModelNotAvailableException
 import org.multipaz.securearea.KeyUnlockDataProvider
 import org.multipaz.prompt.Reason
+import org.multipaz.securearea.KeyInfo
 import kotlin.random.Random
 
 /**
@@ -95,7 +96,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
             builder.build()
         }
         try {
-            val privateKey = Crypto.createEcPrivateKey(settings.algorithm.curve!!)
+            val privateKey = settings.privateKey ?: Crypto.createEcPrivateKey(settings.algorithm.curve!!)
             val encodedPublicKey = Cbor.encode(privateKey.publicKey.toCoseKey().toDataItem())
             val keyMetadata = if (settings.passphraseRequired) {
                 val secretKey = derivePrivateKeyEncryptionKey(encodedPublicKey, settings.passphrase!!)

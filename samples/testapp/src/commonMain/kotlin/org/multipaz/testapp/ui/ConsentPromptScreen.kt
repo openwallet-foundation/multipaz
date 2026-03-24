@@ -765,8 +765,8 @@ private suspend fun getQueryResult(
             // Otherwise, just return the trustMetadata
             trustMetadata
         },
-        domainMdocSignature = "mdoc",
-        domainKeyBoundSdJwt = "sdjwt"
+        domainsMdocSignature = listOf("mdoc"),
+        domainsKeyBoundSdJwt = listOf("sdjwt")
     )
     val dcqlQuery = DcqlQuery.fromJson(dcql = dcql)
     val dcqlResponse = dcqlQuery.execute(presentmentSource = source)

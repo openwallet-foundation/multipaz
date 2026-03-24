@@ -139,10 +139,10 @@ func getPresentmentSource() async -> PresentmentSource {
             )
         },
         preferSignatureToKeyAgreement: false,
-        domainMdocSignature: TestAppUtils.shared.CREDENTIAL_DOMAIN_MDOC_USER_AUTH,
-        domainMdocKeyAgreement: TestAppUtils.shared.CREDENTIAL_DOMAIN_MDOC_MAC_USER_AUTH,
-        domainKeylessSdJwt: nil,
-        domainKeyBoundSdJwt: nil
+        domainsMdocSignature: [TestAppUtils.shared.CREDENTIAL_DOMAIN_MDOC_USER_AUTH],
+        domainsMdocKeyAgreement: [TestAppUtils.shared.CREDENTIAL_DOMAIN_MDOC_MAC_USER_AUTH],
+        domainsKeylessSdJwt: [],
+        domainsKeyBoundSdJwt: []
     )
 }
 

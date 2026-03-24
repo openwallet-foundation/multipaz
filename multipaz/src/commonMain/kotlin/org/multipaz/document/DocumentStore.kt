@@ -27,12 +27,21 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.credential.Credential
 import org.multipaz.credential.CredentialLoaderBuilder
+import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mpzpass.MpzPass
 import org.multipaz.provisioning.Provisioning
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
+import org.multipaz.securearea.software.SoftwareCreateKeySettings
+import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.NoRecordStorageException
 import org.multipaz.tags.Tags
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -260,6 +269,112 @@ class DocumentStore private constructor(
 
     internal suspend fun getDocumentTable(): StorageTable {
         return storage.getTable(documentTableSpec)
+    }
+
+    /**
+     * Imports an [MpzPass] into a [DocumentStore].
+     *
+     * Reconstructs the [Document] and internal credential objects (either ISO mDoc, SD-JWT VC, or both)
+     * using the extracted data and keys in the passed-in [mpzPass] for credentials.
+     *
+     * The returned document will have the [Document.provisioned] flag set to `true`.
+     *
+     * @param mpzPass The []MpzPass] to import.
+     * @param isoMdocDomain The domain string to use when creating ISO mdoc credentials.
+     * @param sdJwtVcDomain The domain string to use when creating SD-JWT VC credentials.
+     * @param keylessSdJwtVcDomain the domain string to use when creating keyless SD-JWT VC credentials.
+     * @return The newly created [Document] containing the provisioned credentials.
+     * @throws IllegalStateException if a SoftwareSecureArea implementation cannot be found in the repository.
+     * @throws ImportMpzPassException if credential creation or certification fails.
+     */
+    @Throws(IllegalStateException::class, ImportMpzPassException::class, CancellationException::class)
+    suspend fun importMpzPass(
+        mpzPass: MpzPass,
+        isoMdocDomain: String = "mdoc",
+        sdJwtVcDomain: String = "sdjwtvc",
+        keylessSdJwtVcDomain: String = "sdjwtvc_keyless"
+    ): Document {
+        val softwareSecureArea = secureAreaRepository.getImplementation(SoftwareSecureArea.IDENTIFIER)
+            ?: throw IllegalStateException(
+                "No SoftwareSecureArea implementation found"
+            )
+
+        val document = try {
+            createDocument(
+                displayName = mpzPass.name,
+                typeDisplayName = mpzPass.typeName,
+                cardArt = mpzPass.cardArt,
+            )
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            throw ImportMpzPassException("Failed to create document", e)
+        }
+
+        try {
+            mpzPass.isoMdoc.forEach { isoMdoc ->
+                val importedKeyInfo = softwareSecureArea.createKey(
+                    alias = null,
+                    createKeySettings = SoftwareCreateKeySettings.Builder()
+                        .setPrivateKey(isoMdoc.deviceKeyPrivate)
+                        .build()
+                )
+                val credential = MdocCredential.createForExistingAlias(
+                    document = document,
+                    asReplacementForIdentifier = null,
+                    domain = isoMdocDomain,
+                    secureArea = softwareSecureArea,
+                    docType = isoMdoc.docType,
+                    existingKeyAlias = importedKeyInfo.alias,
+                )
+                credential.certify(
+                    issuerProvidedAuthenticationData = ByteString(
+                        Cbor.encode(buildCborMap {
+                            put("nameSpaces", isoMdoc.issuerNamespaces.toDataItem())
+                            put("issuerAuth", isoMdoc.issuerAuth.toDataItem())
+                        })
+                    )
+                )
+            }
+
+            mpzPass.sdJwtVc.forEach { sdJwtVc ->
+                val credential = if (sdJwtVc.deviceKeyPrivate != null) {
+                    val importedKeyInfo = softwareSecureArea.createKey(
+                        alias = null,
+                        createKeySettings = SoftwareCreateKeySettings.Builder()
+                            .setPrivateKey(sdJwtVc.deviceKeyPrivate)
+                            .build()
+                    )
+                    KeyBoundSdJwtVcCredential.createForExistingAlias(
+                        document = document,
+                        asReplacementForIdentifier = null,
+                        domain = sdJwtVcDomain,
+                        secureArea = softwareSecureArea,
+                        vct = sdJwtVc.vct,
+                        existingKeyAlias = importedKeyInfo.alias,
+                    )
+                } else {
+                    KeylessSdJwtVcCredential.create(
+                        document = document,
+                        asReplacementForIdentifier = null,
+                        domain = keylessSdJwtVcDomain,
+                        vct = sdJwtVc.vct
+                    )
+                }
+
+                credential.certify(
+                    issuerProvidedAuthenticationData = sdJwtVc.compactSerialization.encodeToByteString()
+                )
+            }
+
+            document.edit {
+                provisioned = true
+            }
+            return document
+        } catch (e: Exception) {
+            deleteDocument(document.identifier)
+            if (e is CancellationException) throw e
+            throw ImportMpzPassException("Failed importing credentials", e)
+        }
     }
 
     /**

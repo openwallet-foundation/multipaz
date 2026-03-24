@@ -17,6 +17,7 @@ import org.multipaz.request.Requester
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.trustmanagement.TrustMetadata
 import kotlin.time.Clock
+import kotlin.time.Instant
 
 
 private data class CredentialForPresentment(
@@ -38,10 +39,13 @@ private data class CredentialForPresentment(
  * @property showConsentPrompt a [ShowConsentPromptFn] used show a consent prompt is required.
  * @property preferSignatureToKeyAgreement whether to use mdoc ECDSA authentication even if mdoc MAC authentication
  *   is possible (ISO mdoc only).
- * @property domainMdocSignature the domain to use for [org.multipaz.mdoc.credential.MdocCredential] instances using mdoc ECDSA authentication or `null`.
- * @property domainMdocKeyAgreement the domain to use for [org.multipaz.mdoc.credential.MdocCredential] instances using mdoc MAC authentication or `null`.
- * @property domainKeylessSdJwt the domain to use for [KeylessSdJwtVcCredential] instances or `null`.
- * @property domainKeyBoundSdJwt the domain to use for [org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential] instances or `null`.
+ * @property domainsMdocSignature the domains to use for [org.multipaz.mdoc.credential.MdocCredential] instances using
+ * mdoc ECDSA authentication, will be tried in order.
+ * @property domainsMdocKeyAgreement the domains to use for [org.multipaz.mdoc.credential.MdocCredential] instances
+ * using mdoc MAC authentication, will be tried in order.
+ * @property domainsKeylessSdJwt the domains to use for [KeylessSdJwtVcCredential] instances, will be tried in order.
+ * @property domainsKeyBoundSdJwt the domains to use for [org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential]
+ * instances, will be tried in order.
  */
 class SimplePresentmentSource(
     override val documentStore: DocumentStore,
@@ -51,10 +55,10 @@ class SimplePresentmentSource(
     private val resolveTrustFn: suspend (requester: Requester) -> TrustMetadata? = { requester -> null },
     private val showConsentPromptFn: ShowConsentPromptFn = ::promptModelRequestConsent,
     val preferSignatureToKeyAgreement: Boolean = true,
-    val domainMdocSignature: String? = null,
-    val domainMdocKeyAgreement: String? = null,
-    val domainKeylessSdJwt: String? = null,
-    val domainKeyBoundSdJwt: String? = null,
+    val domainsMdocSignature: List<String> = emptyList(),
+    val domainsMdocKeyAgreement: List<String> = emptyList(),
+    val domainsKeylessSdJwt: List<String> = emptyList(),
+    val domainsKeyBoundSdJwt: List<String> = emptyList(),
 ): PresentmentSource(
     documentStore = documentStore,
     documentTypeRepository = documentTypeRepository,
@@ -81,6 +85,15 @@ class SimplePresentmentSource(
         )
     }
 
+    private suspend fun Document.findCredential(domains: List<String>, now: Instant): Credential? {
+        for (domain in domains) {
+            findCredential(domain, now)?.let {
+                return it
+            }
+        }
+        return null
+    }
+
     override suspend fun selectCredential(
         document: Document,
         requestedClaims: List<RequestedClaim>,
@@ -91,27 +104,19 @@ class SimplePresentmentSource(
         val credsForPresentment = when (requestedClaims[0]) {
             is MdocRequestedClaim -> {
                 CredentialForPresentment(
-                    credential = domainMdocSignature?.let {
-                        document.findCredential(domain = it, now = now)
-                    },
-                    credentialKeyAgreement = domainMdocKeyAgreement?.let {
-                        document.findCredential(domain = it, now = now)
-                    }
+                    credential = document.findCredential(domains = domainsMdocSignature, now = now),
+                    credentialKeyAgreement = document.findCredential(domains = domainsMdocKeyAgreement, now = now)
                 )
             }
             is JsonRequestedClaim -> {
                 if (document.getCertifiedCredentials().firstOrNull() is KeylessSdJwtVcCredential) {
                     CredentialForPresentment(
-                        credential = domainKeylessSdJwt?.let {
-                            document.findCredential(domain = it, now = now)
-                        },
+                        credential = document.findCredential(domains = domainsKeylessSdJwt, now = now),
                         credentialKeyAgreement = null
                     )
                 } else {
                     CredentialForPresentment(
-                        credential = domainKeyBoundSdJwt?.let {
-                            document.findCredential(domain = it, now = now)
-                        },
+                        credential = document.findCredential(domains = domainsKeyBoundSdJwt, now = now),
                         credentialKeyAgreement = null
                     )
                 }

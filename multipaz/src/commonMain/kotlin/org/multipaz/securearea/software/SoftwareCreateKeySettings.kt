@@ -6,9 +6,12 @@ import org.multipaz.securearea.PassphraseConstraints
 import org.multipaz.securearea.config.SecureAreaConfigurationSoftware
 import kotlin.time.Instant;
 import kotlinx.io.bytestring.buildByteString
+import org.multipaz.crypto.EcPrivateKey
 
 /**
  * Class used to indicate key creation settings for software-backed keys.
+ *
+ * @property privateKey private key material to use for the key or `null`.
  */
 class SoftwareCreateKeySettings internal constructor(
     val passphraseRequired: Boolean,
@@ -17,7 +20,8 @@ class SoftwareCreateKeySettings internal constructor(
     algorithm: Algorithm,
     val subject: String?,
     validFrom: Instant?,
-    validUntil: Instant?
+    validUntil: Instant?,
+    val privateKey: EcPrivateKey?
 ) : CreateKeySettings(
     algorithm = algorithm,
     nonce = buildByteString {},
@@ -35,6 +39,7 @@ class SoftwareCreateKeySettings internal constructor(
         private var subject: String? = null
         private var validFrom: Instant? = null
         private var validUntil: Instant? = null
+        private var privateKey: EcPrivateKey? = null
 
         /**
          * Apply settings from configuration object.
@@ -109,13 +114,25 @@ class SoftwareCreateKeySettings internal constructor(
         }
 
         /**
+         * Sets the private key material.
+         *
+         * @param privateKey the private key material.
+         * @return the builder.
+         */
+        fun setPrivateKey(
+            privateKey: EcPrivateKey
+        ) = apply {
+            this.privateKey = privateKey
+        }
+
+        /**
          * Builds the [SoftwareCreateKeySettings].
          *
          * @return a new [SoftwareCreateKeySettings].
          */
         fun build(): SoftwareCreateKeySettings {
             return SoftwareCreateKeySettings(
-                passphraseRequired, passphrase, passphraseConstraints, algorithm, subject, validFrom, validUntil
+                passphraseRequired, passphrase, passphraseConstraints, algorithm, subject, validFrom, validUntil, privateKey
             )
         }
     }

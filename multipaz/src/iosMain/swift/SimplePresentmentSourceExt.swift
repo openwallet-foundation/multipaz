@@ -14,10 +14,10 @@ extension SimplePresentmentSource.Companion {
     ///   - resolveTrustFn: a function which can be used to determine if a requester is trusted.
     ///   - showConsentPromptFn: a [ShowConsentPromptFn] used show a consent prompt is required.
     ///   - preferSignatureToKeyAgreement: whether to use mdoc ECDSA authentication even if mdoc MAC authentication is possible (ISO mdoc only).
-    ///   - domainMdocSignature: the domain to use for ``MdocCredential`` instances using mdoc ECDSA authentication or `nil`.
-    ///   - domainMdocKeyAgreement: the domain to use for ``MdocCredential`` instances using mdoc MAC authentication or `nil`.
-    ///   - domainKeylessSdJwt: the domain to use for ``KeylessSdJwtVcCredential`` instances or `nil`.
-    ///   - domainKeyBoundSdJwt: the domain to use for ``KeyBoundSdJwtVcCredential`` instances or `nil`.
+    ///   - domainsMdocSignature: the domains to use for ``MdocCredential`` instances using mdoc ECDSA authentication.
+    ///   - domainsMdocKeyAgreement: the domains to use for ``MdocCredential`` instances using mdoc MAC authentication.
+    ///   - domainsKeylessSdJwt: the domains to use for ``KeylessSdJwtVcCredential`` instances.
+    ///   - domainsKeyBoundSdJwt: the domains to use for ``KeyBoundSdJwtVcCredential`` instances.
     public func create(
         documentStore: DocumentStore,
         documentTypeRepository: DocumentTypeRepository,
@@ -34,10 +34,10 @@ extension SimplePresentmentSource.Companion {
             _ onDocumentsInFocus: @escaping @Sendable (_ documents: [Document]) -> Void,
         ) async -> CredentialPresentmentSelection?,
         preferSignatureToKeyAgreement: Bool = true,
-        domainMdocSignature: String? = nil,
-        domainMdocKeyAgreement: String? = nil,
-        domainKeylessSdJwt: String? = nil,
-        domainKeyBoundSdJwt: String? = nil,
+        domainsMdocSignature: [ String ] = [],
+        domainsMdocKeyAgreement: [ String ] = [],
+        domainsKeylessSdJwt: [ String ] = [],
+        domainsKeyBoundSdJwt: [ String ] = [],
     ) -> SimplePresentmentSource {
         return SimplePresentmentSource(
             documentStore: documentStore,
@@ -47,10 +47,10 @@ extension SimplePresentmentSource.Companion {
             resolveTrustFn: ResolveTrustHandler(f: resolveTrustFn),
             showConsentPromptFn: ShowConsentPromptHandler(f: showConsentPromptFn),
             preferSignatureToKeyAgreement: preferSignatureToKeyAgreement,
-            domainMdocSignature: domainMdocSignature,
-            domainMdocKeyAgreement: domainMdocKeyAgreement,
-            domainKeylessSdJwt: domainKeylessSdJwt,
-            domainKeyBoundSdJwt: domainKeyBoundSdJwt
+            domainsMdocSignature: domainsMdocSignature,
+            domainsMdocKeyAgreement: domainsMdocKeyAgreement,
+            domainsKeylessSdJwt: domainsKeylessSdJwt,
+            domainsKeyBoundSdJwt: domainsKeyBoundSdJwt
         )
     }
 
