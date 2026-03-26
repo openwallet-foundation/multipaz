@@ -8,11 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		512DAED62F2A31B30061F72B /* IdentityDocumentProviderExtension.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = 512DAECF2F2A31B30061F72B /* IdentityDocumentProviderExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		51A18EFB2F7157FF0050476D /* Multipaz in Frameworks */ = {isa = PBXBuildFile; productRef = 51A18EFA2F7157FF0050476D /* Multipaz */; };
-		51B36B2A2F2A3CD50022E192 /* Multipaz in Frameworks */ = {isa = PBXBuildFile; productRef = 51BD5C182F21DB3E0082DE19 /* Multipaz */; };
 		51BD5C5E2F22604F0082DE19 /* AdditionalConfig.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 51BD5C5C2F22604F0082DE19 /* AdditionalConfig.xcconfig */; };
 		51BD5C5F2F22604F0082DE19 /* DeveloperConfig.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 51BD5C5D2F22604F0082DE19 /* DeveloperConfig.xcconfig */; };
-		51C6CAF82F2B1566003EAB7A /* Multipaz in Frameworks */ = {isa = PBXBuildFile; productRef = 5168E4AF2F269CE60096DAC0 /* Multipaz */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -87,9 +84,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				51A18EFB2F7157FF0050476D /* Multipaz in Frameworks */,
-				51C6CAF82F2B1566003EAB7A /* Multipaz in Frameworks */,
-				51B36B2A2F2A3CD50022E192 /* Multipaz in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -138,6 +132,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 51100E882F21D4A6006B2ADD /* Build configuration list for PBXNativeTarget "SwiftTestApp" */;
 			buildPhases = (
+				7B92F9932F75E5FC007A00A1 /* Compile Kotlin Framework */,
 				51100E632F21D4A5006B2ADD /* Sources */,
 				51100E642F21D4A5006B2ADD /* Frameworks */,
 				51100E652F21D4A5006B2ADD /* Resources */,
@@ -153,9 +148,6 @@
 			);
 			name = SwiftTestApp;
 			packageProductDependencies = (
-				51BD5C182F21DB3E0082DE19 /* Multipaz */,
-				5168E4AF2F269CE60096DAC0 /* Multipaz */,
-				51A18EFA2F7157FF0050476D /* Multipaz */,
 			);
 			productName = SwiftTestApp;
 			productReference = 51100E672F21D4A5006B2ADD /* SwiftTestApp.app */;
@@ -165,6 +157,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 512DAEDB2F2A31B30061F72B /* Build configuration list for PBXNativeTarget "IdentityDocumentProviderExtension" */;
 			buildPhases = (
+				7B92F9512F75DB8B007A00A1 /* Compile Kotlin Framework */,
 				512DAECB2F2A31B30061F72B /* Sources */,
 				512DAECC2F2A31B30061F72B /* Frameworks */,
 				512DAECD2F2A31B30061F72B /* Resources */,
@@ -211,7 +204,6 @@
 			mainGroup = 51100E5E2F21D4A5006B2ADD;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				51A18EF92F7157FF0050476D /* XCLocalSwiftPackageReference "../../../multipaz" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 51100E682F21D4A5006B2ADD /* Products */;
@@ -242,6 +234,47 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		7B92F9512F75DB8B007A00A1 /* Compile Kotlin Framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 12;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Compile Kotlin Framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"\n  exit 0\nfi\ncd \"$SRCROOT/..\"\n../gradlew :samples:SwiftTestApp:embedAndSignAppleFrameworkForXcode\n";
+		};
+		7B92F9932F75E5FC007A00A1 /* Compile Kotlin Framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Compile Kotlin Framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"\n  exit 0\nfi\ncd \"$SRCROOT/..\"\n../gradlew :samples:SwiftTestApp:embedAndSignAppleFrameworkForXcode\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		51100E632F21D4A5006B2ADD /* Sources */ = {
@@ -401,6 +434,11 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "$(inherited)";
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)\n$(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SwiftTestApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Multipaz Swift Test App";
@@ -416,6 +454,10 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.multipaz.SwiftTestApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -439,6 +481,11 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "$(inherited)";
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)\n$(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SwiftTestApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Multipaz Swift Test App";
@@ -454,6 +501,10 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.multipaz.SwiftTestApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -474,6 +525,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "${inherited}";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = IdentityDocumentProviderExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = IdentityDocumentProviderExtension;
@@ -504,6 +556,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "${inherited}";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = IdentityDocumentProviderExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = IdentityDocumentProviderExtension;
@@ -557,28 +610,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCLocalSwiftPackageReference section */
-		51A18EF92F7157FF0050476D /* XCLocalSwiftPackageReference "../../../multipaz" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../../multipaz;
-		};
-/* End XCLocalSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		5168E4AF2F269CE60096DAC0 /* Multipaz */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Multipaz;
-		};
-		51A18EFA2F7157FF0050476D /* Multipaz */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Multipaz;
-		};
-		51BD5C182F21DB3E0082DE19 /* Multipaz */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Multipaz;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 51100E5F2F21D4A5006B2ADD /* Project object */;
 }
