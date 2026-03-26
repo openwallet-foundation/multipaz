@@ -71,30 +71,34 @@ public class DocumentModel {
         self.documentTypeRepository = documentTypeRepository
         self.documentOrderKey = documentOrderKey
         self.documentStore = documentStore
-        self.storageData = if let encoded = try! await documentStore.getTags().getByteString(key: documentOrderKey) {
+        self.storageData = if let encoded = try await documentStore.getTags().getByteString(key: documentOrderKey) {
             DocumentModelStorageData.fromDataItem(
-                try! Cbor.shared.decode(encodedCbor: encoded.toByteArray(startIndex: 0, endIndex: encoded.size))
+                try Cbor.shared.decode(encodedCbor: encoded.toByteArray(startIndex: 0, endIndex: encoded.size))
             )
         } else {
             DocumentModelStorageData()
         }
 
-        for document in try! await documentStore.listDocuments(sort: true) {
-            await _documentInfos.append(getDocumentInfo(document))
+        for document in try await documentStore.listDocuments(sort: true) {
+            await _documentInfos.append(try getDocumentInfo(document))
         }
         Task {
             for await event in documentStore.eventFlow {
                 if event is DocumentAdded {
-                    let document = try! await documentStore.lookupDocument(identifier: event.documentId)
+                    let document = try await documentStore.lookupDocument(identifier: event.documentId)
                     if document != nil {
-                        await self._documentInfos.append(getDocumentInfo(document!))
+                        await self._documentInfos.append(try getDocumentInfo(document!))
                     }
                 } else if event is DocumentUpdated {
                     let index = self._documentInfos.firstIndex { documentInfo in
                         documentInfo.document.identifier == event.documentId
                     }
-                    if (index != nil) {
-                        self._documentInfos[index!] = await getDocumentInfo(self._documentInfos[index!].document)
+                    do {
+                        if (index != nil) {
+                            self._documentInfos[index!] = await try getDocumentInfo(self._documentInfos[index!].document)
+                        }
+                    } catch {
+                        print("Ignoring error in getDocumentInfo() for DocumentUpdated event: \(error)")
                     }
                 } else if event is DocumentDeleted {
                     self._documentInfos.removeAll { documentInfo in
@@ -161,10 +165,10 @@ public class DocumentModel {
         )
     }
 
-    private func getDocumentInfo(_ document: Document) async -> DocumentInfo {
+    private func getDocumentInfo(_ document: Document) async throws -> DocumentInfo {
         var credentialInfos: [CredentialInfo] = []
-        for credential in try! await document.getCredentials() {
-            await credentialInfos.append(getCredentialInfo(credential))
+        for credential in try await document.getCredentials() {
+            await credentialInfos.append(try getCredentialInfo(credential))
         }
         return DocumentInfo(
             document: document,
@@ -173,16 +177,16 @@ public class DocumentModel {
         )
     }
 
-    private func getCredentialInfo(_ credential: Credential) async -> CredentialInfo {
+    private func getCredentialInfo(_ credential: Credential) async throws -> CredentialInfo {
 
         var keyInfo: KeyInfo? = nil
         var keyInvalidated = false
         if let secureAreaBoundCredential = credential as? SecureAreaBoundCredential {
-            keyInfo = try! await secureAreaBoundCredential.secureArea.getKeyInfo(alias: secureAreaBoundCredential.alias)
-            keyInvalidated = try! await secureAreaBoundCredential.isInvalidated().boolValue
+            keyInfo = try await secureAreaBoundCredential.secureArea.getKeyInfo(alias: secureAreaBoundCredential.alias)
+            keyInvalidated = try await secureAreaBoundCredential.isInvalidated().boolValue
         }
         let claims: [Claim] = if credential.isCertified {
-            try! await credential.getClaims(documentTypeRepository: documentTypeRepository)
+            try await credential.getClaims(documentTypeRepository: documentTypeRepository)
         } else {
             []
         }

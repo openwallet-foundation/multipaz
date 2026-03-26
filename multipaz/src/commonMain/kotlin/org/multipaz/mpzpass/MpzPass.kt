@@ -10,6 +10,7 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
 import org.multipaz.util.Logger
+import org.multipaz.util.UUID
 import org.multipaz.util.deflate
 import org.multipaz.util.inflate
 
@@ -23,6 +24,10 @@ import org.multipaz.util.inflate
  * See [this page](https://github.com/openwallet-foundation/multipaz/tree/main/mpzpass/README.md)
  * for the definition of the Multipaz Pass file format.
  *
+ * @property uniqueId A unique identifier for this pass, as assigned by the issuer. This should contain at least 128
+ * bits of entropy and should only contain alphanumeric characters, hyphens, and underscores.
+ * @property version the version of the pass.
+ * @property updateUrl Optional URL which can be used to check for an update.
  * @property name The display name of the credential (e.g., "Erika's Driving License").
  * @property typeName The display type of the credential (e.g., "Utopia Driving License").
  * @property cardArt The card art for the pass as a PNG ByteString.
@@ -31,9 +36,12 @@ import org.multipaz.util.inflate
  * @throws IllegalArgumentException if both [isoMdoc] and [sdJwtVc] are empty.
  */
 data class MpzPass(
-    val name: String?,
-    val typeName: String?,
-    val cardArt: ByteString?,
+    val uniqueId: String = UUID.randomUUID().toString(),
+    val version: Long = 0L,
+    val updateUrl: String? = null,
+    val name: String? = null,
+    val typeName: String? = null,
+    val cardArt: ByteString? = null,
     val isoMdoc: List<MpzPassIsoMdoc> = emptyList(),
     val sdJwtVc: List<MpzPassSdJwtVc> = emptyList()
 ) {
@@ -57,6 +65,9 @@ data class MpzPass(
     suspend fun toDataItem(compressionLevel: Int = 5) = buildCborArray {
         add("MpzPass")
         val credentialData = buildCborMap {
+            put("uniqueId", uniqueId)
+            put("version", version)
+            updateUrl?.let { put("updateUrl", it) }
             putCborMap("credential") {
                 if (isoMdoc.isNotEmpty()) {
                     putCborArray("isoMdoc") {
@@ -101,6 +112,10 @@ data class MpzPass(
             val credentialDataBytes = compressedCredentialDataBytes.inflate()
             val credentialData = Cbor.decode(credentialDataBytes)
 
+            val uniqueId = credentialData["uniqueId"].asTstr
+            val version = credentialData["version"].asNumber
+            val updateUrl = credentialData.getOrNull("updateUrl")?.asTstr
+
             val display = credentialData["display"]
             val name = display.getOrNull("name")?.asTstr
             val typeName = display.getOrNull("typeName")?.asTstr
@@ -115,6 +130,9 @@ data class MpzPass(
             } ?: emptyList()
 
             return MpzPass(
+                uniqueId = uniqueId,
+                version = version,
+                updateUrl = updateUrl,
                 name = name,
                 typeName = typeName,
                 cardArt = cardArt,

@@ -20,8 +20,10 @@ func getPresentmentSource() async -> PresentmentSource {
         excludeFromBackup: true
     )
     let secureArea = try! await Platform.shared.getSecureArea(storage: storage)
+    let softwareSecureArea = try! await SoftwareSecureArea.companion.create(storage: storage)
     let secureAreaRepository = SecureAreaRepository.Builder()
         .add(secureArea: secureArea)
+        .add(secureArea: softwareSecureArea)
         .build()
     let documentTypeRepository = DocumentTypeRepository()
     documentTypeRepository.addDocumentType(documentType: DrivingLicense.shared.getDocumentType())

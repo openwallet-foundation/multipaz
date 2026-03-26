@@ -272,18 +272,20 @@ class DocumentStore private constructor(
     }
 
     /**
-     * Imports an [MpzPass] into a [DocumentStore].
+     * Imports a [MpzPass] into a [DocumentStore].
      *
-     * Reconstructs the [Document] and internal credential objects (either ISO mDoc, SD-JWT VC, or both)
-     * using the extracted data and keys in the passed-in [mpzPass] for credentials.
+     * The returned document will have the [Document.provisioned] flag set to `true` and [Document.mpzPassId]
+     * will be set to [MpzPass.uniqueId].
      *
-     * The returned document will have the [Document.provisioned] flag set to `true`.
+     * If the pass had been previously imported, the same [Document] will be returned and the credentials
+     * will be updated.
      *
-     * @param mpzPass The []MpzPass] to import.
+     * @param mpzPass The [MpzPass] to import.
      * @param isoMdocDomain The domain string to use when creating ISO mdoc credentials.
      * @param sdJwtVcDomain The domain string to use when creating SD-JWT VC credentials.
      * @param keylessSdJwtVcDomain the domain string to use when creating keyless SD-JWT VC credentials.
-     * @return The newly created [Document] containing the provisioned credentials.
+     * @return An existing [Document] if updating, otherwise a newly created [Document]. In both cases
+     * the returned document will have the credentials included in [mpzPass].
      * @throws IllegalStateException if a SoftwareSecureArea implementation cannot be found in the repository.
      * @throws ImportMpzPassException if credential creation or certification fails.
      */
@@ -300,11 +302,19 @@ class DocumentStore private constructor(
             )
 
         val document = try {
-            createDocument(
-                displayName = mpzPass.name,
-                typeDisplayName = mpzPass.typeName,
-                cardArt = mpzPass.cardArt,
-            )
+            val existingDocument = listDocuments().find { it.mpzPassId == mpzPass.uniqueId }
+            if (existingDocument != null) {
+                existingDocument.getCredentials().forEach { credential ->
+                    credential.deleteCredential()
+                }
+                existingDocument
+            } else {
+                createDocument(
+                    displayName = mpzPass.name,
+                    typeDisplayName = mpzPass.typeName,
+                    cardArt = mpzPass.cardArt,
+                )
+            }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             throw ImportMpzPassException("Failed to create document", e)
@@ -368,6 +378,7 @@ class DocumentStore private constructor(
 
             document.edit {
                 provisioned = true
+                mpzPassId = mpzPass.uniqueId
             }
             return document
         } catch (e: Exception) {

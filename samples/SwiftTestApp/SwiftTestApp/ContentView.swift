@@ -85,32 +85,7 @@ struct ContentView: View {
             print("handling \(url)")
             if url.isFileURL {
                 if url.pathExtension.lowercased() == "mpzpass" {
-                    guard url.startAccessingSecurityScopedResource() else {
-                        print("Error: Permission denied to access the mpzpass file at \(url.lastPathComponent)")
-                        return
-                    }
-                    
-                    defer {
-                        url.stopAccessingSecurityScopedResource()
-                    }
-                    
-                    Task {
-                        do {
-                            let fileData = try Data(contentsOf: url)
-                            let dataItem = try Cbor.shared.decode(encodedCbor: fileData.toByteArray())
-                            let mpzPass = try await MpzPass.companion.fromDataItem(dataItem: dataItem)
-                            let document = try await viewModel.documentStore.importMpzPass(
-                                mpzPass: mpzPass,
-                                isoMdocDomain: "mdoc",
-                                sdJwtVcDomain: "sdjwt",
-                                keylessSdJwtVcDomain: "sdjwt"
-                            )
-                            // TODO: use returned document and navigate to that screen
-                            viewModel.path.append(Destination.documentStoreScreen)
-                        } catch {
-                            print("Error reading mpzpass file: \(error.localizedDescription)")
-                        }
-                    }
+                    processMpzPass(url: url)
                 } else {
                     print("Unhandled file extension: \(url.pathExtension)")
                 }
@@ -131,5 +106,35 @@ struct ContentView: View {
                 print("Unhandled URL \(url)")
             }
         }
+    }
+    
+    func processMpzPass(url: URL) {
+        Task {
+            guard url.startAccessingSecurityScopedResource() else {
+                print("Error: Permission denied to access the mpzpass file at \(url.lastPathComponent)")
+                return
+            }
+            
+            defer {
+                url.stopAccessingSecurityScopedResource()
+            }
+
+            do {
+                let fileData = try Data(contentsOf: url)
+                let dataItem = try Cbor.shared.decode(encodedCbor: fileData.toByteArray())
+                let mpzPass = try await MpzPass.companion.fromDataItem(dataItem: dataItem)
+                let document = try await viewModel.documentStore.importMpzPass(
+                    mpzPass: mpzPass,
+                    isoMdocDomain: "mdoc",
+                    sdJwtVcDomain: "sdjwt",
+                    keylessSdJwtVcDomain: "sdjwt"
+                )
+                // TODO: use returned document and navigate to that screen
+                viewModel.path.append(Destination.documentStoreScreen)
+            } catch {
+                print("Error reading mpzpass file: \(error.localizedDescription)")
+            }
+        }
+
     }
 }

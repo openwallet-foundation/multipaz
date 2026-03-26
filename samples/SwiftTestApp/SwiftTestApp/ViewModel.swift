@@ -199,11 +199,15 @@ class ViewModel {
             )
             Task {
                 for await _ in documentStore.eventFlow {
-                    try! await dcApi.register(
-                        documentStore: documentStore,
-                        documentTypeRepository: documentTypeRepository,
-                        selectedProtocols: dcApi.supportedProtocols
-                    )
+                    do {
+                        try await dcApi.register(
+                            documentStore: documentStore,
+                            documentTypeRepository: documentTypeRepository,
+                            selectedProtocols: dcApi.supportedProtocols
+                        )
+                    } catch {
+                        print("Error updating DC registration: \(error)")
+                    }
                 }
             }
         }

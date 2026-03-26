@@ -149,12 +149,17 @@ class DocumentModel private constructor(
                                 if (existingDocumentInfo == null) {
                                     Logger.w(TAG, "Didn't find DocumentInfo for document with id $id")
                                 } else {
-                                    val newDocumentInfo = document.toDocumentInfo()
-                                    if (newDocumentInfo != existingDocumentInfo) {
-                                        remove(existingDocumentInfo)
-                                        add(newDocumentInfo)
-                                    } else {
-                                        Logger.w(TAG, "DocumentInfo for document with id $id didn't change")
+                                    try {
+                                        val newDocumentInfo = document.toDocumentInfo()
+                                        if (newDocumentInfo != existingDocumentInfo) {
+                                            remove(existingDocumentInfo)
+                                            add(newDocumentInfo)
+                                        } else {
+                                            Logger.w(TAG, "DocumentInfo for document with id $id didn't change")
+                                        }
+                                    } catch (e: Exception) {
+                                        if (e is CancellationException) throw e
+                                        Logger.w(TAG, "Error generating DocumentInfo", e)
                                     }
                                 }
                             }.sorted()

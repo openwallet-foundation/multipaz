@@ -146,4 +146,56 @@ class MpzPassTest {
         assertEquals(credential.issuerProvidedData, importedCredential.issuerProvidedData)
     }
 
+    @Test
+    fun passWithUpdate() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val doc = harness.documentStore.createDocument(
+            displayName = "Driving license specimen",
+            typeDisplayName = "Utopia driving license",
+            cardArt = ByteString(1, 2, 3),
+        )
+        val credential = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = doc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            domain = "mdoc",
+        )
+        doc.edit { provisioned = true }
+
+        val pass = credential.exportToMpzPass()
+        assertEquals(
+            pass,
+            MpzPass.fromDataItem(pass.toDataItem())
+        )
+        val importedDoc = harness.documentStore.importMpzPass(pass)
+        assertNotEquals(doc.identifier, importedDoc.identifier)
+        assertNotEquals(doc.created, importedDoc.created)
+        assertEquals(doc.displayName, importedDoc.displayName)
+        assertEquals(doc.typeDisplayName, importedDoc.typeDisplayName)
+        assertEquals(doc.cardArt, importedDoc.cardArt)
+        assertEquals(doc.provisioned, importedDoc.provisioned)
+        assertEquals(1, importedDoc.getCredentials().size)
+        val importedCredential = importedDoc.getCredentials().first()
+        assertNotEquals(credential.identifier, importedCredential.identifier)
+        assertEquals(credential::class, importedCredential::class)
+        assertEquals(credential.credentialType, importedCredential.credentialType)
+        assertEquals(credential.issuerProvidedData, importedCredential.issuerProvidedData)
+        importedCredential as MdocCredential
+        assertNotEquals(credential.alias, importedCredential.alias)
+        assertEquals(credential.secureArea, importedCredential.secureArea)
+
+        val updatedPass = pass.copy(
+            version = pass.version + 1
+        )
+        val updatedDoc = harness.documentStore.importMpzPass(updatedPass)
+        assertEquals(updatedDoc, importedDoc)
+
+    }
 }

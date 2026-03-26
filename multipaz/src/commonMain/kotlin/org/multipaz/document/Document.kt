@@ -150,6 +150,11 @@ class Document internal constructor(
     val authorizationData: ByteString? get() = data.authorizationData
 
     /**
+     * The unique identifier if this document is imported from a [org.multipaz.mpzpass.MpzPass].
+     */
+    val mpzPassId: String? get() = data.mpzPassId
+
+    /**
      * A [Tags] for storing application-specific data.
      *
      * Applications must use collision-resistant keys when using the [Tags] instance.
@@ -167,6 +172,7 @@ class Document internal constructor(
                     cardArt = data.cardArt,
                     issuerLogo = data.issuerLogo,
                     authorizationData = data.authorizationData,
+                    mpzPassId = data.mpzPassId,
                     metadata = data.metadata,
                     tagsData = if (newData.asMap.isEmpty()) {
                         null
@@ -428,6 +434,7 @@ class Document internal constructor(
                 cardArt = data.cardArt,
                 issuerLogo = data.issuerLogo,
                 authorizationData = data.authorizationData,
+                mpzPassId = data.mpzPassId,
                 metadata = metadata,
                 tags = Tags.Editor(this@Document.tags._tags)
             )
@@ -447,6 +454,7 @@ class Document internal constructor(
                 cardArt = editor.cardArt,
                 issuerLogo = editor.issuerLogo,
                 authorizationData = editor.authorizationData,
+                mpzPassId = editor.mpzPassId,
                 metadata = editor.metadata?.serialize(),
                 tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) }
             )
@@ -467,6 +475,17 @@ class Document internal constructor(
 
     /**
      * An interface to edit [Document] metadata
+     *
+     * @property provisioned Whether the document is provisioned, i.e. issuer is ready to provide credentials.
+     * @property created The time the document was created.
+     * @property displayName User-facing name of this specific [Document] instance, e.g. "John's Passport".
+     * @property typeDisplayName User-facing name of this document type, e.g. "Utopia Passport".
+     * @property cardArt An image that represents this document to the user in the UI.
+     * @property issuerLogo An image that represents the issuer of the document in the UI.
+     * @property authorizationData Saved authorization data to refresh credentials, possibly without requiring user to re-authorize.
+     * @property mpzPassId The unique identifier if this document is imported from a [org.multipaz.mpzpass.MpzPass].
+     * @property metadata A [AbstractDocumentMetadata] for storing application-specific data.
+     * @property tags A [Tags] for storing application-specific data.
      */
     class Editor internal constructor(
         var provisioned: Boolean,
@@ -476,6 +495,7 @@ class Document internal constructor(
         var cardArt: ByteString?,
         var issuerLogo: ByteString?,
         var authorizationData: ByteString?,
+        var mpzPassId: String?,
         var metadata: AbstractDocumentMetadata?,
         val tags: Tags.Editor
     )
