@@ -35,6 +35,7 @@ struct ContentView: View {
                 case .iso18013ProximityPresentmentScreen: Iso18013ProximityPresentmentScreen()
                 case .certificateViewerScreen(let certificates): CertificateViewerScreen(certificates: certificates)
                 case .certificateExamplesScreen: CertificateExamplesScreen()
+                case .floatingItemListScreen: FloatingItemListScreen()
                 }
             }
             .sheet(

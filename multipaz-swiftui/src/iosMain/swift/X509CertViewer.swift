@@ -19,7 +19,7 @@ public struct X509CertViewer: View {
         self.certificate = certificate
         self.data = CertificateViewData(from: certificate)
     }
-    
+
     public var body: some View {
         VStack(spacing: 16) {
             BasicInfoView(data: data)
@@ -38,41 +38,47 @@ private struct BasicInfoView: View {
     @State private var isCopied = false
 
     var body: some View {
-        RenderSection(title: "Basic Information") {
-            VStack(spacing: 2) {
-                KeyValuePairLine(key: "Type", value: "Version \(data.version)")
-                Divider()
-                KeyValuePairLine(key: "Serial Number", value: data.serialNumber)
-                Divider()
-                KeyValuePairLine(key: "Valid From", value: data.validFromFormatted)
-                Divider()
-                KeyValuePairLine(key: "Valid Until", value: data.validUntilFormatted)
-                Divider()
-                validityLine
-            }
+        FloatingItemList(title: "Basic Information") {
+            FloatingItemHeadingAndText(heading: "Type", text: "Version \(data.version)")
+            FloatingItemHeadingAndText(heading: "Serial Number", text: data.serialNumber)
+            FloatingItemHeadingAndText(heading: "Valid From", text: data.validFromFormatted)
+            FloatingItemHeadingAndText(heading: "Valid Until", text: data.validUntilFormatted)
+            validityLine
         }
     }
 
     @ViewBuilder
     private var validityLine: some View {
         let now = Date()
-        
+
         if now > data.validUntil {
-            KeyValuePairLine(
-                key: "Validity Info",
-                value: "This certificate is no longer valid, it expired \(data.validUntil.relativeTimeText)",
-                valueColor: .red
+            FloatingItemHeadingAndText(
+                heading: "Validity Info",
+                text: AttributedString(
+                    "This certificate is no longer valid, it expired \(data.validUntil.relativeTimeText)",
+                    attributes: {
+                        var container = AttributeContainer()
+                        container.foregroundColor = .red
+                        return container
+                    }()
+                )
             )
         } else if data.validFrom > now {
-            KeyValuePairLine(
-                key: "Validity Info",
-                value: "This certificate is not yet valid, it will be valid \(data.validFrom.relativeTimeText)",
-                valueColor: .red
+            FloatingItemHeadingAndText(
+                heading: "Validity Info",
+                text: AttributedString(
+                    "This certificate is not yet valid, it will be valid \(data.validFrom.relativeTimeText)",
+                    attributes: {
+                        var container = AttributeContainer()
+                        container.foregroundColor = .red
+                        return container
+                    }()
+                )
             )
         } else {
-            KeyValuePairLine(
-                key: "Validity Info",
-                value: "Valid (Expires \(data.validUntil.relativeTimeText))"
+            FloatingItemHeadingAndText(
+                heading: "Validity Info",
+                text: "Valid (Expires \(data.validUntil.relativeTimeText))"
             )
         }
     }
@@ -80,23 +86,18 @@ private struct BasicInfoView: View {
 
 private struct SubjectView: View {
     let data: CertificateViewData
-    
+
     var body: some View {
-        RenderSection(title: "Subject") {
-            VStack(spacing: 2) {
-                let oids = Array(data.subject.components.keys)
-                ForEach(0..<oids.count, id: \.self) { oidIdx in
-                    let componentOid = oids[oidIdx]
-                    let componentName = oidToPrettyName[componentOid] ?? componentOid
-                    let componentValue = data.subject.components[componentOid]!
-                    KeyValuePairLine(
-                        key: componentName,
-                        value: componentValue.value
-                    )
-                    if oidIdx < oids.count - 1 {
-                        Divider()
-                    }
-                }
+        FloatingItemList(title: "Subject") {
+            let oids = Array(data.subject.components.keys)
+            ForEach(0..<oids.count, id: \.self) { oidIdx in
+                let componentOid = oids[oidIdx]
+                let componentName = oidToPrettyName[componentOid] ?? componentOid
+                let componentValue = data.subject.components[componentOid]!
+                FloatingItemHeadingAndText(
+                    heading: componentName,
+                    text: componentValue.value
+                )
             }
         }
     }
@@ -104,23 +105,18 @@ private struct SubjectView: View {
 
 private struct IssuerView: View {
     let data: CertificateViewData
-    
+
     var body: some View {
-        RenderSection(title: "Issuer") {
-            VStack(spacing: 2) {
-                let oids = Array(data.issuer.components.keys)
-                ForEach(0..<oids.count, id: \.self) { oidIdx in
-                    let componentOid = oids[oidIdx]
-                    let componentName = oidToPrettyName[componentOid] ?? componentOid
-                    let componentValue = data.issuer.components[componentOid]!
-                    KeyValuePairLine(
-                        key: componentName,
-                        value: componentValue.value
-                    )
-                    if oidIdx < oids.count - 1 {
-                        Divider()
-                    }
-                }
+        FloatingItemList(title: "Issuer") {
+            let oids = Array(data.issuer.components.keys)
+            ForEach(0..<oids.count, id: \.self) { oidIdx in
+                let componentOid = oids[oidIdx]
+                let componentName = oidToPrettyName[componentOid] ?? componentOid
+                let componentValue = data.issuer.components[componentOid]!
+                FloatingItemHeadingAndText(
+                    heading: componentName,
+                    text: componentValue.value
+                )
             }
         }
     }
@@ -128,96 +124,30 @@ private struct IssuerView: View {
 
 private struct PublicKeyInfoView: View {
     let data: CertificateViewData
-    
+
     var body: some View {
-        RenderSection(title: "Public Key Info") {
-            VStack(spacing: 2) {
-                KeyValuePairLine(key: "Algorithm", value: data.pkAlgorithm)
-                if let curve = data.pkNamedCurve {
-                    Divider()
-                    KeyValuePairLine(key: "Named Curve", value: curve)
-                }
-                Divider()
-                KeyValuePairLine(key: "Key Value", value: data.pkValue)
+        FloatingItemList(title: "Public Key Info") {
+            FloatingItemHeadingAndText(heading: "Algorithm", text: data.pkAlgorithm)
+            if let curve = data.pkNamedCurve {
+                FloatingItemHeadingAndText(heading: "Named Curve", text: curve)
             }
+            FloatingItemHeadingAndText(heading: "Key Value", text: data.pkValue)
         }
     }
 }
 
 private struct ExtensionsView: View {
     let data: CertificateViewData
-    
+
     var body: some View {
         if !data.extensions.isEmpty {
-            RenderSection(title: "Extensions") {
-                VStack(spacing: 2) {
-                    ForEach(data.extensions, id: \.oid) { ext in
-                        VStack(spacing: 2) {
-                            KeyValuePairLine(key: "Critical", value: ext.isCritical ? "Yes" : "No")
-                            KeyValuePairLine(key: "OID", value: ext.oid)
-                            KeyValuePairLine(key: "Value", value: ext.value)
-                        }
-                        if ext != data.extensions.last {
-                            Divider()
-                        }
-                    }
+            FloatingItemList(title: "Extensions") {
+                ForEach(data.extensions, id: \.oid) { ext in
+                    FloatingItemHeadingAndText(heading: "Critical", text: ext.isCritical ? "Yes" : "No")
+                    FloatingItemHeadingAndText(heading: "OID", text: ext.oid)
+                    FloatingItemHeadingAndText(heading: "Value", text: ext.value)
                 }
             }
-        }
-    }
-}
-
-struct RenderSection<Content: View>: View {
-    let title: String
-    let content: Content
-
-    init(title: String, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(alignment: .center, spacing: 8) {
-            HStack {
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.secondary)
-                    .padding(.vertical, 4)
-                Spacer()
-            }
-
-            content
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
-                    .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
-            )
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-struct KeyValuePairLine: View {
-    let key: String
-    let value: String
-    var valueColor: Color = .primary
-
-    var body: some View {
-        if !value.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(key)
-                    .font(.system(size: 14))
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Text(value)
-                    .font(.system(size: 14))
-                    .foregroundColor(valueColor)
-                    .textSelection(.enabled) // Allows user to copy text
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
         }
     }
 }
@@ -247,7 +177,7 @@ fileprivate struct CertificateViewData {
     init(from cert: X509Cert) {
         // NOTE: In a real app, you would access the properties of `cert` here.
         // Since I cannot see the SharedModule code, I am assuming properties exist.
-        
+
         self.version = String(cert.version) // Example access
         self.serialNumber = cert.serialNumber.value.unsignedBigIntToString(base: 10)
         self.validFrom = cert.validityNotBefore.toNSDate()
@@ -287,35 +217,35 @@ private struct FormattedExtension: Equatable {
 }
 
 extension X509Cert {
-    
+
     fileprivate func formatExtensions() -> [FormattedExtension] {
-        
+
         return self.extensions.map { ext in
-            
+
             var displayValue: String
-            
+
             // Note: In Swift, OID constants from KMP usually bridge as static properties.
             // e.g. OID.shared.X509_EXTENSION... or OID.X509_EXTENSION...
             switch ext.oid {
-                
+
             case OID.x509ExtensionSubjectKeyIdentifier.oid:
                 displayValue = self.subjectKeyIdentifier?.toHex(upperCase: false, byteDivider: " ", decodeAsString: false) ?? ""
-                
+
             case OID.x509ExtensionKeyUsage.oid:
                 displayValue = self.keyUsage
-                    .map { $0.description_ } // Assuming description is available
-                    .joined(separator: ", ")
-                
+                .map { $0.description_ } // Assuming description is available
+                .joined(separator: ", ")
+
             case OID.x509ExtensionBasicConstraints.oid:
                 displayValue = parseBasicConstraints(data: ext.data)
-                
+
             case OID.x509ExtensionAuthorityKeyIdentifier.oid:
                 displayValue = self.authorityKeyIdentifier?.toHex(upperCase: false, byteDivider: " ", decodeAsString: false) ?? ""
-                
+
             case OID.x509ExtensionAndroidKeystoreAttestation.oid:
                 // Assuming parser is available in SharedModule
                 displayValue = AndroidAttestationExtensionParser(cert: self).prettyPrint()
-                
+
             case OID.x509ExtensionAndroidKeystoreProvisioningInformation.oid:
                 // CBOR Diagnostics
                 do {
@@ -326,17 +256,17 @@ extension X509Cert {
                 } catch {
                     displayValue = "Failed to decode CBOR: \(error)"
                 }
-                
+
             case OID.x509ExtensionMultipazExtension.oid:
                 displayValue = MultipazExtension.companion.fromCbor(
                     data: ext.data.toByteArray(startIndex: 0, endIndex: ext.data.size)
                 ).prettyPrint()
-                
+
             default:
                 // Fallback: Try ASN.1 decode, else Hex
                 displayValue = tryParseAsn1OrDefault(data: ext.data)
             }
-            
+
             // OID Lookup Logic
             let oidLabel: String
             if let entry = OID.companion.lookupByOid(oid: ext.oid) {
@@ -344,7 +274,7 @@ extension X509Cert {
             } else {
                 oidLabel = ext.oid
             }
-            
+
             return FormattedExtension(
                 isCritical: ext.isCritical,
                 oid: oidLabel,
@@ -352,7 +282,7 @@ extension X509Cert {
             )
         }
     }
-    
+
     private func parseBasicConstraints(data: ByteString) -> String {
         do {
             guard let seq = try ASN1.shared.decode(derEncoded: data.toByteArray(startIndex: 0, endIndex: data.size)) as? ASN1Sequence else {
@@ -370,7 +300,7 @@ extension X509Cert {
             return "Error decoding: \(error)"
         }
     }
-    
+
     private func tryParseAsn1OrDefault(data: ByteString) -> String {
         do {
             let decoded = try ASN1.shared.decode(derEncoded: data.toByteArray(startIndex: 0, endIndex: data.size))

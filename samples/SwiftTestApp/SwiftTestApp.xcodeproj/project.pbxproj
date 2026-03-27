@@ -77,6 +77,12 @@
 			path = IdentityDocumentProviderExtension;
 			sourceTree = "<group>";
 		};
+		7B10E6842F76CB4900B05767 /* swift */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = swift;
+			path = "/Users/zeuthen/StudioProjects/multipaz/multipaz-swiftui/src/iosMain/swift";
+			sourceTree = "<absolute>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -100,6 +106,7 @@
 		51100E5E2F21D4A5006B2ADD = {
 			isa = PBXGroup;
 			children = (
+				7B10E6842F76CB4900B05767 /* swift */,
 				51BD5C5C2F22604F0082DE19 /* AdditionalConfig.xcconfig */,
 				51BD5C5D2F22604F0082DE19 /* DeveloperConfig.xcconfig */,
 				51100E692F21D4A5006B2ADD /* SwiftTestApp */,
@@ -145,6 +152,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				51100E692F21D4A5006B2ADD /* SwiftTestApp */,
+				7B10E6842F76CB4900B05767 /* swift */,
 			);
 			name = SwiftTestApp;
 			packageProductDependencies = (
@@ -168,6 +176,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				512DAED02F2A31B30061F72B /* IdentityDocumentProviderExtension */,
+				7B10E6842F76CB4900B05767 /* swift */,
 			);
 			name = IdentityDocumentProviderExtension;
 			packageProductDependencies = (

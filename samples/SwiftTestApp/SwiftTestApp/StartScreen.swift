@@ -27,6 +27,9 @@ struct StartScreen: View {
                 Button(action: { viewModel.path.append(Destination.iso18013ProximityPresentmentScreen) }) {
                     Text("ISO 18013-5 Proximity Presentment")
                 }
+                Button(action: { viewModel.path.append(Destination.floatingItemListScreen) }) {
+                    Text("FloatingItemList examples")
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

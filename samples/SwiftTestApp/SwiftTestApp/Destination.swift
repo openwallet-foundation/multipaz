@@ -13,4 +13,5 @@ enum Destination: Hashable {
     case certificateViewerScreen(certificates: [X509Cert])
     case certificateExamplesScreen
     case verticalDocumentListScreen
+    case floatingItemListScreen
 }

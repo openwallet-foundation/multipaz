@@ -20,13 +20,15 @@ import androidx.compose.ui.unit.dp
  * @param secondary optional text to show below the main text, in secondary color and smaller font.
  * @param modifier a [Modifier].
  * @param image optional image, shown to the left of the text.
+ * @param trailingContent optional trailing content.
  */
 @Composable
 fun FloatingItemText(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
     secondary: String? = null,
-    image: @Composable () -> Unit = {}
+    image: @Composable () -> Unit = {},
+    trailingContent: @Composable () -> Unit = {},
 ) {
     FloatingItemContainer(modifier = modifier) {
         Row(
@@ -35,26 +37,34 @@ fun FloatingItemText(
             verticalAlignment = Alignment.CenterVertically
         ) {
             image()
-            if (secondary == null) {
-                Text(
-                    text = text,
-                    textAlign = TextAlign.Start
-                )
-            } else {
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp, alignment = Alignment.Start),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (secondary == null) {
                     Text(
+                        modifier = Modifier.weight(1.0f),
                         text = text,
                         textAlign = TextAlign.Start
                     )
-                    Text(
-                        text = secondary,
-                        textAlign = TextAlign.Start,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
+                } else {
+                    Column(
+                        modifier = Modifier.weight(1.0f)
+                    ) {
+                        Text(
+                            text = text,
+                            textAlign = TextAlign.Start
+                        )
+                        Text(
+                            text = secondary,
+                            textAlign = TextAlign.Start,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
                 }
+                trailingContent()
             }
         }
     }
@@ -67,18 +77,21 @@ fun FloatingItemText(
  * @param secondary optional text to show below the main text, in secondary color and smaller font.
  * @param modifier a [Modifier].
  * @param image optional image, shown to the left of the text.
+ * @param trailingContent optional trailing content.
  */
 @Composable
 fun FloatingItemText(
     text: String,
     modifier: Modifier = Modifier,
     secondary: String? = null,
-    image: @Composable () -> Unit = {}
+    image: @Composable () -> Unit = {},
+    trailingContent: @Composable () -> Unit = {},
 ) {
     FloatingItemText(
         text = AnnotatedString(text),
         modifier = modifier,
         secondary = secondary,
-        image = image
+        image = image,
+        trailingContent = trailingContent
     )
 }

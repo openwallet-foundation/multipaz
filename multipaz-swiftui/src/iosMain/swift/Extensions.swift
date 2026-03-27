@@ -34,3 +34,5 @@ extension CredentialPresentmentData: @unchecked Sendable {}
 extension CredentialPresentmentSelection: @unchecked Sendable {}
 extension Tags: @unchecked Sendable {}
 extension Tags.Editor: @unchecked Sendable {}
+extension PassphraseEvaluation: @unchecked Sendable {}
+extension Document.Editor: @unchecked Sendable {}

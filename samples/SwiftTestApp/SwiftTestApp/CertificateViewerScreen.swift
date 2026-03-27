@@ -12,7 +12,6 @@ struct CertificateViewerScreen: View {
             certificates: certificates,
             currentPage: $currentPage
         )
-        .background(Color(uiColor: .secondarySystemFill))
     }
 }
 

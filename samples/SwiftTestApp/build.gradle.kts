@@ -22,7 +22,8 @@ kotlin {
             export(project(":multipaz-dcapi"))
             export(project(":multipaz-doctypes"))
             export(project(":multipaz-longfellow"))
-            export(project(":multipaz-swiftui"))
+            // Specifically exclude :multipaz-swiftui since those Swift sources are included in
+            // the SwiftTestApp project via XCode for easy editing.
             export(libs.kotlinx.io.bytestring)
             export(libs.kotlinx.io.core)
             export(libs.kotlinx.datetime)
@@ -56,7 +57,6 @@ kotlin {
                 api(project(":multipaz-dcapi"))
                 api(project(":multipaz-doctypes"))
                 api(project(":multipaz-longfellow"))
-                api(project(":multipaz-swiftui"))
                 api(libs.kotlinx.io.bytestring)
                 api(libs.kotlinx.io.core)
                 api(libs.kotlinx.datetime)

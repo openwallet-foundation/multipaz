@@ -44,7 +44,7 @@ fun FloatingItemList(
             Text(
                 modifier = Modifier.padding(start = 10.dp, top = 10.dp, end = 10.dp, bottom = 0.dp),
                 text = title,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.secondary,
             )

@@ -21,13 +21,15 @@ import androidx.compose.ui.unit.dp
  * @param text will be shown below the heading.
  * @param modifier a [Modifier].
  * @param image optional image, shown to the left of the text.
+ * @param trailingContent optional trailing content.
  */
 @Composable
 fun FloatingItemHeadingAndText(
     heading: String,
     text: AnnotatedString,
     modifier: Modifier = Modifier,
-    image: @Composable () -> Unit = {}
+    image: @Composable () -> Unit = {},
+    trailingContent: @Composable () -> Unit = {},
 ) {
     FloatingItemContainer(modifier = modifier) {
         Row(
@@ -37,7 +39,7 @@ fun FloatingItemHeadingAndText(
         ) {
             image()
             Column(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.weight(1.0f)
             ) {
                 Text(
                     text = heading,
@@ -50,7 +52,9 @@ fun FloatingItemHeadingAndText(
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
+
             }
+            trailingContent()
         }
     }
 }
@@ -62,18 +66,21 @@ fun FloatingItemHeadingAndText(
  * @param text will be shown below the heading.
  * @param modifier a [Modifier].
  * @param image optional image, shown to the left of the text.
+ * @param trailingContent optional trailing content.
  */
 @Composable
 fun FloatingItemHeadingAndText(
     heading: String,
     text: String,
     modifier: Modifier = Modifier,
-    image: @Composable () -> Unit = {}
+    image: @Composable () -> Unit = {},
+    trailingContent: @Composable () -> Unit = {},
 ) {
     FloatingItemHeadingAndText(
         heading = heading,
         text = AnnotatedString(text),
         modifier = modifier,
-        image = image
+        image = image,
+        trailingContent = trailingContent
     )
 }
