@@ -58,6 +58,7 @@ fun StartScreen(
     onClickShareSheet: () -> Unit = {},
     onClickGenerateMpzPass: () -> Unit = {},
     onClickFloatingItemList: () -> Unit = {},
+    onClickDeviceCheck: () -> Unit = {},
 ) {
     val blePermissionState = rememberBluetoothPermissionState()
     val coroutineScope = rememberCoroutineScope()
@@ -306,6 +307,12 @@ fun StartScreen(
                 item {
                     TextButton(onClick = onClickFloatingItemList) {
                         Text("FloatingItemList examples")
+                    }
+                }
+
+                item {
+                    TextButton(onClick = onClickDeviceCheck) {
+                        Text("DeviceCheck")
                     }
                 }
             }

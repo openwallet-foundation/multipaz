@@ -124,6 +124,7 @@ import org.multipaz.testapp.ui.ConsentPromptScreen
 import org.multipaz.testapp.ui.CredentialClaimsViewerScreen
 import org.multipaz.testapp.ui.CredentialViewerScreen
 import org.multipaz.testapp.ui.DcRequestScreen
+import org.multipaz.testapp.ui.DeviceCheckScreen
 import org.multipaz.testapp.ui.DocumentStoreScreen
 import org.multipaz.testapp.ui.DocumentViewerScreen
 import org.multipaz.testapp.ui.EventLoggerScreen
@@ -1109,7 +1110,8 @@ class App private constructor (val promptModel: PromptModel) {
                             onClickEventLog = { navController.navigate(EventLogDestination) },
                             onClickShareSheet = { navController.navigate(ShareSheetDestination) },
                             onClickGenerateMpzPass = { navController.navigate(GenerateMpzPassDestination) },
-                            onClickFloatingItemList = { navController.navigate(FloatingItemListDestination) }
+                            onClickFloatingItemList = { navController.navigate(FloatingItemListDestination) },
+                            onClickDeviceCheck = { navController.navigate(DeviceCheckDestination) },
                         )
                     }
                 }
@@ -1711,6 +1713,13 @@ class App private constructor (val promptModel: PromptModel) {
                 composable<FloatingItemListDestination> { backstackEntry ->
                     WithAppBar(navController, "FloatingItemList examples") {
                         FloatingItemListScreen(
+                            showToast = { message -> showToast(message) },
+                        )
+                    }
+                }
+                composable<DeviceCheckDestination> { backstackEntry ->
+                    WithAppBar(navController, "DeviceCheck") {
+                        DeviceCheckScreen(
                             showToast = { message -> showToast(message) },
                         )
                     }

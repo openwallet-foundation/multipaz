@@ -78,7 +78,8 @@ kotlin {
         it.binaries.all {
             linkerOpts(
                 "-L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/${platform}/",
-                "-Wl,-rpath,/usr/lib/swift"
+                "-Wl,-rpath,/usr/lib/swift",
+                "-lsqlite3"
             )
         }
     }

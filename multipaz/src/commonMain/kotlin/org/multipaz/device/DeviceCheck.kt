@@ -21,12 +21,14 @@ expect object DeviceCheck {
      * @param secureArea a platform-specific [SecureArea], on Android use [AndroidKeystoreSecureArea]
      *   and on iOS use [SecureEnclaveSecureArea].
      * @param challenge should come from the party requesting the attestation, for freshness.
+     * @param secret optional secret for identifying the client, only used in [DeviceAttestationSoftware].
      * @return a [DeviceAttestationResult] containing a [DeviceAttestation] which can be sent to the party
      *   requesting the attestation.
      */
     suspend fun generateAttestation(
         secureArea: SecureArea,
-        challenge: ByteString
+        challenge: ByteString,
+        secret: String? = null
     ): DeviceAttestationResult
 
     /**

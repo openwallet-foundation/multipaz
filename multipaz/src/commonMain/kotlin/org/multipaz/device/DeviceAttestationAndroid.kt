@@ -4,18 +4,20 @@ import kotlinx.coroutines.CancellationException
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.util.validateAndroidKeyAttestation
-import org.multipaz.crypto.SignatureVerificationException
 import kotlin.time.Instant
 
 /**
  * On Android we create a private key in secure area and use its key attestation as the
  * device attestation.
+ *
+ * @property certificateChain the certificate chain.
  */
 data class DeviceAttestationAndroid(
     val certificateChain: X509CertChain
-) : DeviceAttestation() {
+): DeviceAttestation() {
     override suspend fun validate(
         validationData: DeviceAttestationValidationData,
         validateAt: Instant

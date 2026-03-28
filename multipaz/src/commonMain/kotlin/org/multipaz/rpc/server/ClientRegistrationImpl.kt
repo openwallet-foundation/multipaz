@@ -3,7 +3,6 @@ package org.multipaz.rpc.server
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.ByteString
-import kotlinx.io.bytestring.buildByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -36,7 +35,7 @@ class ClientRegistrationImpl(
     var registrationChallenge: ByteString? = null,
 ): ClientRegistration {
     override suspend fun challenge(): ByteString {
-        return buildByteString { Random.nextBytes(16) }.also {
+        return ByteString(Random.nextBytes(16)).also {
             registrationChallenge = it
         }
     }
@@ -68,10 +67,13 @@ class ClientRegistrationImpl(
                     val requirements = clientRequirements?.let {
                         Json.parseToJsonElement(it) as JsonObject
                     }
+                    val software = requirements?.get("software") as JsonObject?
                     val ios = requirements?.get("ios") as JsonObject?
                     val android = requirements?.get("android") as JsonObject?
                     DeviceAttestationValidationData(
                         attestationChallenge = ByteString(),
+                        softwareAccepted = software.bool("accepted"),
+                        softwareSecrets = software.stringSet("secrets"),
                         iosReleaseBuild = ios.bool("release_build"),
                         iosAppIdentifiers = ios.stringSet("app_identifiers"),
                         androidGmsAttestation = android.bool("gms_attestation"),
@@ -84,7 +86,7 @@ class ClientRegistrationImpl(
                             "tee" -> AndroidKeystoreSecurityLevel.TRUSTED_ENVIRONMENT
                             "strong_box" -> AndroidKeystoreSecurityLevel.STRONG_BOX
                             else -> throw IllegalStateException("keystore_security_level invalid")
-                        }
+                        },
                     )
                 }
             }

@@ -6,9 +6,14 @@ import org.multipaz.securearea.SecureArea
 actual object DeviceCheck {
     actual suspend fun generateAttestation(
         secureArea: SecureArea,
-        challenge: ByteString
+        challenge: ByteString,
+        secret: String?
     ): DeviceAttestationResult {
-        TODO("generateAttestation not yet implemented")
+        return DeviceAttestationSoftware.generateAttestation(
+            secureArea = secureArea,
+            challenge = challenge,
+            secret = secret
+        )
     }
 
     actual suspend fun generateAssertion(
@@ -16,6 +21,10 @@ actual object DeviceCheck {
         deviceAttestationId: String,
         assertion: Assertion
     ): DeviceAssertion {
-        TODO("generateAssertion not yet implemented")
+        return DeviceAttestationSoftware.generateAssertion(
+            secureArea = secureArea,
+            deviceAttestationId = deviceAttestationId,
+            assertion = assertion
+        )
     }
 }

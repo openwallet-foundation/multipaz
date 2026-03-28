@@ -5,10 +5,14 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 
 /**
- * A platform-issued statement vouching for the integrity of the wallet app.
+ * A platform-issued statement vouching for the integrity of an application.
  *
  * Validity checks are cross-platform, as we need to be able to run them on the server
  * (e.g. one does not have to be on iOS to validate [DeviceAttestationIos]).
+ *
+ * For platforms without dedicated support, [DeviceAttestationSoftware] exists
+ * which relies on the ability of the application to prove that it possesses
+ * a secret.
  */
 @CborSerializable
 sealed class DeviceAttestation {

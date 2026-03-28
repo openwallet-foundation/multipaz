@@ -1,12 +1,9 @@
 package org.multipaz.device
 
 import kotlinx.coroutines.test.runTest
-import org.multipaz.util.fromBase64Url
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
-import org.multipaz.crypto.EcPrivateKey
-import org.multipaz.crypto.X509Cert
-import kotlin.collections.setOf
+import org.multipaz.util.fromBase64Url
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test
@@ -19,6 +16,8 @@ class DeviceAttestationAndroidTest {
         deviceAttestation.validate(
             DeviceAttestationValidationData(
                 attestationChallenge = ATTESTATION_CHALLENGE_PIXEL7A.encodeToByteString(),
+                softwareAccepted = false,
+                softwareSecrets = setOf(),
                 iosReleaseBuild = false,
                 iosAppIdentifiers = setOf(),
                 androidGmsAttestation = true,
@@ -27,7 +26,7 @@ class DeviceAttestationAndroidTest {
                 androidAppSignatureCertificateDigests = setOf(
                     ByteString("VEpxrWMf2GFLy2_HHTuN7xlW5fy6mKhVAmRADo4aLh0".fromBase64Url())
                 ),
-                androidAppPackageNames = setOf("org.multipaz_credential.wallet")
+                androidAppPackageNames = setOf("org.multipaz_credential.wallet"),
             ),
             validateAt = Instant.parse("2025-03-24T22:27:35Z")
         )
@@ -46,6 +45,8 @@ class DeviceAttestationAndroidTest {
         deviceAttestation.validate(
             DeviceAttestationValidationData(
                 attestationChallenge = ATTESTATION_CHALLENGE_EMULATOR_PIXEL3A.encodeToByteString(),
+                softwareAccepted = false,
+                softwareSecrets = setOf(),
                 iosReleaseBuild = false,
                 iosAppIdentifiers = setOf(),
                 androidRequiredKeyMintSecurityLevel = AndroidKeystoreSecurityLevel.SOFTWARE,
@@ -54,7 +55,7 @@ class DeviceAttestationAndroidTest {
                 androidAppSignatureCertificateDigests = setOf(
                     ByteString("VEpxrWMf2GFLy2_HHTuN7xlW5fy6mKhVAmRADo4aLh0".fromBase64Url())
                 ),
-                androidAppPackageNames = setOf("org.multipaz_credential.wallet")
+                androidAppPackageNames = setOf("org.multipaz_credential.wallet"),
             ),
             validateAt = Instant.parse("2025-05-05T00:00:00Z")
         )

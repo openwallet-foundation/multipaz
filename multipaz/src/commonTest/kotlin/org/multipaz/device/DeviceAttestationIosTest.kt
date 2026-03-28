@@ -17,13 +17,15 @@ class DeviceAttestationIosTest {
         deviceAttestation.validate(
             DeviceAttestationValidationData(
                 attestationChallenge = attestationChallenge.encodeToByteString(),
+                softwareAccepted = false,
+                softwareSecrets = setOf(),
                 iosReleaseBuild = false,
                 iosAppIdentifiers = setOf("74HWMG89B3.com.sorototkin.testapp5"),
                 androidGmsAttestation = false,
                 androidVerifiedBootGreen = false,
                 androidRequiredKeyMintSecurityLevel = AndroidKeystoreSecurityLevel.SOFTWARE,
                 androidAppSignatureCertificateDigests = setOf(),
-                androidAppPackageNames = setOf()
+                androidAppPackageNames = setOf(),
             ),
             validateAt = Instant.parse("2025-05-05T00:00:00Z")
         )

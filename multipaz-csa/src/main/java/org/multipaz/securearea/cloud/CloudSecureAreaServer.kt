@@ -176,13 +176,15 @@ class CloudSecureAreaServer(
             request1.deviceAttestation.validate(
                 DeviceAttestationValidationData(
                     attestationChallenge = state.attestationChallenge!!,
+                    softwareAccepted = false,
+                    softwareSecrets = emptySet(),
                     iosReleaseBuild = iosReleaseBuild,
                     iosAppIdentifiers = iosAppIdentifiers.toSet(),
                     androidGmsAttestation = androidGmsAttestation,
                     androidVerifiedBootGreen = androidVerifiedBootGreen,
                     androidAppSignatureCertificateDigests = androidAppSignatureCertificateDigests.toSet(),
                     androidAppPackageNames = androidAppPackageNames.toSet(),
-                    androidRequiredKeyMintSecurityLevel = androidKeystoreSecurityLevel
+                    androidRequiredKeyMintSecurityLevel = androidKeystoreSecurityLevel,
                 )
             )
         } catch (e: Exception) {

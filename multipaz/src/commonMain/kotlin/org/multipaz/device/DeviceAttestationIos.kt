@@ -1,6 +1,9 @@
 package org.multipaz.device
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.ByteStringBuilder
+import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1OctetString
 import org.multipaz.asn1.ASN1Sequence
@@ -17,20 +20,21 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
-import kotlinx.io.bytestring.ByteString
-import kotlinx.io.bytestring.ByteStringBuilder
-import kotlinx.io.bytestring.encodeToByteString
+import org.multipaz.crypto.X509CertChainValidationException
 import org.multipaz.util.getInt16
 import org.multipaz.util.getInt32
-import org.multipaz.crypto.SignatureVerificationException
-import org.multipaz.crypto.X509CertChainValidationException
 import kotlin.time.Instant
 
-/** On iOS device attestation is the result of Apple's DeviceCheck API. */
+/**
+ * On iOS device attestation is the result of Apple's DeviceCheck API.
+ *
+ * @property blob the attestation blob.
+ */
 data class DeviceAttestationIos(
-    val blob: ByteString
+    val blob: ByteString,
 ): DeviceAttestation() {
     override suspend fun validate(
         validationData: DeviceAttestationValidationData,

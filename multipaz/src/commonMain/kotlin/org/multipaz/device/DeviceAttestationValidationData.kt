@@ -12,6 +12,18 @@ data class DeviceAttestationValidationData(
     val attestationChallenge: ByteString,
 
     /**
+     * If `true`, [DeviceAttestationSoftware] is accepted.
+     */
+    val softwareAccepted: Boolean,
+
+    /**
+     * List of allowed secrets when [DeviceAttestationSoftware] is accepted.
+     *
+     * If empty allow any secret or the secret to be absent
+     */
+    val softwareSecrets: Set<String>,
+
+    /**
      * Whether a release build is required on iOS. When `false`, both debug and release builds
      * are accepted.
      */
@@ -60,18 +72,20 @@ data class DeviceAttestationValidationData(
      *
      * If empty, allow any app.
      */
-    val androidAppPackageNames: Set<String>
+    val androidAppPackageNames: Set<String>,
 ) {
     fun withChallenge(challenge: ByteString): DeviceAttestationValidationData {
         return DeviceAttestationValidationData(
             attestationChallenge = challenge,
+            softwareAccepted = softwareAccepted,
+            softwareSecrets = softwareSecrets,
             iosReleaseBuild = iosReleaseBuild,
             iosAppIdentifiers = iosAppIdentifiers,
             androidRequiredKeyMintSecurityLevel = androidRequiredKeyMintSecurityLevel,
             androidGmsAttestation = androidGmsAttestation,
             androidVerifiedBootGreen = androidVerifiedBootGreen,
             androidAppSignatureCertificateDigests = androidAppSignatureCertificateDigests,
-            androidAppPackageNames = androidAppPackageNames
+            androidAppPackageNames = androidAppPackageNames,
         )
     }
 }

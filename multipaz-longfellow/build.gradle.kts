@@ -82,6 +82,7 @@ kotlin {
             linkerOpts(
                 "-L$rootDir/multipaz-longfellow/src/iosMain/nativeLibs/$zkLibExt/lib",
                 "-Wl,-rpath,/usr/lib/swift",
+                "-lsqlite3",
                 "-lmdoc_static"
             )
         }

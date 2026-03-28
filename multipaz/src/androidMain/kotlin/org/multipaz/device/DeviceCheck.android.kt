@@ -1,25 +1,34 @@
 package org.multipaz.device
 
-import org.multipaz.securearea.AndroidKeystoreCreateKeySettings
-import org.multipaz.crypto.Algorithm
-import org.multipaz.securearea.SecureArea
 import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.isEmpty
+import org.multipaz.securearea.AndroidKeystoreCreateKeySettings
+import org.multipaz.securearea.SecureArea
+import org.multipaz.util.Logger
 
 /**
  * Generates statements validating device/app/OS integrity. Details of these
  * statements are inherently platform-specific.
  */
 actual object DeviceCheck {
+    private const val TAG = "DeviceCheck"
+
     actual suspend fun generateAttestation(
         secureArea: SecureArea,
-        challenge: ByteString
+        challenge: ByteString,
+        secret: String?
     ): DeviceAttestationResult {
+        if (challenge.isEmpty()) {
+            Logger.w(TAG, "Generating an attestation with an empty challenge is not secure")
+        }
         val keySettings = AndroidKeystoreCreateKeySettings.Builder(challenge)
             .build()
         val keyInfo = secureArea.createKey(null, keySettings)
         return DeviceAttestationResult(
             deviceAttestationId = keyInfo.alias,
-            deviceAttestation = DeviceAttestationAndroid(keyInfo.attestation.certChain!!)
+            deviceAttestation = DeviceAttestationAndroid(
+                certificateChain = keyInfo.attestation.certChain!!,
+            )
         )
     }
 

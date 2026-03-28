@@ -58,6 +58,8 @@ class RpcAuthorizedDeviceClient private constructor(
          * @param url RPC server endpoint
          * @param secureArea [SecureArea] that stores private key that identifies this client
          * @param storage [Storage] that holds information identifying this client across sessions
+         * @param secret optional secret for identifying the client, only included in
+         * [org.multipaz.device.DeviceAttestationSoftware].
          * @return object that can be used to create stub objects for RPC interfaces
          */
         suspend fun connect(
@@ -65,13 +67,15 @@ class RpcAuthorizedDeviceClient private constructor(
             httpClientEngine: HttpClientEngineFactory<*>,
             url: String,
             secureArea: SecureArea,
-            storage: Storage
+            storage: Storage,
+            secret: String? = null
         ): RpcAuthorizedDeviceClient = connect(
-            exceptionMap,
-            KtorHttpTransport(httpClientEngine, url),
-            url,
-            secureArea,
-            storage
+            exceptionMap = exceptionMap,
+            httpTransport = KtorHttpTransport(httpClientEngine, url),
+            transportUri = url,
+            secureArea = secureArea,
+            storage = storage,
+            secret = secret
         )
 
         /**
@@ -82,7 +86,8 @@ class RpcAuthorizedDeviceClient private constructor(
             httpTransport: HttpTransport,
             transportUri: String,
             secureArea: SecureArea,
-            storage: Storage
+            storage: Storage,
+            secret: String? = null
         ): RpcAuthorizedDeviceClient {
             val poll = RpcPollHttp(httpTransport)
             val notifier = RpcNotifierPoll(poll)
@@ -93,13 +98,19 @@ class RpcAuthorizedDeviceClient private constructor(
             val hostsTable = storage.getTable(hostsTableSpec)
 
             val (clientId, authorizedDispatcher) = createAuthorizedDispatcher(
-                dispatcher, notifier, transportUri, secureArea, hostsTable)
+                dispatcher = dispatcher,
+                notifier = notifier,
+                baseUrl = transportUri,
+                secureArea = secureArea,
+                hostsTable = hostsTable,
+                secret = secret
+            )
 
             return RpcAuthorizedDeviceClient(
                 dispatcher = authorizedDispatcher,
                 notifier = notifier,
                 rpcClientId = clientId,
-                notificationJob = notificationJob
+                notificationJob = notificationJob,
             )
         }
 
@@ -108,14 +119,22 @@ class RpcAuthorizedDeviceClient private constructor(
             notifier: RpcNotifier,
             baseUrl: String,
             secureArea: SecureArea,
-            hostsTable: StorageTable
+            hostsTable: StorageTable,
+            secret: String?
         ): Pair<String, RpcDispatcher> {
             val connectionDataBytes = hostsTable.get(key = baseUrl)
             val connectionData = if (connectionDataBytes == null) {
                 // RPC entry point that does not require authorization, it is used to set up
                 // authorization parameters with the server (so these parameters can be used for subsequent
                 // RPC communication).
-                registerClient(dispatcher, notifier, baseUrl, secureArea, hostsTable)
+                registerClient(
+                    dispatcher = dispatcher,
+                    notifier = notifier,
+                    baseUrl = baseUrl,
+                    secureArea = secureArea,
+                    hostsTable = hostsTable,
+                    secret = secret
+                )
             } else {
                 HostData.fromCbor(connectionDataBytes.toByteArray())
             }
@@ -152,7 +171,13 @@ class RpcAuthorizedDeviceClient private constructor(
                 // server and try again.
                 hostsTable.delete(key = baseUrl)
                 return createAuthorizedDispatcher(
-                    dispatcher, notifier, baseUrl, secureArea, hostsTable)
+                    dispatcher = dispatcher,
+                    notifier = notifier,
+                    baseUrl = baseUrl,
+                    secureArea = secureArea,
+                    hostsTable = hostsTable,
+                    secret = secret
+                )
             }
             return Pair(connectionData.clientId, authorizedDispatcher)
         }
@@ -162,7 +187,8 @@ class RpcAuthorizedDeviceClient private constructor(
             notifier: RpcNotifier,
             baseUrl: String,
             secureArea: SecureArea,
-            hostsTable: StorageTable
+            hostsTable: StorageTable,
+            secret: String?
         ): HostData {
             val clientRegistration = ClientRegistrationStub(
                 endpoint = "client_registration",
@@ -171,7 +197,8 @@ class RpcAuthorizedDeviceClient private constructor(
             )
             val (attestationId, attestation) = DeviceCheck.generateAttestation(
                 secureArea = secureArea,
-                challenge = clientRegistration.challenge()
+                challenge = clientRegistration.challenge(),
+                secret = secret
             )
             val clientId = clientRegistration.register(attestation)
             val hostData = HostData(

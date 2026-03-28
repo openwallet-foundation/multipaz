@@ -96,7 +96,8 @@ kotlin {
                         "-L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/${platform}/",
                         "-L$rootDir/multipaz/SwiftBridge/build/Release-${platform}/",
                         "-lSwiftBridge",
-                        "-Wl,-rpath,/usr/lib/swift"
+                        "-Wl,-rpath,/usr/lib/swift",
+                        "-lsqlite3"
                     )
                 }
             }
