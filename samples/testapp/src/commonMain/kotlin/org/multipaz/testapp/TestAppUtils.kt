@@ -131,11 +131,20 @@ object TestAppUtils {
                         } else {
                             null
                         }
+                        val otherInfo = mutableMapOf<String, DataItem>()
+                        for (transactionData in request.transactionData) {
+                            val type = transactionData.transactionType
+                            otherInfo[type.mdocRequestInfoKeyName] = Tagged(
+                                tagNumber = Tagged.ENCODED_CBOR,
+                                taggedItem = Cbor.encode(transactionData.attributes).toDataItem()
+                            )
+                        }
                         addDocRequest(
                             docType = mdocRequest.docType,
                             nameSpaces = itemsToRequest,
                             docRequestInfo = DocRequestInfo(
-                                zkRequest = zkRequest
+                                zkRequest = zkRequest,
+                                otherInfo = otherInfo
                             ),
                             readerKey = readerKey,
                         )

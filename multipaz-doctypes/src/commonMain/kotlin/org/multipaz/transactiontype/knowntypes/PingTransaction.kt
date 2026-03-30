@@ -60,4 +60,9 @@ object PingTransaction: TransactionType(
             }
         }
     }
+
+    /** Sample transaction data for this transaction type */
+    val sampleData = buildCanned {
+        put("string", "string data")
+    }
 }

@@ -21,7 +21,6 @@ import kotlinx.io.bytestring.encodeToByteString
 import kotlin.time.Instant
 import org.multipaz.cbor.DataItem
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.multipaz.cbor.Bstr
@@ -33,7 +32,6 @@ import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
-import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.Document
@@ -43,7 +41,6 @@ import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
-import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureArea
 import kotlin.collections.component1
@@ -275,6 +272,7 @@ class DocumentType private constructor(
          * @param jsonClaims the claim names for JSON-based credentials in the request. If the list is empty, all
          *   defined claims will be included. Each claim name must use `.` to separate path components, e.g.
          *   `age_equal_or_over.18`.
+         * @param cannedTransactionData transaction data list for the request
          */
         fun addSampleRequest(
             id: String,
@@ -282,6 +280,7 @@ class DocumentType private constructor(
             mdocDataElements: Map<String, Map<String, Boolean>>? = null,
             mdocUseZkp: Boolean = false,
             jsonClaims: List<String>? = null,
+            cannedTransactionData: List<CannedTransactionData> = listOf()
         ) = apply {
             val mdocRequest = if (mdocDataElements == null) {
                 null
@@ -333,7 +332,8 @@ class DocumentType private constructor(
                     id = id,
                     displayName = displayName,
                     mdocRequest = mdocRequest,
-                    jsonRequest = jsonRequest
+                    jsonRequest = jsonRequest,
+                    transactionData = cannedTransactionData
                 ))
         }
 

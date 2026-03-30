@@ -2,7 +2,11 @@ package org.multipaz.documenttype
 
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
+import org.multipaz.cbor.CborBuilder
+import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.MapBuilder
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.credential.Credential
 import org.multipaz.document.Document
 import org.multipaz.presentment.TransactionData
@@ -95,4 +99,17 @@ abstract class TransactionType(
             }
         }
     }
+
+    /**
+     * Builds [CannedTransactionData] for this request type.
+     *
+     * @param builderAction builder action block to initialize transaction attributes.
+     * @return new [CannedTransactionData] initialized with this transaction type and
+     *  given attributes
+     */
+    fun buildCanned(builderAction: MapBuilder<CborBuilder>.() -> Unit) =
+        CannedTransactionData(
+            transactionType = this,
+            attributes = buildCborMap(builderAction) as CborMap
+        )
 }
