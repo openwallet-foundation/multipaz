@@ -42,6 +42,8 @@ service () {
   shift
   local instance="$1"
   shift
+  local mainclass="$1"
+  shift
   local port="$1"
   shift
   local extra="$EXTRA_PARAMS"
@@ -55,7 +57,7 @@ service () {
     extra="$extra -param enrollment_server_url=${BASE_URL}/records"
   fi
   echo "Starting $service service ($instance) at port $port..."
-  java -jar "/app/jars/$service.jar" \
+  java -cp "/app/jars/$service.jar:/app/libs/*" "$mainclass" \
     -param server_port=$port \
     -param base_url=${BASE_URL}/$instance \
     -param ca_trust_servers="[\"$host\"]" \
@@ -87,11 +89,11 @@ else
 fi
 
 # records server must be started first, as it processes enrollments
-service records records 8004 -param admin_password=$ADMIN_PASS
-service openid4vci openid4vci 8007 -param admin_password=$ADMIN_PASS
-service csa csa 8005
-service verifier verifier 8006
-service backend backend 8008
+service records records org.multipaz.records.server.Main 8004 -param admin_password=$ADMIN_PASS
+service openid4vci openid4vci org.multipaz.openid4vci.server.Main 8007 -param admin_password=$ADMIN_PASS
+service csa csa org.multipaz.csa.server.Main 8005
+service verifier verifier org.multipaz.verifier.server.Main 8006
+service backend backend org.multipaz.backend.server.Main 8008
 
 if [ "$INIT" = "0" ]
 then

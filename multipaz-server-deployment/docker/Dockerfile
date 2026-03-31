@@ -12,12 +12,11 @@ RUN groupadd -r multipaz && useradd -r -g multipaz multipaz
 
 WORKDIR /app
 
-# Copy JARs (built by Gradle before docker build)
-COPY multipaz-verifier-server/build/libs/multipaz-verifier-server-all.jar /app/jars/verifier.jar
-COPY multipaz-openid4vci-server/build/libs/multipaz-openid4vci-server-all.jar /app/jars/openid4vci.jar
-COPY multipaz-backend-server/build/libs/multipaz-backend-server-all.jar /app/jars/backend.jar
-COPY multipaz-records-server/build/libs/multipaz-records-server-all.jar /app/jars/records.jar
-COPY multipaz-csa-server/build/libs/multipaz-csa-server-all.jar /app/jars/csa.jar
+# Copy shared dependency JARs (deduplicated across all servers)
+COPY multipaz-server-deployment/build/docker-staging/libs/ /app/libs/
+
+# Copy thin server JARs
+COPY multipaz-server-deployment/build/docker-staging/jars/ /app/jars/
 
 # Copy web frontend (built by Gradle before docker build)
 COPY multipaz-server-frontend/build/dist/js/productionExecutable /app/web
