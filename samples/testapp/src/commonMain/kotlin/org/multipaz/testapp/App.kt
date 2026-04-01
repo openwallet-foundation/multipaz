@@ -432,19 +432,8 @@ class App private constructor (val promptModel: PromptModel) {
 
     @OptIn(ExperimentalResourceApi::class)
     private suspend fun zkSystemRepositoryInit() {
-        val circuitsToAdd = listOf(
-            "files/longfellow-libzk-v1/6_1_4096_2945_137e5a75ce72735a37c8a72da1a8a0a5df8d13365c2ae3d2c2bd6a0e7197c7c6",
-            "files/longfellow-libzk-v1/6_2_4025_2945_b4bb6f01b7043f4f51d8302a30b36e3d4d2d0efc3c24557ab9212ad524a9764e",
-            "files/longfellow-libzk-v1/6_3_4121_2945_b2211223b954b34a1081e3fbf71b8ea2de28efc888b4be510f532d6ba76c2010",
-            "files/longfellow-libzk-v1/6_4_4283_2945_c70b5f44a1365c53847eb8948ad5b4fdc224251a2bc02d958c84c862823c49d6",
-        )
-
         val longfellowSystem = LongfellowZkSystem()
-        for (circuit in circuitsToAdd) {
-            val circuitBytes = Res.readBytes(circuit)
-            val pathParts = circuit.split("/")
-            longfellowSystem.addCircuit(pathParts[pathParts.size - 1], ByteString(circuitBytes))
-        }
+        longfellowSystem.addDefaultCircuits()
         zkSystemRepository = ZkSystemRepository().apply {
             add(longfellowSystem)
         }

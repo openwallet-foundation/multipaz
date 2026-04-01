@@ -3,6 +3,7 @@
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Base64
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -16,6 +17,69 @@ val projectVersionCode: Int by rootProject.extra
 val projectVersionName: String by rootProject.extra
 
 val disableWebTargets = project.properties["disable.web.targets"]?.toString()?.toBoolean() ?: false
+
+abstract class GeneratePayloadsTask : DefaultTask() {
+    @get:InputFiles
+    abstract val inputFiles: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @get:Input
+    abstract val packageName: Property<String>
+
+    @TaskAction
+    fun generate() {
+        val pkg = packageName.get()
+        val dir = outputDir.get().asFile
+        val packageDir = File(dir, pkg.replace('.', '/'))
+        packageDir.mkdirs()
+        val outFile = File(packageDir, "Payloads.kt")
+        outFile.bufferedWriter().use { writer ->
+            writer.write("@file:OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)\n")
+            writer.write("package $pkg\n\n")
+            writer.write("import kotlin.io.encoding.Base64\n\n")
+            inputFiles.forEach { file ->
+                val bytes = file.readBytes()
+                val base64String = Base64.getEncoder().encodeToString(bytes)
+                // Chunk safely below the JVM 65k string literal limit
+                val chunks = base64String.chunked(30000)
+                // Sanitize the filename to use as a Kotlin variable name
+                val safeName = "chunks_" + file.name.replace("[^a-zA-Z0-9_]".toRegex(), "_")
+                writer.write("private val $safeName = arrayOf(\n")
+                chunks.forEach { chunk ->
+                    writer.write("    \"$chunk\",\n")
+                }
+                writer.write(")\n\n")
+            }
+            writer.write("internal val payloads: Map<String, ByteArray> by lazy {\n")
+            writer.write("    mapOf(\n")
+            inputFiles.forEach { file ->
+                val safeName = "chunks_" + file.name.replace("[^a-zA-Z0-9_]".toRegex(), "_")
+                writer.write("        \"${file.name}\" to Base64.decode($safeName.joinToString(\"\")),\n")
+            }
+            writer.write("    )\n")
+            writer.write("}\n")
+        }
+    }
+}
+
+val generatePayloads by tasks.registering(GeneratePayloadsTask::class) {
+    val files = listOf(
+        "6_1_4096_2945_137e5a75ce72735a37c8a72da1a8a0a5df8d13365c2ae3d2c2bd6a0e7197c7c6",
+        "6_2_4025_2945_b4bb6f01b7043f4f51d8302a30b36e3d4d2d0efc3c24557ab9212ad524a9764e",
+        "6_3_4121_2945_b2211223b954b34a1081e3fbf71b8ea2de28efc888b4be510f532d6ba76c2010",
+        "6_4_4283_2945_c70b5f44a1365c53847eb8948ad5b4fdc224251a2bc02d958c84c862823c49d6",
+        "7_1_4151_4096_8d079211715200ff06c5109639245502bfe94aa869908d31176aae4016182121",
+        "7_2_4265_4096_6a5810683e62b6d7766ebd0d7ca72518a2b8325418142adcadb10d51dbbcd5ad",
+        "7_3_4307_4096_8ee4849ae1293ae6fe5f9082ce3e5e15c4f198f2998c682fa1b727237d6d252f",
+        "7_4_4415_4096_5aebdaaafe17296a3ef3ca6c80c6e7505e09291897c39700410a365fb278e460",
+        )
+    val baseDir = layout.projectDirectory.dir("src/commonMain/circuits")
+    inputFiles.from(files.map { baseDir.file(it) })
+    packageName.set("org.multipaz.mdoc.zkp.longfellow")
+    outputDir.set(layout.buildDirectory.dir("generated/source/payloads/main"))
+}
 
 kotlin {
     jvmToolchain(17)
@@ -100,6 +164,7 @@ kotlin {
                 implementation(libs.kotlinx.datetime)
                 implementation(project(":multipaz"))
             }
+            kotlin.srcDir(generatePayloads)
         }
 
         val commonTest by getting {
@@ -216,3 +281,9 @@ tasks.withType<Test>().configureEach {
     }
 }
 
+// Disable unit tests for Android (running on the host JVM)
+project.tasks.configureEach {
+    if (name == "testDebugUnitTest" || name == "testReleaseUnitTest") {
+        enabled = false
+    }
+}

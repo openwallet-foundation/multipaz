@@ -64,7 +64,6 @@
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		51D0CF442E9682B1004EC0DB /* DocumentProviderExtension */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (51D0CF4B2E9682B1004EC0DB /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = DocumentProviderExtension; sourceTree = "<group>"; };
-		7B447ECB2F7D77AA00A9546E /* longfellow-libzk-v1 */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); name = "longfellow-libzk-v1"; path = "../src/commonMain/composeResources/files/longfellow-libzk-v1"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -96,7 +95,6 @@
 		7555FF72242A565900829871 = {
 			isa = PBXGroup;
 			children = (
-				7B447ECB2F7D77AA00A9546E /* longfellow-libzk-v1 */,
 				7B9C61172DBA8D46000484FF /* AdditionalConfig.xcconfig */,
 				7BAB1AC72DB687B000CAC98C /* DeveloperConfig.xcconfig */,
 				7555FF7D242A565900829871 /* TestApp */,
@@ -145,7 +143,6 @@
 			);
 			fileSystemSynchronizedGroups = (
 				51D0CF442E9682B1004EC0DB /* DocumentProviderExtension */,
-				7B447ECB2F7D77AA00A9546E /* longfellow-libzk-v1 */,
 			);
 			name = DocumentProviderExtension;
 			packageProductDependencies = (

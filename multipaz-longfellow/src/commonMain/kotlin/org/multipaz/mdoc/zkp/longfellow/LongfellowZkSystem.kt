@@ -9,9 +9,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
-import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
-import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import org.multipaz.mdoc.zkp.ProofVerificationFailureException
 import org.multipaz.mdoc.zkp.ZkDocument
@@ -154,6 +152,8 @@ class LongfellowZkSystem(): ZkSystem {
         val circuitBytes = getCircuitBytes(zkSystemSpec)
             ?: throw IllegalArgumentException("Circuit not found for system spec: $zkSystemSpec")
 
+        Logger.i(TAG, "Generating proof using $zkSystemSpec")
+
         // The Longfellow ZKP library expects `DeviceResponse` CBOR, and will grab the 1st document in the array.
         val longfellowDocBytes = Cbor.encode(
             buildCborMap {
@@ -223,6 +223,8 @@ class LongfellowZkSystem(): ZkSystem {
         if (zkDocument.documentData.msoX5chain == null || zkDocument.documentData.msoX5chain!!.certificates.isEmpty()) {
             throw IllegalArgumentException("zkDocument must contain at least 1 certificate in msoX5chain.")
         }
+
+        Logger.i(TAG, "Verifying proof using $zkSystemSpec")
 
         val cert = zkDocument.documentData.msoX5chain!!.certificates[0]
         val ecPubKeyCoordinates = cert.ecPublicKey as EcPublicKeyDoubleCoordinate
@@ -295,10 +297,22 @@ class LongfellowZkSystem(): ZkSystem {
     }
 
     /**
+     * Adds the default circuits recommended by the Longfellow authors.
+     */
+    fun addDefaultCircuits() {
+        payloads.forEach { (circuitName, circuitBytes) ->
+            addCircuit(
+                circuitFilename = circuitName,
+                circuitBytes = ByteString(circuitBytes)
+            )
+        }
+    }
+
+    /**
      * Finds the best matching [ZkSystemSpec] from a given list based on the number of signed attributes.
      *
      * @param zkSystemSpecs the available specs from the request
-     * @param mdocRequest the request to fulfill
+     * @param requestedClaims the requested claims.
      * @return the best matching [ZkSystemSpec], or null if none are suitable
      */
     override fun getMatchingSystemSpec(
@@ -320,14 +334,15 @@ class LongfellowZkSystem(): ZkSystem {
             return null
         }
 
-        return this.systemSpecs
+        // Find all specs which match ...
+        val applicableSpecs = systemSpecs
             .filter { spec ->
                 val circuitHash = spec.getParam<String>("circuit_hash")
                 val hashMatches = (circuitHash != null && circuitHash in allowedCircuitHashes)
                 val numAttributesMatch = spec.getParam<Long>("num_attributes") == numAttributesRequested
                 hashMatches && numAttributesMatch
             }
-            .sortedBy { it.getParam<Long>("version") ?: Long.MIN_VALUE }
-            .firstOrNull()
+        // ... and pick the one with the biggest version number
+        return applicableSpecs.maxByOrNull { it.getParam<Long>("version") ?: Long.MIN_VALUE }
     }
 }

@@ -12,23 +12,12 @@ import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.response.buildDeviceResponse
 import kotlin.test.Test
 
-expect fun loadCircuit(): Pair<String, ByteString>?
-
 class SystemTest {
     @Test
     fun testProofFullFlow_success() = runTest {
 
-        val circuit = loadCircuit()
-        if (circuit == null) {
-            println("Skipping SystemTest on this platform because no circuit is defined")
-            return@runTest
-        }
-        val system = LongfellowZkSystem().apply {
-            addCircuit(
-                circuitFilename = circuit.first,
-                circuitBytes = circuit.second
-            )
-        }
+        val system = LongfellowZkSystem()
+        system.addDefaultCircuits()
 
         val testTime = MdocTestDataProvider.getProofGenerationDate().toInstant(TimeZone.UTC)
         val zkRepository = ZkSystemRepository()
