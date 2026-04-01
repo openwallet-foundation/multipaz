@@ -9,7 +9,7 @@ presentment protocols.
 
 The project provides libraries written in [Kotlin Multiplatform](https://kotlinlang.org/docs/multiplatform.html):
 
-- `multipaz` provides the core building blocks it works on Android,
+- `multipaz` provides the core building blocks. It works on Android,
   iOS, and in server-side environments. The library includes support 
   for ISO mdoc and IETF SD-JWT VC credential formats and also implements
   proximity presentment using ISO/IEC 18013-5:2021 (for ISO mdoc credentials)
@@ -61,12 +61,12 @@ is used. At this time we're in pre-1.0 territory but we expect to hit 1.0 around
 late 2026 or early 2027.
 
 We are also making Multipaz available as a [Swift package](https://github.com/openwallet-foundation/multipaz/blob/main/Package.swift)
-which includes an the `multipaz`, `multipaz-doctypes`, `multipaz-doctypes`,
+which includes the `multipaz`, `multipaz-doctypes`,
 `multipaz-longfellow`, and `multipaz-swiftui` libraries. This is built using
 [SKIE](https://skie.touchlab.co/). Be careful relying on this as Swift/Kotlin interop technology
 might change in the near future with e.g. [Swift Export](https://kotlinlang.org/docs/native-swift-export.html).
 
-At this point both API interfaces and data stored on disk is subject to change
+At this point both API interfaces and data stored on disk are subject to change
 but we expect to provide stability guarantees post 1.0. We only expect minor changes
 for example conversion from `ByteArray` to `ByteString` and similar things.
 
@@ -104,13 +104,13 @@ Prebuilt APKs are available from https://apps.multipaz.org.
 For an over-the-Internet verifier supporting OpenID4VP (both W3C DC API and
 URI schemes) and ISO/IEC 18013-7 Annex A and C see https://verifier.multipaz.org.
 
-To see how to use the Multipaz in a 3rd party project, see
+To see how to use Multipaz in a 3rd party project, see
 https://github.com/openwallet-foundation/multipaz-samples/ which includes
 a number of samples for different platforms.
 
 ## Developer Resources
 
-[developer.multipaz.org](developer.multipaz.org) is a comprehensive resource for developers. **The entire developer website is open source** and contributions are welcome!
+[developer.multipaz.org](https://developer.multipaz.org) is a comprehensive resource for developers. **The entire developer website is open source** and contributions are welcome!
 
 ### Documentation
 
