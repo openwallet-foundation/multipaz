@@ -70,6 +70,7 @@ import org.multipaz.compose.branding.Branding
 import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.compose.provisioning.ProvisioningBottomSheet
+import org.multipaz.compose.trustmanagement.TrustManagerModel
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -113,7 +114,6 @@ import org.multipaz.securearea.cloud.CloudSecureArea
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
-import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.testapp.provisioning.ProvisioningSupport
 import org.multipaz.testapp.ui.AboutScreen
 import org.multipaz.testapp.ui.AndroidKeystoreSecureAreaScreen
@@ -404,12 +404,12 @@ class App private constructor (val promptModel: PromptModel) {
         generateTrustManagers()
     }
 
-    private fun getTrustManagerFromId(identifier: String): TrustEntryBasedTrustManager {
+    private fun getTrustManagerModelFromId(identifier: String): TrustManagerModel {
         return when (identifier) {
-            "builtInIssuerTrustManager" -> builtInIssuerTrustManager
-            "userIssuerTrustManager" -> userIssuerTrustManager
-            "builtInReaderTrustManager" -> builtInReaderTrustManager
-            "userReaderTrustManager" -> userReaderTrustManager
+            "builtInIssuerTrustManager" -> builtInIssuerTrustManagerModel
+            "userIssuerTrustManager" -> userIssuerTrustManagerModel
+            "builtInReaderTrustManager" -> builtInReaderTrustManagerModel
+            "userReaderTrustManager" -> userReaderTrustManagerModel
             else -> throw IllegalStateException("Unexpected TrustManager id $identifier")
         }
     }
@@ -740,7 +740,18 @@ class App private constructor (val promptModel: PromptModel) {
             trustManagers = listOf(builtInReaderTrustManager, userReaderTrustManager),
             identifier = "readers"
         )
+
+        val coroutineScope = CoroutineScope(Dispatchers.Default)
+        builtInReaderTrustManagerModel = TrustManagerModel(builtInReaderTrustManager, coroutineScope)
+        userReaderTrustManagerModel = TrustManagerModel(userReaderTrustManager, coroutineScope)
+        builtInIssuerTrustManagerModel = TrustManagerModel(builtInIssuerTrustManager, coroutineScope)
+        userIssuerTrustManagerModel = TrustManagerModel(userIssuerTrustManager, coroutineScope)
     }
+
+    private lateinit var builtInReaderTrustManagerModel: TrustManagerModel
+    private lateinit var userReaderTrustManagerModel: TrustManagerModel
+    private lateinit var builtInIssuerTrustManagerModel: TrustManagerModel
+    private lateinit var userIssuerTrustManagerModel: TrustManagerModel
 
     lateinit var digitalCredentials: DigitalCredentials
 
@@ -1232,8 +1243,8 @@ class App private constructor (val promptModel: PromptModel) {
                 composable<TrustedIssuersDestination> { backStackEntry ->
                     WithAppBar(navController, "Trusted Issuers") {
                         TrustManagerScreen(
-                            builtIn = builtInIssuerTrustManager,
-                            user = userIssuerTrustManager,
+                            builtIn = builtInIssuerTrustManagerModel,
+                            user = userIssuerTrustManagerModel,
                             isVical = true,
                             imageLoader = imageLoader,
                             onTrustEntryClicked = { trustManagerId, trustEntryId ->
@@ -1260,8 +1271,8 @@ class App private constructor (val promptModel: PromptModel) {
                 composable<TrustedVerifiersDestination> { backStackEntry ->
                     WithAppBar(navController, "Trusted Verifiers") {
                         TrustManagerScreen(
-                            builtIn = builtInReaderTrustManager,
-                            user = userReaderTrustManager,
+                            builtIn = builtInReaderTrustManagerModel,
+                            user = userReaderTrustManagerModel,
                             isVical = false,
                             imageLoader = imageLoader,
                             onTrustEntryClicked = { trustManagerId, trustEntryId ->
@@ -1289,7 +1300,7 @@ class App private constructor (val promptModel: PromptModel) {
                     // TrustEntryScreen has its own AppBar
                     val destination = backStackEntry.toRoute<TrustEntryDestination>()
                     TrustEntryScreen(
-                        trustManager = getTrustManagerFromId(destination.trustManagerId),
+                        trustManagerModel = getTrustManagerModelFromId(destination.trustManagerId),
                         trustEntryId = destination.trustEntryId,
                         justImported = destination.justImported,
                         imageLoader = imageLoader,
@@ -1326,7 +1337,7 @@ class App private constructor (val promptModel: PromptModel) {
                     // TrustEntryEditScreen has its own AppBar
                     val destination = backStackEntry.toRoute<TrustEntryDestination>()
                     TrustEntryEditScreen(
-                        trustManager = getTrustManagerFromId(destination.trustManagerId) as TrustManager,
+                        trustManagerModel = getTrustManagerModelFromId(destination.trustManagerId),
                         trustEntryId = destination.trustEntryId,
                         imageLoader = imageLoader,
                         onBack = { navController.navigateUp() },
@@ -1337,7 +1348,7 @@ class App private constructor (val promptModel: PromptModel) {
                     WithAppBar(navController, "VICAL Entry") {
                         val destination = backStackEntry.toRoute<TrustEntryVicalEntryDestination>()
                         TrustEntryVicalEntryScreen(
-                            trustManager = getTrustManagerFromId(destination.trustManagerId),
+                            trustManagerModel = getTrustManagerModelFromId(destination.trustManagerId),
                             vicalTrustEntryId = destination.trustEntryId,
                             certNum = destination.vicalCertNumber
                         )
@@ -1347,7 +1358,7 @@ class App private constructor (val promptModel: PromptModel) {
                     WithAppBar(navController, "RICAL Entry") {
                         val destination = backStackEntry.toRoute<TrustEntryRicalEntryDestination>()
                         TrustEntryRicalEntryScreen(
-                            trustManager = getTrustManagerFromId(destination.trustManagerId),
+                            trustManagerModel = getTrustManagerModelFromId(destination.trustManagerId),
                             ricalTrustEntryId = destination.trustEntryId,
                             certNum = destination.ricalCertNumber
                         )

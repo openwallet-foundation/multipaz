@@ -71,12 +71,12 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.Icon
 import org.multipaz.eventlogger.Event
 import org.multipaz.eventlogger.EventPresentment
-import org.multipaz.eventlogger.SimpleEventLogger
 import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsMdocApi
 import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsOpenID4VP
 import org.multipaz.eventlogger.EventPresentmentIso18013AnnexA
 import org.multipaz.eventlogger.EventPresentmentIso18013Proximity
 import org.multipaz.eventlogger.EventPresentmentUriSchemeOpenID4VP
+import org.multipaz.eventlogger.SimpleEventLogger
 import org.multipaz.eventlogger.toDataItem
 import org.multipaz.prompt.PromptModel
 import org.multipaz.request.MdocRequestedClaim
@@ -97,7 +97,7 @@ fun EventViewerScreen(
     showToast: (message: String) -> Unit
 ) {
     val coroutineScope = rememberUiBoundCoroutineScope { promptModel }
-    val model = SimpleEventLoggerModel(eventLogger, coroutineScope)
+    val model = remember(eventLogger) { SimpleEventLoggerModel(eventLogger, coroutineScope) }
     val events by model.events.collectAsState()
     var showDeleteConfirmationDialog by remember { mutableStateOf(false) }
 

@@ -9,11 +9,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.multipaz.compose.trustmanagement.TrustEntryVicalEntryViewer
+import org.multipaz.compose.trustmanagement.TrustManagerModel
 import org.multipaz.trustmanagement.TrustEntryBasedTrustManager
 
 @Composable
 fun TrustEntryVicalEntryScreen(
-    trustManager: TrustEntryBasedTrustManager,
+    trustManagerModel: TrustManagerModel,
     vicalTrustEntryId: String,
     certNum: Int
 ) {
@@ -25,7 +26,7 @@ fun TrustEntryVicalEntryScreen(
             .padding(8.dp),
     ) {
         TrustEntryVicalEntryViewer(
-            trustManager = trustManager,
+            trustManagerModel = trustManagerModel,
             vicalTrustEntryId = vicalTrustEntryId,
             certNum = certNum
         )

@@ -43,7 +43,7 @@ import org.multipaz.trustmanagement.TrustManager
 @OptIn(ExperimentalResourceApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TrustEntryScreen(
-    trustManager: TrustEntryBasedTrustManager,
+    trustManagerModel: TrustManagerModel,
     trustEntryId: String,
     justImported: Boolean,
     imageLoader: ImageLoader,
@@ -58,10 +58,6 @@ fun TrustEntryScreen(
     val scrollState = rememberScrollState()
     var showDeleteConfirmationDialog by remember { mutableStateOf(false) }
 
-    val trustManagerModel = TrustManagerModel(
-        trustManager = trustManager,
-        coroutineScope = coroutineScope
-    )
     val info = trustManagerModel.trustManagerInfos.collectAsState().value?.find {
         it.entry.identifier == trustEntryId
     } ?: return
@@ -81,7 +77,7 @@ fun TrustEntryScreen(
                     onClick = {
                         coroutineScope.launch {
                             showDeleteConfirmationDialog = false
-                            (trustManager as? TrustManager)?.deleteEntry(info.entry)
+                            (trustManagerModel.trustManager as? TrustManager)?.deleteEntry(info.entry)
                             onBack()
                         }
                     }
@@ -134,7 +130,7 @@ fun TrustEntryScreen(
                     }
                 },
                 actions = {
-                    if (trustManager is TrustManager) {
+                    if (trustManagerModel.trustManager is TrustManager) {
                         IconButton(
                             onClick = { onEdit() }
                         ) {
@@ -164,7 +160,7 @@ fun TrustEntryScreen(
                 .padding(8.dp),
         ) {
             TrustEntryViewer(
-                trustManager = trustManager,
+                trustManagerModel = trustManagerModel,
                 trustEntryId = trustEntryId,
                 justImported = justImported,
                 imageLoader = imageLoader,

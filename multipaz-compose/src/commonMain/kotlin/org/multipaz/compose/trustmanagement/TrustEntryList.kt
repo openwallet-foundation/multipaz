@@ -27,7 +27,7 @@ import org.multipaz.trustmanagement.TrustEntryBasedTrustManager
  * when trust entries are added, removed, or modified. It's using [FloatingItemList] to
  * display items
  *
- * @param trustManager A [TrustEntryBasedTrustManager] holding the trust entries.
+ * @param trustManagerModel A [TrustManagerModel].
  * @param title The title to display at the top of the list.
  * @param imageLoader a [ImageLoader].
  * @param loading A Composable to render when loading entries, normally a [FloatingItemCenteredText].
@@ -37,7 +37,7 @@ import org.multipaz.trustmanagement.TrustEntryBasedTrustManager
  */
 @Composable
 fun TrustEntryList(
-    trustManager: TrustEntryBasedTrustManager,
+    trustManagerModel: TrustManagerModel,
     title: String,
     imageLoader: ImageLoader,
     loading: @Composable () -> Unit = {},
@@ -45,11 +45,6 @@ fun TrustEntryList(
     onTrustEntryClicked: (trustEntry: TrustEntry) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val trustManagerModel = TrustManagerModel(
-        trustManager = trustManager,
-        coroutineScope = coroutineScope
-    )
     val infos = trustManagerModel.trustManagerInfos.collectAsState().value
     FloatingItemList(
         modifier = modifier,

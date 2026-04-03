@@ -1,6 +1,5 @@
 package org.multipaz.testapp.ui
 
-import kotlinx.coroutines.CancellationException
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -9,7 +8,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -24,7 +22,6 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,25 +33,22 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.multipaz.compose.items.FloatingItemCenteredText
 import org.multipaz.compose.pickers.FilePicker
 import org.multipaz.compose.pickers.rememberFilePicker
-import org.multipaz.compose.trustmanagement.TrustEntryInfo
 import org.multipaz.compose.trustmanagement.TrustEntryList
 import org.multipaz.compose.trustmanagement.TrustManagerModel
 import org.multipaz.crypto.X509Cert
 import org.multipaz.mdoc.rical.SignedRical
 import org.multipaz.mdoc.vical.SignedVical
-import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.trustmanagement.TrustEntryAlreadyExistsException
 import org.multipaz.trustmanagement.TrustEntryBasedTrustManager
 import org.multipaz.trustmanagement.TrustManager
+import org.multipaz.trustmanagement.TrustMetadata
 
 @Composable
 private fun FloatingActionButtonMenu(
@@ -142,8 +136,8 @@ private fun FloatingActionButtonMenu(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrustManagerScreen(
-    builtIn: TrustEntryBasedTrustManager,
-    user: TrustManager,
+    builtIn: TrustManagerModel,
+    user: TrustManagerModel,
     isVical: Boolean,
     imageLoader: ImageLoader,
     onTrustEntryClicked: (trustManagerId: String, trustEntryId: String) -> Unit,
@@ -169,11 +163,11 @@ fun TrustManagerScreen(
                 coroutineScope.launch {
                     try {
                         val cert = X509Cert.fromPem(pemEncoding = files[0].toByteArray().decodeToString())
-                        val entry = user.addX509Cert(
+                        val entry = (user.trustManager as TrustManager).addX509Cert(
                             certificate = cert,
                             metadata = TrustMetadata()
                         )
-                        onTrustEntryAdded(user.identifier, entry.identifier)
+                        onTrustEntryAdded(user.trustManager.identifier, entry.identifier)
                     } catch (_: TrustEntryAlreadyExistsException) {
                         showImportErrorDialog.value = "A certificate with this Subject Key Identifier already exists"
                     } catch (e: Exception) {
@@ -202,11 +196,11 @@ fun TrustManagerScreen(
                             encodedSignedVical = encodedSignedVical.toByteArray(),
                             disableSignatureVerification = false
                         )
-                        val entry = user.addVical(
+                        val entry = (user.trustManager as TrustManager).addVical(
                             encodedSignedVical = encodedSignedVical,
                             metadata = TrustMetadata()
                         )
-                        onTrustEntryAdded(user.identifier, entry.identifier)
+                        onTrustEntryAdded(user.trustManager.identifier, entry.identifier)
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
                         e.printStackTrace()
@@ -233,11 +227,11 @@ fun TrustManagerScreen(
                             encodedSignedRical = encodedSignedRical.toByteArray(),
                             disableSignatureVerification = false
                         )
-                        val entry = user.addRical(
+                        val entry = (user.trustManager as TrustManager).addRical(
                             encodedSignedRical = encodedSignedRical,
                             metadata = TrustMetadata()
                         )
-                        onTrustEntryAdded(user.identifier, entry.identifier)
+                        onTrustEntryAdded(user.trustManager.identifier, entry.identifier)
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
                         e.printStackTrace()
@@ -284,23 +278,23 @@ fun TrustManagerScreen(
                 .padding(8.dp),
         ) {
             TrustEntryList(
-                trustManager = builtIn,
+                trustManagerModel = builtIn,
                 title = "Built-in",
                 imageLoader = imageLoader,
                 loading = { FloatingItemCenteredText(text = "Loading...") },
                 noItems = { FloatingItemCenteredText(text = "No built-in trust points") },
                 onTrustEntryClicked = { trustEntry ->
-                    onTrustEntryClicked(builtIn.identifier, trustEntry.identifier)
+                    onTrustEntryClicked(builtIn.trustManager.identifier, trustEntry.identifier)
                 }
             )
             TrustEntryList(
-                trustManager = user,
+                trustManagerModel = user,
                 title = "Manually imported",
                 imageLoader = imageLoader,
                 loading = { FloatingItemCenteredText(text = "Loading...") },
                 noItems = { FloatingItemCenteredText(text = "Certificates and trust lists manually imported will appear in this list") },
                 onTrustEntryClicked = { trustEntry ->
-                    onTrustEntryClicked(user.identifier, trustEntry.identifier)
+                    onTrustEntryClicked(user.trustManager.identifier, trustEntry.identifier)
                 }
             )
         }

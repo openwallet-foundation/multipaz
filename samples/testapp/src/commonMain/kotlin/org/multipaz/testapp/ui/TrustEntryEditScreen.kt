@@ -39,7 +39,7 @@ import org.multipaz.trustmanagement.TrustMetadata
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrustEntryEditScreen(
-    trustManager: TrustManager,
+    trustManagerModel: TrustManagerModel,
     trustEntryId: String,
     imageLoader: ImageLoader,
     onBack: () -> Unit,
@@ -49,10 +49,6 @@ fun TrustEntryEditScreen(
     val scrollState = rememberScrollState()
     var showConfirmationBeforeExiting by remember { mutableStateOf(false) }
 
-    val trustManagerModel = TrustManagerModel(
-        trustManager = trustManager,
-        coroutineScope = coroutineScope
-    )
     val info = trustManagerModel.trustManagerInfos.collectAsState().value?.find {
         it.entry.identifier == trustEntryId
     } ?: return
@@ -124,7 +120,7 @@ fun TrustEntryEditScreen(
                         enabled = (newMetadata.value != info.entry.metadata),
                         onClick = {
                             coroutineScope.launch {
-                                trustManager.updateMetadata(
+                                (trustManagerModel.trustManager as TrustManager).updateMetadata(
                                     entry = info.entry,
                                     metadata = newMetadata.value
                                 )

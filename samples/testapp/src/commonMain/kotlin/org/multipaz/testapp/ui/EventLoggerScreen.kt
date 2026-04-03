@@ -45,12 +45,12 @@ import org.multipaz.compose.items.FloatingItemText
 import org.multipaz.datetime.formatLocalized
 import org.multipaz.eventlogger.Event
 import org.multipaz.eventlogger.EventPresentment
-import org.multipaz.eventlogger.SimpleEventLogger
 import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsMdocApi
 import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsOpenID4VP
 import org.multipaz.eventlogger.EventPresentmentIso18013AnnexA
 import org.multipaz.eventlogger.EventPresentmentIso18013Proximity
 import org.multipaz.eventlogger.EventPresentmentUriSchemeOpenID4VP
+import org.multipaz.eventlogger.SimpleEventLogger
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,7 +63,7 @@ fun EventLoggerScreen(
     showToast: (message: String) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val model = SimpleEventLoggerModel(eventLogger, coroutineScope)
+    val model = remember(eventLogger) { SimpleEventLoggerModel(eventLogger, coroutineScope) }
     val events by model.events.collectAsState()
     var showDeleteConfirmationDialog by remember { mutableStateOf(false) }
 

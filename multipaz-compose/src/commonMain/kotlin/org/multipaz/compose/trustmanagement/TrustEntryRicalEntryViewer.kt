@@ -8,6 +8,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,22 +30,16 @@ import org.multipaz.trustmanagement.TrustEntryBasedTrustManager
  * A Composable that displays the details of a specific individual certificate
  * embedded within a larger RICAL trust entry.
  *
- * @param trustManager The [TrustEntryBasedTrustManager] holding the root RICAL trust entry.
+ * @param trustManagerModel A [TrustManagerModel].
  * @param ricalTrustEntryId The identifier of the parent RICAL trust entry.
  * @param certNum The index position of the specific certificate within the RICAL's certificate list.
  */
 @Composable
 fun TrustEntryRicalEntryViewer(
-    trustManager: TrustEntryBasedTrustManager,
+    trustManagerModel: TrustManagerModel,
     ricalTrustEntryId: String,
     certNum: Int
 ) {
-    val coroutineScope = rememberCoroutineScope()
-
-    val trustManagerModel = TrustManagerModel(
-        trustManager = trustManager,
-        coroutineScope = coroutineScope
-    )
     val info = trustManagerModel.trustManagerInfos.collectAsState().value?.find {
         it.entry.identifier == ricalTrustEntryId
     } ?: return
