@@ -44,7 +44,7 @@ class ProvisioningSupport(
     }
 
     private val lock = Mutex()
-    private val pendingLinksByState = mutableMapOf<String, SendChannel<String>>()
+    private val pendingLinksByState = mutableMapOf<String, SendChannel<String?>>()
 
     private lateinit var backend: OpenID4VCIBackend
     private lateinit var preferences: OpenID4VCIClientPreferences
@@ -123,8 +123,17 @@ class ProvisioningSupport(
         }
     }
 
-    suspend fun waitForAppLinkInvocation(state: String): String {
-        val channel = Channel<String>(Channel.RENDEZVOUS)
+    suspend fun cancelAllPendingAppLinks() {
+        lock.withLock {
+            for (channel in pendingLinksByState.values) {
+                channel.trySend(null)
+            }
+            pendingLinksByState.clear()
+        }
+    }
+
+    suspend fun waitForAppLinkInvocation(state: String): String? {
+        val channel = Channel<String?>(Channel.RENDEZVOUS)
         lock.withLock {
             pendingLinksByState[state] = channel
         }

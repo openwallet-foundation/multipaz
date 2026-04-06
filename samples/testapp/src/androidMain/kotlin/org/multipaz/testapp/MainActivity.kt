@@ -45,6 +45,7 @@ class MainActivity : FragmentActivity() {
                 Logger.w(TAG, "CardEmulation.categoryAllowsForegroundPreference(CATEGORY_OTHER) returned false")
             }
         }
+        App.existingApp()?.cancelAllPendingAppLinks()
     }
 
     override fun onPause() {

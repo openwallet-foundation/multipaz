@@ -16,15 +16,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,11 +35,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -71,6 +74,7 @@ import org.multipaz.provisioning.ProvisioningMetadata
 import org.multipaz.provisioning.ProvisioningModel
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
 import org.multipaz.provisioning.openid4vci.OpenID4VCIClientPreferences
+import org.multipaz.provisioning.openid4vci.OpenID4VCILocalBackend
 import org.multipaz.securearea.PassphraseConstraints
 import org.multipaz.util.Logger
 import kotlin.time.Duration.Companion.seconds
@@ -90,53 +94,33 @@ import kotlin.time.Duration.Companion.seconds
  * session is assigned a unique state value (passed as url parameter on the redirect url). It is
  * important that url with the correct state parameter value is returned by
  * [waitForRedirectLinkInvocation]. This is important in all cases to avoid contaminating
- * an active authorization session with stale URLs (e.g. from a browser tab)
+ * an active authorization session with stale URLs (e.g. from a browser tab); this function
+ * should return null if navigation is not likely to happen and the session should be
+ * treated as abandoned.
  *
  * @param modifier Compose [Modifier] for this UI control
  * @param provisioningModel model that manages credential provisioning
  * @param waitForRedirectLinkInvocation wait for redirect url with the given state parameter
  *  being navigated to in the browser.
+ * @param clientPreferences preferences for OpenID4VCI protocol
+ * @param backend OpenID4VCI protocol support object
  * @param onFinishedProvisioning called when the document is provisioned (or it fails provisioning)
  * @param issuerUrl if given, starts provisioning from the metadata exposed by the given issuer,
  *  credential offer is not needed in this case
- * @param clientPreferences preferences for OpenID4VCI protocol, must be given if [issuerUrl] is given
- * @param backend OpenID4VCI protocol support object, must be given if [issuerUrl] is given
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProvisioningBottomSheet(
     modifier: Modifier = Modifier,
     provisioningModel: ProvisioningModel,
-    waitForRedirectLinkInvocation: suspend (state: String) -> String,
+    waitForRedirectLinkInvocation: suspend (state: String) -> String?,
+    clientPreferences: Deferred<OpenID4VCIClientPreferences>,
+    backend: Deferred<OpenID4VCIBackend>,
     onFinishedProvisioning: (document: Document?, isNewlyIssued: Boolean) -> Unit = { _, _ -> },
     issuerUrl: String? = null,
-    clientPreferences: Flow<OpenID4VCIClientPreferences?>,
-    backend: Flow<OpenID4VCIBackend?>,
 ) {
     val provisioningState = provisioningModel.state.collectAsState().value
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val issuerMetadata = remember { mutableStateOf<ProvisioningMetadata?>(null) }
-    val issuerError = remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(issuerUrl) {
-        issuerMetadata.value = try {
-            issuerUrl?.let {
-                provisioningModel.getOpenID4VCIIssuerMetadata(
-                    issuerUrl = issuerUrl,
-                    clientPreferences = clientPreferences.first()!!
-                )
-            }?.also {
-                sheetState.expand()
-            }
-        } catch (err: CancellationException) {
-            issuerError.value = "Cancelled"  // for completeness, should never show up in UI
-            throw err
-        } catch (err: Exception) {
-            issuerError.value = err.message
-            Logger.e(TAG, "Could not load metadata", err)
-            null
-        }
-    }
 
     if (provisioningState !== ProvisioningModel.Idle || issuerUrl != null) {
         ModalBottomSheet(
@@ -148,6 +132,7 @@ fun ProvisioningBottomSheet(
             dragHandle = null,
             containerColor = MaterialTheme.colorScheme.surfaceBright,
         ) {
+            val issuerMetadata = remember { mutableStateOf<ProvisioningMetadata?>(null) }
             val metadata = provisioningModel.metadata.collectAsState().value
             ProvisioningHeader(
                 provisioningMetadata = metadata,
@@ -157,37 +142,18 @@ fun ProvisioningBottomSheet(
                     provisioningModel.cancel()
                 }
             )
-            val errorText = issuerError.value
-            if (errorText != null) {
-                Text(
-                    modifier = Modifier
-                        .padding(16.dp, 4.dp),
-                    text = stringResource(Res.string.issuer_loading_failed)
-                )
-                Text(
-                    modifier = Modifier.padding(16.dp, 4.dp),
-                    text = errorText
-                )
-            } else if (provisioningState == ProvisioningModel.Idle
-                    && issuerMetadata.value == null) {
-                Text(
-                    modifier = Modifier
-                        .padding(16.dp, 4.dp),
-                    text = stringResource(Res.string.issuer_loading)
-                )
-            } else {
-                ProvisioningBottomSheetContent(
-                    provisioningModel = provisioningModel,
-                    provisioningMetadata = metadata,
-                    provisioningState = provisioningState,
-                    waitForRedirectLinkInvocation = waitForRedirectLinkInvocation,
-                    onFinishedProvisioning = onFinishedProvisioning,
-                    issuerUrl = issuerUrl,
-                    issuerMetadata = issuerMetadata.value,
-                    clientPreferences = clientPreferences,
-                    backend = backend,
-                )
-            }
+            ProvisioningBottomSheetBody(
+                provisioningModel = provisioningModel,
+                provisioningMetadata = metadata,
+                provisioningState = provisioningState,
+                waitForRedirectLinkInvocation = waitForRedirectLinkInvocation,
+                onFinishedProvisioning = onFinishedProvisioning,
+                sheetState = sheetState,
+                issuerUrl = issuerUrl,
+                issuerMetadata = issuerMetadata,
+                clientPreferences = clientPreferences,
+                backend = backend,
+            )
         }
     }
 }
@@ -237,17 +203,120 @@ private fun ProvisioningHeader(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProvisioningBottomSheetBody(
+    provisioningModel: ProvisioningModel,
+    provisioningMetadata: ProvisioningMetadata?,
+    provisioningState: ProvisioningModel.State,
+    waitForRedirectLinkInvocation: suspend (state: String) -> String?,
+    onFinishedProvisioning: (document: Document?, isNewlyIssued: Boolean) -> Unit,
+    sheetState: SheetState,
+    issuerUrl: String?,
+    issuerMetadata: MutableState<ProvisioningMetadata?>,
+    clientPreferences: Deferred<OpenID4VCIClientPreferences>,
+    backend: Deferred<OpenID4VCIBackend>,
+) {
+    val clientPreferencesHolder = remember { mutableStateOf<OpenID4VCIClientPreferences?>(null) }
+    val backendHolder = remember { mutableStateOf<OpenID4VCIBackend?>(null) }
+    val issuerError = remember { mutableStateOf<String?>(null) }
+    val preferences = clientPreferencesHolder.value
+    val be = backendHolder.value
+
+    LaunchedEffect(clientPreferences) {
+        try {
+            clientPreferencesHolder.value = clientPreferences.await()
+        } catch (err: CancellationException) {
+            issuerError.value = "Cancelled"  // for completeness, should never show up in UI
+            throw err
+        } catch (err: Exception) {
+            issuerError.value = err.message
+            Logger.e(TAG, "Could not load OpenID4VCI client preferences", err)
+        }
+    }
+    LaunchedEffect(backend) {
+        try {
+            backendHolder.value = backend.await()
+        } catch (err: CancellationException) {
+            issuerError.value = "Cancelled"  // for completeness, should never show up in UI
+            throw err
+        } catch (err: Exception) {
+            issuerError.value = err.message
+            Logger.e(TAG, "Could not load OpenID4VCI backend", err)
+        }
+    }
+
+    val coroutineScope = rememberCoroutineScope()
+    LaunchedEffect(issuerUrl, clientPreferences) {
+        issuerMetadata.value = try {
+            issuerUrl?.let {
+                provisioningModel.getOpenID4VCIIssuerMetadata(
+                    issuerUrl = issuerUrl,
+                    clientPreferences = clientPreferences.await()
+                )
+            }
+        } catch (err: CancellationException) {
+            issuerError.value = "Cancelled"  // for completeness, should never show up in UI
+            throw err
+        } catch (err: Exception) {
+            issuerError.value = err.message
+            Logger.e(TAG, "Could not load metadata", err)
+            null
+        }?.also {
+            coroutineScope.launch {
+                delay(50)
+                // this can get cancelled, we do not want to be affected by it
+                sheetState.expand()
+            }
+        }
+    }
+    val errorText = issuerError.value
+    if (errorText != null) {
+        Text(
+            modifier = Modifier
+                .padding(16.dp, 4.dp),
+            text = stringResource(Res.string.issuer_loading_failed)
+        )
+        if (errorText.isNotEmpty()) {
+            Text(
+                modifier = Modifier.padding(16.dp, 4.dp),
+                text = errorText
+            )
+        }
+    } else if (preferences == null || be == null || (
+                provisioningState == ProvisioningModel.Idle
+                    && issuerMetadata.value == null)) {
+        Text(
+            modifier = Modifier
+                .padding(16.dp, 4.dp),
+            text = stringResource(Res.string.issuer_loading)
+        )
+    } else {
+        ProvisioningBottomSheetContent(
+            provisioningModel = provisioningModel,
+            provisioningMetadata = provisioningMetadata,
+            provisioningState = provisioningState,
+            waitForRedirectLinkInvocation = waitForRedirectLinkInvocation,
+            onFinishedProvisioning = onFinishedProvisioning,
+            issuerUrl = issuerUrl,
+            issuerMetadata = issuerMetadata.value,
+            clientPreferences = preferences,
+            backend = be,
+       )
+    }
+}
+
 @Composable
 private fun ProvisioningBottomSheetContent(
     provisioningModel: ProvisioningModel,
     provisioningMetadata: ProvisioningMetadata?,
     provisioningState: ProvisioningModel.State,
-    waitForRedirectLinkInvocation: suspend (state: String) -> String,
+    waitForRedirectLinkInvocation: suspend (state: String) -> String?,
     onFinishedProvisioning: (document: Document?, isNewlyIssued: Boolean) -> Unit,
     issuerUrl: String?,
     issuerMetadata: ProvisioningMetadata?,
-    clientPreferences: Flow<OpenID4VCIClientPreferences?>,
-    backend: Flow<OpenID4VCIBackend?>,
+    clientPreferences: OpenID4VCIClientPreferences?,
+    backend: OpenID4VCIBackend?,
 ) {
     val coroutineScope = rememberCoroutineScope()
     val credentialIdState = remember { mutableStateOf<String?>(null) }
@@ -260,7 +329,7 @@ private fun ProvisioningBottomSheetContent(
         )
         issuerMetadata!!.credentials
     } else {
-        // Just displaying the selected credential
+        // Just displaying the selected credential (or the credential from the credential offer)
         provisioningMetadata?.credentials
             ?: issuerMetadata?.let { metadata ->
                 credentialIdState.value?.let { credentialId ->
@@ -294,8 +363,8 @@ private fun ProvisioningBottomSheetContent(
                         provisioningModel.launchOpenID4VCIProvisioning(
                             issuerUrl = issuerUrl!!,
                             credentialId = credentialId,
-                            clientPreferences = clientPreferences.first()!!,
-                            backend = backend.first()!!
+                            clientPreferences = clientPreferences!!,
+                            backend = backend!!
                         )
                     }
                 }
@@ -311,7 +380,9 @@ private fun ProvisioningBottomSheetContent(
         is ProvisioningModel.Authorizing -> {
             Authorize(
                 provisioningModel = provisioningModel,
+                clientPreferences = clientPreferences,
                 waitForRedirectLinkInvocation = waitForRedirectLinkInvocation,
+                onFinishedProvisioning = onFinishedProvisioning,
                 challenges = provisioningState.authorizationChallenges
             )
         }
@@ -392,14 +463,18 @@ private fun ProvisioningBottomSheetContent(
 @Composable
 private fun Authorize(
     provisioningModel: ProvisioningModel,
-    waitForRedirectLinkInvocation: suspend (state: String) -> String,
+    clientPreferences: OpenID4VCIClientPreferences?,
+    waitForRedirectLinkInvocation: suspend (state: String) -> String?,
+    onFinishedProvisioning: (document: Document?, isNewlyIssued: Boolean) -> Unit,
     challenges: List<AuthorizationChallenge>
 ) {
     when (val challenge = challenges.first()) {
         is AuthorizationChallenge.OAuth ->
             EvidenceRequestWebView(
                 provisioningModel = provisioningModel,
+                clientPreferences = clientPreferences!!,
                 waitForRedirectLinkInvocation = waitForRedirectLinkInvocation,
+                onFinishedProvisioning = onFinishedProvisioning,
                 evidenceRequest = challenge
             )
         is AuthorizationChallenge.SecretText ->
@@ -413,22 +488,29 @@ private fun Authorize(
 @Composable
 private fun EvidenceRequestWebView(
     provisioningModel: ProvisioningModel,
-    waitForRedirectLinkInvocation: suspend (state: String) -> String,
+    clientPreferences: OpenID4VCIClientPreferences,
+    waitForRedirectLinkInvocation: suspend (state: String) -> String?,
+    onFinishedProvisioning: (document: Document?, isNewlyIssued: Boolean) -> Unit,
     evidenceRequest: AuthorizationChallenge.OAuth
 ) {
-    // NB: these scopes will be cancelled when navigating outside of this screen.
-    LaunchedEffect(evidenceRequest.url) {
-        val invokedUrl = waitForRedirectLinkInvocation(evidenceRequest.state)
-        provisioningModel.provideAuthorizationResponse(
-            AuthorizationResponse.OAuth(evidenceRequest.id, invokedUrl)
-        )
-    }
-    val uriHandler = LocalUriHandler.current
-    LaunchedEffect(evidenceRequest.url) {
-        // Launch the browser
-        // TODO: use Chrome Custom Tabs instead?
-        uriHandler.openUri(evidenceRequest.url)
-    }
+    EvidenceRequestOAuthBrowser(
+        url = evidenceRequest.url,
+        redirectUrl = clientPreferences.redirectUrl,
+        waitForRedirect = { waitForRedirectLinkInvocation(evidenceRequest.state) },
+        onRedirectReceived = { invokedUrl ->
+            if (invokedUrl != null) {
+                provisioningModel.provideAuthorizationResponse(
+                    response = AuthorizationResponse.OAuth(
+                        id = evidenceRequest.id,
+                        parameterizedRedirectUrl = invokedUrl
+                    )
+                )
+            } else {
+                onFinishedProvisioning.invoke(null, false)
+                provisioningModel.cancel()
+            }
+        }
+    )
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),

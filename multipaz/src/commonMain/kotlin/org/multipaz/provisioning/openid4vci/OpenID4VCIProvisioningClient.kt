@@ -111,7 +111,7 @@ internal class OpenID4VCIProvisioningClient(
                 append("&request_uri=")
                 append(requestUri.encodeURLParameter())
             },
-            state = redirectState!!
+            state = redirectState!!,
         ))
     }
 

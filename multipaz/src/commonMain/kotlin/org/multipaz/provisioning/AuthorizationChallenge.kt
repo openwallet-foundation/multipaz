@@ -23,7 +23,7 @@ sealed class AuthorizationChallenge {
         /** Authorization page url. */
         val url: String,
         /** State url parameter that will be used in redirect url. */
-        val state: String
+        val state: String,
     ): AuthorizationChallenge()
 
     /** Request the user to enter text (which is assumed to be sensitive) like PIN or password. */

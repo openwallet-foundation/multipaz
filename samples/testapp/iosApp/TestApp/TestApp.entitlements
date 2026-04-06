@@ -5,6 +5,7 @@
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:apps.multipaz.org</string>
+		<string>webcredentials:apps.multipaz.org</string>
 	</array>
 	<key>com.apple.developer.identity-document-services.document-provider.mobile-document-types</key>
 	<array>

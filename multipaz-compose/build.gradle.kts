@@ -136,6 +136,7 @@ kotlin {
                 implementation(libs.androidx.credentials)
                 implementation(libs.androidx.credentials.registry.provider)
                 implementation(libs.ktor.client.android)
+                implementation(libs.androidx.browser)
             }
         }
     }

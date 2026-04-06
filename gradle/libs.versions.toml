@@ -21,6 +21,7 @@ bouncy-castle = "1.83"
 tink = "1.19.0"
 ksp = "2.3.3"
 androidx-biometrics = "1.2.0-alpha05"
+androidx-browser = "1.8.0"
 uiToolingPreview = "1.9.5"
 volley = "1.2.1"
 cbor = "0.9"
@@ -93,6 +94,7 @@ bouncy-castle-bcpkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref
 tink = { group = "com.google.crypto.tink", name = "tink-android", version.ref = "tink"}
 ksp-symbol-processing-api = {module="com.google.devtools.ksp:symbol-processing-api", version.ref="ksp"}
 androidx-biometrics = { module = "androidx.biometric:biometric", version.ref = "androidx-biometrics" }
+androidx-browser = { module = "androidx.browser:browser", version.ref = "androidx-browser" }
 volley = { module = "com.android.volley:volley", version.ref = "volley" }
 cbor = { module = "co.nstant.in:cbor", version.ref = "cbor" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camera" }

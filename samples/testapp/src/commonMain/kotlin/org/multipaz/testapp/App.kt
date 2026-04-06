@@ -43,9 +43,11 @@ import io.ktor.http.Url
 import io.ktor.http.decodeURLPart
 import io.ktor.http.protocolWithAuthority
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
@@ -229,7 +231,8 @@ class App private constructor (val promptModel: PromptModel) {
 
     lateinit var zkSystemRepository: ZkSystemRepository
     private val initLock = Mutex()
-    private var initialized = false
+    var initialized = false
+        private set
 
     fun getPresentmentSource(): PresentmentSource {
         val useAuth = settingsModel.presentmentRequireAuthentication.value
@@ -865,6 +868,12 @@ class App private constructor (val promptModel: PromptModel) {
         }
     }
 
+    fun cancelAllPendingAppLinks() {
+        CoroutineScope(Dispatchers.Default).launch {
+            provisioningSupport.cancelAllPendingAppLinks()
+        }
+    }
+
     fun importMpzPass(encodedMpzPass: ByteArray) {
         CoroutineScope(Dispatchers.Default).launch {
             mpzPassesToImport.send(ByteString(encodedMpzPass))
@@ -910,6 +919,8 @@ class App private constructor (val promptModel: PromptModel) {
             }
             return app!!
         }
+
+        fun existingApp(): App? = app?.let { if (it.initialized) it else null }
     }
 
     private suspend fun observeModeInit() {
@@ -1026,8 +1037,8 @@ class App private constructor (val promptModel: PromptModel) {
                     }
                 },
                 issuerUrl = provisioningIssuerUrl.value,
-                clientPreferences = flow { provisioningSupport.getOpenID4VCIClientPreferences() },
-                backend = flow { provisioningSupport.getOpenID4VCIBackend() }
+                clientPreferences = CompletableDeferred(provisioningSupport.getOpenID4VCIClientPreferences()),
+                backend = CompletableDeferred(provisioningSupport.getOpenID4VCIBackend())
             )
             NavHost(
                 navController = navController,

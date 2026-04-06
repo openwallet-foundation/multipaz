@@ -144,7 +144,7 @@ private suspend fun generateAppleAppSiteAssociationJson(): JsonElement {
             }
         }
         putJsonObject("webcredentials") {
-            put("appIDs", appIds)
+            put("apps", appIds)
         }
     }
 }

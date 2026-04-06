@@ -7,6 +7,7 @@ import DeviceCheck
 import CoreImage
 import CommonCrypto
 import IdentityDocumentServices
+import AuthenticationServices
 
 @objc public class SwiftBridge : NSObject {
     @objc(sha1:) public class func sha1(data: Data) -> Data {
@@ -525,6 +526,84 @@ import IdentityDocumentServices
             }
         }
         return ""
+    }
+
+    // Launches ASWebAuthenticationSession with the iOS 17.4+ Callback API that supports
+    // HTTPS redirect URLs. Older iOS versions and the legacy callbackURLScheme-based API
+    // cannot intercept HTTPS redirects, so this bridge function is needed to access the
+    // newer Swift-only API from Kotlin/Native.
+    //
+    // Parameters:
+    //   urlString: the OAuth authorization page URL
+    //   callbackHost: the host component of the redirect URL (e.g. "apps.multipaz.org")
+    //   callbackPath: the path prefix of the redirect URL (e.g. "/landing/")
+    //   ephemeral: if false, shares cookies with Safari (needed for OpenID flows)
+    //   completionHandler: called with (redirectURL, error) when the session completes
+    @objc(launchOAuthSession:::::) public class func launchOAuthSession(
+        urlString: String,
+        callbackHost: String,
+        callbackPath: String,
+        ephemeral: Bool,
+        completionHandler: @escaping (String?, Error?) -> Void
+    ) -> Void {
+        NSLog("In launchOAuthSession: \(urlString), \(callbackHost), \(callbackPath)")
+        
+        guard let url = URL(string: urlString) else {
+            completionHandler(nil, NSError(
+                domain: "org.multipaz",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid URL: \(urlString)"]
+            ))
+            return
+        }
+        
+        if #available(iOS 17.4, *) {
+            DispatchQueue.main.async {
+                // presentationContextProvider is a weak property on
+                // ASWebAuthenticationSession, so we must hold a strong reference
+                // to prevent it from being deallocated before the session uses it.
+                let contextProvider = WebAuthContextProvider()
+                NSLog("Starting new ASWebAuthenticationSession")
+                let session = ASWebAuthenticationSession(
+                    url: url,
+                    callback: .https(host: callbackHost, path: callbackPath)
+                ) { callbackURL, error in
+                    // prevent contextProvider from being collected while session is active
+                    _ = contextProvider
+                    if let callbackURL = callbackURL {
+                        completionHandler(callbackURL.absoluteString, nil)
+                    } else if let error = error {
+                        NSLog("Encountered an error during OAuth session: \(error)")
+                        completionHandler(nil, error)
+                    } else {
+                        completionHandler(nil, NSError(
+                            domain: "org.multipaz",
+                            code: 3,
+                            userInfo: [NSLocalizedDescriptionKey: "No callback URL and no error"]
+                        ))
+                    }
+                }
+                session.prefersEphemeralWebBrowserSession = ephemeral
+                session.presentationContextProvider = contextProvider
+                session.start()
+            }
+        } else {
+            completionHandler(nil, NSError(
+                domain: "org.multipaz",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "HTTPS callback requires iOS 17.4+"]
+            ))
+        }
+    }
+}
+
+// Provides the presentation anchor (window) for ASWebAuthenticationSession.
+private class WebAuthContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        return UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow } ?? ASPresentationAnchor()
     }
 }
 
