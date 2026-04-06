@@ -155,6 +155,11 @@ class Document internal constructor(
     val mpzPassId: String? get() = data.mpzPassId
 
     /**
+     * The version of the pass if this document is imported from a [org.multipaz.mpzpass.MpzPass].
+     */
+    val mpzPassVersion: Long? get() = data.mpzPassVersion
+
+    /**
      * A [Tags] for storing application-specific data.
      *
      * Applications must use collision-resistant keys when using the [Tags] instance.
@@ -173,6 +178,7 @@ class Document internal constructor(
                     issuerLogo = data.issuerLogo,
                     authorizationData = data.authorizationData,
                     mpzPassId = data.mpzPassId,
+                    mpzPassVersion = data.mpzPassVersion,
                     metadata = data.metadata,
                     tagsData = if (newData.asMap.isEmpty()) {
                         null
@@ -435,6 +441,7 @@ class Document internal constructor(
                 issuerLogo = data.issuerLogo,
                 authorizationData = data.authorizationData,
                 mpzPassId = data.mpzPassId,
+                mpzPassVersion = data.mpzPassVersion,
                 metadata = metadata,
                 tags = Tags.Editor(this@Document.tags._tags)
             )
@@ -455,6 +462,7 @@ class Document internal constructor(
                 issuerLogo = editor.issuerLogo,
                 authorizationData = editor.authorizationData,
                 mpzPassId = editor.mpzPassId,
+                mpzPassVersion = editor.mpzPassVersion,
                 metadata = editor.metadata?.serialize(),
                 tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) }
             )
@@ -484,6 +492,7 @@ class Document internal constructor(
      * @property issuerLogo An image that represents the issuer of the document in the UI.
      * @property authorizationData Saved authorization data to refresh credentials, possibly without requiring user to re-authorize.
      * @property mpzPassId The unique identifier if this document is imported from a [org.multipaz.mpzpass.MpzPass].
+     * @property mpzPassVersion The version if this document is imported from a [org.multipaz.mpzpass.MpzPass].
      * @property metadata A [AbstractDocumentMetadata] for storing application-specific data.
      * @property tags A [Tags] for storing application-specific data.
      */
@@ -496,6 +505,7 @@ class Document internal constructor(
         var issuerLogo: ByteString?,
         var authorizationData: ByteString?,
         var mpzPassId: String?,
+        var mpzPassVersion: Long?,
         var metadata: AbstractDocumentMetadata?,
         val tags: Tags.Editor
     )

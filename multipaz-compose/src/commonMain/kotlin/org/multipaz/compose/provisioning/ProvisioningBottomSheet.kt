@@ -38,13 +38,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.ByteString
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.PassphraseEntryField
 import org.multipaz.compose.decodeImage
 import org.multipaz.document.Document
-import org.multipaz.provisioning.ProvisioningModel
 import org.multipaz.multipaz_compose.generated.resources.Res
 import org.multipaz.multipaz_compose.generated.resources.issuer_loading
 import org.multipaz.multipaz_compose.generated.resources.issuer_loading_failed
@@ -55,18 +56,19 @@ import org.multipaz.multipaz_compose.generated.resources.provisioning_cancel_but
 import org.multipaz.multipaz_compose.generated.resources.provisioning_connected
 import org.multipaz.multipaz_compose.generated.resources.provisioning_credentials_issued
 import org.multipaz.multipaz_compose.generated.resources.provisioning_error
-import org.multipaz.multipaz_compose.generated.resources.provisioning_title
 import org.multipaz.multipaz_compose.generated.resources.provisioning_initial
 import org.multipaz.multipaz_compose.generated.resources.provisioning_processing_authorization
 import org.multipaz.multipaz_compose.generated.resources.provisioning_requestion_credentials
 import org.multipaz.multipaz_compose.generated.resources.provisioning_retry
 import org.multipaz.multipaz_compose.generated.resources.provisioning_select_credential
+import org.multipaz.multipaz_compose.generated.resources.provisioning_title
 import org.multipaz.provisioning.AuthorizationChallenge
 import org.multipaz.provisioning.AuthorizationException
 import org.multipaz.provisioning.AuthorizationResponse
 import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.provisioning.CredentialMetadata
 import org.multipaz.provisioning.ProvisioningMetadata
+import org.multipaz.provisioning.ProvisioningModel
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
 import org.multipaz.provisioning.openid4vci.OpenID4VCIClientPreferences
 import org.multipaz.securearea.PassphraseConstraints
@@ -108,8 +110,8 @@ fun ProvisioningBottomSheet(
     waitForRedirectLinkInvocation: suspend (state: String) -> String,
     onFinishedProvisioning: (document: Document?, isNewlyIssued: Boolean) -> Unit = { _, _ -> },
     issuerUrl: String? = null,
-    clientPreferences: OpenID4VCIClientPreferences? = null,
-    backend: OpenID4VCIBackend? = null,
+    clientPreferences: Flow<OpenID4VCIClientPreferences?>,
+    backend: Flow<OpenID4VCIBackend?>,
 ) {
     val provisioningState = provisioningModel.state.collectAsState().value
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -121,7 +123,7 @@ fun ProvisioningBottomSheet(
             issuerUrl?.let {
                 provisioningModel.getOpenID4VCIIssuerMetadata(
                     issuerUrl = issuerUrl,
-                    clientPreferences = clientPreferences!!,
+                    clientPreferences = clientPreferences.first()!!
                 )
             }?.also {
                 sheetState.expand()
@@ -244,9 +246,10 @@ private fun ProvisioningBottomSheetContent(
     onFinishedProvisioning: (document: Document?, isNewlyIssued: Boolean) -> Unit,
     issuerUrl: String?,
     issuerMetadata: ProvisioningMetadata?,
-    clientPreferences: OpenID4VCIClientPreferences?,
-    backend: OpenID4VCIBackend?,
+    clientPreferences: Flow<OpenID4VCIClientPreferences?>,
+    backend: Flow<OpenID4VCIBackend?>,
 ) {
+    val coroutineScope = rememberCoroutineScope()
     val credentialIdState = remember { mutableStateOf<String?>(null) }
     val credentialMap = if (provisioningState == ProvisioningModel.Idle) {
         // Selecting the credential
@@ -287,12 +290,14 @@ private fun ProvisioningBottomSheetContent(
                 // Selecting a credential
                 { credentialId ->
                     credentialIdState.value = credentialId
-                    provisioningModel.launchOpenID4VCIProvisioning(
-                        issuerUrl = issuerUrl!!,
-                        credentialId = credentialId,
-                        clientPreferences = clientPreferences!!,
-                        backend = backend!!
-                    )
+                    coroutineScope.launch {
+                        provisioningModel.launchOpenID4VCIProvisioning(
+                            issuerUrl = issuerUrl!!,
+                            credentialId = credentialId,
+                            clientPreferences = clientPreferences.first()!!,
+                            backend = backend.first()!!
+                        )
+                    }
                 }
             } else {
                 // Just displaying selected credential

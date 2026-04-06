@@ -274,11 +274,13 @@ class DocumentStore private constructor(
     /**
      * Imports a [MpzPass] into a [DocumentStore].
      *
-     * The returned document will have the [Document.provisioned] flag set to `true` and [Document.mpzPassId]
-     * will be set to [MpzPass.uniqueId].
+     * The returned document will have the [Document.provisioned] flag set to `true` and
+     * [Document.mpzPassId] and [Document.mpzPassVersion] will be set to [MpzPass.uniqueId]
+     * and [MpzPass.version]
      *
-     * If the pass had been previously imported, the same [Document] will be returned and the credentials
-     * will be updated.
+     * If the pass had been previously imported at an earlier version, the same [Document] will
+     * be returned and the credentials and [Document.mpzPassVersion] will be updated. If the pass
+     * is already import at the same or later version, [ImportMpzPassException] will be thrown.
      *
      * @param mpzPass The [MpzPass] to import.
      * @param isoMdocDomain The domain string to use when creating ISO mdoc credentials.
@@ -287,7 +289,8 @@ class DocumentStore private constructor(
      * @return An existing [Document] if updating, otherwise a newly created [Document]. In both cases
      * the returned document will have the credentials included in [mpzPass].
      * @throws IllegalStateException if a SoftwareSecureArea implementation cannot be found in the repository.
-     * @throws ImportMpzPassException if credential creation or certification fails.
+     * @throws ImportMpzPassException if credential creation or certification fails or if the pass
+     * already exists in the store at the given version.
      */
     @Throws(IllegalStateException::class, ImportMpzPassException::class, CancellationException::class)
     suspend fun importMpzPass(
@@ -304,6 +307,13 @@ class DocumentStore private constructor(
         val document = try {
             val existingDocument = listDocuments().find { it.mpzPassId == mpzPass.uniqueId }
             if (existingDocument != null) {
+                existingDocument.mpzPassVersion?.let { currentVersion ->
+                    if (currentVersion >= mpzPass.version) {
+                        throw ImportMpzPassException(
+                            "Pass already imported at version $currentVersion which is greater or equal to version ${mpzPass.version}"
+                        )
+                    }
+                }
                 existingDocument.getCredentials().forEach { credential ->
                     credential.deleteCredential()
                 }
@@ -379,6 +389,7 @@ class DocumentStore private constructor(
             document.edit {
                 provisioned = true
                 mpzPassId = mpzPass.uniqueId
+                mpzPassVersion = mpzPass.version
             }
             return document
         } catch (e: Exception) {

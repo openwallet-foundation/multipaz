@@ -47,6 +47,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -158,7 +159,6 @@ import org.multipaz.testapp.ui.VerticalDocumentListScreen
 import org.multipaz.transactiontype.knowntypes.PingTransaction
 import org.multipaz.trustmanagement.CompositeTrustManager
 import org.multipaz.trustmanagement.ConfigurableTrustManager
-import org.multipaz.trustmanagement.TrustEntryBasedTrustManager
 import org.multipaz.trustmanagement.TrustEntryX509Cert
 import org.multipaz.trustmanagement.TrustManager
 import org.multipaz.trustmanagement.TrustMetadata
@@ -1026,8 +1026,8 @@ class App private constructor (val promptModel: PromptModel) {
                     }
                 },
                 issuerUrl = provisioningIssuerUrl.value,
-                clientPreferences = provisioningSupport.getOpenID4VCIClientPreferences(),
-                backend = provisioningSupport.getOpenID4VCIBackend()
+                clientPreferences = flow { provisioningSupport.getOpenID4VCIClientPreferences() },
+                backend = flow { provisioningSupport.getOpenID4VCIBackend() }
             )
             NavHost(
                 navController = navController,

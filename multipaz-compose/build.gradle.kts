@@ -216,7 +216,11 @@ publishing {
     }
 }
 
-tasks.named("generateResourceAccessorsForAndroidMain").configure { dependsOn("sourceReleaseJar") }
+tasks.configureEach {
+    if (name == "androidReleaseSourcesJar") {
+        dependsOn("generateMultipazStrings")
+    }
+}
 
 lokalize {
     resourcesDir.set("src/commonMain/composeResources")
