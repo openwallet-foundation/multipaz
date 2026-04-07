@@ -6,7 +6,7 @@ import kotlinx.coroutines.CoroutineScope
  * An interface for a persistent logger for recording events.
  *
  * See [SimpleEventLogger] for an implementation backed by [org.multipaz.storage.Storage] and
- * also includes an functionality for inspecting, filtering, amending, and deleting events
+ * also includes functionality for inspecting, filtering, amending, and deleting events
  * as well as observing when events are added or removed.
  */
 interface EventLogger {
