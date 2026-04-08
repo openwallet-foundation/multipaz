@@ -1,4 +1,4 @@
-package org.multipaz.transactiontype.knowntypes
+package org.multipaz.utopia.knowntypes
 
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.toDataItem
@@ -7,7 +7,6 @@ import org.multipaz.documenttype.DocumentAttribute
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.MdocDataElement
 import org.multipaz.documenttype.TransactionType
-import org.multipaz.documenttype.knowntypes.UtopiaNaturalization
 import org.multipaz.presentment.TransactionData
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 

@@ -50,7 +50,9 @@ import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.PhotoID
-import org.multipaz.documenttype.knowntypes.UtopiaBoardingPass
+import org.multipaz.utopia.knowntypes.UtopiaBoardingPass
+import org.multipaz.documenttype.knowntypes.addKnownTypes
+import org.multipaz.utopia.knowntypes.addUtopiaTypes
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.presentment.CredentialPresentmentData
@@ -202,9 +204,8 @@ fun ConsentPromptScreen(
         val storage = EphemeralStorage()
         val secureArea = SoftwareSecureArea.create(storage)
         documentTypeRepository = DocumentTypeRepository()
-        documentTypeRepository.addDocumentType(DrivingLicense.getDocumentType())
-        documentTypeRepository.addDocumentType(PhotoID.getDocumentType())
-        documentTypeRepository.addDocumentType(UtopiaBoardingPass.getDocumentType())
+        documentTypeRepository.addKnownTypes()
+        documentTypeRepository.addUtopiaTypes()
         documentStore = buildDocumentStore(storage, secureAreaRepository) {}
         documentModel = DocumentModel.create(documentStore = documentStore!!, documentTypeRepository = documentTypeRepository)
 

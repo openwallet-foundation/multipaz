@@ -43,12 +43,12 @@ import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.MultiDocumentCannedRequest
 import org.multipaz.documenttype.SingleDocumentCannedRequest
 import org.multipaz.documenttype.knowntypes.AgeVerification
-import org.multipaz.documenttype.knowntypes.Loyalty
-import org.multipaz.documenttype.knowntypes.DigitalPaymentCredential
+import org.multipaz.utopia.knowntypes.Loyalty
+import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
-import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
+import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
@@ -57,7 +57,6 @@ import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.mdoc.zkp.ZkSystemRepository
-import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential

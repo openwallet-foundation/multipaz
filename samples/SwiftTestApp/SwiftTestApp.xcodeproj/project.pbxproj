@@ -10,6 +10,58 @@
 		512DAED62F2A31B30061F72B /* IdentityDocumentProviderExtension.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = 512DAECF2F2A31B30061F72B /* IdentityDocumentProviderExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		51BD5C5E2F22604F0082DE19 /* AdditionalConfig.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 51BD5C5C2F22604F0082DE19 /* AdditionalConfig.xcconfig */; };
 		51BD5C5F2F22604F0082DE19 /* DeveloperConfig.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 51BD5C5D2F22604F0082DE19 /* DeveloperConfig.xcconfig */; };
+		51F711892F860D320017F68B /* DocumentModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711732F860D320017F68B /* DocumentModel.swift */; };
+		51F7118A2F860D320017F68B /* DocumentExtCardart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711722F860D320017F68B /* DocumentExtCardart.swift */; };
+		51F7118B2F860D320017F68B /* DocumentExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711712F860D320017F68B /* DocumentExt.swift */; };
+		51F7118C2F860D320017F68B /* FloatingItemHeadingAndText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711772F860D320017F68B /* FloatingItemHeadingAndText.swift */; };
+		51F7118D2F860D320017F68B /* VerticalDocumentList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711862F860D320017F68B /* VerticalDocumentList.swift */; };
+		51F7118E2F860D320017F68B /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711742F860D320017F68B /* Extensions.swift */; };
+		51F7118F2F860D320017F68B /* ProvisioningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711802F860D320017F68B /* ProvisioningView.swift */; };
+		51F711902F860D320017F68B /* PromptModelExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7117F2F860D320017F68B /* PromptModelExt.swift */; };
+		51F711912F860D320017F68B /* PromptDialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7117E2F860D320017F68B /* PromptDialogs.swift */; };
+		51F711922F860D320017F68B /* PassphrasePromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7117D2F860D320017F68B /* PassphrasePromptDialog.swift */; };
+		51F711932F860D320017F68B /* SimplePresentmentSourceExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711832F860D320017F68B /* SimplePresentmentSourceExt.swift */; };
+		51F711942F860D320017F68B /* FloatingItemCenteredText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711752F860D320017F68B /* FloatingItemCenteredText.swift */; };
+		51F711952F860D320017F68B /* TagsExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711852F860D320017F68B /* TagsExt.swift */; };
+		51F711962F860D320017F68B /* MdocProximityQrPresentment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7117A2F860D320017F68B /* MdocProximityQrPresentment.swift */; };
+		51F711972F860D320017F68B /* FloatingItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711782F860D320017F68B /* FloatingItemList.swift */; };
+		51F711982F860D320017F68B /* QrCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711812F860D320017F68B /* QrCode.swift */; };
+		51F711992F860D320017F68B /* DocumentCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711702F860D320017F68B /* DocumentCarousel.swift */; };
+		51F7119A2F860D320017F68B /* Consent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7116E2F860D320017F68B /* Consent.swift */; };
+		51F7119B2F860D320017F68B /* FloatingItemText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711792F860D320017F68B /* FloatingItemText.swift */; };
+		51F7119C2F860D320017F68B /* FloatingItemContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711762F860D320017F68B /* FloatingItemContainer.swift */; };
+		51F7119D2F860D320017F68B /* X509CertViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711872F860D320017F68B /* X509CertViewer.swift */; };
+		51F7119E2F860D320017F68B /* PassphraseInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7117C2F860D320017F68B /* PassphraseInputView.swift */; };
+		51F7119F2F860D320017F68B /* MdocProximityQrSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7117B2F860D320017F68B /* MdocProximityQrSettings.swift */; };
+		51F711A02F860D320017F68B /* ConsentPromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7116F2F860D320017F68B /* ConsentPromptDialog.swift */; };
+		51F711A12F860D320017F68B /* RequestAuthorizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711822F860D320017F68B /* RequestAuthorizationView.swift */; };
+		51F711A22F860D320017F68B /* SmartSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711842F860D320017F68B /* SmartSheet.swift */; };
+		51F711A32F860D320017F68B /* DocumentModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711732F860D320017F68B /* DocumentModel.swift */; };
+		51F711A42F860D320017F68B /* DocumentExtCardart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711722F860D320017F68B /* DocumentExtCardart.swift */; };
+		51F711A52F860D320017F68B /* DocumentExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711712F860D320017F68B /* DocumentExt.swift */; };
+		51F711A62F860D320017F68B /* FloatingItemHeadingAndText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711772F860D320017F68B /* FloatingItemHeadingAndText.swift */; };
+		51F711A72F860D320017F68B /* VerticalDocumentList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711862F860D320017F68B /* VerticalDocumentList.swift */; };
+		51F711A82F860D320017F68B /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711742F860D320017F68B /* Extensions.swift */; };
+		51F711A92F860D320017F68B /* ProvisioningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711802F860D320017F68B /* ProvisioningView.swift */; };
+		51F711AA2F860D320017F68B /* PromptModelExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7117F2F860D320017F68B /* PromptModelExt.swift */; };
+		51F711AB2F860D320017F68B /* PromptDialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7117E2F860D320017F68B /* PromptDialogs.swift */; };
+		51F711AC2F860D320017F68B /* PassphrasePromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7117D2F860D320017F68B /* PassphrasePromptDialog.swift */; };
+		51F711AD2F860D320017F68B /* SimplePresentmentSourceExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711832F860D320017F68B /* SimplePresentmentSourceExt.swift */; };
+		51F711AE2F860D320017F68B /* FloatingItemCenteredText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711752F860D320017F68B /* FloatingItemCenteredText.swift */; };
+		51F711AF2F860D320017F68B /* TagsExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711852F860D320017F68B /* TagsExt.swift */; };
+		51F711B02F860D320017F68B /* MdocProximityQrPresentment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7117A2F860D320017F68B /* MdocProximityQrPresentment.swift */; };
+		51F711B12F860D320017F68B /* FloatingItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711782F860D320017F68B /* FloatingItemList.swift */; };
+		51F711B22F860D320017F68B /* QrCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711812F860D320017F68B /* QrCode.swift */; };
+		51F711B32F860D320017F68B /* DocumentCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711702F860D320017F68B /* DocumentCarousel.swift */; };
+		51F711B42F860D320017F68B /* Consent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7116E2F860D320017F68B /* Consent.swift */; };
+		51F711B52F860D320017F68B /* FloatingItemText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711792F860D320017F68B /* FloatingItemText.swift */; };
+		51F711B62F860D320017F68B /* FloatingItemContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711762F860D320017F68B /* FloatingItemContainer.swift */; };
+		51F711B72F860D320017F68B /* X509CertViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711872F860D320017F68B /* X509CertViewer.swift */; };
+		51F711B82F860D320017F68B /* PassphraseInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7117C2F860D320017F68B /* PassphraseInputView.swift */; };
+		51F711B92F860D320017F68B /* MdocProximityQrSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7117B2F860D320017F68B /* MdocProximityQrSettings.swift */; };
+		51F711BA2F860D320017F68B /* ConsentPromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F7116F2F860D320017F68B /* ConsentPromptDialog.swift */; };
+		51F711BB2F860D320017F68B /* RequestAuthorizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711822F860D320017F68B /* RequestAuthorizationView.swift */; };
+		51F711BC2F860D320017F68B /* SmartSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51F711842F860D320017F68B /* SmartSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -41,6 +93,32 @@
 		512DAECF2F2A31B30061F72B /* IdentityDocumentProviderExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.extensionkit-extension"; includeInIndex = 0; path = IdentityDocumentProviderExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		51BD5C5C2F22604F0082DE19 /* AdditionalConfig.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = AdditionalConfig.xcconfig; path = ../testapp/iosApp/AdditionalConfig.xcconfig; sourceTree = SOURCE_ROOT; };
 		51BD5C5D2F22604F0082DE19 /* DeveloperConfig.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = DeveloperConfig.xcconfig; path = ../testapp/iosApp/DeveloperConfig.xcconfig; sourceTree = SOURCE_ROOT; };
+		51F7116E2F860D320017F68B /* Consent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Consent.swift; sourceTree = "<group>"; };
+		51F7116F2F860D320017F68B /* ConsentPromptDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsentPromptDialog.swift; sourceTree = "<group>"; };
+		51F711702F860D320017F68B /* DocumentCarousel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentCarousel.swift; sourceTree = "<group>"; };
+		51F711712F860D320017F68B /* DocumentExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentExt.swift; sourceTree = "<group>"; };
+		51F711722F860D320017F68B /* DocumentExtCardart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentExtCardart.swift; sourceTree = "<group>"; };
+		51F711732F860D320017F68B /* DocumentModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentModel.swift; sourceTree = "<group>"; };
+		51F711742F860D320017F68B /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
+		51F711752F860D320017F68B /* FloatingItemCenteredText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemCenteredText.swift; sourceTree = "<group>"; };
+		51F711762F860D320017F68B /* FloatingItemContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemContainer.swift; sourceTree = "<group>"; };
+		51F711772F860D320017F68B /* FloatingItemHeadingAndText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemHeadingAndText.swift; sourceTree = "<group>"; };
+		51F711782F860D320017F68B /* FloatingItemList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemList.swift; sourceTree = "<group>"; };
+		51F711792F860D320017F68B /* FloatingItemText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemText.swift; sourceTree = "<group>"; };
+		51F7117A2F860D320017F68B /* MdocProximityQrPresentment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MdocProximityQrPresentment.swift; sourceTree = "<group>"; };
+		51F7117B2F860D320017F68B /* MdocProximityQrSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MdocProximityQrSettings.swift; sourceTree = "<group>"; };
+		51F7117C2F860D320017F68B /* PassphraseInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PassphraseInputView.swift; sourceTree = "<group>"; };
+		51F7117D2F860D320017F68B /* PassphrasePromptDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PassphrasePromptDialog.swift; sourceTree = "<group>"; };
+		51F7117E2F860D320017F68B /* PromptDialogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptDialogs.swift; sourceTree = "<group>"; };
+		51F7117F2F860D320017F68B /* PromptModelExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptModelExt.swift; sourceTree = "<group>"; };
+		51F711802F860D320017F68B /* ProvisioningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisioningView.swift; sourceTree = "<group>"; };
+		51F711812F860D320017F68B /* QrCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCode.swift; sourceTree = "<group>"; };
+		51F711822F860D320017F68B /* RequestAuthorizationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RequestAuthorizationView.swift; sourceTree = "<group>"; };
+		51F711832F860D320017F68B /* SimplePresentmentSourceExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimplePresentmentSourceExt.swift; sourceTree = "<group>"; };
+		51F711842F860D320017F68B /* SmartSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartSheet.swift; sourceTree = "<group>"; };
+		51F711852F860D320017F68B /* TagsExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsExt.swift; sourceTree = "<group>"; };
+		51F711862F860D320017F68B /* VerticalDocumentList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerticalDocumentList.swift; sourceTree = "<group>"; };
+		51F711872F860D320017F68B /* X509CertViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = X509CertViewer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -77,18 +155,6 @@
 			path = IdentityDocumentProviderExtension;
 			sourceTree = "<group>";
 		};
-		7B10E6842F76CB4900B05767 /* swift */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			name = swift;
-			path = "/Users/zeuthen/StudioProjects/multipaz/multipaz-swiftui/src/iosMain/swift";
-			sourceTree = "<absolute>";
-		};
-		7B447EB42F7D770B00A9546E /* longfellow-libzk-v1 */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			name = "longfellow-libzk-v1";
-			path = "../testapp/src/commonMain/composeResources/files/longfellow-libzk-v1";
-			sourceTree = SOURCE_ROOT;
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -112,8 +178,7 @@
 		51100E5E2F21D4A5006B2ADD = {
 			isa = PBXGroup;
 			children = (
-				7B447EB42F7D770B00A9546E /* longfellow-libzk-v1 */,
-				7B10E6842F76CB4900B05767 /* swift */,
+				51F711882F860D320017F68B /* swift */,
 				51BD5C5C2F22604F0082DE19 /* AdditionalConfig.xcconfig */,
 				51BD5C5D2F22604F0082DE19 /* DeveloperConfig.xcconfig */,
 				51100E692F21D4A5006B2ADD /* SwiftTestApp */,
@@ -139,6 +204,40 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		51F711882F860D320017F68B /* swift */ = {
+			isa = PBXGroup;
+			children = (
+				51F7116E2F860D320017F68B /* Consent.swift */,
+				51F7116F2F860D320017F68B /* ConsentPromptDialog.swift */,
+				51F711702F860D320017F68B /* DocumentCarousel.swift */,
+				51F711712F860D320017F68B /* DocumentExt.swift */,
+				51F711722F860D320017F68B /* DocumentExtCardart.swift */,
+				51F711732F860D320017F68B /* DocumentModel.swift */,
+				51F711742F860D320017F68B /* Extensions.swift */,
+				51F711752F860D320017F68B /* FloatingItemCenteredText.swift */,
+				51F711762F860D320017F68B /* FloatingItemContainer.swift */,
+				51F711772F860D320017F68B /* FloatingItemHeadingAndText.swift */,
+				51F711782F860D320017F68B /* FloatingItemList.swift */,
+				51F711792F860D320017F68B /* FloatingItemText.swift */,
+				51F7117A2F860D320017F68B /* MdocProximityQrPresentment.swift */,
+				51F7117B2F860D320017F68B /* MdocProximityQrSettings.swift */,
+				51F7117C2F860D320017F68B /* PassphraseInputView.swift */,
+				51F7117D2F860D320017F68B /* PassphrasePromptDialog.swift */,
+				51F7117E2F860D320017F68B /* PromptDialogs.swift */,
+				51F7117F2F860D320017F68B /* PromptModelExt.swift */,
+				51F711802F860D320017F68B /* ProvisioningView.swift */,
+				51F711812F860D320017F68B /* QrCode.swift */,
+				51F711822F860D320017F68B /* RequestAuthorizationView.swift */,
+				51F711832F860D320017F68B /* SimplePresentmentSourceExt.swift */,
+				51F711842F860D320017F68B /* SmartSheet.swift */,
+				51F711852F860D320017F68B /* TagsExt.swift */,
+				51F711862F860D320017F68B /* VerticalDocumentList.swift */,
+				51F711872F860D320017F68B /* X509CertViewer.swift */,
+			);
+			name = swift;
+			path = "/Users/davidz/StudioProjects/multipaz/multipaz-swiftui/src/iosMain/swift";
+			sourceTree = "<absolute>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -159,7 +258,6 @@
 			);
 			fileSystemSynchronizedGroups = (
 				51100E692F21D4A5006B2ADD /* SwiftTestApp */,
-				7B10E6842F76CB4900B05767 /* swift */,
 			);
 			name = SwiftTestApp;
 			packageProductDependencies = (
@@ -183,8 +281,6 @@
 			);
 			fileSystemSynchronizedGroups = (
 				512DAED02F2A31B30061F72B /* IdentityDocumentProviderExtension */,
-				7B10E6842F76CB4900B05767 /* swift */,
-				7B447EB42F7D770B00A9546E /* longfellow-libzk-v1 */,
 			);
 			name = IdentityDocumentProviderExtension;
 			packageProductDependencies = (
@@ -298,6 +394,32 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				51F711A32F860D320017F68B /* DocumentModel.swift in Sources */,
+				51F711A42F860D320017F68B /* DocumentExtCardart.swift in Sources */,
+				51F711A52F860D320017F68B /* DocumentExt.swift in Sources */,
+				51F711A62F860D320017F68B /* FloatingItemHeadingAndText.swift in Sources */,
+				51F711A72F860D320017F68B /* VerticalDocumentList.swift in Sources */,
+				51F711A82F860D320017F68B /* Extensions.swift in Sources */,
+				51F711A92F860D320017F68B /* ProvisioningView.swift in Sources */,
+				51F711AA2F860D320017F68B /* PromptModelExt.swift in Sources */,
+				51F711AB2F860D320017F68B /* PromptDialogs.swift in Sources */,
+				51F711AC2F860D320017F68B /* PassphrasePromptDialog.swift in Sources */,
+				51F711AD2F860D320017F68B /* SimplePresentmentSourceExt.swift in Sources */,
+				51F711AE2F860D320017F68B /* FloatingItemCenteredText.swift in Sources */,
+				51F711AF2F860D320017F68B /* TagsExt.swift in Sources */,
+				51F711B02F860D320017F68B /* MdocProximityQrPresentment.swift in Sources */,
+				51F711B12F860D320017F68B /* FloatingItemList.swift in Sources */,
+				51F711B22F860D320017F68B /* QrCode.swift in Sources */,
+				51F711B32F860D320017F68B /* DocumentCarousel.swift in Sources */,
+				51F711B42F860D320017F68B /* Consent.swift in Sources */,
+				51F711B52F860D320017F68B /* FloatingItemText.swift in Sources */,
+				51F711B62F860D320017F68B /* FloatingItemContainer.swift in Sources */,
+				51F711B72F860D320017F68B /* X509CertViewer.swift in Sources */,
+				51F711B82F860D320017F68B /* PassphraseInputView.swift in Sources */,
+				51F711B92F860D320017F68B /* MdocProximityQrSettings.swift in Sources */,
+				51F711BA2F860D320017F68B /* ConsentPromptDialog.swift in Sources */,
+				51F711BB2F860D320017F68B /* RequestAuthorizationView.swift in Sources */,
+				51F711BC2F860D320017F68B /* SmartSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -305,6 +427,32 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				51F711892F860D320017F68B /* DocumentModel.swift in Sources */,
+				51F7118A2F860D320017F68B /* DocumentExtCardart.swift in Sources */,
+				51F7118B2F860D320017F68B /* DocumentExt.swift in Sources */,
+				51F7118C2F860D320017F68B /* FloatingItemHeadingAndText.swift in Sources */,
+				51F7118D2F860D320017F68B /* VerticalDocumentList.swift in Sources */,
+				51F7118E2F860D320017F68B /* Extensions.swift in Sources */,
+				51F7118F2F860D320017F68B /* ProvisioningView.swift in Sources */,
+				51F711902F860D320017F68B /* PromptModelExt.swift in Sources */,
+				51F711912F860D320017F68B /* PromptDialogs.swift in Sources */,
+				51F711922F860D320017F68B /* PassphrasePromptDialog.swift in Sources */,
+				51F711932F860D320017F68B /* SimplePresentmentSourceExt.swift in Sources */,
+				51F711942F860D320017F68B /* FloatingItemCenteredText.swift in Sources */,
+				51F711952F860D320017F68B /* TagsExt.swift in Sources */,
+				51F711962F860D320017F68B /* MdocProximityQrPresentment.swift in Sources */,
+				51F711972F860D320017F68B /* FloatingItemList.swift in Sources */,
+				51F711982F860D320017F68B /* QrCode.swift in Sources */,
+				51F711992F860D320017F68B /* DocumentCarousel.swift in Sources */,
+				51F7119A2F860D320017F68B /* Consent.swift in Sources */,
+				51F7119B2F860D320017F68B /* FloatingItemText.swift in Sources */,
+				51F7119C2F860D320017F68B /* FloatingItemContainer.swift in Sources */,
+				51F7119D2F860D320017F68B /* X509CertViewer.swift in Sources */,
+				51F7119E2F860D320017F68B /* PassphraseInputView.swift in Sources */,
+				51F7119F2F860D320017F68B /* MdocProximityQrSettings.swift in Sources */,
+				51F711A02F860D320017F68B /* ConsentPromptDialog.swift in Sources */,
+				51F711A12F860D320017F68B /* RequestAuthorizationView.swift in Sources */,
+				51F711A22F860D320017F68B /* SmartSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

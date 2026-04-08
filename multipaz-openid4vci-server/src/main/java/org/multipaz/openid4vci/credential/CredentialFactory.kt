@@ -7,9 +7,9 @@ import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.cbor.DataItem
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.documenttype.knowntypes.AgeVerification
-import org.multipaz.documenttype.knowntypes.DigitalPaymentCredential
+import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.documenttype.knowntypes.EUPersonalID
-import org.multipaz.documenttype.knowntypes.Loyalty
+import org.multipaz.utopia.knowntypes.Loyalty
 import org.multipaz.openid4vci.request.wellKnownOpenidCredentialIssuer
 import org.multipaz.openid4vci.util.CredentialId
 import org.multipaz.provisioning.CredentialFormat

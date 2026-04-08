@@ -2,7 +2,7 @@ package org.multipaz.openid4vci.credential
 
 import kotlinx.serialization.json.JsonObject
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
+import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import kotlin.time.Clock
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put

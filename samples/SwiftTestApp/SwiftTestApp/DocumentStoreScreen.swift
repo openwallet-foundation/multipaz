@@ -12,7 +12,7 @@ struct DocumentStoreScreen: View {
                 Button(action: {
                     Task {
                         await viewModel.addSelfsignedMdoc(
-                            documentType: DrivingLicense.shared.getDocumentType(),
+                            documentType: DrivingLicense.shared.getDocumentType(locale: LocalizedStrings.shared.getCurrentLocale()),
                             displayName: "Erika's Driving License",
                             typeDisplayName: "Utopia Driving License",
                             cardArtResourceName: "driving_license_card_art"
@@ -24,7 +24,7 @@ struct DocumentStoreScreen: View {
                 Button(action: {
                     Task {
                         await viewModel.addSelfsignedMdoc(
-                            documentType: PhotoID.shared.getDocumentType(),
+                            documentType: PhotoID.shared.getDocumentType(locale: LocalizedStrings.shared.getCurrentLocale()),
                             displayName: "Erika's PhotoID",
                             typeDisplayName: "Utopia PhotoID",
                             cardArtResourceName: "photo_id_card_art"
@@ -36,7 +36,7 @@ struct DocumentStoreScreen: View {
                 Button(action: {
                     Task {
                         await viewModel.addSelfsignedMdoc(
-                            documentType: EUPersonalID.shared.getDocumentType(),
+                            documentType: EUPersonalID.shared.getDocumentType(locale: LocalizedStrings.shared.getCurrentLocale()),
                             displayName: "Erika's PID",
                             typeDisplayName: "Utopia PID",
                             cardArtResourceName: "pid_card_art"
@@ -48,7 +48,7 @@ struct DocumentStoreScreen: View {
                 Button(action: {
                     Task {
                         await viewModel.addSelfsignedMdoc(
-                            documentType: AgeVerification.shared.getDocumentType(),
+                            documentType: AgeVerification.shared.getDocumentType(locale: LocalizedStrings.shared.getCurrentLocale()),
                             displayName: "Erika's Age Verification Credential",
                             typeDisplayName: "Utopia Age Verification Credential",
                             cardArtResourceName: "av18_card_art"

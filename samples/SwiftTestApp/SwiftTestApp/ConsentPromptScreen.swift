@@ -111,9 +111,8 @@ private func calcConsentData(
         .add(secureArea: secureArea)
         .build()
     let documentTypeRepository = DocumentTypeRepository()
-    documentTypeRepository.addDocumentType(documentType: DrivingLicense.shared.getDocumentType())
-    documentTypeRepository.addDocumentType(documentType: PhotoID.shared.getDocumentType())
-    documentTypeRepository.addDocumentType(documentType: UtopiaBoardingPass.shared.getDocumentType())
+    documentTypeRepository.addKnownTypes(locale: LocalizedStrings.shared.getCurrentLocale())
+    documentTypeRepository.addUtopiaTypes(locale: LocalizedStrings.shared.getCurrentLocale())
     let documentStore = DocumentStore.Builder(
         storage: storage,
         secureAreaRepository: secureAreaRepository
@@ -161,7 +160,9 @@ private func calcConsentData(
         created: now.toKotlinInstant(),
         metadata: nil
     )
-    let _ = try! await DrivingLicense.shared.getDocumentType().createMdocCredentialWithSampleData(
+    let _ = try! await DrivingLicense.shared.getDocumentType(
+        locale: LocalizedStrings.shared.getCurrentLocale()
+    ).createMdocCredentialWithSampleData(
         document: mdlDoc,
         secureArea: secureArea,
         createKeySettings: CreateKeySettings(
@@ -194,7 +195,9 @@ private func calcConsentData(
         created: now.toKotlinInstant(),
         metadata: nil
     )
-    let _ = try! await PhotoID.shared.getDocumentType().createMdocCredentialWithSampleData(
+    let _ = try! await PhotoID.shared.getDocumentType(
+        locale: LocalizedStrings.shared.getCurrentLocale()
+    ).createMdocCredentialWithSampleData(
         document: photoIdDoc,
         secureArea: secureArea,
         createKeySettings: CreateKeySettings(
@@ -227,7 +230,9 @@ private func calcConsentData(
         created: now.toKotlinInstant(),
         metadata: nil
     )
-    let _ = try! await PhotoID.shared.getDocumentType().createMdocCredentialWithSampleData(
+    let _ = try! await PhotoID.shared.getDocumentType(
+        locale: LocalizedStrings.shared.getCurrentLocale()
+    ).createMdocCredentialWithSampleData(
         document: photoIdDoc2,
         secureArea: secureArea,
         createKeySettings: CreateKeySettings(
@@ -260,7 +265,9 @@ private func calcConsentData(
         created: now.toKotlinInstant(),
         metadata: nil
     )
-    let _ = try! await UtopiaBoardingPass.shared.getDocumentType().createMdocCredentialWithSampleData(
+    let _ = try! await UtopiaBoardingPass.shared.getDocumentType(
+        locale: LocalizedStrings.shared.getCurrentLocale()
+    ).createMdocCredentialWithSampleData(
         document: boardingPassDoc,
         secureArea: secureArea,
         createKeySettings: CreateKeySettings(
@@ -297,8 +304,12 @@ private func calcConsentData(
         ),
     )
     
-    let mdlDocType = DrivingLicense.shared.getDocumentType()
-    let photoIdDocType = PhotoID.shared.getDocumentType()
+    let mdlDocType = DrivingLicense.shared.getDocumentType(
+        locale: LocalizedStrings.shared.getCurrentLocale()
+    )
+    let photoIdDocType = PhotoID.shared.getDocumentType(
+        locale: LocalizedStrings.shared.getCurrentLocale()
+    )
 
     let dcqlString = switch requestType {
     case .mdlUsTransportation:

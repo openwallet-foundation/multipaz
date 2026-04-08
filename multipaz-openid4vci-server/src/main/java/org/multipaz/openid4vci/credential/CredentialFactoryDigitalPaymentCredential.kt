@@ -7,7 +7,6 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
-import org.multipaz.cbor.Uint
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemFullDate
@@ -16,7 +15,7 @@ import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.documenttype.knowntypes.DigitalPaymentCredential
+import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.openid4vci.util.CredentialId

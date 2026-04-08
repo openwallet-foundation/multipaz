@@ -85,15 +85,7 @@ import org.multipaz.digitalcredentials.getDefault
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.documenttype.knowntypes.Aadhaar
-import org.multipaz.documenttype.knowntypes.AgeVerification
-import org.multipaz.documenttype.knowntypes.DigitalPaymentCredential
-import org.multipaz.documenttype.knowntypes.DrivingLicense
-import org.multipaz.documenttype.knowntypes.EUPersonalID
-import org.multipaz.documenttype.knowntypes.IDPass
-import org.multipaz.documenttype.knowntypes.Loyalty
-import org.multipaz.documenttype.knowntypes.PhotoID
-import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
+import org.multipaz.documenttype.knowntypes.addKnownTypes
 import org.multipaz.eventlogger.SimpleEventLogger
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.zkp.ZkSystemRepository
@@ -156,7 +148,6 @@ import org.multipaz.testapp.ui.TrustEntryScreen
 import org.multipaz.testapp.ui.TrustEntryVicalEntryScreen
 import org.multipaz.testapp.ui.TrustManagerScreen
 import org.multipaz.testapp.ui.VerticalDocumentListScreen
-import org.multipaz.transactiontype.knowntypes.PingTransaction
 import org.multipaz.trustmanagement.CompositeTrustManager
 import org.multipaz.trustmanagement.ConfigurableTrustManager
 import org.multipaz.trustmanagement.TrustEntryX509Cert
@@ -167,6 +158,7 @@ import org.multipaz.util.Platform
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.fromHexByteString
 import org.multipaz.util.toBase64Url
+import org.multipaz.utopia.knowntypes.addUtopiaTypes
 import kotlin.time.Clock
 
 /**
@@ -348,16 +340,8 @@ class App private constructor (val promptModel: PromptModel) {
 
     private suspend fun documentTypeRepositoryInit() {
         documentTypeRepository = DocumentTypeRepository()
-        documentTypeRepository.addDocumentType(Aadhaar.getDocumentType())
-        documentTypeRepository.addDocumentType(DrivingLicense.getDocumentType())
-        documentTypeRepository.addDocumentType(PhotoID.getDocumentType())
-        documentTypeRepository.addDocumentType(EUPersonalID.getDocumentType())
-        documentTypeRepository.addDocumentType(UtopiaMovieTicket.getDocumentType())
-        documentTypeRepository.addDocumentType(IDPass.getDocumentType())
-        documentTypeRepository.addDocumentType(AgeVerification.getDocumentType())
-        documentTypeRepository.addDocumentType(Loyalty.getDocumentType())
-        documentTypeRepository.addDocumentType(DigitalPaymentCredential.getDocumentType())
-        documentTypeRepository.addTransactionType(PingTransaction)
+        documentTypeRepository.addKnownTypes()
+        documentTypeRepository.addUtopiaTypes()
     }
 
     private suspend fun documentStoreInit() {

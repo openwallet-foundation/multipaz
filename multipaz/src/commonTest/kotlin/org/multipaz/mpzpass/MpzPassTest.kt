@@ -6,7 +6,7 @@ import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.document.ImportMpzPassException
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
-import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
+import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.securearea.CreateKeySettings

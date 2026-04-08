@@ -1,7 +1,7 @@
 package org.multipaz.openid4vci.credential
 
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.documenttype.knowntypes.UtopiaNaturalization
+import org.multipaz.utopia.knowntypes.UtopiaNaturalization
 import org.multipaz.rpc.backend.BackendEnvironment
 import kotlin.time.Clock
 import kotlinx.serialization.json.buildJsonObject

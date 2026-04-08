@@ -1,4 +1,4 @@
-package org.multipaz.documenttype.knowntypes
+package org.multipaz.utopia.knowntypes
 
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemFullDate
@@ -8,6 +8,7 @@ import org.multipaz.documenttype.Icon
 import kotlinx.datetime.LocalDate
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
+import org.multipaz.documenttype.knowntypes.SampleData
 
 /**
  * Example Payment SCA credential profile for card-based digital payments.

@@ -21,10 +21,8 @@ func getPresentmentSource() async -> PresentmentSource {
         .add(secureArea: softwareSecureArea)
         .build()
     let documentTypeRepository = DocumentTypeRepository()
-    documentTypeRepository.addDocumentType(documentType: DrivingLicense.shared.getDocumentType())
-    documentTypeRepository.addDocumentType(documentType: PhotoID.shared.getDocumentType())
-    documentTypeRepository.addDocumentType(documentType: AgeVerification.shared.getDocumentType())
-    documentTypeRepository.addDocumentType(documentType: EUPersonalID.shared.getDocumentType())
+    documentTypeRepository.addKnownTypes(locale: LocalizedStrings.shared.getCurrentLocale())
+    documentTypeRepository.addUtopiaTypes(locale: LocalizedStrings.shared.getCurrentLocale())
     let documentStore = DocumentStore.Builder(
         storage: storage,
         secureAreaRepository: secureAreaRepository

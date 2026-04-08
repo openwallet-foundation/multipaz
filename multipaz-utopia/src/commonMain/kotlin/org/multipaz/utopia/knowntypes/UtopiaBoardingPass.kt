@@ -1,4 +1,4 @@
-package org.multipaz.documenttype.knowntypes
+package org.multipaz.utopia.knowntypes
 
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemDateTimeString

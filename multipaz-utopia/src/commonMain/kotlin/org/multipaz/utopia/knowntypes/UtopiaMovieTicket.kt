@@ -1,15 +1,13 @@
-package org.multipaz.documenttype.knowntypes
+package org.multipaz.utopia.knowntypes
 
-import kotlinx.datetime.parse
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.Icon
 import kotlinx.serialization.json.JsonPrimitive
-import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.documenttype.StringOption
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
-import kotlin.time.Instant
+import org.multipaz.documenttype.knowntypes.SampleData
 
 /**
  * Object containing the metadata of the Utopia Movie Ticket Document Type.

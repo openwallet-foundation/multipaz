@@ -1,4 +1,4 @@
-package org.multipaz.documenttype.knowntypes
+package org.multipaz.utopia.knowntypes
 
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.DocumentType
@@ -7,6 +7,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
+import org.multipaz.documenttype.knowntypes.Options
+import org.multipaz.documenttype.knowntypes.SampleData
 
 /**
  * Object containing the metadata of the German ID Document Type.

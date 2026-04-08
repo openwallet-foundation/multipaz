@@ -29,7 +29,7 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.knowntypes.EUPersonalID
-import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
+import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.calculateCredentialDatabase

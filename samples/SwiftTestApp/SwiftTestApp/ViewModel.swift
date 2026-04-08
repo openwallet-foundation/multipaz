@@ -43,10 +43,8 @@ class ViewModel {
             .add(secureArea: softwareSecureArea)
             .build()
         documentTypeRepository = DocumentTypeRepository()
-        documentTypeRepository.addDocumentType(documentType: DrivingLicense.shared.getDocumentType())
-        documentTypeRepository.addDocumentType(documentType: EUPersonalID.shared.getDocumentType())
-        documentTypeRepository.addDocumentType(documentType: PhotoID.shared.getDocumentType())
-        documentTypeRepository.addDocumentType(documentType: UtopiaBoardingPass.shared.getDocumentType())
+        documentTypeRepository.addKnownTypes(locale: LocalizedStrings.shared.getCurrentLocale())
+        documentTypeRepository.addUtopiaTypes(locale: LocalizedStrings.shared.getCurrentLocale())
         documentStore = DocumentStore.Builder(
             storage: storage,
             secureAreaRepository: secureAreaRepository

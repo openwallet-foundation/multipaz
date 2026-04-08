@@ -15,7 +15,7 @@ import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.documenttype.knowntypes.Loyalty
+import org.multipaz.utopia.knowntypes.Loyalty
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.openid4vci.util.CredentialId

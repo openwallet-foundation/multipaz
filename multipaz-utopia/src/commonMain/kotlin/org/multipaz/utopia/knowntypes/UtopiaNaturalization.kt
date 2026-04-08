@@ -1,4 +1,4 @@
-package org.multipaz.documenttype.knowntypes
+package org.multipaz.utopia.knowntypes
 
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.DocumentType
@@ -6,6 +6,7 @@ import org.multipaz.documenttype.Icon
 import kotlinx.serialization.json.JsonPrimitive
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
+import org.multipaz.documenttype.knowntypes.SampleData
 
 /**
  * Naturalization Certificate of the fictional State of Utopia.
