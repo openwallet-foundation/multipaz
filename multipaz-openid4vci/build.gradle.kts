@@ -3,11 +3,6 @@ plugins {
     id("org.jetbrains.kotlin.jvm")
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.ktor)
-}
-
-application {
-    mainClass.set("org.multipaz.openid4vci.server.Main")
 }
 
 kotlin {
@@ -30,7 +25,6 @@ dependencies {
     implementation(project(":multipaz-doctypes"))
     implementation(project(":multipaz-utopia"))
     implementation(project(":multipaz-server"))
-    implementation(project(":multipaz-openid4vci"))
 
     implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.serialization.json)
@@ -50,8 +44,5 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.ktor.server.test.host)
-}
-
-ktor {
 }
 

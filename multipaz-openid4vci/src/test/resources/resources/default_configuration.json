@@ -1,0 +1,259 @@
+{
+  "server_port": 8007,
+  "ca_trust_servers": [
+    "*.multipaz.org/**",
+    "sorotokin.com/**"
+  ],
+  "credential_mdl": {
+    "title": "{core.given_name}'s driver license",
+    "card_art": {
+      "blank": "blank_mdl.png",
+      "content": [
+        {
+          "op": "text",
+          "text": "DRIVER LICENSE",
+          "font": "fonts/OpenSans-SemiBold.ttf",
+          "font_size": 70,
+          "x": 120,
+          "y": 105,
+          "effects": [
+            {"type":  "blur", "radius": 3, "argb": "FFFFFFFF"},
+            {"type":  "fill", "argb": "FF002050" }
+          ]
+        },
+        {
+          "op": "image",
+          "field": "core.portrait",
+          "image": "female.jpg",
+          "x": 45,
+          "y": 150,
+          "width": 300,
+          "height": 300,
+          "fill": false
+        },
+        {
+          "op": "text",
+          "text": "{core.given_name}",
+          "uppercase": true,
+          "x": 382,
+          "y": 350,
+          "font_size": 55,
+          "max_width": 410,
+          "effects": [
+            {"type": "blur", "radius": 3},
+            {"type": "lighting", "argb": "FFC0C080" }
+          ]
+        },
+        {
+          "op": "text",
+          "text": "{core.family_name}",
+          "uppercase": true,
+          "x": 382,
+          "y": 440,
+          "font_size": 55,
+          "max_width": 410,
+          "effects": [
+            {"type": "blur", "radius": 3},
+            {"type": "lighting", "argb": "FFC0C080" }
+          ]
+        }
+      ]
+    }
+  },
+  "credential_pid": {
+    "title": "{core.given_name}'s PID",
+    "card_art": {
+      "blank": "blank_pid.png",
+      "content": [
+        {
+          "op": "text",
+          "text": "PERSONAL ID",
+          "font": "fonts/OpenSans-SemiBold.ttf",
+          "font_size": 80,
+          "x": 135,
+          "y": 105,
+          "effects": [
+            {
+              "type": "blur",
+              "radius": 5,
+              "argb": "FFFFFFFF"
+            },
+            {
+              "type": "fill",
+              "argb": "FF004020"
+            }
+          ]
+        },
+        {
+          "op": "image",
+          "field": "core.portrait",
+          "image": "female.jpg",
+          "x": 40,
+          "y": 180,
+          "width": 270,
+          "height": 270,
+          "fill": false
+        },
+        {
+          "op": "text",
+          "text": "{core.given_name}",
+          "uppercase": true,
+          "x": 340,
+          "y": 350,
+          "font_size": 60,
+          "max_width": 410,
+          "effects": [
+            {
+              "type": "blur",
+              "radius": 5,
+              "argb": "000000"
+            },
+            {
+              "type": "lighting",
+              "argb": "FFAACCEE"
+            }
+          ]
+        },
+        {
+          "op": "text",
+          "text": "{core.family_name}",
+          "uppercase": true,
+          "x": 340,
+          "y": 440,
+          "font_size": 60,
+          "max_width": 410,
+          "effects": [
+            {
+              "type": "blur",
+              "radius": 5,
+              "argb": "000000"
+            },
+            {
+              "type": "lighting",
+              "argb": "FFAACCEE"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "credential_naturalization": {
+    "title": "{core.given_name}'s naturalization",
+    "card_art": {
+      "blank": "blank_naturalization.png",
+      "content": [
+        {
+          "op": "text",
+          "text": "CERTIFICATE OF NATURALIZATION",
+          "font": "fonts/OpenSans-SemiBold.ttf",
+          "font_size": 45,
+          "x": 37,
+          "y": 85,
+          "effects": [
+            {"type":  "blur", "radius": 3, "argb": "FFBBFFEE"},
+            {"type":  "fill", "argb": "FF003050" }
+          ]
+        },
+        {
+          "op": "text",
+          "text": "{core.given_name} {core.family_name}",
+          "uppercase": true,
+          "x": 50,
+          "y": 470,
+          "font_size": 45,
+          "max_width": 650,
+          "effects": [
+            {"type": "lighting", "argb": "FF80C0C0" }
+          ]
+        }
+      ]
+    }
+  },
+  "credential_payment": {
+    "title": "{core.given_name}'s payment card",
+    "card_art": {
+      "blank": "card_payment_sca.png",
+      "content": [
+        {
+          "op": "text",
+          "text": "{display.masked_account_reference}",
+          "font": "fonts/OpenSans-SemiBold.ttf",
+          "font_size": 50,
+          "x": 180,
+          "y": 370,
+          "effects": [
+            {"type": "blur", "radius": 1, "argb": "44000000"},
+            {"type": "fill", "argb": "FF1D2430"}
+          ]
+        },
+        {
+          "op": "text",
+          "text": "VALID THRU",
+          "font": "fonts/OpenSans-SemiBold.ttf",
+          "font_size": 18,
+          "x": 540,
+          "y": 348,
+          "effects": [
+            {"type": "fill", "argb": "FF6B7280"}
+          ]
+        },
+        {
+          "op": "text",
+          "text": "{display.expiry_short}",
+          "font": "fonts/OpenSans-SemiBold.ttf",
+          "font_size": 44,
+          "x": 540,
+          "y": 370,
+          "effects": [
+            {"type": "blur", "radius": 1, "argb": "44000000"},
+            {"type": "fill", "argb": "FF1D2430"}
+          ]
+        },
+        {
+          "op": "text",
+          "text": "{core.given_name} {core.family_name}",
+          "uppercase": true,
+          "font": "fonts/OpenSans-SemiBold.ttf",
+          "font_size": 40,
+          "x": 70,
+          "y": 470,
+          "max_width": 520,
+          "effects": [
+            {"type": "blur", "radius": 1, "argb": "44000000"},
+            {"type": "fill", "argb": "FF1D2430"}
+          ]
+        }
+      ]
+    }
+  },
+  "trusted_client_assertions": {
+    "urn:uuid:418745b8-78a3-4810-88df-7898aff3ffb4#895b72b9-0808-4fcc-bb19-960d14a9e28f": {
+      "kty": "EC",
+      "alg": "ES256",
+      "crv": "P-256",
+      "x": "nSmAFnZx-SqgTEyqqOSmZyLESdbiSUIYlRlLLoWy5uc",
+      "y": "FN1qcif7nyVX1MHN_YSbo7o7RgG2kPJUjg27YX6AKsQ"
+    },
+    "multipaz_client_assertion": {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "T1e0RX1raACcc_pUYiahl6bk7DzSolNGWwlgqX_6rVc",
+      "y": "KLxC0QBTMy2H5-eFwQSQtJR3IxpAlKlvVSgAeJcS7fI",
+      "alg": "ES256"
+    }
+  },
+  "trusted_client_attestations": {
+    "urn:uuid:60f8c117-b692-4de8-8f7f-636ff852baa6": "MIIBxTCCAUugAwIBAgIJAOQTL9qcQopZMAoGCCqGSM49BAMDMDgxNjA0BgNVBAMTLXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjAeFw0yNDA5MjMyMjUxMzFaFw0zNDA5MjMyMjUxMzFaMDgxNjA0BgNVBAMTLXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjB2MBAGByqGSM49AgEGBSuBBAAiA2IABN4D7fpNMAv4EtxyschbITpZ6iNH90rGapa6YEO/uhKnC6VpPt5RUrJyhbvwAs0edCPthRfIZwfwl5GSEOS0mKGCXzWdRv4GGX/Y0m7EYypox+tzfnRTmoVX3v6OxQiapKMhMB8wHQYDVR0OBBYEFPqAK5EjiQbxFAeWt//DCaWtC57aMAoGCCqGSM49BAMDA2gAMGUCMEO01fJKCy+iOTpaVp9LfO7jiXcXksn2BA22reiR9ahDRdGNCrH1E3Q2umQAssSQbQIxAIz1FTHbZPcEbA5uE5lCZlRG/DQxlZhk/rZrkPyXFhqEgfMnQ45IJ6f8Utlg+4Wiiw==",
+    "multipaz_wallet_attestation": "MIIBZjCCAQygAwIBAgIJALeOfaT23Xl4MAoGCCqGSM49BAMCMCYxJDAiBgNVBAMMG211bHRpcGF6X3dhbGxldF9hdHRlc3RhdGlvbjAeFw0yNTEwMDIwMjUzNThaFw0zNTA5MzAwMjUzNThaMCYxJDAiBgNVBAMMG211bHRpcGF6X3dhbGxldF9hdHRlc3RhdGlvbjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABIy2TeFHLTgP9OMs7/osKPuZsOITKIE+/HirAmyxxRrgfFcrNNcBtbkJ6aofpt+csdFZnf1UpCvE7vWTsX4Xp4ejIzAhMA4GA1UdDwEB/wQEAwIBhjAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49BAMCA0gAMEUCIF0xO2hhKUc4nj0kBBJkb3yCeIlkLeyZg1bGx9+SL0qHAiEArUd5SSxPsuSHVga0UBryJy2awvbUlI79QaBWX3LTuII="
+  },
+  "trusted_key_attestations": {
+    "urn:uuid:60f8c117-b692-4de8-8f7f-636ff852baa6": "MIIBxTCCAUugAwIBAgIJAOQTL9qcQopZMAoGCCqGSM49BAMDMDgxNjA0BgNVBAMTLXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjAeFw0yNDA5MjMyMjUxMzFaFw0zNDA5MjMyMjUxMzFaMDgxNjA0BgNVBAMTLXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjB2MBAGByqGSM49AgEGBSuBBAAiA2IABN4D7fpNMAv4EtxyschbITpZ6iNH90rGapa6YEO/uhKnC6VpPt5RUrJyhbvwAs0edCPthRfIZwfwl5GSEOS0mKGCXzWdRv4GGX/Y0m7EYypox+tzfnRTmoVX3v6OxQiapKMhMB8wHQYDVR0OBBYEFPqAK5EjiQbxFAeWt//DCaWtC57aMAoGCCqGSM49BAMDA2gAMGUCMEO01fJKCy+iOTpaVp9LfO7jiXcXksn2BA22reiR9ahDRdGNCrH1E3Q2umQAssSQbQIxAIz1FTHbZPcEbA5uE5lCZlRG/DQxlZhk/rZrkPyXFhqEgfMnQ45IJ6f8Utlg+4Wiiw==",
+    "multipaz_key_attestation": {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "gV6qaaY4o9pWw2XkWH45d92_JVKFPsMr_eszFCZ4jiU",
+      "y": "rmzbybii_BwR2sa9C6YwREFf2hRBFURBejRiod1n1RI",
+      "alg": "ES256"
+    }
+  }
+}

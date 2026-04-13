@@ -1,7 +1,17 @@
 package org.multipaz.openid4vci.server
 
+import org.multipaz.openid4vci.credential.CredentialFactoryAgeVerification
+import org.multipaz.openid4vci.credential.CredentialFactoryDigitalPaymentCredential
+import org.multipaz.openid4vci.credential.CredentialFactoryMdl
+import org.multipaz.openid4vci.credential.CredentialFactoryMdocPid
+import org.multipaz.openid4vci.credential.CredentialFactoryRegistry
+import org.multipaz.openid4vci.credential.CredentialFactorySdjwtPid
+import org.multipaz.openid4vci.credential.CredentialFactoryUtopiaLoyalty
+import org.multipaz.openid4vci.credential.CredentialFactoryUtopiaMovieTicket
+import org.multipaz.openid4vci.credential.CredentialFactoryUtopiaNaturalization
 import org.multipaz.server.common.ServerConfiguration
 import org.multipaz.server.common.runServer
+import kotlin.collections.mutableListOf
 
 /**
  * Main entry point to launch the server.
@@ -25,7 +35,23 @@ class Main {
             runServer(
                 args = args,
                 needAdminPassword = true,
-                checkConfiguration = ::checkConfiguration
+                checkConfiguration = ::checkConfiguration,
+                environmentInitializer = {
+                    val credentialFactoryRegistry = CredentialFactoryRegistry(
+                        listOf(
+                            CredentialFactoryMdl(),
+                            CredentialFactoryMdocPid(),
+                            CredentialFactorySdjwtPid(),
+                            CredentialFactoryUtopiaNaturalization(),
+                            CredentialFactoryUtopiaMovieTicket(),
+                            CredentialFactoryAgeVerification(),
+                            CredentialFactoryUtopiaLoyalty(),
+                            CredentialFactoryDigitalPaymentCredential(),
+                        )
+                    )
+                    credentialFactoryRegistry.initialize()
+                    add(CredentialFactoryRegistry::class, credentialFactoryRegistry)
+                }
             ) { serverEnvironment ->
                 configureRouting(serverEnvironment)
             }

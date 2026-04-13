@@ -1,0 +1,107 @@
+package org.multipaz.openid4vci.credential
+
+import org.multipaz.crypto.EcPublicKey
+import org.multipaz.utopia.knowntypes.UtopiaNaturalization
+import org.multipaz.rpc.backend.BackendEnvironment
+import kotlin.time.Clock
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.buildCborMap
+import org.multipaz.openid4vci.util.CredentialId
+import org.multipaz.provisioning.CredentialFormat
+import org.multipaz.revocation.RevocationStatus
+import org.multipaz.sdjwt.SdJwt
+import org.multipaz.server.common.getBaseUrl
+import kotlin.time.Duration.Companion.days
+
+/** [CredentialFactory] for [UtopiaNaturalization] credentials in IETF SD-JWT format. */
+class CredentialFactoryUtopiaNaturalization : CredentialFactory {
+    override val configurationId: String
+        get() = "utopia_naturalization"
+
+    override val scope: String
+        get() = "naturalization"
+
+    override val format
+        get() = FORMAT
+
+    override val requireKeyAttestation: Boolean get() = false
+
+    override val proofSigningAlgorithms: List<String>
+        get() = CredentialFactory.DEFAULT_PROOF_SIGNING_ALGORITHMS
+
+    override val cryptographicBindingMethods: List<String>
+        get() = listOf("jwk")
+
+    override val name: String
+        get() = "Naturalization certificate"
+
+    override val logo: String
+        get() = "naturalization.png"
+
+    override suspend fun mint(
+        systemOfRecordData: DataItem,
+        authenticationKey: EcPublicKey?,
+        credentialId: CredentialId
+    ): MintedCredential {
+        check(authenticationKey != null)
+        val issuer = BackendEnvironment.getBaseUrl()
+        val coreData = systemOfRecordData["core"]
+
+        val records = systemOfRecordData["records"]
+        if (!records.hasKey("naturalization")) {
+            throw IllegalArgumentException("No naturalization record for this person")
+        }
+        val nzData = records["naturalization"].asMap.values.firstOrNull() ?: buildCborMap { }
+
+        val identityAttributes = buildJsonObject {
+            put("given_name", coreData["given_name"].asTstr)
+            put("family_name", coreData["family_name"].asTstr)
+            put("birth_date", coreData["birth_date"].asDateString.toString())
+            if (nzData.hasKey("naturalization_date")) {
+                put("naturalization_date", nzData["naturalization_date"].asDateString.toString())
+            }
+        }
+
+        val baseUrl = BackendEnvironment.getBaseUrl()
+        val revocationStatus = RevocationStatus.StatusList(
+            idx = credentialId.index,
+            uri = "$baseUrl/status_list/${credentialId.bucket}",
+            certificate = null
+        )
+
+        val now = Clock.System.now()
+
+        val timeSigned = now
+        val validFrom = now
+        val validUntil = now + 30.days
+
+        val sdJwt = SdJwt.create(
+            issuerKey = getSigningKey(),
+            kbKey = authenticationKey,
+            claims = identityAttributes,
+            nonSdClaims = buildJsonObject {
+                put("iss", issuer)
+                put("vct", UtopiaNaturalization.VCT)
+                put("iat", timeSigned.epochSeconds)
+                put("nbf", validFrom.epochSeconds)
+                put("exp", validUntil.epochSeconds)
+                put("status", revocationStatus.toJson())
+            }
+        )
+
+        return MintedCredential(
+            credential = sdJwt.compactSerialization,
+            creation = validFrom,
+            expiration = validUntil
+        )
+    }
+
+    override suspend fun display(systemOfRecordData: DataItem): CredentialDisplay =
+        CredentialDisplay.create(systemOfRecordData, "credential_naturalization")
+
+    companion object {
+        private val FORMAT = CredentialFormat.SdJwt(UtopiaNaturalization.VCT)
+    }
+}
