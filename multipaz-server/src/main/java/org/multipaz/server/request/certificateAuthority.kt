@@ -4,7 +4,6 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.application.call
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Routing
@@ -15,6 +14,9 @@ import org.multipaz.server.enrollment.getLocalRootCertificate
 
 /**
  * Serves root certificates created by this server and their revocation lists.
+ *
+ * @param createOnRequest when `true`, root certificates are generated on demand if they
+ *     don't already exist. When `false`, a 404 is returned for missing identities.
  */
 fun Routing.certificateAuthority(createOnRequest: Boolean = false) {
     get("/crl/{identity}") {

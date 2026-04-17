@@ -30,7 +30,8 @@ import org.multipaz.records.request.pushedAuthorizationRequest
 import org.multipaz.records.request.enroll
 import org.multipaz.records.request.identityDump
 import org.multipaz.records.request.identityLoad
-import org.multipaz.records.request.identityToJson
+import org.multipaz.records.request.paymentAccount
+import org.multipaz.records.request.recordsRpc
 import org.multipaz.records.request.token
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.server.common.ServerEnvironment
@@ -68,6 +69,7 @@ fun Application.configureRouting(serverEnvironment: Deferred<ServerEnvironment>)
     }
     routing {
         serveResources()
+        recordsRpc(serverEnvironment)
         certificateAuthority(createOnRequest = true)
         post("/enroll") {
             enroll(call)
@@ -149,6 +151,9 @@ fun Application.configureRouting(serverEnvironment: Deferred<ServerEnvironment>)
         }
         get("/data") {
             data(call)
+        }
+        get("/payment/account/{account}") {
+            paymentAccount(call, call.parameters["account"]!!)
         }
     }
 }

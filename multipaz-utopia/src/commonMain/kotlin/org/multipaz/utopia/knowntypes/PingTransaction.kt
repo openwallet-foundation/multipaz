@@ -51,10 +51,10 @@ object PingTransaction: TransactionType(
         credential: Credential
     ): Map<String, DataItem> {
         return buildMap {
-            transactionData.getString("string")?.let {
+            transactionData.attributes.getString("string")?.let {
                 put("string", it.toDataItem())
             }
-            transactionData.getBlob("blob")?.let {
+            transactionData.attributes.getBlob("blob")?.let {
                 put("blob", it.toByteArray().toDataItem())
             }
         }

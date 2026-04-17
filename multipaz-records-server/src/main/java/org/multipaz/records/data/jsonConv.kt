@@ -5,7 +5,6 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format
 import kotlinx.datetime.format.FormatStringsInDatetimeFormats
-import kotlinx.datetime.format.byUnicodePattern
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonArray
@@ -17,7 +16,6 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.CborMap
@@ -33,10 +31,8 @@ import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.documenttype.DocumentAttributeType
-import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64
 import org.multipaz.util.toBase64
-import kotlin.time.Instant
 
 private val UTOPIA_TIMEZONE = TimeZone.UTC
 
@@ -95,11 +91,7 @@ fun JsonElement.toDataItem(recordType: RecordType): DataItem {
                 if (itemType != null) {
                     put(itemKey, item.toDataItem(itemType))
                 } else {
-                    if (itemKey == "instance_title") {
-                        put("instance_title", item.jsonPrimitive.content)
-                    } else {
                         throw IllegalArgumentException("Unexpected item: '$itemKey'")
-                    }
                 }
             }
         }

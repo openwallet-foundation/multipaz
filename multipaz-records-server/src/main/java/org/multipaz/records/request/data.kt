@@ -7,9 +7,6 @@ import io.ktor.server.request.header
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.CborMap
-import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborMap
 import org.multipaz.records.data.Identity
@@ -33,7 +30,7 @@ suspend fun data(call: ApplicationCall) {
         )
         return
     }
-    if (authorization.substring(0, 7).lowercase() != "bearer ") {
+    if (authorization.take(7).lowercase() != "bearer ") {
         call.respondText(
             status = HttpStatusCode.Unauthorized,
             contentType = ContentType.Text.Plain,
@@ -62,12 +59,7 @@ suspend fun data(call: ApplicationCall) {
                     putCborMap(scope) {
                         val record = records[recordId]
                         if (record != null) {
-                            put(
-                                recordId,
-                                CborMap(record.asMap.filter { (key, _) ->
-                                    key.asTstr != "instance_title"
-                                }.toMutableMap())
-                            )
+                            put(recordId, record)
                         }
                     }
                 }

@@ -6,7 +6,8 @@ val serverProjects = listOf(
     "multipaz-openid4vci-server",
     "multipaz-backend-server",
     "multipaz-records-server",
-    "multipaz-csa-server"
+    "multipaz-csa-server",
+    "multipaz-upay-server",
 )
 
 tasks.register("collectDependencies") {
@@ -158,7 +159,7 @@ tasks.register<Exec>("runDockerImage") {
     commandLine(
         containerTool, "run",
         "--rm",
-        "-p", "8000-8008:8000-8008",
+        "-p", "8000-8009:8000-8009",
         "multipaz/server-bundle:latest"
     )
 }

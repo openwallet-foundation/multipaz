@@ -6,11 +6,13 @@ import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cose.Cose
+import org.multipaz.cose.CoseLabel
+import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.X509CertChain
 import org.multipaz.device.AssertionRpcAuth
-import org.multipaz.device.DeviceAssertion
 import org.multipaz.device.toCbor
 import kotlin.time.Clock
 
@@ -34,11 +36,30 @@ class RpcAuthIssuerSignature(
             timestamp = Clock.System.now(),
             payloadHash = ByteString(Crypto.digest(Algorithm.SHA256, payload.value))
         )
+        val protectedHeaders: Map<CoseLabel, DataItem> = if (signingKey is AsymmetricKey.X509Certified) {
+            val certificates = signingKey.certChain.certificates
+            val last = certificates.last()
+            if (last.subject != last.issuer) {
+                // Root cert is not in the chain
+                mapOf(Cose.COSE_LABEL_X5CHAIN.toCoseLabel to signingKey.certChain.toDataItem())
+            } else {
+                if (certificates.size == 1) {
+                    // Signing certificate is self-signed, no chain to include
+                    mapOf()
+                } else {
+                    // Don't include root certificate
+                    val chain = X509CertChain(certificates.subList(0, certificates.lastIndex))
+                    mapOf(Cose.COSE_LABEL_X5CHAIN.toCoseLabel to chain.toDataItem())
+                }
+            }
+        } else {
+            mapOf()
+        }
         val sign1 = Cose.coseSign1Sign(
             signingKey = signingKey,
             message = assertion.toCbor(),
             includeMessageInPayload = true,
-            protectedHeaders = mapOf(),
+            protectedHeaders = protectedHeaders,
             unprotectedHeaders = mapOf()
         )
         return buildCborMap {

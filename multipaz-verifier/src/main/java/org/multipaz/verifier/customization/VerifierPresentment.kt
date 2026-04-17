@@ -1,7 +1,8 @@
 package org.multipaz.verifier.customization
 
-import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonObject
+import org.multipaz.server.presentment.PresentmentRecord
+import org.multipaz.server.presentment.PresentmentResult
 
 /**
  * Represents the original request and the result of a successful presentment.
@@ -9,12 +10,18 @@ import kotlinx.serialization.json.JsonObject
 interface VerifierPresentment {
     /** DCQL request that describes the desired credentials and claims */
     val dcql: JsonObject
+
     /** transaction data */
     val transactions: List<JsonObject>
-    /** Response protocol prefixed by "dcapi:" or "custom-url:" */
-    val responseProtocol: String
-    /** Raw response data */
-    val rawResponse: ByteString
+
+    /** Serializable data that fully describes the presentation */
+    val presentmentRecord: PresentmentRecord
+
+    /**
+     * Per-document presentment verification result.
+     */
+    val presentmentResults: List<PresentmentResult>
+
     /**
      * Processed response; this will have an object for each returned for each credential
      * in the request DCQL indexed by the request id. Each object has the following fields:

@@ -31,6 +31,7 @@ COPY multipaz-server-deployment/docker/services/csa.conf /etc/multipaz/csa.conf
 COPY multipaz-server-deployment/docker/services/openid4vci.conf /etc/multipaz/openid4vci.conf
 COPY multipaz-server-deployment/docker/services/records.conf /etc/multipaz/records.conf
 COPY multipaz-server-deployment/docker/services/verifier.conf /etc/multipaz/verifier.conf
+COPY multipaz-server-deployment/docker/services/upay.conf /etc/multipaz/upay.conf
 
 # Copy initial data
 COPY multipaz-server-deployment/docker/init/records.json /app/init/records.json
@@ -49,6 +50,6 @@ RUN mkdir -p /var/lib/nginx/body /var/log/nginx /run /run/nginx && \
 USER multipaz
 
 # Expose unified port (nginx) and individual service ports
-EXPOSE 8080 8004 8005 8006 8007 8008
+EXPOSE 8080 8004 8005 8006 8007 8008 8009
 
 ENTRYPOINT ["/app/start-servers.sh"]

@@ -18,4 +18,5 @@ fun DocumentTypeRepository.addUtopiaTypes(locale: String = LocalizedStrings.getC
     addDocumentType(UtopiaMovieTicket.getDocumentType(locale))
     addDocumentType(UtopiaNaturalization.getDocumentType(locale))
     addTransactionType(PingTransaction)
+    addTransactionType(PaymentTransaction)
 }

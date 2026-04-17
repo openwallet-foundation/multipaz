@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -29,12 +30,12 @@ import org.multipaz.util.fromBase64Url
 class TransactionDataJson(
     type: TransactionType,
     val base64UrlEncodedJson: String,
-    val data: JsonObject =
-        Json.parseToJsonElement(base64UrlEncodedJson.fromBase64Url().decodeToString()).jsonObject
+    data: JsonObject = Json.parseToJsonElement(base64UrlEncodedJson.fromBase64Url().decodeToString()).jsonObject
 ): TransactionData(type) {
+    override val attributes = AttributesJson(data)
 
     override fun getHashAlgorithm(): Algorithm? =
-        data["transaction_data_hashes_alg"]?.let { algs ->
+        attributes.data["transaction_data_hashes_alg"]?.let { algs ->
             algs.jsonArray.firstNotNullOfOrNull { alg ->
                 (alg as? JsonPrimitive)?.let {
                     try {
@@ -50,17 +51,30 @@ class TransactionDataJson(
     override suspend fun getHash(algorithm: Algorithm) =
         ByteString(Crypto.digest(algorithm, base64UrlEncodedJson.encodeToByteArray()))
 
-    override fun getString(name: String): String? =
-        data[name]?.jsonPrimitive?.content
+    /**
+     * Implementation of [TransactionData.Attributes] for JSON-formatted transactions.
+     *
+     * @param data transaction data as JSON object.
+     */
+    class AttributesJson(val data: JsonObject): Attributes {
+        override fun getString(name: String): String? =
+            data[name]?.jsonPrimitive?.content
 
-    override fun getLong(name: String): Long? =
-        data[name]?.jsonPrimitive?.long
+        override fun getLong(name: String): Long? =
+            data[name]?.jsonPrimitive?.long
 
-    override fun getBoolean(name: String): Boolean? =
-        data[name]?.jsonPrimitive?.boolean
+        override fun getDouble(name: String): Double? =
+            data[name]?.jsonPrimitive?.double
 
-    override fun getBlob(name: String): ByteString? =
-        data[name]?.let { ByteString(it.jsonPrimitive.content.fromBase64Url()) }
+        override fun getBoolean(name: String): Boolean? =
+            data[name]?.jsonPrimitive?.boolean
+
+        override fun getBlob(name: String): ByteString? =
+            data[name]?.let { ByteString(it.jsonPrimitive.content.fromBase64Url()) }
+
+        override fun getCompound(name: String): Attributes? =
+            data[name]?.let { AttributesJson(it.jsonObject) }
+    }
 
     companion object {
         /**

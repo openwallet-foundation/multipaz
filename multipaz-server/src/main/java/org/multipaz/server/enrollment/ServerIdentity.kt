@@ -42,6 +42,7 @@ import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.server.common.getBaseUrl
+import org.multipaz.server.presentment.PaymentProcessor
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.Logger
 import org.multipaz.util.fromGlob
@@ -121,7 +122,13 @@ enum class ServerIdentity(
      *
      * Multipaz issuance servers use this to access the System of Record.
      */
-    RECORDS_CLIENT("System of Records Client");
+    RECORDS_CLIENT("System of Records Client"),
+
+    /**
+     * RPC authentication to access [PaymentProcessor] interface used by a verifier
+     * that can accept payment transactions.
+     */
+    PAYMENT_PROCESSOR("Payment Processor");
 
     /**
      * A name for the identity that is formatted for use in JSON and in URLs (lowercase,
@@ -177,7 +184,7 @@ suspend fun getLocalRootCertificate(
     serverIdentity: ServerIdentity,
     createOnRequest: Boolean
 ): X509Cert {
-    val certChain = getRootIdentity(serverIdentity, createOnRequest).certChain
+    val certChain = getLocalRootIdentity(serverIdentity, createOnRequest).certChain
     check(certChain.certificates.size == 1)
     return certChain.certificates.first()
 }
@@ -199,7 +206,7 @@ suspend fun getLocalRootCertificate(
  * @throws IllegalStateException if [createOnRequest] is `false` and requested identity does not
  *      exist in either configuration or database.
  */
-private suspend fun getRootIdentity(
+private suspend fun getLocalRootIdentity(
     serverIdentity: ServerIdentity,
     createOnRequest: Boolean
 ): AsymmetricKey.X509Certified =
@@ -352,6 +359,15 @@ private suspend fun createRootIdentity(
     )
 }
 
+/**
+ * Generates a leaf certificate for a server identity, signed by the local root CA.
+ *
+ * @param serverIdentity the type of identity to certify.
+ * @param enrollmentRequest the enrollment request containing the public key and subject info.
+ * @param now the certificate validity start time (defaults to the current time).
+ * @param expiration the certificate validity end time.
+ * @return a certificate chain consisting of the new leaf certificate followed by the root.
+ */
 suspend fun generateServerIdentityLeafCertificate(
     serverIdentity: ServerIdentity,
     enrollmentRequest: Enrollment.EnrollmentRequest,
@@ -377,7 +393,7 @@ suspend fun generateServerIdentityLeafCertificate(
             put(OID.ORGANIZATIONAL_UNIT_NAME.oid, ASN1String(it))
         }
     })
-    val signingKey = getRootIdentity(serverIdentity, createOnRequest = true)
+    val signingKey = getLocalRootIdentity(serverIdentity, createOnRequest = true)
     val certifyingChain = signingKey.certChain
     val issuerCert = certifyingChain.certificates.first()
     val certificate = buildX509Cert(
@@ -508,7 +524,7 @@ suspend fun enrollServer(
         exceptionMap = exceptionMap,
         rpcEndpointUrl = "$url/push",
         callingServerUrl = BackendEnvironment.getBaseUrl(),
-        signingKey = getRootIdentity(ServerIdentity.ENROLLMENT, createOnRequest = true)
+        signingKey = getLocalRootIdentity(ServerIdentity.ENROLLMENT, createOnRequest = true)
     )
     val enrollment = EnrollmentStub(
         endpoint = "enrollment",
@@ -545,7 +561,7 @@ suspend fun getCrl(
     serverIdentity: ServerIdentity,
     createOnRequest: Boolean
 ): X509Crl {
-    val root = getRootIdentity(serverIdentity, createOnRequest)
+    val root = getLocalRootIdentity(serverIdentity, createOnRequest)
     val now = Clock.System.now().truncateToWholeSeconds()
     val builder = X509Crl.Builder(
         signingKey = root,
@@ -569,8 +585,12 @@ suspend fun getCrl(
 suspend fun checkServerTrust(url: String, settingName: String) {
     val parsedUrl = Url(url)
     val baseUrl = BackendEnvironment.getBaseUrl()
-    if (EnrollmentImpl.LOCALHOST.matchEntire(baseUrl) == null
-        && parsedUrl.protocol != URLProtocol.HTTPS) {
+    if (EnrollmentImpl.LOCALHOST.matchEntire(baseUrl) != null) {
+        // If running locally, trust other localhost servers
+        if (EnrollmentImpl.LOCALHOST.matchEntire(url) != null) {
+            return
+        }
+    } else if (parsedUrl.protocol != URLProtocol.HTTPS) {
         throw IllegalStateException("Only allow https servers")
     }
     val host = parsedUrl.host

@@ -209,10 +209,23 @@ function addField(controls, typedefs, attribute, className, sectionDiv, removeFn
                 input.type = "text";
         }
     }
-    if (className == "core" && attribute.identifier == "utopia_id_number") {
+    if (attribute.identifier == "utopia_id_number" || attribute.identifier == "account_number") {
         input.readOnly = true
     }
     row.appendChild(input);
+    if (attribute.identifier == "account_number") {
+        const link = document.createElement("a");
+        link.textContent = "\u25B6";
+        link.style.cursor = "pointer";
+        link.style.verticalAlign = "bottom";
+        link.addEventListener("click", function() {
+            const account = input.value;
+            if (account) {
+                window.location.href = "account.html?id=" + account;
+            }
+        });
+        row.appendChild(link);
+    }
     input.setAttribute("id", id);
     let field = subsection || input;
     if (removeFn) {

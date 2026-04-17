@@ -15,6 +15,10 @@ sealed class TransactionData(
     val type: TransactionType
 ) {
     /**
+     * Transaction attributes
+     */
+    abstract val attributes: Attributes
+    /**
      * Hash algorithm override for this transaction data.
      *
      * By default [Algorithm.SHA256] is used, but transaction data can specify a list of the desired
@@ -34,15 +38,30 @@ sealed class TransactionData(
      */
     abstract suspend fun getHash(algorithm: Algorithm = Algorithm.SHA256): ByteString
 
-    /** @return string attribute */
-    abstract fun getString(name: String): String?
+    /**
+     * A set of attributes either in the transaction data itself or in one of the compound
+     * objects that it contains.
+     *
+     * Transaction can come in either JSON or CBOR format depending on the presentment protocol.
+     * This helps writing code generically, so it works with either format.
+     */
+    interface Attributes {
+        /** @return string attribute */
+        fun getString(name: String): String?
 
-    /** @return integer attribute */
-    abstract fun getLong(name: String): Long?
+        /** @return integer attribute */
+        fun getLong(name: String): Long?
 
-    /** @return boolean attribute */
-    abstract fun getBoolean(name: String): Boolean?
+        /** @return number attribute */
+        fun getDouble(name: String): Double?
 
-    /** @return binary attribute */
-    abstract fun getBlob(name: String): ByteString?
+        /** @return boolean attribute */
+        fun getBoolean(name: String): Boolean?
+
+        /** @return binary attribute */
+        fun getBlob(name: String): ByteString?
+
+        /** @return compound attribute */
+        fun getCompound(name: String): Attributes?
+    }
 }

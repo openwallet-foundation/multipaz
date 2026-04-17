@@ -49,6 +49,18 @@ class ServerEnvironment(): BackendEnvironment {
     }
 
     companion object {
+        /**
+         * Creates and asynchronously initializes a [ServerEnvironment].
+         *
+         * Initialization sets up storage (JDBC or ephemeral based on `database_engine` config),
+         * an HTTP client, a [SoftwareSecureArea], RPC cipher and notification infrastructure,
+         * and then runs the caller-provided [initializer] for server-specific setup.
+         *
+         * @param configuration server configuration to use.
+         * @param initializer optional block for registering additional interfaces into the
+         *  environment via [ServerEnvironmentInitializer.add].
+         * @return a [Deferred] that completes when initialization is finished.
+         */
         fun create(
             configuration: Configuration,
             initializer: suspend ServerEnvironmentInitializer.() -> Unit = {}

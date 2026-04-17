@@ -27,7 +27,6 @@ import org.multipaz.asn1.ASN1TaggedObject
 import org.multipaz.asn1.OID
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X509KeyUsage
@@ -190,6 +189,15 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
             supportExpiration = true
         )
 
+        /**
+         * Returns a [Deferred] that resolves to this server's certified key for the given
+         * [serverIdentity] type.
+         *
+         * Loads from configuration, database, or triggers enrollment as needed. Results
+         * are cached in memory and automatically refreshed before certificate expiration.
+         *
+         * @param serverIdentity the type of identity for which the key is requested
+         */
         suspend fun getServerIdentity(
             serverIdentity: ServerIdentity,
         ): Deferred<AsymmetricKey.X509Certified> {
@@ -373,7 +381,7 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
         @Volatile
         private var provisioningServerNextUpdate: Instant = Instant.DISTANT_PAST
         @Volatile
-        private var provisioningServerPublicKey: Deferred<EcPublicKey>? = null
+        private var provisioningServerCertificate: Deferred<X509Cert>? = null
 
         private val serverAuth = RpcAuthInspectorSignature { serverUrl ->
             val now = Clock.System.now()
@@ -382,19 +390,19 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
                     if (provisioningServerNextUpdate <= now) {
                         provisioningServerNextUpdate = now + 5.minutes
                         val env = BackendEnvironment.get(currentCoroutineContext())
-                        provisioningServerPublicKey = CoroutineScope(Dispatchers.IO).async {
-                            loadProvisioningServerPublicKey(env, serverUrl)
+                        provisioningServerCertificate = CoroutineScope(Dispatchers.IO).async {
+                            loadProvisioningServerCertificate(env, serverUrl)
                         }
                     }
                 }
             }
-            provisioningServerPublicKey!!.await()
+            provisioningServerCertificate!!.await()
         }
 
-        private suspend fun loadProvisioningServerPublicKey(
+        private suspend fun loadProvisioningServerCertificate(
             backendEnvironment: BackendEnvironment,
             serverUrl: String
-        ): EcPublicKey {
+        ): X509Cert {
             val enrollmentUrl = backendEnvironment.getInterface(Configuration::class)!!.enrollmentServerUrl
             if (enrollmentUrl != serverUrl) {
                 throw RpcAuthException(
@@ -410,7 +418,7 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
                     rpcAuthError = RpcAuthError.FAILED
                 )
             }
-            return X509Cert.fromPem(response.readRawBytes().decodeToString()).ecPublicKey
+            return X509Cert.fromPem(response.readRawBytes().decodeToString())
         }
 
         /** Pattern that matches localhost urls */

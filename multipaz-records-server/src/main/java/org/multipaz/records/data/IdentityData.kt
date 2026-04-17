@@ -1,8 +1,15 @@
 package org.multipaz.records.data
 
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.annotation.CborSerializable
+import org.multipaz.cbor.buildCborMap
+import kotlin.collections.component1
+import kotlin.collections.component2
+import kotlin.collections.iterator
 
 /**
  * Class that holds data for a person.
@@ -71,5 +78,46 @@ class IdentityData(
         }
     }
 
-    companion object
+    companion object {
+        /**
+         * Creates IdentityData from its JSON representation
+         *
+         * @param data JSON object for IdentityData
+         * @return parsed [IdentityData]
+         */
+        fun fromJson(data: JsonObject): IdentityData {
+            val coreAttributes = recordTypes["core"]!!.subAttributes
+            val common = data["core"]!!.jsonObject.asIterable().associate { (key, value) ->
+                Pair(key, value.toDataItem(coreAttributes[key]!!))
+            }
+            val records =
+                data["records"]!!.jsonObject.asIterable().associate { (recordTypeId, recordMap) ->
+                    val recordType = recordTypes[recordTypeId]!!
+                    Pair(
+                        recordTypeId,
+                        recordMap.jsonObject.asIterable().associate { (recordId, record) ->
+                            val recordCbor = buildCborMap {
+                                if (!record.jsonObject.containsKey("instance_title")) {
+                                    put(
+                                        "instance_title",
+                                        recordType.attribute.displayName + " " + recordId
+                                    )
+                                }
+                                for ((itemKey, item) in record.jsonObject) {
+                                    val itemType = recordType.subAttributes[itemKey]
+                                    if (itemType != null) {
+                                        put(itemKey, item.toDataItem(itemType))
+                                    } else if (itemKey == "instance_title") {
+                                        put("instance_title", item.jsonPrimitive.content)
+                                    } else {
+                                        throw IllegalArgumentException("Unexpected item: '$itemKey'")
+                                    }
+                                }
+                            }
+                            Pair(recordId, recordCbor)
+                        })
+                }
+            return IdentityData(common, records)
+        }
+    }
 }

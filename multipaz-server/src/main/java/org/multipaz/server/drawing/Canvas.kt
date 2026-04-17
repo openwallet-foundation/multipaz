@@ -313,6 +313,10 @@ class Canvas private constructor(val bufferedImage: BufferedImage) {
     }
 
     companion object {
+        /**
+         * Default font resources used by [drawText] when no `font` is specified in config,
+         * in order of decreasing width (regular, semi-condensed, condensed).
+         */
         val DEFAULT_FONTS: List<String> = listOf(
             "fonts/OpenSans-Regular.ttf",
             "fonts/OpenSans_SemiCondensed-Regular.ttf",

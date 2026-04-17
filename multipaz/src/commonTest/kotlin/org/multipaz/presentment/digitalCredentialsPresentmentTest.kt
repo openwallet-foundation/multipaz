@@ -63,7 +63,7 @@ class DigitalCredentialsPresentmentTest {
             transactionData: TransactionData,
             credential: Credential
         ): Boolean {
-            return transactionData.getBoolean("succeed")!!
+            return transactionData.attributes.getBoolean("succeed")!!
         }
 
         override suspend fun applyCbor(
@@ -83,7 +83,7 @@ class DigitalCredentialsPresentmentTest {
             transactionData: TransactionData,
             credential: Credential
         ): Boolean {
-            return transactionData.getBoolean("succeed")!!
+            return transactionData.attributes.getBoolean("succeed")!!
         }
 
         override suspend fun applyCbor(

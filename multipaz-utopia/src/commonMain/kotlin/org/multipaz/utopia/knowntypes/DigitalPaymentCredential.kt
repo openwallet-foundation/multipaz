@@ -113,6 +113,14 @@ object DigitalPaymentCredential {
                     CARD_NAMESPACE to mapOf()
                 )
             )
+            .addSampleRequest(
+                id = "payment_transaction",
+                displayName = getLocalizedString(GeneratedStringKeys.PAYMENT_REQUEST_PAYMENT_SCA_ALL),
+                mdocDataElements = mapOf(
+                    CARD_NAMESPACE to mapOf()
+                ),
+                cannedTransactionData = listOf(PaymentTransaction.sampleData)
+            )
             .build()
     }
 }

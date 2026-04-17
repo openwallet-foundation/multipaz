@@ -94,6 +94,7 @@ service openid4vci openid4vci org.multipaz.openid4vci.server.Main 8007 -param ad
 service csa csa org.multipaz.csa.server.Main 8005
 service verifier verifier org.multipaz.verifier.server.Main 8006
 service backend backend org.multipaz.backend.server.Main 8008
+service upay upay org.multipaz.upay.server.Main 8009
 
 if [ "$INIT" = "0" ]
 then

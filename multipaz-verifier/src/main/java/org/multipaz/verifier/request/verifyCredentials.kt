@@ -1,6 +1,5 @@
 package org.multipaz.verifier.request
 
-import kotlinx.coroutines.CancellationException
 import io.ktor.http.ContentType
 import io.ktor.http.Url
 import io.ktor.server.application.ApplicationCall
@@ -14,7 +13,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
-import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -30,6 +28,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
@@ -52,21 +51,21 @@ import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.documenttype.DocumentAttribute
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.openid.OpenID4VP
-import org.multipaz.presentment.TransactionData
-import org.multipaz.presentment.TransactionDataCbor
 import org.multipaz.presentment.TransactionDataJson
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.SimpleCipher
-import org.multipaz.sdjwt.SdJwt
-import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.server.common.getDomain
 import org.multipaz.server.enrollment.ServerIdentity
 import org.multipaz.server.enrollment.getServerIdentity
-import org.multipaz.trustmanagement.TrustManagerInterface
+import org.multipaz.server.presentment.PresentmentRecord
+import org.multipaz.server.presentment.PresentmentRecordMdoc
+import org.multipaz.server.presentment.PresentmentRecordOpenID4VP
+import org.multipaz.server.presentment.PresentmentResult
+import org.multipaz.server.presentment.PresentmentResultMdoc
+import org.multipaz.server.presentment.PresentmentResultSdJwt
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
@@ -86,7 +85,8 @@ private val defaultExchangeProtocols = listOf("org-iso-mdoc", "openid4vp-v1-sign
 suspend fun makeRequest(call: ApplicationCall) {
     val rawRequest = Json.parseToJsonElement(call.receiveText()) as JsonObject
     val assistant = BackendEnvironment.getInterface(VerifierAssistant::class)
-    val request = assistant?.processRequest(rawRequest) ?: rawRequest
+    val expandedRequest = assistant?.processRequest(rawRequest)
+    val request = expandedRequest?.request ?: rawRequest
 
     val dcqlQuery = request["dcql"] as? JsonObject
         ?: throw InvalidRequestException("'dcql' is missing or invalid")
@@ -108,6 +108,7 @@ suspend fun makeRequest(call: ApplicationCall) {
     val (sessionId, session) = Session.createSession(
         dcqlQuery = dcqlQuery.toString(),
         jsonTransactionData = transactionData?.map { it.toString() },
+        nonce = expandedRequest?.nonce
     )
     val encodedSessionId = encodeSessionId(sessionId)
     val dcRequest = generateRequest(
@@ -142,26 +143,20 @@ suspend fun processResponse(call: ApplicationCall) {
     val sessionId = decodeSessionId(encodedSessionId)
     val session = Session.getSession(sessionId)
         ?: throw InvalidRequestException("Session '$encodedSessionId' is missing or expired")
-    session.responseProtocol = "dcapi:$protocol"
-    val result = if (protocol == "org-iso-mdoc") {
-        val response = dcData["response"]!!.jsonPrimitive.content.fromBase64Url()
-        session.response = ByteString(response)
-        processIsoMdocResponse(
-            session = session,
-            response = response
+    val presentationRecord = when (protocol) {
+        "org-iso-mdoc" -> createPresentationRecordMdoc(
+            response = dcData["response"]!!.jsonPrimitive.content.fromBase64Url(),
+            session = session
         )
-    } else {
-        val responseText = dcData["response"]!!.jsonPrimitive.content
-        session.response = responseText.encodeToByteString()
-        processOpenID4VPResponseText(
+        "openid4vp-v1-signed" -> createPresentationRecordOpenID4VP(
+            responseText = dcData["response"]!!.jsonPrimitive.content,
             session = session,
-            responseText = responseText,
             dcApi = true,
             encodedSessionId = encodedSessionId
         )
+        else -> throw InvalidRequestException("Unknown protocol: '$protocol'")
     }
-
-    processResult(session, result)
+    processResult(session, presentationRecord)
 
     Session.updateSession(sessionId, session)
     call.respondText(
@@ -200,15 +195,13 @@ suspend fun processDirectPost(call: ApplicationCall, encodedSessionId: String) {
         ?: throw InvalidRequestException("'response' parameter is missing")
     val session = Session.getSession(sessionId)
         ?: throw InvalidRequestException("Session '$encodedSessionId' is missing or expired")
-    session.responseProtocol = "custom-url:openid4vp-v1-signed"
-    session.response = responseText.encodeToByteString()
-    val result = processOpenID4VPResponseText(
-        session = session,
+    val presentationRecord = createPresentationRecordOpenID4VP(
         responseText = responseText,
+        session = session,
         dcApi = false,
         encodedSessionId = encodedSessionId
     )
-    processResult(session, result)
+    processResult(session, presentationRecord)
     Session.updateSession(sessionId, session)
     val channels = resultChannelMutex.withLock {
         resultChannels[sessionId]?.toMutableSet() ?: setOf()
@@ -222,7 +215,254 @@ suspend fun processDirectPost(call: ApplicationCall, encodedSessionId: String) {
     )
 }
 
-private suspend fun processResult(session: Session, result: JsonObject) {
+private suspend fun createPresentationRecordMdoc(
+    response: ByteArray,
+    session: Session
+): PresentmentRecord {
+    val array = Cbor.decode(response).asArray
+    if (array.first().asTstr != "dcapi") {
+        throw IllegalArgumentException("Excepted dcapi as first array element")
+    }
+    val encryptionParameters = array[1].asMap
+    val enc = encryptionParameters[Tstr("enc")]!!.asBstr
+    val cipherText = encryptionParameters[Tstr("cipherText")]!!.asBstr
+
+    val encryptionKey = session.encryptionPrivateKey
+    val encryptionInfo = buildCborArray {
+        add("dcapi")
+        addCborMap {
+            put("nonce", session.nonce.toByteArray())
+            put("recipientPublicKey", encryptionKey.publicKey.toCoseKey().toDataItem())
+        }
+    }
+    val encryptionInfoBytes = Cbor.encode(encryptionInfo)
+    val base64EncryptionInfo = encryptionInfoBytes.toBase64Url()
+
+    val documentTypeRepository = BackendEnvironment.getInterface(DocumentTypeRepository::class)!!
+    val origin = BackendEnvironment.getDomain()
+    val dcapiInfo = buildCborArray {
+        add(base64EncryptionInfo)
+        add(origin)
+    }
+
+    val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
+    val sessionTranscript = buildCborArray {
+        add(Simple.NULL) // DeviceEngagementBytes
+        add(Simple.NULL) // EReaderKeyBytes
+        addCborArray {
+            add("dcapi")
+            add(dcapiInfoDigest)
+        }
+    }
+
+    val decrypter = Hpke.getDecrypter(
+        cipherSuite = Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM,
+        receiverPrivateKey = AsymmetricKey.AnonymousExplicit(encryptionKey),
+        encapsulatedKey = enc,
+        info = Cbor.encode(sessionTranscript)
+    )
+    val deviceResponseRaw = decrypter.decrypt(ciphertext = cipherText, aad = byteArrayOf())
+
+    // In ISO world document ids are not used and responses rely on document index
+    // TODO: it is not clear how this would work when there are document sets.
+
+    val transactionData = TransactionDataJson.parse(
+        base64UrlEncodedJson = session.jsonTransactionData?.map {
+            it.encodeToByteArray().toBase64Url()
+        } ?: emptyList(),
+        documentTypeRepository = documentTypeRepository
+    ).values.map { value ->
+        value.associate {
+            it.type.mdocRequestInfoKeyName to convertTransactionDataToCbor(it)
+        }
+    }
+
+    return PresentmentRecordMdoc(
+        response = Cbor.decode(deviceResponseRaw),
+        sessionTranscript = sessionTranscript,
+        origin = origin,
+        encryptionInfo = ByteString(encryptionInfoBytes),
+        transactionData = transactionData
+    )
+}
+
+private suspend fun createPresentationRecordOpenID4VP(
+    responseText: String,
+    session: Session,
+    dcApi: Boolean,
+    encodedSessionId: String
+): PresentmentRecordOpenID4VP {
+    val decryptedResponse = JsonWebEncryption.decrypt(
+        responseText,
+        AsymmetricKey.anonymous(
+            privateKey = session.encryptionPrivateKey,
+            algorithm = session.encryptionPrivateKey.curve.defaultKeyAgreementAlgorithm
+        )
+    ).jsonObject
+    val baseUrl = BackendEnvironment.getBaseUrl()
+    val origin = BackendEnvironment.getDomain()
+    val token = decryptedResponse["vp_token"]!!.jsonObject
+    val state = (decryptedResponse["state"] as? JsonPrimitive)?.content
+    if (state == encodedSessionId) {
+        Logger.i(TAG, "State parameter value verified")
+    } else {
+        Logger.e(TAG, "Expected state='$encodedSessionId', got '$state'")
+    }
+    val formatMap = extractFormatMap(
+        dcql = Json.parseToJsonElement(session.dcqlQuery).jsonObject
+    )
+    val mdocSessionTranscript = if (!formatMap.values.contains("mso_mdoc")) {
+        null
+    } else {
+        val jwkThumbPrint = session.encryptionPrivateKey.publicKey
+            .toJwkThumbprint(Algorithm.SHA256).toByteArray()
+        val nonce = session.nonce.toByteArray().toBase64Url()
+        val handoverInfo = Cbor.encode(
+            buildCborArray {
+                if (dcApi) {
+                    add(origin)
+                    add(nonce)
+                    add(jwkThumbPrint)
+                } else {
+                    add(getClientId())
+                    add(nonce)
+                    add(jwkThumbPrint)
+                    add("$baseUrl/direct_post/$encodedSessionId")
+                }
+            }
+        )
+        val handoverInfoDigest = Crypto.digest(Algorithm.SHA256, handoverInfo)
+        buildCborArray {
+            add(Simple.NULL) // DeviceEngagementBytes
+            add(Simple.NULL) // EReaderKeyBytes
+            addCborArray {
+                if (dcApi) {
+                    add("OpenID4VPDCAPIHandover")
+                } else {
+                    add("OpenID4VPHandover")
+                }
+                add(handoverInfoDigest)
+            }
+        }
+    }
+    return PresentmentRecordOpenID4VP(
+        nonce = session.nonce.toByteArray().toBase64Url(),
+        formats = formatMap,
+        vpToken = token.toString(),
+        jsonTransactionData = session.jsonTransactionData,
+        mdocSessionTranscript = mdocSessionTranscript
+    )
+}
+
+private fun createResult(
+    session: Session,
+    presentmentResults: List<PresentmentResult>
+): JsonObject {
+    val requestedDocuments = extractRequestedDocuments(
+        dcql = Json.parseToJsonElement(session.dcqlQuery).jsonObject
+    )
+    val documentRequests = requestedDocuments.associateBy { it.id }
+    val singleDocMap = mutableMapOf<String, JsonObject>()
+    val multiDocMap = mutableMapOf<String, MutableList<JsonObject>>()
+    for ((index, presentmentResult) in presentmentResults.withIndex()) {
+        val id = presentmentResult.id ?: requestedDocuments[index].id
+        val request = documentRequests[id]!!
+        val docResult = when (presentmentResult) {
+            is PresentmentResultMdoc -> buildJsonObject {
+                put("trusted", presentmentResult.trustResult.isTrusted)
+                val issuerNamespaces = presentmentResult.mdocDocument.issuerNamespaces
+                putJsonObject("claims") {
+                    for (claim in request.claims) {
+                        if (claim.path.size != 2) {
+                            // TODO: nested values in mdoc?
+                            continue
+                        }
+                        val issuerSignedItemsMap =
+                            issuerNamespaces.data[claim.path.first().asTstr]
+                                ?: continue
+                        val issuerSignedItem = issuerSignedItemsMap[claim.path.last().asTstr]
+                            ?: continue
+                        val jsonItem = when (val item = issuerSignedItem.dataElementValue) {
+                            is Tagged -> when (item.tagNumber) {
+                                Tagged.DATE_TIME_STRING,
+                                Tagged.FULL_DATE_STRING -> JsonPrimitive((item.taggedItem as Tstr).asTstr)
+                                else -> item.toJson()
+                            }
+                            else -> item.toJson()
+                        }
+                        val id = claim.id ?: claim.path.last().asTstr
+                        put(id, jsonItem)
+                    }
+                }
+                if (!presentmentResult.transactionResults.isNullOrEmpty()) {
+                    putJsonObject("transactions") {
+                        for ((transactionIdentifier, transactionResult) in presentmentResult.transactionResults) {
+                            putJsonObject(transactionIdentifier) {
+                                for ((name, value) in transactionResult) {
+                                    if (name != "transaction_data_hash" &&
+                                        name != "transaction_data_hash_alg"
+                                    ) {
+                                        put(name, value.toJson())
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            is PresentmentResultSdJwt -> buildJsonObject {
+                put("trusted", presentmentResult.trustResult.isTrusted)
+                putJsonObject("claims") {
+                    for (claim in request.claims) {
+                        var value: JsonElement = presentmentResult.claimMap
+                        for (key in claim.path) {
+                            value = when (key) {
+                                is Tstr -> value.jsonObject[key.asTstr]!!
+                                is Uint -> value.jsonArray[key.asNumber.toInt()]
+                                else -> throw IllegalStateException("Unexpected key in claim path")
+                            }
+                        }
+                        val id = claim.id ?: claim.path.last().asTstr
+                        put(id, value)
+                    }
+                }
+
+                if (!presentmentResult.transactionResults.isNullOrEmpty()) {
+                    putJsonObject("transactions") {
+                        for ((id, value) in presentmentResult.transactionResults) {
+                            put(id, value)
+                        }
+                    }
+                }
+            }
+        }
+        if (request.multiple) {
+            multiDocMap.getOrPut(id) { mutableListOf() }.add(docResult)
+        } else {
+            singleDocMap[id] = docResult
+        }
+    }
+    return buildJsonObject {
+        for ((id, docResult) in singleDocMap) {
+            put(id, docResult)
+        }
+        for ((id, docResults) in multiDocMap) {
+            putJsonArray(id) {
+                for (docResult in docResults) {
+                    add(docResult)
+                }
+            }
+        }
+    }
+}
+
+private suspend fun processResult(
+    session: Session,
+    presentmentRecord: PresentmentRecord,
+) {
+    presentmentRecord.verifyNonce(session.nonce)
+    val presentmentResults = presentmentRecord.verify()
+    val result = createResult(session, presentmentResults)
     val revised = BackendEnvironment.getInterface(VerifierAssistant::class)?.processResponse(
         presentment = object: VerifierPresentment {
             override val dcql get(): JsonObject =
@@ -231,11 +471,12 @@ private suspend fun processResult(session: Session, result: JsonObject) {
                 session.jsonTransactionData?.map {
                     Json.parseToJsonElement(it).jsonObject
                 } ?: emptyList()
-            override val responseProtocol: String = session.responseProtocol!!
-            override val rawResponse: ByteString = session.response!!
+            override val presentmentRecord = presentmentRecord
+            override val presentmentResults = presentmentResults
             override val response = result
         }
     )
+    session.presentmentRecord = presentmentRecord
     session.result = (revised ?: result).toString()
 }
 
@@ -336,7 +577,7 @@ private fun convertTransactionDataToCbor(data: TransactionDataJson): Tagged =
     Tagged(
         Tagged.ENCODED_CBOR,
         Bstr(Cbor.encode(buildCborMap {
-            data.data["transaction_data_hashes_alg"]?.jsonArray?.mapNotNull {
+            data.attributes.data["transaction_data_hashes_alg"]?.jsonArray?.mapNotNull {
                 Algorithm.fromHashAlgorithmIdentifier(it.jsonPrimitive.content)
                     .coseAlgorithmIdentifier?.toDataItem()
             }?.let { hashAlgorithms ->
@@ -346,7 +587,7 @@ private fun convertTransactionDataToCbor(data: TransactionDataJson): Tagged =
                 put("transaction_data_hashes_alg", CborArray(hashAlgorithms.toMutableList()))
             }
             for (element in data.type.dataElements.values) {
-                val value = data.data[element.attribute.identifier]
+                val value = data.attributes.data[element.attribute.identifier]
                 if (value == null) {
                     if (element.mandatory) {
                         throw InvalidRequestException(
@@ -370,14 +611,16 @@ private fun convertToCbor(
     value: JsonElement
 ): DataItem =
     when (attribute.type) {
-        DocumentAttributeType.String -> if (value is JsonPrimitive && value.isString) {
-            value.content.toDataItem()
-        } else {
-            throw InvalidRequestException("'${attribute.identifier}' in '$transactionTypeIdentifier' is not a string")
-        }
+        DocumentAttributeType.String, is DocumentAttributeType.StringOptions ->
+            if (value is JsonPrimitive && value.isString) {
+                value.content.toDataItem()
+            } else {
+                throw InvalidRequestException("'${attribute.identifier}' in '$transactionTypeIdentifier' is not a string")
+            }
 
-        DocumentAttributeType.Number -> convertToNumber(value)
-            ?: throw InvalidRequestException("'${attribute.identifier}' in '$transactionTypeIdentifier': not a number")
+        DocumentAttributeType.Number, is DocumentAttributeType.IntegerOptions ->
+            convertToNumber(value)
+                ?: throw InvalidRequestException("'${attribute.identifier}' in '$transactionTypeIdentifier': not a number")
 
         DocumentAttributeType.Blob -> if (value is JsonPrimitive && value.isString) {
             value.content.fromBase64Url().toDataItem()
@@ -387,6 +630,21 @@ private fun convertToCbor(
 
         DocumentAttributeType.Boolean -> (value as? JsonPrimitive)?.booleanOrNull?.toDataItem()
             ?: throw InvalidRequestException("'${attribute.identifier}' in '$transactionTypeIdentifier': not a boolean")
+
+        DocumentAttributeType.ComplexType -> {
+            if (value !is JsonObject) {
+                throw InvalidRequestException("'${attribute.identifier}' in '$transactionTypeIdentifier': not an object")
+            }
+            buildCborMap {
+                for (attr in attribute.embeddedAttributes) {
+                    val attrValue = value[attr.identifier]
+                    if (attrValue != null) {
+                        put(attr.identifier,
+                            convertToCbor(transactionTypeIdentifier, attr, attrValue))
+                    }
+                }
+            }
+        }
 
         else -> throw InvalidRequestException("'${attribute.identifier}' in '$transactionTypeIdentifier': unsupported type")
     }
@@ -398,306 +656,19 @@ private fun convertToNumber(value: JsonElement): DataItem? =
         null
     }
 
-private suspend fun processOpenID4VPResponseText(
-    session: Session,
-    responseText: String,
-    dcApi: Boolean,
-    encodedSessionId: String
-): JsonObject {
-    val decryptedResponse = JsonWebEncryption.decrypt(
-        responseText,
-        AsymmetricKey.anonymous(
-            privateKey = session.encryptionPrivateKey,
-            algorithm = session.encryptionPrivateKey.curve.defaultKeyAgreementAlgorithm
-        )
-    ).jsonObject
-    val baseUrl = BackendEnvironment.getBaseUrl()
-    val origin = BackendEnvironment.getDomain()
-    val documentTypeRepository = BackendEnvironment.getInterface(DocumentTypeRepository::class)!!
-    val token = decryptedResponse["vp_token"]!!.jsonObject
-    val state = (decryptedResponse["state"] as? JsonPrimitive)?.content
-    if (state == encodedSessionId) {
-        Logger.i(TAG, "State parameter value verified")
-    } else {
-        Logger.e(TAG, "Expected state='$encodedSessionId', got '$state'")
-    }
-    val jwkThumbPrint = session.encryptionPrivateKey.publicKey
-        .toJwkThumbprint(Algorithm.SHA256).toByteArray()
-    val nonce = session.nonce.toByteArray().toBase64Url()
-    val handoverInfo = Cbor.encode(
-        buildCborArray {
-            if (dcApi) {
-                add(origin)
-                add(nonce)
-                add(jwkThumbPrint)
-            } else {
-                add(getClientId())
-                add(nonce)
-                add(jwkThumbPrint)
-                add("$baseUrl/direct_post/$encodedSessionId")
-            }
-        }
-    )
-    val handoverInfoDigest = Crypto.digest(Algorithm.SHA256, handoverInfo)
-    val mdocSessionTranscript by lazy {
-        buildCborArray {
-            add(Simple.NULL) // DeviceEngagementBytes
-            add(Simple.NULL) // EReaderKeyBytes
-            addCborArray {
-                if (dcApi) {
-                    add("OpenID4VPDCAPIHandover")
-                } else {
-                    add("OpenID4VPHandover")
-                }
-                add(handoverInfoDigest)
-            }
-        }
-    }
-    val transactionMap = TransactionDataJson.parse(
-        base64UrlEncodedJson = session.jsonTransactionData?.map {
-            it.encodeToByteArray().toBase64Url()
-        } ?: emptyList(),
-        documentTypeRepository = documentTypeRepository
-    )
-    val requestedDocuments = extractRequestedDocuments(
-        dcql = Json.parseToJsonElement(session.dcqlQuery).jsonObject
-    )
-    val documentRequests = requestedDocuments.associateBy { it.id }
-    return buildJsonObject {
-        for ((id, value) in token) {
-            val documentRequest = documentRequests[id]!!
-            val cbor = documentRequest.format == "mso_mdoc"
-            val responses = value.jsonArray.map { credentialResponse ->
-                val responseText = credentialResponse.jsonPrimitive.content
-                if (cbor) {
-                    val decoded = Cbor.decode(responseText.fromBase64Url())
-                    processMdocResponse(
-                        credentialResponse = decoded,
-                        mdocSessionTranscript = mdocSessionTranscript,
-                        eReaderKey = null,
-                        documentRequests = listOf(documentRequest),
-                        transactionDataList = listOf(transactionMap[id] ?: emptyList())
-                    ).first()
-                } else {
-                    processSdJwtResponse(
-                        credentialResponse = responseText,
-                        documentRequest = documentRequest,
-                        sessionNonce = nonce,
-                        transactionData = transactionMap[id] ?: listOf()
-                    )
-                }
-            }
-            if (documentRequest.multiple) {
-                put(id, JsonArray(responses))
-            } else {
-                check(responses.size == 1)
-                put(id, responses.first())
-            }
-        }
-    }
-}
-
-private suspend fun processIsoMdocResponse(
-    session: Session,
-    response: ByteArray
-): JsonObject {
-    val array = Cbor.decode(response).asArray
-    if (array.first().asTstr != "dcapi") {
-        throw IllegalArgumentException("Excepted dcapi as first array element")
-    }
-    val encryptionParameters = array[1].asMap
-    val enc = encryptionParameters[Tstr("enc")]!!.asBstr
-    val cipherText = encryptionParameters[Tstr("cipherText")]!!.asBstr
-
-    val encryptionKey = session.encryptionPrivateKey
-    val encryptionInfo = buildCborArray {
-        add("dcapi")
-        addCborMap {
-            put("nonce", session.nonce.toByteArray())
-            put("recipientPublicKey", encryptionKey.publicKey.toCoseKey().toDataItem())
-        }
-    }
-    val base64EncryptionInfo = Cbor.encode(encryptionInfo).toBase64Url()
-
-    val documentTypeRepository = BackendEnvironment.getInterface(DocumentTypeRepository::class)!!
-    val origin = BackendEnvironment.getDomain()
-    val dcapiInfo = buildCborArray {
-        add(base64EncryptionInfo)
-        add(origin)
-    }
-
-    val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
-    val sessionTranscript = buildCborArray {
-        add(Simple.NULL) // DeviceEngagementBytes
-        add(Simple.NULL) // EReaderKeyBytes
-        addCborArray {
-            add("dcapi")
-            add(dcapiInfoDigest)
-        }
-    }
-
-    val decrypter = Hpke.getDecrypter(
-        cipherSuite = Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM,
-        receiverPrivateKey = AsymmetricKey.AnonymousExplicit(encryptionKey),
-        encapsulatedKey = enc,
-        info = Cbor.encode(sessionTranscript)
-    )
-    val deviceResponseRaw = decrypter.decrypt(ciphertext = cipherText, aad = byteArrayOf())
-    val requestedDocuments = extractRequestedDocuments(
-        dcql = Json.parseToJsonElement(session.dcqlQuery).jsonObject
-    )
-
-    // In ISO world document ids are not used and responses rely on document index
-    // TODO: it is not clear how this would work when there are document sets.
-
-    val transactionDataList = TransactionDataJson.parse(
-        base64UrlEncodedJson = session.jsonTransactionData?.map {
-            it.encodeToByteArray().toBase64Url()
-        } ?: emptyList(),
-        documentTypeRepository = documentTypeRepository
-    ).values.map { value ->
-        value.map {
-            TransactionDataCbor(it.type, convertTransactionDataToCbor(it))
-        }
-    }
-
-    val responses = processMdocResponse(
-        credentialResponse = Cbor.decode(deviceResponseRaw),
-        mdocSessionTranscript = sessionTranscript,
-        eReaderKey = null,
-        documentRequests = requestedDocuments,
-        transactionDataList = transactionDataList
-    )
-
-    return buildJsonObject {
-        for ((documentRequest, response) in requestedDocuments.zip(responses)) {
-            put(documentRequest.id, response)
-        }
-    }
-}
-
-private suspend fun processMdocResponse(
-    credentialResponse: DataItem,
-    mdocSessionTranscript: DataItem,
-    eReaderKey: AsymmetricKey?,
-    documentRequests: List<RequestedDocument>,
-    transactionDataList: List<List<TransactionData>>
-): List<JsonObject> {
-    val trustManager = BackendEnvironment.getInterface(TrustManagerInterface::class)!!
-    val deviceResponse = DeviceResponse.fromDataItem(credentialResponse)
-    val transactionResponses = deviceResponse.verify(
-        sessionTranscript = mdocSessionTranscript,
-        eReaderKey = eReaderKey,
-        transactionDataList = transactionDataList
-    )
-    return deviceResponse.documents.mapIndexed { index, document ->
-        val request = documentRequests[index]
-        val transactionResponse = transactionResponses[index]
-        buildJsonObject {
-            try {
-                val trustResult = trustManager.verify(document.issuerCertChain.certificates)
-                put("trusted", trustResult.isTrusted)
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                Logger.e(TAG, "Trust verification failed", e)
-            }
-            putJsonObject("claims") {
-                for (claim in request.claims) {
-                    if (claim.path.size != 2) {
-                        // TODO: nested values in mdoc?
-                        continue
-                    }
-                    val issuerSignedItemsMap =
-                        document.issuerNamespaces.data[claim.path.first().asTstr]
-                            ?: continue
-                    val issuerSignedItem = issuerSignedItemsMap[claim.path.last().asTstr]
-                        ?: continue
-                    val jsonItem = when (val item = issuerSignedItem.dataElementValue) {
-                        is Tagged -> when (item.tagNumber) {
-                            Tagged.DATE_TIME_STRING,
-                            Tagged.FULL_DATE_STRING -> JsonPrimitive((item.taggedItem as Tstr).asTstr)
-                            else -> item.toJson()
-                        }
-                        else -> item.toJson()
-                    }
-                    val id = claim.id ?: claim.path.last().asTstr
-                    put(id, jsonItem)
-                }
-            }
-            if (transactionResponse.isNotEmpty()) {
-                putJsonObject("transactions") {
-                    for ((transactionIdentifier, transactionResult) in transactionResponse) {
-                        putJsonObject(transactionIdentifier) {
-                            for ((name, value) in transactionResult) {
-                                if (name != "transaction_data_hash" &&
-                                    name != "transaction_data_hash_alg") {
-                                    put(name, value.toJson())
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private suspend fun processSdJwtResponse(
-    credentialResponse: String,
-    documentRequest: RequestedDocument,
-    sessionNonce: String,
-    transactionData: List<TransactionData>
-): JsonObject {
-    val (sdJwt, sdJwtKb) = if (credentialResponse.endsWith("~")) {
-        Pair(SdJwt.fromCompactSerialization(credentialResponse), null)
-    } else {
-        val sdJwtKb = SdJwtKb.fromCompactSerialization(credentialResponse)
-        Pair(sdJwtKb.sdJwt, sdJwtKb)
-    }
-    if (sdJwtKb == null && sdJwt.jwtBody["cnf"] != null) {
-        throw InvalidRequestException("`cnf` claim present but we got a SD-JWT, not a SD-JWT+KB")
-    }
-    val issuerCert = sdJwt.x5c?.certificates?.first()
-        ?: throw InvalidRequestException("'x5c' not found")
-    val trustManager = BackendEnvironment.getInterface(TrustManagerInterface::class)!!
-    val trustResult = trustManager.verify(sdJwt.x5c!!.certificates)
-    return buildJsonObject {
-        put("trusted", trustResult.isTrusted)
-
-        val claimMap = sdJwtKb?.verify(
-            issuerKey = issuerCert.ecPublicKey,
-            checkNonce = { nonce -> nonce == sessionNonce },
-            // TODO: check audience, and creationTime
-            checkAudience = { audience -> true },
-            checkCreationTime = { creationTime -> true },
-            transactionData = transactionData
-        )
-            ?: sdJwt.verify(issuerCert.ecPublicKey)
-
-        putJsonObject("claims") {
-            for (claim in documentRequest.claims) {
-                var value: JsonElement = claimMap
-                for (key in claim.path) {
-                    value = when (key) {
-                        is Tstr -> value.jsonObject[key.asTstr]!!
-                        is Uint -> value.jsonArray[key.asNumber.toInt()]
-                        else -> throw IllegalStateException("Unexpected key in claim path")
-                    }
-                }
-                val id = claim.id ?: claim.path.last().asTstr
-                put(id, value)
-            }
-        }
-
-        if (transactionData.isNotEmpty() && sdJwtKb != null) {
-            putJsonObject("transactions") {
-                for (transaction in transactionData) {
-                    sdJwtKb.jwtBody[transaction.type.kbJwtResponseClaimName]?.let {
-                        put(transaction.type.identifier, it)
-                    }
-                }
-            }
-        }
+private fun extractFormatMap(
+    dcql: JsonObject
+): Map<String, String> {
+    val credentials = dcql["credentials"] as? JsonArray
+        ?: throw InvalidRequestException("'credentials' is missing or invalid in dsql")
+    return credentials.associate { credential ->
+        credential as? JsonObject
+            ?: throw InvalidRequestException("credential query most be an object")
+        val id = credential["id"] as? JsonPrimitive
+            ?: throw InvalidRequestException("'id' is missing or invalid")
+        val format = credential["format"] as? JsonPrimitive
+            ?: throw InvalidRequestException("'format' is missing or invalid")
+        id.content to format.content
     }
 }
 

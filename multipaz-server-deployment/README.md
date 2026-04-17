@@ -11,6 +11,7 @@ The container bundles:
 - **Records Server** (System of Record) - at `/records/` (port 8004)
 - **CSA Server** (Credential Security Agent) - at `/csa/` (port 8005)
 - **Backend Server** - at `/backend/` (port 8008)
+- **Payment Server** - at `/upay/` (port 8009)
 - **nginx** - reverse proxy routing all services through port 8000
 
 ## Prerequisites
@@ -118,14 +119,15 @@ podman exec -it <container_id> /bin/bash
 
 All services are available through the nginx proxy on port 8000:
 
-| Service | URL                               |
-|---------|-----------------------------------|
-| Web Frontend | http://localhost:8000/            |
-| Verifier | http://localhost:8000/verifier/   |
+| Service             | URL                               |
+|---------------------|-----------------------------------|
+| Web Frontend        | http://localhost:8000/            |
+| Verifier            | http://localhost:8000/verifier/   |
 | OpenID4VCI (Issuer) | http://localhost:8000/openid4vci/ |
-| Records | http://localhost:8000/records/    |
-| CSA | http://localhost:8000/csa/        |
-| Backend | http://localhost:8000/backend/    |
+| Records             | http://localhost:8000/records/    |
+| CSA                 | http://localhost:8000/csa/        |
+| Backend             | http://localhost:8000/backend/    |
+| Payment             | http://localhost:8000/upay/       |
 
 ## Deploying to a Server
 
@@ -199,46 +201,3 @@ and must be removed at very least in the container environment.
 | `MODE` | `proxy`                 | `proxy` for nginx routing, `direct` for port-only access to individual services |
 | `ADMIN_PASS` | `multipaz`        | default is only used for localhost deployment, otherwise it must be specified
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Container                                                       │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  nginx (port 8000)                                        │   │
-│  │    /*            → web frontend (static files)            │   │
-│  │    /verifier/*   → localhost:8006                         │   │
-│  │    /openid4vci/* → localhost:8007                         │   │
-│  │    /records/*    → localhost:8004                         │   │
-│  │    /csa/*        → localhost:8005                         │   │
-│  │    /backend/*    → localhost:8008                         │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              │                                   │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐   │
-│  │verifier │ │openid4  │ │records  │ │  csa    │ │backend  │   │
-│  │ :8006   │ │vci:8007 │ │ :8004   │ │ :8005   │ │ :8008   │   │
-│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘   │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## Building Manually (without Gradle wrapper)
-
-This may be useful if you are trying to troubleshoot a build problem.
-
-```bash
-# 1. Build all components
-./gradlew :multipaz-verifier-server:buildFatJar
-./gradlew :multipaz-openid4vci-server:buildFatJar
-./gradlew :multipaz-backend-server:buildFatJar
-./gradlew :multipaz-records-server:buildFatJar
-./gradlew :multipaz-csa-server:buildFatJar
-./gradlew :multipaz-server-frontend:jsBrowserDistribution
-
-# 2. Build the container image
-podman build -f multipaz-server-deployment/docker/Dockerfile -t multipaz/server-bundle:latest .
-
-# 3. For a specific architecture
-podman build --platform linux/amd64 -f multipaz-server-deployment/docker/Dockerfile -t multipaz/server-bundle:latest-amd64 .
-```

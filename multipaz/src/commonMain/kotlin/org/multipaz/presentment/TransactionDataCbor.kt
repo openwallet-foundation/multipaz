@@ -18,11 +18,11 @@ class TransactionDataCbor(
     type: TransactionType,
     val data: Tagged
 ): TransactionData(type) {
-    private val decoded = data.asTaggedEncodedCbor as CborMap
+    override val attributes = AttributesCbor(this@TransactionDataCbor.data.asTaggedEncodedCbor as CborMap)
 
     override fun getHashAlgorithm(): Algorithm? =
-        if (decoded.hasKey("transaction_data_hashes_alg")) {
-            decoded["transaction_data_hashes_alg"].asArray.firstNotNullOfOrNull { alg ->
+        if (attributes.data.hasKey("transaction_data_hashes_alg")) {
+            attributes.data["transaction_data_hashes_alg"].asArray.firstNotNullOfOrNull { alg ->
                 try {
                     Algorithm.fromCoseAlgorithmIdentifier(alg.asNumber.toInt()).let {
                         if (it.hashAlgorithmName != null) it else null
@@ -36,17 +36,30 @@ class TransactionDataCbor(
         }
 
     override suspend fun getHash(algorithm: Algorithm) =
-        ByteString(Crypto.digest(algorithm, data.taggedItem.asBstr))
+        ByteString(Crypto.digest(algorithm, this@TransactionDataCbor.data.taggedItem.asBstr))
 
-    override fun getString(name: String): String? =
-        if (decoded.hasKey(name)) decoded[name].asTstr else null
+    /**
+     * Implementation of [TransactionData.Attributes] for CBOR-formatted transactions.
+     *
+     * @param data transaction data as CBOR map.
+     */
+    class AttributesCbor(val data: CborMap): Attributes {
+        override fun getString(name: String): String? =
+            if (data.hasKey(name)) data[name].asTstr else null
 
-    override fun getLong(name: String): Long? =
-        if (decoded.hasKey(name)) decoded[name].asNumber else null
+        override fun getLong(name: String): Long? =
+            if (data.hasKey(name)) data[name].asNumber else null
 
-    override fun getBoolean(name: String): Boolean? =
-        if (decoded.hasKey(name)) decoded[name].asBoolean else null
+        override fun getDouble(name: String): Double? =
+            if (data.hasKey(name)) data[name].asDouble else null
 
-    override fun getBlob(name: String): ByteString? =
-        if (decoded.hasKey(name)) ByteString(decoded[name].asBstr) else null
+        override fun getBoolean(name: String): Boolean? =
+            if (data.hasKey(name)) data[name].asBoolean else null
+
+        override fun getBlob(name: String): ByteString? =
+            if (data.hasKey(name)) ByteString(data[name].asBstr) else null
+
+        override fun getCompound(name: String): Attributes? =
+            if (data.hasKey(name)) AttributesCbor(data[name] as CborMap) else null
+    }
 }

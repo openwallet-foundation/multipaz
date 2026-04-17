@@ -6,7 +6,6 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Tagged
-import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemFullDate
@@ -25,6 +24,7 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.truncateToWholeSeconds
+import kotlin.math.max
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
@@ -66,42 +66,17 @@ class CredentialFactoryDigitalPaymentCredential : CredentialFactory {
         val validFrom = now.truncateToWholeSeconds()
         val validUntil = validFrom + 30.days
 
-        val coreData = systemOfRecordData["core"]
-        val records = systemOfRecordData["records"]
-        val paymentData = records["payment"].asMap.values.firstOrNull() ?: buildCborMap {}
-
-        val holderName = if (paymentData.hasKey("holder_name")) {
-            paymentData["holder_name"].asTstr
-        } else {
-            val given = coreData["given_name"].asTstr
-            val family = coreData["family_name"].asTstr
-            "$given $family"
-        }
-        val issueDate = if (paymentData.hasKey("issue_date")) {
-            paymentData["issue_date"].asDateString
-        } else {
-            LocalDate.parse("2026-01-01")
-        }
-        val expiryDate = if (paymentData.hasKey("expiry_date")) {
-            paymentData["expiry_date"].asDateString
-        } else {
-            LocalDate.parse("2031-01-01")
-        }
+        val data = extractData(systemOfRecordData)
 
         val issuerNamespaces = buildIssuerNamespaces {
             addNamespace(DigitalPaymentCredential.CARD_NAMESPACE) {
-                addDataElement("issuer_name", paymentData.getValueOrDefault("issuer_name", "Utopia Bank"))
-                addDataElement(
-                    "payment_instrument_id",
-                    paymentData.getValueOrDefault("payment_instrument_id", "pi-77AABBCC")
-                )
-                addDataElement(
-                    "masked_account_reference",
-                    paymentData.getValueOrDefault("masked_account_reference", "****1234")
-                )
-                addDataElement("holder_name", Tstr(holderName))
-                addDataElement("issue_date", issueDate.toDataItemFullDate())
-                addDataElement("expiry_date", expiryDate.toDataItemFullDate())
+                addDataElement("issuer_name", data["issuer_name"])
+                // We do not have to obfuscate it in our demo system, just use straight account number
+                addDataElement("payment_instrument_id", data["account_number"])
+                addDataElement("masked_account_reference", data["masked_account_reference"])
+                addDataElement("holder_name", data["holder_name"])
+                addDataElement("issue_date", data["issue_date"])
+                addDataElement("expiry_date", data["expiry_date"])
             }
         }
 
@@ -169,50 +144,64 @@ class CredentialFactoryDigitalPaymentCredential : CredentialFactory {
 
     override suspend fun display(systemOfRecordData: DataItem): CredentialDisplay =
         CredentialDisplay.create(
-            enrichDisplayData(systemOfRecordData),
+            extractData(systemOfRecordData),
             "credential_payment"
         )
 
-    private fun DataItem.getValueOrDefault(name: String, defaultValue: String): DataItem {
-        if (this.hasKey(name)) {
-            return this[name]
-        }
-        return Tstr(defaultValue)
-    }
+    private fun extractData(systemOfRecordData: DataItem): DataItem {
+        val coreData = systemOfRecordData["core"]
+        val records = systemOfRecordData["records"]
+        val paymentData = records["payment"].asMap.values.firstOrNull() ?: buildCborMap {}
 
-    private fun enrichDisplayData(systemOfRecordData: DataItem): DataItem {
-        val records = if (systemOfRecordData.hasKey("records")) {
-            systemOfRecordData["records"]
+        val instanceTitle = if (paymentData.hasKey("instance_title")) {
+            paymentData["instance_title"].asTstr
         } else {
-            buildCborMap {}
+            "Pay Card"
         }
-        val paymentRecords = if (records.hasKey("payment")) {
-            records["payment"]
+        val issuerName = if (paymentData.hasKey("issuer_name")) {
+            paymentData["issuer_name"].asTstr
         } else {
-            buildCborMap {}
+            "Bank of Utopia"
         }
-        val paymentData = paymentRecords.asMap.values.firstOrNull() ?: buildCborMap {}
-        val maskedAccountReference = if (paymentData.hasKey("masked_account_reference")) {
-            paymentData["masked_account_reference"].asTstr
+        val holderName = if (paymentData.hasKey("holder_name")) {
+            paymentData["holder_name"].asTstr
         } else {
-            "**** 5678"
+            val given = coreData["given_name"].asTstr
+            val family = coreData["family_name"].asTstr
+            "$given $family"
         }
-        val expiryShort = if (paymentData.hasKey("expiry_date")) {
-            formatExpiryMonthYear(paymentData["expiry_date"].asDateString.toString())
+        val issueDate = if (paymentData.hasKey("issue_date")) {
+            paymentData["issue_date"]
         } else {
-            "12/31"
+            LocalDate.parse("2026-01-01").toDataItemFullDate()
         }
+        val expiryDate = if (paymentData.hasKey("expiry_date")) {
+            paymentData["expiry_date"]
+        } else {
+            LocalDate.parse("2031-01-01").toDataItemFullDate()
+        }
+        val accountNumber = if (paymentData.hasKey("account_number")) {
+            paymentData["account_number"].asTstr
+        } else {
+            "01234567"
+        }
+
+        val maskedLength = max(0, accountNumber.length - 4)
+        val lastFour = accountNumber.substring(maskedLength)
+        val maskedAccountReference = lastFour.padStart(accountNumber.length, '*')
+
+        val expiryShort = formatExpiryMonthYear(expiryDate.asDateString.toString())
 
         return buildCborMap {
-            put("core", systemOfRecordData["core"])
-            put("records", records)
-            put(
-                "display",
-                buildCborMap {
-                    put("masked_account_reference", Tstr(maskedAccountReference))
-                    put("expiry_short", Tstr(expiryShort))
-                }
-            )
+            put("instance_title", instanceTitle)
+            put("issuer_name", issuerName)
+            put("holder_name", holderName)
+            put("given_name", coreData["given_name"])
+            put("account_number", accountNumber)
+            put("issue_date", issueDate)
+            put("expiry_date", expiryDate)
+            put("masked_account_reference", maskedAccountReference)
+            put("expiry_short", expiryShort)
         }
     }
 

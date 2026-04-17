@@ -170,13 +170,13 @@
     }
   },
   "credential_payment": {
-    "title": "{core.given_name}'s payment card",
+    "title": "{given_name}'s {instance_title}",
     "card_art": {
       "blank": "card_payment_sca.png",
       "content": [
         {
           "op": "text",
-          "text": "{display.masked_account_reference}",
+          "text": "{masked_account_reference}",
           "font": "fonts/OpenSans-SemiBold.ttf",
           "font_size": 50,
           "x": 180,
@@ -211,7 +211,7 @@
         },
         {
           "op": "text",
-          "text": "{core.given_name} {core.family_name}",
+          "text": "{holder_name}",
           "uppercase": true,
           "font": "fonts/OpenSans-SemiBold.ttf",
           "font_size": 40,

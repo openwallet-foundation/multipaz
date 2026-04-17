@@ -10,6 +10,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.records.data.IdentityData
 import org.multipaz.records.data.Identity
 import org.multipaz.records.data.TokenType
@@ -17,6 +18,9 @@ import org.multipaz.records.data.idToToken
 import org.multipaz.records.data.recordTypes
 import org.multipaz.records.data.toDataItem
 import org.multipaz.records.data.tokenToId
+import kotlin.collections.component1
+import kotlin.collections.component2
+import kotlin.collections.iterator
 import kotlin.time.Duration
 
 /**
@@ -47,23 +51,14 @@ import kotlin.time.Duration
  * */
 suspend fun identityPut(call: ApplicationCall, create: Boolean) {
     val request = Json.parseToJsonElement(call.receiveText()) as JsonObject
-    val coreAttributes = recordTypes["core"]!!.subAttributes
-    val common = request["core"]!!.jsonObject.asIterable().associate { (key, value) ->
-        Pair(key, value.toDataItem(coreAttributes[key]!!))
-    }
-    val records = request["records"]!!.jsonObject.asIterable().associate { (recordTypeId, recordMap) ->
-        val recordType = recordTypes[recordTypeId]!!
-        Pair(recordTypeId, recordMap.jsonObject.asIterable().associate { (recordId, record) ->
-            Pair(recordId, record.toDataItem(recordType))
-        })
-    }
+    val identityData = IdentityData.fromJson(request)
     val token = if (create) {
-        val record = Identity.create(IdentityData(common, records))
+        val record = Identity.create(identityData)
         idToToken(TokenType.FE_TOKEN, record.id, Duration.INFINITE)
     } else {
         val token = request["token"]!!.jsonPrimitive.content
         val record = Identity.findById(tokenToId(TokenType.FE_TOKEN, token))
-        record.data = record.data.merge(common, records)
+        record.data = record.data.merge(identityData.core, identityData.records)
         record.save()
         token
     }

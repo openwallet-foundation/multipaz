@@ -1,0 +1,49 @@
+html {
+    background-color: #FAF0FF;
+    height: 100%;
+}
+
+body {
+    max-width: 720px;
+    min-height: 100%;
+    margin: 0px auto;
+    background-color: white;
+}
+
+div#main {
+    padding: 12px;
+}
+
+/* this is for left-to-right languages only */
+
+.controls {
+    display: table;
+    border-spacing: 0 0.5em;
+}
+
+.row {
+    display: table-row;
+}
+
+.row > * {
+    display: table-cell;
+}
+
+.row > label {
+    padding-right: 4px;
+    text-align: right;
+}
+
+.label {
+    padding-right: 4px;
+    text-align: right;
+}
+
+.field {
+    font-family: sans-serif;
+    font-size: 0.875em;
+}
+
+input[type=text], input[type=number] select {
+    width: 240px;
+}

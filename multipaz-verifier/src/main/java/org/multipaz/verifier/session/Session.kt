@@ -7,6 +7,7 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable
+import org.multipaz.server.presentment.PresentmentRecord
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.verifier.customization.VerifierPresentment
 import kotlin.random.Random
@@ -19,11 +20,10 @@ import kotlin.time.Duration.Companion.hours
  *
  * @property nonce raw nonce (base64url encoding is used where string is needed)
  * @property encryptionPrivateKey private key used for response encryption
- * @property dcqlQuery JSON-serialized DCQL query
+ * @property dcqlQuery DCQL query that was used to request credentials (serialized JSON)
  * @property jsonTransactionData JSON transaction data
- * @property responseProtocol protocol that was used for response prefixed by "dcapi:" or
- *  "custom-url:"
- * @param response raw response from the presentment
+ * @param presentmentRecord data that was received from the client that encapsulates all the
+ *  information needed for verification
  * @property result verification result (once obtained and verified) as serialized JSON,
  *  see [VerifierPresentment.response] for more info
  */
@@ -33,8 +33,7 @@ data class Session(
     val encryptionPrivateKey: EcPrivateKey,
     val dcqlQuery: String,
     val jsonTransactionData: List<String>?,
-    var responseProtocol: String? = null,
-    var response: ByteString? = null,
+    var presentmentRecord: PresentmentRecord?,
     var result: String? = null
 ) {
     companion object {
@@ -48,12 +47,14 @@ data class Session(
         suspend fun createSession(
             dcqlQuery: String,
             jsonTransactionData: List<String>?,
+            nonce: ByteString?
         ): Pair<String, Session> {
             val session = Session(
-                nonce = ByteString(Random.nextBytes(15)),
+                nonce = nonce ?: ByteString(Random.nextBytes(15)),
                 encryptionPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256),
                 dcqlQuery = dcqlQuery,
                 jsonTransactionData = jsonTransactionData,
+                presentmentRecord = null
             )
             val id = BackendEnvironment.getTable(tableSpec).insert(
                 key = null,

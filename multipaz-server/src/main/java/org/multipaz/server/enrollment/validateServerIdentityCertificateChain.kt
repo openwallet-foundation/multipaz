@@ -61,7 +61,19 @@ suspend fun validateServerIdentityCertificateChain(
     return basicCertificateChainValidator(certChain, instant)
 }
 
-private suspend fun getIdentityRootCertificate(
+/**
+ * Fetches the root certificate for a given [serverIdentity] from the specified [serverUrl].
+ *
+ * If [serverUrl] matches this server's own base URL, the local root certificate is returned.
+ * Otherwise, the certificate is fetched via HTTP from `[serverUrl]/ca/<identity>` and cached.
+ *
+ * @param serverIdentity the type of server identity whose root certificate to fetch.
+ * @param serverUrl the URL of the server that issued the root certificate.
+ * @return the root certificate.
+ * @throws InvalidRequestException if the remote server cannot be reached.
+ * @throws IllegalStateException if the server URL is not trusted per `ca_trust_servers` setting.
+ */
+suspend fun getIdentityRootCertificate(
     serverIdentity: ServerIdentity,
     serverUrl: String
 ): X509Cert {

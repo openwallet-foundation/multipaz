@@ -384,15 +384,9 @@ val recordTypes = RecordType.buildMap {
             Icon.ACCOUNT_BALANCE,
         )
         addString(
-            "payment_instrument_id",
-            "Payment instrument ID",
-            "Tokenized payment instrument identifier.",
-            Icon.NUMBERS,
-        )
-        addString(
-            "masked_account_reference",
-            "Masked account reference",
-            "Masked account reference, for example PAN last 4.",
+            "account_number",
+            "Account number",
+            "Account number.",
             Icon.NUMBERS,
         )
         addString(

@@ -1,14 +1,13 @@
 package org.multipaz.records.data
 
-import kotlinx.datetime.LocalDate
 import kotlinx.io.bytestring.ByteString
-import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.Tstr
+import org.multipaz.records.payment.PaymentAccount
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable
 import org.multipaz.storage.KeyExistsStorageException
 import org.multipaz.storage.StorageTableSpec
-import org.multipaz.util.toBase64Url
 import kotlin.random.Random
 
 /**
@@ -20,11 +19,41 @@ class Identity private constructor(
     val id: String,
     var data: IdentityData
 ) {
-    /** Saves updates to data in storage. */
-    suspend fun save() {
+    /**
+     * Saves updates to data in storage.
+     *
+     * @return (possibly adjusted) data which was actually written
+     */
+    suspend fun save(): IdentityData {
         val table = BackendEnvironment.getTable(tableSpec)
         check(id == data.core["utopia_id_number"]!!.asTstr)
-        table.update(id, ByteString(data.toCbor()))
+        val paymentData = data.records["payment"]
+        val dataToWrite = if (paymentData == null) {
+            data
+        } else {
+            val existingData = table.get(id) ?: throw IdentityNotFoundException()
+            val existingPaymentData =
+                IdentityData.fromCbor(existingData.toByteArray()).records["payment"]
+                    ?: emptyMap()
+            val updatedPaymentData = paymentData.toMutableMap()
+            for ((cardId, cardData) in data.records["payment"]!!) {
+                val existingCardData = existingPaymentData[cardId]
+                if (existingCardData == null || !existingCardData.hasKey("account_number")) {
+                    val updatedCardData = cardData.asMap.toMutableMap()
+                    updatedCardData[Tstr("account_number")] = Tstr(PaymentAccount.create(id))
+                    updatedPaymentData[cardId] = CborMap(updatedCardData)
+                } else {
+                    check(cardData["account_number"] == existingCardData["account_number"])
+                    updatedPaymentData[cardId] = cardData
+                }
+            }
+            IdentityData(
+                core = data.core,
+                records = data.records + ("payment" to updatedPaymentData.toMap())
+            )
+        }
+        table.update(id, ByteString(dataToWrite.toCbor()))
+        return dataToWrite
     }
 
     companion object {
@@ -32,17 +61,22 @@ class Identity private constructor(
         suspend fun create(data: IdentityData): Identity {
             val table = BackendEnvironment.getTable(tableSpec)
             while (true) {
-                val mutableCore = data.core.toMutableMap()
-                val n = Random.Default.nextInt(100000000).toString().padStart(8, '0')
-                val utopiaId = n.substring(0, 4) + "-" + n.substring(4, 8)
-                mutableCore["utopia_id_number"] = Tstr(utopiaId)
-                val dataToStore = IdentityData(mutableCore.toMap(), data.records)
+                val n = Random.nextInt(100000000).toString().padStart(8, '0')
+                val utopiaId = n.take(4) + "-" + n.substring(4, 8)
+                val core = data.core + ("utopia_id_number" to Tstr(utopiaId))
+                val records = data.records.minus("payment") // account numbers will need to be adjusted
+                val dataToStore = IdentityData(core, records)
                 try {
                     val id = table.insert(
                         key = utopiaId,
                         data = ByteString(dataToStore.toCbor())
                     )
-                    return Identity(id, dataToStore)
+                    return if (data.records.containsKey("payment")) {
+                        val adjustedData = Identity(id, IdentityData(core, data.records)).save()
+                        Identity(id, adjustedData)
+                    } else {
+                        Identity(id, dataToStore)
+                    }
                 } catch (_: KeyExistsStorageException) {
                     // try a different key
                 }

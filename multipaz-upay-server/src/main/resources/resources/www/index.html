@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="referrer" content="unsafe-url">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OWF Multipaz UPay service</title>
+    <script src="verify_credentials.js"></script>
+    <script src="upay.js"></script>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="main">
+<h1>UPay Payment Service</h1>
+<div class="controls">
+    <div class="row">
+        <label for="account">Payee account number:</label>
+        <input id="account" type="text"/>
+    </div>
+    <div class="row">
+        <label for="amount">Payment amount:</label>
+        <input id="amount" type="number"/>
+    </div>
+    <div class="row">
+        <label for="description">Description:</label>
+        <input id="description" type="text"/>
+    </div>
+    <div class="row">
+        <label>DC API Protocols</label>
+        <div>
+            <label><input id="protocol_iso" type="checkbox" checked="checked"/>ISO 18013-7 Annex C</label>
+            <br/>
+            <label><input id="protocol_openid4vp" type="checkbox" checked="checked"/>OpenID4VP v1</label>
+        </div>
+    </div>
+</div>
+<button onclick="run()">Pay</button>
+<div id="result">
+</div>
+</div>
+</body>
+</html>
