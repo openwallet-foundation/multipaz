@@ -26,10 +26,12 @@ struct ContentView: View {
                 case .startScreen: StartScreen()
                 case .aboutScreen: AboutScreen()
                 case .documentStoreScreen: DocumentStoreScreen()
-                case .documentScreen(let documentInfo): DocumentScreen(documentInfo: documentInfo)
+                case .documentScreen(let documentId): DocumentScreen(documentId: documentId)
                 case .verticalDocumentListScreen: VerticalDocumentListScreen()
-                case .credentialScreen(let credentialInfo): CredentialScreen(credentialInfo: credentialInfo)
-                case .claimsScreen(let credentialInfo): ClaimsScreen(credentialInfo: credentialInfo)
+                case .credentialScreen(documentId: let documentId, credentialId: let credentialId):
+                    CredentialScreen(documentId: documentId, credentialId: credentialId)
+                case .claimsScreen(documentId: let documentId, credentialId: let credentialId):
+                    ClaimsScreen(documentId: documentId, credentialId: credentialId)
                 case .consentPromptScreen: ConsentPromptScreen()
                 case .passphrasePromptScreen: PassphrasePromptScreen()
                 case .iso18013ProximityPresentmentScreen: Iso18013ProximityPresentmentScreen()

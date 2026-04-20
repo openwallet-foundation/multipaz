@@ -95,7 +95,7 @@ public class DocumentModel {
                     }
                     do {
                         if (index != nil) {
-                            self._documentInfos[index!] = await try getDocumentInfo(self._documentInfos[index!].document)
+                            self._documentInfos[index!] = try await getDocumentInfo(self._documentInfos[index!].document)
                         }
                     } catch {
                         print("Ignoring error in getDocumentInfo() for DocumentUpdated event: \(error)")

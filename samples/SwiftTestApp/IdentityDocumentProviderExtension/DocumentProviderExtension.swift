@@ -69,7 +69,10 @@ func getPresentmentSource() async -> PresentmentSource {
             )
         },
         preferSignatureToKeyAgreement: false,
-        domainsMdocSignature: ["mdoc"]
+        domainsMdocSignature: ["mdoc_user_auth", "mdoc_no_user_auth"],
+        domainsMdocKeyAgreement: [],
+        domainsKeylessSdJwt: ["sdjwt_keyless"],
+        domainsKeyBoundSdJwt: ["sdjwt_user_auth", "sdjwt_no_user_auth"]
     )
 }
 

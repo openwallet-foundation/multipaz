@@ -29,7 +29,7 @@ struct VerticalDocumentListScreen: View {
                             Text("Tap card for more info")
                         } else {
                             Button(action: {
-                                viewModel.path.append(Destination.documentScreen(documentInfo: docInfo))
+                                viewModel.path.append(Destination.documentScreen(documentId: docInfo.document.identifier))
                             }) {
                                 Text("Even more info")
                                     .cornerRadius(12)

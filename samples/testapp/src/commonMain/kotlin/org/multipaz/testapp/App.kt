@@ -47,9 +47,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -84,6 +82,7 @@ import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.getDefault
+import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
@@ -100,7 +99,10 @@ import org.multipaz.presentment.uriSchemePresentment
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.promptModelRequestConsent
 import org.multipaz.prompt.promptModelSilentConsent
+import org.multipaz.provisioning.CredentialMetadata
 import org.multipaz.provisioning.DocumentProvisioningHandler
+import org.multipaz.provisioning.DocumentProvisioningSettings
+import org.multipaz.provisioning.ProvisioningMetadata
 import org.multipaz.provisioning.ProvisioningModel
 import org.multipaz.request.Requester
 import org.multipaz.secure_area_test_app.ui.CloudSecureAreaScreen
@@ -407,7 +409,7 @@ class App private constructor (val promptModel: PromptModel) {
         provisioningModel = ProvisioningModel(
             documentProvisioningHandler = DocumentProvisioningHandler(
                 documentStore = documentStore,
-                secureArea = secureArea
+                secureArea = secureArea,
             ),
             httpClient = HttpClient(TestAppConfiguration.httpClientEngineFactory) {
                 followRedirects = false
@@ -1183,12 +1185,30 @@ class App private constructor (val promptModel: PromptModel) {
                                 )
                             },
                             onProvisionMore = { document, authorizationData ->
-                                provisioningModel.launchOpenID4VCIRefreshCredentials(
-                                    document,
-                                    authorizationData,
-                                    provisioningSupport.getOpenID4VCIClientPreferences(),
-                                    provisioningSupport.getOpenID4VCIBackend()
-                                )
+                                coroutineScope.launch {
+                                    val tStart = Clock.System.now()
+                                    try {
+                                        val numNewCredentials =
+                                            provisioningModel.openID4VCIRefreshCredentials(
+                                                document = document,
+                                                authorizationData = authorizationData,
+                                                clientPreferences = provisioningSupport.getOpenID4VCIClientPreferences(),
+                                                backend = provisioningSupport.getOpenID4VCIBackend()
+                                            )
+                                        val duration = Clock.System.now() - tStart
+                                        showToast("Refreshed $numNewCredentials credentials in $duration")
+                                    } catch (e: Throwable) {
+                                        if (e is CancellationException) throw e
+                                        showToast("Error refreshing credentials: $e")
+                                    }
+                                }
+                            },
+                            onDeleteAllCredentials = { document ->
+                                coroutineScope.launch {
+                                    document.getCredentials().map { it.identifier }.forEach { identifier ->
+                                        document.deleteCredential(identifier)
+                                    }
+                                }
                             },
                             onDocumentDeleted = {
                                 navController.navigateUp()
@@ -1218,6 +1238,12 @@ class App private constructor (val promptModel: PromptModel) {
                                         credentialId = credentialId
                                     )
                                 )
+                            },
+                            onCredentialDelete = { documentId, credentialId ->
+                                coroutineScope.launch {
+                                    documentStore.lookupDocument(documentId)?.deleteCredential(credentialId)
+                                }
+                                navController.navigateUp()
                             }
                         )
                     }

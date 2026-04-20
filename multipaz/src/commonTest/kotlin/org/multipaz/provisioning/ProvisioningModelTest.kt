@@ -227,6 +227,7 @@ class ProvisioningModelTest {
         }
 
         val metadata = ProvisioningMetadata(
+            url = "https://example.com/test",
             display = Display("Test Issuer", null),
             credentials = mapOf(
                 "testId" to CredentialMetadata(

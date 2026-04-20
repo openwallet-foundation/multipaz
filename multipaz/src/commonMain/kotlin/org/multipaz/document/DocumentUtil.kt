@@ -33,14 +33,12 @@ object DocumentUtil {
      * credentials of a specific type available within the following constraints
      *
      * - If a credential is used more than `maxUsesPerCredential` times, a replacement is generated.
-     * - If a credential expires within `minValidTimeMillis` milliseconds, a replacement is generated.
+     * - If a credential expires within `minValidTime`, a replacement is generated.
      *
-     * This is all implemented on top of [Credential] creation
-     * and [Credential.certify]. The application should examine the return
-     * value and if positive, collect the not-yet-certified credentials via
-     * [Document.pendingCredentials], send them to the issuer for certification,
-     * and then call [Credential.certify] when receiving the certification
-     * from the issuer.
+     * This is all implemented on top of [Credential] creation and [Credential.certify]. The application should
+     * examine the return value and if positive, collect the not-yet-certified credentials via
+     * [Document.pendingCredentials], send them to the issuer for certification, and then call [Credential.certify]
+     * when receiving the certification from the issuer.
      *
      * @param document the document to manage credentials for.
      * @param domain the domain to use for created credentials.

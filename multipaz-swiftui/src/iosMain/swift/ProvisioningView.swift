@@ -209,11 +209,13 @@ struct EvidenceRequestSecretText: View {
         )
 
         VStack {
-            Text(passphraseRequest.description_)
-                .font(.title)
-                .multilineTextAlignment(.center)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .center)
+            if let desc = passphraseRequest.description_ {
+                Text(desc)
+                    .font(.title)
+                    .multilineTextAlignment(.center)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
             
             if challenge.retry {
                 Text("Retry")

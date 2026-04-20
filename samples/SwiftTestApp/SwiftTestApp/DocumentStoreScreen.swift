@@ -76,7 +76,7 @@ struct DocumentStoreScreen: View {
                     initialDocumentId: focusedDocumentId,
                     allowReordering: true,
                     onDocumentClicked: { documentInfo in
-                        viewModel.path.append(Destination.documentScreen(documentInfo: documentInfo))
+                        viewModel.path.append(Destination.documentScreen(documentId: documentInfo.document.identifier))
                     },
                     onDocumentFocused: { documentInfo in
                         focusedDocumentId = documentInfo.document.identifier

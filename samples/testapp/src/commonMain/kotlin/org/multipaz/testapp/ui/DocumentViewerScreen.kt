@@ -42,6 +42,7 @@ fun DocumentViewerScreen(
     showToast: (message: String) -> Unit,
     onViewCredential: (documentId: String, credentialId: String) -> Unit,
     onProvisionMore: (document: Document, authorizationData: ByteString) -> Unit,
+    onDeleteAllCredentials: (document: Document) -> Unit,
     onDocumentDeleted: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -143,6 +144,11 @@ fun DocumentViewerScreen(
                         if (credentialInfo.credential.domain != domain) {
                             continue
                         }
+                        val keyText = if (credentialInfo.credential.isCertified) {
+                            credentialInfo.credential.credentialType
+                        } else {
+                            "${credentialInfo.credential.credentialType} (Pending)"
+                        }
                         KeyValuePairText(
                             modifier = Modifier
                                 .padding(start = 24.dp)
@@ -152,7 +158,7 @@ fun DocumentViewerScreen(
                                         credentialInfo.credential.identifier
                                     )
                                 },
-                            keyText = credentialInfo.credential.credentialType,
+                            keyText = keyText,
                             valueText = buildAnnotatedString {
                                 withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.secondary)) {
                                     append("Usage count ${credentialInfo.credential.usageCount}. Click for details")
@@ -165,7 +171,18 @@ fun DocumentViewerScreen(
                     Button(onClick = {
                         onProvisionMore(documentInfo.document, authorizationData)
                     }) {
-                        Text("Provision more credentials")
+                        Text("Refresh credentials")
+                    }
+                    Button(
+                        onClick = {
+                            onDeleteAllCredentials(documentInfo.document)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Red,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text("Delete all credentials")
                     }
                 }
             }

@@ -165,16 +165,27 @@ class ViewModel {
                     extensions: [:]
                 )
             )
-
+        
         self.provisioningModel = ProvisioningModel(
             documentProvisioningHandler: DocumentProvisioningHandler(
                 secureArea: secureArea,
                 documentStore: documentStore,
-                mdocCredentialDomain: "mdoc",
-                sdJwtCredentialDomain: "sdJwt",
-                keylessCredentialDomain: "sdJwtKeyless",
-                batchSize: 5,
-                metadataHandler: nil
+                metadataHandler: nil,
+                defaultDocumentProvisioningSettings: DocumentProvisioningSettings(
+                    minValidTime: 5*86400*1000_000_000,
+                    keyBoundCredentialMaxUses: 1,
+                    keyBoundCredentialNumPerDomain: 5,
+                    keylessCredentialMaxUses: Int32.max,
+                    keylessCredentialNumPerDomain: 1,
+                    userAuthTimeout: 0,
+                    requestUserAuth: true,
+                    requestNoUserAuth: true,
+                    mdocUserAuthDomain: "mdoc_user_auth",
+                    mdocNoUserAuthDomain: "mdoc_no_user_auth",
+                    sdJwtUserAuthDomain: "sdjwt_user_auth",
+                    sdJwtNoUserAuthDomain: "sdjwt_no_user_auth",
+                    sdJwtKeylessDomain: "sdjwt_keyless"
+                )
             ),
             httpClient: HttpClient(engineFactory: Darwin()) { config in
                 config.followRedirects = false
@@ -280,7 +291,7 @@ class ViewModel {
             validFrom: validFrom.toKotlinInstant().truncateToWholeSeconds(),
             validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
             expectedUpdate: nil,
-            domain: "mdoc",
+            domain: "mdoc_user_auth",
             randomProvider: KotlinRandom.companion
         )
         try! await document.edit(editActionFn: { editor in
@@ -315,8 +326,12 @@ class ViewModel {
                 )
             },
             preferSignatureToKeyAgreement: false,
-            domainsMdocSignature: ["mdoc"],
+            domainsMdocSignature: ["mdoc_user_auth", "mdoc_no_user_auth"],
+            domainsMdocKeyAgreement: [],
+            domainsKeylessSdJwt: ["sdjwt_keyless"],
+            domainsKeyBoundSdJwt: ["sdjwt_user_auth", "sdjwt_no_user_auth"]
         )
     }
 }
 
+    

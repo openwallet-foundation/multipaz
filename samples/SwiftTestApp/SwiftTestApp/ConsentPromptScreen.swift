@@ -584,7 +584,7 @@ private func calcConsentData(
             return nil
         },
         showConsentPromptFn: { requester, trustMetadata, credentialPresentmentData, preselectedDocuments, onDocumentsInFocus in
-            try! await promptModelSilentConsent(
+            return try! await promptModelSilentConsent(
                 requester: requester,
                 trustMetadata: trustMetadata,
                 credentialPresentmentData: credentialPresentmentData,

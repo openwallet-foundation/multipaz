@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.buildJsonObject
@@ -36,6 +35,8 @@ import org.multipaz.util.Logger
 import kotlin.coroutines.CoroutineContext
 import kotlin.reflect.KClass
 import kotlin.reflect.safeCast
+
+private const val TAG = "ProvisioningModel"
 
 /**
  * This model supports UX/UI flow for provisioning of credentials.
@@ -138,6 +139,42 @@ class ProvisioningModel(
         }
 
     /**
+     * Synchronously requests the provisioning of additional credentials to an existing [Document].
+     *
+     * Note that this bypasses the model and throws an exception if something goes wrong.
+     *
+     * @param document [Document] where credentials should be provisioned
+     * @param authorizationData authorization data from a previous provisioning session (see
+     *  [DocumentProvisioningHandler.AbstractDocumentMetadataHandler.updateDocumentMetadata]
+     *  `authorizationData` parameter)
+     * @param clientPreferences configuration parameters for OpenID4VCI client
+     * @param backend interface to the wallet back-end service
+     * @return deferred [Document] value, resolved when credentials are provisioned
+     * @throws Exception if an error occurred
+     */
+    // TODO: be more specific with what exceptions are thrown
+    @Throws(
+        CancellationException::class,
+        Exception::class
+    )
+    suspend fun openID4VCIRefreshCredentials(
+        document: Document,
+        authorizationData: ByteString,
+        clientPreferences: OpenID4VCIClientPreferences,
+        backend: OpenID4VCIBackend,
+    ): Int {
+        val numCredentialsFetched = CoroutineScope(createCoroutineContext(clientPreferences, backend)).async {
+            val provisioningClient = Provisioning.createClientFromAuthorizationData(authorizationData)
+            requestCredentials(
+                provisioningClient = provisioningClient,
+                targetDocument = document,
+                documentProvisioningHandler = documentProvisioningHandler,
+            ).second
+        }
+        return numCredentialsFetched.await()
+    }
+
+    /**
      * Launch provisioning session to provision credentials to a new [Document] using
      * given [ProvisioningClient] factory.
      *
@@ -161,7 +198,35 @@ class ProvisioningModel(
                 targetDocument = document
                 val provisioningClient = provisioningClientFactory.invoke()
                 mutableMetadata.emit(provisioningClient.getMetadata())
-                runProvisioning(provisioningClient)
+
+                var evidenceRequests = provisioningClient.getAuthorizationChallenges()
+                while (evidenceRequests.isNotEmpty()) {
+                    mutableState.emit(Authorizing(evidenceRequests))
+                    val authorizationResponse = authorizationResponseChannel.receive()
+                    mutableState.emit(ProcessingAuthorization)
+                    provisioningClient.authorize(authorizationResponse)
+                    evidenceRequests = provisioningClient.getAuthorizationChallenges()
+                }
+                mutableState.emit(Authorized)
+
+                mutableState.emit(Connected)
+
+                val (document, numCredentialsFetched) = requestCredentials(
+                    provisioningClient = provisioningClient,
+                    targetDocument = targetDocument,
+                    documentProvisioningHandler = documentProvisioningHandler,
+                    onRequestingCredentials = {
+                        mutableState.emit(RequestingCredentials)
+                    }
+                )
+
+                mutableState.emit(CredentialsIssued(
+                    document = document,
+                    isNewlyIssued = targetDocument == null,
+                    numCredentialsFetched = numCredentialsFetched
+                ))
+
+                document
             } catch(err: CancellationException) {
                 launch(NonCancellable) {
                     mutableState.emit(Idle)
@@ -229,129 +294,6 @@ class ProvisioningModel(
     ) = Dispatchers.Default + promptModel + RpcAuthClientSession() +
             ProvisioningEnvironment(clientPreferences, backend)
 
-    private suspend fun runProvisioning(provisioningClient: ProvisioningClient): Document {
-        mutableState.emit(Connected)
-        val issuerMetadata = provisioningClient.getMetadata()
-        val credentialConfig = issuerMetadata.credentials.values.first()
-
-        var evidenceRequests = provisioningClient.getAuthorizationChallenges()
-
-        while (evidenceRequests.isNotEmpty()) {
-            mutableState.emit(Authorizing(evidenceRequests))
-            val authorizationResponse = authorizationResponseChannel.receive()
-            mutableState.emit(ProcessingAuthorization)
-            provisioningClient.authorize(authorizationResponse)
-            evidenceRequests = provisioningClient.getAuthorizationChallenges()
-        }
-
-        mutableState.emit(Authorized)
-
-        val documentAuthorizationData = provisioningClient.getAuthorizationData()
-        val document = targetDocument ?: run {
-            documentProvisioningHandler.createDocument(
-                credentialConfig,
-                issuerMetadata,
-                documentAuthorizationData
-            )
-        }
-        var pendingCredentials: List<Credential> = listOf()
-        try {
-            // get the initial set of credentials
-            val keyInfo = if (credentialConfig.keyBindingType == KeyBindingType.Keyless) {
-                // keyless, no need for keys
-                KeyBindingInfo.Keyless
-            } else {
-                // create keys in the selected secure area and send them to the issuer
-                val keyChallenge = provisioningClient.getKeyBindingChallenge()
-                val createKeySettings = CreateKeySettings(
-                    algorithm = when (val type = credentialConfig.keyBindingType) {
-                        is KeyBindingType.OpenidProofOfPossession -> type.algorithm
-                        is KeyBindingType.Attestation -> type.algorithm
-                        else -> throw IllegalStateException()
-                    },
-                    nonce = keyChallenge.encodeToByteString(),
-                    userAuthenticationRequired = true
-                )
-                pendingCredentials = documentProvisioningHandler.createKeyBoundCredentials(
-                    document,
-                    credentialConfig,
-                    createKeySettings
-                )
-
-                when (val keyProofType = credentialConfig.keyBindingType) {
-                    is KeyBindingType.Attestation -> {
-                        KeyBindingInfo.Attestation(
-                            attestations = pendingCredentials.map {
-                                CredentialKeyAttestation(it.identifier, it.getAttestation())
-                            }
-                        )
-                    }
-                    is KeyBindingType.OpenidProofOfPossession -> {
-                        val jwtList = pendingCredentials.map {
-                            openidProofOfPossession(
-                                challenge = keyChallenge,
-                                keyProofType = keyProofType,
-                                credential = it
-                            )
-                        }
-                        KeyBindingInfo.OpenidProofOfPossession(jwtList)
-                    }
-                    else -> throw IllegalStateException()
-                }
-            }
-
-            mutableState.emit(RequestingCredentials)
-            val credentials = provisioningClient.obtainCredentials(keyInfo)
-            // If we successfully sent keys to the server, we should not unconditionally clean
-            // them up on error if we are past this point.
-            pendingCredentials = listOf()
-
-            val credentialData = credentials.certifications
-
-            if (credentialConfig.keyBindingType == KeyBindingType.Keyless) {
-                if (credentialData.size != 1) {
-                    throw IllegalStateException("Only a single keyless credential must be issued")
-                }
-                val pendingCredential = documentProvisioningHandler.createKeylessCredential(
-                    document = document,
-                    credentialMetadata = credentialConfig
-                )
-                pendingCredential.certify(credentialData.first().issuerData)
-            } else {
-                // Credential minting can happen offline, we can get any number of new credentials
-                // here, some might have been created as pending in the previous calls to this
-                // method.
-                for ((credentialId, credentialData) in credentialData) {
-                    val pendingCredential = document.lookupCredential(credentialId)
-                    if (pendingCredential == null) {
-                        Logger.e(TAG, "Credential '$credentialId' is not found")
-                    } else if (pendingCredential.isCertified) {
-                        Logger.e(TAG, "Credential '$credentialId' is already certified")
-                    } else {
-                        pendingCredential.certify(credentialData)
-                    }
-                }
-                documentProvisioningHandler.updateDocument(
-                    document = document,
-                    display = credentials.display,
-                    documentAuthorizationData = provisioningClient.getAuthorizationData()
-                )
-            }
-        } catch (err: Exception) {
-            // Clean-up after failed provisioning and then rethrow - so we also handle CancellationException here
-            if (targetDocument == null) {
-                // Initial provisioning: failed
-                documentProvisioningHandler.cleanupDocumentOnError(document, err)
-            } else {
-                // Refresh: only delete the pending credentials
-                documentProvisioningHandler.cleanupCredentialsOnError(pendingCredentials, err)
-            }
-            throw err
-        }
-        mutableState.emit(CredentialsIssued(document, targetDocument == null))
-        return document
-    }
-
     /** Represents model's state */
     sealed class State
 
@@ -392,10 +334,12 @@ class ProvisioningModel(
      *
      * @param document [Document] to which new credentials belong
      * @param isNewlyIssued if this is a newly issued document (as opposed to refreshed credentials)
+     * @param numCredentialsFetched the number of credentials that was fetched.
      */
     data class CredentialsIssued(
         val document: Document,
-        val isNewlyIssued: Boolean
+        val isNewlyIssued: Boolean,
+        val numCredentialsFetched: Int
     ): State()
 
     /** Error occurred when provisioning, provisioning has stopped */
@@ -420,33 +364,181 @@ class ProvisioningModel(
             }
         )
     }
+}
 
-    companion object {
-        private const val TAG = "ProvisioningModel"
+/**
+ * Low-level function to request credentials.
+ *
+ * @param provisioningClient a [ProvisioningClient]
+ * @param targetDocument the document to request credentials for or `null`.
+ * @param documentProvisioningHandler a [AbstractDocumentProvisioningHandler].
+ * @param onRequestingCredentials called when requesting credentials.
+ * @return the [Document] (either newly created or [targetDocument] if not null) and how many credentials were fetched.
+ */
+private suspend fun requestCredentials(
+    provisioningClient: ProvisioningClient,
+    targetDocument: Document?,
+    documentProvisioningHandler: AbstractDocumentProvisioningHandler,
+    onRequestingCredentials: suspend () -> Unit = {},
+): Pair<Document, Int> {
+    val issuerMetadata = provisioningClient.getMetadata()
+    val credentialConfig = issuerMetadata.credentials.values.first()
 
-        private suspend fun openidProofOfPossession(
-            challenge: String,
-            keyProofType: KeyBindingType.OpenidProofOfPossession,
-            credential: SecureAreaBoundCredential
-        ): String {
-            val signingKey = AsymmetricKey.anonymous(
-                secureArea = credential.secureArea,
-                alias = credential.alias,
-                unlockReason = ProofOfPossessionUnlockReason
+    val documentAuthorizationData = provisioningClient.getAuthorizationData()
+    val document = targetDocument ?: run {
+        documentProvisioningHandler.createDocument(
+            credentialConfig,
+            issuerMetadata,
+            documentAuthorizationData
+        )
+    }
+
+    // Create a number of pending credentials - the ones with keys are sent to the
+    // issuer for certification.
+    //
+    var pendingCredentials: List<Credential> = listOf()
+    var numCredentialsFetched = 0
+    try {
+        // get the initial set of credentials
+        val keyInfo = if (credentialConfig.keyBindingType == KeyBindingType.Keyless) {
+            pendingCredentials = documentProvisioningHandler.getPendingKeylessCredentials(
+                document = document,
+                credentialMetadata = credentialConfig,
+                issuerMetadata = issuerMetadata
             )
-            return buildJwt(
-                type = "openid4vci-proof+jwt",
-                key = signingKey,
-                header = {
-                    put("jwk", signingKey.publicKey.toJwk(buildJsonObject {
-                        put("kid", credential.identifier)
-                    }))
+            // keyless, no need for proofs
+            KeyBindingInfo.Keyless
+        } else {
+            // create keys in the selected secure area and send them to the issuer
+            val keyChallenge = provisioningClient.getKeyBindingChallenge()
+            val createKeySettings = CreateKeySettings(
+                algorithm = when (val type = credentialConfig.keyBindingType) {
+                    is KeyBindingType.OpenidProofOfPossession -> type.algorithm
+                    is KeyBindingType.Attestation -> type.algorithm
+                    else -> throw IllegalStateException()
+                },
+                nonce = keyChallenge.encodeToByteString(),
+                userAuthenticationRequired = true
+            )
+            pendingCredentials = documentProvisioningHandler.getPendingKeyBoundCredentials(
+                document = document,
+                credentialMetadata = credentialConfig,
+                issuerMetadata = issuerMetadata,
+                createKeySettings = createKeySettings
+            )
+
+            when (val keyProofType = credentialConfig.keyBindingType) {
+                is KeyBindingType.Attestation -> {
+                    KeyBindingInfo.Attestation(
+                        attestations = pendingCredentials.map {
+                            CredentialKeyAttestation(it.identifier, it.getAttestation())
+                        }
+                    )
                 }
-            ) {
-                put("iss", keyProofType.clientId)
-                put("aud", keyProofType.aud)
-                put("nonce", challenge)
+                is KeyBindingType.OpenidProofOfPossession -> {
+                    val jwtList = pendingCredentials.map {
+                        openidProofOfPossession(
+                            challenge = keyChallenge,
+                            keyProofType = keyProofType,
+                            credential = it
+                        )
+                    }
+                    KeyBindingInfo.OpenidProofOfPossession(jwtList)
+                }
+                else -> throw IllegalStateException()
             }
         }
+
+        if (keyInfo == KeyBindingInfo.Keyless) {
+            // For keyless credentials, we can only get a single credential per call
+            pendingCredentials.forEach { pendingCredential ->
+                onRequestingCredentials()
+                val credentials = provisioningClient.obtainCredentials(keyInfo)
+                val credentialData = credentials.certifications
+                if (credentialData.size != 1) {
+                    throw IllegalStateException("Only a single keyless credential is expected to be issued")
+                }
+                pendingCredential.certify(credentialData.first().issuerData)
+
+                documentProvisioningHandler.updateDocument(
+                    document = document,
+                    display = credentials.display,
+                    documentAuthorizationData = provisioningClient.getAuthorizationData()
+                )
+
+                // Modify pendingCredentials so this now certified credential isn't removed on error
+                pendingCredentials = pendingCredentials.filter { it != pendingCredential }
+
+                numCredentialsFetched += 1
+            }
+        } else {
+            // It's entirely possible we have no pending credentials in which case we are done
+            if (pendingCredentials.isNotEmpty()) {
+                onRequestingCredentials()
+                val credentials = provisioningClient.obtainCredentials(keyInfo)
+                // If we successfully sent keys to the server, we should not unconditionally clean
+                // them up on error if we are past this point.
+                pendingCredentials = listOf()
+
+                val credentialData = credentials.certifications
+                numCredentialsFetched = credentialData.size
+
+                // Credential minting can happen offline, we can get any number of new credentials
+                // here, some might have been created as pending in the previous calls to this
+                // method.
+                for ((credentialId, credentialData) in credentialData) {
+                    val pendingCredential = document.lookupCredential(credentialId)
+                    if (pendingCredential == null) {
+                        Logger.e(TAG, "Credential '$credentialId' is not found")
+                    } else if (pendingCredential.isCertified) {
+                        Logger.e(TAG, "Credential '$credentialId' is already certified")
+                    } else {
+                        pendingCredential.certify(credentialData)
+                    }
+                }
+                documentProvisioningHandler.updateDocument(
+                    document = document,
+                    display = credentials.display,
+                    documentAuthorizationData = provisioningClient.getAuthorizationData()
+                )
+            }
+        }
+    } catch (err: Exception) {
+        // Clean-up after failed provisioning and then rethrow - so we also handle CancellationException here
+        if (targetDocument == null) {
+            // Initial provisioning: failed
+            documentProvisioningHandler.cleanupDocumentOnError(document, err)
+        } else {
+            // Refresh: only delete the pending credentials
+            documentProvisioningHandler.cleanupCredentialsOnError(pendingCredentials, err)
+        }
+        throw err
+    }
+    return Pair(document, numCredentialsFetched)
+}
+
+private suspend fun openidProofOfPossession(
+    challenge: String,
+    keyProofType: KeyBindingType.OpenidProofOfPossession,
+    credential: SecureAreaBoundCredential
+): String {
+    val signingKey = AsymmetricKey.anonymous(
+        secureArea = credential.secureArea,
+        alias = credential.alias,
+        unlockReason = ProofOfPossessionUnlockReason
+    )
+    return buildJwt(
+        type = "openid4vci-proof+jwt",
+        key = signingKey,
+        header = {
+            put("jwk", signingKey.publicKey.toJwk(buildJsonObject {
+                put("kid", credential.identifier)
+            }))
+        }
+    ) {
+        put("iss", keyProofType.clientId)
+        put("aud", keyProofType.aud)
+        put("nonce", challenge)
     }
 }
+

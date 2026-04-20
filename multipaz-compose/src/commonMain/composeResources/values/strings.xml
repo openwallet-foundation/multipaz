@@ -105,7 +105,7 @@
     <string name="provisioning_processing_authorization">Processing authorization...</string>
     <string name="provisioning_authorized">Authorized</string>
     <string name="provisioning_requestion_credentials">Requesting credentials...</string>
-    <string name="provisioning_credentials_issued">Credentials issued</string>
+    <string name="provisioning_credentials_issued">%1$d credentials issued</string>
     <string name="provisioning_browser">Launching browser, continue there</string>
     <string name="provisioning_retry">Please retry</string>
     <string name="provisioning_error">Error provisioning (error code: %1$s)</string>

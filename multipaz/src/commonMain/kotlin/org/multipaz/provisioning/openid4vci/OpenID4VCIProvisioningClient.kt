@@ -81,6 +81,7 @@ internal class OpenID4VCIProvisioningClient(
         val fullMetadata = issuerConfiguration.provisioningMetadata
         val credentialId = credentialOffer.configurationId
         return ProvisioningMetadata(
+            url = issuerConfiguration.url,
             display = fullMetadata.display,
             credentials = mapOf(credentialId to fullMetadata.credentials[credentialId]!!)
         )

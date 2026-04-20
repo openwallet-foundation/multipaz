@@ -428,19 +428,19 @@ private fun ProvisioningBottomSheetContent(
         }
 
         else -> {
-            val text = stringResource(
-                when (provisioningState) {
-                    ProvisioningModel.Idle -> throw IllegalStateException()
-                    ProvisioningModel.Initial -> Res.string.provisioning_initial
-                    ProvisioningModel.Connected -> Res.string.provisioning_connected
-                    ProvisioningModel.ProcessingAuthorization -> Res.string.provisioning_processing_authorization
-                    ProvisioningModel.Authorized -> Res.string.provisioning_authorized
-                    ProvisioningModel.RequestingCredentials -> Res.string.provisioning_requestion_credentials
-                    is ProvisioningModel.CredentialsIssued -> Res.string.provisioning_credentials_issued
-                    is ProvisioningModel.Error -> throw IllegalStateException()
-                    is ProvisioningModel.Authorizing -> throw IllegalStateException()
+            val text = when (provisioningState) {
+                ProvisioningModel.Idle -> throw IllegalStateException()
+                ProvisioningModel.Initial -> stringResource(Res.string.provisioning_initial)
+                ProvisioningModel.Connected -> stringResource(Res.string.provisioning_connected)
+                ProvisioningModel.ProcessingAuthorization -> stringResource(Res.string.provisioning_processing_authorization)
+                ProvisioningModel.Authorized -> stringResource(Res.string.provisioning_authorized)
+                ProvisioningModel.RequestingCredentials -> stringResource(Res.string.provisioning_requestion_credentials)
+                is ProvisioningModel.CredentialsIssued -> {
+                    stringResource(Res.string.provisioning_credentials_issued, provisioningState.numCredentialsFetched)
                 }
-            )
+                is ProvisioningModel.Error -> throw IllegalStateException()
+                is ProvisioningModel.Authorizing -> throw IllegalStateException()
+            }
             Text(
                 modifier = Modifier
                     .padding(16.dp, 4.dp),

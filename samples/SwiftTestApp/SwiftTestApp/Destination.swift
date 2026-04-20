@@ -4,9 +4,9 @@ enum Destination: Hashable {
     case startScreen
     case aboutScreen
     case documentStoreScreen
-    case documentScreen(documentInfo: DocumentInfo)
-    case credentialScreen(credentialInfo: CredentialInfo)
-    case claimsScreen(credentialInfo: CredentialInfo)
+    case documentScreen(documentId: String)
+    case credentialScreen(documentId: String, credentialId: String)
+    case claimsScreen(documentId: String, credentialId: String)
     case consentPromptScreen
     case passphrasePromptScreen
     case iso18013ProximityPresentmentScreen

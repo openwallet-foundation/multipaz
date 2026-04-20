@@ -104,6 +104,7 @@ internal data class IssuerConfiguration(
 
 
             val provisioningMetadata = ProvisioningMetadata(
+                url = url,
                 display = extractDisplay(credentialMetadata, httpClient, clientPreferences),
                 credentials = credentials.toMap()
             )

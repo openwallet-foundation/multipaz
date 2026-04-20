@@ -3,16 +3,20 @@ package org.multipaz.testapp.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -37,6 +41,7 @@ fun CredentialViewerScreen(
     showToast: (message: String) -> Unit,
     onViewCertificateChain: (encodedCertificateData: String) -> Unit,
     onViewCredentialClaims: (documentId: String, credentialId: String) -> Unit,
+    onCredentialDelete: (documentId: String, credentialId: String) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val documentInfos = documentModel.documentInfos.collectAsState().value
@@ -177,6 +182,33 @@ fun CredentialViewerScreen(
                             onViewCredentialClaims(documentId, credentialId)
                         }
                     }
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp, horizontal = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Button(
+                modifier = Modifier.weight(1.0f),
+                onClick = {
+                    credentialInfo?.let {
+                        onCredentialDelete(
+                            credentialInfo.credential.document.identifier,
+                            credentialInfo.credential.identifier
+                        )
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Red,
+                    contentColor = Color.White
+                )
+            ) {
+                Text(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    text = "Delete credential"
                 )
             }
         }
