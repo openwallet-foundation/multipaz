@@ -11,7 +11,6 @@ import org.multipaz.openid4vci.credential.CredentialFactoryUtopiaMovieTicket
 import org.multipaz.openid4vci.credential.CredentialFactoryUtopiaNaturalization
 import org.multipaz.server.common.ServerConfiguration
 import org.multipaz.server.common.runServer
-import kotlin.collections.mutableListOf
 
 /**
  * Main entry point to launch the server.
@@ -25,7 +24,7 @@ import kotlin.collections.mutableListOf
  * or with a System of Record back-end:
  *
  * ```
- * ./gradlew multipaz-openid4vci-server:run --args="-param system_of_record_url=http://localhost:8004 -param system_of_record_jwk='$(cat key.jwk)'"
+ * ./gradlew multipaz-openid4vci-server:run --args="-param enrollment_server_url=http://localhost:8004 -param system_of_record_url=http://localhost:8004"
  * ```
  */
 class Main {

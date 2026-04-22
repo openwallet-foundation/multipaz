@@ -1,14 +1,12 @@
 package org.multipaz.openid4vci.request
 
 import io.ktor.client.HttpClient
-import io.ktor.client.request.headers
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
+import io.ktor.client.request.forms.submitForm
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
-import io.ktor.http.encodeURLParameter
+import io.ktor.http.parameters
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.request.receiveParameters
@@ -201,20 +199,15 @@ private suspend fun establishDPopKey(
 private const val TAG = "token"
 
 private suspend fun obtainSystemOfRecordToken(systemOfRecordUrl: String, state: IssuanceState) {
-    val req = buildMap {
-        put("grant_type", "authorization_code")
-        put("code", state.systemOfRecordAuthCode!!)
-        put("code_verifier", state.systemOfRecordCodeVerifier!!.toByteArray().toBase64Url())
-    }
     val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
-    val response = httpClient.post("$systemOfRecordUrl/token") {
-        headers {
-            append("Content-Type", "application/x-www-form-urlencoded")
+    val response = httpClient.submitForm(
+        url = "$systemOfRecordUrl/token",
+        formParameters = parameters {
+            append("grant_type", "authorization_code")
+            append("code", state.systemOfRecordAuthCode!!)
+            append("code_verifier", state.systemOfRecordCodeVerifier!!.toByteArray().toBase64Url())
         }
-        setBody(req.map { (name, value) ->
-            name.encodeURLParameter() + "=" + value.encodeURLParameter()
-        }.joinToString("&"))
-    }
+    )
     val responseText = response.readRawBytes().decodeToString()
     if (response.status != HttpStatusCode.OK) {
         Logger.e(TAG, "token request error: ${response.status}: $responseText")

@@ -5,6 +5,7 @@ import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Uint
 import org.multipaz.rpc.backend.BackendEnvironment
+import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.SimpleCipher
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
@@ -52,7 +53,7 @@ suspend fun tokenToId(type: TokenType, code: String): String {
     val cipher = BackendEnvironment.getInterface(SimpleCipher::class)!!
     val buf = cipher.decrypt(code.fromBase64Url())
     if (buf[0] != type.code) {
-        throw IllegalArgumentException(
+        throw InvalidRequestException(
             "Not required token type, need ${type.code}, got ${buf[0].toInt()}")
     }
     val len = buf[1].toInt()
@@ -60,11 +61,11 @@ suspend fun tokenToId(type: TokenType, code: String): String {
         val offsetAndExpirationTimeEpochSeconds = Cbor.decode(buf, 2 + len)
         // returned offset should be at the end of the string
         if (offsetAndExpirationTimeEpochSeconds.first != buf.size) {
-            throw IllegalArgumentException("Decoding error")
+            throw InvalidRequestException("Decoding error")
         }
         // expiration time should not be in the past
         if (offsetAndExpirationTimeEpochSeconds.second.asNumber < Clock.System.now().epochSeconds) {
-            throw IllegalArgumentException("Token expired")
+            throw InvalidRequestException("Token expired")
         }
     }
     return String(buf, 2, len)
