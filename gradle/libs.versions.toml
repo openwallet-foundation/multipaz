@@ -146,6 +146,7 @@ coil-compose-core = { module = "io.coil-kt.coil3:coil-compose-core", version.ref
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 coil-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 kotlin-wrappers-web = { module = "org.jetbrains.kotlin-wrappers:kotlin-web", version.ref="kotlin-wrappers" }
+kotlin-wrappers-browser = { module = "org.jetbrains.kotlin-wrappers:kotlin-browser", version.ref="kotlin-wrappers" }
 kotlin-wrappers-react = { module = "org.jetbrains.kotlin-wrappers:kotlin-react", version.ref= "kotlin-wrappers-rx" }
 kotlin-wrappers-react-dom = { module = "org.jetbrains.kotlin-wrappers:kotlin-react-dom", version.ref= "kotlin-wrappers-rx" }
 kotlin-wrappers-emotion-react-js = { module = "org.jetbrains.kotlin-wrappers:kotlin-emotion-react-js", version.ref="kotlin-wrappers-em" }

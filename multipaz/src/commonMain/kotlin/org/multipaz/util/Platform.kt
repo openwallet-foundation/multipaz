@@ -13,8 +13,6 @@ import org.multipaz.storage.Storage
 expect object Platform {
     /**
      * The name and version of the platform.
-     *
-     * @throws NotImplementedError if called on a platform which isn't Android or iOS.
      */
     val name: String
 
@@ -33,7 +31,7 @@ expect object Platform {
     /**
      * A [Storage] instance suitable for the platform.
      *
-     * @throws NotImplementedError if called on a platform which isn't Android or iOS.
+     * @throws NotImplementedError if not implemented on the platform.
      */
     val storage: Storage
 
@@ -41,7 +39,7 @@ expect object Platform {
      * A [Storage] instance suitable for the platform in a location where the
      * underlying data file is excluded from backups.
      *
-     * @throws NotImplementedError if called on a platform which isn't Android or iOS.
+     * @throws NotImplementedError if not implemented on the platform.
      */
     val nonBackedUpStorage: Storage
 
@@ -49,7 +47,7 @@ expect object Platform {
      * Gets a [SecureArea] implementation suitable for the platform.
      *
      * @param storage the [Storage] to use for metadata.
-     * @throws NotImplementedError if called on a platform which isn't Android or iOS.
+     * @throws NotImplementedError if not implemented on the platform.
      */
     suspend fun getSecureArea(
         storage: Storage = nonBackedUpStorage

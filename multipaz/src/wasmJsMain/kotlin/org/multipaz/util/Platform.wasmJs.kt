@@ -8,8 +8,7 @@ import org.multipaz.prompt.WebPromptModel
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
-import org.multipaz.storage.ephemeral.EphemeralStorage
-import kotlin.getValue
+import org.multipaz.storage.WebStorage
 
 actual object Platform {
     actual val name: String by lazy {
@@ -24,20 +23,17 @@ actual object Platform {
     }
 
     actual val storage: Storage by lazy {
-        // TODO
-        EphemeralStorage()
+        WebStorage("MultipazStorage")
     }
 
     actual val nonBackedUpStorage: Storage by lazy {
-        // TODO
-        EphemeralStorage()
+        WebStorage("MultipazStorageNonBackedUp")
     }
 
     private var secureArea: SecureArea? = null
     private val secureAreaLock = Mutex()
 
     actual suspend fun getSecureArea(storage: Storage): SecureArea {
-        // TODO
         secureAreaLock.withLock {
             if (secureArea == null) {
                 secureArea = SoftwareSecureArea.create(storage)
