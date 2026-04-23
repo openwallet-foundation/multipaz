@@ -11,7 +11,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
-import org.multipaz.openid4vci.credential.CredentialFactory
+import org.multipaz.device.AndroidKeystoreSecurityLevel
 import org.multipaz.openid4vci.credential.CredentialFactoryRegistry
 import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.rpc.backend.BackendEnvironment
@@ -80,6 +80,24 @@ suspend fun wellKnownOpenidCredentialIssuer(call: ApplicationCall) {
                                     putJsonArray("proof_signing_alg_values_supported") {
                                         credentialFactory.proofSigningAlgorithms.forEach {
                                             add(it)
+                                        }
+                                    }
+                                }
+                                if (credentialFactory.acceptAndroidKeyAttestation) {
+                                    putJsonObject("android_keystore_attestation") {
+                                        put("key_mint_security_level",
+                                            when (credentialFactory.keyMintSecurityLevel) {
+                                                AndroidKeystoreSecurityLevel.SOFTWARE ->
+                                                    "Software"
+                                                AndroidKeystoreSecurityLevel.TRUSTED_ENVIRONMENT ->
+                                                    "TrustedEnvironment"
+                                                AndroidKeystoreSecurityLevel.STRONG_BOX ->
+                                                    "StrongBox"
+                                            })
+                                        putJsonArray("proof_signing_alg_values_supported") {
+                                            credentialFactory.proofSigningAlgorithms.forEach {
+                                                add(it)
+                                            }
                                         }
                                     }
                                 }

@@ -3,6 +3,7 @@ package org.multipaz.openid4vci.credential
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.cbor.DataItem
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.device.AndroidKeystoreSecurityLevel
 import org.multipaz.openid4vci.request.wellKnownOpenidCredentialIssuer
 import org.multipaz.openid4vci.util.CredentialId
 import org.multipaz.provisioning.CredentialFormat
@@ -26,6 +27,9 @@ import org.multipaz.rpc.backend.BackendEnvironment
  * @param format format of the credential issued by this factory
  * @param requireKeyAttestation if this credential can only be bound to an attested key (i.e.
  *  mere proof-of-possession is not acceptable)
+ * @param acceptAndroidKeyAttestation if true "android_keystore_attestation" proof type is accepted
+ * @param keyMintSecurityLevel minimal accepted security level for Android Keystore Attestation
+ * @param acceptAndroidKeyAttestation if true "android_keystore_attestation" proof type is accepted
  * @param proofSigningAlgorithms algorithms that correspond to `proof_signing_alg_values_supported`
  *  property in OpenID4VCI; must be empty for keyless credentials
  * @param cryptographicBindingMethods key binding methods that correspond to
@@ -40,6 +44,9 @@ interface CredentialFactory {
     val scope: String
     val format: CredentialFormat
     val requireKeyAttestation: Boolean get() = true
+    val acceptAndroidKeyAttestation: Boolean get() = false
+    val keyMintSecurityLevel: AndroidKeystoreSecurityLevel get() =
+        AndroidKeystoreSecurityLevel.TRUSTED_ENVIRONMENT
     val proofSigningAlgorithms: List<String>
     val cryptographicBindingMethods: List<String>
     val name: String

@@ -13,6 +13,8 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import kotlinx.datetime.LocalDate
+import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.decodeToString
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.util.fromBase64Url
@@ -36,6 +38,7 @@ import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.X509CertChain
 import org.multipaz.openid4vci.credential.CredentialDisplay
 import org.multipaz.webtoken.ChallengeInvalidException
 import org.multipaz.openid4vci.credential.CredentialFactoryRegistry
@@ -57,6 +60,7 @@ import org.multipaz.rpc.backend.Configuration
 import org.multipaz.server.enrollment.ServerIdentity
 import org.multipaz.server.enrollment.validateServerIdentityCertificateChain
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.validateAndroidKeyAttestation
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 
@@ -145,7 +149,10 @@ suspend fun credential(call: ApplicationCall) {
         proofType = proof.jsonObject["proof_type"]?.jsonPrimitive?.content!!
         proofs = buildJsonArray { add(proof.jsonObject[proofType]!!) }
     } else {
-        proofType = if (proofsObj.containsKey("attestation")) {
+        proofType = if (proofsObj.containsKey("android_keystore_attestation")) {
+            // prefer Android attestation to everything else
+            "android_keystore_attestation"
+        } else if (proofsObj.containsKey("attestation")) {
             // prefer attestation
             "attestation"
         } else if (proofsObj.containsKey("jwt")) {
@@ -183,6 +190,38 @@ suspend fun credential(call: ApplicationCall) {
                         id = key.jsonObject["kid"]?.jsonPrimitive?.content ?: keyHash(publicKey)
                     )
                 }
+            }
+        }
+        "android_keystore_attestation" -> {
+            if (!factory.acceptAndroidKeyAttestation) {
+                throw InvalidRequestException(
+                    "android_keystore_attestation proof cannot be used for this credential")
+            }
+            var expectedNonce: ByteString? = null
+            proofs.map { proof ->
+                val chain = X509CertChain.fromX5c(proof)
+                val nonce = validateAndroidKeyAttestation(
+                    chain = chain,
+                    challenge = null,
+                    requireGmsAttestation = true,
+                    requireVerifiedBootGreen = true,
+                    requireKeyMintSecurityLevel = factory.keyMintSecurityLevel,
+                    requireAppSignatureCertificateDigests = setOf(),
+                    requireAppPackages = setOf()
+                )
+                // All nonce values must be the same. Validate the first one and ensure that
+                // the rest of them match the first one.
+                if (expectedNonce == null) {
+                    expectedNonce = nonce
+                    validateAndConsumeCredentialChallenge(nonce.decodeToString())
+                } else if (nonce != expectedNonce) {
+                    throw InvalidRequestException("nonce mismatch")
+                }
+                val publicKey = chain.certificates.first().ecPublicKey
+                KeyAndId(
+                    publicKey,
+                    keyHash(publicKey)
+                )
             }
         }
         "jwt" -> {

@@ -17,13 +17,14 @@ private const val TAG = "validateAndroidKeyAttestation"
  * // TODO: use revocation list from https://android.googleapis.com/attestation/status
  *
  * @param chain Android key attestation
- * @param challenge challenge/nonce used during key creation
+ * @param challenge challenge/nonce used during key creation (if needs to be checked)
  * @param requireGmsAttestation check that certificate chain is rooted in a known Google key
  * @param requireVerifiedBootGreen check that the device has booted securely
  * @param requireKeyMintSecurityLevel identifies acceptable security level
  * @param requireAppSignatureCertificateDigests identifies trusted app signing keys
  * @param requireAppPackages identifies trusted app package names
  * @param validateAt time instant used to validate certificate validity intervals
+ * @return challenge/nonce used during key creation
  *
  * @throws IllegalStateException if Android key attestation is not valid
  */
@@ -36,20 +37,23 @@ suspend fun validateAndroidKeyAttestation(
     requireAppSignatureCertificateDigests: Set<ByteString>,
     requireAppPackages: Set<String>,
     validateAt: Instant = Clock.System.now()
-) {
+): ByteString {
     try {
         if (requireGmsAttestation) {
             // Google root certificate uses RSA private key (and not EC key that we currently support
             // in Kotlin Multiplatform code). Instead of comparing the keys, just replace the root
             // in the chain with the known root certificate before validation.
-            // TODO: add functionality to extract the public key in any format from the certificate.
-            // Then we can compare the key in the root certificate instead of injecting the known root
-            // certificate and worry about its expiration date.
-            val truncatedChain = chain.certificates.subList(0, chain.certificates.lastIndex)
+            val lastCertificate = chain.certificates.last()
+            val rootlessChain = if (lastCertificate.subject == lastCertificate.issuer) {
+                chain.certificates.subList(0, chain.certificates.lastIndex)
+            } else {
+                chain.certificates
+            }
             val trustedRoot =
-                GOOGLE_ATTESTATION_ROOT_CERTIFICATES[chain.certificates.last().subject]
-                    ?: throw IllegalArgumentException("No trusted root in Android Key Attestation")
-            val chainToVerify = truncatedChain + listOf(trustedRoot)
+                GOOGLE_ATTESTATION_ROOT_CERTIFICATES[rootlessChain.last().issuer]
+                    ?: throw IllegalArgumentException(
+                        "No trusted root in Android Key Attestation: ${rootlessChain.last().subject.name}")
+            val chainToVerify = rootlessChain + listOf(trustedRoot)
             X509CertChain(chainToVerify).validate(validateAt)
         } else {
             chain.validate(validateAt)
@@ -67,7 +71,8 @@ suspend fun validateAndroidKeyAttestation(
     }
 
     // Challenge must match...
-    check(challenge == null || challenge == ByteString(parser.attestationChallenge)) {
+    val attestationChallenge = ByteString(parser.attestationChallenge)
+    check(challenge == null || challenge == attestationChallenge) {
         "Challenge didn't match what was expected"
     }
 
@@ -111,6 +116,21 @@ suspend fun validateAndroidKeyAttestation(
         Logger.d(TAG,
             "Digest $n: ${parser.applicationSignatureDigests[n].toByteArray().toBase64Url()}")
     }
+
+    return attestationChallenge
+}
+
+/**
+ * Checks if the given certificate chain represents Android Key Attestation
+ *
+ * @param chain key attestation certificate chain
+ * @return if this certificate chain attests an Android Secure Area key
+ */
+fun isAndroidAttestation(chain: X509CertChain?): Boolean {
+    if (chain == null) {
+        return false
+    }
+    return GOOGLE_ATTESTATION_ROOT_CERTIFICATES.containsKey(chain.certificates.last().issuer)
 }
 
 // This certificates are from

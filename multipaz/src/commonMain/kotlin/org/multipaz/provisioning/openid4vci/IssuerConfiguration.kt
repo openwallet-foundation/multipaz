@@ -15,7 +15,6 @@ import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.provisioning.CredentialMetadata
 import org.multipaz.provisioning.KeyBindingType
 import org.multipaz.provisioning.ProvisioningMetadata
-import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.util.Logger
 
 internal data class IssuerConfiguration(
@@ -81,15 +80,16 @@ internal data class IssuerConfiguration(
                     Logger.e(TAG, "Unsupported credential format", err)
                     continue
                 }
-                credentialConfigurations[id] = CredentialConfiguration(
-                    scope = config.stringOrNull("scope")
-                )
-                val keyProofType = try {
+                val (keyProofType, useAndroidAttestation) = try {
                     extractKeyProofType(config, url, clientPreferences)
                 } catch (err: IllegalArgumentException) {
                     Logger.e(TAG, "Unsupported key proof type", err)
                     continue
                 }
+                credentialConfigurations[id] = CredentialConfiguration(
+                    scope = config.stringOrNull("scope"),
+                    useAndroidAttestation = useAndroidAttestation
+                )
                 credentials[id] = CredentialMetadata(
                     display = extractDisplay(
                         element = config.objOrNull("credential_metadata") ?: config,
@@ -134,24 +134,30 @@ internal data class IssuerConfiguration(
             config: JsonObject,
             issuerId: String,
             clientPreferences: OpenID4VCIClientPreferences
-        ): KeyBindingType {
+        ): Pair<KeyBindingType, Boolean> {
             val proofTypes = config.objOrNull("proof_types_supported")
-                ?: return KeyBindingType.Keyless
+                ?: return Pair(KeyBindingType.Keyless, false)
+            val androidAttestation = proofTypes.objOrNull("android_keystore_attestation")
             val attestation = proofTypes.objOrNull("attestation")
             val jwt = proofTypes.objOrNull("jwt")
-            val proof = attestation ?: jwt
+            val proof = androidAttestation ?: attestation ?: jwt
             if (proof != null) {
                 val alg = preferredAlgorithm(
                     available = proof.arrayOrNull("proof_signing_alg_values_supported"),
                     clientPreferences = clientPreferences
                 )
-                return if (attestation != null) {
-                    KeyBindingType.Attestation(alg)
+                return if (androidAttestation != null) {
+                    Pair(KeyBindingType.Attestation(alg), true)
+                } else if (attestation != null) {
+                    Pair(KeyBindingType.Attestation(alg), false)
                 } else {
-                    KeyBindingType.OpenidProofOfPossession(
-                        algorithm = alg,
-                        clientId = clientPreferences.clientId,
-                        aud = issuerId
+                    Pair(
+                        KeyBindingType.OpenidProofOfPossession(
+                            algorithm = alg,
+                            clientId = clientPreferences.clientId,
+                            aud = issuerId
+                        ),
+                        false
                     )
                 }
             }

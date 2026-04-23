@@ -53,6 +53,7 @@ import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.storage.Storage
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
+import org.multipaz.util.isAndroidAttestation
 import org.multipaz.util.toBase64Url
 import kotlin.random.Random
 import kotlin.time.Clock
@@ -160,7 +161,9 @@ internal class OpenID4VCIProvisioningClient(
         var credentialResponse: HttpResponse
         val credentialMetadata =
             issuerConfiguration.provisioningMetadata.credentials[credentialOffer.configurationId]!!
-        val keyProofs = buildKeyProofs(keyInfo)
+        val credentialConfiguration =
+            issuerConfiguration.credentialConfigurations[credentialOffer.configurationId]!!
+        val keyProofs = buildKeyProofs(keyInfo, credentialConfiguration)
         val dpopKey = getDPopKey()
         while (true) {
             val dpop = OpenID4VCIUtil.generateDPoP(
@@ -237,7 +240,10 @@ internal class OpenID4VCIProvisioningClient(
         return Credentials(idAndData, display)
     }
 
-    private suspend fun buildKeyProofs(keyInfo: KeyBindingInfo): JsonElement? =
+    private suspend fun buildKeyProofs(
+        keyInfo: KeyBindingInfo,
+        credentialConfiguration: CredentialConfiguration
+    ): JsonElement? =
         when (keyInfo) {
             KeyBindingInfo.Keyless -> null
             is KeyBindingInfo.OpenidProofOfPossession -> buildJsonObject {
@@ -248,13 +254,25 @@ internal class OpenID4VCIProvisioningClient(
                 }
             }
             is KeyBindingInfo.Attestation -> buildJsonObject {
-                val backend = BackendEnvironment.getInterface(OpenID4VCIBackend::class)!!
-                val jwtKeyAttestation = backend.createJwtKeyAttestation(
-                    credentialKeyAttestations = keyInfo.attestations,
-                    challenge = keyChallenge!!
-                )
-                putJsonArray("attestation") {
-                    add(jwtKeyAttestation)
+                if (credentialConfiguration.useAndroidAttestation &&
+                    isAndroidAttestation(keyInfo.attestations.first().keyAttestation.certChain)) {
+                    putJsonArray("android_keystore_attestation") {
+                        Logger.i(TAG, "Using android_keystore_attestation proof")
+                        for (attestation in keyInfo.attestations) {
+                            // NB: root is included per-spec. Our server accepts the chain with
+                            // or without the root.
+                            add(attestation.keyAttestation.certChain!!.toX5c(excludeRoot = false))
+                        }
+                    }
+                } else {
+                    val backend = BackendEnvironment.getInterface(OpenID4VCIBackend::class)!!
+                    val jwtKeyAttestation = backend.createJwtKeyAttestation(
+                        credentialKeyAttestations = keyInfo.attestations,
+                        challenge = keyChallenge!!
+                    )
+                    putJsonArray("attestation") {
+                        add(jwtKeyAttestation)
+                    }
                 }
             }
         }

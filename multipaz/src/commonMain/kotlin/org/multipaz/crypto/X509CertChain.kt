@@ -10,7 +10,6 @@ import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.annotation.CborSerializationImplemented
 import org.multipaz.cbor.buildCborArray
-import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.util.fromBase64
 import kotlin.io.encoding.Base64
 import kotlin.time.Clock
