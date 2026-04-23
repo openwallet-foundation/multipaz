@@ -283,7 +283,7 @@ data class MdocDocument(
                     val namespaceName = namespaceDataItemKey.asTstr
                     val innerMap = mutableMapOf<String, ByteString>()
                     for (issuerSignedItemBytes in namespaceDataItemValue.asArray) {
-                        val issuerSignedItem = IssuerSignedItem.fromDataItem(issuerSignedItemBytes.asTaggedEncodedCbor)
+                        val issuerSignedItem = IssuerSignedItem(issuerSignedItemBytes.asTaggedEncodedCbor)
                         val digest = Crypto.digest(
                             algorithm = mso.digestAlgorithm,
                             message = Cbor.encode(issuerSignedItemBytes)

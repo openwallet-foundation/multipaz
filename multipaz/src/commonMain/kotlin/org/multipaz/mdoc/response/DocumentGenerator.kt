@@ -255,7 +255,7 @@ class DocumentGenerator
                         for ((namespace, innerMap) in issuerNamespacesNew!!.data) {
                             putCborArray(namespace) {
                                 for ((_, issuerSignedItem) in innerMap) {
-                                    add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(issuerSignedItem.toDataItem()))))
+                                    add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(issuerSignedItem.dataItem))))
                                 }
                             }
                         }

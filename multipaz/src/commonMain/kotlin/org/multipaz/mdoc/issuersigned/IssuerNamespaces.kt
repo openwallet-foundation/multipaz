@@ -38,7 +38,7 @@ data class IssuerNamespaces(
                     for ((_, issuerSignedItem) in innerMap) {
                         add(Tagged(
                             Tagged.ENCODED_CBOR,
-                            Bstr(Cbor.encode(issuerSignedItem.toDataItem()))
+                            Bstr(Cbor.encode(issuerSignedItem.dataItem))
                         ))
                     }
                 }
@@ -95,9 +95,7 @@ data class IssuerNamespaces(
                 val namespaceName = namespaceDataItemKey.asTstr
                 val innerMap = mutableMapOf<String, IssuerSignedItem>()
                 for (issuerSignedItemBytes in namespaceDataItemValue.asArray) {
-                    val issuerSignedItem = IssuerSignedItem.fromDataItem(
-                        issuerSignedItemBytes.asTaggedEncodedCbor
-                    )
+                    val issuerSignedItem = IssuerSignedItem(dataItem = issuerSignedItemBytes.asTaggedEncodedCbor)
                     innerMap[issuerSignedItem.dataElementIdentifier] = issuerSignedItem
                 }
                 ret[namespaceName] = innerMap
@@ -192,17 +190,14 @@ data class IssuerNamespaces(
             for (ns in builtNamespaces) {
                 val items = mutableMapOf<String, IssuerSignedItem>()
                 for ((deName, deValue) in ns.dataElements) {
-                    items.put(
-                        deName,
-                        IssuerSignedItem(
-                            digestId = digestIt.next(),
-                            random = ByteString(randomProvider.nextBytes(dataElementRandomSize)),
-                            dataElementIdentifier = deName,
-                            dataElementValue = deValue
-                        )
+                    items[deName] = IssuerSignedItem.fromValues(
+                        digestId = digestIt.next(),
+                        random = ByteString(randomProvider.nextBytes(dataElementRandomSize)),
+                        dataElementIdentifier = deName,
+                        dataElementValue = deValue
                     )
                 }
-                ret.put(ns.namespaceName, items)
+                ret[ns.namespaceName] = items
             }
             return IssuerNamespaces(ret)
         }

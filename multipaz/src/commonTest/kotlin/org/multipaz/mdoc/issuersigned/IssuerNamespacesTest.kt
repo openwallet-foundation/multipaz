@@ -9,6 +9,11 @@ import org.multipaz.mdoc.TestVectors
 import org.multipaz.util.fromHex
 import org.multipaz.util.toHex
 import kotlinx.datetime.LocalDate
+import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Simple
+import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.putCborArray
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -106,6 +111,57 @@ class IssuerNamespacesTest {
                 """.trimIndent().trim(),
             issuerNamespaces.prettyPrint().trim()
         )
+    }
+
+    private fun checkOrder(issuerSignedItemCbor: DataItem) {
+        val decodedItem = IssuerNamespaces.fromDataItem(issuerSignedItemCbor)
+        assertEquals(issuerSignedItemCbor, decodedItem.toDataItem())
+    }
+
+    // This checks that IssuerSignedItem preserves the order
+    @Test
+    fun orderIsPreservedInIssuerSignedItem() {
+        // The order as per the standard ...
+        checkOrder(buildCborMap {
+            putCborArray("ns1") {
+                add(Tagged(Tagged.ENCODED_CBOR, Bstr(
+                        Cbor.encode(buildCborMap {
+                        put("digestID", 1)
+                        put("random", "1234".fromHex())
+                        put("elementIdentifier", "age_over_21")
+                        put("elementValue", Simple.TRUE)
+                    })
+                )))
+            }
+        })
+
+        // ... different order than as in the standard
+        checkOrder(buildCborMap {
+            putCborArray("ns1") {
+                add(Tagged(Tagged.ENCODED_CBOR, Bstr(
+                    Cbor.encode(buildCborMap {
+                        put("random", "1234".fromHex())
+                        put("digestID", 1)
+                        put("elementIdentifier", "age_over_21")
+                        put("elementValue", Simple.TRUE)
+                    })
+                )))
+            }
+        })
+
+        // ... yet another different order than as in the standard
+        checkOrder(buildCborMap {
+            putCborArray("ns1") {
+                add(Tagged(Tagged.ENCODED_CBOR, Bstr(
+                    Cbor.encode(buildCborMap {
+                        put("elementValue", Simple.TRUE)
+                        put("elementIdentifier", "age_over_21")
+                        put("random", "1234".fromHex())
+                        put("digestID", 1)
+                    })
+                )))
+            }
+        })
     }
 }
 
