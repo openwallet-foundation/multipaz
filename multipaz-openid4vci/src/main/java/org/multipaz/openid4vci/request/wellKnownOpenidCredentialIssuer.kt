@@ -84,16 +84,18 @@ suspend fun wellKnownOpenidCredentialIssuer(call: ApplicationCall) {
                                     }
                                 }
                                 if (credentialFactory.acceptAndroidKeyAttestation) {
+                                    val level = when (credentialFactory.keyMintSecurityLevel) {
+                                        AndroidKeystoreSecurityLevel.SOFTWARE ->
+                                            "Software"
+                                        AndroidKeystoreSecurityLevel.TRUSTED_ENVIRONMENT ->
+                                            "TrustedEnvironment"
+                                        AndroidKeystoreSecurityLevel.STRONG_BOX ->
+                                            "StrongBox"
+                                    }
                                     putJsonObject("android_keystore_attestation") {
-                                        put("key_mint_security_level",
-                                            when (credentialFactory.keyMintSecurityLevel) {
-                                                AndroidKeystoreSecurityLevel.SOFTWARE ->
-                                                    "Software"
-                                                AndroidKeystoreSecurityLevel.TRUSTED_ENVIRONMENT ->
-                                                    "TrustedEnvironment"
-                                                AndroidKeystoreSecurityLevel.STRONG_BOX ->
-                                                    "StrongBox"
-                                            })
+                                        putJsonObject("key_attestations_required") {
+                                            put("key_mint_security_level", level)
+                                        }
                                         putJsonArray("proof_signing_alg_values_supported") {
                                             credentialFactory.proofSigningAlgorithms.forEach {
                                                 add(it)

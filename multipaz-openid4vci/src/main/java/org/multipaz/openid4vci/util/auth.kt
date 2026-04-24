@@ -22,9 +22,8 @@ import org.multipaz.cbor.Uint
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.webtoken.Challenge
-import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.openid4vci.credential.CredentialFactoryRegistry
+import org.multipaz.openid4vci.customization.NonceManager
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.SimpleCipher
@@ -121,7 +120,8 @@ suspend fun authorizeWithDpop(
     publicKey: EcPublicKey,
     clientId: String,
     accessToken: String?,
-    initial: Boolean = false
+    isResourceServer: Boolean,
+    initial: Boolean,
 ) {
     val auth = request.headers["Authorization"]
     if (accessToken == null) {
@@ -140,21 +140,14 @@ suspend fun authorizeWithDpop(
         }
     }
 
-    validateDPoPJwt(request, publicKey, clientId, accessToken, initial)
+    validateDPoPJwt(request, publicKey, clientId, accessToken, isResourceServer, initial)
 }
 
-suspend fun addFreshNonceHeaders(call: ApplicationCall) {
-    val configuration = BackendEnvironment.getInterface(Configuration::class)!!
-    val useClientAttestationChallenge =
-        configuration.getValue("use_client_attestation_challenge") != "false"
-    call.response.header("DPoP-Nonce", Challenge.create())
-    if (useClientAttestationChallenge) {
-        call.response.header("OAuth-Client-Attestation-Challenge", Challenge.create())
+suspend fun respondWithNewDPoPNonce(call: ApplicationCall, nonces: NonceManager.Nonces) {
+    nonces.dpopNonce?.let { call.response.header("DPoP-Nonce", it) }
+    nonces.clientAttestationNonce?.let {
+        call.response.header("OAuth-Client-Attestation-Challenge", it)
     }
-}
-
-suspend fun respondWithNewDPoPNonce(call: ApplicationCall) {
-    addFreshNonceHeaders(call)
     call.response.header("WWW-Authenticate", "DPoP error=\"use_dpop_nonce\"")
     call.respondText(status = HttpStatusCode.Unauthorized, text = "")
 }
@@ -229,12 +222,19 @@ suspend fun validateClientAttestationPoP(
             if (useClientAttestationChallenge) {
                 put(WebTokenCheck.CHALLENGE, "challenge")
             }
-        }
+        },
+        nonceValidator = NonceManager.get()::checkAndConsumeClientAttestationNonce
     )
 }
 
-suspend fun respondWithNewClientAttestationChallenge(call: ApplicationCall) {
-    addFreshNonceHeaders(call)
+suspend fun respondWithNewClientAttestationChallenge(
+    call: ApplicationCall,
+    nonces: NonceManager.Nonces
+) {
+    nonces.dpopNonce?.let { call.response.header("DPoP-Nonce", it) }
+    nonces.clientAttestationNonce?.let {
+        call.response.header("OAuth-Client-Attestation-Challenge", it)
+    }
     call.respondText(
         status = HttpStatusCode.BadRequest,
         text = "{\"error\": \"use_attestation_challenge\"}\n",
@@ -285,7 +285,14 @@ suspend fun createSession(
     // Validate DPoP if any
     val dpopKey = processInitialDPoP(request)
     if (dpopKey != null) {
-        validateDPoPJwt(request, dpopKey, clientId, null, true)
+        validateDPoPJwt(
+            request = request,
+            publicKey = dpopKey,
+            clientId = clientId,
+            accessToken = null,
+            isResourceServer = false,
+            initial = true
+        )
     } else {
         // DPoP is not supplied. We are OK with that as long as clientId is authenticated
         // one way or the other.
@@ -366,10 +373,17 @@ private suspend fun validateDPoPJwt(
     publicKey: EcPublicKey,
     clientId: String,
     accessToken: String?,
-    initial: Boolean = false
+    isResourceServer: Boolean,
+    initial: Boolean,
 ) {
     val dpop = request.headers["DPoP"] ?: throw InvalidRequestException("DPoP header required")
     val baseUrl = BackendEnvironment.getBaseUrl()
+    val nonceManager = NonceManager.get()
+    val nonceValidator: suspend (String) -> Unit = if (isResourceServer) {
+        nonceManager::checkAndConsumeResourceDPoPNonce
+    } else {
+        nonceManager::checkAndConsumeAuthorizationDPoPNonce
+    }
     val body = validateJwt(
         jwt = dpop,
         jwtName = "DPoP JWT",
@@ -386,7 +400,8 @@ private suspend fun validateDPoPJwt(
                 val athHash = Crypto.digest(Algorithm.SHA256, accessToken.encodeToByteArray())
                 put(WebTokenCheck.ATH, athHash.toBase64Url())
             }
-        }
+        },
+        nonceValidator = nonceValidator
     )
     if (accessToken == null && body.containsKey("ath")) {
         throw InvalidRequestException("DPoP JWT: 'ath' specified, but not expected")

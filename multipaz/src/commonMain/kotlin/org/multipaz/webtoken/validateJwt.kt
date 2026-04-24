@@ -59,21 +59,23 @@ import kotlin.time.Instant
  *
  * [WebTokenCheck.CHALLENGE] defines the nonce/challenge check using the value of the specified property.
  * The value given to this key in [checks] map is used as a property name in the body part of the
- * JWT. That property must exist. Its value is passed to [Challenge.validateAndConsume] method.
+ * JWT. That property must exist. Its value is passed to [nonceValidator] function.
  *
  * @param jwt JWT to validate
  * @param jwtName name for the kind of JWT being validated, this is used to generate more meaningful
- *    exception messages
+ *  exception messages
  * @param publicKey public key to use to check signature, either publicKey or [WebTokenCheck.TRUST]
- *    must be used.
+ *  must be used.
  * @param checks validation checks to perform.
  * @param maxValidity when `exp` is not present determines expiration time based on `iat` claim;
- *     when `exp` claim is present, determines how far in the future it can be.
+ *  when `exp` claim is present, determines how far in the future it can be.
  * @param certificateChainValidator optional function to validate certificate chain in CWT; if
- *     the certificate chain is not valid it should throw [InvalidRequestException] exception,
- *     the returned value should indicate if the chain is trusted (in which case
- *     [WebTokenCheck.TRUST] check is not performed) or not ([WebTokenCheck.TRUST] still applies).
+ *  the certificate chain is not valid it should throw [InvalidRequestException] exception,
+ *  the returned value should indicate if the chain is trusted (in which case
+ *  [WebTokenCheck.TRUST] check is not performed) or not ([WebTokenCheck.TRUST] still applies).
  * @param clock clock that determines current time to check for expiration.
+ * @param nonceValidator function that must throw [ChallengeInvalidException] if nonce/challenge
+ *  is not valid; this is used with [WebTokenCheck.CHALLENGE] check.
  * @throws ChallengeInvalidException when nonce or challenge check fails (see [WebTokenCheck.CHALLENGE])
  * @throws InvalidRequestException when any other validation fails
  */
@@ -84,7 +86,8 @@ suspend fun validateJwt(
     checks: Map<WebTokenCheck, String> = mapOf(),
     maxValidity: Duration = 10.hours,
     certificateChainValidator: (suspend (chain: X509CertChain, atTime: Instant) -> Boolean)? = null,
-    clock: Clock = Clock.System
+    clock: Clock = Clock.System,
+    nonceValidator: suspend (nonce: String) -> Unit = Challenge::validateAndConsume
 ): JsonObject {
     require(publicKey == null || certificateChainValidator == null)
     val parts = jwt.split('.')
@@ -209,7 +212,7 @@ suspend fun validateJwt(
         if (nonce !is JsonPrimitive || !nonce.isString) {
             throw InvalidRequestException("$jwtName: '$nonceName' is invalid")
         }
-        Challenge.validateAndConsume(nonce.content)
+        nonceValidator.invoke(nonce.content)
     }
 
     val jtiPartition = checks[WebTokenCheck.IDENT]

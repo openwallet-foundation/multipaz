@@ -41,9 +41,12 @@ suspend fun authorizeChallenge(call: ApplicationCall) {
     if (authSession != null) {
         authorizeWithDpop(
             call.request,
-            state.dpopKey ?: throw IllegalArgumentException("DPoP is required"),
-            state.clientId!!,
-            null
+            publicKey = state.dpopKey
+                ?: throw IllegalArgumentException("DPoP is required"),
+            clientId = state.clientId!!,
+            accessToken = null,
+            initial = false,
+            isResourceServer = false
         )
     }
     val baseUrl = BackendEnvironment.getBaseUrl()

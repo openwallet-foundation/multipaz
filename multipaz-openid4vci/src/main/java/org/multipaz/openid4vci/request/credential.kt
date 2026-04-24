@@ -5,6 +5,7 @@ import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
+import io.ktor.client.request.request
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -42,6 +43,7 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.openid4vci.credential.CredentialDisplay
 import org.multipaz.webtoken.ChallengeInvalidException
 import org.multipaz.openid4vci.credential.CredentialFactoryRegistry
+import org.multipaz.openid4vci.customization.NonceManager
 import org.multipaz.openid4vci.util.IssuanceState
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.authorizeWithDpop
@@ -71,15 +73,18 @@ suspend fun credential(call: ApplicationCall) {
     val accessToken = extractAccessToken(call.request)
     val id = codeToId(OpaqueIdType.ACCESS_TOKEN, accessToken)
     val state = IssuanceState.getIssuanceState(id)
+    val nonceManager = NonceManager.get()
     try {
         authorizeWithDpop(
-            call.request,
-            state.dpopKey!!,
-            state.clientId!!,
-            accessToken
+            request = call.request,
+            publicKey = state.dpopKey!!,
+            clientId = state.clientId!!,
+            accessToken = accessToken,
+            isResourceServer = true,
+            initial = false
         )
     } catch (_: ChallengeInvalidException) {
-        respondWithNewDPoPNonce(call)
+        respondWithNewDPoPNonce(call, nonceManager.credential())
         return
     }
     val registry = BackendEnvironment.getInterface(CredentialFactoryRegistry::class)!!
@@ -182,7 +187,7 @@ suspend fun credential(call: ApplicationCall) {
                                 ServerIdentity.KEY_ATTESTATION, chain, instant)
                         }
                     )
-                validateAndConsumeCredentialChallenge(body["nonce"]!!.jsonPrimitive.content)
+                nonceManager.checkAndConsumeCredentialNonce(body["nonce"]!!.jsonPrimitive.content)
                 body["attested_keys"]!!.jsonArray.map { key ->
                     val publicKey = EcPublicKey.fromJwk(key.jsonObject)
                     KeyAndId(
@@ -213,7 +218,7 @@ suspend fun credential(call: ApplicationCall) {
                 // the rest of them match the first one.
                 if (expectedNonce == null) {
                     expectedNonce = nonce
-                    validateAndConsumeCredentialChallenge(nonce.decodeToString())
+                    nonceManager.checkAndConsumeCredentialNonce(nonce.decodeToString())
                 } else if (nonce != expectedNonce) {
                     throw InvalidRequestException("nonce mismatch")
                 }
@@ -251,7 +256,7 @@ suspend fun credential(call: ApplicationCall) {
                 val nonce = body["nonce"]!!.jsonPrimitive.content
                 if (expectedNonce == null) {
                     expectedNonce = nonce
-                    validateAndConsumeCredentialChallenge(nonce)
+                    nonceManager.checkAndConsumeCredentialNonce(nonce)
                 } else if (nonce != expectedNonce) {
                     throw InvalidRequestException("nonce mismatch")
                 }

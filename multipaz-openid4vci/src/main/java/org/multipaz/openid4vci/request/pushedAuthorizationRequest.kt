@@ -4,12 +4,13 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receiveParameters
+import io.ktor.server.response.header
 import io.ktor.server.response.respondText
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.multipaz.openid4vci.customization.NonceManager
 import org.multipaz.webtoken.ChallengeInvalidException
 import org.multipaz.openid4vci.util.OpaqueIdType
-import org.multipaz.openid4vci.util.addFreshNonceHeaders
 import org.multipaz.openid4vci.util.createSession
 import org.multipaz.openid4vci.util.idToCode
 import org.multipaz.openid4vci.util.respondWithNewClientAttestationChallenge
@@ -37,19 +38,23 @@ import kotlin.time.Duration.Companion.minutes
 suspend fun pushedAuthorizationRequest(call: ApplicationCall) {
     val parameters = call.receiveParameters()
     val timeout: Duration = 5.minutes
+    val nonces = NonceManager.get().pushedAuthorizationRequest()
 
     val id = try {
         // This is where actual work happens
         createSession(call.request, parameters, Clock.System.now() + timeout)
     } catch (_: ChallengeInvalidException) {
-        respondWithNewClientAttestationChallenge(call)
+        respondWithNewClientAttestationChallenge(call, nonces)
         return
     }
 
     // Format the result (session identifying information).
     val code = idToCode(OpaqueIdType.PAR_CODE, id, timeout)
 
-    addFreshNonceHeaders(call)
+    nonces.dpopNonce?.let { call.response.header("DPoP-Nonce", it) }
+    nonces.clientAttestationNonce?.let {
+        call.response.header("OAuth-Client-Attestation-Challenge", it)
+    }
     call.respondText(
         text = buildJsonObject {
                 put("request_uri", "urn:ietf:params:oauth:request_uri:$code")
