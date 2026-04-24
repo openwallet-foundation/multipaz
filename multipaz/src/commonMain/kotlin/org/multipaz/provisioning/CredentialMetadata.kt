@@ -1,8 +1,11 @@
 package org.multipaz.provisioning
 
+import org.multipaz.cbor.annotation.CborSerializable
+
 /**
  * Metadata for a particular type of credential that an issuer can provision.
  */
+@CborSerializable
 data class CredentialMetadata(
     /** Credential name and visual representation of that credential in the wallet. */
     val display: Display,
@@ -12,4 +15,6 @@ data class CredentialMetadata(
     val keyBindingType: KeyBindingType,
     /** Maximum number of credentials that can be requested in a single request */
     val maxBatchSize: Int
-)
+) {
+    companion object
+}

@@ -199,10 +199,10 @@
     <string name="trust_entry_editor_test_only_vical">This VICAL is for testing only</string>
     <string name="trust_entry_editor_test_only_rical">This RICAL is for testing only</string>
 
-    <!-- AndroidPromptModel -->
-    <string name="key_unlock_default_title">Verify it\'s you</string>
+    <!-- DefaultToHumanReadable.kt -->
+    <string name="key_unlock_default_title">Verify it's you</string>
     <string name="key_unlock_default_subtitle">Authentication is required</string>
-    <string name="key_unlock_present_title">Verify it\'s you to share the document</string>
+    <string name="key_unlock_present_title">Verify it's you to share the document</string>
     <string name="key_unlock_present_bio_subtitle">Authentication is required</string>
     <string name="key_unlock_present_passphrase_subtitle">Enter the passphrase associated with the document</string>
     <string name="aks_unlock_present_pin_subtitle">Enter the PIN associated with the document</string>

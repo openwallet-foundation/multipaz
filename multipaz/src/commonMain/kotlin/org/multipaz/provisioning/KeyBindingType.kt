@@ -1,5 +1,6 @@
 package org.multipaz.provisioning
 
+import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.crypto.Algorithm
 import org.multipaz.securearea.KeyAttestation
 
@@ -7,6 +8,7 @@ import org.multipaz.securearea.KeyAttestation
  * Type of [KeyBindingInfo] that credential issuer expects in [ProvisioningClient.obtainCredentials]
  * call.
  */
+@CborSerializable
 sealed class KeyBindingType {
     /**
      * No key binding, [KeyBindingInfo.Keyless] should be used.
@@ -30,4 +32,6 @@ sealed class KeyBindingType {
     data class Attestation(
         val algorithm: Algorithm
     ): KeyBindingType()
+
+    companion object
 }

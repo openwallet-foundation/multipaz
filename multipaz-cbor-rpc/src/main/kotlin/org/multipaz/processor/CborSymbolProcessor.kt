@@ -726,13 +726,17 @@ class CborSymbolProcessor(
                         }
                     }
                 }
-                line("return $baseName(")
-                withIndent {
-                    constructorParameters.forEach { parameter ->
-                        line("$parameter,")
+                if (classDeclaration.classKind == ClassKind.OBJECT) {
+                    line ("return $baseName")
+                } else {
+                    line("return $baseName(")
+                    withIndent {
+                        constructorParameters.forEach { parameter ->
+                            line("$parameter,")
+                        }
                     }
+                    line(")")
                 }
-                line(")")
             }
 
             if (hadMergedMap) {

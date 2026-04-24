@@ -299,6 +299,7 @@ class App private constructor (val promptModel: PromptModel) {
             val initFuncs = listOf<Pair<suspend () -> Unit, String>>(
                 Pair(TestAppConfiguration::init, "TestAppConfiguration::init"),
                 Pair(::settingsInit, "settingsInit"),
+                Pair(::eventLoggerInit, "eventLoggerInit"),
                 Pair(::platformCryptoInit, "platformCryptoInit"),
                 Pair(::platformExternalNfcTagReadersInit, "platformExternalNfcTagReadersInit"),
                 Pair(::documentTypeRepositoryInit, "documentTypeRepositoryInit"),
@@ -313,7 +314,6 @@ class App private constructor (val promptModel: PromptModel) {
                 Pair(::zkSystemRepositoryInit, "zkSystemRepositoryInit"),
                 Pair(::observeModeInit, "observeModeInit"),
                 Pair(::digitalCredentialsInit, "digitalCredentialsInit"),
-                Pair(::eventLoggerInit, "eventLoggerInit"),
             )
 
             val begin = Clock.System.now()
@@ -415,7 +415,8 @@ class App private constructor (val promptModel: PromptModel) {
                 followRedirects = false
             },
             promptModel = promptModel,
-            authorizationSecureArea = secureArea
+            authorizationSecureArea = secureArea,
+            eventLogger = eventLogger
         )
         provisioningSupport = ProvisioningSupport(
             storage = TestAppConfiguration.storage,

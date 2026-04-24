@@ -50,6 +50,8 @@ import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsOpenID4VP
 import org.multipaz.eventlogger.EventPresentmentIso18013AnnexA
 import org.multipaz.eventlogger.EventPresentmentIso18013Proximity
 import org.multipaz.eventlogger.EventPresentmentUriSchemeOpenID4VP
+import org.multipaz.eventlogger.EventProvisioning
+import org.multipaz.eventlogger.EventSimple
 import org.multipaz.eventlogger.SimpleEventLogger
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -156,7 +158,8 @@ fun EventLoggerScreen(
                     }
 
                     else -> {
-                        currentEvents.forEach { event ->
+                        // Show the newest events first
+                        currentEvents.reversed().forEach { event ->
                             EventItem(
                                 modifier = Modifier
                                     .clickable { onEventClicked(event) },
@@ -184,8 +187,84 @@ private fun EventItem(
 ) {
     // Right now the all events are presentment events. This will change in the future as we add
     // support for logging other events
-    val presentmentData = (event as EventPresentment).presentmentData
+    when (event) {
+        is EventPresentment -> {
+            EventItemPresentment(
+                event = event,
+                imageLoader = imageLoader,
+                documentModel = documentModel,
+                imageSize = imageSize,
+                timeZone = timeZone,
+                modifier = modifier
+            )
+        }
+        is EventProvisioning -> {
+            EventItemProvisioning(
+                event = event,
+                imageLoader = imageLoader,
+                documentModel = documentModel,
+                imageSize = imageSize,
+                timeZone = timeZone,
+                modifier = modifier
+            )
+        }
+        is EventSimple -> {
+            FloatingItemCenteredText(
+                text = "EventSimple w/ ${event.appData.size} bytes of data"
+            )
+        }
+    }
+}
 
+@Composable
+private fun EventItemProvisioning(
+    event: EventProvisioning,
+    imageLoader: ImageLoader,
+    documentModel: DocumentModel,
+    imageSize: Dp = 40.dp,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    modifier: Modifier = Modifier
+) {
+    val docInfo = event.documentId.let { documentId ->
+        documentModel.documentInfos.collectAsState().value.find {
+            it.document.identifier == documentId
+        }
+    }
+
+    val eventType = if (event.initialProvisioning) {
+        "Document provisioning"
+    } else {
+        "Credential refresh"
+    }
+
+    val eventDateTimeString = event.timestamp.toLocalDateTime(timeZone = timeZone).formatLocalized()
+    val text = "$eventDateTimeString • $eventType"
+
+    FloatingItemText(
+        modifier = modifier,
+        image = {
+            docInfo?.cardArt?.let {
+                Image(
+                    modifier = modifier.size(imageSize),
+                    bitmap = it,
+                    contentDescription = null
+                )
+            } ?: Spacer(modifier = Modifier.size(imageSize))
+        },
+        text = docInfo?.document?.displayName ?: event.documentName ?: "Unknown document",
+        secondary = text,
+    )
+}
+
+@Composable
+private fun EventItemPresentment(
+    event: EventPresentment,
+    imageLoader: ImageLoader,
+    documentModel: DocumentModel,
+    imageSize: Dp = 40.dp,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    modifier: Modifier = Modifier
+) {
     val sharingType = when (event) {
         is EventPresentmentDigitalCredentialsMdocApi -> getSharingType(event.origin)
         is EventPresentmentDigitalCredentialsOpenID4VP -> getSharingType(event.origin)
@@ -194,7 +273,7 @@ private fun EventItem(
         is EventPresentmentUriSchemeOpenID4VP ->getSharingType(event.origin)
     }
 
-    val firstDoc = presentmentData.requestedDocuments.firstOrNull()
+    val firstDoc = event.presentmentData.requestedDocuments.firstOrNull()
     val firstDocInfo = firstDoc?.let { requestedDocument ->
         documentModel.documentInfos.collectAsState().value.find {
             it.document.identifier == requestedDocument.documentId

@@ -21,7 +21,10 @@ import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.Document
-import org.multipaz.webtoken.buildJwt
+import org.multipaz.eventlogger.EventLogger
+import org.multipaz.eventlogger.EventProvisioning
+import org.multipaz.eventlogger.EventProvisioningCredentialData
+import org.multipaz.eventlogger.EventProvisioningIssuerDataOpenID4VCI
 import org.multipaz.prompt.PromptModel
 import org.multipaz.provisioning.openid4vci.OpenID4VCI
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
@@ -32,6 +35,7 @@ import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.util.Logger
+import org.multipaz.webtoken.buildJwt
 import kotlin.coroutines.CoroutineContext
 import kotlin.reflect.KClass
 import kotlin.reflect.safeCast
@@ -52,12 +56,14 @@ private const val TAG = "ProvisioningModel"
  * @param authorizationSecureArea secure area that is used to store session authorization keys
  *  during provisioning; when credentials are refreshed, it is important that the [SecureArea]
  *  used during refresh is the same that was used during the initial provisioning
+ * @param eventLogger an [EventLogger] for logging events or `null`.
  */
 class ProvisioningModel(
     private val documentProvisioningHandler: AbstractDocumentProvisioningHandler,
     private val httpClient: HttpClient,
     private val promptModel: PromptModel,
-    private val authorizationSecureArea: SecureArea
+    private val authorizationSecureArea: SecureArea,
+    private val eventLogger: EventLogger? = null
 ) {
     private var mutableState = MutableStateFlow<State>(Idle)
     private var mutableMetadata = MutableStateFlow<ProvisioningMetadata?>(null)
@@ -169,6 +175,7 @@ class ProvisioningModel(
                 provisioningClient = provisioningClient,
                 targetDocument = document,
                 documentProvisioningHandler = documentProvisioningHandler,
+                eventLogger = eventLogger
             ).second
         }
         return numCredentialsFetched.await()
@@ -215,6 +222,7 @@ class ProvisioningModel(
                     provisioningClient = provisioningClient,
                     targetDocument = targetDocument,
                     documentProvisioningHandler = documentProvisioningHandler,
+                    eventLogger = eventLogger,
                     onRequestingCredentials = {
                         mutableState.emit(RequestingCredentials)
                     }
@@ -379,6 +387,7 @@ private suspend fun requestCredentials(
     provisioningClient: ProvisioningClient,
     targetDocument: Document?,
     documentProvisioningHandler: AbstractDocumentProvisioningHandler,
+    eventLogger: EventLogger?,
     onRequestingCredentials: suspend () -> Unit = {},
 ): Pair<Document, Int> {
     val issuerMetadata = provisioningClient.getMetadata()
@@ -458,12 +467,30 @@ private suspend fun requestCredentials(
                 if (credentialData.size != 1) {
                     throw IllegalStateException("Only a single keyless credential is expected to be issued")
                 }
-                pendingCredential.certify(credentialData.first().issuerData)
+                val issuerData = credentialData.first().issuerData
+                pendingCredential.certify(issuerData)
 
                 documentProvisioningHandler.updateDocument(
                     document = document,
                     display = credentials.display,
                     documentAuthorizationData = provisioningClient.getAuthorizationData()
+                )
+
+                eventLogger?.addEvent(
+                    EventProvisioning(
+                        issuerData = EventProvisioningIssuerDataOpenID4VCI(
+                            display = issuerMetadata.display,
+                            url = issuerMetadata.url,
+                            credentialId = credentialData.first().credentialId
+                        ),
+                        initialProvisioning = (targetDocument == null),
+                        documentId = document.identifier,
+                        documentName = document.displayName,
+                        display = credentials.display,
+                        credentialsFetched = mapOf(
+                            pendingCredential.domain to listOf(EventProvisioningCredentialData(issuerData))
+                        )
+                    )
                 )
 
                 // Modify pendingCredentials so this now certified credential isn't removed on error
@@ -486,6 +513,7 @@ private suspend fun requestCredentials(
                 // Credential minting can happen offline, we can get any number of new credentials
                 // here, some might have been created as pending in the previous calls to this
                 // method.
+                val credentialsFetched = mutableMapOf<String, MutableList<EventProvisioningCredentialData>>()
                 for ((credentialId, credentialData) in credentialData) {
                     val pendingCredential = document.lookupCredential(credentialId)
                     if (pendingCredential == null) {
@@ -494,12 +522,44 @@ private suspend fun requestCredentials(
                         Logger.e(TAG, "Credential '$credentialId' is already certified")
                     } else {
                         pendingCredential.certify(credentialData)
+                        val domainList = credentialsFetched.getOrPut(key = pendingCredential.domain) { mutableListOf() }
+                        domainList.add(EventProvisioningCredentialData(credentialData))
                     }
                 }
                 documentProvisioningHandler.updateDocument(
                     document = document,
                     display = credentials.display,
                     documentAuthorizationData = provisioningClient.getAuthorizationData()
+                )
+
+                eventLogger?.addEvent(
+                    EventProvisioning(
+                        issuerData = EventProvisioningIssuerDataOpenID4VCI(
+                            display = issuerMetadata.display,
+                            url = issuerMetadata.url,
+                            credentialId = credentialData.first().credentialId
+                        ),
+                        initialProvisioning = (targetDocument == null),
+                        documentId = document.identifier,
+                        documentName = document.displayName,
+                        display = credentials.display,
+                        credentialsFetched = credentialsFetched
+                    )
+                )
+            } else {
+                eventLogger?.addEvent(
+                    EventProvisioning(
+                        issuerData = EventProvisioningIssuerDataOpenID4VCI(
+                            display = issuerMetadata.display,
+                            url = issuerMetadata.url,
+                            credentialId = issuerMetadata.credentials.entries.first().key
+                        ),
+                        initialProvisioning = (targetDocument == null),
+                        documentId = document.identifier,
+                        documentName = document.displayName,
+                        display = null,
+                        credentialsFetched = emptyMap()
+                    )
                 )
             }
         }
@@ -514,6 +574,7 @@ private suspend fun requestCredentials(
         }
         throw err
     }
+
     return Pair(document, numCredentialsFetched)
 }
 

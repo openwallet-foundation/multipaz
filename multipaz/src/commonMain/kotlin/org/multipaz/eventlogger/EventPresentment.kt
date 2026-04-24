@@ -4,7 +4,7 @@ import org.multipaz.cbor.DataItem
 import kotlin.time.Instant
 
 /**
- * Base class for events recorded in the [EventLogger] related to credential presentment.
+ * Base class for events recorded in [EventLogger] related to credential presentment.
  *
  * @property presentmentData a [EventPresentmentData] with details about the presentment.
  */
