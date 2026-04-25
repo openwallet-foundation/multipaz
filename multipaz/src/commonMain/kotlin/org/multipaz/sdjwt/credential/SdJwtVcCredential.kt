@@ -39,7 +39,12 @@ interface SdJwtVcCredential {
     ): List<JsonClaim> {
         val ret = mutableListOf<JsonClaim>()
         val sdJwt = SdJwt.fromCompactSerialization(issuerProvidedData.decodeToString())
-        val issuerKey = sdJwt.x5c!!.certificates.first().ecPublicKey
+        // We only support keys that are certified with the certificate chain. Web-based resolution
+        // is not supported (and it is not clear it is suitable for identity credentials in general
+        // if the future goal is to support (offline) proximity presentment).
+        val x5c = sdJwt.x5c
+            ?: throw IllegalStateException("Only X509-certified keys are supported in SD-JWT")
+        val issuerKey = x5c.certificates.first().ecPublicKey
         val processedJwt = sdJwt.verify(issuerKey)
 
         // By design, we only include the top-level claims.

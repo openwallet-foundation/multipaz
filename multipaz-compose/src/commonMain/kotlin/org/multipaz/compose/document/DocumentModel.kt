@@ -277,7 +277,13 @@ class DocumentModel private constructor(
                     false
                 }
                 val claims = if (credential.isCertified) {
-                    credential.getClaims(documentTypeRepository)
+                    try {
+                        credential.getClaims(documentTypeRepository)
+                    } catch (err: IllegalStateException) {
+                        Logger.e(TAG,
+                            "Error reading claims: '${identifier}.${credential.identifier}'", err)
+                        emptyList()
+                    }
                 } else {
                     emptyList()
                 }

@@ -16,10 +16,20 @@
 package org.multipaz.sdjwt.credential
 
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.bytestring.encodeToByteString
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.multipaz.credential.CredentialLoader
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.EcCurve
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
+import org.multipaz.documenttype.DocumentType
+import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.documenttype.knowntypes.EUPersonalID
+import org.multipaz.sdjwt.SdJwt
 import org.multipaz.securearea.BatchCreateKeyResult
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureArea
@@ -30,8 +40,11 @@ import org.multipaz.storage.ephemeral.EphemeralStorage
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 
 class KeyBoundSdJwtVcCredentialTest {
     private lateinit var credentialLoader: CredentialLoader
@@ -87,6 +100,46 @@ class KeyBoundSdJwtVcCredentialTest {
         val credentials = document.getCredentials()
         // assert that document credentials contain all original credentials
         assertTrue(credentials.containsAll(originalCredentials))
+    }
+
+    @Test
+    fun noX5C() = runTest {
+        val document = documentStore.createDocument()
+        // Uncertified issuer key
+        val issuerKey = AsymmetricKey.NamedExplicit(
+            keyId = "foobar",
+            privateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        )
+        val credential = KeyBoundSdJwtVcCredential.create(
+            document = document,
+            asReplacementForIdentifier = null,
+            domain = "domain",
+            secureArea = secureArea,
+            vct = EUPersonalID.EUPID_VCT,
+            createKeySettings = CreateKeySettings()
+        )
+        val documentTypeRepository = DocumentTypeRepository()
+        documentTypeRepository.addDocumentType(EUPersonalID.getDocumentType())
+        val now = Clock.System.now()
+        val sdJwt = SdJwt.create(
+            issuerKey = issuerKey,
+            kbKey = secureArea.getKeyInfo(credential.alias).publicKey,
+            claims = buildJsonObject {
+                put("given_name", "John")
+                put("family_name", "Dow")
+            },
+            nonSdClaims = buildJsonObject {
+                put("iss", "http://issuer.example.org")
+                put("vct", credential.vct)
+                put("iat", now.epochSeconds)
+                put("nbf", now.epochSeconds)
+                put("exp", (now + 30.days).epochSeconds)
+            }
+        )
+        credential.certify(sdJwt.compactSerialization.encodeToByteString())
+        assertFailsWith(IllegalStateException::class) {
+            credential.getClaims(documentTypeRepository)
+        }
     }
 
     /**

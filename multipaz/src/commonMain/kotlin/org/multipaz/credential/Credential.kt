@@ -402,6 +402,8 @@ abstract class Credential {
      *
      * @param documentTypeRepository a [DocumentTypeRepository] or `null`.
      * @return a list of claims with values.
+     * @throws IllegalStateException if claims could not be read (e.g. due to unsupported
+     *  credential syntax)
      */
     abstract suspend fun getClaims(
         documentTypeRepository: DocumentTypeRepository?

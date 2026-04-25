@@ -32,6 +32,7 @@ import org.multipaz.cbor.putCborMap
 import org.multipaz.claim.organizeByNamespace
 import org.multipaz.context.AndroidUiContext
 import org.multipaz.context.applicationContext
+import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.document.Document
@@ -191,7 +192,13 @@ private suspend fun exportMdocCredential(
 
     val cardArtResized = resizedCardArt(cardArt)
 
-    val claims = credential.getClaims(documentTypeRepository)
+    val claims = try {
+        credential.getClaims(documentTypeRepository)
+    } catch (err: IllegalStateException) {
+        Logger.e(TAG,
+            "Error reading claims: '${credential.document.identifier}.${credential.identifier}'", err)
+        emptyList()
+    }
     return buildCborMap {
         put("title", displayName)
         put("subtitle", displayNameSub)
@@ -246,7 +253,14 @@ private suspend fun exportSdJwtVcCredential(
 
     val cardArtResized = resizedCardArt(cardArt)
 
-    val claims = credential.getClaimsImpl(documentTypeRepository)
+    val claims = try {
+        credential.getClaimsImpl(documentTypeRepository)
+    } catch (err: IllegalStateException) {
+        val cred = credential as Credential
+        Logger.e(TAG,
+            "Error reading claims: '${cred.document.identifier}.${credential.identifier}'", err)
+        emptyList()
+    }
     return buildCborMap {
         put("title", displayName)
         put("subtitle", displayNameSub)

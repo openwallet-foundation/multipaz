@@ -149,8 +149,13 @@ data class DcqlQuery(
             val matches = mutableListOf<QueryResponseMatch>()
             // We sort on displayName b/c otherwise it's sorted on Document.identifier which can be unpredictable
             for (cred in credsSatisfyingMeta.sortedBy { it.document.displayName }) {
-                val claimsInCredential =
+                val claimsInCredential = try {
                     cred.getClaims(documentTypeRepository = presentmentSource.documentTypeRepository)
+                } catch (err: IllegalStateException) {
+                    Logger.e(TAG,
+                        "Error reading claims: '${cred.document.identifier}.${cred.identifier}'", err)
+                    listOf()
+                }
                 if (credentialQuery.claimSets.isEmpty()) {
                     var didNotMatch = false
                     val matchingClaimValues = mutableMapOf< RequestedClaim, Claim>()
