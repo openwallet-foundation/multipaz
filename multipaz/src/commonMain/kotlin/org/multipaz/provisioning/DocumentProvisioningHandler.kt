@@ -133,22 +133,27 @@ open class DocumentProvisioningHandler(
     ): List<SecureAreaBoundCredential> {
         val settings = getDocumentProvisioningSettings(document, credentialMetadata, issuerMetadata)
         val now = Clock.System.now()
-        val numVariants = if (settings.requestUserAuth && settings.requestNoUserAuth) {
-            2
-        } else if (settings.requestUserAuth || settings.requestNoUserAuth) {
-            1
+        val noUserAuthBatchSize = if (settings.requestNoUserAuth) {
+            if (settings.requestUserAuth) {
+                credentialMetadata.maxBatchSize / 2  // NB: if maxBatchSize = 1, this will be zero
+            } else {
+                credentialMetadata.maxBatchSize
+            }
         } else {
-            0.also {
+            if (!settings.requestUserAuth) {
                 Logger.w(TAG, "Both requestUserAuth and requestNoUserAuth set to false")
                 return emptyList()
             }
+            0
         }
-        val maxBatchSize = credentialMetadata.maxBatchSize / numVariants
         if (settings.requestUserAuth) {
-            doDomain(now, document, settings, createKeySettings, credentialMetadata.format, maxBatchSize, true)
+            val batchSize = credentialMetadata.maxBatchSize - noUserAuthBatchSize
+            doDomain(now, document, settings, createKeySettings, credentialMetadata.format,
+                batchSize, true)
         }
         if (settings.requestNoUserAuth) {
-            doDomain(now, document, settings, createKeySettings, credentialMetadata.format, maxBatchSize, false)
+            doDomain(now, document, settings, createKeySettings, credentialMetadata.format,
+                noUserAuthBatchSize, false)
         }
         if (!settings.requestUserAuth && !settings.requestNoUserAuth) {
             Logger.w(TAG, "Both requestUserAuth and requestNoUserAuth are false, no credentials will be retrieved")
