@@ -3,6 +3,7 @@ package org.multipaz.presentment
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.EcCurve
 import org.multipaz.document.Document
+import org.multipaz.document.DocumentBadge
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.eventlogger.EventLogger
@@ -87,4 +88,14 @@ abstract class PresentmentSource(
         requestedClaims: List<RequestedClaim>,
         keyAgreementPossible: List<EcCurve>,
     ): Credential?
+
+    /**
+     * Gets a list of badges for a document.
+     *
+     * This may be used when the UI shows a list of documents to choose from.
+     *
+     * @param document the document to get a list of badges from.
+     * @return the badges.
+     */
+    abstract suspend fun getBadges(document: Document): List<DocumentBadge>
 }

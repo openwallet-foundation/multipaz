@@ -1,4 +1,4 @@
-package org.multipaz.compose.document
+package org.multipaz.compose.cards
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -41,7 +40,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -50,6 +48,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -61,70 +60,59 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-// MARK: - Internal Helper Models
-
-private data class CarouselModel(
-    val id: String,
-    val name: String,
-    val image: ImageBitmap
-)
-
-// MARK: - DocumentCarousel
-
 /**
- * A horizontal carousel composable that displays a collection of documents.
+ * A horizontal carousel composable that displays a collection of cards.
  *
- * [DocumentCarousel] provides a highly interactive way to browse, select, and reorder documents.
+ * [CardCarousel] provides a highly interactive way to browse, select, and reorder cards.
  * It features a "cover flow" style layout where the center item is elevated, and side items are scaled down.
  *
  * ## Features
  * - **Snap Scrolling**: Automatically snaps to the nearest card after dragging.
  * - **Reordering**: Long-press and drag to reorder items (optional).
- * - **Focus Reporting**: Reports which document is currently centered.
+ * - **Focus Reporting**: Reports which card is currently centered.
  * - **Custom Overlays**: Supports custom views for selected item information and empty states.
  *
  * @param modifier a [Modifier].
- * @param documentModel a [DocumentModel] with the documents to show a carousel for.
- * @param initialDocumentId the document to initially select.
- * @param allowReordering if `true` allow the user to reorder documents by long pressing.
- * @param onDocumentClicked action to perform when a document is tapped.
- * @param onDocumentFocused called when a new document is focused.
- * @param onDocumentReordered called when the user has reordered a document, to update the underlying [DocumentStore].
- * @param selectedDocumentInfo a composable to draw text underneath the focused document.
- * @param emptyDocumentContent a composable to draw text when there are no documents. This will be rendered in
+ * @param cardInfos the cards to show in the carousel.
+ * @param initialCardInfo the card to initially select.
+ * @param allowReordering if `true` allow the user to reorder cards by long pressing.
+ * @param onCardClicked action to perform when a card is tapped.
+ * @param onCardFocused called when a new card is focused.
+ * @param onCardReordered called when the user has reordered a card.
+ * @param selectedCardInfo a composable to draw text underneath the focused card.
+ * @param emptyCardContent a composable to draw text when there are no cards. This will be rendered in
  *   the center of a dashed outline of a grey card .
  */
 @Composable
-fun DocumentCarousel(
+fun CardCarousel(
     modifier: Modifier = Modifier,
-    documentModel: DocumentModel,
-    initialDocumentId: String? = null,
+    cardInfos: List<CardInfo>,
+    initialCardInfo: CardInfo? = null,
     allowReordering: Boolean = true,
-    onDocumentClicked: (DocumentInfo) -> Unit = {},
-    onDocumentFocused: (DocumentInfo) -> Unit = {},
-    onDocumentReordered: (document: DocumentInfo, oldIndex: Int, newIndex: Int) -> Unit = { _, _, _ -> },
-    selectedDocumentInfo: @Composable (docInfo: DocumentInfo?, index: Int, total: Int) -> Unit = { _, _, _ -> },
-    emptyDocumentContent: @Composable () -> Unit = { }
+    onCardClicked: (CardInfo) -> Unit = {},
+    onCardFocused: (CardInfo) -> Unit = {},
+    onCardReordered: (cardInfo: CardInfo, oldIndex: Int, newIndex: Int) -> Unit = { _, _, _ -> },
+    selectedCardInfo: @Composable (cardInfo: CardInfo?, index: Int, total: Int) -> Unit = { _, _, _ -> },
+    emptyCardContent: @Composable () -> Unit = { }
 ) {
-    val docInfos by documentModel.documentInfos.collectAsState()
-
     // Local state
-    var items by remember { mutableStateOf(emptyList<CarouselModel>()) }
+    var items by remember(cardInfos) { mutableStateOf(cardInfos) }
     val cardIndex = remember { Animatable(0f) }
     var hasInitialized by remember { mutableStateOf(false) }
-    var lastReportedFocusId by remember { mutableStateOf<String?>(null) }
+    var lastReportedFocusCard by remember { mutableStateOf<CardInfo?>(null) }
     var isReordering by remember { mutableStateOf(false) }
 
-    // Sync Items from Model
-    LaunchedEffect(docInfos) {
-        val newItems = docInfos.map { info ->
-            CarouselModel(
-                id = info.document.identifier,
-                name = info.document.displayName ?: "",
-                image = info.cardArt
-            )
+    // Initial Index Logic
+    LaunchedEffect(items) {
+        if (!hasInitialized && items.isNotEmpty()) {
+            val targetIndex = if (initialCardInfo != null) {
+                items.indexOfFirst { it.identifier == initialCardInfo.identifier }.takeIf { it >= 0 } ?: 0
+            } else {
+                0
+            }
+            cardIndex.snapTo(targetIndex.toFloat())
+            hasInitialized = true
         }
-        items = newItems
 
         // Clamp index if items reduced
         if (items.isNotEmpty()) {
@@ -132,17 +120,6 @@ fun DocumentCarousel(
             if (cardIndex.value > maxIndex) {
                 cardIndex.snapTo(maxIndex)
             }
-        }
-
-        // Initial Index Logic
-        if (!hasInitialized && items.isNotEmpty()) {
-            val targetIndex = if (initialDocumentId != null) {
-                items.indexOfFirst { it.id == initialDocumentId }.takeIf { it >= 0 } ?: 0
-            } else {
-                0
-            }
-            cardIndex.snapTo(targetIndex.toFloat())
-            hasInitialized = true
         }
     }
 
@@ -154,20 +131,17 @@ fun DocumentCarousel(
                 if (items.isEmpty() || isReordering) return@collect
 
                 val index = currentIndex.roundToInt().coerceIn(0, items.size - 1)
-                val focusedItem = items[index]
+                val focusedCard = items[index]
 
-                if (focusedItem.id != lastReportedFocusId) {
-                    val realDoc = docInfos.firstOrNull { it.document.identifier == focusedItem.id }
-                    if (realDoc != null) {
-                        lastReportedFocusId = focusedItem.id
-                        onDocumentFocused(realDoc)
-                    }
+                if (focusedCard != lastReportedFocusCard) {
+                    lastReportedFocusCard = focusedCard
+                    onCardFocused(focusedCard)
                 }
             }
     }
 
-    if (items.isEmpty() && docInfos.isEmpty()) {
-        EmptyStateView(modifier, emptyDocumentContent)
+    if (items.isEmpty()) {
+        EmptyStateView(modifier, emptyCardContent)
     } else {
         Column(
             modifier = modifier.fillMaxWidth(),
@@ -180,18 +154,13 @@ fun DocumentCarousel(
                 isReordering = isReordering,
                 onIsReorderingChange = { isReordering = it },
                 allowReordering = allowReordering,
-                onCarouselItemClick = { item ->
-                    val info = docInfos.firstOrNull { it.document.identifier == item.id }
-                    if (info != null) onDocumentClicked(info)
+                onCarouselItemClick = { cardInfo ->
+                    onCardClicked(cardInfo)
                 },
                 onReorder = { oldIndex, newIndex ->
                     if (newIndex in items.indices) {
-                        val movedItem = items[newIndex]
-                        // Parent has access to docInfos, so we do the lookup here
-                        val realDoc = docInfos.firstOrNull { it.document.identifier == movedItem.id }
-                        if (realDoc != null) {
-                            onDocumentReordered(realDoc, oldIndex, newIndex)
-                        }
+                        val movedCard = items[newIndex]
+                        onCardReordered(movedCard, oldIndex, newIndex)
                     }
                 },
                 onItemsChanged = { newItems -> items = newItems }
@@ -201,8 +170,7 @@ fun DocumentCarousel(
                 items = items,
                 cardIndex = cardIndex.value,
                 isReordering = isReordering,
-                documentInfos = docInfos,
-                selectedDocumentInfo = selectedDocumentInfo
+                selectedCardInfo = selectedCardInfo
             )
         }
     }
@@ -248,11 +216,10 @@ private fun EmptyStateView(modifier: Modifier, content: @Composable () -> Unit) 
 
 @Composable
 private fun InfoOverlayView(
-    items: List<CarouselModel>,
+    items: List<CardInfo>,
     cardIndex: Float,
     isReordering: Boolean,
-    documentInfos: List<DocumentInfo>,
-    selectedDocumentInfo: @Composable (DocumentInfo?, Int, Int) -> Unit
+    selectedCardInfo: @Composable (CardInfo?, Int, Int) -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -262,7 +229,7 @@ private fun InfoOverlayView(
     ) {
         val totalCount = items.size
 
-        items.forEachIndexed { index, item ->
+        items.forEachIndexed { index, cardInfo ->
             val dist = index.toFloat() - cardIndex
             val absDist = abs(dist)
 
@@ -276,12 +243,9 @@ private fun InfoOverlayView(
                         .graphicsLayer { alpha = opacity }
                 ) {
                     if (isReordering) {
-                        selectedDocumentInfo(null, index, totalCount)
+                        selectedCardInfo(null, index, totalCount)
                     } else {
-                        val realDoc = documentInfos.firstOrNull { it.document.identifier == item.id }
-                        if (realDoc != null) {
-                            selectedDocumentInfo(realDoc, index, totalCount)
-                        }
+                        selectedCardInfo(cardInfo, index, totalCount)
                     }
                 }
             }
@@ -293,14 +257,14 @@ private fun InfoOverlayView(
 
 @Composable
 private fun CardCarousel(
-    items: List<CarouselModel>,
+    items: List<CardInfo>,
     cardIndexAnimatable: Animatable<Float, AnimationVector1D>,
     isReordering: Boolean,
     onIsReorderingChange: (Boolean) -> Unit,
     allowReordering: Boolean,
-    onCarouselItemClick: (CarouselModel) -> Unit,
+    onCarouselItemClick: (CardInfo) -> Unit,
     onReorder: (Int, Int) -> Unit,
-    onItemsChanged: (List<CarouselModel>) -> Unit
+    onItemsChanged: (List<CardInfo>) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val hapticFeedback = LocalHapticFeedback.current
@@ -311,8 +275,8 @@ private fun CardCarousel(
     var lastHapticIndex by remember { mutableIntStateOf(0) }
 
     // Reorder State
-    // We track WHICH item is being dragged by ID to survive list swaps
-    var draggingItemId by remember { mutableStateOf<String?>(null) }
+    // We track WHICH item is being dragged by reference to survive list swaps
+    var draggingItem by remember { mutableStateOf<CardInfo?>(null) }
     var originalReorderIndex by remember { mutableStateOf<Int?>(null) }
     var dragOffsetX by remember { mutableFloatStateOf(0f) }
 
@@ -401,9 +365,9 @@ private fun CardCarousel(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            items.forEachIndexed { index, item ->
-                // key(item.id) is crucial for correct state retention during swaps
-                key(item.id) {
+            items.forEachIndexed { index, cardInfo ->
+                // key(cardInfo) is crucial for correct state retention during swaps
+                key(cardInfo) {
                     val i = index.toFloat()
                     val offset = i - cardIndex
                     val absOffset = abs(offset)
@@ -442,7 +406,7 @@ private fun CardCarousel(
                     val translationY = verticalOffsetPx * interpolation
 
                     // --- Reorder State Calculations ---
-                    val isBeingDragged = (item.id == draggingItemId)
+                    val isBeingDragged = (cardInfo == draggingItem)
 
                     // If dragged, use the cumulative drag offset + where it "should" be
                     val finalTranslationX = if (isBeingDragged) standardTranslationX + dragOffsetX else standardTranslationX
@@ -453,14 +417,14 @@ private fun CardCarousel(
                     Box(
                         modifier = Modifier
                             // 1. GESTURES FIRST: So they don't get lost when zIndex changes
-                            .pointerInput(item.id) {
+                            .pointerInput(cardInfo) {
                                 detectTapGestures {
                                     if (!isReordering && absOffset < 0.5f) {
-                                        onCarouselItemClick(item)
+                                        onCarouselItemClick(cardInfo)
                                     }
                                 }
                             }
-                            .pointerInput(item.id) {
+                            .pointerInput(cardInfo) {
                                 if (allowReordering) {
                                     detectDragGesturesAfterLongPress(
                                         onDragStart = {
@@ -468,9 +432,9 @@ private fun CardCarousel(
                                             if (!isReordering && isCurrentCard) {
                                                 hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 onIsReorderingChange(true)
-                                                draggingItemId = item.id
+                                                draggingItem = cardInfo
 
-                                                val currentIndex = currentItems.indexOfFirst { it.id == item.id }
+                                                val currentIndex = currentItems.indexOfFirst { it.identifier == cardInfo.identifier }
                                                 originalReorderIndex = currentIndex
                                                 dragOffsetX = 0f
                                             }
@@ -479,11 +443,11 @@ private fun CardCarousel(
                                             hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureEnd)
 
                                             onIsReorderingChange(false)
-                                            draggingItemId = null
+                                            draggingItem = null
                                             dragOffsetX = 0f
 
                                             // Notify listener of final move
-                                            val finalIdx = currentItems.indexOfFirst { it.id == item.id }
+                                            val finalIdx = currentItems.indexOfFirst { it.identifier == cardInfo.identifier }
                                             val origIdx = originalReorderIndex
                                             if (origIdx != null && finalIdx != -1 && origIdx != finalIdx) {
                                                 onReorder(origIdx, finalIdx)
@@ -492,12 +456,12 @@ private fun CardCarousel(
                                         },
                                         onDragCancel = {
                                             onIsReorderingChange(false)
-                                            draggingItemId = null
+                                            draggingItem = null
                                             dragOffsetX = 0f
                                             originalReorderIndex = null
                                         },
                                         onDrag = { change, dragAmount ->
-                                            if (draggingItemId != item.id) return@detectDragGesturesAfterLongPress
+                                            if (draggingItem != cardInfo) return@detectDragGesturesAfterLongPress
                                             change.consume()
 
                                             // Accumulate drag
@@ -505,7 +469,7 @@ private fun CardCarousel(
 
                                             // Logic to check for swaps
                                             val currentList = currentItems
-                                            val currentIndex = currentList.indexOfFirst { it.id == item.id }
+                                            val currentIndex = currentList.indexOfFirst { it.identifier == cardInfo.identifier }
                                             if (currentIndex == -1) return@detectDragGesturesAfterLongPress
 
                                             // Check Right Swap
@@ -557,11 +521,11 @@ private fun CardCarousel(
                                 this.translationY = translationY
                                 shadowElevation = finalShadow.toPx()
                                 shape = RoundedCornerShape(24.dp)
-                                clip = true
+                                clip = false
                             }
                     ) {
                         CarouselItem(
-                            item = item,
+                            cardInfo = cardInfo,
                             overlayAlpha = calculateOverlay(
                                 isReordering = isReordering,
                                 isCurrentCard = isCurrentCard,
@@ -594,27 +558,43 @@ private fun calculateOverlay(
 
 @Composable
 private fun CarouselItem(
-    item: CarouselModel,
+    cardInfo: CardInfo,
     overlayAlpha: Float
 ) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.White)
+        modifier = Modifier.fillMaxSize()
     ) {
-        Image(
-            bitmap = item.image,
-            contentDescription = item.name,
-            contentScale = ContentScale.FillBounds,
-            modifier = Modifier.fillMaxSize()
-        )
-
-        if (overlayAlpha > 0) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.White.copy(alpha = overlayAlpha))
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    shape = RoundedCornerShape(24.dp)
+                    clip = true
+                }
+                .background(Color.White)
+        ) {
+            Image(
+                bitmap = cardInfo.cardArt,
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier.fillMaxSize()
             )
+
+            if (overlayAlpha > 0) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.White.copy(alpha = overlayAlpha))
+                )
+            }
         }
+
+        CardBadges(
+            badges = cardInfo.badges,
+            elevation = 8.dp,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .zIndex(100f)
+        )
     }
 }

@@ -4,6 +4,8 @@ import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.engine.js.Js
 import multipazproject.samples.testapp.generated.resources.Res
 import multipazproject.samples.testapp.generated.resources.app_icon
+import org.multipaz.document.Document
+import org.multipaz.document.DocumentBadge
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.util.Platform
 

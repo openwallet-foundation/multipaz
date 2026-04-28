@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.multipaz.document.Document
+import org.multipaz.document.DocumentBadge
 
 /**
  * A model which can be used to drive UI for presentment.
@@ -15,7 +16,7 @@ import org.multipaz.document.Document
  */
 class PresentmentModel {
 
-    private var mutableState = MutableStateFlow<State>(State.Reset(null))
+    private var mutableState = MutableStateFlow<State>(State.Reset)
 
     /**
      * The current state of the model.
@@ -44,6 +45,14 @@ class PresentmentModel {
     val numRequestsServed: StateFlow<Int>
         get() = mutableNumRequestsServed.asStateFlow()
 
+    private var mutableShowDocumentChooser: DocumentChooserData? = null
+
+    /**
+     * Whether to show a document chooser.
+     */
+    val showDocumentChooser: DocumentChooserData?
+        get() = mutableShowDocumentChooser
+
     /**
      * Resets the model.
      *
@@ -62,10 +71,11 @@ class PresentmentModel {
         preselectedDocuments: List<Document>,
         showDocumentChooser: DocumentChooserData? = null,
     ) {
-        mutableState.value = State.Reset(showDocumentChooser)
+        mutableState.value = State.Reset
         mutableSource = source
         mutableDocumentsSelected.value = preselectedDocuments
         mutableNumRequestsServed.value = 0
+        mutableShowDocumentChooser = showDocumentChooser
     }
 
     /**
@@ -144,9 +154,7 @@ class PresentmentModel {
      */
     sealed class State {
         /** The presentment has just started. */
-        data class Reset(
-            val documentChooserData: DocumentChooserData?
-        ): State()
+        data object Reset: State()
 
         /** Connecting to the credential reader. */
         data object Connecting: State()

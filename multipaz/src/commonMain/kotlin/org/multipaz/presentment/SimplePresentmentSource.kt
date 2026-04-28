@@ -4,6 +4,7 @@ import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.EcCurve
 import org.multipaz.document.Document
+import org.multipaz.document.DocumentBadge
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.eventlogger.EventLogger
@@ -54,6 +55,7 @@ class SimplePresentmentSource(
     override val eventLogger: EventLogger? = null,
     private val resolveTrustFn: suspend (requester: Requester) -> TrustMetadata? = { requester -> null },
     private val showConsentPromptFn: ShowConsentPromptFn = ::promptModelRequestConsent,
+    private val getBadgesFn: suspend (document: Document) -> List<DocumentBadge> = { document -> emptyList() },
     val preferSignatureToKeyAgreement: Boolean = true,
     val domainsMdocSignature: List<String> = emptyList(),
     val domainsMdocKeyAgreement: List<String> = emptyList(),
@@ -83,6 +85,10 @@ class SimplePresentmentSource(
             preselectedDocuments,
             onDocumentsInFocus
         )
+    }
+
+    override suspend fun getBadges(document: Document): List<DocumentBadge> {
+        return getBadgesFn(document)
     }
 
     private suspend fun Document.findCredential(domains: List<String>, now: Instant): Credential? {

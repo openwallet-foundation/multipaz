@@ -71,17 +71,19 @@ struct DocumentStoreScreen: View {
                     Text("Delete all documents")
                 }
                 
-                DocumentCarousel(
-                    documentModel: viewModel.documentModel,
-                    initialDocumentId: focusedDocumentId,
+                CardCarousel(
+                    cardInfos: viewModel.documentModel.documentInfos,
+                    initialCardInfo: viewModel.documentModel.documentInfos.first { $0.identifier == focusedDocumentId },
                     allowReordering: true,
-                    onDocumentClicked: { documentInfo in
+                    onCardClicked: { cardInfo in
+                        let documentInfo = cardInfo as! DocumentInfo
                         viewModel.path.append(Destination.documentScreen(documentId: documentInfo.document.identifier))
                     },
-                    onDocumentFocused: { documentInfo in
-                        focusedDocumentId = documentInfo.document.identifier
+                    onCardFocused: { cardInfo in
+                        focusedDocumentId = cardInfo.identifier
                     },
-                    onDocumentReordered: { documentInfo, oldPosition, newPosition in
+                    onCardReordered: { cardInfo, oldPosition, newPosition in
+                        let documentInfo = cardInfo as! DocumentInfo
                         Task {
                             do {
                                 try await viewModel.documentModel.setDocumentPosition(
@@ -93,9 +95,9 @@ struct DocumentStoreScreen: View {
                             }
                         }
                     },
-                    selectedDocumentInfo: { documentInfo, documentIdx, numDocuments in
+                    selectedCardInfo: { cardInfo, documentIdx, numDocuments in
                         HStack {
-                            if let documentInfo = documentInfo {
+                            if let documentInfo = cardInfo as? DocumentInfo {
                                 Text("\(documentIdx + 1) of \(numDocuments): " +
                                      (documentInfo.document.displayName ?? "(No displayName)")
                                 )
@@ -108,7 +110,7 @@ struct DocumentStoreScreen: View {
                             }
                         }
                     },
-                    emptyDocumentContent: {
+                    emptyCardContent: {
                         Text("No documents in store")
                             .foregroundStyle(Color.secondary)
                     }

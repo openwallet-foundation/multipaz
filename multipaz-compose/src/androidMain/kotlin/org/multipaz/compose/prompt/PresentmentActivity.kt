@@ -74,8 +74,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.branding.Branding
+import org.multipaz.compose.cards.VerticalCardList
+import org.multipaz.compose.document.DocumentInfo
 import org.multipaz.compose.document.DocumentModel
-import org.multipaz.compose.document.VerticalDocumentList
 import org.multipaz.compose.prompt.PresentmentActivity.Companion.getPendingIntent
 import org.multipaz.context.applicationContext
 import org.multipaz.context.initializeApplication
@@ -149,7 +150,7 @@ class PresentmentActivity: FragmentActivity() {
          * Get a [PendingIntent] to launch [PresentmentActivity] in document chooser mode.
          *
          * In document chooser mode, the user is presented with a list of documents from [source]
-         * rendered using [VerticalDocumentList]. The document indicated by [initiallySelectedDocumentId]
+         * rendered using [VerticalCardList]. The document indicated by [initiallySelectedDocumentId]
          * is selected and by tapping the document pile at the bottom the user can select another
          * document. The user is also presented with a "Open Wallet" button (replacing "Wallet"
          * with [Branding.Current.appName] if not `null`) which if pressed will launch
@@ -174,12 +175,12 @@ class PresentmentActivity: FragmentActivity() {
         ): PendingIntent {
             presentmentModel.reset(
                 source = source,
+                preselectedDocuments = emptyList(),
                 showDocumentChooser = DocumentChooserData(
                     initiallySelectedDocumentId = initiallySelectedDocumentId,
                     openAppPendingIntentFn = openWalletAppPendingIntentFn,
                     preferredServices = preferredServices
-                ),
-                preselectedDocuments = emptyList()
+                )
             )
 
             var modelWatcherJob: Job? = null;
@@ -229,10 +230,10 @@ class PresentmentActivity: FragmentActivity() {
     override fun onResume() {
         super.onResume()
         val state = presentmentModel.state.value
-        if (state is PresentmentModel.State.Reset && state.documentChooserData != null) {
+        if (state is PresentmentModel.State.Reset && presentmentModel.showDocumentChooser != null) {
             NfcAdapter.getDefaultAdapter(this)?.let { adapter ->
                 val cardEmulation = CardEmulation.getInstance(adapter)
-                for (componentName in state.documentChooserData!!.preferredServices) {
+                for (componentName in presentmentModel.showDocumentChooser!!.preferredServices) {
                     if (!cardEmulation.setPreferredService(this, componentName)) {
                         Logger.w(TAG, "CardEmulation.setPreferredService() returned false for $componentName")
                     }
@@ -247,7 +248,7 @@ class PresentmentActivity: FragmentActivity() {
     override fun onPause() {
         super.onPause()
         val state = presentmentModel.state.value
-        if (state is PresentmentModel.State.Reset && state.documentChooserData != null) {
+        if (state is PresentmentModel.State.Reset && presentmentModel.showDocumentChooser != null) {
             NfcAdapter.getDefaultAdapter(this)?.let {
                 val cardEmulation = CardEmulation.getInstance(it)
                 if (!cardEmulation.unsetPreferredService(this)) {
@@ -341,7 +342,8 @@ internal fun PresentmentActivityContent(
         presentmentModel = getPresentmentModel()
         documentModel = DocumentModel.create(
             documentStore = presentmentModel!!.source.documentStore,
-            documentTypeRepository = presentmentModel!!.source.documentTypeRepository
+            documentTypeRepository = presentmentModel!!.source.documentTypeRepository,
+            badgeFunction = { document -> presentmentModel!!.source.getBadges(document) }
         )
         startFadeIn = true
     }
@@ -415,10 +417,10 @@ internal fun PresentmentActivityContent(
                         ),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    if (state is PresentmentModel.State.Reset && state.documentChooserData != null) {
+                    if (state is PresentmentModel.State.Reset && presentmentModel!!.showDocumentChooser != null) {
                         ShowCardChooser(
                             documentModel = documentModel!!,
-                            initiallySelectedDocumentId = state.documentChooserData!!.initiallySelectedDocumentId,
+                            initiallySelectedDocumentId = presentmentModel!!.showDocumentChooser!!.initiallySelectedDocumentId,
                             selectedDocIdFromCardChooser = selectedDocIdFromCardChooser,
                             contentBelow = {
                                 Column(
@@ -442,7 +444,7 @@ internal fun PresentmentActivityContent(
                                             onClick = {
                                                 coroutineScope.launch {
                                                     switchToAppOnFinishPendingIntent =
-                                                        state.documentChooserData!!.openAppPendingIntentFn(
+                                                        presentmentModel!!.showDocumentChooser!!.openAppPendingIntentFn(
                                                             presentmentModel!!.source.documentStore.lookupDocument(
                                                                 selectedDocIdFromCardChooser.value!!
                                                             )!!
@@ -535,16 +537,17 @@ private fun ShowCard(
     val configuration = LocalConfiguration.current
     val maxCardHeight = configuration.screenHeightDp.dp / 3
 
-    val documentInfo = documentModel.documentInfos.collectAsState().value.find { it.document.identifier == documentId }
+    val docInfos by documentModel.documentInfos.collectAsState()
+    val documentInfo = docInfos.find { it.document.identifier == documentId }
     if (documentInfo != null) {
-        VerticalDocumentList(
-            documentModel = documentModel,
-            focusedDocument = documentInfo,
+        VerticalCardList(
+            cardInfos = docInfos,
+            focusedCard = documentInfo,
             unfocusedVisiblePercent = 25,
-            allowDocumentReordering = false,
+            allowCardReordering = false,
             showStackWhileFocused = false,
             cardMaxHeight = maxCardHeight,
-            showDocumentInfo = { documentInfo ->
+            showCardInfo = { cardInfo ->
                 contentBelow()
             }
         )
@@ -567,10 +570,11 @@ private fun ShowCardChooser(
     val configuration = LocalConfiguration.current
     val maxCardHeight = configuration.screenHeightDp.dp / 3
 
+    val docInfos by documentModel.documentInfos.collectAsState()
     var focusedDocumentId by rememberSaveable { mutableStateOf<String?>(
-        initiallySelectedDocumentId ?: documentModel.documentInfos.value.firstOrNull()?.document?.identifier
+        initiallySelectedDocumentId ?: docInfos.firstOrNull()?.document?.identifier
     )}
-    val focusedDocument = documentModel.documentInfos.collectAsState().value.find { documentInfo ->
+    val focusedDocument = docInfos.find { documentInfo ->
         documentInfo.document.identifier == focusedDocumentId
     }
 
@@ -578,28 +582,29 @@ private fun ShowCardChooser(
         selectedDocIdFromCardChooser.value = focusedDocumentId
     }
 
-    VerticalDocumentList(
-        documentModel = documentModel,
-        focusedDocument = focusedDocument,
+    VerticalCardList(
+        cardInfos = docInfos,
+        focusedCard = focusedDocument,
         unfocusedVisiblePercent = 25,
-        allowDocumentReordering = false,
+        allowCardReordering = false,
         showStackWhileFocused = true,
         cardMaxHeight = maxCardHeight,
-        showDocumentInfo = { documentInfo -> contentBelow() },
-        emptyDocumentContent = {
+        showCardInfo = { cardInfo -> contentBelow() },
+        emptyContent = {
             Text(stringResource(
                 Res.string.presentment_activity_no_documents_available
             ))
         },
-        onDocumentFocused = { documentInfo ->
+        onCardFocused = { cardInfo ->
+            val documentInfo = cardInfo as DocumentInfo
             focusedDocumentId = documentInfo.document.identifier
             selectedDocIdFromCardChooser.value = documentInfo.document.identifier
         },
-        onDocumentFocusedTapped = { _ ->
+        onCardFocusedTapped = { _ ->
             focusedDocumentId = null
             selectedDocIdFromCardChooser.value = null
         },
-        onDocumentFocusedStackTapped = {
+        onCardFocusedStackTapped = {
             focusedDocumentId = null
             selectedDocIdFromCardChooser.value = null
         }

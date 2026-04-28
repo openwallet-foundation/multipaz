@@ -10,13 +10,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborMap
 import org.multipaz.compose.branding.Branding
+import org.multipaz.compose.cards.CardBadge
 import org.multipaz.compose.decodeImage
 import org.multipaz.credential.Credential
 import org.multipaz.credential.SecureAreaBoundCredential
@@ -24,15 +24,13 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentAdded
+import org.multipaz.document.DocumentBadge
 import org.multipaz.document.DocumentDeleted
 import org.multipaz.document.DocumentEvent
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.DocumentUpdated
 import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
-import org.multipaz.storage.StorageTableSpec
-import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.Logger
 import org.multipaz.util.LruCache
 
@@ -84,6 +82,7 @@ class DocumentModel private constructor(
     private val documentStore: DocumentStore,
     private val documentTypeRepository: DocumentTypeRepository?,
     private val documentOrderKey: String = "org.multipaz.DocumentModel.orderingKey",
+    private val badgeFunction: suspend (document: Document) -> List<DocumentBadge>,
 ) {
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
     private val _documentInfos = MutableStateFlow<List<DocumentInfo>>(emptyList())
@@ -218,7 +217,7 @@ class DocumentModel private constructor(
     private val cardArtCache = LruCache<ByteString, ImageBitmap>(5)
 
     private suspend fun Document.toDocumentInfo(): DocumentInfo {
-        cardArt?.let {
+        cardArt?.let { it ->
             val image = it.toByteArray()
             val imageSha256 = ByteString(Crypto.digest(Algorithm.SHA256, image))
             var cardArt = cardArtCache.get(imageSha256)
@@ -229,12 +228,14 @@ class DocumentModel private constructor(
             return DocumentInfo(
                 document = this,
                 cardArt = cardArt,
+                badges = badgeFunction(this).map { docBadge -> CardBadge.fromDocumentBadge(docBadge) },
                 credentialInfos = buildCredentialInfos(documentTypeRepository)
             )
         }
         return DocumentInfo(
             document = this,
             cardArt = Branding.Current.value.renderFallbackCardArt(this),
+            badges = badgeFunction(this).map { docBadge -> CardBadge.fromDocumentBadge(docBadge) },
             credentialInfos = buildCredentialInfos(documentTypeRepository)
         )
     }
@@ -247,16 +248,19 @@ class DocumentModel private constructor(
          * @param documentTypeRepository a [DocumentTypeRepository] with information about document types or `null`.
          * @param documentOrderKey the name of the key to use for storing the document order in the [Tags] object
          *   associated with  [documentStore].
+         * @param badgeFunction a function that takes a [Document] and returns a list of badges to show.
          */
         suspend fun create(
             documentStore: DocumentStore,
             documentTypeRepository: DocumentTypeRepository?,
             documentOrderKey: String = "org.multipaz.DocumentModel.orderingKey",
+            badgeFunction: suspend (document: Document) -> List<DocumentBadge> = { emptyList() }
         ): DocumentModel {
             val documentModel = DocumentModel(
-                documentStore,
-                documentTypeRepository,
-                documentOrderKey
+                documentStore = documentStore,
+                documentTypeRepository = documentTypeRepository,
+                documentOrderKey = documentOrderKey,
+                badgeFunction = badgeFunction
             )
             documentModel.initialize()
             return documentModel

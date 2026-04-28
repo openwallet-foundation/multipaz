@@ -145,7 +145,7 @@ data class NfcReaderDestination(
 ): Destination()
 
 @Serializable
-data object DocumentListDestination: Destination()
+data object VerticalCardListDestination: Destination()
 
 @Serializable
 data object EventLogDestination: Destination()

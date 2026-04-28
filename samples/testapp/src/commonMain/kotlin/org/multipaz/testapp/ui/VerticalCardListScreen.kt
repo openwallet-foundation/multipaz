@@ -1,7 +1,6 @@
 package org.multipaz.testapp.ui
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,20 +36,18 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import kotlinx.coroutines.launch
-import org.multipaz.compose.document.VerticalDocumentList
+import org.multipaz.compose.cards.VerticalCardList
 import org.multipaz.compose.document.DocumentModel
+import org.multipaz.compose.document.DocumentInfo
 import org.multipaz.document.DocumentStore
-import org.multipaz.testapp.SettingsDestination
-import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.testapp.TestAppSettingsModel
 import org.multipaz.util.Logger
 
-private const val TAG = "DocumentListScreen"
+private const val TAG = "VerticalCardListScreen"
 
 private data class VisibilityOption(
     val displayName: String,
@@ -60,7 +56,7 @@ private data class VisibilityOption(
 
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun VerticalDocumentListScreen(
+fun VerticalCardListScreen(
     documentStore: DocumentStore,
     documentModel: DocumentModel,
     settingsModel: TestAppSettingsModel,
@@ -108,7 +104,7 @@ fun VerticalDocumentListScreen(
                             "Document Focused"
                         }
                     } else {
-                        "Vertical Document List"
+                        "Vertical Card List"
                     }
                     Text(text = text)},
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -194,14 +190,16 @@ fun VerticalDocumentListScreen(
                 (windowInfo.containerSize.height / 3f).toDp()
             }
 
-            VerticalDocumentList(
-                documentModel = documentModel,
-                focusedDocument = focusedDocument,
+            val cardInfos by documentModel.documentInfos.collectAsState()
+            VerticalCardList(
+                cardInfos = cardInfos,
+                focusedCard = focusedDocument,
                 unfocusedVisiblePercent = visibilityOptionsSelected.value.visibilityPercentage,
-                allowDocumentReordering = allowDocumentReordering,
+                allowCardReordering = allowDocumentReordering,
                 showStackWhileFocused = showStackWhileFocused,
                 cardMaxHeight = maxCardHeight,
-                showDocumentInfo = { documentInfo ->
+                showCardInfo = { cardInfo ->
+                    val documentInfo = cardInfo as DocumentInfo
                     Column(
                         modifier = Modifier.fillMaxHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -219,20 +217,22 @@ fun VerticalDocumentListScreen(
                         }
                     }
                 },
-                emptyDocumentContent = {
+                emptyContent = {
                     Text("No documents available.")
                 },
-                onDocumentFocused = { documentInfo ->
+                onCardFocused = { cardInfo ->
+                    val documentInfo = cardInfo as DocumentInfo
                     focusedDocumentShowMoreInfo = false
                     focusedDocumentId = documentInfo.document.identifier
                 },
-                onDocumentFocusedTapped = {
+                onCardFocusedTapped = {
                     focusedDocumentShowMoreInfo = true
                 },
-                onDocumentFocusedStackTapped = {
+                onCardFocusedStackTapped = {
                     focusedDocumentId = null
                 },
-                onDocumentReordered = { documentInfo, newIndex ->
+                onCardReordered = { cardInfo, newIndex ->
+                    val documentInfo = cardInfo as DocumentInfo
                     coroutineScope.launch {
                         try {
                             documentModel.setDocumentPosition(

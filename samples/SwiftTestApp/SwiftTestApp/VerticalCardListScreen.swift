@@ -1,7 +1,7 @@
 import SwiftUI
 import Multipaz
 
-struct VerticalDocumentListScreen: View {
+struct VerticalCardListScreen: View {
     @Environment(ViewModel.self) private var viewModel
     
     @SceneStorage("focusedDocumentId") private var focusedDocumentId: String?
@@ -15,13 +15,14 @@ struct VerticalDocumentListScreen: View {
             $0.document.identifier == focusedDocumentId
         }
         VStack {
-            VerticalDocumentList(
-                documentModel: viewModel.documentModel,
-                focusedDocument: focusedDocument,
+            VerticalCardList(
+                cardInfos: viewModel.documentModel.documentInfos,
+                focusedCard: focusedDocument,
                 unfocusedVisiblePercent: 25, // Show a bit more of the overlapping cards
-                allowDocumentReordering: true,
+                allowCardReordering: true,
                 showStackWhileFocused: true,
-                showDocumentInfo: { docInfo in
+                showCardInfo: { cardInfo in
+                    let docInfo = cardInfo as! DocumentInfo
                     VStack {
                         Text("\(docInfo.document.displayName ?? "Document") is focused")
                         Spacer()
@@ -38,7 +39,7 @@ struct VerticalDocumentListScreen: View {
                         }
                     }
                 },
-                emptyDocumentContent: {
+                emptyContent: {
                     // This view appears inside the dashed placeholder
                     VStack(spacing: 12) {
                         Image(systemName: "plus.rectangle.on.rectangle")
@@ -52,26 +53,27 @@ struct VerticalDocumentListScreen: View {
                             .foregroundColor(.gray)
                     }
                 },
-                onDocumentReordered: { document, newIndex in
+                onCardReordered: { cardInfo, newIndex in
+                    let document = cardInfo as! DocumentInfo
                     print("User moved \(document.document.displayName ?? "card") to index \(newIndex)")
                     Task {
                         try? await viewModel.documentModel.setDocumentPosition(documentInfo: document, position: newIndex)
                     }
                 },
-                onDocumentFocused: { documentInfo in
-                    focusedDocumentId = documentInfo.document.identifier
+                onCardFocused: { cardInfo in
+                    focusedDocumentId = cardInfo.identifier
                 },
-                onDocumentFocusedTapped: { _ in
+                onCardFocusedTapped: { _ in
                     focusedDocumentShowMoreInfo = true
                 },
-                onDocumentFocusedStackTapped: { _ in
+                onCardFocusedStackTapped: { _ in
                     focusedDocumentId = nil
                 }
             )
         }
         .navigationTitle(focusedDocument != nil
                          ? (focusedDocumentShowMoreInfo ? "Document Focused (more)" : "Document Focused")
-                         : "Vertical Document List"
+                         : "Vertical Card List"
         )
         // Override back button to unfocus...
         .navigationBarBackButtonHidden(true)

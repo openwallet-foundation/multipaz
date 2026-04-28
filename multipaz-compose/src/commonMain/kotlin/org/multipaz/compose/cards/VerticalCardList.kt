@@ -1,4 +1,4 @@
-package org.multipaz.compose.document
+package org.multipaz.compose.cards
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -6,12 +6,13 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,9 +22,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -33,12 +35,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -47,6 +52,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
@@ -59,72 +65,71 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * A vertically scrolling list of documents that mimics a physical wallet experience.
+ * A vertically scrolling list of cards that mimics a physical wallet experience.
  *
- * In its default state, documents are displayed as a vertical list of cards. The amount of
+ * In its default state, cards are displayed as a vertical list. The amount of
  * overlap between cards is configurable. Users can long-press a card to drag and drop it into
  * a new position.
  *
  * When a user taps a card, it enters a "focused" state. The focused card elevates and animates
- * to the top of the viewport. A dynamic content section ([showDocumentInfo]) fades in immediately
+ * to the top of the viewport. A dynamic content section ([showCardInfo]) fades in immediately
  * below it. By default, the remaining unfocused cards animate into a 3D overlapping stack at the
  * bottom of the screen.
  *
  * @param modifier The modifier to be applied to the list container.
- * @param documentModel The [DocumentModel] providing the reactive flow of documents to display.
- * @param focusedDocument The currently focused document. When null, the component operates in
- * standard list mode. When set to a [DocumentInfo], that document is brought to the top and
+ * @param cardInfos The list of [CardInfo] objects to display.
+ * @param focusedCard The currently focused card. When null, the component operates in
+ * standard list mode. When set to a [CardInfo], that card is brought to the top and
  * detailed information is displayed.
  * @param unfocusedVisiblePercent Determines how much of each card is visible when not focused. A
  * value of `100` displays cards with standard spacing (no overlap). Lower values cause cards to
  * overlap, allowing more cards to fit on screen. Must be between 0 and 100.
- * @param allowDocumentReordering If true, users can long-press and drag cards to reorder them
+ * @param allowCardReordering If true, users can long-press and drag cards to reorder them
  * when in standard list mode. Defaults to true.
  * @param showStackWhileFocused If true, unfocused cards will collapse into a 3D stack at the bottom
- * of the screen when a document is focused. If false, unfocused cards fade away entirely to maximize
+ * of the screen when a card is focused. If false, unfocused cards fade away entirely to maximize
  * screen real estate for the detail view. Defaults to true.
  * @param cardMaxHeight An optional max height constraint for the cards. Useful for foldables and wide screens.
- * @param showDocumentInfo A composable slot that renders the detailed content below the focused card.
+ * @param showCardInfo A composable slot that renders the detailed content below the focused card.
  * It is horizontally centered by default.
- * @param emptyDocumentContent A composable slot displayed inside a dashed placeholder card when the
- * [documentModel] is empty.
- * @param onDocumentReordered Callback invoked when a drag-and-drop reordering operation completes.
- * Provides the [DocumentInfo] of the moved card and its new index position in the list.
- * @param onDocumentFocused Callback invoked when a document is tapped to be focused.
- * @param onDocumentFocusedTapped Callback invoked when the currently focused document is tapped.
- * @param onDocumentFocusedStackTapped Callback invoked when the unfocused document stack is tapped while another document is in focus.
+ * @param emptyContent A composable slot displayed inside a dashed placeholder card when the
+ * [cardInfos] list is empty.
+ * @param onCardReordered Callback invoked when a drag-and-drop reordering operation completes.
+ * Provides the [CardInfo] of the moved card and its new index position in the list.
+ * @param onCardFocused Callback invoked when a card is tapped to be focused.
+ * @param onCardFocusedTapped Callback invoked when the currently focused card is tapped.
+ * @param onCardFocusedStackTapped Callback invoked when the unfocused card stack is tapped while another card is in focus.
  *
  * @throws IllegalArgumentException if [unfocusedVisiblePercent] is not between 0 and 100.
  */
 @Composable
-fun VerticalDocumentList(
+fun VerticalCardList(
     modifier: Modifier = Modifier,
-    documentModel: DocumentModel,
-    focusedDocument: DocumentInfo?,
+    cardInfos: List<CardInfo>,
+    focusedCard: CardInfo?,
     unfocusedVisiblePercent: Int = 25,
-    allowDocumentReordering: Boolean = true,
+    allowCardReordering: Boolean = true,
     showStackWhileFocused: Boolean = true,
     cardMaxHeight: Dp = Dp.Unspecified,
-    showDocumentInfo: @Composable (DocumentInfo) -> Unit = {},
-    emptyDocumentContent: @Composable () -> Unit = { },
-    onDocumentReordered: (documentInfo: DocumentInfo, newPosition: Int) -> Unit = { _, _ -> },
-    onDocumentFocused: (documentInfo: DocumentInfo) -> Unit = {},
-    onDocumentFocusedTapped: (documentInfo: DocumentInfo) -> Unit = {},
-    onDocumentFocusedStackTapped: (documentInfo: DocumentInfo) -> Unit = {}
+    showCardInfo: @Composable (CardInfo) -> Unit = {},
+    emptyContent: @Composable () -> Unit = { },
+    onCardReordered: (cardInfo: CardInfo, newPosition: Int) -> Unit = { _, _ -> },
+    onCardFocused: (cardInfo: CardInfo) -> Unit = {},
+    onCardFocusedTapped: (cardInfo: CardInfo) -> Unit = {},
+    onCardFocusedStackTapped: (cardInfo: CardInfo) -> Unit = {}
 ) {
     if (unfocusedVisiblePercent !in 0..100) {
         throw IllegalArgumentException("unfocusedVisiblePercent must be between 0 and 100")
     }
 
-    val docInfos by documentModel.documentInfos.collectAsState()
     val scrollState = rememberScrollState()
     val haptic = LocalHapticFeedback.current
 
     // Local state to handle visual reordering without waiting for DB updates
-    var displayOrder by remember(docInfos) { mutableStateOf(docInfos) }
+    var displayOrder by remember(cardInfos) { mutableStateOf(cardInfos) }
 
     // Drag tracking state
-    var draggedDocId by remember { mutableStateOf<String?>(null) }
+    var draggedCard by remember { mutableStateOf<CardInfo?>(null) }
     var dragCurrentY by remember { mutableFloatStateOf(0f) }
     var dragJustEnded by remember { mutableStateOf(false) }
 
@@ -136,9 +141,8 @@ fun VerticalDocumentList(
         }
     }
 
-    val isAnyFocused = focusedDocument != null
-    val focusedId = focusedDocument?.document?.identifier
-    val focusedIndex = displayOrder.indexOfFirst { it.document.identifier == focusedId }.coerceAtLeast(0)
+    val isAnyFocused = focusedCard != null
+    val focusedIndex = displayOrder.indexOfFirst { it.identifier == focusedCard?.identifier }.coerceAtLeast(0)
 
     // A nested scroll connection to intercept and consume the overscroll effect cleanly
     val overscrollConsumer = remember {
@@ -156,7 +160,7 @@ fun VerticalDocumentList(
         }
     }
 
-    if (docInfos.isEmpty()) {
+    if (cardInfos.isEmpty()) {
         BoxWithConstraints(
             modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.TopCenter
@@ -194,7 +198,7 @@ fun VerticalDocumentList(
                     },
                 contentAlignment = Alignment.Center
             ) {
-                emptyDocumentContent()
+                emptyContent()
             }
         }
         return
@@ -282,20 +286,18 @@ fun VerticalDocumentList(
                         .padding(top = topOffsetDp, bottom = detailBottomPaddingDp),
                     contentAlignment = Alignment.TopCenter
                 ) {
-                    if (focusedDocument != null) {
-                        showDocumentInfo(focusedDocument)
+                    if (focusedCard != null) {
+                        showCardInfo(focusedCard)
                     }
                 }
             }
 
             // Iterate over displayOrder so dragged positions instantly update visually
-            displayOrder.forEachIndexed { index, docInfo ->
-                val identifier = docInfo.document.identifier
-
+            displayOrder.forEachIndexed { index, cardInfo ->
                 // key block prevents the layout from destroying gesture state when cards swap indices
-                key(identifier) {
-                    val isFocused = identifier == focusedId
-                    val isDragged = identifier == draggedDocId
+                key(cardInfo) {
+                    val isFocused = cardInfo == focusedCard
+                    val isDragged = cardInfo == draggedCard
                     val viewportTop = scrollState.value.toFloat()
 
                     val targetY: Float
@@ -357,14 +359,14 @@ fun VerticalDocumentList(
                                 shadowElevation = animatedElevation.dp.toPx()
                                 alpha = animatedAlpha
                                 shape = RoundedCornerShape(24.dp)
-                                clip = true
+                                clip = false
                             }
-                            .pointerInput(isAnyFocused, allowDocumentReordering) {
-                                if (!isAnyFocused && allowDocumentReordering) {
+                            .pointerInput(isAnyFocused, allowCardReordering) {
+                                if (!isAnyFocused && allowCardReordering) {
                                     detectDragGesturesAfterLongPress(
                                         onDragStart = { _ ->
-                                            draggedDocId = identifier
-                                            val currentIndex = displayOrder.indexOfFirst { it.document.identifier == identifier }
+                                            draggedCard = cardInfo
+                                            val currentIndex = displayOrder.indexOfFirst { it.identifier == cardInfo.identifier }
                                             dragCurrentY = paddingTopPx + currentIndex * listStepPx
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         },
@@ -377,7 +379,7 @@ fun VerticalDocumentList(
                                                 .roundToInt()
                                                 .coerceIn(0, displayOrder.lastIndex)
 
-                                            val currentIndex = displayOrder.indexOfFirst { it.document.identifier == identifier }
+                                            val currentIndex = displayOrder.indexOfFirst { it.identifier == cardInfo.identifier }
 
                                             if (currentIndex != -1 && newIndex != currentIndex) {
                                                 // Swap the items visually in the local state
@@ -391,49 +393,60 @@ fun VerticalDocumentList(
                                         },
                                         onDragEnd = {
                                             dragJustEnded = true
-                                            if (draggedDocId != null) {
-                                                val finalIndex = displayOrder.indexOfFirst { it.document.identifier == draggedDocId }
-                                                val finalDoc = displayOrder.getOrNull(finalIndex)
+                                            if (draggedCard != null) {
+                                                val finalIndex = displayOrder.indexOfFirst { it.identifier == draggedCard?.identifier }
+                                                val finalCard = draggedCard!!
 
                                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                draggedDocId = null
+                                                draggedCard = null
 
-                                                if (finalDoc != null) {
-                                                    onDocumentReordered(finalDoc, finalIndex)
-                                                }
+                                                onCardReordered(finalCard, finalIndex)
                                             }
                                         },
                                         onDragCancel = {
                                             dragJustEnded = true
-                                            draggedDocId = null
+                                            draggedCard = null
                                         }
                                     )
                                 }
                             }
                             .clickable {
                                 // Block clicks if a drag is occurring, or ended in the last 300ms
-                                if (dragJustEnded || draggedDocId != null) return@clickable
+                                if (dragJustEnded || draggedCard != null) return@clickable
 
                                 if (isAnyFocused) {
-                                    focusedDocument?.let {
+                                    focusedCard.let {
                                         if (isFocused) {
                                             // The user tapped the card that is currently focused
-                                            onDocumentFocusedTapped(it)
+                                            onCardFocusedTapped(it)
                                         } else {
                                             // The user tapped a card in the unfocused stack
-                                            onDocumentFocusedStackTapped(it)
+                                            onCardFocusedStackTapped(it)
                                         }
                                     }
                                 } else {
-                                    onDocumentFocused(docInfo)
+                                    onCardFocused(cardInfo)
                                 }
                             }
                     ) {
                         Image(
-                            bitmap = docInfo.cardArt,
-                            contentDescription = docInfo.document.displayName ?: "Document Card",
+                            bitmap = cardInfo.cardArt,
+                            contentDescription = "Card Image",
                             contentScale = ContentScale.FillWidth,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    shape = RoundedCornerShape(24.dp)
+                                    clip = true
+                                }
+                        )
+
+                        CardBadges(
+                            badges = cardInfo.badges,
+                            elevation = 8.dp,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .zIndex(100f)
                         )
                     }
                 }

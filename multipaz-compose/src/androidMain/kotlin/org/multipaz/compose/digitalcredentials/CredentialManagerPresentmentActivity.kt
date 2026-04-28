@@ -1,6 +1,5 @@
 package org.multipaz.compose.digitalcredentials
 
-import kotlinx.coroutines.CancellationException
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
@@ -21,6 +20,7 @@ import coil3.ImageLoader
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel

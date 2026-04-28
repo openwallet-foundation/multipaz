@@ -83,6 +83,8 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.getDefault
 import org.multipaz.document.Document
+import org.multipaz.document.DocumentBadge
+import org.multipaz.document.DocumentBadgeColor
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
@@ -99,10 +101,7 @@ import org.multipaz.presentment.uriSchemePresentment
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.promptModelRequestConsent
 import org.multipaz.prompt.promptModelSilentConsent
-import org.multipaz.provisioning.CredentialMetadata
 import org.multipaz.provisioning.DocumentProvisioningHandler
-import org.multipaz.provisioning.DocumentProvisioningSettings
-import org.multipaz.provisioning.ProvisioningMetadata
 import org.multipaz.provisioning.ProvisioningModel
 import org.multipaz.request.Requester
 import org.multipaz.secure_area_test_app.ui.CloudSecureAreaScreen
@@ -151,7 +150,7 @@ import org.multipaz.testapp.ui.TrustEntryRicalEntryScreen
 import org.multipaz.testapp.ui.TrustEntryScreen
 import org.multipaz.testapp.ui.TrustEntryVicalEntryScreen
 import org.multipaz.testapp.ui.TrustManagerScreen
-import org.multipaz.testapp.ui.VerticalDocumentListScreen
+import org.multipaz.testapp.ui.VerticalCardListScreen
 import org.multipaz.trustmanagement.CompositeTrustManager
 import org.multipaz.trustmanagement.ConfigurableTrustManager
 import org.multipaz.trustmanagement.TrustEntryX509Cert
@@ -235,12 +234,13 @@ class App private constructor (val promptModel: PromptModel) {
             documentTypeRepository = documentTypeRepository,
             zkSystemRepository = zkSystemRepository,
             eventLogger = eventLogger,
+            resolveTrustFn = ::resolveTrust,
             showConsentPromptFn = if (settingsModel.presentmentShowConsentPrompt.value) {
                 ::promptModelRequestConsent
             } else {
                 ::promptModelSilentConsent
             },
-            resolveTrustFn = ::resolveTrust,
+            getBadgesFn = ::getBadgesForDocument,
             preferSignatureToKeyAgreement = settingsModel.presentmentPreferSignatureToKeyAgreement.value,
             domainsMdocSignature = if (useAuth) {
                 listOf(TestAppUtils.CREDENTIAL_DOMAIN_MDOC_USER_AUTH, TestAppUtils.CREDENTIAL_DOMAIN_MDOC_SOFTWARE)
@@ -386,7 +386,23 @@ class App private constructor (val promptModel: PromptModel) {
         documentModel = DocumentModel.create(
             documentStore = documentStore,
             documentTypeRepository = documentTypeRepository,
+            badgeFunction = ::getBadgesForDocument
         )
+    }
+
+    // For testing of the badge rendering, always add a badge with the document name
+    suspend fun getBadgesForDocument(document: Document): List<DocumentBadge> {
+        val displayName = document.displayName ?: "Unknown Document"
+        val colorRgb = displayName.hashCode()
+        val badge = DocumentBadge(
+            text = displayName,
+            color = DocumentBadgeColor(
+                red = colorRgb.and(0xff),
+                green = colorRgb.rotateRight(8).and(0xff),
+                blue = colorRgb.rotateRight(16).and(0xff),
+            )
+        )
+        return listOf(badge)
     }
 
     private suspend fun trustManagersInit() {
@@ -1040,9 +1056,9 @@ class App private constructor (val promptModel: PromptModel) {
                             onDigitalCredentialsReregister = { digitalCredentialsReregister() },
                             onClickAbout = { navController.navigate(AboutDestination) },
                             onClickDocumentStore = { navController.navigate(DocumentStoreDestination) },
-                            onClickDocumentListScreen = {
+                            onClickVerticalCardListScreen = {
                                 navController.navigate(
-                                    DocumentListDestination
+                                    VerticalCardListDestination
                                 )
                             },
                             onClickTrustedIssuers = {
@@ -1654,14 +1670,14 @@ class App private constructor (val promptModel: PromptModel) {
                         )
                     }
                 }
-                composable<DocumentListDestination>(
+                composable<VerticalCardListDestination>(
                     enterTransition = { null },
                     exitTransition = { null },
                     popEnterTransition = { null },
                     popExitTransition = { null }
                 ) { backStackEntry ->
-                    // Note: VerticalDocumentListScreen has its own AppBar
-                    VerticalDocumentListScreen(
+                    // Note: VerticalCardListScreen has its own AppBar
+                    VerticalCardListScreen(
                         documentStore = documentStore,
                         documentModel = documentModel,
                         settingsModel = settingsModel,

@@ -1,5 +1,6 @@
 import UIKit
 import Combine
+import SwiftUI
 
 /// A structure with information about a ``Credential``.
 public struct CredentialInfo: Hashable {
@@ -17,12 +18,18 @@ public struct CredentialInfo: Hashable {
 }
 
 /// A structure with information about a ``Document``.
-public struct DocumentInfo: Hashable {
+public struct DocumentInfo: Hashable, CardInfo {
+    /// A unique identifier for the document.
+    public var identifier: String { document.identifier }
+
     /// A reference to the ``Document`` this information is about.
     public let document: Document
     
     /// Card art for the document.
     public let cardArt: UIImage
+    
+    /// Badges for the document.
+    public let badges: [CardBadge]
     
     /// The credentials for the document.
     public let credentialInfos: [CredentialInfo]
@@ -54,6 +61,9 @@ public class DocumentModel {
     
     let documentTypeRepository: DocumentTypeRepository?
     let documentOrderKey: String
+    let badgeFunction: @Sendable (
+        _ document: Document
+    ) async -> [DocumentBadge]
 
     /**
      * Initialization for ``DocumentModel``.
@@ -62,14 +72,19 @@ public class DocumentModel {
      *   - documentStore: the ``DocumentStore`` to use as a source of truth.
      *   - documentTypeRepository: a ``DocumentTypeRepository`` with information about document types or nil.
      *   - documentOrderKey: the name of the key to use for storing the document order in the ``Tags`` object associated with  ``documentStore``.
+     *   - badgeFunction: a function to return badges for a document.
      */
     public init(
         documentStore: DocumentStore,
         documentTypeRepository: DocumentTypeRepository?,
-        documentOrderKey: String = "org.multipaz.DocumentModel.orderingKey"
+        documentOrderKey: String = "org.multipaz.DocumentModel.orderingKey",
+        badgeFunction: @escaping @Sendable (
+            _ document: Document
+        ) async -> [DocumentBadge] = { document in [] }
     ) async throws {
         self.documentTypeRepository = documentTypeRepository
         self.documentOrderKey = documentOrderKey
+        self.badgeFunction = badgeFunction
         self.documentStore = documentStore
         self.storageData = if let encoded = try await documentStore.getTags().getByteString(key: documentOrderKey) {
             DocumentModelStorageData.fromDataItem(
@@ -173,6 +188,16 @@ public class DocumentModel {
         return DocumentInfo(
             document: document,
             cardArt: document.renderCardArt(),
+            badges: await badgeFunction(document).map { docBadge in
+                CardBadge(
+                    text: docBadge.text,
+                    color: Color(
+                        red: Double(docBadge.color.red)/255.0,
+                        green: Double(docBadge.color.green)/255.0,
+                        blue: Double(docBadge.color.blue)/255.0
+                    )
+                )
+            },
             credentialInfos: credentialInfos
         )
     }

@@ -52,7 +52,7 @@ fun StartScreen(
     onClickScreenLock: () -> Unit = {},
     onClickPickersScreen: () -> Unit = {},
     onClickNfcReadersScreen: () -> Unit = {},
-    onClickDocumentListScreen: () -> Unit = {},
+    onClickVerticalCardListScreen: () -> Unit = {},
     onClickQuickAccessWallet: () -> Unit = {},
     onClickEventLog: () -> Unit = {},
     onClickShareSheet: () -> Unit = {},
@@ -133,8 +133,8 @@ fun StartScreen(
                 }
 
                 item {
-                    TextButton(onClick = onClickDocumentListScreen) {
-                        Text("Vertical Document List")
+                    TextButton(onClick = onClickVerticalCardListScreen) {
+                        Text("Vertical Card List")
                     }
                 }
 

@@ -3,6 +3,7 @@ package org.multipaz.presentment
 import android.app.PendingIntent
 import android.content.ComponentName
 import org.multipaz.document.Document
+import org.multipaz.document.DocumentBadge
 
 /**
  * Data for configuring a document chooser.
@@ -13,7 +14,6 @@ import org.multipaz.document.Document
  * @property openAppPendingIntentFn a function to create a [PendingIntent] to open the given document when the button is pressed.
  * @property preferredServices a list of services which should be preferred while an activity providing the UI for
  *  [PresentmentModel] is in the foreground. See [PresenmentActivity] in the multipaz-compose library for an example.
- *
  */
 actual data class DocumentChooserData(
     val initiallySelectedDocumentId: String?,

@@ -39,3 +39,4 @@ extension Document.Editor: @unchecked Sendable {}
 extension DocumentProvisioningSettings: @unchecked Sendable {}
 extension CredentialMetadata: @unchecked Sendable {}
 extension ProvisioningMetadata: @unchecked Sendable {}
+extension DocumentBadge: @unchecked Sendable {}

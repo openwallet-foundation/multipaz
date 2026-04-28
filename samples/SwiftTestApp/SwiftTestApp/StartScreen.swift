@@ -15,8 +15,8 @@ struct StartScreen: View {
                 Button(action: { viewModel.path.append(Destination.documentStoreScreen) }) {
                     Text("Document Store")
                 }
-                Button(action: { viewModel.path.append(Destination.verticalDocumentListScreen) }) {
-                    Text("Vertical Document List")
+                Button(action: { viewModel.path.append(Destination.verticalCardListScreen) }) {
+                    Text("Vertical Card List")
                 }
                 Button(action: { viewModel.path.append(Destination.consentPromptScreen) }) {
                     Text("Consent Prompt")

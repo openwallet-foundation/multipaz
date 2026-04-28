@@ -2,161 +2,114 @@ import SwiftUI
 import UIKit
 import Combine
 
-// MARK: - Internal Helper Models
-
-private struct CarouselModel: Identifiable, Equatable {
-    let id: String
-    let name: String
-    let image: UIImage
-    
-    static func == (lhs: CarouselModel, rhs: CarouselModel) -> Bool {
-        return lhs.id == rhs.id
-    }
-}
-
-// MARK: - DocumentCarousel
-
-/// A horizontal carousel view that displays a collection of documents.
+/// A horizontal carousel view that displays a collection of cards.
 ///
-/// `DocumentCarousel` provides a highly interactive way to browse, select, and reorder documents.
+/// ``CardCarousel`` provides a highly interactive way to browse, select, and reorder cards.
 /// It features a "cover flow" style layout where the center item is elevated, and side items are scaled down.
 ///
 /// ## Features
 /// - **Snap Scrolling**: Automatically snaps to the nearest card after dragging.
 /// - **Reordering**: Long-press and drag to reorder items (optional).
-/// - **Focus Reporting**: Reports which document is currently centered.
+/// - **Focus Reporting**: Reports which card is currently centered.
 /// - **Custom Overlays**: Supports custom views for selected item information and empty states.
-///
-/// ## Usage Example
-///
-/// ```swift
-/// DocumentCarousel(
-///     documentModel: myDocumentModel,
-///     initialDocumentId: "doc_123",
-///     allowReordering: true,
-///     onDocumentClicked: { docInfo in
-///         print("Tapped on: \(docInfo.document.displayName ?? "Unknown")")
-///     },
-///     onDocumentReordered: { docInfo, oldIndex, newIndex in
-///         print("Moved \(docInfo.document.identifier) from \(oldIndex) to \(newIndex)")
-///     },
-///     selectedDocumentInfo: { docInfo, index, total in
-///         // A view that appears below the active card
-///         VStack {
-///             Text(docInfo?.document.displayName ?? "Loading...")
-///                 .font(.headline)
-///             Text("\(index + 1) of \(total)")
-///                 .font(.caption)
-///         }
-///     },
-///     emptyDocumentContent: {
-///         Text("No Documents Found")
-///     }
-/// )
-/// ```
-public struct DocumentCarousel<EmptyContent: View, SelectedContent: View>: View {
+public struct CardCarousel<EmptyContent: View, SelectedContent: View>: View {
     
     // MARK: - Properties
     
-    /// The data source containing the list of documents to display.
-    public var documentModel: DocumentModel
+    /// The list of cards to display.
+    public var cardInfos: [CardInfo]
     
-    /// The identifier of the document to focus on immediately upon loading.
-    public var initialDocumentId: String?
+    /// The card to focus on immediately upon loading.
+    public var initialCardInfo: CardInfo?
     
     /// Controls whether the user can reorder cards via long-press and drag.
     /// Defaults to `true`.
     public var allowReordering: Bool
     
-    /// Callback triggered when a document card is tapped.
-    public var onDocumentClicked: (DocumentInfo) -> Void
+    /// Callback triggered when a card is tapped.
+    public var onCardClicked: (CardInfo) -> Void
     
-    /// Callback triggered when a document settles in the center of the screen.
-    public var onDocumentFocused: (DocumentInfo) -> Void
+    /// Callback triggered when a card settles in the center of the screen.
+    public var onCardFocused: (CardInfo) -> Void
     
-    /// Callback triggered when a document has been successfully moved to a new index.
+    /// Callback triggered when a card has been successfully moved to a new index.
     /// - Parameters:
-    ///   - document: The document that was moved.
+    ///   - cardInfo: The card that was moved.
     ///   - oldIndex: The original index before the move.
     ///   - newIndex: The new index after the move.
-    public var onDocumentReordered: (_ document: DocumentInfo, _ oldIndex: Int, _ newIndex: Int) -> Void
+    public var onCardReordered: (_ cardInfo: CardInfo, _ oldIndex: Int, _ newIndex: Int) -> Void
     
-    /// A view builder that constructs the overlay information for the currently selected document.
+    /// A view builder that constructs the overlay information for the currently selected card.
     ///
     /// The closure provides:
-    /// - `DocumentInfo?`: The currently focused document (nil during reordering).
+    /// - `CardInfo?`: The currently focused card (nil during reordering).
     /// - `Int`: The current index.
     /// - `Int`: The total number of items.
-    public var selectedDocumentInfo: (DocumentInfo?, Int, Int) -> SelectedContent
+    public var selectedCardInfo: (CardInfo?, Int, Int) -> SelectedContent
     
-    /// A view builder that constructs the content to display when there are no documents.
-    public var emptyDocumentContent: () -> EmptyContent
+    /// A view builder that constructs the content to display when there are no cards.
+    public var emptyCardContent: () -> EmptyContent
     
     // MARK: - State
     
-    @State private var items: [CarouselModel] = []
+    @State private var items: [CardInfo] = []
     @State private var cardIndex: CGFloat = 0
     @State private var hasInitialized: Bool = false
-    @State private var lastReportedFocusId: String? = nil
+    @State private var lastReportedFocusCard: CardInfo? = nil
     @State private var isReordering: Bool = false
     
     // MARK: - Initializer
     
-    /// Creates a new `DocumentCarousel` instance.
+    /// Creates a new ``CardCarousel`` instance.
     ///
     /// - Parameters:
-    ///   - documentModel: The data model containing document information.
-    ///   - initialDocumentId: An optional ID to scroll to initially.
+    ///   - cardInfos: The cards to display.
+    ///   - initialCardInfo: An optional card to scroll to initially.
     ///   - allowReordering: If `true`, enables long-press to reorder cards. Defaults to `true`.
-    ///   - onDocumentClicked: Action to perform when a card is tapped.
-    ///   - onDocumentFocused: Action to perform when a card becomes the center focus.
-    ///   - onDocumentReordered: Action to perform when the order changes.
-    ///   - selectedDocumentInfo: Builder for the info view below the focused card.
-    ///   - emptyDocumentContent: Builder for the empty state view.
+    ///   - onCardClicked: Action to perform when a card is tapped.
+    ///   - onCardFocused: Action to perform when a card becomes the center focus.
+    ///   - onCardReordered: Action to perform when the order changes.
+    ///   - selectedCardInfo: Builder for the info view below the focused card.
+    ///   - emptyCardContent: Builder for the empty state view.
     public init(
-        documentModel: DocumentModel,
-        initialDocumentId: String? = nil,
+        cardInfos: [CardInfo],
+        initialCardInfo: CardInfo? = nil,
         allowReordering: Bool = true,
-        onDocumentClicked: @escaping (DocumentInfo) -> Void = { _ in },
-        onDocumentFocused: @escaping (DocumentInfo) -> Void = { _ in },
-        onDocumentReordered: @escaping (DocumentInfo, Int, Int) -> Void = { _, _, _ in },
-        @ViewBuilder selectedDocumentInfo: @escaping (DocumentInfo?, Int, Int) -> SelectedContent,
-        @ViewBuilder emptyDocumentContent: @escaping () -> EmptyContent = { EmptyView() }
+        onCardClicked: @escaping (CardInfo) -> Void = { _ in },
+        onCardFocused: @escaping (CardInfo) -> Void = { _ in },
+        onCardReordered: @escaping (CardInfo, Int, Int) -> Void = { _, _, _ in },
+        @ViewBuilder selectedCardInfo: @escaping (CardInfo?, Int, Int) -> SelectedContent,
+        @ViewBuilder emptyCardContent: @escaping () -> EmptyContent = { EmptyView() }
     ) {
-        self.documentModel = documentModel
-        self.initialDocumentId = initialDocumentId
+        self.cardInfos = cardInfos
+        self.initialCardInfo = initialCardInfo
         self.allowReordering = allowReordering
-        self.onDocumentClicked = onDocumentClicked
-        self.onDocumentFocused = onDocumentFocused
-        self.onDocumentReordered = onDocumentReordered
-        self.selectedDocumentInfo = selectedDocumentInfo
-        self.emptyDocumentContent = emptyDocumentContent
+        self.onCardClicked = onCardClicked
+        self.onCardFocused = onCardFocused
+        self.onCardReordered = onCardReordered
+        self.selectedCardInfo = selectedCardInfo
+        self.emptyCardContent = emptyCardContent
     }
     
     // MARK: - Body
     
     public var body: some View {
-        if items.isEmpty && documentModel.documentInfos.isEmpty {
+        if items.isEmpty && cardInfos.isEmpty {
             emptyStateView
         } else {
             VStack(spacing: -10) {
-                CardCarousel(
+                CardCarouselInternal(
                     items: $items,
                     cardIndex: $cardIndex,
                     isReordering: $isReordering,
                     allowReordering: allowReordering,
                     onCarouselItemClick: { item in
-                        if let info = documentModel.documentInfos.first(where: { $0.document.identifier == item.id }) {
-                            onDocumentClicked(info)
-                        }
+                        onCardClicked(item)
                     },
                     onReorder: { oldIndex, newIndex in
                         guard newIndex >= 0 && newIndex < items.count else { return }
                         let movedItem = items[newIndex]
-                        
-                        if let realDoc = documentModel.documentInfos.first(where: { $0.document.identifier == movedItem.id }) {
-                            onDocumentReordered(realDoc, oldIndex, newIndex)
-                        }
+                        onCardReordered(movedItem, oldIndex, newIndex)
                     }
                 )
                 
@@ -169,7 +122,7 @@ public struct DocumentCarousel<EmptyContent: View, SelectedContent: View>: View 
                     reportFocusChange()
                 }
             }
-            .onChange(of: documentModel.documentInfos) { _, _ in
+            .onChange(of: cardInfos.count) { _, _ in
                 syncItemsFromModel()
                 
                 if !items.isEmpty {
@@ -202,7 +155,7 @@ public struct DocumentCarousel<EmptyContent: View, SelectedContent: View>: View 
                     )
                     .frame(width: cardWidth, height: cardHeight)
                 
-                emptyDocumentContent()
+                emptyCardContent()
             }
             .frame(width: width, height: geometry.size.height)
         }
@@ -213,7 +166,7 @@ public struct DocumentCarousel<EmptyContent: View, SelectedContent: View>: View 
         ZStack {
             let totalCount = items.count
             
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 let dist = CGFloat(index) - cardIndex
                 let absDist = abs(dist)
                 
@@ -222,17 +175,15 @@ public struct DocumentCarousel<EmptyContent: View, SelectedContent: View>: View 
                     let xOffset = dist * 30
                     
                     if isReordering {
-                        selectedDocumentInfo(nil, index, totalCount)
+                        selectedCardInfo(nil, index, totalCount)
                             .opacity(opacity)
                             .offset(x: xOffset)
                             .allowsHitTesting(false)
                     } else {
-                        if let realDoc = documentModel.documentInfos.first(where: { $0.document.identifier == item.id }) {
-                            selectedDocumentInfo(realDoc, index, totalCount)
-                                .opacity(opacity)
-                                .offset(x: xOffset)
-                                .allowsHitTesting(false)
-                        }
+                        selectedCardInfo(item, index, totalCount)
+                            .opacity(opacity)
+                            .offset(x: xOffset)
+                            .allowsHitTesting(false)
                     }
                 }
             }
@@ -243,20 +194,14 @@ public struct DocumentCarousel<EmptyContent: View, SelectedContent: View>: View 
     // MARK: - Helpers
     
     private func syncItemsFromModel() {
-        self.items = documentModel.documentInfos.map { info in
-            CarouselModel(
-                id: info.document.identifier,
-                name: info.document.displayName ?? "",
-                image: info.cardArt
-            )
-        }
+        self.items = cardInfos
     }
     
     private func updateInitialIndex() {
         guard !items.isEmpty else { return }
         
-        if let targetId = initialDocumentId,
-           let index = items.firstIndex(where: { $0.id == targetId }) {
+        if let target = initialCardInfo,
+           let index = items.firstIndex(where: { $0.identifier == target.identifier }) {
             cardIndex = CGFloat(index)
         } else {
             if !hasInitialized {
@@ -275,24 +220,22 @@ public struct DocumentCarousel<EmptyContent: View, SelectedContent: View>: View 
         
         let focusedItem = items[index]
         
-        if focusedItem.id != lastReportedFocusId {
-            if let realDoc = documentModel.documentInfos.first(where: { $0.document.identifier == focusedItem.id }) {
-                lastReportedFocusId = focusedItem.id
-                onDocumentFocused(realDoc)
-            }
+        if focusedItem.identifier != lastReportedFocusCard?.identifier {
+            lastReportedFocusCard = focusedItem
+            onCardFocused(focusedItem)
         }
     }
 }
 
 // MARK: - Internal Implementation
 
-private struct CardCarousel: View {
-    @Binding var items: [CarouselModel]
+private struct CardCarouselInternal: View {
+    @Binding var items: [CardInfo]
     @Binding var cardIndex: CGFloat
     @Binding var isReordering: Bool
     
     let allowReordering: Bool
-    let onCarouselItemClick: (CarouselModel) -> Void
+    let onCarouselItemClick: (CardInfo) -> Void
     let onReorder: (Int, Int) -> Void
     
     // Scroll State
@@ -318,7 +261,7 @@ private struct CardCarousel: View {
             let fractionalPart = cardIndex - CGFloat(Int(floor(cardIndex)))
             
             ZStack {
-                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                     let i = CGFloat(index)
                     let offset = i - cardIndex
                     let absOffset = abs(offset)
@@ -586,16 +529,18 @@ private struct CardCarousel: View {
 // MARK: - Carousel Item View
 
 private struct CarouselItem: View {
-    let item: CarouselModel
+    let item: CardInfo
     let overlayAlpha: Double
     
     var body: some View {
-        ZStack {
-            Image(uiImage: item.image)
+        ZStack(alignment: .topTrailing) {
+            Image(uiImage: item.cardArt)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
+            
+            CardBadgesView(badges: item.badges)
             
             if overlayAlpha > 0 {
                 Color.white.opacity(overlayAlpha)

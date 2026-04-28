@@ -16,6 +16,8 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.multipaz.compose.notifications.NotificationManagerAndroid
 import org.multipaz.compose.prompt.PresentmentActivity
 import org.multipaz.digitalcredentials.getAppOrigin
+import org.multipaz.document.Document
+import org.multipaz.document.DocumentBadge
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.util.Logger
 import java.net.NetworkInterface
@@ -90,7 +92,7 @@ actual object TestAppConfiguration {
 
     fun getPendingIntentForLaunchingQuickAccessWallet(
         source: PresentmentSource,
-        initiallySelectedDocumentId: String?
+        initiallySelectedDocumentId: String?,
     ): PendingIntent {
         return PresentmentActivity.getPendingIntent(
             source = source,

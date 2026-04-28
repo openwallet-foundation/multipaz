@@ -56,7 +56,8 @@ import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
-import org.multipaz.compose.document.DocumentCarousel
+import org.multipaz.compose.cards.CardCarousel
+import org.multipaz.compose.document.DocumentInfo
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.AsymmetricKey
@@ -248,17 +249,19 @@ fun DocumentStoreScreen(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            DocumentCarousel(
-                documentModel = documentModel,
-                initialDocumentId = settingsModel.currentlyFocusedDocumentId.value,
+            CardCarousel(
+                cardInfos = documentInfos,
+                initialCardInfo = documentInfos.find { it.identifier == settingsModel.currentlyFocusedDocumentId.value },
                 allowReordering = true,
-                onDocumentClicked = { documentInfo ->
+                onCardClicked = { cardInfo ->
+                    val documentInfo = cardInfo as DocumentInfo
                     onViewDocument(documentInfo.document.identifier)
                 },
-                onDocumentFocused = { documentInfo ->
-                    settingsModel.currentlyFocusedDocumentId.value = documentInfo.document.identifier
+                onCardFocused = { cardInfo ->
+                    settingsModel.currentlyFocusedDocumentId.value = cardInfo.identifier
                 },
-                onDocumentReordered = { documentInfo, oldPos, newPos ->
+                onCardReordered = { cardInfo, oldPos, newPos ->
+                    val documentInfo = cardInfo as DocumentInfo
                     coroutineScope.launch {
                         try {
                             documentModel.setDocumentPosition(
@@ -270,8 +273,9 @@ fun DocumentStoreScreen(
                         }
                     }
                 },
-                selectedDocumentInfo = { documentInfo, index, total ->
-                    if (documentInfo != null) {
+                selectedCardInfo = { cardInfo, index, total ->
+                    if (cardInfo != null) {
+                        val documentInfo = cardInfo as DocumentInfo
                         Text(
                             text = "${index + 1} of $total: ${documentInfo.document.displayName ?: "No displayname"}",
                             fontWeight = FontWeight.Bold
@@ -283,7 +287,7 @@ fun DocumentStoreScreen(
                         )
                     }
                 },
-                emptyDocumentContent = {
+                emptyCardContent = {
                     Text(
                         text = "No documents in store",
                         fontWeight = FontWeight.Bold

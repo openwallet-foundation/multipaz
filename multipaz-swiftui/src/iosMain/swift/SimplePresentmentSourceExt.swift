@@ -33,6 +33,9 @@ extension SimplePresentmentSource.Companion {
             _ preselectedDocuments: [Document],
             _ onDocumentsInFocus: @escaping @Sendable (_ documents: [Document]) -> Void,
         ) async -> CredentialPresentmentSelection?,
+        getBadgesFn: @escaping @Sendable (
+            _ document: Document
+        ) async -> [DocumentBadge] = { document in [] },
         preferSignatureToKeyAgreement: Bool = true,
         domainsMdocSignature: [ String ] = [],
         domainsMdocKeyAgreement: [ String ] = [],
@@ -46,6 +49,7 @@ extension SimplePresentmentSource.Companion {
             eventLogger: eventLogger,
             resolveTrustFn: ResolveTrustHandler(f: resolveTrustFn),
             showConsentPromptFn: ShowConsentPromptHandler(f: showConsentPromptFn),
+            getBadgesFn: GetBadgesHandler(f: getBadgesFn),
             preferSignatureToKeyAgreement: preferSignatureToKeyAgreement,
             domainsMdocSignature: domainsMdocSignature,
             domainsMdocKeyAgreement: domainsMdocKeyAgreement,
@@ -109,6 +113,25 @@ private class ShowConsentPromptHandler: KotlinSuspendFunction5 {
                 preselectedDocuments,
                 { documents in }
             )
+            completionHandler(value, nil)
+        }
+    }
+}
+
+private class GetBadgesHandler: KotlinSuspendFunction1 {
+    let f: @Sendable (
+        _ document: Document
+    ) async -> [DocumentBadge]
+    
+    init(f: @escaping @Sendable (_ document: Document) async -> [DocumentBadge]) {
+        self.f = f
+    }
+
+    func __invoke(p1: Any?, completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void) {
+        let document = p1 as! Document
+        let f = self.f
+        Task {
+            let value = await f(document)
             completionHandler(value, nil)
         }
     }

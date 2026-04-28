@@ -223,10 +223,25 @@ class ViewModel {
         
         documentModel = try! await DocumentModel(
             documentStore: documentStore,
-            documentTypeRepository: documentTypeRepository
+            documentTypeRepository: documentTypeRepository,
+            badgeFunction: { document in await self.getBadges(document: document) }
         )
     
         isLoading = false
+    }
+    
+    // For testing of the badge rendering, always add a badge with the document name
+    func getBadges(document: Document) async -> [DocumentBadge] {
+        let displayName = document.displayName ?? "Unknown Document"
+        let hash = displayName.hashValue
+        let red = (hash >> 16) & 0xFF
+        let green = (hash >> 8) & 0xFF
+        let blue = hash & 0xFF
+        let badge = DocumentBadge(
+            text: displayName,
+            color: DocumentBadgeColor(red: Int32(red), green: Int32(green), blue: Int32(blue))
+        )
+        return [ badge ]
     }
     
     func addSelfsignedMdoc(
