@@ -127,6 +127,7 @@ class DocumentType private constructor(
          * @param description a description of the attribute.
          * @param mandatory indication whether the ISO mdoc attribute is mandatory.
          * @param mdocNamespace the namespace of the ISO mdoc attribute.
+         * @param sensitivity the sensitivity of the attribute.
          * @param icon the icon, if available.
          * @param sampleValueMdoc a sample value for the attribute for ISO mdoc credentials, if available.
          * @param sampleValueJson a sample value for the attribute for JSON-based credentials, if available.
@@ -138,12 +139,31 @@ class DocumentType private constructor(
             description: String,
             mandatory: Boolean,
             mdocNamespace: String,
+            sensitivity: DocumentAttributeSensitivity = DocumentAttributeSensitivity.PII,
             icon: Icon? = null,
             sampleValueMdoc: DataItem? = null,
             sampleValueJson: JsonElement? = null,
         ) = apply {
-            addMdocAttribute(type, identifier, displayName, description, mandatory, mdocNamespace, icon, sampleValueMdoc)
-            addJsonAttribute(type, identifier, displayName, description, icon, sampleValueJson)
+            addMdocAttribute(
+                type = type,
+                identifier = identifier,
+                displayName = displayName,
+                description = description,
+                mandatory = mandatory,
+                mdocNamespace = mdocNamespace,
+                sensitivity = sensitivity,
+                icon = icon,
+                sampleValue = sampleValueMdoc
+            )
+            addJsonAttribute(
+                type = type,
+                identifier = identifier,
+                displayName = displayName,
+                description = description,
+                sensitivity = sensitivity,
+                icon = icon,
+                sampleValue = sampleValueJson
+            )
         }
 
         /**
@@ -157,6 +177,7 @@ class DocumentType private constructor(
          * @param description a description of the attribute.
          * @param mandatory indication whether the ISO mdoc attribute is mandatory.
          * @param mdocNamespace the namespace of the ISO mdoc attribute.
+         * @param sensitivity the sensitivity of the attribute.
          * @param icon the icon, if available.
          * @param sampleValueMdoc a sample value for the attribute for ISO mdoc credentials, if available.
          * @param sampleValueJson a sample value for the attribute for JSON-based credentials, if available.
@@ -169,21 +190,31 @@ class DocumentType private constructor(
             description: String,
             mandatory: Boolean,
             mdocNamespace: String,
+            sensitivity: DocumentAttributeSensitivity = DocumentAttributeSensitivity.PII,
             icon: Icon? = null,
             sampleValueMdoc: DataItem? = null,
             sampleValueJson: JsonElement? = null,
         ) = apply {
             addMdocAttribute(
-                type,
-                mdocIdentifier,
-                displayName,
-                description,
-                mandatory,
-                mdocNamespace,
-                icon,
-                sampleValueMdoc
+                type = type,
+                identifier = mdocIdentifier,
+                displayName = displayName,
+                description = description,
+                mandatory = mandatory,
+                mdocNamespace = mdocNamespace,
+                sensitivity = sensitivity,
+                icon = icon,
+                sampleValue = sampleValueMdoc
             )
-            addJsonAttribute(type, jsonIdentifier, displayName, description, icon, sampleValueJson)
+            addJsonAttribute(
+                type = type,
+                identifier = jsonIdentifier,
+                displayName = displayName,
+                description = description,
+                sensitivity = sensitivity,
+                icon = icon,
+                sampleValue = sampleValueJson
+            )
         }
 
         /**
@@ -195,6 +226,7 @@ class DocumentType private constructor(
          * @param description a description of the attribute.
          * @param mandatory indication whether the ISO mdoc attribute is mandatory.
          * @param mdocNamespace the namespace of the ISO mdoc attribute.
+         * @param sensitivity the sensitivity of the attribute.
          * @param icon the icon, if available.
          * @param sampleValue a sample value for the attribute, if available.
          */
@@ -205,18 +237,20 @@ class DocumentType private constructor(
             description: String,
             mandatory: Boolean,
             mdocNamespace: String,
+            sensitivity: DocumentAttributeSensitivity = DocumentAttributeSensitivity.PII,
             icon: Icon? = null,
             sampleValue: DataItem? = null
         ) = apply {
             mdocBuilder?.addDataElement(
-                mdocNamespace,
-                type,
-                identifier,
-                displayName,
-                description,
-                mandatory,
-                icon,
-                sampleValue
+                namespace = mdocNamespace,
+                type = type,
+                identifier = identifier,
+                displayName = displayName,
+                description = description,
+                mandatory = mandatory,
+                sensitivity = sensitivity,
+                icon = icon,
+                sampleValue = sampleValue
             ) ?: throw Exception("The ISO mdoc Document Type was not initialized")
         }
 
@@ -228,6 +262,7 @@ class DocumentType private constructor(
          * `age_equal_or_over.18`.
          * @param displayName a name suitable for display of the attribute.
          * @param description a description of the attribute.
+         * @param sensitivity the sensitivity of the attribute.
          * @param icon the icon, if available.
          * @param sampleValue a sample value for the attribute, if available.
          */
@@ -236,6 +271,7 @@ class DocumentType private constructor(
             identifier: String,
             displayName: String,
             description: String,
+            sensitivity: DocumentAttributeSensitivity = DocumentAttributeSensitivity.PII,
             icon: Icon? = null,
             sampleValue: JsonElement? = null
         ) = apply {
@@ -252,6 +288,7 @@ class DocumentType private constructor(
                         identifier = splits[1],
                         displayName = displayName,
                         description = description,
+                        sensitivity = sensitivity,
                         icon = icon,
                         sampleValue = sampleValue
                     ) ?: throw Exception("The JSON Document Type was not initialized")
@@ -346,8 +383,6 @@ class DocumentType private constructor(
             mdocBuilder?.build(),
             jsonBuilder?.build())
     }
-
-    // TODO: also add createSdJwtVCWithSampleData()
 
     /**
      * Adds a [MdocCredential] to a [Document] with sample data for the document type.

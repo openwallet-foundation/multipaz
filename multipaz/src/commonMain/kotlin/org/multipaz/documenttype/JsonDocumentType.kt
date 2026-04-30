@@ -98,6 +98,7 @@ class JsonDocumentType private constructor(
             identifier: String,
             displayName: String,
             description: String,
+            sensitivity: DocumentAttributeSensitivity = DocumentAttributeSensitivity.PII,
             icon: Icon? = null,
             sampleValue: JsonElement? = null
         ) {
@@ -109,6 +110,7 @@ class JsonDocumentType private constructor(
                     identifier = identifier,
                     displayName = displayName,
                     description = description,
+                    sensitivity = sensitivity,
                     icon = icon,
                     sampleValueMdoc = null,
                     sampleValueJson = sampleValue,

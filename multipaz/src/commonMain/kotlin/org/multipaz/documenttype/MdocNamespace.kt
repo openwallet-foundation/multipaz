@@ -47,6 +47,7 @@ class MdocNamespace private constructor(
          * @param displayName the name suitable for display of the attribute.
          * @param description a description of the attribute.
          * @param mandatory indication whether the mdoc attribute is mandatory.
+         * @param sensitivity the sensitivity of the attribute.
          * @param icon the icon, if available.
          * @param sampleValue a sample value for the attribute, if available.
          */
@@ -56,6 +57,7 @@ class MdocNamespace private constructor(
             displayName: String,
             description: String,
             mandatory: Boolean,
+            sensitivity: DocumentAttributeSensitivity,
             icon: Icon?,
             sampleValue: DataItem?,
         ) = apply {
@@ -65,6 +67,7 @@ class MdocNamespace private constructor(
                     identifier = identifier,
                     displayName = displayName,
                     description = description,
+                    sensitivity = sensitivity,
                     icon = icon,
                     sampleValueMdoc = sampleValue,
                     sampleValueJson = null,

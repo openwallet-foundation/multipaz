@@ -20,6 +20,7 @@ import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.DocumentType
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
+import org.multipaz.documenttype.DocumentAttributeSensitivity
 
 /**
  * Object containing the metadata of the Vehicle Registration
@@ -38,44 +39,45 @@ object VehicleRegistration {
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_VEHICLE_REGISTRATION))
             .addMdocDocumentType("nl.rdw.mekb.1")
             .addMdocAttribute(
-                DocumentAttributeType.ComplexType,
-                "registration_info",
-                getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_ATTRIBUTE_REGISTRATION_INFO),
-                getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_DESCRIPTION_REGISTRATION_INFO),
-                true,
-                MVR_NAMESPACE
+                type = DocumentAttributeType.ComplexType,
+                identifier = "registration_info",
+                displayName = getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_ATTRIBUTE_REGISTRATION_INFO),
+                description = getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_DESCRIPTION_REGISTRATION_INFO),
+                mandatory = true,
+                mdocNamespace = MVR_NAMESPACE
             )
             .addMdocAttribute(
-                DocumentAttributeType.Date,
-                "issue_date",
-                getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_ATTRIBUTE_ISSUE_DATE),
-                getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_DESCRIPTION_ISSUE_DATE),
-                true,
-                MVR_NAMESPACE
+                type = DocumentAttributeType.Date,
+                identifier = "issue_date",
+                displayName = getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_ATTRIBUTE_ISSUE_DATE),
+                description = getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_DESCRIPTION_ISSUE_DATE),
+                mandatory = true,
+                mdocNamespace = MVR_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.VALIDITY
             )
             .addMdocAttribute(
-                DocumentAttributeType.ComplexType,
-                "registration_holder",
-                getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_ATTRIBUTE_REGISTRATION_HOLDER),
-                getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_DESCRIPTION_REGISTRATION_HOLDER),
-                true,
-                MVR_NAMESPACE
+                type = DocumentAttributeType.ComplexType,
+                identifier = "registration_holder",
+                displayName = getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_ATTRIBUTE_REGISTRATION_HOLDER),
+                description = getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_DESCRIPTION_REGISTRATION_HOLDER),
+                mandatory = true,
+                mdocNamespace = MVR_NAMESPACE
             )
             .addMdocAttribute(
-                DocumentAttributeType.ComplexType,
-                "basic_vehicle_info",
-                getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_ATTRIBUTE_BASIC_VEHICLE_INFO),
-                getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_DESCRIPTION_BASIC_VEHICLE_INFO),
-                true,
-                MVR_NAMESPACE
+                type = DocumentAttributeType.ComplexType,
+                identifier = "basic_vehicle_info",
+                displayName = getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_ATTRIBUTE_BASIC_VEHICLE_INFO),
+                description = getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_DESCRIPTION_BASIC_VEHICLE_INFO),
+                mandatory = true,
+                mdocNamespace = MVR_NAMESPACE
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "vin",
-                getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_ATTRIBUTE_VIN),
-                getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_DESCRIPTION_VIN),
-                true,
-                MVR_NAMESPACE
+                type = DocumentAttributeType.String,
+                identifier = "vin",
+                displayName = getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_ATTRIBUTE_VIN),
+                description = getLocalizedString(GeneratedStringKeys.VEHICLE_REGISTRATION_DESCRIPTION_VIN),
+                mandatory = true,
+                mdocNamespace = MVR_NAMESPACE
             )
             .build()
     }

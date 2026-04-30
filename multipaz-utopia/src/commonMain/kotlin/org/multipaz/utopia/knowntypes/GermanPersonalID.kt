@@ -9,6 +9,7 @@ import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
 import org.multipaz.documenttype.knowntypes.Options
 import org.multipaz.documenttype.knowntypes.SampleData
+import org.multipaz.documenttype.DocumentAttributeSensitivity
 
 /**
  * Object containing the metadata of the German ID Document Type.
@@ -29,239 +30,252 @@ object GermanPersonalID {
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_GERMAN_PERSONAL_ID))
             .addJsonDocumentType(type = EUPID_VCT, keyBound = true)
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "family_name",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_FAMILY_NAME),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_FAMILY_NAME),
-                Icon.PERSON,
-                JsonPrimitive(SampleData.FAMILY_NAME)
+                type = DocumentAttributeType.String,
+                identifier = "family_name",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_FAMILY_NAME),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_FAMILY_NAME),
+                icon = Icon.PERSON,
+                sampleValue = JsonPrimitive(SampleData.FAMILY_NAME)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "given_name",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_GIVEN_NAMES),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_GIVEN_NAMES),
-                Icon.PERSON,
-                JsonPrimitive(SampleData.GIVEN_NAME)
+                type = DocumentAttributeType.String,
+                identifier = "given_name",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_GIVEN_NAMES),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_GIVEN_NAMES),
+                icon = Icon.PERSON,
+                sampleValue = JsonPrimitive(SampleData.GIVEN_NAME)
             )
             .addJsonAttribute(
-                DocumentAttributeType.Date,
-                "birthdate",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_DATE_OF_BIRTH),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_DATE_OF_BIRTH),
-                Icon.TODAY,
-                JsonPrimitive(SampleData.BIRTH_DATE)
+                type = DocumentAttributeType.Date,
+                identifier = "birthdate",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_DATE_OF_BIRTH),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_DATE_OF_BIRTH),
+                icon = Icon.TODAY,
+                sampleValue = JsonPrimitive(SampleData.BIRTH_DATE)
             )
             .addJsonAttribute(
-                DocumentAttributeType.Number,
-                "age_in_years",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_AGE_IN_YEARS),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_AGE_IN_YEARS),
-                Icon.TODAY,
-                JsonPrimitive(SampleData.AGE_IN_YEARS)
+                type = DocumentAttributeType.Number,
+                identifier = "age_in_years",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_AGE_IN_YEARS),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_AGE_IN_YEARS),
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                icon = Icon.TODAY,
+                sampleValue = JsonPrimitive(SampleData.AGE_IN_YEARS)
             )
             .addJsonAttribute(
-                DocumentAttributeType.Number,
-                "age_birth_year",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_YEAR_OF_BIRTH),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_YEAR_OF_BIRTH),
-                Icon.TODAY,
-                JsonPrimitive(SampleData.AGE_BIRTH_YEAR)
+                type = DocumentAttributeType.Number,
+                identifier = "age_birth_year",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_YEAR_OF_BIRTH),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_YEAR_OF_BIRTH),
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                icon = Icon.TODAY,
+                sampleValue = JsonPrimitive(SampleData.AGE_BIRTH_YEAR)
             )
             .addJsonAttribute(
-                DocumentAttributeType.Boolean,
-                "12",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_OLDER_THAN_12),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_OLDER_THAN_12),
-                Icon.TODAY,
-                JsonPrimitive(SampleData.AGE_OVER)
+                type = DocumentAttributeType.Boolean,
+                identifier = "12",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_OLDER_THAN_12),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_OLDER_THAN_12),
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                icon = Icon.TODAY,
+                sampleValue = JsonPrimitive(SampleData.AGE_OVER)
             )
             .addJsonAttribute(
-                DocumentAttributeType.Boolean,
-                "14",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_OLDER_THAN_14),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_OLDER_THAN_14),
-                Icon.TODAY,
-                JsonPrimitive(SampleData.AGE_OVER)
+                type = DocumentAttributeType.Boolean,
+                identifier = "14",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_OLDER_THAN_14),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_OLDER_THAN_14),
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                icon = Icon.TODAY,
+                sampleValue = JsonPrimitive(SampleData.AGE_OVER)
             )
             .addJsonAttribute(
-                DocumentAttributeType.Boolean,
-                "16",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_OLDER_THAN_16),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_OLDER_THAN_16),
-                Icon.TODAY,
-                JsonPrimitive(SampleData.AGE_OVER_16)
+                type = DocumentAttributeType.Boolean,
+                identifier = "16",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_OLDER_THAN_16),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_OLDER_THAN_16),
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                icon = Icon.TODAY,
+                sampleValue = JsonPrimitive(SampleData.AGE_OVER_16)
             )
             // TODO: nest in age_equal_or_over object
             .addJsonAttribute(
-                DocumentAttributeType.Boolean,
-                "18",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_OLDER_THAN_18),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_OLDER_THAN_18),
-                Icon.TODAY,
-                JsonPrimitive(SampleData.AGE_OVER_18)
+                type = DocumentAttributeType.Boolean,
+                identifier = "18",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_OLDER_THAN_18),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_OLDER_THAN_18),
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                icon = Icon.TODAY,
+                sampleValue = JsonPrimitive(SampleData.AGE_OVER_18)
             )
             .addJsonAttribute(
-                DocumentAttributeType.Boolean,
-                "21",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_OLDER_THAN_21),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_OLDER_THAN_21),
-                Icon.TODAY,
-                JsonPrimitive(SampleData.AGE_OVER_21)
+                type = DocumentAttributeType.Boolean,
+                identifier = "21",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_OLDER_THAN_21),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_OLDER_THAN_21),
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                icon = Icon.TODAY,
+                sampleValue = JsonPrimitive(SampleData.AGE_OVER_21)
             )
             .addJsonAttribute(
-                DocumentAttributeType.Boolean,
-                "65",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_OLDER_THAN_65),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_OLDER_THAN_65),
-                Icon.TODAY,
-                JsonPrimitive(SampleData.AGE_OVER_65)
+                type = DocumentAttributeType.Boolean,
+                identifier = "65",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_OLDER_THAN_65),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_OLDER_THAN_65),
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                icon = Icon.TODAY,
+                sampleValue = JsonPrimitive(SampleData.AGE_OVER_65)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "birth_family_name",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_FAMILY_NAME_AT_BIRTH),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_FAMILY_NAME_AT_BIRTH),
-                Icon.PERSON,
-                JsonPrimitive(SampleData.FAMILY_NAME_BIRTH)
+                type = DocumentAttributeType.String,
+                identifier = "birth_family_name",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_FAMILY_NAME_AT_BIRTH),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_FAMILY_NAME_AT_BIRTH),
+                icon = Icon.PERSON,
+                sampleValue = JsonPrimitive(SampleData.FAMILY_NAME_BIRTH)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "birth_place",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_PLACE_OF_BIRTH),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_PLACE_OF_BIRTH),
-                Icon.PLACE,
-                JsonPrimitive(SampleData.BIRTH_PLACE)
+                type = DocumentAttributeType.String,
+                identifier = "birth_place",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_PLACE_OF_BIRTH),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_PLACE_OF_BIRTH),
+                icon = Icon.PLACE,
+                sampleValue = JsonPrimitive(SampleData.BIRTH_PLACE)
             )
             .addJsonAttribute(
-                DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
-                "birth_country",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_COUNTRY_OF_BIRTH),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_COUNTRY_OF_BIRTH),
-                Icon.PLACE,
-                JsonPrimitive(SampleData.BIRTH_COUNTRY)
+                type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
+                identifier = "birth_country",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_COUNTRY_OF_BIRTH),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_COUNTRY_OF_BIRTH),
+                icon = Icon.PLACE,
+                sampleValue = JsonPrimitive(SampleData.BIRTH_COUNTRY)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "birth_state",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_STATE_OF_BIRTH),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_STATE_OF_BIRTH),
-                Icon.PLACE,
-                JsonPrimitive(SampleData.BIRTH_STATE)
+                type = DocumentAttributeType.String,
+                identifier = "birth_state",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_STATE_OF_BIRTH),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_STATE_OF_BIRTH),
+                icon = Icon.PLACE,
+                sampleValue = JsonPrimitive(SampleData.BIRTH_STATE)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "birth_city",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_CITY_OF_BIRTH),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_CITY_OF_BIRTH),
-                Icon.PLACE,
-                JsonPrimitive(SampleData.BIRTH_CITY)
+                type = DocumentAttributeType.String,
+                identifier = "birth_city",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_CITY_OF_BIRTH),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_CITY_OF_BIRTH),
+                icon = Icon.PLACE,
+                sampleValue = JsonPrimitive(SampleData.BIRTH_CITY)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "street_address",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_RESIDENT_ADDRESS),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_RESIDENT_ADDRESS),
-                Icon.PLACE,
-                JsonPrimitive(SampleData.RESIDENT_ADDRESS)
+                type = DocumentAttributeType.String,
+                identifier = "street_address",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_RESIDENT_ADDRESS),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_RESIDENT_ADDRESS),
+                icon = Icon.PLACE,
+                sampleValue = JsonPrimitive(SampleData.RESIDENT_ADDRESS)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "locality",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_RESIDENT_CITY),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_RESIDENT_CITY),
-                Icon.PLACE,
-                JsonPrimitive(SampleData.RESIDENT_CITY)
+                type = DocumentAttributeType.String,
+                identifier = "locality",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_RESIDENT_CITY),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_RESIDENT_CITY),
+                icon = Icon.PLACE,
+                sampleValue = JsonPrimitive(SampleData.RESIDENT_CITY)
             )
             .addJsonAttribute(
-                DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
-                "country",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_RESIDENT_COUNTRY),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_RESIDENT_COUNTRY),
-                Icon.PLACE,
-                JsonPrimitive(SampleData.RESIDENT_COUNTRY)
+                type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
+                identifier = "country",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_RESIDENT_COUNTRY),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_RESIDENT_COUNTRY),
+                icon = Icon.PLACE,
+                sampleValue = JsonPrimitive(SampleData.RESIDENT_COUNTRY)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "postal_code",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_RESIDENT_POSTAL_CODE),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_RESIDENT_POSTAL_CODE),
-                Icon.PLACE,
-                JsonPrimitive(SampleData.RESIDENT_POSTAL_CODE)
+                type = DocumentAttributeType.String,
+                identifier = "postal_code",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_RESIDENT_POSTAL_CODE),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_RESIDENT_POSTAL_CODE),
+                icon = Icon.PLACE,
+                sampleValue = JsonPrimitive(SampleData.RESIDENT_POSTAL_CODE)
             )
             .addJsonAttribute(
-                DocumentAttributeType.IntegerOptions(Options.SEX_ISO_IEC_5218),
-                "gender",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_GENDER),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_GENDER),
-                Icon.EMERGENCY,
-                JsonPrimitive(SampleData.SEX_ISO_5218)
+                type = DocumentAttributeType.IntegerOptions(Options.SEX_ISO_IEC_5218),
+                identifier = "gender",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_GENDER),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_GENDER),
+                icon = Icon.EMERGENCY,
+                sampleValue = JsonPrimitive(SampleData.SEX_ISO_5218)
             )
             .addJsonAttribute(
-                DocumentAttributeType.ComplexType,
-                "nationalities",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_NATIONALITY),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_NATIONALITY),
-                Icon.LANGUAGE,
-                buildJsonArray {
+                type = DocumentAttributeType.ComplexType,
+                identifier = "nationalities",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_NATIONALITY),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_NATIONALITY),
+                icon = Icon.LANGUAGE,
+                sampleValue = buildJsonArray {
                     add(JsonPrimitive(SampleData.NATIONALITY))
                 }
             )
             .addJsonAttribute(
-                DocumentAttributeType.Date,
-                "issuance_date",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_DATE_OF_ISSUE),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_DATE_OF_ISSUE),
-                Icon.DATE_RANGE,
-                JsonPrimitive(SampleData.ISSUE_DATE)
+                type = DocumentAttributeType.Date,
+                identifier = "issuance_date",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_DATE_OF_ISSUE),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_DATE_OF_ISSUE),
+                sensitivity = DocumentAttributeSensitivity.VALIDITY,
+                icon = Icon.DATE_RANGE,
+                sampleValue = JsonPrimitive(SampleData.ISSUE_DATE)
             )
             .addJsonAttribute(
-                DocumentAttributeType.Date,
-                "expiry_date",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_DATE_OF_EXPIRY),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_DATE_OF_EXPIRY),
-                Icon.CALENDAR_CLOCK,
-                JsonPrimitive(SampleData.EXPIRY_DATE)
+                type = DocumentAttributeType.Date,
+                identifier = "expiry_date",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_DATE_OF_EXPIRY),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_DATE_OF_EXPIRY),
+                sensitivity = DocumentAttributeSensitivity.VALIDITY,
+                icon = Icon.CALENDAR_CLOCK,
+                sampleValue = JsonPrimitive(SampleData.EXPIRY_DATE)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "issuing_authority",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_ISSUING_AUTHORITY),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_ISSUING_AUTHORITY),
-                Icon.ACCOUNT_BALANCE,
-                JsonPrimitive(SampleData.ISSUING_AUTHORITY_EU_PID)
+                type = DocumentAttributeType.String,
+                identifier = "issuing_authority",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_ISSUING_AUTHORITY),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_ISSUING_AUTHORITY),
+                sensitivity = DocumentAttributeSensitivity.ISSUER,
+                icon = Icon.ACCOUNT_BALANCE,
+                sampleValue = JsonPrimitive(SampleData.ISSUING_AUTHORITY_EU_PID)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "document_number",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_DOCUMENT_NUMBER),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_DOCUMENT_NUMBER),
-                Icon.NUMBERS,
-                JsonPrimitive(SampleData.DOCUMENT_NUMBER)
+                type = DocumentAttributeType.String,
+                identifier = "document_number",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_DOCUMENT_NUMBER),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_DOCUMENT_NUMBER),
+                icon = Icon.NUMBERS,
+                sampleValue = JsonPrimitive(SampleData.DOCUMENT_NUMBER)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "administrative_number",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_ADMINISTRATIVE_NUMBER),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_ADMINISTRATIVE_NUMBER),
-                Icon.NUMBERS,
-                JsonPrimitive(SampleData.ADMINISTRATIVE_NUMBER)
+                type = DocumentAttributeType.String,
+                identifier = "administrative_number",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_ADMINISTRATIVE_NUMBER),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_ADMINISTRATIVE_NUMBER),
+                icon = Icon.NUMBERS,
+                sampleValue = JsonPrimitive(SampleData.ADMINISTRATIVE_NUMBER)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "issuing_jurisdiction",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_ISSUING_JURISDICTION),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_ISSUING_JURISDICTION),
-                Icon.ACCOUNT_BALANCE,
-                JsonPrimitive(SampleData.ISSUING_JURISDICTION)
+                type = DocumentAttributeType.String,
+                identifier = "issuing_jurisdiction",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_ISSUING_JURISDICTION),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_ISSUING_JURISDICTION),
+                sensitivity = DocumentAttributeSensitivity.ISSUER,
+                icon = Icon.ACCOUNT_BALANCE,
+                sampleValue = JsonPrimitive(SampleData.ISSUING_JURISDICTION)
             )
             .addJsonAttribute(
-                DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
-                "issuing_country",
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_ISSUING_COUNTRY),
-                getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_ISSUING_COUNTRY),
-                Icon.ACCOUNT_BALANCE,
-                JsonPrimitive(SampleData.ISSUING_COUNTRY)
+                type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
+                identifier = "issuing_country",
+                displayName = getLocalizedString(GeneratedStringKeys.GERMAN_ID_ATTRIBUTE_ISSUING_COUNTRY),
+                description = getLocalizedString(GeneratedStringKeys.GERMAN_ID_DESCRIPTION_ISSUING_COUNTRY),
+                sensitivity = DocumentAttributeSensitivity.ISSUER,
+                icon = Icon.ACCOUNT_BALANCE,
+                sampleValue = JsonPrimitive(SampleData.ISSUING_COUNTRY)
             )
             .addSampleRequest(
                 id = "age_over_18",

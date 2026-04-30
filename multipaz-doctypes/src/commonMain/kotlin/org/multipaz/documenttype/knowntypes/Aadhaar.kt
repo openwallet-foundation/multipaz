@@ -7,6 +7,7 @@ import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.Icon
 import org.multipaz.util.fromBase64Url
 import kotlinx.datetime.LocalDate
+import org.multipaz.documenttype.DocumentAttributeSensitivity
 
 /**
  * Object containing the metadata of the Aadhaar Document Type.
@@ -26,414 +27,422 @@ object Aadhaar {
         return DocumentType.Builder("Aadhaar")
             .addMdocDocumentType(AADHAAR_DOCTYPE)
             .addMdocAttribute(
-                DocumentAttributeType.Date,
-                "credential_issuing_date",
-                "Credential issuing date",
-                "Date of credential issuance",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.CALENDAR_CLOCK,
-                LocalDate.parse("2023-01-01").toDataItemFullDate()
+                type = DocumentAttributeType.Date,
+                identifier = "credential_issuing_date",
+                displayName = "Credential issuing date",
+                description = "Date of credential issuance",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.VALIDITY,
+                icon = Icon.CALENDAR_CLOCK,
+                sampleValue = LocalDate.parse("2023-01-01").toDataItemFullDate()
             )
             .addMdocAttribute(
-                DocumentAttributeType.Date,
-                "enrolment_date",
-                "Enrollment date",
-                "Date of enrollment",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.TODAY,
-                LocalDate.parse("2023-01-01").toDataItemFullDate()
+                type = DocumentAttributeType.Date,
+                identifier = "enrolment_date",
+                displayName = "Enrollment date",
+                description = "Date of enrollment",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.VALIDITY,
+                icon = Icon.TODAY,
+                sampleValue = LocalDate.parse("2023-01-01").toDataItemFullDate()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "enrolment_number",
-                "Enrollment number",
-                "Enrollment number",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.NUMBERS,
-                "1234567890".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "enrolment_number",
+                displayName = "Enrollment number",
+                description = "Enrollment number",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.NUMBERS,
+                sampleValue = "1234567890".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.Boolean,
-                "is_nri",
-                "Is NRI",
-                "Resident is NRI",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.GLOBE,
-                false.toDataItem()
+                type = DocumentAttributeType.Boolean,
+                identifier = "is_nri",
+                displayName = "Is NRI",
+                description = "Resident is NRI",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.GLOBE,
+                sampleValue = false.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.Picture,
-                "resident_image",
-                "Photo",
-                "Photo of the resident",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.ACCOUNT_BOX,
-                SampleData.PORTRAIT_BASE64URL.fromBase64Url().toDataItem()
+                type = DocumentAttributeType.Picture,
+                identifier = "resident_image",
+                displayName = "Photo",
+                description = "Photo of the resident",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.PORTRAIT_IMAGE,
+                icon = Icon.ACCOUNT_BOX,
+                sampleValue = SampleData.PORTRAIT_BASE64URL.fromBase64Url().toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "resident_name",
-                "Name",
-                "Resident name",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PERSON,
-                SampleData.GIVEN_NAME.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "resident_name",
+                displayName = "Name",
+                description = "Resident name",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PERSON,
+                sampleValue = SampleData.GIVEN_NAME.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "local_resident_name",
-                "Local name",
-                "Resident name in local language",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PERSON,
-                SampleData.GIVEN_NAME.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "local_resident_name",
+                displayName = "Local name",
+                description = "Resident name in local language",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PERSON,
+                sampleValue = SampleData.GIVEN_NAME.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.Boolean,
-                "age_above18",
-                "Age above 18",
-                "Age above 18",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.TODAY,
-                true.toDataItem()
+                type = DocumentAttributeType.Boolean,
+                identifier = "age_above18",
+                displayName = "Age above 18",
+                description = "Age above 18",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                icon = Icon.TODAY,
+                sampleValue = true.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.Boolean,
-                "age_above50",
-                "Age above 50",
-                "Age above 50",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.TODAY,
-                true.toDataItem()
+                type = DocumentAttributeType.Boolean,
+                identifier = "age_above50",
+                displayName = "Age above 50",
+                description = "Age above 50",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                icon = Icon.TODAY,
+                sampleValue = true.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.Boolean,
-                "age_above60",
-                "Age above 60",
-                "Age above 60",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.TODAY,
-                true.toDataItem()
+                type = DocumentAttributeType.Boolean,
+                identifier = "age_above60",
+                displayName = "Age above 60",
+                description = "Age above 60",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                icon = Icon.TODAY,
+                sampleValue = true.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.Boolean,
-                "age_above75",
-                "Age above 75",
-                "Age above 75",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.TODAY,
-                true.toDataItem()
+                type = DocumentAttributeType.Boolean,
+                identifier = "age_above75",
+                displayName = "Age above 75",
+                description = "Age above 75",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                icon = Icon.TODAY,
+                sampleValue = true.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.Date,
-                "dob",
-                "Date of birth",
-                "Date of birth",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.TODAY,
-                LocalDate.parse("1990-01-01").toDataItemFullDate()
+                type = DocumentAttributeType.Date,
+                identifier = "dob",
+                displayName = "Date of birth",
+                description = "Date of birth",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.TODAY,
+                sampleValue = LocalDate.parse("1990-01-01").toDataItemFullDate()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "gender",
-                "Gender",
-                "Gender",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PERSON,
-                "M".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "gender",
+                displayName = "Gender",
+                description = "Gender",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PERSON,
+                sampleValue = "M".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "building",
-                "Building",
-                "Building",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "Building 1".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "building",
+                displayName = "Building",
+                description = "Building",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "Building 1".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "local_building",
-                "Local building",
-                "Local building",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "Building 1".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "local_building",
+                displayName = "Local building",
+                description = "Local building",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "Building 1".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "locality",
-                "Locality",
-                "Locality",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "Locality 1".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "locality",
+                displayName = "Locality",
+                description = "Locality",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "Locality 1".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "local_locality",
-                "Local locality",
-                "Local locality",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "Locality 1".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "local_locality",
+                displayName = "Local locality",
+                description = "Local locality",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "Locality 1".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "street",
-                "Street",
-                "Street",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "Street 1".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "street",
+                displayName = "Street",
+                description = "Street",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "Street 1".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "local_street",
-                "Local street",
-                "Local street",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "Street 1".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "local_street",
+                displayName = "Local street",
+                description = "Local street",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "Street 1".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "landmark",
-                "Landmark",
-                "Landmark",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "Landmark 1".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "landmark",
+                displayName = "Landmark",
+                description = "Landmark",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "Landmark 1".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "local_landmark",
-                "Local landmark",
-                "Local landmark",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "Landmark 1".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "local_landmark",
+                displayName = "Local landmark",
+                description = "Local landmark",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "Landmark 1".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "vtc",
-                "VTC",
-                "Village/town/city",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "VTC".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "vtc",
+                displayName = "VTC",
+                description = "Village/town/city",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "VTC".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "local_vtc",
-                "Local VTC",
-                "Local village/town/city",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "VTC".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "local_vtc",
+                displayName = "Local VTC",
+                description = "Local village/town/city",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "VTC".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "sub_district",
-                "Sub-district",
-                "Sub-district",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "Sub-District".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "sub_district",
+                displayName = "Sub-district",
+                description = "Sub-district",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "Sub-District".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "local_sub_district",
-                "Local Sub-district",
-                "Local Sub-district",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "Sub-District".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "local_sub_district",
+                displayName = "Local Sub-district",
+                description = "Local Sub-district",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "Sub-District".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "district",
-                "District",
-                "District",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "District".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "district",
+                displayName = "District",
+                description = "District",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "District".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "local_district",
-                "Local district",
-                "Local district",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "District".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "local_district",
+                displayName = "Local district",
+                description = "Local district",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "District".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "state",
-                "State",
-                "State",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                SampleData.RESIDENT_STATE.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "state",
+                displayName = "State",
+                description = "State",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = SampleData.RESIDENT_STATE.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "local_state",
-                "Local state",
-                "Local state",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                SampleData.RESIDENT_STATE.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "local_state",
+                displayName = "Local state",
+                description = "Local state",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = SampleData.RESIDENT_STATE.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "po_name",
-                "PO name",
-                "Post office name",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "PO Name".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "po_name",
+                displayName = "PO name",
+                description = "Post office name",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "PO Name".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "local_po_name",
-                "Local PO name",
-                "Local post office name",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                "PO Name".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "local_po_name",
+                displayName = "Local PO name",
+                description = "Local post office name",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = "PO Name".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "pincode",
-                "Pincode",
-                "Pincode",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                SampleData.RESIDENT_POSTAL_CODE.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "pincode",
+                displayName = "Pincode",
+                description = "Pincode",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = SampleData.RESIDENT_POSTAL_CODE.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "address",
-                "Address",
-                "Address",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                SampleData.RESIDENT_ADDRESS.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "address",
+                displayName = "Address",
+                description = "Address",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = SampleData.RESIDENT_ADDRESS.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "local_address",
-                "Local address",
-                "Local address",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PLACE,
-                SampleData.RESIDENT_ADDRESS.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "local_address",
+                displayName = "Local address",
+                description = "Local address",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValue = SampleData.RESIDENT_ADDRESS.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "mobile",
-                "Mobile",
-                "Mobile",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PHONE,
-                "1234567890".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "mobile",
+                displayName = "Mobile",
+                description = "Mobile",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PHONE,
+                sampleValue = "1234567890".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "masked_mobile",
-                "Masked mobile",
-                "Masked mobile",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.PHONE,
-                "XXXXXX7890".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "masked_mobile",
+                displayName = "Masked mobile",
+                description = "Masked mobile",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.PHONE,
+                sampleValue = "XXXXXX7890".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "email",
-                "Email",
-                "Email",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.EMAIL,
-                SampleData.EMAIL_ADDRESS.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "email",
+                displayName = "Email",
+                description = "Email",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.EMAIL,
+                sampleValue = SampleData.EMAIL_ADDRESS.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "masked_email",
-                "Masked email",
-                "Masked email",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.EMAIL,
-                "a***a@example.com".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "masked_email",
+                displayName = "Masked email",
+                description = "Masked email",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.EMAIL,
+                sampleValue = "a***a@example.com".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "masked_uid",
-                "Masked UID",
-                "Masked UID",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.NUMBERS,
-                "XXXXXXXX1234".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "masked_uid",
+                displayName = "Masked UID",
+                description = "Masked UID",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.NUMBERS,
+                sampleValue = "XXXXXXXX1234".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "aadhaar_type",
-                "Type",
-                "Type",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.BADGE,
-                "Resident".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "aadhaar_type",
+                displayName = "Type",
+                description = "Type",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                icon = Icon.BADGE,
+                sampleValue = "Resident".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.Date,
-                "expires_on",
-                "Expires on",
-                "Expires on",
-                false,
-                AADHAAR_NAMESPACE,
-                Icon.CALENDAR_CLOCK,
-                LocalDate.parse(SampleData.EXPIRY_DATE).toDataItemFullDate()
+                type = DocumentAttributeType.Date,
+                identifier = "expires_on",
+                displayName = "Expires on",
+                description = "Expires on",
+                mandatory = false,
+                mdocNamespace = AADHAAR_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.VALIDITY,
+                icon = Icon.CALENDAR_CLOCK,
+                sampleValue = LocalDate.parse(SampleData.EXPIRY_DATE).toDataItemFullDate()
             )
             .addSampleRequest(
                 id = "age_over_18",

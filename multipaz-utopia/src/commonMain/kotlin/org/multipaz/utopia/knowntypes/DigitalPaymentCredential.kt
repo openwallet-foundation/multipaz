@@ -9,6 +9,7 @@ import kotlinx.datetime.LocalDate
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
 import org.multipaz.documenttype.knowntypes.SampleData
+import org.multipaz.documenttype.DocumentAttributeSensitivity
 
 /**
  * Example Payment SCA credential profile for card-based digital payments.
@@ -32,64 +33,67 @@ object DigitalPaymentCredential {
             .addMdocDocumentType(CARD_DOCTYPE)
 
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "issuer_name",
-                getLocalizedString(GeneratedStringKeys.PAYMENT_ATTRIBUTE_ISSUER_NAME),
-                getLocalizedString(GeneratedStringKeys.PAYMENT_DESCRIPTION_ISSUER_NAME),
-                true,
-                CARD_NAMESPACE,
-                Icon.ACCOUNT_BALANCE,
-                "Utopia Bank".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "issuer_name",
+                displayName = getLocalizedString(GeneratedStringKeys.PAYMENT_ATTRIBUTE_ISSUER_NAME),
+                description = getLocalizedString(GeneratedStringKeys.PAYMENT_DESCRIPTION_ISSUER_NAME),
+                mandatory = true,
+                mdocNamespace = CARD_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.ISSUER,
+                icon = Icon.ACCOUNT_BALANCE,
+                sampleValue = "Utopia Bank".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "payment_instrument_id",
-                getLocalizedString(GeneratedStringKeys.PAYMENT_ATTRIBUTE_PAYMENT_INSTRUMENT_ID),
-                getLocalizedString(GeneratedStringKeys.PAYMENT_DESCRIPTION_PAYMENT_INSTRUMENT_ID),
-                false,
-                CARD_NAMESPACE,
-                Icon.NUMBERS,
-                "pi-77AABBCC".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "payment_instrument_id",
+                displayName = getLocalizedString(GeneratedStringKeys.PAYMENT_ATTRIBUTE_PAYMENT_INSTRUMENT_ID),
+                description = getLocalizedString(GeneratedStringKeys.PAYMENT_DESCRIPTION_PAYMENT_INSTRUMENT_ID),
+                mandatory = false,
+                mdocNamespace = CARD_NAMESPACE,
+                icon = Icon.NUMBERS,
+                sampleValue = "pi-77AABBCC".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "masked_account_reference",
-                getLocalizedString(GeneratedStringKeys.PAYMENT_ATTRIBUTE_MASKED_ACCOUNT_REFERENCE),
-                getLocalizedString(GeneratedStringKeys.PAYMENT_DESCRIPTION_MASKED_ACCOUNT_REFERENCE),
-                true,
-                CARD_NAMESPACE,
-                Icon.NUMBERS,
-                "****1234".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "masked_account_reference",
+                displayName = getLocalizedString(GeneratedStringKeys.PAYMENT_ATTRIBUTE_MASKED_ACCOUNT_REFERENCE),
+                description = getLocalizedString(GeneratedStringKeys.PAYMENT_DESCRIPTION_MASKED_ACCOUNT_REFERENCE),
+                mandatory = true,
+                mdocNamespace = CARD_NAMESPACE,
+                icon = Icon.NUMBERS,
+                sampleValue = "****1234".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "holder_name",
-                getLocalizedString(GeneratedStringKeys.PAYMENT_ATTRIBUTE_HOLDER_NAME),
-                getLocalizedString(GeneratedStringKeys.PAYMENT_DESCRIPTION_HOLDER_NAME),
-                true,
-                CARD_NAMESPACE,
-                Icon.PERSON,
-                "${SampleData.GIVEN_NAME} ${SampleData.FAMILY_NAME}".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "holder_name",
+                displayName = getLocalizedString(GeneratedStringKeys.PAYMENT_ATTRIBUTE_HOLDER_NAME),
+                description = getLocalizedString(GeneratedStringKeys.PAYMENT_DESCRIPTION_HOLDER_NAME),
+                mandatory = true,
+                mdocNamespace = CARD_NAMESPACE,
+                icon = Icon.PERSON,
+                sampleValue = "${SampleData.GIVEN_NAME} ${SampleData.FAMILY_NAME}".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.Date,
-                "issue_date",
-                getLocalizedString(GeneratedStringKeys.PAYMENT_ATTRIBUTE_ISSUE_DATE),
-                getLocalizedString(GeneratedStringKeys.PAYMENT_DESCRIPTION_ISSUE_DATE),
-                true,
-                CARD_NAMESPACE,
-                Icon.CALENDAR_CLOCK,
-                LocalDate.parse(SampleData.ISSUE_DATE).toDataItemFullDate()
+                type = DocumentAttributeType.Date,
+                identifier = "issue_date",
+                displayName = getLocalizedString(GeneratedStringKeys.PAYMENT_ATTRIBUTE_ISSUE_DATE),
+                description = getLocalizedString(GeneratedStringKeys.PAYMENT_DESCRIPTION_ISSUE_DATE),
+                mandatory = true,
+                mdocNamespace = CARD_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.VALIDITY,
+                icon = Icon.CALENDAR_CLOCK,
+                sampleValue = LocalDate.parse(SampleData.ISSUE_DATE).toDataItemFullDate()
             )
             .addMdocAttribute(
-                DocumentAttributeType.Date,
-                "expiry_date",
-                getLocalizedString(GeneratedStringKeys.PAYMENT_ATTRIBUTE_EXPIRY_DATE),
-                getLocalizedString(GeneratedStringKeys.PAYMENT_DESCRIPTION_EXPIRY_DATE),
-                true,
-                CARD_NAMESPACE,
-                Icon.CALENDAR_CLOCK,
-                LocalDate.parse(SampleData.EXPIRY_DATE).toDataItemFullDate()
+                type = DocumentAttributeType.Date,
+                identifier = "expiry_date",
+                displayName = getLocalizedString(GeneratedStringKeys.PAYMENT_ATTRIBUTE_EXPIRY_DATE),
+                description = getLocalizedString(GeneratedStringKeys.PAYMENT_DESCRIPTION_EXPIRY_DATE),
+                mandatory = true,
+                mdocNamespace = CARD_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.VALIDITY,
+                icon = Icon.CALENDAR_CLOCK,
+                sampleValue = LocalDate.parse(SampleData.EXPIRY_DATE).toDataItemFullDate()
             )
 
             .addSampleRequest(

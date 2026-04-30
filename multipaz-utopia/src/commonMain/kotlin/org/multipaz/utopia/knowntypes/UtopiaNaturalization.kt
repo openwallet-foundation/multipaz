@@ -23,36 +23,36 @@ object UtopiaNaturalization {
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_NATURALIZATION_CERTIFICATE))
             .addJsonDocumentType(type = VCT, keyBound = true)
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "family_name",
-                getLocalizedString(GeneratedStringKeys.NATURALIZATION_ATTRIBUTE_FAMILY_NAME),
-                getLocalizedString(GeneratedStringKeys.NATURALIZATION_DESCRIPTION_FAMILY_NAME),
-                Icon.PERSON,
-                JsonPrimitive(SampleData.FAMILY_NAME)
+                type = DocumentAttributeType.String,
+                identifier = "family_name",
+                displayName = getLocalizedString(GeneratedStringKeys.NATURALIZATION_ATTRIBUTE_FAMILY_NAME),
+                description = getLocalizedString(GeneratedStringKeys.NATURALIZATION_DESCRIPTION_FAMILY_NAME),
+                icon = Icon.PERSON,
+                sampleValue = JsonPrimitive(SampleData.FAMILY_NAME)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "given_name",
-                getLocalizedString(GeneratedStringKeys.NATURALIZATION_ATTRIBUTE_GIVEN_NAMES),
-                getLocalizedString(GeneratedStringKeys.NATURALIZATION_DESCRIPTION_GIVEN_NAMES),
-                Icon.PERSON,
-                JsonPrimitive(SampleData.GIVEN_NAME)
+                type = DocumentAttributeType.String,
+                identifier = "given_name",
+                displayName = getLocalizedString(GeneratedStringKeys.NATURALIZATION_ATTRIBUTE_GIVEN_NAMES),
+                description = getLocalizedString(GeneratedStringKeys.NATURALIZATION_DESCRIPTION_GIVEN_NAMES),
+                icon = Icon.PERSON,
+                sampleValue = JsonPrimitive(SampleData.GIVEN_NAME)
             )
             .addJsonAttribute(
-                DocumentAttributeType.Date,
-                "birth_date",
-                getLocalizedString(GeneratedStringKeys.NATURALIZATION_ATTRIBUTE_DATE_OF_BIRTH),
-                getLocalizedString(GeneratedStringKeys.NATURALIZATION_DESCRIPTION_DATE_OF_BIRTH),
-                Icon.TODAY,
-                JsonPrimitive(SampleData.BIRTH_DATE)
+                type = DocumentAttributeType.Date,
+                identifier = "birth_date",
+                displayName = getLocalizedString(GeneratedStringKeys.NATURALIZATION_ATTRIBUTE_DATE_OF_BIRTH),
+                description = getLocalizedString(GeneratedStringKeys.NATURALIZATION_DESCRIPTION_DATE_OF_BIRTH),
+                icon = Icon.TODAY,
+                sampleValue = JsonPrimitive(SampleData.BIRTH_DATE)
             )
             .addJsonAttribute(
-                DocumentAttributeType.Date,
-                "naturalization_date",
-                getLocalizedString(GeneratedStringKeys.NATURALIZATION_ATTRIBUTE_DATE_OF_NATURALIZATION),
-                getLocalizedString(GeneratedStringKeys.NATURALIZATION_DESCRIPTION_DATE_OF_NATURALIZATION),
-                Icon.DATE_RANGE,
-                JsonPrimitive(SampleData.ISSUE_DATE)
+                type = DocumentAttributeType.Date,
+                identifier = "naturalization_date",
+                displayName = getLocalizedString(GeneratedStringKeys.NATURALIZATION_ATTRIBUTE_DATE_OF_NATURALIZATION),
+                description = getLocalizedString(GeneratedStringKeys.NATURALIZATION_DESCRIPTION_DATE_OF_NATURALIZATION),
+                icon = Icon.DATE_RANGE,
+                sampleValue = JsonPrimitive(SampleData.ISSUE_DATE)
             )
             .addSampleRequest(
                 id = "full",

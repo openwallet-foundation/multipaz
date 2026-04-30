@@ -6,6 +6,7 @@ import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.Icon
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
+import org.multipaz.documenttype.DocumentAttributeSensitivity
 
 /**
  * Object containing the metadata of the Age Verification document type.
@@ -46,6 +47,7 @@ object AgeVerification {
                     ),
                     mandatory = (age == 18),
                     mdocNamespace = AV_NAMESPACE,
+                    sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
                     icon = Icon.TODAY,
                     sampleValue =
                         if (age in ageThresholdsToProvision) {

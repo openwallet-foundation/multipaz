@@ -28,44 +28,44 @@ object UtopiaBoardingPass {
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_BOARDING_PASS)).apply {
             addMdocDocumentType(BOARDING_PASS_DOCTYPE)
             addMdocAttribute(
-                DocumentAttributeType.String,
-                "passenger_name",
-                getLocalizedString(GeneratedStringKeys.BOARDING_PASS_ATTRIBUTE_PASSENGER_NAME),
-                getLocalizedString(GeneratedStringKeys.BOARDING_PASS_DESCRIPTION_PASSENGER_NAME),
-                true,
-                BOARDING_PASS_NS,
-                Icon.PERSON,
-                "Erika Mustermann".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "passenger_name",
+                displayName = getLocalizedString(GeneratedStringKeys.BOARDING_PASS_ATTRIBUTE_PASSENGER_NAME),
+                description = getLocalizedString(GeneratedStringKeys.BOARDING_PASS_DESCRIPTION_PASSENGER_NAME),
+                mandatory = true,
+                mdocNamespace = BOARDING_PASS_NS,
+                icon = Icon.PERSON,
+                sampleValue = "Erika Mustermann".toDataItem()
             )
             addMdocAttribute(
-                DocumentAttributeType.String,
-                "flight_number",
-                getLocalizedString(GeneratedStringKeys.BOARDING_PASS_ATTRIBUTE_FLIGHT_NUMBER),
-                getLocalizedString(GeneratedStringKeys.BOARDING_PASS_DESCRIPTION_FLIGHT_NUMBER),
-                true,
-                BOARDING_PASS_NS,
-                Icon.AIRPORT_SHUTTLE,
-                "United 815".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "flight_number",
+                displayName = getLocalizedString(GeneratedStringKeys.BOARDING_PASS_ATTRIBUTE_FLIGHT_NUMBER),
+                description = getLocalizedString(GeneratedStringKeys.BOARDING_PASS_DESCRIPTION_FLIGHT_NUMBER),
+                mandatory = true,
+                mdocNamespace = BOARDING_PASS_NS,
+                icon = Icon.AIRPORT_SHUTTLE,
+                sampleValue = "United 815".toDataItem()
             )
             addMdocAttribute(
-                DocumentAttributeType.String,
-                "seat_number",
-                getLocalizedString(GeneratedStringKeys.BOARDING_PASS_ATTRIBUTE_SEAT_NUMBER),
-                getLocalizedString(GeneratedStringKeys.BOARDING_PASS_DESCRIPTION_SEAT_NUMBER),
-                true,
-                BOARDING_PASS_NS,
-                Icon.DIRECTIONS,
-                "12A".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "seat_number",
+                displayName = getLocalizedString(GeneratedStringKeys.BOARDING_PASS_ATTRIBUTE_SEAT_NUMBER),
+                description = getLocalizedString(GeneratedStringKeys.BOARDING_PASS_DESCRIPTION_SEAT_NUMBER),
+                mandatory = true,
+                mdocNamespace = BOARDING_PASS_NS,
+                icon = Icon.DIRECTIONS,
+                sampleValue = "12A".toDataItem()
             )
             addMdocAttribute(
-                DocumentAttributeType.DateTime,
-                "departure_time",
-                getLocalizedString(GeneratedStringKeys.BOARDING_PASS_ATTRIBUTE_DEPARTURE_TIME),
-                getLocalizedString(GeneratedStringKeys.BOARDING_PASS_DESCRIPTION_DEPARTURE_TIME),
-                true,
-                BOARDING_PASS_NS,
-                Icon.TODAY,
-                Clock.System.now().toDataItemDateTimeString()
+                type = DocumentAttributeType.DateTime,
+                identifier = "departure_time",
+                displayName = getLocalizedString(GeneratedStringKeys.BOARDING_PASS_ATTRIBUTE_DEPARTURE_TIME),
+                description = getLocalizedString(GeneratedStringKeys.BOARDING_PASS_DESCRIPTION_DEPARTURE_TIME),
+                mandatory = true,
+                mdocNamespace = BOARDING_PASS_NS,
+                icon = Icon.TODAY,
+                sampleValue = Clock.System.now().toDataItemDateTimeString()
             )
         }.build()
     }

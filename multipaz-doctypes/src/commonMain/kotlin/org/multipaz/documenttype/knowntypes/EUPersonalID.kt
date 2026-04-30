@@ -29,6 +29,7 @@ import kotlinx.serialization.json.buildJsonObject
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
+import org.multipaz.documenttype.DocumentAttributeSensitivity
 
 /**
  * Object containing the metadata of the EU Personal ID Document Type.
@@ -90,6 +91,7 @@ object EUPersonalID {
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_AGE_IN_YEARS),
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
                 icon = Icon.TODAY,
                 sampleValueMdoc = SampleData.AGE_IN_YEARS.toDataItem(),
                 sampleValueJson = JsonPrimitive(SampleData.AGE_IN_YEARS)
@@ -101,6 +103,7 @@ object EUPersonalID {
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_YEAR_OF_BIRTH),
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
                 icon = Icon.TODAY,
                 sampleValueMdoc = SampleData.AGE_BIRTH_YEAR.toDataItem(),
                 sampleValueJson = JsonPrimitive(SampleData.AGE_BIRTH_YEAR)
@@ -110,6 +113,7 @@ object EUPersonalID {
                 identifier = "age_equal_or_over",
                 displayName = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_ATTRIBUTE_OLDER_THAN_AGE_ATTESTATIONS),
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_OLDER_THAN_AGE_ATTESTATIONS),
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
                 icon = Icon.TODAY,
                 sampleValue = buildJsonObject {
                     put("18", JsonPrimitive(SampleData.AGE_OVER_18))
@@ -124,6 +128,7 @@ object EUPersonalID {
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_OLDER_THAN_18),
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
                 icon = Icon.TODAY,
                 sampleValueMdoc = SampleData.AGE_OVER_18.toDataItem(),
                 sampleValueJson = JsonPrimitive(SampleData.AGE_OVER_18)
@@ -136,6 +141,7 @@ object EUPersonalID {
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_OLDER_THAN_21),
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
                 icon = Icon.TODAY,
                 sampleValueMdoc = SampleData.AGE_OVER_21.toDataItem(),
                 sampleValueJson = JsonPrimitive(SampleData.AGE_OVER_21)
@@ -359,6 +365,7 @@ object EUPersonalID {
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_DATE_OF_ISSUE),
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.VALIDITY,
                 icon = Icon.DATE_RANGE,
                 sampleValueMdoc = LocalDate.parse(SampleData.ISSUE_DATE).toDataItemFullDate(),
                 sampleValueJson = JsonPrimitive(SampleData.ISSUE_DATE)
@@ -371,6 +378,7 @@ object EUPersonalID {
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_DATE_OF_EXPIRY),
                 mandatory = true,
                 mdocNamespace = EUPID_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.VALIDITY,
                 icon = Icon.CALENDAR_CLOCK,
                 sampleValueMdoc = LocalDate.parse(SampleData.EXPIRY_DATE).toDataItemFullDate(),
                 sampleValueJson = JsonPrimitive(SampleData.EXPIRY_DATE)
@@ -382,6 +390,7 @@ object EUPersonalID {
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_ISSUING_AUTHORITY),
                 mandatory = true,
                 mdocNamespace = EUPID_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.ISSUER,
                 icon = Icon.ACCOUNT_BALANCE,
                 sampleValueMdoc = SampleData.ISSUING_AUTHORITY_EU_PID.toDataItem(),
                 sampleValueJson = JsonPrimitive(SampleData.ISSUING_AUTHORITY_EU_PID)
@@ -415,6 +424,7 @@ object EUPersonalID {
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_ISSUING_JURISDICTION),
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.ISSUER,
                 icon = Icon.ACCOUNT_BALANCE,
                 sampleValueMdoc = SampleData.ISSUING_JURISDICTION.toDataItem(),
                 sampleValueJson = JsonPrimitive(SampleData.ISSUING_JURISDICTION)
@@ -426,6 +436,7 @@ object EUPersonalID {
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_ISSUING_COUNTRY),
                 mandatory = true,
                 mdocNamespace = EUPID_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.ISSUER,
                 icon = Icon.ACCOUNT_BALANCE,
                 sampleValueMdoc = SampleData.ISSUING_COUNTRY.toDataItem(),
                 sampleValueJson = JsonPrimitive(SampleData.ISSUING_COUNTRY)
@@ -438,6 +449,7 @@ object EUPersonalID {
                 description = getLocalizedString(GeneratedStringKeys.EU_PERSONAL_ID_DESCRIPTION_PHOTO_OF_HOLDER),
                 mandatory = false,
                 mdocNamespace = EUPID_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.PORTRAIT_IMAGE,
                 icon = Icon.ACCOUNT_BOX,
                 sampleValueMdoc = SampleData.PORTRAIT_BASE64URL.fromBase64Url().toDataItem(),
                 sampleValueJson = JsonPrimitive(SampleData.PORTRAIT_BASE64URL)

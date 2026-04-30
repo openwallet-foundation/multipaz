@@ -24,28 +24,28 @@ object UtopiaMovieTicket {
         return DocumentType.Builder(getLocalizedString(GeneratedStringKeys.DOCUMENT_DISPLAY_NAME_MOVIE_TICKET))
             .addJsonDocumentType(type = MOVIE_TICKET_VCT, keyBound = false)
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "ticket_id",
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_TICKET_NUMBER),
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_TICKET_NUMBER),
-                Icon.NUMBERS,
-                JsonPrimitive(SampleData.TICKET_NUMBER)
+                type = DocumentAttributeType.String,
+                identifier = "ticket_id",
+                displayName = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_TICKET_NUMBER),
+                description = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_TICKET_NUMBER),
+                icon = Icon.NUMBERS,
+                sampleValue = JsonPrimitive(SampleData.TICKET_NUMBER)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "cinema",
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_CINEMA_THEATER),
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_CINEMA_THEATER),
-                Icon.PLACE,
-                JsonPrimitive(SampleData.CINEMA)
+                type = DocumentAttributeType.String,
+                identifier = "cinema",
+                displayName = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_CINEMA_THEATER),
+                description = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_CINEMA_THEATER),
+                icon = Icon.PLACE,
+                sampleValue = JsonPrimitive(SampleData.CINEMA)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "movie",
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_MOVIE_TITLE),
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_MOVIE_TITLE),
-                Icon.TODAY,
-                JsonPrimitive(SampleData.MOVIE)
+                type = DocumentAttributeType.String,
+                identifier = "movie",
+                displayName = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_MOVIE_TITLE),
+                description = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_MOVIE_TITLE),
+                icon = Icon.TODAY,
+                sampleValue = JsonPrimitive(SampleData.MOVIE)
             )
             .addJsonAttribute(
                 type = DocumentAttributeType.DateTime,
@@ -56,7 +56,7 @@ object UtopiaMovieTicket {
                 sampleValue = JsonPrimitive(SampleData.MOVIE_DATE_TIME)
             )
             .addJsonAttribute(
-                DocumentAttributeType.StringOptions(
+                type = DocumentAttributeType.StringOptions(
                     listOf(
                         StringOption("NR", "NR - Not Rated"),
                         StringOption("G", "G – General Audiences"),
@@ -66,42 +66,42 @@ object UtopiaMovieTicket {
                         StringOption("NC-17", "NC-17 – Adults Only"),
                     )
                 ),
-                "movie_rating",
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_AGE_RATING_CODE),
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_AGE_RATING_CODE),
-                Icon.TODAY,
-                JsonPrimitive(SampleData.MOVIE_RATING)
+                identifier = "movie_rating",
+                displayName = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_AGE_RATING_CODE),
+                description = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_AGE_RATING_CODE),
+                icon = Icon.TODAY,
+                sampleValue = JsonPrimitive(SampleData.MOVIE_RATING)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "theater_id",
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_THEATER),
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_THEATER),
-                Icon.TODAY,
-                JsonPrimitive(SampleData.THEATRE_NAME)
+                type = DocumentAttributeType.String,
+                identifier = "theater_id",
+                displayName = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_THEATER),
+                description = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_THEATER),
+                icon = Icon.TODAY,
+                sampleValue = JsonPrimitive(SampleData.THEATRE_NAME)
             )
             .addJsonAttribute(
-                DocumentAttributeType.String,
-                "seat_id",
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_SEAT),
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_SEAT),
-                Icon.NUMBERS,
-                JsonPrimitive(SampleData.THEATRE_SEAT)
+                type = DocumentAttributeType.String,
+                identifier = "seat_id",
+                displayName = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_SEAT),
+                description = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_SEAT),
+                icon = Icon.NUMBERS,
+                sampleValue = JsonPrimitive(SampleData.THEATRE_SEAT)
             )
             .addJsonAttribute(
-                DocumentAttributeType.Boolean,
-                "parking_option",
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_PARKING),
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_PARKING),
-                Icon.DIRECTIONS_CAR,
-                JsonPrimitive(SampleData.CINEMA_PARKING)
+                type = DocumentAttributeType.Boolean,
+                identifier = "parking_option",
+                displayName = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_PARKING),
+                description = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_PARKING),
+                icon = Icon.DIRECTIONS_CAR,
+                sampleValue = JsonPrimitive(SampleData.CINEMA_PARKING)
             )
             .addJsonAttribute(
-                DocumentAttributeType.Picture,
-                "poster",
-                getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_MOVIE_POSTER),
+                type = DocumentAttributeType.Picture,
+                identifier = "poster",
+                displayName = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_ATTRIBUTE_MOVIE_POSTER),
                 description = getLocalizedString(GeneratedStringKeys.MOVIE_TICKET_DESCRIPTION_MOVIE_POSTER),
-                Icon.IMAGE
+                icon = Icon.IMAGE
             )
             .addSampleRequest(
                 id = "is_parking_prepaid",

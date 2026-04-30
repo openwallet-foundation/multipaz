@@ -10,6 +10,7 @@ import kotlinx.datetime.LocalDate
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
 import org.multipaz.documenttype.knowntypes.SampleData
+import org.multipaz.documenttype.DocumentAttributeSensitivity
 
 object Loyalty {
     const val LOYALTY_DOCTYPE = "org.multipaz.loyalty.1"
@@ -26,76 +27,79 @@ object Loyalty {
             // Core holder data relevant for a loyalty card
             //
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "family_name",
-                getLocalizedString(GeneratedStringKeys.LOYALTY_ATTRIBUTE_FAMILY_NAME),
-                getLocalizedString(GeneratedStringKeys.LOYALTY_DESCRIPTION_FAMILY_NAME),
-                true,
-                LOYALTY_NAMESPACE,
-                Icon.PERSON,
-                SampleData.FAMILY_NAME.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "family_name",
+                displayName = getLocalizedString(GeneratedStringKeys.LOYALTY_ATTRIBUTE_FAMILY_NAME),
+                description = getLocalizedString(GeneratedStringKeys.LOYALTY_DESCRIPTION_FAMILY_NAME),
+                mandatory = true,
+                mdocNamespace = LOYALTY_NAMESPACE,
+                icon = Icon.PERSON,
+                sampleValue = SampleData.FAMILY_NAME.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "given_name",
-                getLocalizedString(GeneratedStringKeys.LOYALTY_ATTRIBUTE_GIVEN_NAMES),
-                getLocalizedString(GeneratedStringKeys.LOYALTY_DESCRIPTION_GIVEN_NAMES),
-                true,
-                LOYALTY_NAMESPACE,
-                Icon.PERSON,
-                SampleData.GIVEN_NAME.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "given_name",
+                displayName = getLocalizedString(GeneratedStringKeys.LOYALTY_ATTRIBUTE_GIVEN_NAMES),
+                description = getLocalizedString(GeneratedStringKeys.LOYALTY_DESCRIPTION_GIVEN_NAMES),
+                mandatory = true,
+                mdocNamespace = LOYALTY_NAMESPACE,
+                icon = Icon.PERSON,
+                sampleValue = SampleData.GIVEN_NAME.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.Picture,
-                "portrait",
-                getLocalizedString(GeneratedStringKeys.LOYALTY_ATTRIBUTE_PHOTO_OF_HOLDER),
-                getLocalizedString(GeneratedStringKeys.LOYALTY_DESCRIPTION_PHOTO_OF_HOLDER),
-                true,
-                LOYALTY_NAMESPACE,
-                Icon.ACCOUNT_BOX,
-                SampleData.PORTRAIT_BASE64URL.fromBase64Url().toDataItem()
+                type = DocumentAttributeType.Picture,
+                identifier = "portrait",
+                displayName = getLocalizedString(GeneratedStringKeys.LOYALTY_ATTRIBUTE_PHOTO_OF_HOLDER),
+                description = getLocalizedString(GeneratedStringKeys.LOYALTY_DESCRIPTION_PHOTO_OF_HOLDER),
+                mandatory = true,
+                mdocNamespace = LOYALTY_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.PORTRAIT_IMAGE,
+                icon = Icon.ACCOUNT_BOX,
+                sampleValue = SampleData.PORTRAIT_BASE64URL.fromBase64Url().toDataItem()
             )
             // Then the LoyaltyID specific data elements.
             //
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "membership_number",
-                getLocalizedString(GeneratedStringKeys.LOYALTY_ATTRIBUTE_MEMBERSHIP_ID),
-                getLocalizedString(GeneratedStringKeys.LOYALTY_DESCRIPTION_MEMBERSHIP_ID),
-                false,
-                LOYALTY_NAMESPACE,
-                Icon.NUMBERS,
-                SampleData.PERSON_ID.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "membership_number",
+                displayName = getLocalizedString(GeneratedStringKeys.LOYALTY_ATTRIBUTE_MEMBERSHIP_ID),
+                description = getLocalizedString(GeneratedStringKeys.LOYALTY_DESCRIPTION_MEMBERSHIP_ID),
+                mandatory = false,
+                mdocNamespace = LOYALTY_NAMESPACE,
+                icon = Icon.NUMBERS,
+                sampleValue = SampleData.PERSON_ID.toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.String,
-                "tier",
-                getLocalizedString(GeneratedStringKeys.LOYALTY_ATTRIBUTE_TIER),
-                getLocalizedString(GeneratedStringKeys.LOYALTY_DESCRIPTION_TIER),
-                false,
-                LOYALTY_NAMESPACE,
-                Icon.STARS,
-                "basic".toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "tier",
+                displayName = getLocalizedString(GeneratedStringKeys.LOYALTY_ATTRIBUTE_TIER),
+                description = getLocalizedString(GeneratedStringKeys.LOYALTY_DESCRIPTION_TIER),
+                mandatory = false,
+                mdocNamespace = LOYALTY_NAMESPACE,
+                icon = Icon.STARS,
+                sampleValue = "basic".toDataItem()
             )
             .addMdocAttribute(
-                DocumentAttributeType.Date,
-                "issue_date",
-                getLocalizedString(GeneratedStringKeys.LOYALTY_ATTRIBUTE_DATE_OF_ISSUE),
-                getLocalizedString(GeneratedStringKeys.LOYALTY_DESCRIPTION_DATE_OF_ISSUE),
-                true,
-                LOYALTY_NAMESPACE,
-                Icon.CALENDAR_CLOCK,
-                LocalDate.parse(SampleData.ISSUE_DATE).toDataItemFullDate()
+                type = DocumentAttributeType.Date,
+                identifier = "issue_date",
+                displayName = getLocalizedString(GeneratedStringKeys.LOYALTY_ATTRIBUTE_DATE_OF_ISSUE),
+                description = getLocalizedString(GeneratedStringKeys.LOYALTY_DESCRIPTION_DATE_OF_ISSUE),
+                mandatory = true,
+                mdocNamespace = LOYALTY_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.VALIDITY,
+                icon = Icon.CALENDAR_CLOCK,
+                sampleValue = LocalDate.parse(SampleData.ISSUE_DATE).toDataItemFullDate()
             )
             .addMdocAttribute(
-                DocumentAttributeType.Date,
-                "expiry_date",
-                getLocalizedString(GeneratedStringKeys.LOYALTY_ATTRIBUTE_DATE_OF_EXPIRY),
-                getLocalizedString(GeneratedStringKeys.LOYALTY_DESCRIPTION_DATE_OF_EXPIRY),
-                true,
-                LOYALTY_NAMESPACE,
-                Icon.CALENDAR_CLOCK,
-                LocalDate.parse(SampleData.EXPIRY_DATE).toDataItemFullDate()
+                type = DocumentAttributeType.Date,
+                identifier = "expiry_date",
+                displayName = getLocalizedString(GeneratedStringKeys.LOYALTY_ATTRIBUTE_DATE_OF_EXPIRY),
+                description = getLocalizedString(GeneratedStringKeys.LOYALTY_DESCRIPTION_DATE_OF_EXPIRY),
+                mandatory = true,
+                mdocNamespace = LOYALTY_NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.VALIDITY,
+                icon = Icon.CALENDAR_CLOCK,
+                sampleValue = LocalDate.parse(SampleData.EXPIRY_DATE).toDataItemFullDate()
             )
             // Finally for the sample requests.
             //

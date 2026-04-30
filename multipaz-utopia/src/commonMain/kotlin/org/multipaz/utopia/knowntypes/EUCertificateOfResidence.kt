@@ -10,6 +10,7 @@ import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
 import org.multipaz.documenttype.knowntypes.Options
 import org.multipaz.documenttype.knowntypes.SampleData
+import org.multipaz.documenttype.DocumentAttributeSensitivity
 
 /**
  * Object containing the metadata of the EU Certificate of Residency (COR) document.
@@ -32,234 +33,241 @@ object EUCertificateOfResidence {
             .addMdocDocumentType(DOCTYPE)
             .addJsonDocumentType(type = VCT, keyBound = true)
             .addAttribute(
-                DocumentAttributeType.String,
-                "family_name",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_FAMILY_NAME),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_FAMILY_NAME),
-                true,
-                NAMESPACE,
-                Icon.PERSON,
-                SampleData.FAMILY_NAME.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "family_name",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_FAMILY_NAME),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_FAMILY_NAME),
+                mandatory = true,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.PERSON,
+                sampleValueMdoc = SampleData.FAMILY_NAME.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.String,
-                "given_name",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_GIVEN_NAMES),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_GIVEN_NAMES),
-                true,
-                NAMESPACE,
-                Icon.PERSON,
-                SampleData.GIVEN_NAME.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "given_name",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_GIVEN_NAMES),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_GIVEN_NAMES),
+                mandatory = true,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.PERSON,
+                sampleValueMdoc = SampleData.GIVEN_NAME.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.Date,
-                "birth_date",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_DATE_OF_BIRTH),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_DATE_OF_BIRTH),
-                true,
-                NAMESPACE,
-                Icon.TODAY,
-                LocalDate.parse(SampleData.BIRTH_DATE).toDataItemFullDate()
+                type = DocumentAttributeType.Date,
+                identifier = "birth_date",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_DATE_OF_BIRTH),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_DATE_OF_BIRTH),
+                mandatory = true,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.TODAY,
+                sampleValueMdoc = LocalDate.parse(SampleData.BIRTH_DATE).toDataItemFullDate()
             )
             .addAttribute(
-                DocumentAttributeType.Boolean,
-                "age_over_18",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_OLDER_THAN_18),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_OLDER_THAN_18),
-                false,
-                NAMESPACE,
-                Icon.TODAY,
-                SampleData.AGE_OVER_18.toDataItem()
+                type = DocumentAttributeType.Boolean,
+                identifier = "age_over_18",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_OLDER_THAN_18),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_OLDER_THAN_18),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                icon = Icon.TODAY,
+                sampleValueMdoc = SampleData.AGE_OVER_18.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.Boolean,
-                "age_over_21",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_OLDER_THAN_21),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_OLDER_THAN_21),
-                false,
-                NAMESPACE,
-                Icon.TODAY,
-                SampleData.AGE_OVER_21.toDataItem()
+                type = DocumentAttributeType.Boolean,
+                identifier = "age_over_21",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_OLDER_THAN_21),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_OLDER_THAN_21),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.AGE_INFORMATION,
+                icon = Icon.TODAY,
+                sampleValueMdoc = SampleData.AGE_OVER_21.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.Date,
-                "arrival_date",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_DATE_OF_ARRIVAL),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_DATE_OF_ARRIVAL),
-                false,
-                NAMESPACE,
-                Icon.DATE_RANGE,
-                LocalDate.parse(SampleData.ISSUE_DATE).toDataItemFullDate()
+                type = DocumentAttributeType.Date,
+                identifier = "arrival_date",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_DATE_OF_ARRIVAL),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_DATE_OF_ARRIVAL),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.DATE_RANGE,
+                sampleValueMdoc = LocalDate.parse(SampleData.ISSUE_DATE).toDataItemFullDate()
             )
             .addAttribute(
-                DocumentAttributeType.String,
-                "resident_address",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_RESIDENT_ADDRESS),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_RESIDENT_ADDRESS),
-                false,
-                NAMESPACE,
-                Icon.PLACE,
-                SampleData.RESIDENT_ADDRESS.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "resident_address",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_RESIDENT_ADDRESS),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_RESIDENT_ADDRESS),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValueMdoc = SampleData.RESIDENT_ADDRESS.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
-                "resident_country",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_RESIDENT_COUNTRY),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_RESIDENT_COUNTRY),
-                false,
-                NAMESPACE,
-                Icon.PLACE,
-                SampleData.RESIDENT_COUNTRY.toDataItem()
+                type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
+                identifier = "resident_country",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_RESIDENT_COUNTRY),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_RESIDENT_COUNTRY),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValueMdoc = SampleData.RESIDENT_COUNTRY.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.String,
-                "resident_state",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_RESIDENT_STATE),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_RESIDENT_STATE),
-                false,
-                NAMESPACE,
-                Icon.PLACE,
-                SampleData.RESIDENT_STATE.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "resident_state",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_RESIDENT_STATE),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_RESIDENT_STATE),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValueMdoc = SampleData.RESIDENT_STATE.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.String,
-                "resident_city",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_RESIDENT_CITY),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_RESIDENT_CITY),
-                false,
-                NAMESPACE,
-                Icon.PLACE,
-                SampleData.RESIDENT_CITY.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "resident_city",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_RESIDENT_CITY),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_RESIDENT_CITY),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValueMdoc = SampleData.RESIDENT_CITY.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.String,
-                "resident_postal_code",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_RESIDENT_POSTAL_CODE),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_RESIDENT_POSTAL_CODE),
-                false,
-                NAMESPACE,
-                Icon.PLACE,
-                SampleData.RESIDENT_POSTAL_CODE.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "resident_postal_code",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_RESIDENT_POSTAL_CODE),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_RESIDENT_POSTAL_CODE),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValueMdoc = SampleData.RESIDENT_POSTAL_CODE.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.String,
-                "resident_street",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_RESIDENT_STREET),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_RESIDENT_STREET),
-                false,
-                NAMESPACE,
-                Icon.PLACE,
-                SampleData.RESIDENT_STREET.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "resident_street",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_RESIDENT_STREET),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_RESIDENT_STREET),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValueMdoc = SampleData.RESIDENT_STREET.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.String,
-                "resident_house_number",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_RESIDENT_HOUSE_NUMBER),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_RESIDENT_HOUSE_NUMBER),
-                false,
-                NAMESPACE,
-                Icon.PLACE,
-                SampleData.RESIDENT_HOUSE_NUMBER.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "resident_house_number",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_RESIDENT_HOUSE_NUMBER),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_RESIDENT_HOUSE_NUMBER),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValueMdoc = SampleData.RESIDENT_HOUSE_NUMBER.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.String,
-                "birth_place",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_PLACE_OF_BIRTH),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_PLACE_OF_BIRTH),
-                false,
-                NAMESPACE,
-                Icon.PLACE,
-                SampleData.RESIDENT_CITY.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "birth_place",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_PLACE_OF_BIRTH),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_PLACE_OF_BIRTH),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.PLACE,
+                sampleValueMdoc = SampleData.RESIDENT_CITY.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.IntegerOptions(Options.SEX_ISO_IEC_5218),
-                "gender",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_GENDER),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_GENDER),
-                false,
-                NAMESPACE,
-                Icon.EMERGENCY,
-                SampleData.SEX_ISO_5218.toDataItem()
+                type = DocumentAttributeType.IntegerOptions(Options.SEX_ISO_IEC_5218),
+                identifier = "gender",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_GENDER),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_GENDER),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.EMERGENCY,
+                sampleValueMdoc = SampleData.SEX_ISO_5218.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
-                "nationality",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_NATIONALITY),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_NATIONALITY),
-                true,
-                NAMESPACE,
-                Icon.LANGUAGE,
-                SampleData.NATIONALITY.toDataItem()
+                type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
+                identifier = "nationality",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_NATIONALITY),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_NATIONALITY),
+                mandatory = true,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.LANGUAGE,
+                sampleValueMdoc = SampleData.NATIONALITY.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.Date,
-                "issuance_date",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_DATE_OF_ISSUE),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_DATE_OF_ISSUE),
-                true,
-                NAMESPACE,
-                Icon.DATE_RANGE,
-                LocalDate.parse(SampleData.ISSUE_DATE).toDataItemFullDate()
+                type = DocumentAttributeType.Date,
+                identifier = "issuance_date",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_DATE_OF_ISSUE),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_DATE_OF_ISSUE),
+                mandatory = true,
+                mdocNamespace = NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.VALIDITY,
+                icon = Icon.DATE_RANGE,
+                sampleValueMdoc = LocalDate.parse(SampleData.ISSUE_DATE).toDataItemFullDate()
             )
             .addAttribute(
-                DocumentAttributeType.Date,
-                "expiry_date",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_DATE_OF_EXPIRY),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_DATE_OF_EXPIRY),
-                true,
-                NAMESPACE,
-                Icon.CALENDAR_CLOCK,
-                LocalDate.parse(SampleData.EXPIRY_DATE).toDataItemFullDate()
+                type = DocumentAttributeType.Date,
+                identifier = "expiry_date",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_DATE_OF_EXPIRY),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_DATE_OF_EXPIRY),
+                mandatory = true,
+                mdocNamespace = NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.VALIDITY,
+                icon = Icon.CALENDAR_CLOCK,
+                sampleValueMdoc = LocalDate.parse(SampleData.EXPIRY_DATE).toDataItemFullDate()
             )
             .addAttribute(
-                DocumentAttributeType.String,
-                "issuing_authority",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_ISSUING_AUTHORITY),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_ISSUING_AUTHORITY),
-                true,
-                NAMESPACE,
-                Icon.ACCOUNT_BALANCE,
-                SampleData.ISSUING_AUTHORITY_EU_PID.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "issuing_authority",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_ISSUING_AUTHORITY),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_ISSUING_AUTHORITY),
+                mandatory = true,
+                mdocNamespace = NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.ISSUER,
+                icon = Icon.ACCOUNT_BALANCE,
+                sampleValueMdoc = SampleData.ISSUING_AUTHORITY_EU_PID.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.String,
-                "document_number",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_DOCUMENT_NUMBER),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_DOCUMENT_NUMBER),
-                false,
-                NAMESPACE,
-                Icon.NUMBERS,
-                SampleData.DOCUMENT_NUMBER.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "document_number",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_DOCUMENT_NUMBER),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_DOCUMENT_NUMBER),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.NUMBERS,
+                sampleValueMdoc = SampleData.DOCUMENT_NUMBER.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.String,
-                "administrative_number",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_ADMINISTRATIVE_NUMBER),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_ADMINISTRATIVE_NUMBER),
-                false,
-                NAMESPACE,
-                Icon.NUMBERS,
-                SampleData.ADMINISTRATIVE_NUMBER.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "administrative_number",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_ADMINISTRATIVE_NUMBER),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_ADMINISTRATIVE_NUMBER),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                icon = Icon.NUMBERS,
+                sampleValueMdoc = SampleData.ADMINISTRATIVE_NUMBER.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.String,
-                "issuing_jurisdiction",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_ISSUING_JURISDICTION),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_ISSUING_JURISDICTION),
-                false,
-                NAMESPACE,
-                Icon.ACCOUNT_BALANCE,
-                SampleData.ISSUING_JURISDICTION.toDataItem()
+                type = DocumentAttributeType.String,
+                identifier = "issuing_jurisdiction",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_ISSUING_JURISDICTION),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_ISSUING_JURISDICTION),
+                mandatory = false,
+                mdocNamespace = NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.ISSUER,
+                icon = Icon.ACCOUNT_BALANCE,
+                sampleValueMdoc = SampleData.ISSUING_JURISDICTION.toDataItem()
             )
             .addAttribute(
-                DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
-                "issuing_country",
-                getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_ISSUING_COUNTRY),
-                getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_ISSUING_COUNTRY),
-                true,
-                NAMESPACE,
-                Icon.ACCOUNT_BALANCE,
-                SampleData.ISSUING_COUNTRY.toDataItem()
+                type = DocumentAttributeType.StringOptions(Options.COUNTRY_ISO_3166_1_ALPHA_2),
+                identifier = "issuing_country",
+                displayName = getLocalizedString(GeneratedStringKeys.COR_ATTRIBUTE_ISSUING_COUNTRY),
+                description = getLocalizedString(GeneratedStringKeys.COR_DESCRIPTION_ISSUING_COUNTRY),
+                mandatory = true,
+                mdocNamespace = NAMESPACE,
+                sensitivity = DocumentAttributeSensitivity.ISSUER,
+                icon = Icon.ACCOUNT_BALANCE,
+                sampleValueMdoc = SampleData.ISSUING_COUNTRY.toDataItem()
             )
             .addSampleRequest(
                 id = "age_over_18",
