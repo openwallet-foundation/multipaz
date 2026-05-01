@@ -1,19 +1,19 @@
-package org.multipaz.doctypes.localization
+package org.multipaz.util
 
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-class NativeLocaleTest {
+class LocaleUtilTest {
 
     @Test
     fun testCurrentLocaleReturnsNonEmpty() {
-        val locale = NativeLocale.currentLocale()
+        val locale = currentLocale
         assertTrue(locale.isNotEmpty(), "Locale should not be empty")
     }
 
     @Test
     fun testCurrentLocaleReturnsTwoLetterCode() {
-        val locale = NativeLocale.currentLocale()
+        val locale = currentLocale
         // Should be a 2-letter code like "en", "fr", "de", etc.
         // Or special cases like "zh-rCN"
         assertTrue(
@@ -24,7 +24,7 @@ class NativeLocaleTest {
 
     @Test
     fun testCurrentLocaleReturnsLowercase() {
-        val locale = NativeLocale.currentLocale()
+        val locale = currentLocale
         // The language code portion should be lowercase
         val languageCode = locale.substringBefore("-")
         assertTrue(
@@ -36,8 +36,8 @@ class NativeLocaleTest {
     @Test
     fun testCurrentLocaleIsConsistent() {
         // Calling multiple times should return the same value
-        val locale1 = NativeLocale.currentLocale()
-        val locale2 = NativeLocale.currentLocale()
+        val locale1 = currentLocale
+        val locale2 = currentLocale
         assertTrue(
             locale1 == locale2,
             "Locale should be consistent across calls: '$locale1' vs '$locale2'"

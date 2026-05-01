@@ -1,7 +1,7 @@
 package org.multipaz.doctypes.localization
 
 import org.multipaz.doctypes.generated.GeneratedTranslations
-import org.multipaz.doctypes.localization.NativeLocale.currentLocale
+import org.multipaz.util.currentLocale
 
 /**
  * Provides runtime access to localized strings generated from JSON translation resources.
@@ -12,7 +12,7 @@ object LocalizedStrings {
     /**
      * Returns the normalized current platform locale used for translation lookup.
      */
-    fun getCurrentLocale(): String = normalizeLocale(currentLocale())
+    fun getCurrentLocale(): String = normalizeLocale(currentLocale)
 
     /**
      * Returns all available locales for which translations are bundled.

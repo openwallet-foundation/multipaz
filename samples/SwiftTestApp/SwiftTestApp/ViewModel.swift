@@ -191,7 +191,8 @@ class ViewModel {
                 config.followRedirects = false
             },
             promptModel: promptModel,
-            authorizationSecureArea: secureArea
+            authorizationSecureArea: secureArea,
+            eventLogger: nil
         )
         self.provisioningSupport = ProvisioningSupport(
             storage: storage,
