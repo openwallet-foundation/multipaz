@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -43,6 +44,10 @@ fun FloatingItemListScreen(
             FloatingItemList(title = "FloatingItemText") {
                 FloatingItemText(text = "Primary text")
                 FloatingItemText(text = "Primary text", secondary = "Secondary text")
+                FloatingItemText(text = "Primary text",
+                    secondary = "Secondary text, pay attention",
+                    secondaryColor = MaterialTheme.colorScheme.error
+                )
                 FloatingItemText(
                     text = "Primary text and image",
                     image = { Icon(Icons.Outlined.Star, null) })

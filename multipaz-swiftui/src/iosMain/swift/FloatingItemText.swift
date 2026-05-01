@@ -10,6 +10,9 @@ public struct FloatingItemText<ImageView: View, TrailingView: View>: View {
     /// An optional secondary string displayed beneath the primary text in a smaller font.
     public var secondary: String?
 
+    /// Color for secondary text.
+    public var secondaryColor: Color
+
     /// A view builder that creates the leading image or icon.
     @ViewBuilder public var image: () -> ImageView
 
@@ -26,11 +29,13 @@ public struct FloatingItemText<ImageView: View, TrailingView: View>: View {
     public init(
         text: AttributedString,
         secondary: String? = nil,
+        secondaryColor: Color = .secondary,
         @ViewBuilder image: @escaping () -> ImageView = { EmptyView() },
         @ViewBuilder trailingContent: @escaping () -> TrailingView = { EmptyView() }
     ) {
         self.text = text
         self.secondary = secondary
+        self.secondaryColor = secondaryColor
         self.image = image
         self.trailingContent = trailingContent
     }
@@ -40,15 +45,17 @@ public struct FloatingItemText<ImageView: View, TrailingView: View>: View {
     /// - Parameters:
     ///   - text: The primary string to display.
     ///   - secondary: An optional secondary string to display below the primary text. Defaults to `nil`.
+    ///   - secondaryColor: Color for secondary text, defaults to `Color.secondary`.
     ///   - image: A view builder that provides a leading image or icon. Defaults to an `EmptyView`.
     ///   - trailingContent: A view builder that provides a trailing view. Defaults to an `EmptyView`.
     public init(
         text: String,
         secondary: String? = nil,
+        secondaryColor: Color = .secondary,
         @ViewBuilder image: @escaping () -> ImageView = { EmptyView() },
         @ViewBuilder trailingContent: @escaping () -> TrailingView = { EmptyView() }
     ) {
-        self.init(text: AttributedString(text), secondary: secondary, image: image, trailingContent: trailingContent)
+        self.init(text: AttributedString(text), secondary: secondary, secondaryColor: secondaryColor, image: image, trailingContent: trailingContent)
     }
 
     public var body: some View {
@@ -64,7 +71,7 @@ public struct FloatingItemText<ImageView: View, TrailingView: View>: View {
                         Text(secondary)
                             .font(.system(size: 13))
                             .multilineTextAlignment(.leading)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(secondaryColor)
                     }
                 } else {
                     Text(text)

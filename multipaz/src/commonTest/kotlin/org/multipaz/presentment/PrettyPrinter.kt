@@ -120,3 +120,36 @@ internal fun CredentialPresentmentData.prettyPrint(): String {
     pp.popIndent()
     return pp.toString()
 }
+
+internal fun CredentialPresentmentSelection.print(pp: PrettyPrinter): String {
+    pp.append("matches:")
+    pp.pushIndent()
+    if (matches.size == 0) {
+        pp.append("<empty>")
+    } else {
+        for (match in matches) {
+            match.print(pp)
+        }
+    }
+    pp.popIndent()
+    return pp.toString()
+}
+internal fun CredentialPresentmentSelection.prettyPrint(): String {
+    val pp = PrettyPrinter()
+    return print(pp)
+}
+
+internal fun List<CredentialPresentmentSelection>.prettyPrint(): String {
+    val pp = PrettyPrinter()
+    pp.append("selections:")
+    pp.pushIndent()
+    if (this.size == 0) {
+        pp.append("<empty>")
+    } else {
+        for (element in this) {
+            element.print(pp)
+        }
+    }
+    pp.popIndent()
+    return pp.toString()
+}

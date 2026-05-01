@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -265,7 +266,20 @@ class ProvisioningModel(
     ): ProvisioningMetadata =
         OpenID4VCI.getMetadata(issuerUrl, httpClient, clientPreferences)
 
-
+    /**
+     * Resets the model to [Idle].
+     *
+     * This is synchronous and waits until the current state is [Idle].
+     */
+    suspend fun reset() {
+        job?.let {
+            if (it.isActive) {
+                it.cancelAndJoin()
+            }
+        }
+        mutableMetadata.emit(null)
+        mutableState.emit(Idle)
+    }
 
     /**
      * Cancel currently-running provisioning session (if any) and sets the state to [Idle].

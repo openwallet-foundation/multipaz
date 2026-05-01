@@ -12,6 +12,7 @@ struct FloatingItemListScreen: View {
                 FloatingItemList(title: "FloatingItemText") {
                     FloatingItemText(text: "Primary text")
                     FloatingItemText(text: "Primary text", secondary: "Secondary text")
+                    FloatingItemText(text: "Primary text", secondary: "Secondary text, pay attention", secondaryColor: .red)
                     FloatingItemText(text: "Primary text and image", image: { Image(systemName: "star") })
                     FloatingItemText(text: "Primary text and image", secondary: "Secondary text", image: { Image(systemName: "star") })
                     FloatingItemText(

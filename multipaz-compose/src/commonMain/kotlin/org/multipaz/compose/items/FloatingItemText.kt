@@ -9,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -17,7 +18,8 @@ import androidx.compose.ui.unit.dp
  * An item showing a text, with smaller secondary text below.
  *
  * @param text text to be shown.
- * @param secondary optional text to show below the main text, in secondary color and smaller font.
+ * @param secondary optional text to show below the main text, in smaller font and [secondaryColor].
+ * @param secondaryColor the color to use for [secondaryColor], defaults to secondary color.
  * @param modifier a [Modifier].
  * @param image optional image, shown to the left of the text.
  * @param trailingContent optional trailing content.
@@ -27,6 +29,7 @@ fun FloatingItemText(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
     secondary: String? = null,
+    secondaryColor: Color = MaterialTheme.colorScheme.secondary,
     image: @Composable () -> Unit = {},
     trailingContent: @Composable () -> Unit = {},
 ) {
@@ -60,7 +63,7 @@ fun FloatingItemText(
                             text = secondary,
                             textAlign = TextAlign.Start,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary
+                            color = secondaryColor
                         )
                     }
                 }
@@ -74,7 +77,8 @@ fun FloatingItemText(
  * An item showing a text, with smaller secondary text below.
  *
  * @param text text to be shown.
- * @param secondary optional text to show below the main text, in secondary color and smaller font.
+ * @param secondary optional text to show below the main text, in smaller font and [secondaryColor].
+ * @param secondaryColor the color to use for [secondaryColor], defaults to secondary color.
  * @param modifier a [Modifier].
  * @param image optional image, shown to the left of the text.
  * @param trailingContent optional trailing content.
@@ -84,6 +88,7 @@ fun FloatingItemText(
     text: String,
     modifier: Modifier = Modifier,
     secondary: String? = null,
+    secondaryColor: Color = MaterialTheme.colorScheme.secondary,
     image: @Composable () -> Unit = {},
     trailingContent: @Composable () -> Unit = {},
 ) {
@@ -91,6 +96,7 @@ fun FloatingItemText(
         text = AnnotatedString(text),
         modifier = modifier,
         secondary = secondary,
+        secondaryColor = secondaryColor,
         image = image,
         trailingContent = trailingContent
     )

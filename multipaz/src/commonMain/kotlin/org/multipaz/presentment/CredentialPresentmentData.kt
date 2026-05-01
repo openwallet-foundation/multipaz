@@ -1,5 +1,6 @@
 package org.multipaz.presentment
 
+import org.multipaz.claim.Claim
 import org.multipaz.document.Document
 import org.multipaz.util.Logger
 import org.multipaz.util.generateAllPaths
@@ -146,6 +147,44 @@ data class CredentialPresentmentData(
         }
         Logger.w(TAG, "Error picking combination for pre-selected documents")
         return null
+    }
+
+    /**
+     * Gets all possible selections.
+     *
+     * @return all possible selections from the given options.
+     */
+    fun getAllSelections(): List<CredentialPresentmentSelection> {
+        val allSetSelections = credentialSets.map { set ->
+            val selectionsForSet = mutableListOf<List<CredentialPresentmentSetOptionMemberMatch>>()
+            if (set.optional) {
+                selectionsForSet.add(emptyList())
+            }
+            for (option in set.options) {
+                // We need one match from each member.
+                val memberMatchChoices = option.members.map { it.matches }
+                val paths = memberMatchChoices.map { it.size }.generateAllPaths()
+                for (path in paths) {
+                    val selection = mutableListOf<CredentialPresentmentSetOptionMemberMatch>()
+                    path.forEachIndexed { memberIndex, matchIndex ->
+                        selection.add(memberMatchChoices[memberIndex][matchIndex])
+                    }
+                    selectionsForSet.add(selection)
+                }
+            }
+            selectionsForSet
+        }
+
+        val paths = allSetSelections.map { it.size }.generateAllPaths()
+        val finalSelections = mutableListOf<CredentialPresentmentSelection>()
+        for (path in paths) {
+            val allMatches = mutableListOf<CredentialPresentmentSetOptionMemberMatch>()
+            path.forEachIndexed { setIndex, selectionIndex ->
+                allMatches.addAll(allSetSelections[setIndex][selectionIndex])
+            }
+            finalSelections.add(CredentialPresentmentSelection(allMatches))
+        }
+        return finalSelections
     }
 }
 

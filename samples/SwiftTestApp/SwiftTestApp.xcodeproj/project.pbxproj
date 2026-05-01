@@ -8,70 +8,70 @@
 
 /* Begin PBXBuildFile section */
 		512DAED62F2A31B30061F72B /* IdentityDocumentProviderExtension.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = 512DAECF2F2A31B30061F72B /* IdentityDocumentProviderExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		517BBCDE2FA4C3450057199B /* FloatingItemText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCCE2FA4C3450057199B /* FloatingItemText.swift */; };
-		517BBCDF2FA4C3450057199B /* PassphrasePromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD22FA4C3450057199B /* PassphrasePromptDialog.swift */; };
-		517BBCE02FA4C3450057199B /* MdocProximityQrPresentment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCCF2FA4C3450057199B /* MdocProximityQrPresentment.swift */; };
-		517BBCE12FA4C3450057199B /* VerticalCardList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCDB2FA4C3450057199B /* VerticalCardList.swift */; };
-		517BBCE22FA4C3450057199B /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC62FA4C3450057199B /* Extensions.swift */; };
-		517BBCE32FA4C3450057199B /* DocumentModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC52FA4C3450057199B /* DocumentModel.swift */; };
-		517BBCE42FA4C3450057199B /* FloatingItemHeadingAndText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCCC2FA4C3450057199B /* FloatingItemHeadingAndText.swift */; };
-		517BBCE52FA4C3450057199B /* PromptModelExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD42FA4C3450057199B /* PromptModelExt.swift */; };
-		517BBCE62FA4C3450057199B /* FloatingItemHeadingAndDateTime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCCB2FA4C3450057199B /* FloatingItemHeadingAndDateTime.swift */; };
-		517BBCE72FA4C3450057199B /* FloatingItemHeadingAndContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC92FA4C3450057199B /* FloatingItemHeadingAndContent.swift */; };
-		517BBCE82FA4C3450057199B /* ProvisioningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD52FA4C3450057199B /* ProvisioningView.swift */; };
-		517BBCE92FA4C3450057199B /* FloatingItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCCD2FA4C3450057199B /* FloatingItemList.swift */; };
-		517BBCEA2FA4C3450057199B /* FloatingItemHeadingAndDate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCCA2FA4C3450057199B /* FloatingItemHeadingAndDate.swift */; };
-		517BBCEB2FA4C3450057199B /* TagsExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCDA2FA4C3450057199B /* TagsExt.swift */; };
-		517BBCEC2FA4C3450057199B /* DocumentExtCardart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC42FA4C3450057199B /* DocumentExtCardart.swift */; };
-		517BBCED2FA4C3450057199B /* FloatingItemContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC82FA4C3450057199B /* FloatingItemContainer.swift */; };
-		517BBCEE2FA4C3450057199B /* X509CertViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCDC2FA4C3450057199B /* X509CertViewer.swift */; };
-		517BBCEF2FA4C3450057199B /* Consent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC02FA4C3450057199B /* Consent.swift */; };
-		517BBCF02FA4C3450057199B /* QrCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD62FA4C3450057199B /* QrCode.swift */; };
-		517BBCF12FA4C3450057199B /* MdocProximityQrSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD02FA4C3450057199B /* MdocProximityQrSettings.swift */; };
-		517BBCF22FA4C3450057199B /* ConsentPromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC12FA4C3450057199B /* ConsentPromptDialog.swift */; };
-		517BBCF32FA4C3450057199B /* SimplePresentmentSourceExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD82FA4C3450057199B /* SimplePresentmentSourceExt.swift */; };
-		517BBCF42FA4C3450057199B /* PromptDialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD32FA4C3450057199B /* PromptDialogs.swift */; };
-		517BBCF52FA4C3450057199B /* CardCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCBE2FA4C3450057199B /* CardCarousel.swift */; };
-		517BBCF62FA4C3450057199B /* CardInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCBF2FA4C3450057199B /* CardInfo.swift */; };
-		517BBCF72FA4C3450057199B /* RequestAuthorizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD72FA4C3450057199B /* RequestAuthorizationView.swift */; };
-		517BBCF82FA4C3450057199B /* FloatingItemCenteredText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC72FA4C3450057199B /* FloatingItemCenteredText.swift */; };
-		517BBCF92FA4C3450057199B /* CardBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCBD2FA4C3450057199B /* CardBadge.swift */; };
-		517BBCFA2FA4C3450057199B /* SmartSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD92FA4C3450057199B /* SmartSheet.swift */; };
-		517BBCFB2FA4C3450057199B /* DocumentExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC32FA4C3450057199B /* DocumentExt.swift */; };
-		517BBCFC2FA4C3450057199B /* PassphraseInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD12FA4C3450057199B /* PassphraseInputView.swift */; };
-		517BBCFD2FA4C3450057199B /* DefaultToHumanReadable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC22FA4C3450057199B /* DefaultToHumanReadable.swift */; };
-		517BBCFE2FA4C3450057199B /* FloatingItemText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCCE2FA4C3450057199B /* FloatingItemText.swift */; };
-		517BBCFF2FA4C3450057199B /* PassphrasePromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD22FA4C3450057199B /* PassphrasePromptDialog.swift */; };
-		517BBD002FA4C3450057199B /* MdocProximityQrPresentment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCCF2FA4C3450057199B /* MdocProximityQrPresentment.swift */; };
-		517BBD012FA4C3450057199B /* VerticalCardList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCDB2FA4C3450057199B /* VerticalCardList.swift */; };
-		517BBD022FA4C3450057199B /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC62FA4C3450057199B /* Extensions.swift */; };
-		517BBD032FA4C3450057199B /* DocumentModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC52FA4C3450057199B /* DocumentModel.swift */; };
-		517BBD042FA4C3450057199B /* FloatingItemHeadingAndText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCCC2FA4C3450057199B /* FloatingItemHeadingAndText.swift */; };
-		517BBD052FA4C3450057199B /* PromptModelExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD42FA4C3450057199B /* PromptModelExt.swift */; };
-		517BBD062FA4C3450057199B /* FloatingItemHeadingAndDateTime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCCB2FA4C3450057199B /* FloatingItemHeadingAndDateTime.swift */; };
-		517BBD072FA4C3450057199B /* FloatingItemHeadingAndContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC92FA4C3450057199B /* FloatingItemHeadingAndContent.swift */; };
-		517BBD082FA4C3450057199B /* ProvisioningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD52FA4C3450057199B /* ProvisioningView.swift */; };
-		517BBD092FA4C3450057199B /* FloatingItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCCD2FA4C3450057199B /* FloatingItemList.swift */; };
-		517BBD0A2FA4C3450057199B /* FloatingItemHeadingAndDate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCCA2FA4C3450057199B /* FloatingItemHeadingAndDate.swift */; };
-		517BBD0B2FA4C3450057199B /* TagsExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCDA2FA4C3450057199B /* TagsExt.swift */; };
-		517BBD0C2FA4C3450057199B /* DocumentExtCardart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC42FA4C3450057199B /* DocumentExtCardart.swift */; };
-		517BBD0D2FA4C3450057199B /* FloatingItemContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC82FA4C3450057199B /* FloatingItemContainer.swift */; };
-		517BBD0E2FA4C3450057199B /* X509CertViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCDC2FA4C3450057199B /* X509CertViewer.swift */; };
-		517BBD0F2FA4C3450057199B /* Consent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC02FA4C3450057199B /* Consent.swift */; };
-		517BBD102FA4C3450057199B /* QrCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD62FA4C3450057199B /* QrCode.swift */; };
-		517BBD112FA4C3450057199B /* MdocProximityQrSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD02FA4C3450057199B /* MdocProximityQrSettings.swift */; };
-		517BBD122FA4C3450057199B /* ConsentPromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC12FA4C3450057199B /* ConsentPromptDialog.swift */; };
-		517BBD132FA4C3450057199B /* SimplePresentmentSourceExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD82FA4C3450057199B /* SimplePresentmentSourceExt.swift */; };
-		517BBD142FA4C3450057199B /* PromptDialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD32FA4C3450057199B /* PromptDialogs.swift */; };
-		517BBD152FA4C3450057199B /* CardCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCBE2FA4C3450057199B /* CardCarousel.swift */; };
-		517BBD162FA4C3450057199B /* CardInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCBF2FA4C3450057199B /* CardInfo.swift */; };
-		517BBD172FA4C3450057199B /* RequestAuthorizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD72FA4C3450057199B /* RequestAuthorizationView.swift */; };
-		517BBD182FA4C3450057199B /* FloatingItemCenteredText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC72FA4C3450057199B /* FloatingItemCenteredText.swift */; };
-		517BBD192FA4C3450057199B /* CardBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCBD2FA4C3450057199B /* CardBadge.swift */; };
-		517BBD1A2FA4C3450057199B /* SmartSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD92FA4C3450057199B /* SmartSheet.swift */; };
-		517BBD1B2FA4C3450057199B /* DocumentExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC32FA4C3450057199B /* DocumentExt.swift */; };
-		517BBD1C2FA4C3450057199B /* PassphraseInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCD12FA4C3450057199B /* PassphraseInputView.swift */; };
-		517BBD1D2FA4C3450057199B /* DefaultToHumanReadable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 517BBCC22FA4C3450057199B /* DefaultToHumanReadable.swift */; };
+		5183236B2FA6AB090083253A /* MdocProximityQrSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183235D2FA6AB080083253A /* MdocProximityQrSettings.swift */; };
+		5183236C2FA6AB090083253A /* SimplePresentmentSourceExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323652FA6AB080083253A /* SimplePresentmentSourceExt.swift */; };
+		5183236D2FA6AB090083253A /* Consent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183234D2FA6AB080083253A /* Consent.swift */; };
+		5183236E2FA6AB090083253A /* FloatingItemHeadingAndDateTime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323582FA6AB080083253A /* FloatingItemHeadingAndDateTime.swift */; };
+		5183236F2FA6AB090083253A /* RequestAuthorizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323642FA6AB080083253A /* RequestAuthorizationView.swift */; };
+		518323702FA6AB090083253A /* ConsentPromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183234E2FA6AB080083253A /* ConsentPromptDialog.swift */; };
+		518323712FA6AB090083253A /* DefaultToHumanReadable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183234F2FA6AB080083253A /* DefaultToHumanReadable.swift */; };
+		518323722FA6AB090083253A /* TagsExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323672FA6AB080083253A /* TagsExt.swift */; };
+		518323732FA6AB090083253A /* X509CertViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323692FA6AB080083253A /* X509CertViewer.swift */; };
+		518323742FA6AB090083253A /* PassphrasePromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183235F2FA6AB080083253A /* PassphrasePromptDialog.swift */; };
+		518323752FA6AB090083253A /* VerticalCardList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323682FA6AB080083253A /* VerticalCardList.swift */; };
+		518323762FA6AB090083253A /* DocumentExtCardart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323512FA6AB080083253A /* DocumentExtCardart.swift */; };
+		518323772FA6AB090083253A /* PromptDialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323602FA6AB080083253A /* PromptDialogs.swift */; };
+		518323782FA6AB090083253A /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323532FA6AB080083253A /* Extensions.swift */; };
+		518323792FA6AB090083253A /* CardBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183234A2FA6AB080083253A /* CardBadge.swift */; };
+		5183237A2FA6AB090083253A /* FloatingItemText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183235B2FA6AB080083253A /* FloatingItemText.swift */; };
+		5183237B2FA6AB090083253A /* DocumentExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323502FA6AB080083253A /* DocumentExt.swift */; };
+		5183237C2FA6AB090083253A /* ProvisioningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323622FA6AB080083253A /* ProvisioningView.swift */; };
+		5183237D2FA6AB090083253A /* FloatingItemContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323552FA6AB080083253A /* FloatingItemContainer.swift */; };
+		5183237E2FA6AB090083253A /* SmartSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323662FA6AB080083253A /* SmartSheet.swift */; };
+		5183237F2FA6AB090083253A /* FloatingItemCenteredText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323542FA6AB080083253A /* FloatingItemCenteredText.swift */; };
+		518323802FA6AB090083253A /* FloatingItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183235A2FA6AB080083253A /* FloatingItemList.swift */; };
+		518323812FA6AB090083253A /* PassphraseInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183235E2FA6AB080083253A /* PassphraseInputView.swift */; };
+		518323822FA6AB090083253A /* DocumentModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323522FA6AB080083253A /* DocumentModel.swift */; };
+		518323832FA6AB090083253A /* MdocProximityQrPresentment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183235C2FA6AB080083253A /* MdocProximityQrPresentment.swift */; };
+		518323842FA6AB090083253A /* FloatingItemHeadingAndText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323592FA6AB080083253A /* FloatingItemHeadingAndText.swift */; };
+		518323852FA6AB090083253A /* QrCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323632FA6AB080083253A /* QrCode.swift */; };
+		518323862FA6AB090083253A /* CardCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183234B2FA6AB080083253A /* CardCarousel.swift */; };
+		518323872FA6AB090083253A /* CardInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183234C2FA6AB080083253A /* CardInfo.swift */; };
+		518323882FA6AB090083253A /* FloatingItemHeadingAndContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323562FA6AB080083253A /* FloatingItemHeadingAndContent.swift */; };
+		518323892FA6AB090083253A /* PromptModelExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323612FA6AB080083253A /* PromptModelExt.swift */; };
+		5183238A2FA6AB090083253A /* FloatingItemHeadingAndDate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323572FA6AB080083253A /* FloatingItemHeadingAndDate.swift */; };
+		5183238B2FA6AB090083253A /* MdocProximityQrSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183235D2FA6AB080083253A /* MdocProximityQrSettings.swift */; };
+		5183238C2FA6AB090083253A /* SimplePresentmentSourceExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323652FA6AB080083253A /* SimplePresentmentSourceExt.swift */; };
+		5183238D2FA6AB090083253A /* Consent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183234D2FA6AB080083253A /* Consent.swift */; };
+		5183238E2FA6AB090083253A /* FloatingItemHeadingAndDateTime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323582FA6AB080083253A /* FloatingItemHeadingAndDateTime.swift */; };
+		5183238F2FA6AB090083253A /* RequestAuthorizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323642FA6AB080083253A /* RequestAuthorizationView.swift */; };
+		518323902FA6AB090083253A /* ConsentPromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183234E2FA6AB080083253A /* ConsentPromptDialog.swift */; };
+		518323912FA6AB090083253A /* DefaultToHumanReadable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183234F2FA6AB080083253A /* DefaultToHumanReadable.swift */; };
+		518323922FA6AB090083253A /* TagsExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323672FA6AB080083253A /* TagsExt.swift */; };
+		518323932FA6AB090083253A /* X509CertViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323692FA6AB080083253A /* X509CertViewer.swift */; };
+		518323942FA6AB090083253A /* PassphrasePromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183235F2FA6AB080083253A /* PassphrasePromptDialog.swift */; };
+		518323952FA6AB090083253A /* VerticalCardList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323682FA6AB080083253A /* VerticalCardList.swift */; };
+		518323962FA6AB090083253A /* DocumentExtCardart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323512FA6AB080083253A /* DocumentExtCardart.swift */; };
+		518323972FA6AB090083253A /* PromptDialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323602FA6AB080083253A /* PromptDialogs.swift */; };
+		518323982FA6AB090083253A /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323532FA6AB080083253A /* Extensions.swift */; };
+		518323992FA6AB090083253A /* CardBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183234A2FA6AB080083253A /* CardBadge.swift */; };
+		5183239A2FA6AB090083253A /* FloatingItemText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183235B2FA6AB080083253A /* FloatingItemText.swift */; };
+		5183239B2FA6AB090083253A /* DocumentExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323502FA6AB080083253A /* DocumentExt.swift */; };
+		5183239C2FA6AB090083253A /* ProvisioningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323622FA6AB080083253A /* ProvisioningView.swift */; };
+		5183239D2FA6AB090083253A /* FloatingItemContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323552FA6AB080083253A /* FloatingItemContainer.swift */; };
+		5183239E2FA6AB090083253A /* SmartSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323662FA6AB080083253A /* SmartSheet.swift */; };
+		5183239F2FA6AB090083253A /* FloatingItemCenteredText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323542FA6AB080083253A /* FloatingItemCenteredText.swift */; };
+		518323A02FA6AB090083253A /* FloatingItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183235A2FA6AB080083253A /* FloatingItemList.swift */; };
+		518323A12FA6AB090083253A /* PassphraseInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183235E2FA6AB080083253A /* PassphraseInputView.swift */; };
+		518323A22FA6AB090083253A /* DocumentModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323522FA6AB080083253A /* DocumentModel.swift */; };
+		518323A32FA6AB090083253A /* MdocProximityQrPresentment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183235C2FA6AB080083253A /* MdocProximityQrPresentment.swift */; };
+		518323A42FA6AB090083253A /* FloatingItemHeadingAndText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323592FA6AB080083253A /* FloatingItemHeadingAndText.swift */; };
+		518323A52FA6AB090083253A /* QrCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323632FA6AB080083253A /* QrCode.swift */; };
+		518323A62FA6AB090083253A /* CardCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183234B2FA6AB080083253A /* CardCarousel.swift */; };
+		518323A72FA6AB090083253A /* CardInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5183234C2FA6AB080083253A /* CardInfo.swift */; };
+		518323A82FA6AB090083253A /* FloatingItemHeadingAndContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323562FA6AB080083253A /* FloatingItemHeadingAndContent.swift */; };
+		518323A92FA6AB090083253A /* PromptModelExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323612FA6AB080083253A /* PromptModelExt.swift */; };
+		518323AA2FA6AB090083253A /* FloatingItemHeadingAndDate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518323572FA6AB080083253A /* FloatingItemHeadingAndDate.swift */; };
 		51BD5C5E2F22604F0082DE19 /* AdditionalConfig.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 51BD5C5C2F22604F0082DE19 /* AdditionalConfig.xcconfig */; };
 		51BD5C5F2F22604F0082DE19 /* DeveloperConfig.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 51BD5C5D2F22604F0082DE19 /* DeveloperConfig.xcconfig */; };
 /* End PBXBuildFile section */
@@ -103,38 +103,38 @@
 /* Begin PBXFileReference section */
 		51100E672F21D4A5006B2ADD /* SwiftTestApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwiftTestApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		512DAECF2F2A31B30061F72B /* IdentityDocumentProviderExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.extensionkit-extension"; includeInIndex = 0; path = IdentityDocumentProviderExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		517BBCBD2FA4C3450057199B /* CardBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardBadge.swift; sourceTree = "<group>"; };
-		517BBCBE2FA4C3450057199B /* CardCarousel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardCarousel.swift; sourceTree = "<group>"; };
-		517BBCBF2FA4C3450057199B /* CardInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardInfo.swift; sourceTree = "<group>"; };
-		517BBCC02FA4C3450057199B /* Consent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Consent.swift; sourceTree = "<group>"; };
-		517BBCC12FA4C3450057199B /* ConsentPromptDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsentPromptDialog.swift; sourceTree = "<group>"; };
-		517BBCC22FA4C3450057199B /* DefaultToHumanReadable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultToHumanReadable.swift; sourceTree = "<group>"; };
-		517BBCC32FA4C3450057199B /* DocumentExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentExt.swift; sourceTree = "<group>"; };
-		517BBCC42FA4C3450057199B /* DocumentExtCardart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentExtCardart.swift; sourceTree = "<group>"; };
-		517BBCC52FA4C3450057199B /* DocumentModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentModel.swift; sourceTree = "<group>"; };
-		517BBCC62FA4C3450057199B /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
-		517BBCC72FA4C3450057199B /* FloatingItemCenteredText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemCenteredText.swift; sourceTree = "<group>"; };
-		517BBCC82FA4C3450057199B /* FloatingItemContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemContainer.swift; sourceTree = "<group>"; };
-		517BBCC92FA4C3450057199B /* FloatingItemHeadingAndContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemHeadingAndContent.swift; sourceTree = "<group>"; };
-		517BBCCA2FA4C3450057199B /* FloatingItemHeadingAndDate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemHeadingAndDate.swift; sourceTree = "<group>"; };
-		517BBCCB2FA4C3450057199B /* FloatingItemHeadingAndDateTime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemHeadingAndDateTime.swift; sourceTree = "<group>"; };
-		517BBCCC2FA4C3450057199B /* FloatingItemHeadingAndText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemHeadingAndText.swift; sourceTree = "<group>"; };
-		517BBCCD2FA4C3450057199B /* FloatingItemList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemList.swift; sourceTree = "<group>"; };
-		517BBCCE2FA4C3450057199B /* FloatingItemText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemText.swift; sourceTree = "<group>"; };
-		517BBCCF2FA4C3450057199B /* MdocProximityQrPresentment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MdocProximityQrPresentment.swift; sourceTree = "<group>"; };
-		517BBCD02FA4C3450057199B /* MdocProximityQrSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MdocProximityQrSettings.swift; sourceTree = "<group>"; };
-		517BBCD12FA4C3450057199B /* PassphraseInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PassphraseInputView.swift; sourceTree = "<group>"; };
-		517BBCD22FA4C3450057199B /* PassphrasePromptDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PassphrasePromptDialog.swift; sourceTree = "<group>"; };
-		517BBCD32FA4C3450057199B /* PromptDialogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptDialogs.swift; sourceTree = "<group>"; };
-		517BBCD42FA4C3450057199B /* PromptModelExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptModelExt.swift; sourceTree = "<group>"; };
-		517BBCD52FA4C3450057199B /* ProvisioningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisioningView.swift; sourceTree = "<group>"; };
-		517BBCD62FA4C3450057199B /* QrCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCode.swift; sourceTree = "<group>"; };
-		517BBCD72FA4C3450057199B /* RequestAuthorizationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RequestAuthorizationView.swift; sourceTree = "<group>"; };
-		517BBCD82FA4C3450057199B /* SimplePresentmentSourceExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimplePresentmentSourceExt.swift; sourceTree = "<group>"; };
-		517BBCD92FA4C3450057199B /* SmartSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartSheet.swift; sourceTree = "<group>"; };
-		517BBCDA2FA4C3450057199B /* TagsExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsExt.swift; sourceTree = "<group>"; };
-		517BBCDB2FA4C3450057199B /* VerticalCardList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerticalCardList.swift; sourceTree = "<group>"; };
-		517BBCDC2FA4C3450057199B /* X509CertViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = X509CertViewer.swift; sourceTree = "<group>"; };
+		5183234A2FA6AB080083253A /* CardBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardBadge.swift; sourceTree = "<group>"; };
+		5183234B2FA6AB080083253A /* CardCarousel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardCarousel.swift; sourceTree = "<group>"; };
+		5183234C2FA6AB080083253A /* CardInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardInfo.swift; sourceTree = "<group>"; };
+		5183234D2FA6AB080083253A /* Consent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Consent.swift; sourceTree = "<group>"; };
+		5183234E2FA6AB080083253A /* ConsentPromptDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsentPromptDialog.swift; sourceTree = "<group>"; };
+		5183234F2FA6AB080083253A /* DefaultToHumanReadable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultToHumanReadable.swift; sourceTree = "<group>"; };
+		518323502FA6AB080083253A /* DocumentExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentExt.swift; sourceTree = "<group>"; };
+		518323512FA6AB080083253A /* DocumentExtCardart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentExtCardart.swift; sourceTree = "<group>"; };
+		518323522FA6AB080083253A /* DocumentModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentModel.swift; sourceTree = "<group>"; };
+		518323532FA6AB080083253A /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
+		518323542FA6AB080083253A /* FloatingItemCenteredText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemCenteredText.swift; sourceTree = "<group>"; };
+		518323552FA6AB080083253A /* FloatingItemContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemContainer.swift; sourceTree = "<group>"; };
+		518323562FA6AB080083253A /* FloatingItemHeadingAndContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemHeadingAndContent.swift; sourceTree = "<group>"; };
+		518323572FA6AB080083253A /* FloatingItemHeadingAndDate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemHeadingAndDate.swift; sourceTree = "<group>"; };
+		518323582FA6AB080083253A /* FloatingItemHeadingAndDateTime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemHeadingAndDateTime.swift; sourceTree = "<group>"; };
+		518323592FA6AB080083253A /* FloatingItemHeadingAndText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemHeadingAndText.swift; sourceTree = "<group>"; };
+		5183235A2FA6AB080083253A /* FloatingItemList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemList.swift; sourceTree = "<group>"; };
+		5183235B2FA6AB080083253A /* FloatingItemText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingItemText.swift; sourceTree = "<group>"; };
+		5183235C2FA6AB080083253A /* MdocProximityQrPresentment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MdocProximityQrPresentment.swift; sourceTree = "<group>"; };
+		5183235D2FA6AB080083253A /* MdocProximityQrSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MdocProximityQrSettings.swift; sourceTree = "<group>"; };
+		5183235E2FA6AB080083253A /* PassphraseInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PassphraseInputView.swift; sourceTree = "<group>"; };
+		5183235F2FA6AB080083253A /* PassphrasePromptDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PassphrasePromptDialog.swift; sourceTree = "<group>"; };
+		518323602FA6AB080083253A /* PromptDialogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptDialogs.swift; sourceTree = "<group>"; };
+		518323612FA6AB080083253A /* PromptModelExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptModelExt.swift; sourceTree = "<group>"; };
+		518323622FA6AB080083253A /* ProvisioningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisioningView.swift; sourceTree = "<group>"; };
+		518323632FA6AB080083253A /* QrCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCode.swift; sourceTree = "<group>"; };
+		518323642FA6AB080083253A /* RequestAuthorizationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RequestAuthorizationView.swift; sourceTree = "<group>"; };
+		518323652FA6AB080083253A /* SimplePresentmentSourceExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimplePresentmentSourceExt.swift; sourceTree = "<group>"; };
+		518323662FA6AB080083253A /* SmartSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartSheet.swift; sourceTree = "<group>"; };
+		518323672FA6AB080083253A /* TagsExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsExt.swift; sourceTree = "<group>"; };
+		518323682FA6AB080083253A /* VerticalCardList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerticalCardList.swift; sourceTree = "<group>"; };
+		518323692FA6AB080083253A /* X509CertViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = X509CertViewer.swift; sourceTree = "<group>"; };
 		51BD5C5C2F22604F0082DE19 /* AdditionalConfig.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = AdditionalConfig.xcconfig; path = ../testapp/iosApp/AdditionalConfig.xcconfig; sourceTree = SOURCE_ROOT; };
 		51BD5C5D2F22604F0082DE19 /* DeveloperConfig.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = DeveloperConfig.xcconfig; path = ../testapp/iosApp/DeveloperConfig.xcconfig; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
@@ -196,7 +196,7 @@
 		51100E5E2F21D4A5006B2ADD = {
 			isa = PBXGroup;
 			children = (
-				517BBCDD2FA4C3450057199B /* swift */,
+				5183236A2FA6AB080083253A /* swift */,
 				51BD5C5C2F22604F0082DE19 /* AdditionalConfig.xcconfig */,
 				51BD5C5D2F22604F0082DE19 /* DeveloperConfig.xcconfig */,
 				51100E692F21D4A5006B2ADD /* SwiftTestApp */,
@@ -222,41 +222,41 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		517BBCDD2FA4C3450057199B /* swift */ = {
+		5183236A2FA6AB080083253A /* swift */ = {
 			isa = PBXGroup;
 			children = (
-				517BBCBD2FA4C3450057199B /* CardBadge.swift */,
-				517BBCBE2FA4C3450057199B /* CardCarousel.swift */,
-				517BBCBF2FA4C3450057199B /* CardInfo.swift */,
-				517BBCC02FA4C3450057199B /* Consent.swift */,
-				517BBCC12FA4C3450057199B /* ConsentPromptDialog.swift */,
-				517BBCC22FA4C3450057199B /* DefaultToHumanReadable.swift */,
-				517BBCC32FA4C3450057199B /* DocumentExt.swift */,
-				517BBCC42FA4C3450057199B /* DocumentExtCardart.swift */,
-				517BBCC52FA4C3450057199B /* DocumentModel.swift */,
-				517BBCC62FA4C3450057199B /* Extensions.swift */,
-				517BBCC72FA4C3450057199B /* FloatingItemCenteredText.swift */,
-				517BBCC82FA4C3450057199B /* FloatingItemContainer.swift */,
-				517BBCC92FA4C3450057199B /* FloatingItemHeadingAndContent.swift */,
-				517BBCCA2FA4C3450057199B /* FloatingItemHeadingAndDate.swift */,
-				517BBCCB2FA4C3450057199B /* FloatingItemHeadingAndDateTime.swift */,
-				517BBCCC2FA4C3450057199B /* FloatingItemHeadingAndText.swift */,
-				517BBCCD2FA4C3450057199B /* FloatingItemList.swift */,
-				517BBCCE2FA4C3450057199B /* FloatingItemText.swift */,
-				517BBCCF2FA4C3450057199B /* MdocProximityQrPresentment.swift */,
-				517BBCD02FA4C3450057199B /* MdocProximityQrSettings.swift */,
-				517BBCD12FA4C3450057199B /* PassphraseInputView.swift */,
-				517BBCD22FA4C3450057199B /* PassphrasePromptDialog.swift */,
-				517BBCD32FA4C3450057199B /* PromptDialogs.swift */,
-				517BBCD42FA4C3450057199B /* PromptModelExt.swift */,
-				517BBCD52FA4C3450057199B /* ProvisioningView.swift */,
-				517BBCD62FA4C3450057199B /* QrCode.swift */,
-				517BBCD72FA4C3450057199B /* RequestAuthorizationView.swift */,
-				517BBCD82FA4C3450057199B /* SimplePresentmentSourceExt.swift */,
-				517BBCD92FA4C3450057199B /* SmartSheet.swift */,
-				517BBCDA2FA4C3450057199B /* TagsExt.swift */,
-				517BBCDB2FA4C3450057199B /* VerticalCardList.swift */,
-				517BBCDC2FA4C3450057199B /* X509CertViewer.swift */,
+				5183234A2FA6AB080083253A /* CardBadge.swift */,
+				5183234B2FA6AB080083253A /* CardCarousel.swift */,
+				5183234C2FA6AB080083253A /* CardInfo.swift */,
+				5183234D2FA6AB080083253A /* Consent.swift */,
+				5183234E2FA6AB080083253A /* ConsentPromptDialog.swift */,
+				5183234F2FA6AB080083253A /* DefaultToHumanReadable.swift */,
+				518323502FA6AB080083253A /* DocumentExt.swift */,
+				518323512FA6AB080083253A /* DocumentExtCardart.swift */,
+				518323522FA6AB080083253A /* DocumentModel.swift */,
+				518323532FA6AB080083253A /* Extensions.swift */,
+				518323542FA6AB080083253A /* FloatingItemCenteredText.swift */,
+				518323552FA6AB080083253A /* FloatingItemContainer.swift */,
+				518323562FA6AB080083253A /* FloatingItemHeadingAndContent.swift */,
+				518323572FA6AB080083253A /* FloatingItemHeadingAndDate.swift */,
+				518323582FA6AB080083253A /* FloatingItemHeadingAndDateTime.swift */,
+				518323592FA6AB080083253A /* FloatingItemHeadingAndText.swift */,
+				5183235A2FA6AB080083253A /* FloatingItemList.swift */,
+				5183235B2FA6AB080083253A /* FloatingItemText.swift */,
+				5183235C2FA6AB080083253A /* MdocProximityQrPresentment.swift */,
+				5183235D2FA6AB080083253A /* MdocProximityQrSettings.swift */,
+				5183235E2FA6AB080083253A /* PassphraseInputView.swift */,
+				5183235F2FA6AB080083253A /* PassphrasePromptDialog.swift */,
+				518323602FA6AB080083253A /* PromptDialogs.swift */,
+				518323612FA6AB080083253A /* PromptModelExt.swift */,
+				518323622FA6AB080083253A /* ProvisioningView.swift */,
+				518323632FA6AB080083253A /* QrCode.swift */,
+				518323642FA6AB080083253A /* RequestAuthorizationView.swift */,
+				518323652FA6AB080083253A /* SimplePresentmentSourceExt.swift */,
+				518323662FA6AB080083253A /* SmartSheet.swift */,
+				518323672FA6AB080083253A /* TagsExt.swift */,
+				518323682FA6AB080083253A /* VerticalCardList.swift */,
+				518323692FA6AB080083253A /* X509CertViewer.swift */,
 			);
 			name = swift;
 			path = "/Users/davidz/StudioProjects/multipaz/multipaz-swiftui/src/iosMain/swift";
@@ -418,38 +418,38 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				517BBCFE2FA4C3450057199B /* FloatingItemText.swift in Sources */,
-				517BBCFF2FA4C3450057199B /* PassphrasePromptDialog.swift in Sources */,
-				517BBD002FA4C3450057199B /* MdocProximityQrPresentment.swift in Sources */,
-				517BBD012FA4C3450057199B /* VerticalCardList.swift in Sources */,
-				517BBD022FA4C3450057199B /* Extensions.swift in Sources */,
-				517BBD032FA4C3450057199B /* DocumentModel.swift in Sources */,
-				517BBD042FA4C3450057199B /* FloatingItemHeadingAndText.swift in Sources */,
-				517BBD052FA4C3450057199B /* PromptModelExt.swift in Sources */,
-				517BBD062FA4C3450057199B /* FloatingItemHeadingAndDateTime.swift in Sources */,
-				517BBD072FA4C3450057199B /* FloatingItemHeadingAndContent.swift in Sources */,
-				517BBD082FA4C3450057199B /* ProvisioningView.swift in Sources */,
-				517BBD092FA4C3450057199B /* FloatingItemList.swift in Sources */,
-				517BBD0A2FA4C3450057199B /* FloatingItemHeadingAndDate.swift in Sources */,
-				517BBD0B2FA4C3450057199B /* TagsExt.swift in Sources */,
-				517BBD0C2FA4C3450057199B /* DocumentExtCardart.swift in Sources */,
-				517BBD0D2FA4C3450057199B /* FloatingItemContainer.swift in Sources */,
-				517BBD0E2FA4C3450057199B /* X509CertViewer.swift in Sources */,
-				517BBD0F2FA4C3450057199B /* Consent.swift in Sources */,
-				517BBD102FA4C3450057199B /* QrCode.swift in Sources */,
-				517BBD112FA4C3450057199B /* MdocProximityQrSettings.swift in Sources */,
-				517BBD122FA4C3450057199B /* ConsentPromptDialog.swift in Sources */,
-				517BBD132FA4C3450057199B /* SimplePresentmentSourceExt.swift in Sources */,
-				517BBD142FA4C3450057199B /* PromptDialogs.swift in Sources */,
-				517BBD152FA4C3450057199B /* CardCarousel.swift in Sources */,
-				517BBD162FA4C3450057199B /* CardInfo.swift in Sources */,
-				517BBD172FA4C3450057199B /* RequestAuthorizationView.swift in Sources */,
-				517BBD182FA4C3450057199B /* FloatingItemCenteredText.swift in Sources */,
-				517BBD192FA4C3450057199B /* CardBadge.swift in Sources */,
-				517BBD1A2FA4C3450057199B /* SmartSheet.swift in Sources */,
-				517BBD1B2FA4C3450057199B /* DocumentExt.swift in Sources */,
-				517BBD1C2FA4C3450057199B /* PassphraseInputView.swift in Sources */,
-				517BBD1D2FA4C3450057199B /* DefaultToHumanReadable.swift in Sources */,
+				5183238B2FA6AB090083253A /* MdocProximityQrSettings.swift in Sources */,
+				5183238C2FA6AB090083253A /* SimplePresentmentSourceExt.swift in Sources */,
+				5183238D2FA6AB090083253A /* Consent.swift in Sources */,
+				5183238E2FA6AB090083253A /* FloatingItemHeadingAndDateTime.swift in Sources */,
+				5183238F2FA6AB090083253A /* RequestAuthorizationView.swift in Sources */,
+				518323902FA6AB090083253A /* ConsentPromptDialog.swift in Sources */,
+				518323912FA6AB090083253A /* DefaultToHumanReadable.swift in Sources */,
+				518323922FA6AB090083253A /* TagsExt.swift in Sources */,
+				518323932FA6AB090083253A /* X509CertViewer.swift in Sources */,
+				518323942FA6AB090083253A /* PassphrasePromptDialog.swift in Sources */,
+				518323952FA6AB090083253A /* VerticalCardList.swift in Sources */,
+				518323962FA6AB090083253A /* DocumentExtCardart.swift in Sources */,
+				518323972FA6AB090083253A /* PromptDialogs.swift in Sources */,
+				518323982FA6AB090083253A /* Extensions.swift in Sources */,
+				518323992FA6AB090083253A /* CardBadge.swift in Sources */,
+				5183239A2FA6AB090083253A /* FloatingItemText.swift in Sources */,
+				5183239B2FA6AB090083253A /* DocumentExt.swift in Sources */,
+				5183239C2FA6AB090083253A /* ProvisioningView.swift in Sources */,
+				5183239D2FA6AB090083253A /* FloatingItemContainer.swift in Sources */,
+				5183239E2FA6AB090083253A /* SmartSheet.swift in Sources */,
+				5183239F2FA6AB090083253A /* FloatingItemCenteredText.swift in Sources */,
+				518323A02FA6AB090083253A /* FloatingItemList.swift in Sources */,
+				518323A12FA6AB090083253A /* PassphraseInputView.swift in Sources */,
+				518323A22FA6AB090083253A /* DocumentModel.swift in Sources */,
+				518323A32FA6AB090083253A /* MdocProximityQrPresentment.swift in Sources */,
+				518323A42FA6AB090083253A /* FloatingItemHeadingAndText.swift in Sources */,
+				518323A52FA6AB090083253A /* QrCode.swift in Sources */,
+				518323A62FA6AB090083253A /* CardCarousel.swift in Sources */,
+				518323A72FA6AB090083253A /* CardInfo.swift in Sources */,
+				518323A82FA6AB090083253A /* FloatingItemHeadingAndContent.swift in Sources */,
+				518323A92FA6AB090083253A /* PromptModelExt.swift in Sources */,
+				518323AA2FA6AB090083253A /* FloatingItemHeadingAndDate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -457,38 +457,38 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				517BBCDE2FA4C3450057199B /* FloatingItemText.swift in Sources */,
-				517BBCDF2FA4C3450057199B /* PassphrasePromptDialog.swift in Sources */,
-				517BBCE02FA4C3450057199B /* MdocProximityQrPresentment.swift in Sources */,
-				517BBCE12FA4C3450057199B /* VerticalCardList.swift in Sources */,
-				517BBCE22FA4C3450057199B /* Extensions.swift in Sources */,
-				517BBCE32FA4C3450057199B /* DocumentModel.swift in Sources */,
-				517BBCE42FA4C3450057199B /* FloatingItemHeadingAndText.swift in Sources */,
-				517BBCE52FA4C3450057199B /* PromptModelExt.swift in Sources */,
-				517BBCE62FA4C3450057199B /* FloatingItemHeadingAndDateTime.swift in Sources */,
-				517BBCE72FA4C3450057199B /* FloatingItemHeadingAndContent.swift in Sources */,
-				517BBCE82FA4C3450057199B /* ProvisioningView.swift in Sources */,
-				517BBCE92FA4C3450057199B /* FloatingItemList.swift in Sources */,
-				517BBCEA2FA4C3450057199B /* FloatingItemHeadingAndDate.swift in Sources */,
-				517BBCEB2FA4C3450057199B /* TagsExt.swift in Sources */,
-				517BBCEC2FA4C3450057199B /* DocumentExtCardart.swift in Sources */,
-				517BBCED2FA4C3450057199B /* FloatingItemContainer.swift in Sources */,
-				517BBCEE2FA4C3450057199B /* X509CertViewer.swift in Sources */,
-				517BBCEF2FA4C3450057199B /* Consent.swift in Sources */,
-				517BBCF02FA4C3450057199B /* QrCode.swift in Sources */,
-				517BBCF12FA4C3450057199B /* MdocProximityQrSettings.swift in Sources */,
-				517BBCF22FA4C3450057199B /* ConsentPromptDialog.swift in Sources */,
-				517BBCF32FA4C3450057199B /* SimplePresentmentSourceExt.swift in Sources */,
-				517BBCF42FA4C3450057199B /* PromptDialogs.swift in Sources */,
-				517BBCF52FA4C3450057199B /* CardCarousel.swift in Sources */,
-				517BBCF62FA4C3450057199B /* CardInfo.swift in Sources */,
-				517BBCF72FA4C3450057199B /* RequestAuthorizationView.swift in Sources */,
-				517BBCF82FA4C3450057199B /* FloatingItemCenteredText.swift in Sources */,
-				517BBCF92FA4C3450057199B /* CardBadge.swift in Sources */,
-				517BBCFA2FA4C3450057199B /* SmartSheet.swift in Sources */,
-				517BBCFB2FA4C3450057199B /* DocumentExt.swift in Sources */,
-				517BBCFC2FA4C3450057199B /* PassphraseInputView.swift in Sources */,
-				517BBCFD2FA4C3450057199B /* DefaultToHumanReadable.swift in Sources */,
+				5183236B2FA6AB090083253A /* MdocProximityQrSettings.swift in Sources */,
+				5183236C2FA6AB090083253A /* SimplePresentmentSourceExt.swift in Sources */,
+				5183236D2FA6AB090083253A /* Consent.swift in Sources */,
+				5183236E2FA6AB090083253A /* FloatingItemHeadingAndDateTime.swift in Sources */,
+				5183236F2FA6AB090083253A /* RequestAuthorizationView.swift in Sources */,
+				518323702FA6AB090083253A /* ConsentPromptDialog.swift in Sources */,
+				518323712FA6AB090083253A /* DefaultToHumanReadable.swift in Sources */,
+				518323722FA6AB090083253A /* TagsExt.swift in Sources */,
+				518323732FA6AB090083253A /* X509CertViewer.swift in Sources */,
+				518323742FA6AB090083253A /* PassphrasePromptDialog.swift in Sources */,
+				518323752FA6AB090083253A /* VerticalCardList.swift in Sources */,
+				518323762FA6AB090083253A /* DocumentExtCardart.swift in Sources */,
+				518323772FA6AB090083253A /* PromptDialogs.swift in Sources */,
+				518323782FA6AB090083253A /* Extensions.swift in Sources */,
+				518323792FA6AB090083253A /* CardBadge.swift in Sources */,
+				5183237A2FA6AB090083253A /* FloatingItemText.swift in Sources */,
+				5183237B2FA6AB090083253A /* DocumentExt.swift in Sources */,
+				5183237C2FA6AB090083253A /* ProvisioningView.swift in Sources */,
+				5183237D2FA6AB090083253A /* FloatingItemContainer.swift in Sources */,
+				5183237E2FA6AB090083253A /* SmartSheet.swift in Sources */,
+				5183237F2FA6AB090083253A /* FloatingItemCenteredText.swift in Sources */,
+				518323802FA6AB090083253A /* FloatingItemList.swift in Sources */,
+				518323812FA6AB090083253A /* PassphraseInputView.swift in Sources */,
+				518323822FA6AB090083253A /* DocumentModel.swift in Sources */,
+				518323832FA6AB090083253A /* MdocProximityQrPresentment.swift in Sources */,
+				518323842FA6AB090083253A /* FloatingItemHeadingAndText.swift in Sources */,
+				518323852FA6AB090083253A /* QrCode.swift in Sources */,
+				518323862FA6AB090083253A /* CardCarousel.swift in Sources */,
+				518323872FA6AB090083253A /* CardInfo.swift in Sources */,
+				518323882FA6AB090083253A /* FloatingItemHeadingAndContent.swift in Sources */,
+				518323892FA6AB090083253A /* PromptModelExt.swift in Sources */,
+				5183238A2FA6AB090083253A /* FloatingItemHeadingAndDate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
