@@ -145,7 +145,10 @@ data class NfcReaderDestination(
 ): Destination()
 
 @Serializable
-data object VerticalCardListDestination: Destination()
+data class VerticalCardListDestination(
+    val focusedDocumentId: String? = null,
+    val animateListTransitions: Boolean = false
+): Destination()
 
 @Serializable
 data object EventLogDestination: Destination()

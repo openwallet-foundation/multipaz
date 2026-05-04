@@ -22,12 +22,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -36,16 +36,17 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
-import androidx.navigationevent.NavigationEventInfo
-import androidx.navigationevent.compose.NavigationBackHandler
-import androidx.navigationevent.compose.rememberNavigationEventState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.multipaz.compose.cards.VerticalCardList
+import org.multipaz.compose.cards.VerticalCardListState
+import org.multipaz.compose.cards.rememberVerticalCardListState
 import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.document.DocumentInfo
 import org.multipaz.document.DocumentStore
 import org.multipaz.testapp.TestAppSettingsModel
 import org.multipaz.util.Logger
+import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "VerticalCardListScreen"
 
@@ -60,49 +61,22 @@ fun VerticalCardListScreen(
     documentStore: DocumentStore,
     documentModel: DocumentModel,
     settingsModel: TestAppSettingsModel,
+    focusedDocumentId: String?,
+    state: VerticalCardListState = rememberVerticalCardListState(),
+    onDocumentFocused: (documentId: String) -> Unit,
+    onDocumentUnfocused: () -> Unit,
     onViewDocument: (documentId: String) -> Unit,
+    onFocusDocumentFollowing: (documentId: String) -> Unit,
     onBackPressed: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
-    var showStackWhileFocused by remember { mutableStateOf(true) }
-    var allowDocumentReordering by remember { mutableStateOf(true) }
-    val visibilityOptions = listOf(
-        VisibilityOption("25%", 25),
-        VisibilityOption("50%", 50),
-        VisibilityOption("75%", 75),
-        VisibilityOption("100%", 100),
-    )
-    val visibilityOptionsExpanded = remember { mutableStateOf(false) }
-    val visibilityOptionsSelected = remember { mutableStateOf(visibilityOptions[0]) }
-    var focusedDocumentShowMoreInfo by rememberSaveable { mutableStateOf(false) }
-    var focusedDocumentId by rememberSaveable { mutableStateOf<String?>(null) }
-    val focusedDocument = documentModel.documentInfos.collectAsState().value.find { documentInfo ->
-        documentInfo.document.identifier == focusedDocumentId
-    }
-
-    // This hooks the back handler so we can close the focused document instead of going back.
-    NavigationBackHandler(
-        state = rememberNavigationEventState(NavigationEventInfo.None),
-        isBackEnabled = focusedDocumentId != null,
-        onBackCompleted = {
-            if (focusedDocumentShowMoreInfo) {
-                focusedDocumentShowMoreInfo = false
-            } else {
-                focusedDocumentId = null
-            }
-        }
-    )
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     val text = if (focusedDocumentId != null) {
-                        if (focusedDocumentShowMoreInfo) {
-                            "Document Focused (more)"
-                        } else {
-                            "Document Focused"
-                        }
+                        "Vertical Card List (doc focused)"
                     } else {
                         "Vertical Card List"
                     }
@@ -112,16 +86,7 @@ fun VerticalCardListScreen(
                 ),
                 navigationIcon = {
                     IconButton(onClick = {
-                        // Unfocus focused document instead of going back, like the back handler above
-                        if (focusedDocumentId != null) {
-                            if (focusedDocumentShowMoreInfo) {
-                                focusedDocumentShowMoreInfo = false
-                            } else {
-                                focusedDocumentId = null
-                            }
-                        } else {
-                            onBackPressed()
-                        }
+                        onBackPressed()
                     }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -143,47 +108,6 @@ fun VerticalCardListScreen(
                 ),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            ComboBox(
-                headline = "Card visibility",
-                options = visibilityOptions,
-                comboBoxSelected = visibilityOptionsSelected,
-                comboBoxExpanded = visibilityOptionsExpanded,
-                getDisplayName = { it.displayName },
-                onSelected = { index, value ->
-                    visibilityOptionsSelected.value = visibilityOptions[index]
-                }
-            )
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = showStackWhileFocused,
-                    onCheckedChange = { value ->
-                        showStackWhileFocused = value
-                    },
-                )
-                Text(
-                    text = "Show stack while focused",
-                )
-            }
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = allowDocumentReordering,
-                    onCheckedChange = { value ->
-                        allowDocumentReordering = value
-                    },
-                )
-                Text(
-                    text = "Allow document reordering",
-                )
-            }
-
             val windowInfo = LocalWindowInfo.current
             val density = LocalDensity.current
             val maxCardHeight = with(density) {
@@ -191,13 +115,15 @@ fun VerticalCardListScreen(
             }
 
             val cardInfos by documentModel.documentInfos.collectAsState()
+            val focusedCard = cardInfos.find { it.document.identifier == focusedDocumentId }
             VerticalCardList(
                 cardInfos = cardInfos,
-                focusedCard = focusedDocument,
-                unfocusedVisiblePercent = visibilityOptionsSelected.value.visibilityPercentage,
-                allowCardReordering = allowDocumentReordering,
-                showStackWhileFocused = showStackWhileFocused,
+                focusedCard = focusedCard,
+                unfocusedVisiblePercent = 25,
+                allowCardReordering = true,
+                showStackWhileFocused = true,
                 cardMaxHeight = maxCardHeight,
+                state = state,
                 showCardInfo = { cardInfo ->
                     val documentInfo = cardInfo as DocumentInfo
                     Column(
@@ -205,15 +131,16 @@ fun VerticalCardListScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text("${documentInfo.document.displayName} is focused")
+                        Button(onClick = {
+                            onFocusDocumentFollowing(documentInfo.document.identifier)
+                        }) {
+                            Text("Next document")
+                        }
                         Spacer(modifier = Modifier.weight(1.0f))
-                        if (!focusedDocumentShowMoreInfo) {
-                            Text("Tap card for more info!")
-                        } else {
-                            Button(onClick = {
-                                onViewDocument(documentInfo.document.identifier)
-                            }) {
-                                Text("Even more info")
-                            }
+                        Button(onClick = {
+                            onViewDocument(documentInfo.document.identifier)
+                        }) {
+                            Text("Document Info")
                         }
                     }
                 },
@@ -222,14 +149,13 @@ fun VerticalCardListScreen(
                 },
                 onCardFocused = { cardInfo ->
                     val documentInfo = cardInfo as DocumentInfo
-                    focusedDocumentShowMoreInfo = false
-                    focusedDocumentId = documentInfo.document.identifier
+                    onDocumentFocused(documentInfo.document.identifier)
                 },
                 onCardFocusedTapped = {
-                    focusedDocumentShowMoreInfo = true
+                    onDocumentUnfocused()
                 },
                 onCardFocusedStackTapped = {
-                    focusedDocumentId = null
+                    onDocumentUnfocused()
                 },
                 onCardReordered = { cardInfo, newIndex ->
                     val documentInfo = cardInfo as DocumentInfo

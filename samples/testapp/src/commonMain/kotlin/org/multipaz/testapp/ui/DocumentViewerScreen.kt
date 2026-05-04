@@ -43,7 +43,8 @@ fun DocumentViewerScreen(
     onViewCredential: (documentId: String, credentialId: String) -> Unit,
     onProvisionMore: (document: Document, authorizationData: ByteString) -> Unit,
     onDeleteAllCredentials: (document: Document) -> Unit,
-    onDocumentDeleted: () -> Unit
+    onDocumentDeleted: () -> Unit,
+    onOpenInVerticalCardList: (documentId: String) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val documentInfos = documentModel.documentInfos.collectAsState().value
@@ -99,6 +100,24 @@ fun DocumentViewerScreen(
                     keyText = "Document Name",
                     valueText = document.displayName ?: "(displayName not set)"
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp, horizontal = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Button(
+                        modifier = Modifier.weight(1.0f),
+                        onClick = {
+                            onOpenInVerticalCardList(documentId)
+                        },
+                    ) {
+                        Text(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            text = "Open in Vertical Card List"
+                        )
+                    }
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

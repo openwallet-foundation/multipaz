@@ -1,5 +1,9 @@
 package org.multipaz.testapp
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +27,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -68,6 +74,7 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.compose.branding.Branding
+import org.multipaz.compose.cards.rememberVerticalCardListState
 import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.compose.provisioning.ProvisioningBottomSheet
@@ -1020,8 +1027,10 @@ class App private constructor (val promptModel: PromptModel) {
         }
 
         snackbarHostState = remember { SnackbarHostState() }
+        val verticalCardListState = rememberVerticalCardListState()
 
         val provisioningIssuerUrl = remember { mutableStateOf<String?>(null) }
+
         val currentBranding = Branding.Current.collectAsState().value
         currentBranding.theme {
             PromptDialogs(
@@ -1059,7 +1068,7 @@ class App private constructor (val promptModel: PromptModel) {
                             onClickDocumentStore = { navController.navigate(DocumentStoreDestination) },
                             onClickVerticalCardListScreen = {
                                 navController.navigate(
-                                    VerticalCardListDestination
+                                    VerticalCardListDestination()
                                 )
                             },
                             onClickTrustedIssuers = {
@@ -1229,6 +1238,13 @@ class App private constructor (val promptModel: PromptModel) {
                             },
                             onDocumentDeleted = {
                                 navController.navigateUp()
+                            },
+                            onOpenInVerticalCardList = { documentId ->
+                                navController.navigate(
+                                    VerticalCardListDestination(
+                                        focusedDocumentId = documentId,
+                                    )
+                                )
                             }
                         )
                     }
@@ -1672,18 +1688,61 @@ class App private constructor (val promptModel: PromptModel) {
                     }
                 }
                 composable<VerticalCardListDestination>(
-                    enterTransition = { null },
-                    exitTransition = { null },
-                    popEnterTransition = { null },
-                    popExitTransition = { null }
+                    enterTransition = {
+                        if (initialState.destination.route?.contains("VerticalCardListDestination") == true) EnterTransition.None else null
+                    },
+                    exitTransition = {
+                        if (targetState.destination.route?.contains("VerticalCardListDestination") == true) ExitTransition.None else null
+                    },
+                    popEnterTransition = {
+                        if (initialState.destination.route?.contains("VerticalCardListDestination") == true) EnterTransition.None else null
+                    },
+                    popExitTransition = {
+                        if (targetState.destination.route?.contains("VerticalCardListDestination") == true) ExitTransition.None else null
+                    }
                 ) { backStackEntry ->
+                    val destination = backStackEntry.toRoute<VerticalCardListDestination>()
+                    val overrideAnim = backStackEntry.savedStateHandle.get<Boolean>("animateListTransitions")
+                    verticalCardListState.animateListTransitions = overrideAnim ?: destination.animateListTransitions
+
                     // Note: VerticalCardListScreen has its own AppBar
                     VerticalCardListScreen(
                         documentStore = documentStore,
                         documentModel = documentModel,
                         settingsModel = settingsModel,
+                        focusedDocumentId = destination.focusedDocumentId,
+                        state = verticalCardListState,
+                        onDocumentFocused = { documentId ->
+                            navController.navigate(VerticalCardListDestination(documentId, animateListTransitions = true))
+                        },
+                        onDocumentUnfocused = {
+                            val previousEntry = navController.previousBackStackEntry
+                            if (previousEntry?.destination?.route?.contains("VerticalCardListDestination") == true) {
+                                previousEntry.savedStateHandle["animateListTransitions"] = true
+                            }
+                            navController.navigateUp()
+                        },
                         onViewDocument = { documentId ->
                             navController.navigate(DocumentViewerDestination(documentId))
+                        },
+                        onFocusDocumentFollowing = { documentId ->
+                            coroutineScope.launch {
+                                val documents = documentStore.listDocuments()
+                                var nextDocument = documents.first()
+                                documents.forEachIndexed { index, document ->
+                                    if (document.identifier == documentId) {
+                                        if (index < documents.size - 1) {
+                                            nextDocument = documents[index + 1]
+                                            return@forEachIndexed
+                                        }
+                                    }
+                                }
+                                navController.navigateUp()
+                                navController.navigate(VerticalCardListDestination(
+                                    focusedDocumentId = nextDocument.identifier,
+                                    animateListTransitions = false
+                                ))
+                            }
                         },
                         onBackPressed = {
                             navController.navigateUp()
