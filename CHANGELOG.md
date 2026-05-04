@@ -5,10 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.99.0] - Not yet released, expected April 2026
+## [0.99.0] - 2026-05-04
 Significant changes since Multipaz 0.98.0 include:
 
-- TODO
+- New `multipaz-utopia` module for non-standardized doctypes and payment services.
+- Introduction of the Multipaz Pass file format for sharing credentials.
+- Improved Swift integration by using SKIE Bundling to move Swift code into KMP libraries.
+- Support for web-based verification transactions and proximity reading transaction data.
+- Enhanced OpenID4VCI and OpenID4VP support, including Android Keystore attestation and state propagation.
+- New `WebStorage` implementation for JS and WasmJS using IndexedDB.
+- Support for document badges and attribute sensitivity levels.
+- Improved cross-platform UI with browser tabs for authorization and new Swift UI components.
+- Enhanced event logging with support for app-specific and provisioning events.
+- Updated to Longfellow ZK version 0.9 with bundled circuits for easier deployment.
+- Continued internationalization efforts, including translations for the `multipaz-doctypes` module.
+- Support for app-provided configuration for document provisioning.
+- Support in DeviceCheck for non-hardware-backed environments.
 
 ## [0.98.0] - 2026-03-19
 Significant changes since Multipaz 0.97.0 include:
