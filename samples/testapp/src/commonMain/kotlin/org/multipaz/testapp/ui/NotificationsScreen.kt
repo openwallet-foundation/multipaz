@@ -45,14 +45,18 @@ fun NotificationsScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Button(
-                onClick = {
-                    coroutineScope.launch {
-                        notificationPermissionState.launchPermissionRequest()
+            if (notificationPermissionState.isPermanentlyDenied) {
+                Text("Notification permission has been permanently denied. Please enable it in your device settings.")
+            } else {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            notificationPermissionState.launchPermissionRequest()
+                        }
                     }
+                ) {
+                    Text("Request Notification permission")
                 }
-            ) {
-                Text("Request Notification permission")
             }
         }
     } else {

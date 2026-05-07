@@ -59,10 +59,14 @@ fun IsoMdocProximitySharingScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (!blePermissionState.isGranted) {
-            Button(
-                onClick = { coroutineScope.launch { blePermissionState.launchPermissionRequest() } }
-            ) {
-                Text("Request BLE permissions")
+            if (blePermissionState.isPermanentlyDenied) {
+                Text("BLE permissions have been permanently denied. Please enable them in your device settings.")
+            } else {
+                Button(
+                    onClick = { coroutineScope.launch { blePermissionState.launchPermissionRequest() } }
+                ) {
+                    Text("Request BLE permissions")
+                }
             }
         } else if (!bleEnabledState.isEnabled) {
             Column(

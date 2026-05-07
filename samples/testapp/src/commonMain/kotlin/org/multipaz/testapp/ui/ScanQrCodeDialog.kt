@@ -65,14 +65,18 @@ fun ScanQrCodeDialog(
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    cameraPermissionState.launchPermissionRequest()
+                        if (cameraPermissionState.isPermanentlyDenied) {
+                            Text("Camera permission has been permanently denied. Please enable it in your device settings.")
+                        } else {
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        cameraPermissionState.launchPermissionRequest()
+                                    }
                                 }
+                            ) {
+                                Text("Request Camera permission")
                             }
-                        ) {
-                            Text("Request Camera permission")
                         }
                     }
                 } else {

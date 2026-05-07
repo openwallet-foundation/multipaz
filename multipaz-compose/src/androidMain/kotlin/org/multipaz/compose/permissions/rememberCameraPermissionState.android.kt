@@ -16,6 +16,12 @@ private class AccompanistCameraPermissionState(
     override val isGranted: Boolean
         get() = permissionsState.status == PermissionStatus.Granted
 
+    override val isPermanentlyDenied: Boolean
+        get() {
+            val status = permissionsState.status
+            return status is PermissionStatus.Denied && !status.shouldShowRationale
+        }
+
     override suspend fun launchPermissionRequest() {
         permissionsState.launchPermissionRequest()
     }

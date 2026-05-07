@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.compose.runtime.Composable
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
+import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 
 @OptIn(ExperimentalPermissionsApi::class)
@@ -14,6 +15,12 @@ private class AccompanistBluetoothPermissionState(
 
     override val isGranted: Boolean
         get() = multiplePermissionsState.allPermissionsGranted
+
+    override val isPermanentlyDenied: Boolean
+        get() = multiplePermissionsState.permissions.any { perm ->
+            val status = perm.status
+            status is PermissionStatus.Denied && !status.shouldShowRationale
+        }
 
     override suspend fun launchPermissionRequest() {
         multiplePermissionsState.launchMultiplePermissionRequest()

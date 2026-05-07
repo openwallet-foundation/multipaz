@@ -33,6 +33,12 @@ private class IosBluetoothPermissionState(
     override val isGranted: Boolean
         get() = (CBManager.authorization == CBManagerAuthorizationAllowedAlways)
 
+    override val isPermanentlyDenied: Boolean
+        get() {
+            val auth = CBManager.authorization
+            return auth == CBManagerAuthorizationDenied || auth == CBManagerAuthorizationRestricted
+        }
+
     override suspend fun launchPermissionRequest() {
         CBCentralManager(object : NSObject(), CBCentralManagerDelegateProtocol {
             override fun centralManagerDidUpdateState(central: CBCentralManager) {

@@ -93,14 +93,22 @@ fun StartScreen(
                 }
                 if (!documentInfos.isEmpty()) {
                     if (!blePermissionState.isGranted) {
-                        WarningCard(
-                            modifier = Modifier.padding(8.dp).clickable() {
-                                coroutineScope.launch {
-                                    blePermissionState.launchPermissionRequest()
-                                }
+                        if (blePermissionState.isPermanentlyDenied) {
+                            WarningCard(
+                                modifier = Modifier.padding(8.dp)
+                            ) {
+                                Text("BLE permissions have been permanently denied. Please enable them in your device settings.")
                             }
-                        ) {
-                            Text("Proximity presentment require BLE permissions to be granted. Click to fix.")
+                        } else {
+                            WarningCard(
+                                modifier = Modifier.padding(8.dp).clickable() {
+                                    coroutineScope.launch {
+                                        blePermissionState.launchPermissionRequest()
+                                    }
+                                }
+                            ) {
+                                Text("Proximity presentment require BLE permissions to be granted. Click to fix.")
+                            }
                         }
                     }
                 }

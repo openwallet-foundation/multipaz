@@ -17,11 +17,13 @@ import platform.UserNotifications.UNAuthorizationOptionSound
 
 import platform.UserNotifications.UNUserNotificationCenter
 import platform.UserNotifications.UNAuthorizationStatusAuthorized
+import platform.UserNotifications.UNAuthorizationStatusDenied
 import kotlin.coroutines.resume
 
 private class IosNotificationPermissionState(
     val center: UNUserNotificationCenter,
     val hasPermission: Boolean,
+    val authorizationStatus: Long,
     val recomposeCounter: MutableIntState
 ): PermissionState {
     companion object {
@@ -33,6 +35,9 @@ private class IosNotificationPermissionState(
 
     override val isGranted: Boolean
         get() = hasPermission
+
+    override val isPermanentlyDenied: Boolean
+        get() = authorizationStatus == UNAuthorizationStatusDenied
 
     override suspend fun launchPermissionRequest() {
         center.requestAuthorizationWithOptions(NOTIFICATION_PERMISSIONS) { isGranted, _ ->
@@ -49,10 +54,11 @@ actual fun rememberNotificationPermissionState(): PermissionState {
     val recomposeCounter = remember { mutableIntStateOf(0) }
     LaunchedEffect(recomposeCounter.value) {}
 
-    val hasPermission = runBlocking {
-        suspendCancellableCoroutine<Boolean> { continuation ->
+    val (hasPermission, authorizationStatus) = runBlocking {
+        suspendCancellableCoroutine<Pair<Boolean, Long>> { continuation ->
             center.getNotificationSettingsWithCompletionHandler { settings ->
-                continuation.resume(settings?.authorizationStatus == UNAuthorizationStatusAuthorized)
+                val status = settings?.authorizationStatus ?: -1L
+                continuation.resume(Pair(status == UNAuthorizationStatusAuthorized, status))
             }
         }
     }
@@ -68,5 +74,5 @@ actual fun rememberNotificationPermissionState(): PermissionState {
         }
     }
 
-    return IosNotificationPermissionState(center, hasPermission, recomposeCounter)
+    return IosNotificationPermissionState(center, hasPermission, authorizationStatus, recomposeCounter)
 }

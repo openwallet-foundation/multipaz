@@ -16,6 +16,12 @@ private class AccompanistNotificationPermissionState(
     override val isGranted: Boolean
         get() = permissionsState.status == PermissionStatus.Granted
 
+    override val isPermanentlyDenied: Boolean
+        get() {
+            val status = permissionsState.status
+            return status is PermissionStatus.Denied && !status.shouldShowRationale
+        }
+
     override suspend fun launchPermissionRequest() {
         permissionsState.launchPermissionRequest()
     }
@@ -37,6 +43,9 @@ actual fun rememberNotificationPermissionState(): PermissionState {
         return object: PermissionState {
             override val isGranted: Boolean
                 get() = true
+
+            override val isPermanentlyDenied: Boolean
+                get() = false
 
             override suspend fun launchPermissionRequest() {
                 throw IllegalStateException("Permission is already granted")

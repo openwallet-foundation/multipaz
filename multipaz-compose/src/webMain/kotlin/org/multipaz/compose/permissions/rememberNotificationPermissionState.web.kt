@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 
 private class WebNotificationPermissionState: PermissionState {
     override val isGranted = true  // TODO
+    override val isPermanentlyDenied = false
     override suspend fun launchPermissionRequest() {
         TODO()
     }

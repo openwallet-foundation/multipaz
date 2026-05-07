@@ -10,6 +10,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 
 import platform.AVFoundation.AVAuthorizationStatusAuthorized
+import platform.AVFoundation.AVAuthorizationStatusDenied
+import platform.AVFoundation.AVAuthorizationStatusRestricted
 import platform.AVFoundation.AVCaptureDevice
 import platform.AVFoundation.AVMediaTypeVideo
 import platform.AVFoundation.authorizationStatusForMediaType
@@ -17,10 +19,15 @@ import platform.AVFoundation.requestAccessForMediaType
 
 private class IosCameraPermissionState(
     val hasPermission: Boolean,
+    val authorizationStatus: Long,
     val recomposeCounter: MutableIntState
 ): PermissionState {
     override val isGranted: Boolean
         get() = hasPermission
+
+    override val isPermanentlyDenied: Boolean
+        get() = authorizationStatus == AVAuthorizationStatusDenied ||
+            authorizationStatus == AVAuthorizationStatusRestricted
 
     override suspend fun launchPermissionRequest() {
         AVCaptureDevice.requestAccessForMediaType(AVMediaTypeVideo) { granted ->
@@ -48,5 +55,5 @@ actual fun rememberCameraPermissionState(): PermissionState {
         }
     }
 
-    return IosCameraPermissionState(hasPermission, recomposeCounter)
+    return IosCameraPermissionState(hasPermission, authzStatus, recomposeCounter)
 }
