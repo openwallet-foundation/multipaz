@@ -22,13 +22,16 @@ import kotlinx.serialization.json.jsonPrimitive
  * @property vct the Verifiable Credential Type.
  * @property claimPath the claim name.
  * @property value the value of the claim
+ * @property queryIdentifier id of this claim in DCQL, if this claim originated in DCQL query and
+ *   id was present there.
  */
 data class JsonClaim(
     override val displayName: String,
     override val attribute: DocumentAttribute?,
     val vct: String,
     val claimPath: JsonArray,
-    val value: JsonElement
+    val value: JsonElement,
+    override val queryIdentifier: String? = null
 ) : Claim(displayName, attribute) {
 
     override fun render(timeZone: TimeZone): String {

@@ -23,6 +23,7 @@ import kotlinx.datetime.toLocalDateTime
  * @property namespaceName the mdoc namespace.
  * @property dataElementName the data element name.
  * @property value the value of the claim.
+ * @property queryIdentifier "id" attribute of the claim query if this claim originated from a query
  */
 data class MdocClaim(
     override val displayName: String,
@@ -30,7 +31,8 @@ data class MdocClaim(
     val docType: String,
     val namespaceName: String,
     val dataElementName: String,
-    val value: DataItem
+    val value: DataItem,
+    override val queryIdentifier: String? = null
 ) : Claim(displayName, attribute) {
 
     override fun render(timeZone: TimeZone): String {

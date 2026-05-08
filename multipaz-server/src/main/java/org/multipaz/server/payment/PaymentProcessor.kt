@@ -1,7 +1,8 @@
-package org.multipaz.server.presentment
+package org.multipaz.server.payment
 
 import org.multipaz.rpc.annotation.RpcInterface
 import org.multipaz.rpc.annotation.RpcMethod
+import org.multipaz.verification.PresentmentRecord
 
 /**
  * RPC interface for payment transaction processing.

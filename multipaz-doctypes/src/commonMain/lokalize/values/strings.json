@@ -390,6 +390,8 @@
   "id_pass_request_all_data_elements": "All data elements",
   "multi_request_mdl_and_photoid": "mDL AND PhotoID",
   "multi_request_mdl_or_photoid": "mDL OR PhotoID",
+  "multi_request_payment_and_age_over_18": "Payment and age over 18",
+  "multi_request_age_over_18_mdl_or_pid": "Age over 18 through mDL or PID + transaction",
   "age_verification_attribute_older_than_years": "Older than {age} years",
   "age_verification_description_older_than_years": "Indication whether the mDL holder is as old or older than {age}"
 }

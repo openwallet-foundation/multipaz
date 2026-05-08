@@ -42,7 +42,7 @@ import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.server.common.getBaseUrl
-import org.multipaz.server.presentment.PaymentProcessor
+import org.multipaz.server.payment.PaymentProcessor
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.Logger
 import org.multipaz.util.fromGlob

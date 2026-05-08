@@ -23,8 +23,9 @@
      * - transaction_data (optional): transaction data as an array of Json objects as described
      *   in described in OpenID4VP spec (before Json serialization and Base64Url-encoding).
      * - protocols (optional): an array of DC API protocols to use in the order of preference, the
-     *   following values are supported: "org-iso-mdoc" (ISO 18013 Annex C), "openid4vp-v1-signed"
-     *   (OpenID4VP v1). Both are enabled by default.
+     *   following values are supported: "org-iso-mdoc" (ISO 18013 Annex C, DC API),
+     *   "openid4vp-v1" (OpenID4VP v1 DC API), "openid4vp-v1-uri" (OpenID4VP url scheme).
+     *   All are enabled by default.
      */
     window.multipazVerifyCredentials = async function(request) {
         const adjustedRequest = {};
@@ -46,7 +47,7 @@
         const dcRequest = rq["dc_request"];
         if (useUrlSchema || dcRequest.digital.requests.length == 0) {
             window.location = "haip-vp://?client_id=" + encodeURIComponent(clientId) +
-                "&request_uri=" + encodeURIComponent(baseUrl + "get_request/" + sessionId);
+                "&request_uri=" + encodeURIComponent(baseUrl + "openid4vp_request/" + sessionId);
             while (true) {
                 // NB: "get_result" does long poll with 3 minute timeout
                 const res = await(await fetch(baseUrl + "get_result/" + sessionId)).json();

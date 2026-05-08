@@ -8,6 +8,7 @@ import org.multipaz.documenttype.Icon
 import kotlinx.datetime.LocalDate
 import org.multipaz.utopia.localization.LocalizedStrings
 import org.multipaz.utopia.localization.GeneratedStringKeys
+import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.documenttype.knowntypes.SampleData
 import org.multipaz.documenttype.DocumentAttributeSensitivity
 
@@ -119,7 +120,7 @@ object DigitalPaymentCredential {
             )
             .addSampleRequest(
                 id = "payment_transaction",
-                displayName = getLocalizedString(GeneratedStringKeys.PAYMENT_REQUEST_PAYMENT_SCA_ALL),
+                displayName = getLocalizedString(GeneratedStringKeys.PAYMENT_REQUEST_PAYMENT_SCA_TRANSACTION),
                 mdocDataElements = mapOf(
                     CARD_NAMESPACE to mapOf()
                 ),

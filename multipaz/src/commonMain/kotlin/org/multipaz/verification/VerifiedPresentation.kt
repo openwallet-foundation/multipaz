@@ -10,7 +10,8 @@ import kotlin.time.Instant
  * This is an abstract base class, see [JsonVerifiedPresentation] and [MdocVerifiedPresentation] for
  * concrete implementations.
  *
- * @property documentSignerCertChain the certificate chain of the document signer key or `null` if not know.
+ * @property documentSignerCertChain the certificate chain of the document signer key or `null`
+ *   if not known.
  * @property issuerSignedClaims the claims signed by the issuer.
  * @property deviceSignedClaims the claims signed by the device.
  * @property zkpUsed if true, a Zero-Knowledge Proof was used to verify the credential.
@@ -18,14 +19,16 @@ import kotlin.time.Instant
  * @property validUntil the point in time this presentation is valid until.
  * @property signedAt the point in time this was signed.
  * @property expectedUpdate the point in time an update is expected, if any.
+ * @property identifier DCQL identifier for this document, if any
  */
-sealed class VerifiedPresentation(
-    open val documentSignerCertChain: X509CertChain?,
-    open val issuerSignedClaims: List<Claim>,
-    open val deviceSignedClaims: List<Claim>,
-    open val zkpUsed: Boolean,
-    open val validFrom: Instant?,
-    open val validUntil: Instant?,
-    open val signedAt: Instant?,
-    open val expectedUpdate: Instant?,
-)
+sealed class VerifiedPresentation() {
+    abstract val documentSignerCertChain: X509CertChain?
+    abstract val issuerSignedClaims: List<Claim>
+    abstract val deviceSignedClaims: List<Claim>
+    abstract val zkpUsed: Boolean
+    abstract val validFrom: Instant?
+    abstract val validUntil: Instant?
+    abstract val signedAt: Instant?
+    abstract val expectedUpdate: Instant?
+    abstract val identifier: String?
+}

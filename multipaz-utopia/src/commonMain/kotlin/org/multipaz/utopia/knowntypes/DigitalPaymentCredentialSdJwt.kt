@@ -4,6 +4,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.Icon
+import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.utopia.localization.GeneratedStringKeys
 import org.multipaz.utopia.localization.LocalizedStrings
 

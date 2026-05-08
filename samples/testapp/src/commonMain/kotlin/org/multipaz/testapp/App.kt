@@ -2,8 +2,6 @@ package org.multipaz.testapp
 
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,8 +25,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -169,6 +165,7 @@ import org.multipaz.util.fromBase64Url
 import org.multipaz.util.fromHexByteString
 import org.multipaz.util.toBase64Url
 import org.multipaz.utopia.knowntypes.addUtopiaTypes
+import org.multipaz.verification.VerificationSession
 import kotlin.time.Clock
 
 /**
@@ -1514,8 +1511,7 @@ class App private constructor (val promptModel: PromptModel) {
                             showToast = { message -> showToast(message) },
                             showResponse = { vpToken: JsonObject?,
                                              deviceResponse: DataItem?,
-                                             sessionTranscript: DataItem,
-                                             nonce: ByteString?,
+                                             session: VerificationSession,
                                              eReaderKey: EcPrivateKey?,
                                              metadata: ShowResponseMetadata ->
                                 navController.navigate(
@@ -1525,9 +1521,7 @@ class App private constructor (val promptModel: PromptModel) {
                                         deviceResponse = deviceResponse?.let {
                                             Cbor.encode(it).toBase64Url()
                                         },
-                                        sessionTranscript = Cbor.encode(sessionTranscript)
-                                            .toBase64Url(),
-                                        nonce = nonce?.let { nonce.toByteArray().toBase64Url() },
+                                        serializedSession = session.serializeToString(),
                                         eReaderKey = eReaderKey?.let {
                                             Cbor.encode(
                                                 eReaderKey.toCoseKey().toDataItem()
@@ -1547,8 +1541,7 @@ class App private constructor (val promptModel: PromptModel) {
                             showToast = { message -> showToast(message) },
                             showResponse = { vpToken: JsonObject?,
                                              deviceResponse: DataItem?,
-                                             sessionTranscript: DataItem,
-                                             nonce: ByteString?,
+                                             session: VerificationSession,
                                              eReaderKey: EcPrivateKey?,
                                              metadata: ShowResponseMetadata ->
                                 navController.navigate(
@@ -1558,9 +1551,7 @@ class App private constructor (val promptModel: PromptModel) {
                                         deviceResponse = deviceResponse?.let {
                                             Cbor.encode(it).toBase64Url()
                                         },
-                                        sessionTranscript = Cbor.encode(sessionTranscript)
-                                            .toBase64Url(),
-                                        nonce = nonce?.let { nonce.toByteArray().toBase64Url() },
+                                        serializedSession = session.serializeToString(),
                                         eReaderKey = eReaderKey?.let {
                                             Cbor.encode(
                                                 eReaderKey.toCoseKey().toDataItem()
@@ -1583,9 +1574,6 @@ class App private constructor (val promptModel: PromptModel) {
                         }
                         val deviceResponse =
                             destination.deviceResponse?.let { Cbor.decode(it.fromBase64Url()) }
-                        val sessionTranscript =
-                            Cbor.decode(destination.sessionTranscript.fromBase64Url())
-                        val nonce = destination.nonce?.let { ByteString(it.fromBase64Url()) }
                         val eReaderKey = destination.eReaderKey?.let {
                             Cbor.decode(it.fromBase64Url()).asCoseKey.ecPrivateKey
                         }
@@ -1594,8 +1582,7 @@ class App private constructor (val promptModel: PromptModel) {
                         ShowResponseScreen(
                             vpToken = vpToken,
                             deviceResponse = deviceResponse,
-                            sessionTranscript = sessionTranscript,
-                            nonce = nonce,
+                            session = VerificationSession.deserializeFromString(destination.serializedSession),
                             eReaderKey = eReaderKey,
                             metadata = metadata,
                             issuerTrustManager = issuerTrustManager,

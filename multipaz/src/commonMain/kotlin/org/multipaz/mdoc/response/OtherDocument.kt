@@ -11,7 +11,6 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.presentment.TransactionData
 import org.multipaz.sdjwt.SdJwtKb
-import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.zlibInflate
 import kotlin.time.Duration.Companion.minutes
@@ -40,16 +39,15 @@ data class OtherDocument(
         eReaderKey: AsymmetricKey?,
         transactionData: List<TransactionData>,
         atTime: Instant,
-    ): Map<String, Map<String, DataItem>> {
+    ) {
         when (docFormat) {
-            "sd-jwt+kb" -> return verifySdJwtVc(
+            "sd-jwt+kb" -> verifySdJwtVc(
                 sessionTranscript = sessionTranscript,
                 eReaderKey = eReaderKey,
                 transactionData = transactionData,
                 atTime = atTime
             )
         }
-        return emptyMap()
     }
 
     internal suspend fun verifySdJwtVc(

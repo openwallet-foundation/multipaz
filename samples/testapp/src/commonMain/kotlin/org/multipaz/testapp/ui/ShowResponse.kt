@@ -31,14 +31,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.DataItem
 import org.multipaz.claim.organizeByNamespace
 import org.multipaz.compose.datetime.formattedDateTime
 import org.multipaz.compose.decodeImage
-import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentAttributeType
@@ -49,9 +47,8 @@ import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.verification.JsonVerifiedPresentation
 import org.multipaz.verification.MdocVerifiedPresentation
-import org.multipaz.verification.VerificationUtil.verifyMdocDeviceResponse
-import org.multipaz.verification.VerificationUtil.verifyOpenID4VPResponse
 import org.multipaz.testapp.ShowResponseMetadata
+import org.multipaz.verification.VerificationSession
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.DurationUnit
@@ -106,8 +103,7 @@ private data class VerificationResult(
 fun ShowResponse(
     vpToken: JsonObject?,
     deviceResponse: DataItem?,
-    sessionTranscript: DataItem,
-    nonce: ByteString?,
+    session: VerificationSession,
     eReaderKey: EcPrivateKey?,
     metadata: ShowResponseMetadata?,
     issuerTrustManager: TrustManagerInterface,
@@ -125,10 +121,9 @@ fun ShowResponse(
             try {
                 verficationResult.value = parseResponse(
                     now = now,
-                    vpToken = vpToken,
+                    dcResponse = vpToken,
                     deviceResponse = deviceResponse,
-                    sessionTranscript = sessionTranscript,
-                    nonce = nonce,
+                    session = session,
                     eReaderKey = eReaderKey,
                     metadata = metadata,
                     documentTypeRepository = documentTypeRepository,
@@ -213,10 +208,9 @@ fun ShowResponse(
 
 private suspend fun parseResponse(
     now: Instant,
-    vpToken: JsonObject?,
+    dcResponse: JsonObject?,
     deviceResponse: DataItem?,
-    sessionTranscript: DataItem,
-    nonce: ByteString?,
+    session: VerificationSession,
     eReaderKey: EcPrivateKey?,
     metadata: ShowResponseMetadata?,
     documentTypeRepository: DocumentTypeRepository?,
@@ -227,29 +221,19 @@ private suspend fun parseResponse(
     val sections = mutableListOf<Section>()
     var lines: MutableList<Line>
 
-    val verifiedPresentations = if (deviceResponse != null) {
-        verifyMdocDeviceResponse(
-            now = now,
-            deviceResponse = deviceResponse,
-            sessionTranscript = sessionTranscript,
-            eReaderKey = eReaderKey?.let {
-                AsymmetricKey.anonymous(it, it.curve.defaultKeyAgreementAlgorithm)
-            },
-            documentTypeRepository = documentTypeRepository,
-            zkSystemRepository = zkSystemRepository
-        )
-    } else if (vpToken != null) {
-        verifyOpenID4VPResponse(
-            now = now,
-            vpToken = vpToken,
-            sessionTranscript = sessionTranscript,
-            nonce = nonce!!,
-            documentTypeRepository = documentTypeRepository,
-            zkSystemRepository = zkSystemRepository
-        )
+    val presentationRecord = if (deviceResponse != null) {
+        session.processIso18013ProximityResponse(deviceResponse = deviceResponse)
+    } else if (dcResponse != null) {
+        session.processDcResponse(dcResponse = dcResponse)
     } else {
-        throw IllegalStateException("Either deviceResponse or vpToken must be non-null")
+        throw IllegalStateException("Either deviceResponse or dcResponse must be non-null")
     }
+
+    val verifiedPresentations = presentationRecord.verify(
+        now,
+        documentTypeRepository = documentTypeRepository,
+        zkSystemRepository = zkSystemRepository
+    )
 
     if (metadata != null) {
         lines = mutableListOf()
@@ -302,7 +286,7 @@ private suspend fun parseResponse(
                     issuerTrustManager.verify(vp.documentSignerCertChain.certificates, now)
                 if (trustResult.isTrusted) {
                     val tpName =
-                        trustResult.trustPoints.first().metadata?.displayName?.let { " ($it)" } ?: ""
+                        trustResult.trustPoints.first().metadata.displayName?.let { " ($it)" } ?: ""
                     lines.add(Line("Issuer Trusted", ValueText("Yes$tpName")))
                 } else {
                     lines.add(Line("Issuer Trusted", ValueText("No")))
@@ -348,7 +332,7 @@ private suspend fun parseResponse(
                     issuerTrustManager.verify(vp.documentSignerCertChain.certificates, now)
                 if (trustResult.isTrusted) {
                     val tpName =
-                        trustResult.trustPoints.first().metadata?.displayName?.let { " ($it)" } ?: ""
+                        trustResult.trustPoints.first().metadata.displayName?.let { " ($it)" } ?: ""
                     lines.add(Line("Issuer Trusted", ValueText("Yes$tpName")))
                 } else {
                     lines.add(Line("Issuer Trusted", ValueText("No")))

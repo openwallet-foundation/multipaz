@@ -128,6 +128,7 @@
   "payment_attribute_expiry_date": "Expiry date",
   "payment_request_payment_sca_minimal": "Payment SCA (minimal)",
   "payment_request_payment_sca_all": "Payment SCA (all data elements)",
+  "payment_request_payment_sca_transaction": "Payment SCA with payment transaction",
   "payment_description_issuer_name": "Human-readable issuer name.",
   "payment_description_payment_instrument_id": "Tokenized payment instrument identifier.",
   "payment_description_masked_account_reference": "Masked account reference, for example PAN last 4.",

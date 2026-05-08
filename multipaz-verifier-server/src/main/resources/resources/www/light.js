@@ -38,12 +38,12 @@ async function onLoad() {
 
 async function run() {
     const query = JSON.parse(document.getElementById("query").value);
-    const protocols = [];
+    const protocols = ["openid4vp-v1-uri"];
     if (document.getElementById("protocol_iso").checked) {
         protocols.push("org-iso-mdoc")
     }
     if (document.getElementById("protocol_openid4vp").checked) {
-        protocols.push("openid4vp-v1-signed")
+        protocols.push("openid4vp-v1")
     }
     const req = { dcql: query, protocols: protocols };
     const transactionDataPresent = document.getElementById("transaction_data_present");
@@ -51,6 +51,8 @@ async function run() {
     if (transactionDataPresent.checked && transactionDataText.trim().length !== 0) {
         req["transaction_data"] = JSON.parse(transactionDataText);
     }
+    req.sign = document.getElementById("sign-request").checked
+    req.encrypt = document.getElementById("encrypt-response").checked
     const result = document.getElementById("result");
     result.innerHTML = "";
     const response = await multipazVerifyCredentials(req);

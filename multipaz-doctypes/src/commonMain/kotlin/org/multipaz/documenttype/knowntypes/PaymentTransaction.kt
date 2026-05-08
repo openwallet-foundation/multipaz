@@ -1,4 +1,4 @@
-package org.multipaz.utopia.knowntypes
+package org.multipaz.documenttype.knowntypes
 
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.putCborMap
@@ -159,20 +159,25 @@ object PaymentTransaction: TransactionType(
                             ),
                             DocumentAttribute(
                                 identifier = "frequency",
-                                type = DocumentAttributeType.StringOptions(listOf(
-                                    StringOption("INDA", "intraday (i.e., several times a day)"),
-                                    StringOption("DAIL", "daily"),
-                                    StringOption("WEEK", "weekly"),
-                                    StringOption("TOWK", "bi-weekly"),
-                                    StringOption("TWMN", "twice a month"),
-                                    StringOption("MNTH", "monthly"),
-                                    StringOption("TOMN", "every two months"),
-                                    StringOption("QUTR", "quarterly"),
-                                    StringOption("FOMN", "every four months"),
-                                    StringOption("SEMI", "twice a year"),
-                                    StringOption("YEAR", "yearly"),
-                                    StringOption("TYEA", "every two years"),
-                                )),
+                                type = DocumentAttributeType.StringOptions(
+                                    listOf(
+                                        StringOption(
+                                            "INDA",
+                                            "intraday (i.e., several times a day)"
+                                        ),
+                                        StringOption("DAIL", "daily"),
+                                        StringOption("WEEK", "weekly"),
+                                        StringOption("TOWK", "bi-weekly"),
+                                        StringOption("TWMN", "twice a month"),
+                                        StringOption("MNTH", "monthly"),
+                                        StringOption("TOMN", "every two months"),
+                                        StringOption("QUTR", "quarterly"),
+                                        StringOption("FOMN", "every four months"),
+                                        StringOption("SEMI", "twice a year"),
+                                        StringOption("YEAR", "yearly"),
+                                        StringOption("TYEA", "every two years"),
+                                    )
+                                ),
                                 displayName = "Frequency",
                                 description = "Frequency of recurring payments"
                             ),
@@ -238,7 +243,7 @@ object PaymentTransaction: TransactionType(
         credential: Credential
     ): Boolean {
         return credential is MdocCredential
-                && credential.docType == DigitalPaymentCredential.CARD_DOCTYPE
+                && credential.docType == "org.multipaz.payment.sca.1"
     }
 
     override suspend fun applyCbor(

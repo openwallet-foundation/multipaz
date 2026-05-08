@@ -11,9 +11,12 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.multipaz.documenttype.SingleDocumentCannedRequest
-import org.multipaz.documenttype.knowntypes.wellKnownMultipleDocumentRequests
+import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.rpc.backend.BackendEnvironment
+import org.multipaz.utopia.knowntypes.wellKnownMultipleDocumentRequests
 
 suspend fun cannedRequests(call: ApplicationCall) {
+    val zkSystemRepository = BackendEnvironment.getInterface(ZkSystemRepository::class)
     call.respondText(
         contentType = ContentType.Application.Json,
         text = buildJsonArray {
@@ -24,19 +27,71 @@ suspend fun cannedRequests(call: ApplicationCall) {
                         put("display_name", dt.displayName + " (VC)")
                         putJsonArray("requests") {
                             for (singleDocumentRequest in jsonRequests) {
-                                addSingleDocumentRequest(singleDocumentRequest, false)
+                                addSingleDocumentRequest(
+                                    singleDocumentRequest = singleDocumentRequest,
+                                    zkSystemRepository = zkSystemRepository,
+                                    mdoc = false
+                                )
                             }
                         }
                     }
                 }
-                // Zero-knowledge is not yet supported
-                val mdocRequests = dt.cannedRequests.filter { it.mdocRequest?.useZkp == false }
+                val mdocRequests = dt.cannedRequests.filter { it.mdocRequest != null }
                 if (mdocRequests.isNotEmpty()) {
                     addJsonObject {
                         put("display_name", dt.displayName + " (mdoc)")
                         putJsonArray("requests") {
                             for (singleDocumentRequest in mdocRequests) {
-                                addSingleDocumentRequest(singleDocumentRequest, true)
+                                addSingleDocumentRequest(
+                                    singleDocumentRequest = singleDocumentRequest,
+                                    zkSystemRepository = zkSystemRepository,
+                                    mdoc = true
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            val extraJsonRequests = documentTypeRepo.extraSingleDocumentCannedRequests.filter {
+                it.jsonRequest != null
+            }
+            if (extraJsonRequests.isNotEmpty()) {
+                addJsonObject {
+                    put("display_name", "Extra requests (json)")
+                    putJsonArray("requests") {
+                        for (request in extraJsonRequests) {
+                            if (request.jsonRequest != null) {
+                                addSingleDocumentRequest(
+                                    singleDocumentRequest = request,
+                                    zkSystemRepository = zkSystemRepository,
+                                    mdoc = false
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            val extraMdocRequests = documentTypeRepo.extraSingleDocumentCannedRequests.filter {
+                it.mdocRequest != null
+            }
+            if (extraMdocRequests.isNotEmpty()) {
+                addJsonObject {
+                    put("display_name", "Extra requests (mdoc)")
+                    putJsonArray("requests") {
+                        for (request in extraMdocRequests) {
+                            if (request.jsonRequest != null) {
+                                addSingleDocumentRequest(
+                                    singleDocumentRequest = request,
+                                    zkSystemRepository = zkSystemRepository,
+                                    mdoc = false
+                                )
+                            }
+                            if (request.mdocRequest != null) {
+                                addSingleDocumentRequest(
+                                    singleDocumentRequest = request,
+                                    zkSystemRepository = zkSystemRepository,
+                                    mdoc = true
+                                )
                             }
                         }
                     }
@@ -62,12 +117,15 @@ suspend fun cannedRequests(call: ApplicationCall) {
 
 fun JsonArrayBuilder.addSingleDocumentRequest(
     singleDocumentRequest: SingleDocumentCannedRequest,
+    zkSystemRepository: ZkSystemRepository?,
     mdoc: Boolean
 ) {
     addJsonObject {
         put("display_name", singleDocumentRequest.displayName)
         if (mdoc) {
-            put("dcql", singleDocumentRequest.mdocRequest!!.toDcql())
+            put("dcql", singleDocumentRequest.mdocRequest!!.toDcql(
+                zkSystemSpecs = zkSystemRepository?.getAllZkSystemSpecs() ?: emptyList()
+            ))
         } else {
             put("dcql", singleDocumentRequest.jsonRequest!!.toDcql())
         }

@@ -72,6 +72,7 @@ import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.truncateToWholeSeconds
+import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -116,6 +117,7 @@ private enum class UseCase(
     MDL_NAME_AND_ADDRESS_PARTIALLY_STORED("mDL: Name and address (partially stored)"),
     MDL_NAME_AND_ADDRESS_ALL_STORED("mDL: Name and address (all stored)"),
     PHOTO_ID_MANDATORY("PhotoID: Mandatory data elements (2 docs)"),
+    PAYMENT("Payment"),
     OPENID4VP_COMPLEX_EXAMPLE("Complex example from OpenID4VP Appendix D"),
     BOARDING_PASS_AND_MDL_EXAMPLE("Boarding pass AND mDL"),
     BOARDING_PASS_OR_MDL_EXAMPLE("Boarding pass OR mDL")
@@ -556,19 +558,21 @@ private suspend fun getQueryResult(
 ): QueryResult {
     val dcql = when (useCase) {
         UseCase.MDL_AGE_OVER_21_AND_PORTRAIT ->
-            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "age_over_21_and_portrait" }!!.mdocRequest!!.toDcql()
+            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "age_over_21_and_portrait" }!!.mdocRequest!!.toDcql(emptyList())
         UseCase.MDL_US_TRANSPORTATION ->
-            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "us-transportation" }!!.mdocRequest!!.toDcql()
+            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "us-transportation" }!!.mdocRequest!!.toDcql(emptyList())
         UseCase.MDL_MANDATORY ->
-            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "mandatory" }!!.mdocRequest!!.toDcql()
+            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "mandatory" }!!.mdocRequest!!.toDcql(emptyList())
         UseCase.MDL_ALL ->
-            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "full" }!!.mdocRequest!!.toDcql()
+            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "full" }!!.mdocRequest!!.toDcql(emptyList())
         UseCase.MDL_NAME_AND_ADDRESS_PARTIALLY_STORED ->
-            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "name-and-address-partially-stored" }!!.mdocRequest!!.toDcql()
+            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "name-and-address-partially-stored" }!!.mdocRequest!!.toDcql(emptyList())
         UseCase.MDL_NAME_AND_ADDRESS_ALL_STORED ->
-            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "name-and-address-all-stored" }!!.mdocRequest!!.toDcql()
+            DrivingLicense.getDocumentType().cannedRequests.find { it.id == "name-and-address-all-stored" }!!.mdocRequest!!.toDcql(emptyList())
         UseCase.PHOTO_ID_MANDATORY ->
-            PhotoID.getDocumentType().cannedRequests.find { it.id == "mandatory" }!!.mdocRequest!!.toDcql()
+            PhotoID.getDocumentType().cannedRequests.find { it.id == "mandatory" }!!.mdocRequest!!.toDcql(emptyList())
+        UseCase.PAYMENT ->
+            DigitalPaymentCredential.getDocumentType().cannedRequests.find { it.id == "payment_transaction" }!!.mdocRequest!!.toDcql(emptyList())
         UseCase.OPENID4VP_COMPLEX_EXAMPLE -> Json.parseToJsonElement(
             """
             {
@@ -770,7 +774,15 @@ private suspend fun getQueryResult(
         domainsKeyBoundSdJwt = listOf("sdjwt")
     )
     val dcqlQuery = DcqlQuery.fromJson(dcql = dcql)
-    val dcqlResponse = dcqlQuery.execute(presentmentSource = source)
+    val transactionDataMap = when (useCase) {
+        UseCase.PAYMENT -> DigitalPaymentCredential.getDocumentType()
+            .cannedRequests.find { it.id == "payment_transaction" }!!.toTransactionDataMap("cred1")
+        else -> emptyMap()
+    }
+    val dcqlResponse = dcqlQuery.execute(
+        presentmentSource = source,
+        transactionDataMap = transactionDataMap
+    )
     return QueryResult(requester, source, dcqlResponse)
 }
 

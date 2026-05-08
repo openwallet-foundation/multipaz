@@ -16,6 +16,9 @@ import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 object PingTransaction: TransactionType(
     displayName = "Ping",
     identifier = "org.multipaz.transaction.ping",
+    mdocRequestInfoKeyName = "org.multipaz.transaction.ping.mdoc_request",
+    mdocResponseNamespace = "org.multipaz.transaction.ping.mdoc_response",
+    kbJwtResponseClaimName = "org.multipaz.transaction.ping.response",
     attributes = listOf(
         MdocDataElement(
             attribute = DocumentAttribute(

@@ -1,5 +1,9 @@
 package org.multipaz.documenttype
 
+import org.multipaz.presentment.TransactionData
+import org.multipaz.presentment.TransactionDataJson
+import org.multipaz.util.toBase64Url
+
 /**
  * A well-known request for a single document.
  *
@@ -16,4 +20,26 @@ data class SingleDocumentCannedRequest(
     val mdocRequest: MdocCannedRequest?,
     val jsonRequest: JsonCannedRequest?,
     val transactionData: List<CannedTransactionData> = listOf()
-): DocumentCannedRequest(id, displayName)
+): DocumentCannedRequest(id, displayName) {
+    /**
+     * @param credentialId DCQL id of the (single) requested credential
+     * @return a single-element map that maps the given [credentialId] to the list of
+     *   [TransactionDataJson] objects created from [transactionData] in this request.
+     */
+    fun toTransactionDataMap(credentialId: String): Map<String, List<TransactionData>> = mapOf(
+        credentialId to transactionData.map {
+            TransactionDataJson(
+                it.transactionType,
+                it.toJsonText(credentialId).encodeToByteArray().toBase64Url()
+            )
+        })
+
+    /**
+     * @param credentialId DCQL id of the credential for which this transaction data is given
+     * @return a single-element map of the given [credentialId] to the list of
+     * OpenID4VCI JSON-formatted (but not Base64Url-encoded) transactions
+     */
+    fun toJsonTransactionData(credentialId: String): List<String> = transactionData.map {
+        it.toJsonText(credentialId)
+    }
+}

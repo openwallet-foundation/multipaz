@@ -1,8 +1,8 @@
 package org.multipaz.verifier.customization
 
 import kotlinx.serialization.json.JsonObject
-import org.multipaz.server.presentment.PresentmentRecord
-import org.multipaz.server.presentment.PresentmentResult
+import org.multipaz.verification.PresentmentRecord
+import org.multipaz.verification.VerifiedPresentation
 
 /**
  * Represents the original request and the result of a successful presentment.
@@ -20,7 +20,7 @@ interface VerifierPresentment {
     /**
      * Per-document presentment verification result.
      */
-    val presentmentResults: List<PresentmentResult>
+    val presentations: List<VerifiedPresentation>
 
     /**
      * Processed response; this will have an object for each returned for each credential

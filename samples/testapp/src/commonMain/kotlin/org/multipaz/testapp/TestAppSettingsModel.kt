@@ -76,7 +76,7 @@ class TestAppSettingsModel private constructor(
         val value = settingsTable.get(key)?.let {
             val dataItem = Cbor.decode(it.toByteArray())
             if (dataItem == Simple.NULL) {
-                null
+               null
             } else {
                 when (T::class) {
                     Boolean::class -> { dataItem.asBoolean as T }

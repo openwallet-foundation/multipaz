@@ -6,6 +6,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.rpc.annotation.RpcState
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable
@@ -14,16 +15,16 @@ import org.multipaz.rpc.handler.RpcAuthInspector
 import org.multipaz.rpc.handler.RpcAuthInspectorSignature
 import org.multipaz.server.enrollment.ServerIdentity
 import org.multipaz.server.enrollment.getLocalRootCertificate
-import org.multipaz.server.presentment.PaymentProcessor
-import org.multipaz.server.presentment.PaymentTransactionData
-import org.multipaz.server.presentment.PaymentTransactionRequest
-import org.multipaz.server.presentment.PresentmentRecord
-import org.multipaz.server.presentment.PresentmentRecordMdoc
-import org.multipaz.server.presentment.PresentmentRecordOpenID4VP
-import org.multipaz.server.presentment.PresentmentResultMdoc
+import org.multipaz.server.payment.PaymentProcessor
+import org.multipaz.server.payment.PaymentTransactionData
+import org.multipaz.server.payment.PaymentTransactionRequest
+import org.multipaz.verification.PresentmentRecord
+import org.multipaz.verification.MdocPresentmentRecord
+import org.multipaz.verification.OpenID4VPPresentmentRecord
+import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.util.Logger
 import org.multipaz.util.truncateToWholeSeconds
-import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
+import org.multipaz.verification.MdocVerifiedPresentation
 import kotlin.math.roundToLong
 import kotlin.random.Random
 import kotlin.time.Clock
@@ -78,18 +79,14 @@ class PaymentProcessorImpl: PaymentProcessor, RpcAuthInspector by rpcAuth {
         val now = Clock.System.now().truncateToWholeSeconds()
         val documentTypeRepository =
             BackendEnvironment.getInterface(DocumentTypeRepository::class)!!
-        val transactionData = when (presentmentRecord) {
-            is PresentmentRecordMdoc ->
-                presentmentRecord.getTransactionData(documentTypeRepository).let {
-                    check(it.size == 1 && it.first().size == 1)
-                    it.first().first()
-                }
-            is PresentmentRecordOpenID4VP ->
-                presentmentRecord.getTransactionData(documentTypeRepository).let {
-                    check(it.size == 1 && it.values.first().size == 1)
-                    it.values.first().first()
-                }
+        val transactionDataMap = when (presentmentRecord) {
+            is MdocPresentmentRecord ->
+                presentmentRecord.getTransactionData(documentTypeRepository)
+            is OpenID4VPPresentmentRecord ->
+                presentmentRecord.getTransactionData(documentTypeRepository)
         }
+        check(transactionDataMap.size == 1 && transactionDataMap.values.first().size == 1)
+        val transactionData = transactionDataMap.values.first().first()
         val transactionPayload = transactionData.attributes.getCompound("payload")!!
         val transactionId = transactionPayload.getString("transaction_id")!!
         val amount = transactionPayload.getDouble("amount")!!
@@ -102,15 +99,21 @@ class PaymentProcessorImpl: PaymentProcessor, RpcAuthInspector by rpcAuth {
             throw InvalidRequestException("Inconsistent transaction amount or currency")
         }
         presentmentRecord.verifyNonce(draft.nonce)
-        val result = presentmentRecord.verify(now)
+        val result = presentmentRecord.verify(
+            atTime = now,
+            documentTypeRepository = documentTypeRepository,
+            zkSystemRepository = BackendEnvironment.getInterface(ZkSystemRepository::class)
+        )
         check(result.size == 1)
-        val payment = result.first() as PresentmentResultMdoc
-        if (!payment.trustResult.isTrusted) {
+        val payment = result.first() as MdocVerifiedPresentation
+        val trustManager = BackendEnvironment.getInterface(TrustManagerInterface::class)!!
+        val trustResult = trustManager.verify(payment.documentSignerCertChain.certificates, now)
+        if (!trustResult.isTrusted) {
             throw InvalidRequestException("Payment instrument is not issued by a trusted issuer")
         }
-        val claims = payment.mdocDocument.issuerNamespaces.data[DigitalPaymentCredential.CARD_NAMESPACE]!!
-        val payerAccount = claims["payment_instrument_id"]!!.dataElementValue.asTstr
-        val payerName = claims["holder_name"]?.dataElementValue?.asTstr
+        val claims = payment.issuerSignedClaims
+        val payerAccount = claims.find { it.displayName == "payment_instrument_id" }!!.value.asTstr
+        val payerName = claims.find { it.displayName == "holder_name"}?.value?.asTstr
         // We don't have transaction support in our simplistic storage interface; this lock
         // prevents conflicts/inconsistencies on a single-machine server.
         transactionLock.withLock {

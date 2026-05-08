@@ -1,6 +1,5 @@
 package org.multipaz.mdoc.response
 
-import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborMap
@@ -8,10 +7,13 @@ import org.multipaz.cbor.putCborArray
 import org.multipaz.cose.CoseSign1
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
+import org.multipaz.mdoc.request.DeviceRequest
+import org.multipaz.mdoc.request.DocRequest
 import org.multipaz.mdoc.request.EncryptionParameters
 import org.multipaz.mdoc.response.DeviceResponse.Companion.STATUS_OK
 import org.multipaz.mdoc.zkp.ZkDocument
@@ -31,7 +33,7 @@ import kotlin.time.Instant
  *
  * @property version the version of the device response, e.g. `1.0` or `1.1`.
  * @property status the status field containing for example [STATUS_OK] or [STATUS_GENERAL_ERROR].
- * @property documents a list of returned documents.
+ * @property documents a list of returned and verified documents.
  * @property zkDocuments a list of returned documents with ZKP.
  * @property encryptedDocuments a list of returned encrypted documents.
  * @property otherDocuments a list of returned documents in other formats, such as SD-JWT VC.
@@ -89,48 +91,62 @@ data class DeviceResponse internal constructor(
      *
      * @param sessionTranscript the session transcript to use.
      * @param eReaderKey the ephemeral reader key or `null` if not using session encryption.
-     * @param transactionDataList list of transactions for each document in this [DeviceResponse]
-     * @param atTime the point in time for validating whether returned documents are valid.
-     * @return list of per-document transaction responses; each response is a map; a key in this
-     *  map is a transaction identifier, and the value is a map with an entry for each item in
-     *  the transaction response data, including "transaction_data_hash".
+     * @param deviceRequest optional request to which this response is given; optional if no
+     *   transaction data was sent in the request
+     * @param documentTypeRepository repository that contains all known transaction types; must
+     *   be given if [deviceRequest] is given
+     * @param atTime the point in time for validating the whether returned documents are valid.
      * @throws IllegalStateException if validation fails.
      */
     suspend fun verify(
         sessionTranscript: DataItem,
         eReaderKey: AsymmetricKey? = null,
-        transactionDataList: List<List<TransactionData>> = emptyList(),
+        deviceRequest: DeviceRequest? = null,
+        documentTypeRepository: DocumentTypeRepository? = null,
         atTime: Instant = Clock.System.now(),
-    ): List<Map<String, Map<String, DataItem>>> {
-        // TODO: modify verify() to take a DeviceRequest
+    ) {
         numTimesVerifyCalled += 1
-        val transactionDataFromDocuments = documents_.mapIndexed { index, document ->
-            try {
-                val transactionData = if (index < transactionDataList.size) {
-                    transactionDataList[index]
-                } else {
-                    emptyList()
-                }
-                document.verify(sessionTranscript, eReaderKey, transactionData, atTime)
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                throw IllegalStateException("Error verifying document $index in DeviceResponse", e)
-            }
+        val requestMap = deviceRequest?.docRequests?.associateBy(DocRequestKey::fromDocRequest)
+        documents_.forEach { document ->
+            val transactionData =
+                requestMap?.get(DocRequestKey.fromMdocDocument(document))
+                    ?.getTransactionData(documentTypeRepository!!)
+                        ?: emptyList()
+            document.verify(sessionTranscript, eReaderKey, transactionData, atTime)
         }
-        val transactionDataFromOtherDocuments = otherDocuments.mapIndexed { index, otherDocument ->
-            try {
-                val transactionData = if (index < transactionDataList.size) {
-                    transactionDataList[index]
-                } else {
-                    emptyList()
-                }
-                otherDocument.verify(sessionTranscript, eReaderKey, transactionData, atTime)
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                throw IllegalStateException("Error verifying otherDocument $index in DeviceResponse", e)
-            }
+        otherDocuments.forEach { otherDocument ->
+            // TODO: transaction data is not yet supported, need to construct DocRequestKey
+            //  from the otherDocument content
+            otherDocument.verify(sessionTranscript, eReaderKey, emptyList(), atTime)
         }
-        return transactionDataFromDocuments + transactionDataFromOtherDocuments
+    }
+
+    /**
+     * Variant of [verify] that is intended for use with [DeviceResponse] data embedded in
+     * non-ISO/IEC-18013 verification response (such as OpenID4VP).
+     *
+     * [DeviceResponse] must contain a single document. Parsed transaction data is supplied
+     * using [transactionData] parameter instead of [DeviceRequest].
+     *
+     * @param sessionTranscript the session transcript to use.
+     * @param transactionData transaction data that was associated with the request
+     * @param atTime the point in time for validating the whether returned documents are valid.
+     * @throws IllegalStateException if validation fails.
+     */
+    suspend fun verifySingleDoc(
+        sessionTranscript: DataItem,
+        transactionData: List<TransactionData>,
+        atTime: Instant = Clock.System.now(),
+    ) {
+        if (documents_.size == 1 && zkDocuments.isEmpty()) {
+            numTimesVerifyCalled += 1
+            documents_.first().verify(sessionTranscript, null, transactionData, atTime)
+        } else if (zkDocuments.size == 1 && documents_.isEmpty()) {
+            numTimesVerifyCalled += 1
+            // Zero-knowledge proof is verified when generating response
+        } else {
+            throw IllegalStateException("Not a single-document DeviceResponse")
+        }
     }
 
     /**
@@ -171,6 +187,29 @@ data class DeviceResponse internal constructor(
                     }
                 }
             }
+        }
+    }
+
+    private data class DocRequestKey(
+        val docType: String,
+        val claims: Map<String, Set<String>>
+    ) {
+        companion object {
+            fun fromDocRequest(docRequest: DocRequest) =
+                DocRequestKey(
+                    docType = docRequest.docType,
+                    claims = docRequest.nameSpaces.mapValues {
+                        (_, claimMap) -> claimMap.keys
+                    }
+                )
+
+            fun fromMdocDocument(mdocDocument: MdocDocument) =
+                DocRequestKey(
+                    docType = mdocDocument.docType,
+                    claims = mdocDocument.issuerNamespaces.data.mapValues {
+                        (_, claimMap) -> claimMap.keys
+                    }
+                )
         }
     }
 

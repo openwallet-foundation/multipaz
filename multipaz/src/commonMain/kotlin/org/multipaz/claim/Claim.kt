@@ -31,8 +31,13 @@ import org.multipaz.request.MdocRequestedClaim
 @CborSerializationImplemented(schemaId = "")
 sealed class Claim(
     open val displayName: String,
-    open val attribute: DocumentAttribute?
+    open val attribute: DocumentAttribute?,
 ) {
+    /**
+     * If this [Claim] was generated as a result of a query, claim id.
+     */
+    abstract val queryIdentifier: String?
+
     /**
      * Returns the value of a claim as a human readable string.
      *
@@ -192,7 +197,7 @@ private fun jsonFindMatchingClaimValue(
     if (requestedClaim !is JsonRequestedClaim) {
         return null
     }
-    check(requestedClaim.claimPath.size >= 1)
+    check(requestedClaim.claimPath.isNotEmpty())
     check(requestedClaim.claimPath[0].isString)
     var ret: JsonClaim? = null
     for (credentialClaim in claims) {

@@ -2,7 +2,7 @@ package org.multipaz.records.payment
 
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.annotation.CborSerializable
-import org.multipaz.server.presentment.PresentmentRecord
+import org.multipaz.verification.PresentmentRecord
 import org.multipaz.storage.StorageTableSpec
 import kotlin.time.Instant
 

@@ -451,7 +451,7 @@ class DeviceResponseTest {
         dr[2916 + 16] = dr[2916 + 16].xor(0xff.toByte())
         val drParsed = DeviceResponse.fromDataItem(Cbor.decode(dr))
         assertEquals(
-            "Signature on MSO failed to verify",
+            "Signature verification failed",
             assertFailsWith(IllegalStateException::class) {
                 drParsed.verify(
                     sessionTranscript = sessionTranscript,
@@ -470,7 +470,7 @@ class DeviceResponseTest {
         dr[3612 + 16] = dr[3612 + 16].xor(0xff.toByte())
         val drParsed = DeviceResponse.fromDataItem(Cbor.decode(dr))
         assertEquals(
-            "Device authentication signature failed to verify",
+            "Signature verification failed",
             assertFailsWith(IllegalStateException::class) {
                 drParsed.verify(
                     sessionTranscript = sessionTranscript,
@@ -496,7 +496,7 @@ class DeviceResponseTest {
                     sessionTranscript = sessionTranscript,
                     atTime = mdlTimeValidityBegin
                 )
-            }.cause!!.message
+            }.message
         )
     }
 
@@ -517,7 +517,7 @@ class DeviceResponseTest {
                     sessionTranscript = sessionTranscript,
                     atTime = mdlTimeValidityBegin
                 )
-            }.cause!!.message
+            }.message
         )
     }
 
@@ -581,8 +581,8 @@ class DeviceResponseTest {
 
         // verify() should fail if eReaderKey isn't passed
         assertEquals(
-            "Error verifying document 0 in DeviceResponse",
-            assertFailsWith(IllegalStateException::class) {
+            "Device authentication is MAC but eReaderKey was not set",
+            assertFailsWith(IllegalArgumentException::class) {
                 drParsed.verify(
                     sessionTranscript = sessionTranscript,
                     atTime = mdlTimeValidityBegin
@@ -617,7 +617,7 @@ class DeviceResponseTest {
                     eReaderKey = AsymmetricKey.AnonymousExplicit(eReaderKey, Algorithm.ECDH_P256),
                     atTime = mdlTimeValidityBegin
                 )
-            }.cause!!.message
+            }.message
         )
     }
 
@@ -657,7 +657,7 @@ class DeviceResponseTest {
                     sessionTranscript = sessionTranscript,
                     atTime = mdlTimeValidityBegin - 10.seconds
                 )
-            }.cause!!.message
+            }.message
         )
         assertEquals(
             "MSO is not valid anymore",
@@ -666,7 +666,7 @@ class DeviceResponseTest {
                     sessionTranscript = sessionTranscript,
                     atTime = mdlTimeValidityEnd + 10.seconds
                 )
-            }.cause!!.message
+            }.message
         )
     }
 

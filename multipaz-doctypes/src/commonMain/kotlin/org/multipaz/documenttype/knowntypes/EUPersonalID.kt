@@ -496,8 +496,7 @@ object EUPersonalID {
                         "age_over_18" to false,
                     )
                 ),
-                mdocUseZkp = true,
-                jsonClaims = listOf("age_equal_or_over.18")
+                mdocUseZkp = true
             )
             .addSampleRequest(
                 id = "age_over_18_and_portrait",
@@ -543,22 +542,6 @@ object EUPersonalID {
                     EUPID_NAMESPACE to mapOf()
                 ),
                 jsonClaims = listOf()
-            )
-            .addSampleRequest(
-                id = "withTransaction",
-                displayName = "With Transaction Data",
-                mdocDataElements = mapOf(
-                    EUPID_NAMESPACE to mapOf(
-                        "family_name" to false,
-                        "given_name" to false,
-                        "birth_date" to false,
-                    )
-                ),
-                jsonClaims = listOf(
-                    "family_name",
-                    "given_name",
-                    "birthdate",
-                ),
             )
             .build()
     }

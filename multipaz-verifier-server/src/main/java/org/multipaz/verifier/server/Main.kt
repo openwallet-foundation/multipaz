@@ -1,6 +1,8 @@
 package org.multipaz.verifier.server
 
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
 import org.multipaz.server.common.runServer
 import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.verifier.customization.VerifierAssistant
@@ -26,6 +28,11 @@ class Main {
                 add(DocumentTypeRepository::class, documentTypeRepo)
                 add(TrustManagerInterface::class, getIssuerTrustManager())
                 add(VerifierAssistant::class, VerifierAssistantImpl)
+                val repo = ZkSystemRepository()
+                val longfellowSystem = LongfellowZkSystem()
+                longfellowSystem.addDefaultCircuits()
+                repo.add(longfellowSystem)
+                add(ZkSystemRepository::class, repo)
             }) { environment ->
                 configureRouting(environment)
             }

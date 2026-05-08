@@ -20,6 +20,7 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.Hkdf
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.documenttype.TransactionType
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceAuth
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
@@ -43,7 +44,7 @@ import kotlin.time.Instant
  * @property deviceNamespaces the device-signed data elements.
  * @property errors the errors in the document.
  */
-data class MdocDocument(
+class MdocDocument(
     val docType: String,
     val issuerAuth: CoseSign1,
     val issuerNamespaces: IssuerNamespaces,
@@ -52,20 +53,6 @@ data class MdocDocument(
     val errors: Map<String, Map<String, Int>>,
     private val issuerNamespaceDigests: Map<String, Map<String, ByteString>>? = null
 ) {
-
-    // Don't include issuerNamespaceDigests in comparison
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is MdocDocument) return false
-        if (docType != other.docType) return false
-        if (issuerAuth != other.issuerAuth) return false
-        if (issuerNamespaces != other.issuerNamespaces) return false
-        if (deviceAuth != other.deviceAuth) return false
-        if (deviceNamespaces != other.deviceNamespaces) return false
-        if (errors != other.errors) return false
-        return true
-    }
-
     /**
      * Convenience property for accessing the [MobileSecurityObject] from [issuerAuth].
      */
@@ -82,6 +69,15 @@ data class MdocDocument(
             CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)
         ]!!.asX509CertChain
     }
+
+    /**
+     * List of verified transaction data which was sent in the request
+     */
+    lateinit var transactionData: List<TransactionData>
+    /**
+     * Transaction response indexed by [TransactionType.identifier]
+     */
+    lateinit var transactionResponse: Map<String, Map<String, DataItem>>
 
     /**
      * Generates CBOR compliant with the CDDL for `Document` according to ISO 18013-5.
@@ -128,7 +124,7 @@ data class MdocDocument(
         eReaderKey: AsymmetricKey?,
         transactionData: List<TransactionData>,
         atTime: Instant,
-    ): Map<String, Map<String, DataItem>> {
+    ) {
         // First check the issuer signature..
         val issuerAuthorityCertChain =
             issuerAuth.unprotectedHeaders[
@@ -242,7 +238,8 @@ data class MdocDocument(
         }
 
         // Check transaction data and return transaction processing responses
-        return buildMap {
+        this.transactionData = transactionData
+        transactionResponse = buildMap {
             for (transaction in transactionData) {
                 val response = deviceNamespaces.data[transaction.type.mdocResponseNamespace]
                     ?: throw IllegalStateException("No transaction response for '${transaction.type.identifier}'")
@@ -258,6 +255,21 @@ data class MdocDocument(
                 put(transaction.type.identifier, response)
             }
         }
+    }
+
+    // This should only be used for testing
+    // Don't include issuerNamespaceDigests in comparison
+    // TODO: consider either removing this or doing hashCode as well
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is MdocDocument) return false
+        if (docType != other.docType) return false
+        if (issuerAuth != other.issuerAuth) return false
+        if (issuerNamespaces != other.issuerNamespaces) return false
+        if (deviceAuth != other.deviceAuth) return false
+        if (deviceNamespaces != other.deviceNamespaces) return false
+        if (errors != other.errors) return false
+        return true
     }
 
     companion object {

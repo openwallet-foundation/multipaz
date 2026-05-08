@@ -22,11 +22,13 @@ import org.multipaz.server.common.enrollmentServerUrl
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.server.enrollment.ServerIdentity
 import org.multipaz.server.enrollment.getServerIdentity
-import org.multipaz.server.presentment.PaymentProcessor
-import org.multipaz.server.presentment.PaymentProcessorStub
-import org.multipaz.server.presentment.PaymentTransactionRequest
+import org.multipaz.server.payment.PaymentProcessor
+import org.multipaz.server.payment.PaymentProcessorStub
+import org.multipaz.server.payment.PaymentTransactionRequest
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
-import org.multipaz.utopia.knowntypes.PaymentTransaction
+import org.multipaz.documenttype.knowntypes.PaymentTransaction
+import org.multipaz.trustmanagement.TrustManagerInterface
+import org.multipaz.verification.MdocVerifiedPresentation
 import org.multipaz.verifier.customization.VerifierAssistant
 import org.multipaz.verifier.customization.VerifierPresentment
 
@@ -116,7 +118,11 @@ internal object TransactionProcessor: VerifierAssistant {
     override suspend fun processResponse(
         presentment: VerifierPresentment
     ): JsonObject {
-        if (!presentment.presentmentResults.first().trustResult.isTrusted) {
+        val trustManager = BackendEnvironment.getInterface(TrustManagerInterface::class)!!
+        val payment = presentment.presentations.find {
+            it is MdocVerifiedPresentation && it.docType == PAYMENT_DOCTYPE
+        } ?: throw InvalidRequestException("Payment card was not presented")
+        if (!trustManager.verify(payment.documentSignerCertChain!!.certificates).isTrusted) {
             throw InvalidRequestException("Payment card is not from a trusted issuer")
         }
         val configuration = BackendEnvironment.getInterface(Configuration::class)!!

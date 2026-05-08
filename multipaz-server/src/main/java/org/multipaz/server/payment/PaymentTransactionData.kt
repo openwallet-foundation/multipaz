@@ -1,4 +1,4 @@
-package org.multipaz.server.presentment
+package org.multipaz.server.payment
 
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.annotation.CborSerializable

@@ -88,7 +88,7 @@ object OpenID4VP {
      * @param requestSigningKey the key to sign the request with or `null`.
      * @param responseMode the response mode.
      * @param responseUri the response URI or `null`.
-     * @param dclqQuery the DCQL query.
+     * @param dcqlQuery the DCQL query.
      * @param jsonTransactionData strings from `transaction_data` array *before* base64url encoding,
      *   see OpenID4VP 1.0 section 8.4.
      * @param state OpenID4VP state parameter (optional)
@@ -103,7 +103,7 @@ object OpenID4VP {
         requestSigningKey: AsymmetricKey?,
         responseMode: ResponseMode,
         responseUri: String?,
-        dclqQuery: JsonObject,
+        dcqlQuery: JsonObject,
         jsonTransactionData: List<String> = emptyList(),
         state: String? = null
     ): JsonObject {
@@ -117,7 +117,7 @@ object OpenID4VP {
                 requestSigningKey = requestSigningKey,
                 responseMode = responseMode,
                 responseUri = responseUri,
-                dclqQuery = dclqQuery
+                dclqQuery = dcqlQuery
             )
         }
         val responseEncryptionKeyJwk = responseEncryptionKey?.let {
@@ -143,7 +143,7 @@ object OpenID4VP {
                     add(origin)
                 }
             }
-            put("dcql_query", dclqQuery)
+            put("dcql_query", dcqlQuery)
             put("nonce", nonce)
             state?.let { put("state", it) }
             putJsonObject("client_metadata") {

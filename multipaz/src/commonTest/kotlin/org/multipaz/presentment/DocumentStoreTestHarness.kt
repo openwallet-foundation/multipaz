@@ -54,6 +54,7 @@ import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.Logger
+import org.multipaz.utopia.knowntypes.PingTransaction
 import org.multipaz.util.truncateToWholeSeconds
 import kotlin.collections.iterator
 import kotlin.time.Clock
@@ -126,6 +127,7 @@ class DocumentStoreTestHarness {
         documentTypeRepository.addDocumentType(DrivingLicense.getDocumentType())
         documentTypeRepository.addDocumentType(PhotoID.getDocumentType())
         documentTypeRepository.addDocumentType(EUPersonalID.getDocumentType())
+        documentTypeRepository.addTransactionType(PingTransaction)
 
         storage = EphemeralStorage()
 

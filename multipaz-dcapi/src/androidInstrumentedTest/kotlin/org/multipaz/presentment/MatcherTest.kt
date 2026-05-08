@@ -99,7 +99,7 @@ class MatcherTest {
             requestSigningKey = readerAuthKey,
             responseMode = OpenID4VP.ResponseMode.DC_API,
             responseUri = null,
-            dclqQuery = Json.decodeFromString(JsonObject.serializer(), dcql)
+            dcqlQuery = Json.decodeFromString(JsonObject.serializer(), dcql)
         )
         val protocolName = when (version) {
             OpenID4VP.Version.DRAFT_24 -> "openid4vp"

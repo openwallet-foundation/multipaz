@@ -1,13 +1,13 @@
 package org.multipaz.documenttype
 
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import org.multipaz.mdoc.zkp.ZkSystemSpec
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
@@ -27,15 +27,34 @@ data class MdocCannedRequest(
     /**
      * Generates DCQL for the request.
      *
+     * @param zkSystemSpecs list of Zero-Knowledge system specs that can handle the request; only
+     *   used when [useZkp] is `true`.
      * @return a [JsonObject] with the DCQL for the request.
      */
-    fun toDcql() = buildJsonObject {
+    fun toDcql(zkSystemSpecs: List<ZkSystemSpec>) = buildJsonObject {
         putJsonArray("credentials") {
             addJsonObject {
                 put("id", JsonPrimitive("cred1"))
-                put("format", JsonPrimitive("mso_mdoc"))
+                if (useZkp) {
+                    put("format", JsonPrimitive("mso_mdoc_zk"))
+                } else {
+                    put("format", JsonPrimitive("mso_mdoc"))
+                }
                 putJsonObject("meta") {
                     put("doctype_value", JsonPrimitive(docType))
+                    if (useZkp) {
+                        putJsonArray("zk_system_type") {
+                            for (spec in zkSystemSpecs) {
+                                addJsonObject {
+                                    put("system", spec.system)
+                                    put("id", spec.id)
+                                    spec.params.forEach { param ->
+                                        put(param.key, param.value.toJson())
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 putJsonArray("claims") {
                     for (ns in namespacesToRequest) {
@@ -53,7 +72,4 @@ data class MdocCannedRequest(
             }
         }
     }
-
-    fun toDcqlString() = Json.encodeToString(toDcql())
-
 }

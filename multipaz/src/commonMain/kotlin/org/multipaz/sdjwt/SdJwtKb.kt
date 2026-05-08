@@ -102,7 +102,11 @@ class SdJwtKb private constructor(
             hashes as? JsonArray
                 ?: throw IllegalStateException("Invalid 'transaction_data_hashes'")
             if (hashes.size != transactionData.size) {
-                throw IllegalStateException("Unexpected 'transaction_data_hashes' size")
+                if (transactionData.isEmpty()) {
+                    throw IllegalStateException("Unexpected 'transaction_data_hashes'")
+                } else {
+                    throw IllegalStateException("Unexpected 'transaction_data_hashes' size")
+                }
             }
             val hashAlgorithm = try {
                 jwtBody["transaction_data_hashes_alg"]?.jsonPrimitive?.content?.let {

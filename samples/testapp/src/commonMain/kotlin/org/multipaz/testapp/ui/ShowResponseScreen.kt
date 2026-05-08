@@ -8,7 +8,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonObject
 import org.multipaz.cbor.DataItem
 import org.multipaz.crypto.EcPrivateKey
@@ -17,6 +16,7 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.testapp.ShowResponseMetadata
 import org.multipaz.trustmanagement.TrustManagerInterface
+import org.multipaz.verification.VerificationSession
 
 private const val TAG = "ShowResponseScreen"
 
@@ -24,8 +24,7 @@ private const val TAG = "ShowResponseScreen"
 fun ShowResponseScreen(
     vpToken: JsonObject?,
     deviceResponse: DataItem?,
-    sessionTranscript: DataItem,
-    nonce: ByteString?,
+    session: VerificationSession,
     eReaderKey: EcPrivateKey?,
     metadata: ShowResponseMetadata,
     issuerTrustManager: TrustManagerInterface,
@@ -42,8 +41,7 @@ fun ShowResponseScreen(
         ShowResponse(
             vpToken = vpToken,
             deviceResponse = deviceResponse,
-            sessionTranscript = sessionTranscript,
-            nonce = nonce,
+            session = session,
             eReaderKey = eReaderKey,
             metadata = metadata,
             issuerTrustManager = issuerTrustManager,

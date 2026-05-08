@@ -2159,7 +2159,7 @@ private suspend fun calcDcRequestStringOpenID4VPforDCQL(
         },
         responseMode = responseMode,
         responseUri = responseUri,
-        dclqQuery = dcql
+        dcqlQuery = dcql
     ).toString()
 }
 

@@ -7,17 +7,30 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.double
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import kotlinx.serialization.json.longOrNull
+import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.CborArray
+import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
+import org.multipaz.documenttype.DocumentAttribute
+import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.TransactionType
+import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.util.fromBase64Url
+import org.multipaz.mdoc.request.DocRequestInfo
 
 /**
  * [TransactionData] in JSON format as used in OpenID4VP.
@@ -76,6 +89,47 @@ class TransactionDataJson(
             data[name]?.let { AttributesJson(it.jsonObject) }
     }
 
+    /**
+     * Converts this transaction data to CBOR representation.
+     *
+     * Transaction data in CBOR is passed as [Tagged] that holds serialized CBOR map. Each
+     * attribute in the map is encoded according to the data schema defined by [TransactionType].
+     *
+     * @return CBOR-encoded transaction data
+     */
+    fun convertDataToCbor(): Tagged =
+        Tagged(
+            tagNumber = Tagged.ENCODED_CBOR,
+            taggedItem = Cbor.encode(buildCborMap {
+                attributes.data["transaction_data_hashes_alg"]?.jsonArray?.mapNotNull {
+                    Algorithm.fromHashAlgorithmIdentifier(it.jsonPrimitive.content)
+                        .coseAlgorithmIdentifier?.toDataItem()
+                }?.let { hashAlgorithms ->
+                    if (hashAlgorithms.isEmpty()) {
+                        throw IllegalArgumentException("no supported hash algorithms")
+                    }
+                    put("transaction_data_hashes_alg", CborArray(hashAlgorithms.toMutableList()))
+                }
+                for (element in type.dataElements.values) {
+                    val value = attributes.data[element.attribute.identifier]
+                    if (value == null) {
+                        if (element.mandatory) {
+                            throw InvalidRequestException(
+                                "missing mandatory '${element.attribute.identifier}' in transaction '${type.identifier}'"
+                            )
+                        }
+                        continue
+                    }
+                    put(element.attribute.identifier, convertToCbor(
+                        transactionTypeIdentifier = type.identifier,
+                        attribute = element.attribute,
+                        value = value
+                    ))
+                }
+            }).toDataItem()
+        )
+
+
     companion object {
         /**
          * Parses OpenID4VP JSON-encoded transaction data.
@@ -125,5 +179,71 @@ class TransactionDataJson(
             }
             return map.mapValues { (_, list) -> list.toList() }
         }
+
+        /**
+         * Converts the list of transaction data in JSON format that all reference a particular
+         * credential to the map that is appropriate to pass as [DocRequestInfo.otherInfo] property
+         * when building the request.
+         *
+         * @receiver list of parsed transaction data in JSON format
+         * @return map that represents transaction data in ISO 18013 context
+         */
+        fun List<TransactionDataJson>.convertToDocRequestOtherInfo(): Map<String, DataItem> =
+            associate {
+                it.type.mdocRequestInfoKeyName to it.convertDataToCbor()
+            }
+
+        private fun convertToCbor(
+            transactionTypeIdentifier: String,
+            attribute: DocumentAttribute,
+            value: JsonElement
+        ): DataItem =
+            when (attribute.type) {
+                DocumentAttributeType.String, is DocumentAttributeType.StringOptions ->
+                    if (value is JsonPrimitive && value.isString) {
+                        value.content.toDataItem()
+                    } else {
+                        throw InvalidRequestException("'${attribute.identifier}' in '$transactionTypeIdentifier' is not a string")
+                    }
+
+                DocumentAttributeType.Number, is DocumentAttributeType.IntegerOptions ->
+                    convertToNumber(value)
+                        ?: throw InvalidRequestException("'${attribute.identifier}' in '$transactionTypeIdentifier': not a number")
+
+                DocumentAttributeType.Blob -> if (value is JsonPrimitive && value.isString) {
+                    value.content.fromBase64Url().toDataItem()
+                } else {
+                    throw InvalidRequestException("'${attribute.identifier}' in '$transactionTypeIdentifier': not a number")
+                }
+
+                DocumentAttributeType.Boolean -> (value as? JsonPrimitive)?.booleanOrNull?.toDataItem()
+                    ?: throw InvalidRequestException("'${attribute.identifier}' in '$transactionTypeIdentifier': not a boolean")
+
+                DocumentAttributeType.ComplexType -> {
+                    if (value !is JsonObject) {
+                        throw InvalidRequestException("'${attribute.identifier}' in '$transactionTypeIdentifier': not an object")
+                    }
+                    buildCborMap {
+                        for (attr in attribute.embeddedAttributes) {
+                            val attrValue = value[attr.identifier]
+                            if (attrValue != null) {
+                                put(
+                                    attr.identifier,
+                                    convertToCbor(transactionTypeIdentifier, attr, attrValue)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                else -> throw InvalidRequestException("'${attribute.identifier}' in '$transactionTypeIdentifier': unsupported type")
+            }
+
+        private fun convertToNumber(value: JsonElement): DataItem? =
+            if (value is JsonPrimitive && !value.isString) {
+                value.longOrNull?.toDataItem() ?: value.doubleOrNull?.toDataItem()
+            } else {
+                null
+            }
     }
 }

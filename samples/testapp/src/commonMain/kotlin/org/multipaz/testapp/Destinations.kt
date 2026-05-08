@@ -107,8 +107,7 @@ data object DcRequestDestination: Destination()
 data class ShowResponseDestination(
     val vpResponse: String?,
     val deviceResponse: String?,
-    val sessionTranscript: String,
-    val nonce: String?,
+    val serializedSession: String,
     val eReaderKey: String?,
     val metadata: String
 ): Destination()

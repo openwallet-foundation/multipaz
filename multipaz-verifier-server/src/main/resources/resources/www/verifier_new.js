@@ -48,14 +48,16 @@ function makeLauncher(request) {
     return async function () {
         const resultElement = document.getElementById("result");
         resultElement.innerHTML = "";
-        const protocols = [];
+        const protocols = ["openid4vp-v1-uri"];
         if (document.getElementById("protocol-dc-mdoc").checked) {
             protocols.push("org-iso-mdoc")
         }
         if (document.getElementById("protocol-dc-vp").checked) {
-            protocols.push("openid4vp-v1-signed")
+            protocols.push("openid4vp-v1")
         }
         request.protocols = protocols;
+        request.sign = document.getElementById("sign-request").checked
+        request.encrypt = document.getElementById("encrypt-response").checked
         const response = await multipazVerifyCredentials(request);
         for (let label in response) {
             renderContent(result, label, response[label], 0);

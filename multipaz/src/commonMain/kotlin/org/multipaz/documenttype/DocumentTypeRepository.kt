@@ -30,8 +30,9 @@ import org.multipaz.request.RequestedClaim
  * Applications also may add their own document and transaction types.
  */
 class DocumentTypeRepository {
-    private val _documentTypes: MutableList<DocumentType> = mutableListOf()
-    private val _transactionTypes: MutableList<TransactionType> = mutableListOf()
+    private val _documentTypes = mutableListOf<DocumentType>()
+    private val _transactionTypes = mutableListOf<TransactionType>()
+    private val _extraSingleDocumentCannedRequests = mutableListOf<SingleDocumentCannedRequest>()
 
     /**
      * Get all the Document Types that are in the repository.
@@ -39,6 +40,11 @@ class DocumentTypeRepository {
     val documentTypes: List<DocumentType>
         get() = _documentTypes
 
+    /**
+     * Additional sample requests, not necessarily associated with a particular document type.
+     */
+    val extraSingleDocumentCannedRequests: List<SingleDocumentCannedRequest>
+        get() = _extraSingleDocumentCannedRequests
     /**
      * All the transaction types in the repository.
      */
@@ -66,6 +72,15 @@ class DocumentTypeRepository {
             check(existingType.mdocRequestInfoKeyName != transactionType.mdocRequestInfoKeyName)
         }
         _transactionTypes.add(transactionType)
+    }
+
+    /**
+     * Adds a single [SingleDocumentCannedRequest] to the [extraSingleDocumentCannedRequests] list.
+     *
+     * @param cannedRequest new [SingleDocumentCannedRequest] to add.
+     */
+    fun addExtraSingleDocumentCannedRequest(cannedRequest: SingleDocumentCannedRequest) {
+        _extraSingleDocumentCannedRequests.add(cannedRequest)
     }
 
     /**

@@ -68,7 +68,6 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonObject
 import org.multipaz.compose.permissions.rememberBluetoothEnabledState
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
-import org.multipaz.documenttype.knowntypes.wellKnownMultipleDocumentRequests
 import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.nfc.MdocHandoverType
 import org.multipaz.mdoc.nfc.MdocReaderNfcHandoverOptions
@@ -78,6 +77,8 @@ import org.multipaz.nfc.NfcTagReader
 import org.multipaz.mdoc.transport.NfcHybridTransportMdocReader
 import org.multipaz.testapp.ShowResponseMetadata
 import org.multipaz.util.fromHex
+import org.multipaz.utopia.knowntypes.wellKnownMultipleDocumentRequests
+import org.multipaz.verification.VerificationSession
 import kotlin.time.Clock
 import kotlin.time.Duration
 
@@ -119,8 +120,7 @@ fun IsoMdocProximityReadingScreen(
     showResponse: (
         vpToken: JsonObject?,
         deviceResponse: DataItem?,
-        sessionTranscript: DataItem,
-        nonce: ByteString?,
+        session: VerificationSession,
         eReaderKey: EcPrivateKey?,
         metadata: ShowResponseMetadata
     ) -> Unit
@@ -152,6 +152,14 @@ fun IsoMdocProximityReadingScreen(
             }
         }
     }
+    for (request in app.documentTypeRepository.extraSingleDocumentCannedRequests) {
+        requestOptions.add(RequestPickerEntry(
+            id = "extra_" + request.id,
+            displayName = request.displayName,
+            request = request,
+            requestSdJwtVc = request.mdocRequest == null && request.jsonRequest != null
+        ))
+    }
     for (request in wellKnownMultipleDocumentRequests) {
         requestOptions.add(RequestPickerEntry(
             id = "multidoc_" + request.id,
@@ -172,13 +180,15 @@ fun IsoMdocProximityReadingScreen(
     val readerShowQrScanner = remember { mutableStateOf(false) }
     val readerTransport = remember { mutableStateOf<MdocTransport?>(null) }
     val readerSessionEncryption = remember { mutableStateOf<SessionEncryption?>(null) }
-    val readerSessionTranscript = remember { mutableStateOf<ByteArray?>(null) }
+    val readerSession = remember { mutableStateOf<VerificationSession?>(null) }
     val readerMostRecentDeviceRequest = remember { mutableStateOf<ByteArray?>(null) }
     val readerMostRecentDeviceResponse = remember { mutableStateOf<ByteArray?>(null) }
     val connectionMethodPickerData = remember { mutableStateOf<ConnectionMethodPickerData?>(null) }
     val durationEngagementReceivedToRequestSent = remember { mutableStateOf<Duration?>(null) }
     val durationRequestSentToResponseReceived = remember { mutableStateOf<Duration?>(null) }
     val eReaderKey = remember { mutableStateOf<EcPrivateKey?>(null) }
+    val deviceHandover = remember { mutableStateOf<DataItem?>(null) }
+    val deviceEngagement = remember { mutableStateOf<ByteString?>(null) }
     var readerJob by remember { mutableStateOf<Job?>(null) }
 
     val readers = mutableListOf<NfcReaderEntry>()
@@ -292,7 +302,7 @@ fun IsoMdocProximityReadingScreen(
                                 showToast = showToast,
                                 readerTransport = readerTransport,
                                 readerSessionEncryption = readerSessionEncryption,
-                                readerSessionTranscript = readerSessionTranscript,
+                                readerSession = readerSession,
                                 readerMostRecentDeviceRequest = readerMostRecentDeviceRequest,
                                 readerMostRecentDeviceResponse = readerMostRecentDeviceResponse,
                                 eReaderKey = eReaderKey,
@@ -320,9 +330,8 @@ fun IsoMdocProximityReadingScreen(
                                 showResponse(
                                     /* vpToken = */ null,
                                     /* deviceResponse = */ Cbor.decode(readerMostRecentDeviceResponse.value!!),
-                                    /* sessionTranscript = */ Cbor.decode(readerSessionTranscript.value!!),
-                                    /* nonce = */ null,
-                                    /* eReaderKey */ eReaderKey.value!!,
+                                    /* readerSession = */ readerSession.value!!,
+                                    /* eReaderKey = */ eReaderKey.value!!,
                                     /* metadata = */ ShowResponseMetadata(
                                         engagementType = "QR Code",
                                         transferProtocol = transferProtocol,
@@ -396,7 +405,7 @@ fun IsoMdocProximityReadingScreen(
                     modifier = Modifier.weight(1.0f),
                     verticalArrangement = Arrangement.Top,
                 ) {
-                    ShowReaderResults(app, readerMostRecentDeviceResponse, readerSessionTranscript, eReaderKey.value)
+                    ShowReaderResults(app, readerMostRecentDeviceResponse, readerSession.value, eReaderKey.value)
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
@@ -414,15 +423,21 @@ fun IsoMdocProximityReadingScreen(
                         onClick = {
                             coroutineScope.launch {
                                 try {
-                                    val encodedDeviceRequest =
-                                        TestAppUtils.generateEncodedDeviceRequest(
-                                            request = requestSelected.value.request,
-                                            encodedSessionTranscript = readerSessionTranscript.value!!,
-                                            readerKey = app.readerKey,
-                                            requestSdJwtVc = requestSelected.value.requestSdJwtVc,
-                                            signRequest = app.settingsModel.signRequest.value
-                                        )
+                                    val session = TestAppUtils.createProximityVerificationSession(
+                                        app = app,
+                                        request = requestSelected.value.request,
+                                        signRequest = app.settingsModel.signRequest.value,
+                                        handover = deviceHandover.value!!,
+                                        eReaderKey = eReaderKey.value!!,
+                                        deviceEngagement = deviceEngagement.value!!,
+                                        requestSdJwtVc = requestSelected.value.requestSdJwtVc
+                                    )
+                                    readerSession.value = session
                                     readerMostRecentDeviceResponse.value = byteArrayOf()
+                                    val proximityRequest =
+                                        session.find<VerificationSession.Iso18013ProximityRequest>()
+                                    val encodedDeviceRequest =
+                                        Cbor.encode(proximityRequest.deviceRequest)
                                     readerTransport.value!!.sendMessage(
                                         readerSessionEncryption.value!!.encryptMessage(
                                             messagePlaintext = encodedDeviceRequest,
@@ -503,7 +518,7 @@ fun IsoMdocProximityReadingScreen(
                     modifier = Modifier.weight(1.0f),
                     verticalArrangement = Arrangement.Top,
                 ) {
-                    ShowReaderResults(app, readerMostRecentDeviceResponse, readerSessionTranscript, eReaderKey.value!!)
+                    ShowReaderResults(app, readerMostRecentDeviceResponse, readerSession.value!!, eReaderKey.value!!)
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 Column(
@@ -639,7 +654,7 @@ fun IsoMdocProximityReadingScreen(
                                     showToast = showToast,
                                     readerTransport = readerTransport,
                                     readerSessionEncryption = readerSessionEncryption,
-                                    readerSessionTranscript = readerSessionTranscript,
+                                    readerSession = readerSession,
                                     readerMostRecentDeviceRequest = readerMostRecentDeviceRequest,
                                     readerMostRecentDeviceResponse = readerMostRecentDeviceResponse,
                                     eReaderKey = eReaderKey,
@@ -670,8 +685,7 @@ fun IsoMdocProximityReadingScreen(
                                         showResponse(
                                             /* vpToken = */ null,
                                             /* deviceResponse = */ Cbor.decode(readerMostRecentDeviceResponse.value!!),
-                                            /* sessionTranscript = */ Cbor.decode(readerSessionTranscript.value!!),
-                                            /* nonce = */ null,
+                                            /* session = */ readerSession.value!!,
                                             /* eReaderKey */ eReaderKey.value!!,
                                             /* metadata = */ ShowResponseMetadata(
                                                 engagementType = nfcEngagementType,
@@ -795,7 +809,7 @@ private suspend fun doReaderFlow(
     showToast: (message: String) -> Unit,
     readerTransport: MutableState<MdocTransport?>,
     readerSessionEncryption: MutableState<SessionEncryption?>,
-    readerSessionTranscript: MutableState<ByteArray?>,
+    readerSession: MutableState<VerificationSession?>,
     readerMostRecentDeviceRequest: MutableState<ByteArray?>,
     readerMostRecentDeviceResponse: MutableState<ByteArray?>,
     eReaderKey: MutableState<EcPrivateKey?>,
@@ -850,7 +864,7 @@ private suspend fun doReaderFlow(
                         showToast = showToast,
                         readerTransport = readerTransport,
                         readerSessionEncryption = readerSessionEncryption,
-                        readerSessionTranscript = readerSessionTranscript,
+                        readerSession = readerSession,
                         readerMostRecentDeviceRequest = readerMostRecentDeviceRequest,
                         readerMostRecentDeviceResponse = readerMostRecentDeviceResponse,
                         durationEngagementReceivedToRequestSent = durationEngagementReceivedToRequestSent,
@@ -876,7 +890,7 @@ private suspend fun doReaderFlow(
         showToast = showToast,
         readerTransport = readerTransport,
         readerSessionEncryption = readerSessionEncryption,
-        readerSessionTranscript = readerSessionTranscript,
+        readerSession = readerSession,
         readerMostRecentDeviceRequest = readerMostRecentDeviceRequest,
         readerMostRecentDeviceResponse = readerMostRecentDeviceResponse,
         durationEngagementReceivedToRequestSent = durationEngagementReceivedToRequestSent,
@@ -898,7 +912,7 @@ private suspend fun doReaderFlowWithTransport(
     showToast: (message: String) -> Unit,
     readerTransport: MutableState<MdocTransport?>,
     readerSessionEncryption: MutableState<SessionEncryption?>,
-    readerSessionTranscript: MutableState<ByteArray?>,
+    readerSession: MutableState<VerificationSession?>,
     readerMostRecentDeviceRequest: MutableState<ByteArray?>,
     readerMostRecentDeviceResponse: MutableState<ByteArray?>,
     durationEngagementReceivedToRequestSent: MutableState<Duration?>,
@@ -909,36 +923,33 @@ private suspend fun doReaderFlowWithTransport(
     signRequest: Boolean,
 ) {
     readerTransport.value = transport
-    val encodedSessionTranscript = TestAppUtils.generateEncodedSessionTranscript(
-        encodedDeviceEngagement.toByteArray(),
-        handover,
-        eReaderKey.publicKey
+    val session = TestAppUtils.createProximityVerificationSession(
+        app = app,
+        request = selectedRequest.value.request,
+        handover = handover,
+        deviceEngagement = encodedDeviceEngagement,
+        eReaderKey = eReaderKey,
+        signRequest = signRequest,
+        requestSdJwtVc = selectedRequest.value.requestSdJwtVc
     )
+    readerSession.value = session
+    val proximityRequest = session.find<VerificationSession.Iso18013ProximityRequest>()
+    val deviceRequest = Cbor.encode(proximityRequest.deviceRequest)
     val sessionEncryption = SessionEncryption(
         role = MdocRole.MDOC_READER,
-        eSelfKey = eReaderKey,
-        remotePublicKey = eDeviceKey,
-        encodedSessionTranscript = encodedSessionTranscript,
-        insertSequenceNumbers = insertSequenceNumbers
+        eReaderKey,
+        eDeviceKey,
+        Cbor.encode(proximityRequest.sessionTranscript),
     )
     readerSessionEncryption.value = sessionEncryption
-    readerSessionTranscript.value = encodedSessionTranscript
-    val encodedDeviceRequest = TestAppUtils.generateEncodedDeviceRequest(
-        request = selectedRequest.value.request,
-        encodedSessionTranscript = readerSessionTranscript.value!!,
-        readerKey = app.readerKey,
-        requestSdJwtVc = selectedRequest.value.requestSdJwtVc,
-        zkSystemRepository = app.zkSystemRepository,
-        signRequest = signRequest
-    )
-    Logger.iCbor(TAG, "deviceRequest", encodedDeviceRequest)
+    Logger.iCbor(TAG, "deviceRequest", deviceRequest)
     try {
         val t0 = Clock.System.now()
         transport.open(eDeviceKey)
-        readerMostRecentDeviceRequest.value = encodedDeviceRequest
+        readerMostRecentDeviceRequest.value = deviceRequest
         transport.sendMessage(
             sessionEncryption.encryptMessage(
-                messagePlaintext = encodedDeviceRequest,
+                messagePlaintext = deviceRequest,
                 statusCode = null
             )
         )
@@ -995,11 +1006,14 @@ private suspend fun doReaderFlowWithTransport(
 private fun ShowReaderResults(
     app: App,
     readerMostRecentDeviceResponse: MutableState<ByteArray?>,
-    readerSessionTranscript: MutableState<ByteArray?>,
+    readerSession: VerificationSession?,
     eReaderKey: EcPrivateKey?,
 ) {
     val deviceResponse1 = readerMostRecentDeviceResponse.value
-    if (deviceResponse1 == null || deviceResponse1.isEmpty() || eReaderKey == null) {
+    if (readerSession == null) {
+        // Making the request. We could show some text here, but typically NFC reader is shown at
+        // this point and it provides enough visual feedback to the user.
+    } else if (deviceResponse1 == null || deviceResponse1.isEmpty() || eReaderKey == null) {
         Text(
             text = "Waiting for data",
             style = MaterialTheme.typography.bodyLarge,
@@ -1015,8 +1029,7 @@ private fun ShowReaderResults(
             ShowResponse(
                 vpToken = null,
                 deviceResponse = Cbor.decode(deviceResponse1!!),
-                sessionTranscript = Cbor.decode(readerSessionTranscript.value!!),
-                nonce = null,
+                session = readerSession,
                 eReaderKey = eReaderKey,
                 metadata = null,
                 issuerTrustManager = app.issuerTrustManager,
