@@ -53,8 +53,12 @@ lokalize {
     llmProvider.set(LLMProvider.GOOGLE)  // GOOGLE, OPENAI, or ANTHROPIC
     llModel.set(LLmModel.GEMINI2_0_FLASH)
     
-    // Optional: Custom resources directory
-    resourcesDir.set("src/commonMain/resources")
+    // Optional: Custom resources directory.
+    // For Kotlin Multiplatform JSON projects, prefer a path that is NOT a
+    // recognized KMP source-set directory (e.g. "src/commonMain/lokalize"
+    // rather than "src/commonMain/resources"), so the per-locale JSONs are
+    // not auto-bundled into the JVM JAR as Java resources at the root.
+    resourcesDir.set("src/commonMain/lokalize")
 
     // Optional: Override the packages used for the generated code so that
     // multiple modules (e.g. multipaz-doctypes and multipaz-utopia) can each
@@ -330,7 +334,7 @@ src/commonMain/composeResources/
 
 **JSON format:**
 ```
-src/commonMain/resources/
+src/commonMain/lokalize/
   values/strings.json         (base/default)
   values-es/strings.json      (Spanish)
   values-fr/strings.json      (French)
@@ -391,7 +395,7 @@ plugins {
 // Only override if needed
 lokalize {
     outputFormat.set(OutputFormat.JSON)
-    resourcesDir.set("src/commonMain/resources")
+    resourcesDir.set("src/commonMain/lokalize")
 }
 ```
 
@@ -408,7 +412,7 @@ lokalize {
     defaultLocale = "en"
     targetLocales = listOf("es", "fr", "de", "ja")
     outputFormat.set(OutputFormat.JSON)
-    resourcesDir.set("src/commonMain/resources")
+    resourcesDir.set("src/commonMain/lokalize")
 }
 ```
 
@@ -449,7 +453,7 @@ code instead of in the doctypes namespace:
 // multipaz-utopia/build.gradle.kts
 lokalize {
     outputFormat.set(OutputFormat.JSON)
-    resourcesDir.set("src/commonMain/resources")
+    resourcesDir.set("src/commonMain/lokalize")
     generatedTranslationsPackageName.set("org.multipaz.utopia.generated")
     stringKeysPackageName.set("org.multipaz.utopia.localization")
 }

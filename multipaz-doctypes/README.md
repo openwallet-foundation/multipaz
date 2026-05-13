@@ -51,7 +51,7 @@ multipaz-doctypes/
 │   ├── kotlin/org/multipaz/doctypes/localization/      # Localization system
 │   │   ├── LocalizedStrings.kt                           # String lookup
 │   │   └── NativeLocale.kt                               # Platform locale
-│   └── resources/                                        # Translation files
+│   └── lokalize/                                         # Translation source files
 │       ├── values/strings.json                           # English (base)
 │       ├── values-es/strings.json                        # Spanish
 │       ├── values-de/strings.json                        # German
@@ -63,8 +63,8 @@ multipaz-doctypes/
 
 ### Localization Flow
 
-1. **Base Keys** (`resources/values/strings.json`): Source of truth for all string keys
-2. **JSON Resources** (`resources/values*/strings.json`): Translation files in JSON format
+1. **Base Keys** (`lokalize/values/strings.json`): Source of truth for all string keys
+2. **JSON Resources** (`lokalize/values*/strings.json`): Translation files in JSON format
 3. **Generated Code** (`GeneratedTranslations.kt`, `GeneratedStringKeys.kt`): Auto-generated Kotlin maps and key constants from JSON
 4. **Runtime Access** (`LocalizedStrings.kt`): Platform-aware string lookup
 
@@ -124,7 +124,7 @@ object MyNewDocument {
 
 ### Step 2: Add Base Key Names to English Strings
 
-Define new key names in `src/commonMain/resources/values/strings.json` (this is now the source of truth; key constants are generated):
+Define new key names in `src/commonMain/lokalize/values/strings.json` (this is now the source of truth; key constants are generated):
 
 ```json
 {
@@ -140,7 +140,7 @@ Define new key names in `src/commonMain/resources/values/strings.json` (this is 
 
 ### Step 3: Add Base Translations
 
-Add English (base) translations in `src/commonMain/resources/values/strings.json`:
+Add English (base) translations in `src/commonMain/lokalize/values/strings.json`:
 
 ```json
 {
@@ -199,9 +199,9 @@ Define new keys in the base English resource (compile-time constants are generat
 }
 ```
 
-#### 2. Create Values in `commonMain/resources/values`
+#### 2. Create Values in `commonMain/lokalize/values`
 
-Add base (English) strings to `src/commonMain/resources/values/strings.json`:
+Add base (English) strings to `src/commonMain/lokalize/values/strings.json`:
 
 ```json
 {
@@ -340,12 +340,12 @@ Available icons for attributes:
 
 ### How It Works
 
-1. **Base JSON Keys** (`resources/values/strings.json`)
+1. **Base JSON Keys** (`lokalize/values/strings.json`)
    - Source of truth for all string identifiers
    - New key names are defined here
    - Generated as type-safe constants in `GeneratedStringKeys.kt`
 
-2. **JSON Resources** (`resources/values*/strings.json`)
+2. **JSON Resources** (`lokalize/values*/strings.json`)
    - Flat JSON format for easy editing
    - One file per language
    - Base locale in `values/strings.json`
@@ -398,7 +398,7 @@ plugins {
 
 lokalize {
     outputFormat.set(OutputFormat.JSON)
-    resourcesDir.set("src/commonMain/resources")
+    resourcesDir.set("src/commonMain/lokalize")
 }
 ```
 

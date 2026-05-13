@@ -127,18 +127,17 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    sourceSets {
-        getByName("main") {
-            assets {
-                srcDirs("src/commonMain/resources")
-            }
-        }
-    }
 }
 
+// Source strings live under src/commonMain/lokalize/ rather than src/commonMain/resources/
+// because KMP would auto-bundle the latter into the JVM JAR as Java resources,
+// colliding with multipaz-doctypes's identically named values-*/strings.json entries
+// during Android's mergeJavaResource step in downstream consumers (issue #1714).
+// Nothing reads these JSONs at runtime — they are build-time inputs to the lokalize
+// plugin only; runtime translations are baked into GeneratedTranslations as constants.
 lokalize {
     outputFormat.set(OutputFormat.JSON)
-    resourcesDir.set("src/commonMain/resources")
+    resourcesDir.set("src/commonMain/lokalize")
     generatedTranslationsPackageName.set("org.multipaz.utopia.generated")
     stringKeysPackageName.set("org.multipaz.utopia.localization")
 }
@@ -179,15 +178,3 @@ publishing {
     }
 }
 
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink>().configureEach {
-    if (binary is org.jetbrains.kotlin.gradle.plugin.mpp.Framework) {
-        doLast {
-            val frameworkDir =
-                (binary as org.jetbrains.kotlin.gradle.plugin.mpp.Framework).outputFile
-            copy {
-                from("${project.projectDir}/src/commonMain/resources")
-                into(frameworkDir)
-            }
-        }
-    }
-}
