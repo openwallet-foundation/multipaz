@@ -267,6 +267,7 @@ abstract class MdocNfcV2Service: HostApduService() {
                     hybridTransport!!.open(eDeviceKey.publicKey)
                     val duration = Clock.System.now() - timeStarted
                     startTransaction(
+                        transport = hybridTransport!!,
                         settings = settings,
                         connectionMethod = connectionMethod,
                         encodedDeviceEngagement = encodedDeviceEngagement,
@@ -306,6 +307,7 @@ abstract class MdocNfcV2Service: HostApduService() {
     }
 
     private suspend fun startTransaction(
+        transport: NfcHybridTransportMdoc,
         settings: Settings,
         connectionMethod: MdocConnectionMethod,
         encodedDeviceEngagement: ByteString,
@@ -314,33 +316,31 @@ abstract class MdocNfcV2Service: HostApduService() {
         engagementDuration: Duration,
     ) {
         val transactionJobContext = currentCoroutineContext()
-
         if (connectionMethod is MdocConnectionMethodNfcV2) {
-            hybridTransport?.setExpectTransport(false)
+            transport.setExpectTransport(false)
             // Nothing to do
         } else {
-            hybridTransport?.setExpectTransport(true)
+            transport.setExpectTransport(true)
             // Wait for the non-NFC transport in a coroutine so we are not blocking
             // initiating presentment....
             waitForTransportJob = serviceScope.launch(Dispatchers.IO) {
                 try {
-                    val transport = MdocTransportFactory.Default.createTransport(
+                    val negotiatedTransport = MdocTransportFactory.Default.createTransport(
                         connectionMethod = connectionMethod,
                         role = MdocRole.MDOC,
                         options = settings.transportOptions
                     )
-                    transport.open(eSenderKey = eDeviceKey.publicKey)
+                    negotiatedTransport.open(eSenderKey = eDeviceKey.publicKey)
+                    transport.setTransport(negotiatedTransport)
 
                     // Monitor the secondary transport
                     launch {
-                        transport.state.collect { state ->
+                        negotiatedTransport.state.collect { state ->
                             if (state == MdocTransport.State.FAILED || state == MdocTransport.State.CLOSED) {
                                 transactionJobContext.cancel(CancellationException("Secondary transport $state"))
                             }
                         }
                     }
-
-                    hybridTransport?.setTransport(transport)
                 } catch (e: Exception) {
                     Logger.w(TAG, "Error opening non-NFC transport", e)
                 }
@@ -350,12 +350,13 @@ abstract class MdocNfcV2Service: HostApduService() {
         try {
             settings.presentmentModel?.setConnecting()
             Iso18013Presentment(
-                transport = hybridTransport!!,
+                transport = transport,
                 eDeviceKey = eDeviceKey,
                 deviceEngagement = Cbor.decode(encodedDeviceEngagement.toByteArray()),
                 handover = handover,
                 source = settings.source,
                 keyAgreementPossible = listOf(eDeviceKey.curve),
+                insertSequenceNumbers = true,
                 onWaitingForRequest = { settings.presentmentModel?.setWaitingForReader() },
                 onWaitingForUserInput = { settings.presentmentModel?.setWaitingForUserInput() },
                 onDocumentsInFocus = { documents ->
@@ -440,8 +441,18 @@ abstract class MdocNfcV2Service: HostApduService() {
 
     // Called by OS when an APDU arrives
     override fun processCommandApdu(encodedCommandApdu: ByteArray, extras: Bundle?): ByteArray? {
-        // Bounce the APDU to processCommandApdu() above via the coroutine in I/O thread set up in onCreate()
-        val commandApdu = CommandApdu.decode(encodedCommandApdu)
+        // Bounce the APDU to processCommandApdu() above via the coroutine in I/O thread set up in onCreate().
+        //
+        // With Extended APDUs it's possible we get a partial APDU so gracefully handle if decoding fails. Simply
+        // log and discard, we'll likely get hit with an onDeactivated call soon anyway.
+        //
+        val commandApdu = try {
+            CommandApdu.decode(encodedCommandApdu)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Logger.w(TAG, "Error decoding APDU", e)
+            return null
+        }
         if (!engagementComplete) {
             if (commandApdu.isApplicationSelect) {
                 applicationSelectProcessed = true

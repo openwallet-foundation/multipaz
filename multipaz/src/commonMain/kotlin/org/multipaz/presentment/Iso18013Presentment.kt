@@ -38,6 +38,7 @@ private const val TAG = "Iso180135Presentment"
  * @param handover the handover.
  * @param source the source of truth used for presentment.
  * @param keyAgreementPossible the list of curves for which key agreement is possible.
+ * @param insertSequenceNumbers if `true`, inserts sequence numbers in session encryption messages.
  * @param timeout the maximum time to wait for the first message from the remote reader or `null` to wait indefinitely.
  * @param timeoutSubsequentRequests the maximum time to wait for subsequent messages or `null` to wait indefinitely.
  * @param onWaitingForRequest called when waiting for a request from the remote reader.
@@ -65,7 +66,8 @@ suspend fun Iso18013Presentment(
     handover: DataItem,
     source: PresentmentSource,
     keyAgreementPossible: List<EcCurve>,
-    timeout: Duration? = 10.seconds,
+    insertSequenceNumbers: Boolean = false,
+    timeout: Duration? = 15.seconds,
     timeoutSubsequentRequests: Duration? = 30.seconds,
     onWaitingForRequest: () -> Unit = {},
     onWaitingForUserInput: () -> Unit = {},
@@ -84,8 +86,8 @@ suspend fun Iso18013Presentment(
     //Logger.iCbor(TAG, "DeviceEngagement", mechanism.encodedDeviceEngagement.toByteArray())
     var numRequestsServed = 0
     var sendSessionTermination = true
+    var sessionEncryption: SessionEncryption? = null
     try {
-        var sessionEncryption: SessionEncryption? = null
         lateinit var eReaderKey: EReaderKey
         lateinit var sessionTranscript: DataItem
         lateinit var encodedSessionTranscript: ByteArray
@@ -119,10 +121,11 @@ suspend fun Iso18013Presentment(
                 }
                 encodedSessionTranscript = Cbor.encode(sessionTranscript)
                 sessionEncryption = SessionEncryption(
-                    MdocRole.MDOC,
-                    eDeviceKey,
-                    eReaderKey.publicKey,
-                    encodedSessionTranscript,
+                    role = MdocRole.MDOC,
+                    eSelfKey = eDeviceKey,
+                    remotePublicKey = eReaderKey.publicKey,
+                    encodedSessionTranscript = encodedSessionTranscript,
+                    insertSequenceNumbers = insertSequenceNumbers
                 )
             }
             val (encodedDeviceRequest, status) = sessionEncryption.decryptMessage(sessionData)
@@ -173,7 +176,14 @@ suspend fun Iso18013Presentment(
             Logger.i(TAG, "Sending session-termination")
             try {
                 transport.sendMessage(
-                    SessionEncryption.encodeStatus(Constants.SESSION_DATA_STATUS_SESSION_TERMINATION)
+                    SessionEncryption.encodeStatus(
+                        statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
+                        sequenceNumber = if (insertSequenceNumbers) {
+                            sessionEncryption?.nextSequenceNumber
+                        } else {
+                            null
+                        }
+                    )
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e

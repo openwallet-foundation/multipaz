@@ -3,6 +3,10 @@ package org.multipaz.mdoc.vical
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.DataItem
 import org.multipaz.crypto.X509Cert
+import org.multipaz.util.Logger
+import org.multipaz.util.toHex
+
+private const val TAG = "VicalCertificateInfo"
 
 /**
  * An entry in a VICAL according to ISO/IEC 18013-5:2021.
@@ -28,6 +32,8 @@ data class VicalCertificateInfo(
     val extensions: Map<String, DataItem> = emptyMap()
 ) {
     init {
-        require(docTypes.isNotEmpty())
+        if (docTypes.isEmpty()) {
+            Logger.w(TAG, "Ignoring empty docTypes for certificate with ski ${ski.toHex()}")
+        }
     }
 }

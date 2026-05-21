@@ -502,6 +502,10 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
     }
 
     override suspend fun waitForStateCharacteristicWriteOrL2CAPClient() {
+        if (device != null) {
+            Logger.i(TAG, "The device is already connected, no need to wait")
+            return
+        }
         suspendCancellableCoroutine<Boolean> { continuation ->
             setWaitCondition(WaitState.STATE_CHARACTERISTIC_WRITTEN_OR_L2CAP_CLIENT, continuation)
         }
@@ -617,19 +621,20 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
         try {
             l2capSocket = l2capServerSocket!!.accept()
 
+            val psm = l2capPsm
             l2capServerSocket?.close()
             l2capServerSocket = null
 
             if (waitFor?.state == WaitState.STATE_CHARACTERISTIC_WRITTEN_OR_L2CAP_CLIENT) {
-                Logger.i(TAG, "L2CAP connection")
+                Logger.i(TAG, "L2CAP client at PSM $psm")
                 device = l2capSocket!!.remoteDevice
-                // Since the central found us, we can stop advertising....
-                advertiser?.stopAdvertising(advertiseCallback)
                 resumeWait()
             } else {
-                Logger.w(TAG, "Got a L2CAP client but not waiting")
-                return
+                Logger.i(TAG, "L2CAP client at PSM $psm (but not yet waiting)")
+                device = l2capSocket!!.remoteDevice
             }
+            // Since the central found us, we can stop advertising....
+            advertiser?.stopAdvertising(advertiseCallback)
 
             val inputStream = l2capSocket!!.inputStream
             while (true) {

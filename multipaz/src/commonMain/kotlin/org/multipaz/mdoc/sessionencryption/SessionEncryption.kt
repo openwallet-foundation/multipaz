@@ -26,6 +26,9 @@ import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.Hkdf
 import org.multipaz.mdoc.role.MdocRole
+import org.multipaz.util.Logger
+
+private const val TAG = "SessionEncryption"
 
 /**
  * Helper class for implementing session encryption according to ISO/IEC 18013-5:2021
@@ -44,21 +47,38 @@ import org.multipaz.mdoc.role.MdocRole
  * it's the for the mdoc.
  * @param remotePublicKey The public ephemeral key of the other end.
  * @param encodedSessionTranscript The bytes of the `SessionTranscript` CBOR.
+ * @param insertSequenceNumbers if `true`, inserts sequence numbers in generated messages.
  */
 class SessionEncryption(
     val role: MdocRole,
     private val eSelfKey: EcPrivateKey,
     private val remotePublicKey: EcPublicKey,
-    private val encodedSessionTranscript: ByteArray
+    private val encodedSessionTranscript: ByteArray,
+    private val insertSequenceNumbers: Boolean = false
 ) {
     private var sessionEstablishmentSent = false
     private lateinit var skRemote: ByteArray
     private lateinit var skSelf: ByteArray
+    private var nextSequenceNumber_ = 0
     private var decryptedCounter = 1
     private var encryptedCounter = 1
     private var sendSessionEstablishment = true
 
     private var initialized: Boolean = false
+
+    /**
+     * Returns the next sequence number that will be used.
+     *
+     * @throws IllegalStateException if the [org.multipaz.mdoc.sessionencryption.SessionEncryption] was constructed
+     *   with [insertSequenceNumbers] set to `false`
+     */
+    val nextSequenceNumber: Int
+        get() {
+            check(insertSequenceNumbers) {
+                "This object was constructed with insertSequenceNumber set to false"
+            }
+            return nextSequenceNumber_
+        }
 
     private suspend fun ensureInitialized() {
         if (initialized) {
@@ -169,6 +189,10 @@ class SessionEncryption(
             if (statusCode != null) {
                 put("status", statusCode)
             }
+            if (insertSequenceNumbers) {
+                put("seq", nextSequenceNumber_)
+            }
+            nextSequenceNumber_++
         })
         sessionEstablishmentSent = true
         return messageData
@@ -234,11 +258,18 @@ class SessionEncryption(
          * code and no data.
          *
          * @param statusCode the intended status code, with value as defined in ISO/IEC 18013-5 Table 20.
+         * @param sequenceNumber optional sequence number or `null`
          * @return a byte array with the encoded CBOR message
          */
-        fun encodeStatus(statusCode: Long): ByteArray = Cbor.encode(
+        fun encodeStatus(
+            statusCode: Long,
+            sequenceNumber: Int? = null,
+        ): ByteArray = Cbor.encode(
             buildCborMap {
                 put("status", statusCode)
+                sequenceNumber?.let {
+                    put("seq", it)
+                }
             }
         )
 

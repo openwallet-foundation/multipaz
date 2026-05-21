@@ -103,12 +103,12 @@ private suspend fun selectConnectionMethod(
 }
 
 private data class RequestPickerEntry(
+    val id: String,
     val displayName: String,
     val request: DocumentCannedRequest,
     val requestSdJwtVc: Boolean
 )
 
-private var lastRequest: Int = 0
 internal var lastNfcReaderSelected: Int = 0
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalCoroutinesApi::class)
@@ -131,6 +131,7 @@ fun IsoMdocProximityReadingScreen(
             if (sampleRequest.mdocRequest != null) {
                 requestOptions.add(
                     RequestPickerEntry(
+                        id = "mdoc_" + documentType.mdocDocumentType!!.docType + "_" + sampleRequest.id,
                         displayName = "${documentType.displayName}: ${sampleRequest.displayName}",
                         request = sampleRequest,
                         requestSdJwtVc = false
@@ -142,6 +143,7 @@ fun IsoMdocProximityReadingScreen(
             if (sampleRequest.jsonRequest != null) {
                 requestOptions.add(
                     RequestPickerEntry(
+                        id = "json_" + documentType.jsonDocumentType!!.vct + "_" + sampleRequest.id,
                         displayName = "${documentType.displayName}: ${sampleRequest.displayName} (SD-JWT VC)",
                         request = sampleRequest,
                         requestSdJwtVc = true
@@ -152,13 +154,18 @@ fun IsoMdocProximityReadingScreen(
     }
     for (request in wellKnownMultipleDocumentRequests) {
         requestOptions.add(RequestPickerEntry(
+            id = "multidoc_" + request.id,
             displayName = "Multi-doc: ${request.displayName}",
             request = request,
             requestSdJwtVc = false
         ))
     }
     val requestDropdownExpanded = remember { mutableStateOf(false) }
-    val requestSelected = remember { mutableStateOf(requestOptions[lastRequest]) }
+    val requestSelected = remember { mutableStateOf(
+        requestOptions.find {
+            it.id == app.settingsModel.readerLastSelectedRequestId.value
+        } ?: requestOptions.first()
+    )}
     val blePermissionState = rememberBluetoothPermissionState()
     val bleEnabledState = rememberBluetoothEnabledState()
     val coroutineScope = rememberCoroutineScope { app.promptModel }
@@ -279,6 +286,7 @@ fun IsoMdocProximityReadingScreen(
                                 existingTransport = null,
                                 handover = Simple.NULL,
                                 allowMultipleRequests = app.settingsModel.readerAllowMultipleRequests.value,
+                                insertSequenceNumbers = false,
                                 bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
                                 bleUseL2CAPInEngagement = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
                                 showToast = showToast,
@@ -535,7 +543,9 @@ fun IsoMdocProximityReadingScreen(
                         comboBoxSelected = requestSelected,
                         comboBoxExpanded = requestDropdownExpanded,
                         getDisplayName = { it.displayName },
-                        onSelected = { index, value -> lastRequest = index }
+                        onSelected = { index, value ->
+                            app.settingsModel.readerLastSelectedRequestId.value = value.id
+                        }
                     )
                 }
                 item {
@@ -623,6 +633,7 @@ fun IsoMdocProximityReadingScreen(
                                     existingTransport = scanResult.transport,
                                     handover = scanResult.handover,
                                     allowMultipleRequests = app.settingsModel.readerAllowMultipleRequests.value,
+                                    insertSequenceNumbers = scanResult.type == MdocHandoverType.V2_HANDOVER,
                                     bleUseL2CAP = app.settingsModel.readerBleL2CapEnabled.value,
                                     bleUseL2CAPInEngagement = app.settingsModel.readerBleL2CapInEngagementEnabled.value,
                                     showToast = showToast,
@@ -778,6 +789,7 @@ private suspend fun doReaderFlow(
     existingTransport: MdocTransport?,
     handover: DataItem,
     allowMultipleRequests: Boolean,
+    insertSequenceNumbers: Boolean,
     bleUseL2CAP: Boolean,
     bleUseL2CAPInEngagement: Boolean,
     showToast: (message: String) -> Unit,
@@ -834,6 +846,7 @@ private suspend fun doReaderFlow(
                         encodedDeviceEngagement = encodedDeviceEngagement,
                         handover = handover,
                         allowMultipleRequests = allowMultipleRequests,
+                        insertSequenceNumbers = insertSequenceNumbers,
                         showToast = showToast,
                         readerTransport = readerTransport,
                         readerSessionEncryption = readerSessionEncryption,
@@ -859,6 +872,7 @@ private suspend fun doReaderFlow(
         encodedDeviceEngagement = encodedDeviceEngagement,
         handover = handover,
         allowMultipleRequests = allowMultipleRequests,
+        insertSequenceNumbers = insertSequenceNumbers,
         showToast = showToast,
         readerTransport = readerTransport,
         readerSessionEncryption = readerSessionEncryption,
@@ -880,6 +894,7 @@ private suspend fun doReaderFlowWithTransport(
     encodedDeviceEngagement: ByteString,
     handover: DataItem,
     allowMultipleRequests: Boolean,
+    insertSequenceNumbers: Boolean,
     showToast: (message: String) -> Unit,
     readerTransport: MutableState<MdocTransport?>,
     readerSessionEncryption: MutableState<SessionEncryption?>,
@@ -900,10 +915,11 @@ private suspend fun doReaderFlowWithTransport(
         eReaderKey.publicKey
     )
     val sessionEncryption = SessionEncryption(
-        MdocRole.MDOC_READER,
-        eReaderKey,
-        eDeviceKey,
-        encodedSessionTranscript,
+        role = MdocRole.MDOC_READER,
+        eSelfKey = eReaderKey,
+        remotePublicKey = eDeviceKey,
+        encodedSessionTranscript = encodedSessionTranscript,
+        insertSequenceNumbers = insertSequenceNumbers
     )
     readerSessionEncryption.value = sessionEncryption
     readerSessionTranscript.value = encodedSessionTranscript

@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.Simple
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.getDefault
@@ -88,33 +89,37 @@ class TestAppSettingsModel private constructor(
         if (!readOnly) {
             CoroutineScope(Dispatchers.Default).launch {
                 variable.asStateFlow().collect { newValue ->
-                    val dataItem = when (T::class) {
-                        Boolean::class -> {
-                            (newValue as Boolean).toDataItem()
-                        }
-
-                        String::class -> {
-                            (newValue as String).toDataItem()
-                        }
-
-                        List::class -> {
-                            buildCborArray {
-                                (newValue as List<*>).forEach { add(Tstr(it as String)) }
+                    val dataItem = if (newValue == null) {
+                        Simple.NULL
+                    } else {
+                        when (T::class) {
+                            Boolean::class -> {
+                                (newValue as Boolean).toDataItem()
                             }
-                        }
 
-                        Set::class -> {
-                            buildCborArray {
-                                (newValue as Set<*>).forEach { add(Tstr(it as String)) }
+                            String::class -> {
+                                (newValue as String).toDataItem()
                             }
-                        }
 
-                        EcCurve::class -> {
-                            (newValue as EcCurve).name.toDataItem()
-                        }
+                            List::class -> {
+                                buildCborArray {
+                                    (newValue as List<*>).forEach { add(Tstr(it as String)) }
+                                }
+                            }
 
-                        else -> {
-                            throw IllegalStateException("Type not supported")
+                            Set::class -> {
+                                buildCborArray {
+                                    (newValue as Set<*>).forEach { add(Tstr(it as String)) }
+                                }
+                            }
+
+                            EcCurve::class -> {
+                                (newValue as EcCurve).name.toDataItem()
+                            }
+
+                            else -> {
+                                throw IllegalStateException("Type not supported")
+                            }
                         }
                     }
                     if (settingsTable.get(key) == null) {
@@ -161,6 +166,7 @@ class TestAppSettingsModel private constructor(
         bind(readerBleL2CapInEngagementEnabled, "readerBleL2CapInEngagementEnabled", true)
         bind(readerAutomaticallySelectTransport, "readerAutomaticallySelectTransport", false)
         bind(readerAllowMultipleRequests, "readerAllowMultipleRequests", false)
+        bind(readerLastSelectedRequestId, "readerLastSelectedRequestId", null)
 
         bind(cloudSecureAreaUrl, "cloudSecureAreaUrl", CSA_URL_DEFAULT)
         bind(dcApiProtocols, "dcApiProtocols", digitalCredentials.supportedProtocols)
@@ -194,6 +200,7 @@ class TestAppSettingsModel private constructor(
     val readerBleL2CapInEngagementEnabled = MutableStateFlow<Boolean>(false)
     val readerAutomaticallySelectTransport = MutableStateFlow<Boolean>(false)
     val readerAllowMultipleRequests = MutableStateFlow<Boolean>(false)
+    val readerLastSelectedRequestId = MutableStateFlow<String?>(null)
 
     val cloudSecureAreaUrl = MutableStateFlow<String>(CSA_URL_DEFAULT)
     val dcApiProtocols = MutableStateFlow<Set<String>>(emptySet())

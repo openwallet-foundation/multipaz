@@ -204,6 +204,23 @@ sealed class DataItem(
         }
 
     /**
+     * The data-time from a tstr with tag [Tagged.FULL_DATE_STRING] or [Tagged.DATE_TIME_STRING].
+     *
+     * @throws IllegalArgumentException if the data item isn't a tag with tag [Tagged.FULL_DATE_STRING] or
+     * [Tagged.DATE_TIME_STRING] containing a tstr with valid date format.
+     */
+    val asDateStringOrDateTimeString: LocalDate
+        get() {
+            require(this is Tagged)
+            require(this.taggedItem is Tstr)
+            when (this.tagNumber) {
+                Tagged.DATE_TIME_STRING -> return LocalDate.parse(this.taggedItem.value.substring(0, 10))
+                Tagged.FULL_DATE_STRING -> return LocalDate.parse(this.taggedItem.value)
+                else -> throw IllegalArgumentException("Unexpected tag number ${this.tagNumber}")
+            }
+        }
+
+    /**
      * Returns whether a map has a value for a given key
      *
      * @param key the key to check for.

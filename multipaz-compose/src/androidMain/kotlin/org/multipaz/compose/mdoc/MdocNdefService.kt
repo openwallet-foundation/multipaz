@@ -476,7 +476,17 @@ abstract class MdocNdefService: HostApduService() {
     // Called by OS when an APDU arrives
     override fun processCommandApdu(encodedCommandApdu: ByteArray, extras: Bundle?): ByteArray? {
         // Bounce the APDU to processCommandApdu() above via the coroutine in I/O thread set up in onCreate()
-        val commandApdu = CommandApdu.decode(encodedCommandApdu)
+        //
+        // With Extended APDUs it's possible we get a partial APDU so gracefully handle if decoding fails. Simply
+        // log and discard, we'll likely get hit with an onDeactivated call soon anyway.
+        //
+        val commandApdu = try {
+            CommandApdu.decode(encodedCommandApdu)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Logger.w(TAG, "Error decoding APDU", e)
+            return null
+        }
         if (!engagementComplete) {
             val unused = channel.trySend(CommandApduData(commandApdu))
         } else {
