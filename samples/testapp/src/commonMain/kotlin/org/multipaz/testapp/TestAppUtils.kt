@@ -44,6 +44,7 @@ import org.multipaz.documenttype.DocumentCannedRequest
 import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.MultiDocumentCannedRequest
 import org.multipaz.documenttype.SingleDocumentCannedRequest
+import org.multipaz.documenttype.knowntypes.Aadhaar
 import org.multipaz.documenttype.knowntypes.AgeVerification
 import org.multipaz.utopia.knowntypes.Loyalty
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
@@ -516,6 +517,19 @@ object TestAppUtils {
                     "Erika",
                     "Erika's Payment Card Credential",
                     Res.drawable.payment_card_art
+                )
+                provisionDocument(
+                    documentStore = documentStore,
+                    secureArea = secureArea,
+                    secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
+                    dsKey = dsKey,
+                    deviceKeyAlgorithm = deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm = deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain = numCredentialsPerDomain,
+                    documentType = Aadhaar.getDocumentType(),
+                    givenNameOverride = "Erika",
+                    displayName = "Erika's Aadhaar",
+                    cardArtResource = Res.drawable.pid_card_art
                 )
                 return null
             }
