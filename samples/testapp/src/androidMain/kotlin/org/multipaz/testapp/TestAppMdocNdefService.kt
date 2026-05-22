@@ -1,5 +1,6 @@
 package org.multipaz.testapp
 
+import android.content.Context
 import org.multipaz.compose.mdoc.MdocNdefService
 import org.multipaz.compose.prompt.PresentmentActivity
 import org.multipaz.mdoc.transport.MdocTransportOptions
@@ -8,7 +9,10 @@ import kotlin.time.Clock
 
 private const val TAG = "TestAppMdocNdefService"
 
-class TestAppMdocNdefService: MdocNdefService() {
+class TestAppMdocNdefService(
+    applicationContext: Context,
+    sendResponse: (ByteArray) -> Unit
+): MdocNdefService(applicationContext, sendResponse) {
 
     //val promptModel = TransparentActivityPromptModel.Builder(
     //    theme = { content -> AppTheme(content) }

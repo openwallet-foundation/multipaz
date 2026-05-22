@@ -1023,6 +1023,78 @@ class TrustManagerTest {
             assertNull(it.trustChain)
             assertEquals(0, it.trustPoints.size)
         }
+
+        val encodedSignedVical = ByteString(
+            signedVical.generate(
+                signingKey = AsymmetricKey.X509CertifiedExplicit(
+                    certChain = X509CertChain(certificates = listOf(vicalCert)),
+                    privateKey = vicalKey
+                )
+            )
+        )
+
+        // Check that when a VICAL is put into a TrustManager, the TrustPoint we get back is for the TrustManager
+        // we put it into, not the VicalTrustManager used in the implementation of TrustManager
+        val tm = TrustManager(
+            storage = EphemeralStorage()
+        )
+        tm.addVical(
+            encodedSignedVical = encodedSignedVical,
+            metadata = TrustMetadata(displayName = "Our VICAL")
+        )
+        tm.verify(listOf(ds2Certificate)).let {
+            assertEquals(null, it.error)
+            assertTrue(it.isTrusted)
+            assertEquals(2, it.trustChain!!.certificates.size)
+            assertEquals(ca2Certificate, it.trustChain.certificates.last())
+            assertEquals(1, it.trustPoints.size)
+            assertEquals(tm, it.trustPoints.first().trustManager)
+        }
+    }
+
+    @Test
+    fun testRicalTrustManager() = runTestWithSetup {
+        val testRical = createTestRical()
+
+        val trustManager = RicalTrustManager(
+            signedRical = SignedRical.parse(encodedSignedRical = testRical.encodedSignedRical.toByteArray())
+        )
+
+        // Happy flow
+        //
+        trustManager.verify(listOf(testRical.breweryReaderCert)).let {
+            assertEquals(null, it.error)
+            assertTrue(it.isTrusted)
+            assertEquals(2, it.trustChain!!.certificates.size)
+            assertEquals(testRical.breweryReaderRootCert, it.trustChain.certificates.last())
+        }
+
+        // No trust point
+        //
+        trustManager.verify(listOf(dsCertificate)).let {
+            assertEquals("No trusted root certificate could not be found", it.error?.message)
+            assertFalse(it.isTrusted)
+            assertNull(it.trustChain)
+            assertEquals(0, it.trustPoints.size)
+        }
+
+        // Check that when a RICAL is put into a TrustManager, the TrustPoint we get back is for the TrustManager
+        // we put it into, not the RicalTrustManager used in the implementation of TrustManager
+        val tm = TrustManager(
+            storage = EphemeralStorage()
+        )
+        tm.addRical(
+            encodedSignedRical = testRical.encodedSignedRical,
+            metadata = TrustMetadata(displayName = "Our RICAL")
+        )
+        tm.verify(listOf(testRical.breweryReaderCert)).let {
+            assertEquals(null, it.error)
+            assertTrue(it.isTrusted)
+            assertEquals(2, it.trustChain!!.certificates.size)
+            assertEquals(testRical.breweryReaderRootCert, it.trustChain.certificates.last())
+            assertEquals(1, it.trustPoints.size)
+            assertEquals(tm, it.trustPoints.first().trustManager)
+        }
     }
 
     @Test
@@ -1039,6 +1111,8 @@ class TrustManagerTest {
             assertEquals(3, it.trustChain!!.certificates.size)
             assertEquals(caCertificate, it.trustChain.certificates.last())
             assertEquals(1, it.trustPoints.size)
+            // Check that TrustPoint.trustManager isn't rewritten.
+            assertEquals(tm1, it.trustPoints.first().trustManager)
         }
         trustManager.verify(listOf(ds2Certificate)).let {
             assertEquals(null, it.error)
@@ -1046,6 +1120,8 @@ class TrustManagerTest {
             assertEquals(2, it.trustChain!!.certificates.size)
             assertEquals(ca2Certificate, it.trustChain.certificates.last())
             assertEquals(1, it.trustPoints.size)
+            // Check that TrustPoint.trustManager isn't rewritten.
+            assertEquals(tm2, it.trustPoints.first().trustManager)
         }
 
         // No trust point

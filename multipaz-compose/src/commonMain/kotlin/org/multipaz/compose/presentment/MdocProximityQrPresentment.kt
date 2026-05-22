@@ -15,10 +15,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Simple
+import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.document.Document
+import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.MdocTransportFactory
@@ -59,6 +62,7 @@ private enum class State {
  *   feedback (either success or error, depending on the error parameter) and call the passed-in reset() lambda
  *   when ready to reset the state and go back and show a QR button.
  * @param preselectedDocuments a list of documents the user may have preselected or the empty list.
+ * @param capabilities the capabilities to convey to the mdoc reader.
  * @param eDeviceKeyCurve the curve to use for session encryption.
  * @param transportFactory the [MdocTransportFactory] to use for creating transports.
  * @param disablePlatformSpecificImplementation set to `true` to not use platform-specific implementations.
@@ -73,6 +77,10 @@ expect fun MdocProximityQrPresentment(
     showTransacting: @Composable (reset: () -> Unit) -> Unit,
     showCompleted: @Composable (error: Throwable?, reset: () -> Unit) -> Unit,
     preselectedDocuments: List<Document> = emptyList(),
+    capabilities: Map<Capability, DataItem> = mapOf(
+        Capability.READER_AUTH_ALL_SUPPORT to true.toDataItem(),
+        Capability.EXTENDED_REQUEST_SUPPORT to true.toDataItem()
+    ),
     eDeviceKeyCurve: EcCurve = EcCurve.P256,
     transportFactory: MdocTransportFactory = MdocTransportFactory.Default,
     disablePlatformSpecificImplementation: Boolean = false
@@ -88,6 +96,10 @@ internal fun MdocProximityQrPresentmentDefault(
     showTransacting: @Composable (reset: () -> Unit) -> Unit,
     showCompleted: @Composable (error: Throwable?, reset: () -> Unit) -> Unit,
     preselectedDocuments: List<Document> = emptyList(),
+    capabilities: Map<Capability, DataItem> = mapOf(
+        Capability.READER_AUTH_ALL_SUPPORT to true.toDataItem(),
+        Capability.EXTENDED_REQUEST_SUPPORT to true.toDataItem()
+    ),
     eDeviceKeyCurve: EcCurve = EcCurve.P256,
     transportFactory: MdocTransportFactory = MdocTransportFactory.Default,
 ) {
@@ -117,6 +129,7 @@ internal fun MdocProximityQrPresentmentDefault(
                             )
                             val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
                                 advertisedTransports.forEach { addConnectionMethod(it.connectionMethod) }
+                                capabilities.forEach { (capability, value) -> addCapability(capability, value) }
                             }.toDataItem()
                             val encodedDeviceEngagement = ByteString(Cbor.encode(deviceEngagement))
                             qrCodeToShow = "mdoc:" + encodedDeviceEngagement.toByteArray().toBase64Url()

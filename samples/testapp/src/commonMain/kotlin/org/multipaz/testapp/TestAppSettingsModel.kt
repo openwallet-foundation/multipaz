@@ -75,13 +75,17 @@ class TestAppSettingsModel private constructor(
     ) {
         val value = settingsTable.get(key)?.let {
             val dataItem = Cbor.decode(it.toByteArray())
-            when (T::class) {
-                Boolean::class -> { dataItem.asBoolean as T }
-                String::class -> { dataItem.asTstr as T }
-                List::class -> { dataItem.asArray.map { item -> (item as Tstr).value } as T }
-                Set::class -> { dataItem.asArray.map { item -> (item as Tstr).value }.toSet() as T }
-                EcCurve::class -> { EcCurve.entries.find { it.name == dataItem.asTstr } as T }
-                else -> { throw IllegalStateException("Type not supported") }
+            if (dataItem == Simple.NULL) {
+                null
+            } else {
+                when (T::class) {
+                    Boolean::class -> { dataItem.asBoolean as T }
+                    String::class -> { dataItem.asTstr as T }
+                    List::class -> { dataItem.asArray.map { item -> (item as Tstr).value } as T }
+                    Set::class -> { dataItem.asArray.map { item -> (item as Tstr).value }.toSet() as T }
+                    EcCurve::class -> { EcCurve.entries.find { it.name == dataItem.asTstr } as T }
+                    else -> { throw IllegalStateException("Type not supported") }
+                }
             }
         } ?: defaultValue
         variable.value = value

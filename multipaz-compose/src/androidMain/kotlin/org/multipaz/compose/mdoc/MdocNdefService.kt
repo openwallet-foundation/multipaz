@@ -1,8 +1,8 @@
 package org.multipaz.compose.mdoc
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
-import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -22,13 +22,14 @@ import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
-import org.multipaz.context.initializeApplication
+import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
+import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.nfc.MdocNfcEngagementHelper
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.MdocTransport
@@ -54,10 +55,13 @@ import kotlin.time.Duration
  * Applications should subclass this and include the appropriate stanzas in its manifest
  * for binding to the NDEF Type 4 tag AID (D2760000850101).
  *
- * See `ComposeWallet` in [Multipaz Samples](https://github.com/openwallet-foundation/multipaz-samples)
- * for an example.
+ * @property applicationContext the [Context], passed by [CombinedNfcService].
+ * @property sendResponse a function to send a response APDU via [CombinedNfcService].
  */
-abstract class MdocNdefService: HostApduService() {
+abstract class MdocNdefService(
+    applicationContext: Context,
+    sendResponse: (ByteArray) -> Unit
+) : NfcApduService(applicationContext, sendResponse) {
     companion object {
         private const val TAG = "MdocNdefService"
     }
@@ -131,6 +135,7 @@ abstract class MdocNdefService: HostApduService() {
      * @property staticHandoverNfcDataTransferEnabled `true` if NFC data transfer should be offered when using NFC
      *   static handover
      * @property transportOptions the [MdocTransportOptions] to use for newly created connections.
+     * @property capabilities the capabilities to convey to the mdoc reader.
      */
     data class Settings(
         val source: PresentmentSource,
@@ -147,6 +152,10 @@ abstract class MdocNdefService: HostApduService() {
         val staticHandoverNfcDataTransferEnabled: Boolean,
 
         val transportOptions: MdocTransportOptions,
+        val capabilities: Map<Capability, DataItem> = mapOf(
+            Capability.READER_AUTH_ALL_SUPPORT to true.toDataItem(),
+            Capability.EXTENDED_REQUEST_SUPPORT to true.toDataItem()
+        )
     )
 
     /**
@@ -164,8 +173,6 @@ abstract class MdocNdefService: HostApduService() {
     override fun onCreate() {
         Logger.i(TAG, "onCreate")
         super.onCreate()
-
-        initializeApplication(applicationContext)
 
         engagement = null
         transactionJob = null
@@ -342,7 +349,8 @@ abstract class MdocNdefService: HostApduService() {
                 Logger.w(TAG, "Engagement failed. Maybe this wasn't an ISO mdoc reader.", error)
             },
             staticHandoverMethods = staticHandoverConnectionMethods,
-            negotiatedHandoverPicker = negotiatedHandoverPicker
+            negotiatedHandoverPicker = negotiatedHandoverPicker,
+            capabilities = settings.capabilities
         )
     }
 

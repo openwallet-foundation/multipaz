@@ -1,6 +1,8 @@
 <resources>
     <string name="app_name">Multipaz Test App</string>
     <string name="notification_channel_title">Notifications</string>
+    <string name="combined_nfc_service_description">@string/app_name</string>
+
     <string name="nfc_ndef_service_description">@string/app_name</string>
     <string name="nfc_ndef_service_aid_group_description">ISO/IEC 18013-5:2021 NFC engagement</string>
     <string name="mdoc_nfc_data_transfer_service_aid_group_description">ISO/IEC 18013-5:2021 NFC data transfer</string>

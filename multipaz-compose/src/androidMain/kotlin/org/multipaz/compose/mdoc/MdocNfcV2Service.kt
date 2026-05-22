@@ -1,8 +1,8 @@
 package org.multipaz.compose.mdoc
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
-import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -21,12 +21,14 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.toDataItem
 import org.multipaz.context.initializeApplication
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfcV2
+import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.nfc.MdocNfcV2EngagementHelper
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.MdocTransport
@@ -51,8 +53,14 @@ import kotlin.time.Duration
  *
  * Applications should subclass this and include the appropriate stanzas in its manifest
  * for binding to the appropriate AID (A0000002480401).
+ *
+ * @property applicationContext the [Context], passed by [CombinedNfcService].
+ * @property sendResponse a function to send a response APDU via [CombinedNfcService].
  */
-abstract class MdocNfcV2Service: HostApduService() {
+abstract class MdocNfcV2Service(
+    applicationContext: Context,
+    sendResponse: (ByteArray) -> Unit
+) : NfcApduService(applicationContext, sendResponse) {
     companion object {
         private const val TAG = "MdocNfcV2Service"
     }
@@ -115,6 +123,7 @@ abstract class MdocNfcV2Service: HostApduService() {
      * @property negotiatedHandoverPreferredOrder a list of the preferred order for which kind of
      *   [org.multipaz.mdoc.transport.MdocTransport] to create when using NFC negotiated handover.
      * @property transportOptions the [MdocTransportOptions] to use for newly created connections.
+     * @property capabilities the capabilities to convey to the mdoc reader.
      */
     data class Settings(
         val source: PresentmentSource,
@@ -122,11 +131,13 @@ abstract class MdocNfcV2Service: HostApduService() {
         val presentmentModel: PresentmentModel?,
         val activityClass: Class<out Activity>?,
         val sessionEncryptionCurve: EcCurve,
-
         val useNegotiatedHandover: Boolean,
         val negotiatedHandoverPreferredOrder: List<String>,
-
         val transportOptions: MdocTransportOptions,
+        val capabilities: Map<Capability, DataItem> = mapOf(
+            Capability.READER_AUTH_ALL_SUPPORT to true.toDataItem(),
+            Capability.EXTENDED_REQUEST_SUPPORT to true.toDataItem()
+        )
     )
 
     /**
@@ -302,7 +313,8 @@ abstract class MdocNfcV2Service: HostApduService() {
                 } else {
                     connectionMethods.find { it is MdocConnectionMethodNfcV2 }!!
                 }
-            }
+            },
+            capabilities = settings.capabilities
         )
     }
 

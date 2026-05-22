@@ -18,12 +18,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Simple
+import org.multipaz.cbor.toDataItem
 import org.multipaz.compose.prompt.PresentmentActivity
 import org.multipaz.context.applicationContext
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.document.Document
+import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.MdocTransportFactory
@@ -46,6 +49,7 @@ actual fun MdocProximityQrPresentment(
     showTransacting: @Composable (reset: () -> Unit) -> Unit,
     showCompleted: @Composable (error: Throwable?, reset: () -> Unit) -> Unit,
     preselectedDocuments: List<Document>,
+    capabilities: Map<Capability, DataItem>,
     eDeviceKeyCurve: EcCurve,
     transportFactory: MdocTransportFactory,
     disablePlatformSpecificImplementation: Boolean
@@ -60,6 +64,7 @@ actual fun MdocProximityQrPresentment(
             showTransacting = showTransacting,
             showCompleted = showCompleted,
             preselectedDocuments = preselectedDocuments,
+            capabilities = capabilities,
             eDeviceKeyCurve = eDeviceKeyCurve,
             transportFactory = transportFactory
         )
@@ -73,6 +78,7 @@ actual fun MdocProximityQrPresentment(
             showTransacting = showTransacting,
             showCompleted = showCompleted,
             preselectedDocuments = preselectedDocuments,
+            capabilities = capabilities,
             eDeviceKeyCurve = eDeviceKeyCurve,
             transportFactory = transportFactory
         )
@@ -98,6 +104,7 @@ private fun MdocProximityQrPresentmentAndroid(
     showTransacting: @Composable (reset: () -> Unit) -> Unit,
     showCompleted: @Composable (error: Throwable?, reset: () -> Unit) -> Unit,
     preselectedDocuments: List<Document>,
+    capabilities: Map<Capability, DataItem>,
     eDeviceKeyCurve: EcCurve,
     transportFactory: MdocTransportFactory,
 ) {
@@ -128,6 +135,7 @@ private fun MdocProximityQrPresentmentAndroid(
                             )
                             val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
                                 advertisedTransports.forEach { addConnectionMethod(it.connectionMethod) }
+                                capabilities.forEach { (capability, value) -> addCapability(capability, value) }
                             }.toDataItem()
                             val encodedDeviceEngagement = ByteString(Cbor.encode(deviceEngagement))
                             qrCodeToShow = "mdoc:" + encodedDeviceEngagement.toByteArray().toBase64Url()

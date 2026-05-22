@@ -9,9 +9,11 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfcV2
+import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.transport.encapsulateInDo53
@@ -43,6 +45,7 @@ import kotlin.math.min
  * always contain a [MdocConnectionMethodNfcV2] instance and contains others if the mdoc reader is capable of data
  * transfer over e.g. BLE or Wifi Aware. If the mdoc only supports data transfer over NFC, it should return the element
  * for [MdocConnectionMethodNfcV2].
+ * @property capabilities the capabilities to convey to the mdoc reader.
  * @param apduCommandMaxSize the maximum length of the command data field.
  */
 class MdocNfcV2EngagementHelper(
@@ -54,6 +57,10 @@ class MdocNfcV2EngagementHelper(
     val onMessageReceived: suspend (ByteString) -> Unit,
     val onError: (error: Exception) -> Unit,
     val negotiatedHandoverPicker: (connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod,
+    val capabilities: Map<Capability, DataItem> = mapOf(
+        Capability.READER_AUTH_ALL_SUPPORT to true.toDataItem(),
+        Capability.EXTENDED_REQUEST_SUPPORT to true.toDataItem()
+    ),
     val apduCommandMaxSize: Long = 65536L,
 ) {
     companion object {
@@ -127,6 +134,9 @@ class MdocNfcV2EngagementHelper(
 
         val deviceEngagement = buildDeviceEngagement(eDeviceKey = eDeviceKey) {
             addConnectionMethod(selectedMethod)
+            capabilities.forEach { (capability, value) ->
+                addCapability(capability, value)
+            }
         }.toDataItem()
         val encodedDeviceEngagement = Cbor.encode(deviceEngagement)
 

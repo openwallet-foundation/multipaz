@@ -24,6 +24,8 @@ import kotlinx.io.bytestring.append
 import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.toDataItem
+import org.multipaz.mdoc.engagement.Capability
 import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.getUInt16
@@ -44,6 +46,7 @@ import org.multipaz.util.getUInt16
  * element, or null to not use NFC static handover.
  * @param negotiatedHandoverPicker a function to choose one of the connection methods from the mdoc reader or
  * null to not use NFC negotiated handover.
+ * @property capabilities the capabilities to convey to the mdoc reader.
  */
 class MdocNfcEngagementHelper(
     val eDeviceKey: EcPublicKey,
@@ -54,6 +57,10 @@ class MdocNfcEngagementHelper(
     val onError: (error: Exception) -> Unit,
     val staticHandoverMethods: List<MdocConnectionMethod>? = null,
     val negotiatedHandoverPicker: ((connectionMethods: List<MdocConnectionMethod>) -> MdocConnectionMethod)? = null,
+    val capabilities: Map<Capability, DataItem> = mapOf(
+        Capability.READER_AUTH_ALL_SUPPORT to true.toDataItem(),
+        Capability.EXTENDED_REQUEST_SUPPORT to true.toDataItem()
+    ),
 ) {
     companion object {
         private const val TAG = "MdocNfcEngagementHelper"
@@ -166,7 +173,11 @@ class MdocNfcEngagementHelper(
                     negotiatedHandoverState = NegotiatedHandoverState.EXPECT_SERVICE_SELECT
                 } else {
                     val encodedDeviceEngagement = Cbor.encode(
-                        buildDeviceEngagement(eDeviceKey = eDeviceKey) { }.toDataItem()
+                        buildDeviceEngagement(eDeviceKey = eDeviceKey) {
+                            capabilities.forEach { (capability, value) ->
+                                addCapability(capability, value)
+                            }
+                        }.toDataItem()
                     )
 
                     val combinedStaticHandoverMethods = MdocConnectionMethod.combine(staticHandoverMethods!!)

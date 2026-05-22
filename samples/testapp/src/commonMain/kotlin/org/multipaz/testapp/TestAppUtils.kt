@@ -50,6 +50,7 @@ import org.multipaz.utopia.knowntypes.Loyalty
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
+import org.multipaz.documenttype.knowntypes.IDPass
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.credential.MdocCredential
@@ -529,6 +530,19 @@ object TestAppUtils {
                     documentType = Aadhaar.getDocumentType(),
                     givenNameOverride = "Erika",
                     displayName = "Erika's Aadhaar",
+                    cardArtResource = Res.drawable.pid_card_art
+                )
+                provisionDocument(
+                    documentStore = documentStore,
+                    secureArea = secureArea,
+                    secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
+                    dsKey = dsKey,
+                    deviceKeyAlgorithm = deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm = deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain = numCredentialsPerDomain,
+                    documentType = IDPass.getDocumentType(),
+                    givenNameOverride = "Erika",
+                    displayName = "Erika's ID pass",
                     cardArtResource = Res.drawable.pid_card_art
                 )
                 return null

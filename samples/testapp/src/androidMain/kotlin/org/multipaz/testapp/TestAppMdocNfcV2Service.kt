@@ -1,5 +1,6 @@
 package org.multipaz.testapp
 
+import android.content.Context
 import org.multipaz.compose.mdoc.MdocNfcV2Service
 import org.multipaz.compose.prompt.PresentmentActivity
 import org.multipaz.mdoc.transport.MdocTransportOptions
@@ -8,7 +9,11 @@ import kotlin.time.Clock
 
 private const val TAG = "TestAppMdocNfcV2Service"
 
-class TestAppMdocNfcV2Service: MdocNfcV2Service() {
+class TestAppMdocNfcV2Service(
+    applicationContext: Context,
+    sendResponse: (ByteArray) -> Unit
+): MdocNfcV2Service(applicationContext, sendResponse) {
+
     override suspend fun getSettings(): MdocNfcV2Service.Settings {
         // TODO: optimize initialization of App so we can just get settingsModel and presentmentSource() out
         val t0 = Clock.System.now()

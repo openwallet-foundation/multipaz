@@ -164,14 +164,14 @@ class PresentmentActivity: FragmentActivity() {
          * in the document chooser.
          * @param openWalletAppPendingIntentFn a function to return a [PendingIntent] to use
          * for when the user presses the "Open Wallet" button.
-         * @param preferredServices a list of [ComponentName]s which will be preferred over other
+         * @param preferredService the [ComponentName]s which will be preferred over other
          * services. This is used in [onResume] to pass to [CardEmulation.setPreferredService].
          */
         fun getPendingIntent(
             source: PresentmentSource,
             initiallySelectedDocumentId: String?,
             openWalletAppPendingIntentFn: (document: Document) -> PendingIntent,
-            preferredServices: List<ComponentName>
+            preferredService: ComponentName
         ): PendingIntent {
             presentmentModel.reset(
                 source = source,
@@ -179,7 +179,7 @@ class PresentmentActivity: FragmentActivity() {
                 showDocumentChooser = DocumentChooserData(
                     initiallySelectedDocumentId = initiallySelectedDocumentId,
                     openAppPendingIntentFn = openWalletAppPendingIntentFn,
-                    preferredServices = preferredServices
+                    preferredService = preferredService
                 )
             )
 
@@ -233,10 +233,9 @@ class PresentmentActivity: FragmentActivity() {
         if (state is PresentmentModel.State.Reset && presentmentModel.showDocumentChooser != null) {
             NfcAdapter.getDefaultAdapter(this)?.let { adapter ->
                 val cardEmulation = CardEmulation.getInstance(adapter)
-                for (componentName in presentmentModel.showDocumentChooser!!.preferredServices) {
-                    if (!cardEmulation.setPreferredService(this, componentName)) {
-                        Logger.w(TAG, "CardEmulation.setPreferredService() returned false for $componentName")
-                    }
+                val componentName = presentmentModel.showDocumentChooser!!.preferredService
+                if (!cardEmulation.setPreferredService(this, componentName)) {
+                    Logger.w(TAG, "CardEmulation.setPreferredService() returned false for $componentName")
                 }
                 if (!cardEmulation.categoryAllowsForegroundPreference(CardEmulation.CATEGORY_OTHER)) {
                     Logger.w(TAG, "CardEmulation.categoryAllowsForegroundPreference(CATEGORY_OTHER) returned false")

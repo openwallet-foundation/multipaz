@@ -182,31 +182,16 @@
         </activity>
 
         <service
-            android:name=".TestAppMdocNdefService"
+            android:name=".TestAppCombinedNfcService"
             android:exported="true"
             android:label="@string/nfc_ndef_service_description"
             android:permission="android.permission.BIND_NFC_SERVICE">
             <intent-filter>
                 <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
             </intent-filter>
-
             <meta-data
                 android:name="android.nfc.cardemulation.host_apdu_service"
-                android:resource="@xml/nfc_ndef_service" />
-        </service>
-
-        <service
-            android:name=".TestAppMdocNfcV2Service"
-            android:exported="true"
-            android:label="@string/nfc_mdoc_engagement_service_aid_group_description"
-            android:permission="android.permission.BIND_NFC_SERVICE">
-            <intent-filter>
-                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
-            </intent-filter>
-
-            <meta-data
-                android:name="android.nfc.cardemulation.host_apdu_service"
-                android:resource="@xml/nfc_mdoc_nfcv2_service" />
+                android:resource="@xml/combined_nfc_service" />
         </service>
 
         <service
@@ -241,19 +226,6 @@
                 android:resource="@drawable/ic_stat_name"/>
         </service>
 
-        <service
-            android:name=".TestAppMdocNfcDataTransferService"
-            android:exported="true"
-            android:label="@string/nfc_ndef_service_description"
-            android:permission="android.permission.BIND_NFC_SERVICE">
-            <intent-filter>
-                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
-            </intent-filter>
-
-            <meta-data
-                android:name="android.nfc.cardemulation.host_apdu_service"
-                android:resource="@xml/mdoc_nfc_data_transfer_service" />
-        </service>
     </application>
 
 </manifest>

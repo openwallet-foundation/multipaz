@@ -113,10 +113,7 @@ actual object TestAppConfiguration {
                     /* flags = */ PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
             },
-            preferredServices = listOf(
-                ComponentName(applicationContext, TestAppMdocNdefService::class.java),
-                ComponentName(applicationContext, TestAppMdocNfcV2Service::class.java)
-            )
+            preferredService = ComponentName(applicationContext, TestAppCombinedNfcService::class.java)
         )
     }
 

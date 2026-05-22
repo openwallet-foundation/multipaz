@@ -566,14 +566,28 @@ class TrustManager(
             vicalTrustManagers.forEach { (_, trustManager) ->
                 val ret = trustManager.verify(chain, atTime)
                 if (ret.isTrusted) {
-                    return@withLock ret
+                    // Make sure we return the right TrustManager instance, not the VicalTrustManager
+                    return@withLock ret.copy(
+                        trustPoints = ret.trustPoints.map {
+                            it.copy(
+                                trustManager = this
+                            )
+                        }
+                    )
                 }
             }
             // Then RICAL..
             ricalTrustManagers.forEach { (_, trustManager) ->
                 val ret = trustManager.verify(chain, atTime)
                 if (ret.isTrusted) {
-                    return@withLock ret
+                    // Make sure we return the right TrustManager instance, not the RicalTrustManager
+                    return@withLock ret.copy(
+                        trustPoints = ret.trustPoints.map {
+                            it.copy(
+                                trustManager = this
+                            )
+                        }
+                    )
                 }
             }
             // Finally certificates...

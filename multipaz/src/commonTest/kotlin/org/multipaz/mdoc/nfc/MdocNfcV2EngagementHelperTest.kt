@@ -164,7 +164,7 @@ class MdocNfcV2EngagementHelperTest {
                 CommandApdu(cla=0, ins=164, p1=4, p2=0, payload=ByteString(size=7 hex=a0000002480401), le=0)
                 ResponseApdu(status=36864, payload=ByteString(size=7 hex=a1001a00010000))
                 CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=17 hex=530fa100a10281830501a1001a00010000), le=65536)
-                ResponseApdu(status=36864, payload=ByteString(size=104 hex=5366a100a30063312e30018201d818584ba401022001215820711b420f708e686917b799e5991346c318a6bd89ac32d04e78cb537cd89dcaa92258201b99557fca9a63617246669eababc7a36068db058e9c98b067a5eba3233b451c0281830501a1001a00010000))
+                ResponseApdu(status=36864, payload=ByteString(size=112 hex=536ea100a50063312e31018201d818584ba401022001215820711b420f708e686917b799e5991346c318a6bd89ac32d04e78cb537cd89dcaa92258201b99557fca9a63617246669eababc7a36068db058e9c98b067a5eba3233b451c0281830501a1001a00010000058006a203f504f5))
                 CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=12 hex=530aa1646461746143010203), le=65530)
                 ResponseApdu(status=36864, payload=ByteString(size=13 hex=530ba164646174614401020304))
                 CommandApdu(cla=0, ins=195, p1=0, p2=0, payload=ByteString(size=11 hex=5309a16673746174757314), le=65530)

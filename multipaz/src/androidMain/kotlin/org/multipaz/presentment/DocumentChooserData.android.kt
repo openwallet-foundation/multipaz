@@ -12,11 +12,11 @@ import org.multipaz.document.DocumentBadge
  *
  * @property initiallySelectedDocumentId the document identifier to initially focus or `null`.
  * @property openAppPendingIntentFn a function to create a [PendingIntent] to open the given document when the button is pressed.
- * @property preferredServices a list of services which should be preferred while an activity providing the UI for
+ * @property preferredService the services which should be preferred while an activity providing the UI for
  *  [PresentmentModel] is in the foreground. See [PresenmentActivity] in the multipaz-compose library for an example.
  */
 actual data class DocumentChooserData(
     val initiallySelectedDocumentId: String?,
     val openAppPendingIntentFn: (document: Document) -> PendingIntent,
-    val preferredServices: List<ComponentName>
+    val preferredService: ComponentName
 )
