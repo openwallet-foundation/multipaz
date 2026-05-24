@@ -12,7 +12,7 @@
     <ID>UndocumentedPublicProperty:EUPersonalID.kt$EUPersonalID$const val EUPID_VCT = "urn:eudi:pid:1"</ID>
     <ID>UndocumentedPublicProperty:IDPass.kt$IDPass$const val IDPASS_DOCTYPE = "com.google.wallet.idcard.1"</ID>
     <ID>UndocumentedPublicProperty:Options.kt$Options$// Values for vehicle categories according to ISO/IEC 18013-1 Annex B // TODO: fill it from the actual standard val VEHICLE_CATEGORY_CODE_ISO_IEC_18013_1_ANNEX_B = listOf( StringOption("A", "A - Motorcycle"), StringOption("B", "B - Car"), StringOption("C", "C - Truck"), StringOption("D", "D - Bus"), )</ID>
-    <ID>UndocumentedPublicProperty:PhotoID.kt$PhotoID$const val DTC_NAMESPACE = "org.iso.23220.dtc.1"</ID>
+    <ID>UndocumentedPublicProperty:PhotoID.kt$PhotoID$const val DATAGROUPS_NAMESPACE = "org.iso.23220.datagroups.1"</ID>
     <ID>UndocumentedPublicProperty:PhotoID.kt$PhotoID$const val ISO_23220_2_NAMESPACE = "org.iso.23220.1"</ID>
     <ID>UndocumentedPublicProperty:PhotoID.kt$PhotoID$const val PHOTO_ID_DOCTYPE = "org.iso.23220.photoid.1"</ID>
     <ID>UndocumentedPublicProperty:PhotoID.kt$PhotoID$const val PHOTO_ID_NAMESPACE = "org.iso.23220.photoid.1"</ID>

@@ -255,9 +255,9 @@ data class DeviceRequest private constructor(
      * @property version the version to use or `null` to automatically determine which version to use.
      */
     class Builder(
-        val sessionTranscript: DataItem,
-        val deviceRequestInfo: DeviceRequestInfo? = null,
-        val version: String? = null,
+        private val sessionTranscript: DataItem,
+        private var deviceRequestInfo: DeviceRequestInfo? = null,
+        private val version: String? = null,
     ) {
         private val docRequests = mutableListOf<DocRequest>()
         private val readerAuthAll = mutableListOf<CoseSign1>()
@@ -385,6 +385,21 @@ data class DeviceRequest private constructor(
         }
 
         /**
+         * Sets [DeviceRequestInfo] to use.
+         *
+         * This overrides the [DeviceRequestInfo] set in the [DeviceRequest.Builder] constructor.
+         *
+         * @param deviceRequestInfo the [DeviceRequestInfo] to use or `null` to not use a [DeviceRequestInfo].
+         */
+        fun setDeviceRequestInfo(deviceRequestInfo: DeviceRequestInfo? = null): Builder {
+            check(readerAuthAll.isEmpty()) {
+                "Cannot call setDeviceRequestInfo() after addReaderAuthAll()"
+            }
+            this.deviceRequestInfo = deviceRequestInfo
+            return this
+        }
+
+        /**
          * Adds a signature over the entire request.
          *
          * After calling this, [addDocRequest] must not be called.
@@ -401,14 +416,12 @@ data class DeviceRequest private constructor(
                         add(it.itemsRequestBytes)
                     }
                 }
-                if (deviceRequestInfo != null) {
+                deviceRequestInfo?.let {
                     add(Tagged(
                         tagNumber = Tagged.ENCODED_CBOR,
-                        taggedItem = Bstr(Cbor.encode(deviceRequestInfo.toDataItem()))
+                        taggedItem = Bstr(Cbor.encode(it.toDataItem()))
                     ))
-                } else {
-                    add(Simple.NULL)
-                }
+                } ?: add(Simple.NULL)
             }
             val readerAuthenticationAllBytes = Cbor.encode(item = Tagged(
                 tagNumber = Tagged.ENCODED_CBOR,

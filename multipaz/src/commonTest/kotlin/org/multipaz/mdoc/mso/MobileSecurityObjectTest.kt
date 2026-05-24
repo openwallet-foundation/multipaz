@@ -105,7 +105,7 @@ class MobileSecurityObjectTest {
                     "age_over_18",
                     "age_over_19"
                 ),
-                PhotoID.DTC_NAMESPACE to listOf(
+                PhotoID.DATAGROUPS_NAMESPACE to listOf(
                     "dg1",
                     "dg2",
                     "dg3"
@@ -142,7 +142,7 @@ class MobileSecurityObjectTest {
                       "nameSpaces": ["org.iso.23220.photoid.1"],
                       "dataElements": {
                         "org.iso.23220.1": ["age_over_18", "age_over_19"],
-                        "org.iso.23220.dtc.1": ["dg1", "dg2", "dg3"]
+                        "org.iso.23220.datagroups.1": ["dg1", "dg2", "dg3"]
                       }
                     },
                     "keyInfo": {

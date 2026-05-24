@@ -8,7 +8,6 @@ import org.multipaz.documenttype.Icon
 import org.multipaz.util.fromBase64Url
 import kotlinx.datetime.LocalDate
 import org.multipaz.cbor.buildCborMap
-import org.multipaz.documenttype.knowntypes.DrivingLicense.MDL_NAMESPACE
 import org.multipaz.doctypes.localization.LocalizedStrings
 import org.multipaz.doctypes.localization.GeneratedStringKeys
 import org.multipaz.documenttype.DocumentAttributeSensitivity
@@ -22,7 +21,7 @@ object PhotoID {
     const val PHOTO_ID_DOCTYPE = "org.iso.23220.photoid.1"
     const val ISO_23220_2_NAMESPACE = "org.iso.23220.1"
     const val PHOTO_ID_NAMESPACE = "org.iso.23220.photoid.1"
-    const val DTC_NAMESPACE = "org.iso.23220.dtc.1"
+    const val DATAGROUPS_NAMESPACE = "org.iso.23220.datagroups.1"
 
     /**
      * Build the PhotoID Document Type.
@@ -135,7 +134,7 @@ object PhotoID {
         )
         addMdocAttribute(
             type = DocumentAttributeType.String,
-            identifier = "issuing_authority_unicode",
+            identifier = "issuing_authority",
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_ISSUING_AUTHORITY),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_ISSUING_AUTHORITY),
             mandatory = true,
@@ -461,7 +460,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_DTC_VC_VERSION),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_DTC_VC_VERSION),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -471,7 +470,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_SOD),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_SOD),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -481,7 +480,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG1),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG1),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -491,7 +490,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG2),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG2),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -501,7 +500,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG3),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG3),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -511,7 +510,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG4),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG4),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -521,7 +520,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG5),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG5),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -531,7 +530,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG6),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG6),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -541,7 +540,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG7),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG7),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -551,7 +550,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG8),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG8),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -561,7 +560,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG9),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG9),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -571,7 +570,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG10),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG10),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -581,7 +580,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG11),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG11),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -591,7 +590,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG12),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG12),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -601,7 +600,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG13),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG13),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -611,7 +610,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG14),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG14),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -621,7 +620,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG15),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG15),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -631,7 +630,7 @@ object PhotoID {
             displayName = getLocalizedString(GeneratedStringKeys.PHOTO_ID_ATTRIBUTE_EMRTD_DG16),
             description = getLocalizedString(GeneratedStringKeys.PHOTO_ID_DESCRIPTION_EMRTD_DG16),
             mandatory = false,
-            mdocNamespace = DTC_NAMESPACE,
+            mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
             sampleValue = null
         )
@@ -678,7 +677,7 @@ object PhotoID {
                     "portrait" to false,
                     "issue_date" to false,
                     "expiry_date" to false,
-                    "issuing_authority_unicode" to false,
+                    "issuing_authority" to false,
                     "issuing_country" to false,
                     "age_over_18" to false,
                 )
@@ -690,7 +689,7 @@ object PhotoID {
             mdocDataElements = mapOf(
                 ISO_23220_2_NAMESPACE to mapOf(),
                 PHOTO_ID_NAMESPACE to mapOf(),
-                DTC_NAMESPACE to mapOf()
+                DATAGROUPS_NAMESPACE to mapOf()
             )
         )
         }.build()
