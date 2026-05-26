@@ -815,7 +815,14 @@ class AndroidKeystoreSecureArea private constructor(
                 val signatureCertificateDigests = mutableSetOf<ByteString>()
                 val pkg = applicationContext.packageManager
                     .getPackageInfo(applicationContext.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-                pkg.signingInfo!!.apkContentsSigners.forEach { signatureInfo ->
+
+                val si = pkg.signingInfo!!
+                val signersToUse = if (si.hasMultipleSigners()) {
+                    si.apkContentsSigners.toList()
+                } else {
+                    si.signingCertificateHistory.toList()
+                }
+                signersToUse.forEach { signatureInfo ->
                     signatureCertificateDigests.add(
                         ByteString(Crypto.digest(Algorithm.SHA256, signatureInfo.toByteArray()))
                     )
