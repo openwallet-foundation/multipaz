@@ -9,6 +9,8 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -2723,6 +2725,47 @@ class SdJwtTest {
                 }
             """.trimIndent().trim(),
             prettyJson.encodeToString(filteredSdJwt.verify(sdJwtRfcIssuerKey))
+        )
+    }
+
+    @Test
+    fun testObjectNotDisclosed() = runTest {
+        // This is a SD-JWT from the issuer in https://github.com/openwallet-foundation/multipaz/issues/1742
+        // which has a single disclosure for the object `age_equal_or_over` like this:
+        //
+        //  Key: age_equal_or_over
+        //  Value: { "12": true, "14": true, "16": true, "18": true, "21": true, "65": false }
+        //
+        val sdJwt = SdJwt.fromCompactSerialization(
+            "eyJ0eXAiOiJkYytzZC1qd3QiLCJhbGciOiJFUzI1NiIsIng1YyI6WyJNSUlCMERDQ0FYYWdBd0lCQWdJUUF4NmMyWXhZRlFaNTdFTHJMa0RCWnpBS0JnZ3Foa2pPUFFRREFqQXFNUXN3Q1FZRFZRUUdFd0pFUlRFYk1Ca0dBMVVFQXhNU1VHeGhlV2R5YjNWdVpDQlNiMjkwSUVOQk1CNFhEVEkyTURVeU1UQTRNemd4T0ZvWERUSTNNRFV5TVRBNE16Z3hPRm93SWpFTE1Ba0dBMVVFQmhNQ1JFVXhFekFSQmdOVkJBTVRDbEJzWVhsbmNtOTFibVF3V1RBVEJnY3Foa2pPUFFJQkJnZ3Foa2pPUFFNQkJ3TkNBQVQ2N1dEeWpCZmhZSVYxSXA5NVZaQnMxWjd1RFNKOXZwREpZODdSZXZ3OGkveW1xWUtZRVhQZEFPbkd5YWNidFBsTzJJVEtUSmIrWDhDa0xBTmUxcUxpbzRHRk1JR0NNQ0lHQTFVZEVRUWJNQm1DRjJWMVpHbHdiRzh1WlhWa2FTMTNZV3hzWlhRdVpHVjJNQXdHQTFVZEV3RUIvd1FDTUFBd0RnWURWUjBQQVFIL0JBUURBZ1dnTUIwR0ExVWREZ1FXQkJUY2hhNE10bFIxdjE1WlNRSEN5L2lVVlFqYm5qQWZCZ05WSFNNRUdEQVdnQlR6SE1CNU43K2dZUEI4NGxSZmMxRVJpemFaakRBS0JnZ3Foa2pPUFFRREFnTklBREJGQWlFQTc0NHhVVnVnV2FzWms2RGpMclhqdDF2anNWQUZXZzZodGN5VW1xSEp1bGdDSUZJdjVxZkJ6QnArVE41bFJyVVdNQXAzc0YrQmFkZmUvWllxTmRJRFg0Q0giXX0.eyJpc3MiOiJodHRwczovL2V1ZGlwbG8uZXVkaS13YWxsZXQuZGV2L2lzc3VlcnMvcGxheWdyb3VuZCIsImlhdCI6MTc3OTgwODcxMywiZXhwIjoxNzgwNDEzNTEzLCJ2Y3QiOiJ1cm46ZXVkaTpwaWQ6ZGU6MSIsImNuZiI6eyJqd2siOnsia3R5IjoiRUMiLCJjcnYiOiJQLTI1NiIsIngiOiJjSkxLYTdHSlZKdHoxS1ItUVd0cGFmTjRCZVVoV1BsdnRpZWRjRHNqSjdnIiwieSI6ImFfYWVsOFZpT1Faa3BfNHlOejdzSGNLMmt5b3pSVHZjVmRzaHVhanJkQ2ciLCJraWQiOiI4ZnhveWdMX2lLZUQifX0sInN0YXR1cyI6eyJzdGF0dXNfbGlzdCI6eyJpZHgiOjI4OTYsInVyaSI6Imh0dHBzOi8vZXVkaXBsby5ldWRpLXdhbGxldC5kZXYvaXNzdWVycy9wbGF5Z3JvdW5kL3N0YXR1cy1tYW5hZ2VtZW50L3N0YXR1cy1saXN0L3BpZCJ9fSwiX3NkIjpbIjY4MmFpZ0l3Sm96ajdjZXI3LUdHM25YQXh4aUNLZmNlRFlzMWtrSTloM3MiLCI2OW1nSzNVZkdzVmphbFllcTdUSnhHTEROUDlKYnZuNEt4R3dHN3FZalNRIiwiTW1Ma1BKaWdlOV9aUk1NOVkyUzg2YzZoRkhxeWJ4Y2FjWUoyRV8wcUhvayIsIldZTERZT0dKRjRFWWJLcDFkZGUxbWdZNmM0SjFBM1ZWYkNpcURVSjVGbDAiLCJaX2ZrZERSMjNJSHZTQXRGVjNwQnh0NDJwV2F4UzVMZ0xjNFRjRHlWYllNIiwiZnhfbXNSZmxxOTk1eWIxQmozRVpCYi1IenhrNlg3dkkzaC1Na0xLX25HZyIsImxIUFZUa3BNWkRWb3QxRTJ6eVowYzU1bEdybWF0b2VGXzg0d2haU0FQU3ciLCJtVFpOUjRfcUFLcHdGSXhkRHFIb1lNRFhPcWF5MXJMSnFNcHlnMGV1X28wIiwibjhBNkZ3V0pxSEtUT1VoUXFMZ0JWUnhBd2U4NUpEWTdhUG1VRmQ4QnlUMCIsInF4Yjk0cEFBVklqc3BoX1JQdF9PblNmcl9VbDFwYXZuQmlBazhLbWNMRGsiLCJyZGo3Z0QzWVpOWk12ejBIa0dkcTdwV19OR2UwOTBOODRycUhZYmdhX1YwIiwidFlJQVdxc01hZWVGc3JDYkNvN3hZSmdxSzdONHBlSEZDRkhmdmQ4XzI4MCJdLCJfc2RfYWxnIjoic2hhLTI1NiJ9.Akjo1M1RD_wnrF9Rv3wWrpCaTL5rnMwt8xOZsFHlVqtPk6XcMOlkYfxaagUnSICYzhiQ4qykgxUFYO_zdxaHBA~WyIxMjg3YmFjZDQ2MWQxMDA0Iiwic3RyZWV0X2FkZHJlc3MiLCJNVVNURVJTVFJBU1NFIDEyMyJd~WyJhNzU1MDg5ZDQ3NWNmODRhIiwibG9jYWxpdHkiLCJCRVJMSU4iXQ~WyI0MTBhNDNmYTk0M2MyYzQyIiwiY291bnRyeSIsIkRFIl0~WyJmZjc5NGZiOThhOGQzYzIwIiwicG9zdGFsX2NvZGUiLCIxMDExNSJd~WyJjYTY2ZjdiYmM3Nzg4NjQ0IiwiaXNzdWluZ19jb3VudHJ5IiwiREUiXQ~WyI1YzRkMjhlM2VkMjVhOGU3IiwiaXNzdWluZ19hdXRob3JpdHkiLCJERSJd~WyJhZjk4Yjk3MGM1MzkyMWQ3Iiwic291cmNlX2RvY3VtZW50X3R5cGUiLCJpZF9jYXJkIl0~WyI1NTkzYjYwZDllY2ZhNWRlIiwiZ2l2ZW5fbmFtZSIsIk1BWCJd~WyI3OTg2NzA0ZmFhOGNiNDFiIiwiZmFtaWx5X25hbWUiLCJNVVNURVJNQU5OIl0~WyI1YjhhMGIyZGM5NWI3NTQzIiwiYmlydGhkYXRlIiwiMTk5MC0wMS0xNSJd~WyIxNTA2YmU3OGEyY2I5YzkyIiwiYWdlX2JpcnRoX3llYXIiLDE5OTBd~WyJkOWU5OTZkYjM3MjUwOWMyIiwiYWdlX2luX3llYXJzIiwzNl0~WyI4N2U5NjY1YmU0MzZkYWM1IiwiYWdlX2VxdWFsX29yX292ZXIiLHsiMTIiOnRydWUsIjE0Ijp0cnVlLCIxNiI6dHJ1ZSwiMTgiOnRydWUsIjIxIjp0cnVlLCI2NSI6ZmFsc2V9XQ~WyI4NTRlZjRlYjFhOWQ0NzgwIiwicGxhY2Vfb2ZfYmlydGgiLHsibG9jYWxpdHkiOiJCRVJMSU4ifV0~WyI4YWYzNjFjYWQ3ZWE5MGM2IiwiYWRkcmVzcyIseyJfc2QiOlsiOF9ORE9rRzRNOEtLVUZGZnZGa2dRTlZFWWZhZi03cGtfUTY1cVZ4QWdLWSIsIlNGSUh2Y2RqYXdYRF94anhfcjI3LUttOXNmZWl4NDllV285RTNWZ3JIaE0iLCJYSm9TR0hmNVB2N29XY3BnLXJnLVYzVl9VZFpQQWFFT1ZQODVNeWJ3VVhjIiwibGJRdDZQN1U5Z3BVUlBRUHlXZFZtZXpfRWJDWW93X3RyRnpIUXUwNTBZOCJdfV0~WyI1MjFlZGY3OGIyYzE5ZjBiIiwibmF0aW9uYWxpdGllcyIsWyJERSJdXQ~"
+        )
+
+        val ageEqualOrOverFilteredSdJwt =  sdJwt.filter(
+            pathsToInclude = listOf(
+                buildJsonArray { add("age_equal_or_over") }
+            )
+        )
+        assertEquals(1, ageEqualOrOverFilteredSdJwt.disclosures.size)
+        assertEquals(
+            """
+                ["87e9665be436dac5","age_equal_or_over",{"12":true,"14":true,"16":true,"18":true,"21":true,"65":false}]
+            """.trimIndent(),
+            ageEqualOrOverFilteredSdJwt.disclosures[0].fromBase64Url().decodeToString()
+        )
+
+        // This should return the disclosure which contains `age_equal_or_over` which unfortunately
+        // will leak other ages too...
+        val ageEqualOrOver16FilteredSdJwt =  sdJwt.filter(
+            pathsToInclude = listOf(
+                buildJsonArray { add("age_equal_or_over"); add("16") }
+            )
+        )
+        assertEquals(1, ageEqualOrOver16FilteredSdJwt.disclosures.size)
+        assertEquals(
+            """
+                ["87e9665be436dac5","age_equal_or_over",{"12":true,"14":true,"16":true,"18":true,"21":true,"65":false}]
+            """.trimIndent(),
+            ageEqualOrOver16FilteredSdJwt.disclosures[0].fromBase64Url().decodeToString()
         )
     }
 

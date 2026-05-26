@@ -156,7 +156,10 @@ suspend fun uriSchemePresentment(
         )
     }
     check(postResponseResponse.status == HttpStatusCode.OK)
-    check(postResponseResponse.contentType()!! == ContentType.Application.Json)
+    val contentType = postResponseResponse.contentType()
+    check(contentType != null && contentType.match(ContentType.Application.Json)) {
+        "Expected ${ContentType.Application.Json}, got $contentType"
+    }
     val bodyText = (postResponseResponse.body() as ByteArray).decodeToString()
     val postResponseBody = Json.decodeFromString<JsonObject>(bodyText)
     val redirectUri = postResponseBody["redirect_uri"]?.jsonPrimitive?.content

@@ -6,6 +6,7 @@ import kotlin.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
@@ -162,6 +163,42 @@ class SdJwt private constructor(
     }
 
     /**
+     * Checks if a disclosure path matches a requested path according to OpenID4VP section 7.1.
+     *
+     * The matching logic compares components at each index:
+     * - A `null` value (JsonNull) in the requested path matches any non-negative integer array index in the disclosure path.
+     * - String keys or specific array indices match if their string values are equal.
+     *
+     * In addition, the two paths match if they are equal or if one is a prefix of the other (so that
+     * ancestors and descendants are matched, satisfying the RFC 9901 section 7.2 requirement that parent
+     * disclosures are preserved to allow traversing to nested children).
+     *
+     * @param path the disclosure's component path.
+     * @param pathToInclude the requested component path.
+     * @return `true` if the disclosure path matches the requested path, `false` otherwise.
+     */
+    private fun pathMatches(path: JsonArray, pathToInclude: JsonArray): Boolean {
+        val minLen = minOf(path.size, pathToInclude.size)
+        for (i in 0 until minLen) {
+            val Cd = path[i]
+            val Cr = pathToInclude[i]
+            if (Cr is JsonNull) {
+                // null matches all elements of array(s) (non-negative integer indices)
+                if (Cd !is JsonPrimitive || Cd.isString || Cd.content.toIntOrNull()?.let { it >= 0 } != true) {
+                    return false
+                }
+            } else if (Cr is JsonPrimitive && Cd is JsonPrimitive) {
+                if (Cr.content != Cd.content) {
+                    return false
+                }
+            } else {
+                return false
+            }
+        }
+        return true
+    }
+
+    /**
      * Generates a new SD-JWT by filtering which claims should be included,
      *
      * The resulting SD-JWT will be constructed so it satisfies the requirement in section 7.2
@@ -175,12 +212,9 @@ class SdJwt private constructor(
     suspend fun filter(
         pathsToInclude: List<JsonArray>
     ): SdJwt {
-        val pathToIncludeStrings = pathsToInclude.map { it.joinToString(".") }
-
         return filter { path: JsonArray, value: JsonElement ->
-            val pathOfDisclosure = path.toList().joinToString(".")
-            for (pathToIncludeString in pathToIncludeStrings) {
-                if (pathOfDisclosure.startsWith(pathToIncludeString)) {
+            for (pathToInclude in pathsToInclude) {
+                if (pathMatches(path, pathToInclude)) {
                     return@filter true
                 }
             }
@@ -206,6 +240,8 @@ class SdJwt private constructor(
      *  ```
      * the hash for the disclosure of the `age_over_or_equal.18` is not included in the Issuer-signed
      * JWT claims, instead it's in the disclosure for the `age_over_or_equal` value.
+     *
+     * This implementation follows the rules for selection in OpenID4VP section 7.1.
      *
      * @param includeDisclosure a function to determine if a given disclosure should be included.
      * @return the resulting [SdJwt].
