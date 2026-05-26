@@ -53,10 +53,10 @@ import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.Logger
-import org.multipaz.util.deflate
 import org.multipaz.util.fromHex
-import org.multipaz.util.inflate
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.zlibDeflate
+import org.multipaz.util.zlibInflate
 import kotlin.experimental.xor
 import kotlin.random.Random
 import kotlin.test.BeforeTest
@@ -1097,7 +1097,7 @@ class DeviceResponseTest {
                 addOtherDocument(
                     OtherDocument(
                         docFormat = "sd-jwt+kb",
-                        data = ByteString(compactSerialization.encodeToByteArray().deflate())
+                        data = ByteString(compactSerialization.encodeToByteArray().zlibDeflate())
                     )
                 )
             }
@@ -1136,7 +1136,7 @@ class DeviceResponseTest {
         assertEquals(1, encDocs.otherDocuments.size)
 
         assertEquals("sd-jwt+kb", encDocs.otherDocuments[0].docFormat)
-        val sdJwtKbCompactSerialization = encDocs.otherDocuments[0].data.toByteArray().inflate().decodeToString()
+        val sdJwtKbCompactSerialization = encDocs.otherDocuments[0].data.toByteArray().zlibInflate().decodeToString()
         val processedPayload = SdJwtKb.fromCompactSerialization(sdJwtKbCompactSerialization)
             .verify(
                 issuerKey = euPidDsKey.publicKey,
@@ -1188,7 +1188,7 @@ class DeviceResponseTest {
             addOtherDocument(
                 otherDocument = OtherDocument(
                     docFormat = "xyz123-abc",
-                    data = ByteString(byteArrayOf(1, 2, 3).deflate())
+                    data = ByteString(byteArrayOf(1, 2, 3).zlibDeflate())
                 )
             )
         }
@@ -1199,6 +1199,6 @@ class DeviceResponseTest {
 
         assertEquals(1, drParsed.otherDocuments.size)
         assertEquals("xyz123-abc", drParsed.otherDocuments[0].docFormat)
-        assertContentEquals(byteArrayOf(1, 2, 3), drParsed.otherDocuments[0].data.toByteArray().inflate())
+        assertContentEquals(byteArrayOf(1, 2, 3), drParsed.otherDocuments[0].data.toByteArray().zlibInflate())
     }
 }

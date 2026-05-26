@@ -94,8 +94,8 @@ import org.multipaz.util.Logger
 import org.multipaz.util.UUID
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.fromHexByteString
-import org.multipaz.util.inflate
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.zlibInflate
 import org.multipaz.utopia.knowntypes.addUtopiaTypes
 import org.multipaz.verification.VerificationUtil
 import java.net.URLEncoder
@@ -1630,7 +1630,7 @@ private suspend fun handleGetDataMdoc(
         for (otherDocument in deviceResponse.otherDocuments) {
             lines.add(ResultLine("OtherDocument", otherDocument.docFormat))
             if (otherDocument.docFormat == "sd-jwt+kb") {
-                val compactSerialization = otherDocument.data.toByteArray().inflate().decodeToString()
+                val compactSerialization = otherDocument.data.toByteArray().zlibInflate().decodeToString()
                 handleGetDataAppendSdJwt(
                     compactSerialization = compactSerialization,
                     lines = lines

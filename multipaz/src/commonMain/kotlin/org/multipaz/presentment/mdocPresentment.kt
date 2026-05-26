@@ -33,8 +33,8 @@ import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.util.Logger
-import org.multipaz.util.deflate
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.zlibDeflate
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -261,7 +261,7 @@ suspend fun mdocPresentment(
                     )
                     val otherDocument = OtherDocument(
                         docFormat = "sd-jwt+kb",
-                        data = ByteString(sdJwtKb.compactSerialization.encodeToByteArray().deflate())
+                        data = ByteString(sdJwtKb.compactSerialization.encodeToByteArray().zlibDeflate())
                     )
                     match.source.docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->
                         addEncryptedDocuments(

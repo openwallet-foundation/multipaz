@@ -31,8 +31,8 @@ import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.presentment.mdocPresentment
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.util.fromBase64Url
-import org.multipaz.util.inflate
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.zlibInflate
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -209,7 +209,7 @@ class MdocPresentmentTest {
 
         assertEquals(1, dr.otherDocuments.size)
         assertEquals("sd-jwt+kb", dr.otherDocuments[0].docFormat)
-        val decompressedData = dr.otherDocuments[0].data.toByteArray().inflate()
+        val decompressedData = dr.otherDocuments[0].data.toByteArray().zlibInflate()
         val sdJwtKb = SdJwtKb.fromCompactSerialization(decompressedData.decodeToString())
         val sessionTranscriptBytes = Tagged(
             tagNumber = Tagged.ENCODED_CBOR,

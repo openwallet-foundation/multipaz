@@ -12,8 +12,8 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.presentment.TransactionData
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.util.Logger
-import org.multipaz.util.inflate
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.zlibInflate
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
@@ -58,7 +58,7 @@ data class OtherDocument(
         transactionData: List<TransactionData>,
         atTime: Instant,
     ): Map<String, Map<String, DataItem>> {
-        val sdJwtKb = SdJwtKb.fromCompactSerialization(data.toByteArray().inflate().decodeToString())
+        val sdJwtKb = SdJwtKb.fromCompactSerialization(data.toByteArray().zlibInflate().decodeToString())
 
         val issuerCertChain = sdJwtKb.sdJwt.x5c
             ?: throw IllegalStateException("Issuer-signed key not in `x5c` in header")

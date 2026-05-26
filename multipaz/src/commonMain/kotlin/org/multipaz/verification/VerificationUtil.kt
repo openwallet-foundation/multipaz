@@ -53,8 +53,8 @@ import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
-import org.multipaz.util.inflate
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.zlibInflate
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.coroutines.cancellation.CancellationException
@@ -1017,7 +1017,7 @@ object VerificationUtil {
                 Logger.w(TAG, "Unknown docFormat ${document.docFormat}")
                 continue
             }
-            val sdJwtKbCompactSerialization = document.data.toByteArray().inflate().decodeToString()
+            val sdJwtKbCompactSerialization = document.data.toByteArray().zlibInflate().decodeToString()
 
             val sessionTranscriptBytes = Tagged(
                 tagNumber = Tagged.ENCODED_CBOR,
