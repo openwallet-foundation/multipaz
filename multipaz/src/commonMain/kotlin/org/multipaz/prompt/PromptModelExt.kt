@@ -1,8 +1,8 @@
 package org.multipaz.prompt
 
 import org.multipaz.document.Document
-import org.multipaz.presentment.CredentialPresentmentData
-import org.multipaz.presentment.CredentialPresentmentSelection
+import org.multipaz.presentment.CredentialSelection
+import org.multipaz.presentment.ConsentData
 import org.multipaz.prompt.PassphrasePromptDialogModel.PassphraseRequest
 import org.multipaz.request.Requester
 import org.multipaz.securearea.PassphraseConstraints
@@ -58,13 +58,13 @@ suspend fun PromptModel.requestPassphrase(
  *
  * @param requester the relying party which is requesting the data.
  * @param trustMetadata [TrustMetadata] conveying the level of trust in the requester, if any.
- * @param credentialPresentmentData the combinations of credentials and claims that the user can select.
+ * @param consentData the combinations of credentials and claims that the user can select.
  * @param preselectedDocuments a list of documents the user may have preselected earlier (for
  *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
  *   if the user didn't preselect.
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
- * @return a [CredentialPresentmentSelection] object conveying which credentials the user selected, if multiple
+ * @return a [CredentialSelection] object conveying which credentials the user selected, if multiple
  *   options are available.
  * @throws PromptDismissedException if the user dismissed the prompt.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
@@ -80,15 +80,15 @@ suspend fun PromptModel.requestPassphrase(
 suspend fun PromptModel.requestConsent(
     requester: Requester,
     trustMetadata: TrustMetadata?,
-    credentialPresentmentData: CredentialPresentmentData,
+    consentData: ConsentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
-): CredentialPresentmentSelection {
+): CredentialSelection {
     return getDialogModel(ConsentPromptDialogModel.DialogType).displayPrompt(
         parameters = ConsentPromptDialogModel.ConsentPromptRequest(
             requester = requester,
             trustMetadata = trustMetadata,
-            credentialPresentmentData = credentialPresentmentData,
+            consentData = consentData,
             preselectedDocuments = preselectedDocuments,
             onDocumentsInFocus = onDocumentsInFocus,
         )

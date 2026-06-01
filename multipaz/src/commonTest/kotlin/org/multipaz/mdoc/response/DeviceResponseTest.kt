@@ -750,13 +750,13 @@ class DeviceResponseTest {
             """
                 {
                   "org.iso.23220.1": [24(<< {
-                    "digestID": 34,
-                    "random": h'1373eb313c9cb6252f2343c1840d133d',
+                    "digestID": 35,
+                    "random": h'ff4f6a83adf75071a2666f94a5b7412b',
                     "elementIdentifier": "family_name",
                     "elementValue": "Mustermann"
                   } >>), 24(<< {
-                    "digestID": 32,
-                    "random": h'e15d2404105d7a163dbd5b2af37c3e3c',
+                    "digestID": 4,
+                    "random": h'f6c860d47511d198e9a1b4ee69d6d66e',
                     "elementIdentifier": "given_name",
                     "elementValue": "Erika"
                   } >>)]

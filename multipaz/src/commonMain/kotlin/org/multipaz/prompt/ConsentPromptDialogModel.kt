@@ -1,14 +1,13 @@
 package org.multipaz.prompt
 
 import org.multipaz.document.Document
-import org.multipaz.presentment.CredentialPresentmentData
-import org.multipaz.presentment.CredentialPresentmentSelection
+import org.multipaz.presentment.CredentialSelection
+import org.multipaz.presentment.ConsentData
 import org.multipaz.request.Requester
 import org.multipaz.trustmanagement.TrustMetadata
-import org.multipaz.trustmanagement.TrustPoint
 
 class ConsentPromptDialogModel():
-    PromptDialogModel<ConsentPromptDialogModel.ConsentPromptRequest, CredentialPresentmentSelection>() {
+    PromptDialogModel<ConsentPromptDialogModel.ConsentPromptRequest, CredentialSelection>() {
     override val dialogType: PromptDialogModel.DialogType<ConsentPromptDialogModel>
         get() = DialogType
 
@@ -17,7 +16,7 @@ class ConsentPromptDialogModel():
     class ConsentPromptRequest(
         val requester: Requester,
         val trustMetadata: TrustMetadata?,
-        val credentialPresentmentData: CredentialPresentmentData,
+        val consentData: ConsentData,
         val preselectedDocuments: List<Document>,
         val onDocumentsInFocus: (documents: List<Document>) -> Unit
     )

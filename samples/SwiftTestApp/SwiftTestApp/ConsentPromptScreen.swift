@@ -10,14 +10,24 @@ private enum RequestType: String, CaseIterable {
     case mdlNameAndAddressAllStored = "mDL: Name and address (all stored)"
     case photoIdMandatory = "PhotoID: Mandatory data elements (two docs)"
     case openid4vpComplexExampleFromAppendixD = "Complex example from OpenID4VP Appendix D"
-    case boardingPassAndMdl = "Boarding pass AND mDL"
-    case boardingPassOrMdl = "Boarding pass OR mDL"
+    case mdlAndBoardingPass = "mDL AND Boarding pass"
+    case mdlAndOptionalBoardingPass = "mDL AND optional Boarding pass"
+    case mdlAndOptionalBoardingPassSepUseCases = "mDL AND optional Boarding pass (separate use cases)"
+    case mdlOrBoardingPass = "mDL OR Boarding pass"
+    case borderCrossing = "Border crossing"
+    case borderCrossingNoRetain = "Border crossing (no retain)"
 }
 
 private enum TrustPointType: String, CaseIterable {
     case utopiaBrewery = "Utopia Brewery"
     case utopiaBreweryNoPrivacyPolicy = "Utopia Brewery (no privacy policy)"
     case multipazIdentityReader = "Multipaz Identity Reader"
+    case utopiaAirlines = "Utopia Airlines"
+    case none = "None"
+}
+
+private enum EncryptionTarget: String, CaseIterable {
+    case utopiaCbp = "Utopia Customs and Border Protection"
     case none = "None"
 }
 
@@ -31,6 +41,7 @@ struct ConsentPromptScreen: View {
     @Environment(ViewModel.self) private var viewModel
     @State private var selectedRequestTypeString = RequestType.allCases.first!.rawValue
     @State private var selectedTrustPointTypeString = TrustPointType.allCases.first!.rawValue
+    @State private var selectedEncryptionTargetString = EncryptionTarget.allCases.first!.rawValue
     @State private var selectedVerifierOriginString = VerifierOrigin.allCases.first!.rawValue
 
     var body: some View {
@@ -51,7 +62,15 @@ struct ConsentPromptScreen: View {
                     selection: $selectedTrustPointTypeString,
                     placeholder: "Pick one..."
                 )
-                
+
+                Text("Encryption Target")
+                    .font(.headline)
+                ComboBox(
+                    options: EncryptionTarget.allCases.map { $0.rawValue },
+                    selection: $selectedEncryptionTargetString,
+                    placeholder: "Pick one..."
+                )
+
                 Text("Verifier Origin")
                     .font(.headline)
                 ComboBox(
@@ -63,15 +82,16 @@ struct ConsentPromptScreen: View {
                 VStack {
                     Button(action: {
                         Task {
-                            let consentData = await calcConsentData(
+                            let requestData = await calcRequestData(
                                 requestType: RequestType(rawValue: selectedRequestTypeString)!,
                                 trustPointType: TrustPointType(rawValue: selectedTrustPointTypeString)!,
+                                encryptionTarget: EncryptionTarget(rawValue: selectedEncryptionTargetString)!,
                                 verifierOrigin: VerifierOrigin(rawValue: selectedVerifierOriginString)!
                             )
                             let selection = try await promptModelRequestConsent(
-                                requester: consentData.requester,
-                                trustMetadata: consentData.trustMetadata,
-                                credentialPresentmentData: consentData.presentmentData,
+                                requester: requestData.requester,
+                                trustMetadata: requestData.trustMetadata,
+                                consentData: requestData.consentData,
                                 preselectedDocuments: [],
                                 onDocumentsInFocus: { documents in }
                             )
@@ -94,17 +114,18 @@ struct ConsentPromptScreen: View {
     }
 }
 
-private struct ConsentData {
+private struct RequestData {
     let requester: Requester
-    let presentmentData: CredentialPresentmentData
+    let consentData: ConsentData
     let trustMetadata: TrustMetadata?
 }
 
-private func calcConsentData(
+private func calcRequestData(
     requestType: RequestType,
     trustPointType: TrustPointType,
+    encryptionTarget: EncryptionTarget,
     verifierOrigin: VerifierOrigin
-) async -> ConsentData {
+) async -> RequestData {
     let storage = EphemeralStorage(clock: KotlinClockCompanion.shared.getSystem())
     let secureArea = try! await Platform.shared.getSecureArea(storage: storage)
     let secureAreaRepository = SecureAreaRepository.Builder()
@@ -122,7 +143,9 @@ private func calcConsentData(
     let photoIdCardArt = UIImage(named: "photo_id_card_art")!.pngData()!
     let boardingPassCardArt = UIImage(named: "boarding-pass-utopia-airlines")!.pngData()!
     let utopiaBreweryLogo = UIImage(named: "utopia-brewery")!.pngData()!
-
+    let utopiaAirlinesLogo = UIImage(named: "utopia-airlines")!.pngData()!
+    let utopiaCbpLogo = UIImage(named: "utopia-cbp")!.pngData()!
+    
     let now = Date.now
     let signedAt = now
     let validFrom = now
@@ -185,7 +208,7 @@ private func calcConsentData(
         domain: "mdoc",
         randomProvider: KotlinRandom.companion
     )
-
+    
     let photoIdDoc = try! await documentStore.createDocument(
         displayName: "Erika's Photo ID",
         typeDisplayName: "Utopia Photo ID",
@@ -220,7 +243,7 @@ private func calcConsentData(
         domain: "mdoc",
         randomProvider: KotlinRandom.companion
     )
-
+    
     let photoIdDoc2 = try! await documentStore.createDocument(
         displayName: "Erika's Photo ID #2",
         typeDisplayName: "Utopia Photo ID",
@@ -255,7 +278,7 @@ private func calcConsentData(
         domain: "mdoc",
         randomProvider: KotlinRandom.companion
     )
-
+    
     let boardingPassDoc = try! await documentStore.createDocument(
         displayName: "Utopia 815 BOS to SFO",
         typeDisplayName: "Utopia Airlines boarding pass",
@@ -310,22 +333,23 @@ private func calcConsentData(
     let photoIdDocType = PhotoID.shared.getDocumentType(
         locale: LocalizedStrings.shared.getCurrentLocale()
     )
-
-    let dcqlString = switch requestType {
+    
+    let zks: [ZkSystemSpec] = []
+    let dcqlString: String? = switch requestType {
     case .mdlUsTransportation:
-        mdlDocType.cannedRequests.first(where: { cr in cr.id == "us-transportation" })!.mdocRequest!.toDcqlString()
+        mdlDocType.cannedRequests.first(where: { cr in cr.id == "us-transportation" })!.mdocRequest!.toDcqlString(zkSystemSpecs: zks)
     case .mdlAgeOver21AndPortrait:
-        mdlDocType.cannedRequests.first(where: { cr in cr.id == "age_over_21_and_portrait" })!.mdocRequest!.toDcqlString()
+        mdlDocType.cannedRequests.first(where: { cr in cr.id == "age_over_21_and_portrait" })!.mdocRequest!.toDcqlString(zkSystemSpecs: zks)
     case .mdlMandatory:
-        mdlDocType.cannedRequests.first(where: { cr in cr.id == "mandatory" })!.mdocRequest!.toDcqlString()
+        mdlDocType.cannedRequests.first(where: { cr in cr.id == "mandatory" })!.mdocRequest!.toDcqlString(zkSystemSpecs: zks)
     case .mdlAll:
-        mdlDocType.cannedRequests.first(where: { cr in cr.id == "full" })!.mdocRequest!.toDcqlString()
+        mdlDocType.cannedRequests.first(where: { cr in cr.id == "full" })!.mdocRequest!.toDcqlString(zkSystemSpecs: zks)
     case .mdlNameAndAddressPartiallyStored:
-        mdlDocType.cannedRequests.first(where: { cr in cr.id == "name-and-address-partially-stored" })!.mdocRequest!.toDcqlString()
+        mdlDocType.cannedRequests.first(where: { cr in cr.id == "name-and-address-partially-stored" })!.mdocRequest!.toDcqlString(zkSystemSpecs: zks)
     case .mdlNameAndAddressAllStored:
-        mdlDocType.cannedRequests.first(where: { cr in cr.id == "name-and-address-all-stored" })!.mdocRequest!.toDcqlString()
+        mdlDocType.cannedRequests.first(where: { cr in cr.id == "name-and-address-all-stored" })!.mdocRequest!.toDcqlString(zkSystemSpecs: zks)
     case .photoIdMandatory:
-        photoIdDocType.cannedRequests.first(where: { cr in cr.id == "mandatory" })!.mdocRequest!.toDcqlString()
+        photoIdDocType.cannedRequests.first(where: { cr in cr.id == "mandatory" })!.mdocRequest!.toDcqlString(zkSystemSpecs: zks)
     case .openid4vpComplexExampleFromAppendixD:
         """
             {
@@ -404,9 +428,9 @@ private func calcConsentData(
                 }
               ]
             }
-
+        
         """
-    case .boardingPassAndMdl:
+    case .mdlAndBoardingPass:
         """
             {
               "credentials": [
@@ -442,11 +466,116 @@ private func calcConsentData(
                     { "path": ["org.multipaz.example.boarding-pass.1", "departure_time" ] }
                   ]
                 }
+              ],
+              "credential_sets": [
+                {
+                  "options": [
+                    [ "mdl", "boarding-pass" ]
+                  ]
+                }
               ]
             }
-
         """
-    case .boardingPassOrMdl:
+    case .mdlAndOptionalBoardingPass:
+        """
+            {
+              "credentials": [
+                {
+                  "id": "mdl",
+                  "format": "mso_mdoc",
+                  "meta": {
+                    "doctype_value": "org.iso.18013.5.1.mDL"
+                  },
+                  "claims": [
+                    { "path": ["org.iso.18013.5.1", "family_name" ] },
+                    { "path": ["org.iso.18013.5.1", "given_name" ] },
+                    { "path": ["org.iso.18013.5.1", "birth_date" ] },
+                    { "path": ["org.iso.18013.5.1", "issue_date" ] },
+                    { "path": ["org.iso.18013.5.1", "expiry_date" ] },
+                    { "path": ["org.iso.18013.5.1", "issuing_country" ] },
+                    { "path": ["org.iso.18013.5.1", "issuing_authority" ] },
+                    { "path": ["org.iso.18013.5.1", "document_number" ] },
+                    { "path": ["org.iso.18013.5.1", "portrait" ] },
+                    { "path": ["org.iso.18013.5.1", "un_distinguishing_sign" ] }
+                  ]
+                },
+                {
+                  "id": "boarding-pass",
+                  "format": "mso_mdoc",
+                  "meta": {
+                    "doctype_value": "org.multipaz.example.boarding-pass.1"
+                  },
+                  "claims": [
+                    { "path": ["org.multipaz.example.boarding-pass.1", "passenger_name" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "seat_number" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "flight_number" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "departure_time" ] }
+                  ]
+                }
+              ],
+              "credential_sets": [
+                {
+                  "options": [
+                    [ "mdl", "boarding-pass" ],
+                    [ "mdl" ]
+                  ]
+                }
+              ]
+            }
+        """
+    case .mdlAndOptionalBoardingPassSepUseCases:
+       """
+            {
+              "credentials": [
+                {
+                  "id": "mdl",
+                  "format": "mso_mdoc",
+                  "meta": {
+                    "doctype_value": "org.iso.18013.5.1.mDL"
+                  },
+                  "claims": [
+                    { "path": ["org.iso.18013.5.1", "family_name" ] },
+                    { "path": ["org.iso.18013.5.1", "given_name" ] },
+                    { "path": ["org.iso.18013.5.1", "birth_date" ] },
+                    { "path": ["org.iso.18013.5.1", "issue_date" ] },
+                    { "path": ["org.iso.18013.5.1", "expiry_date" ] },
+                    { "path": ["org.iso.18013.5.1", "issuing_country" ] },
+                    { "path": ["org.iso.18013.5.1", "issuing_authority" ] },
+                    { "path": ["org.iso.18013.5.1", "document_number" ] },
+                    { "path": ["org.iso.18013.5.1", "portrait" ] },
+                    { "path": ["org.iso.18013.5.1", "un_distinguishing_sign" ] }
+                  ]
+                },
+                {
+                  "id": "boarding-pass",
+                  "format": "mso_mdoc",
+                  "meta": {
+                    "doctype_value": "org.multipaz.example.boarding-pass.1"
+                  },
+                  "claims": [
+                    { "path": ["org.multipaz.example.boarding-pass.1", "passenger_name" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "seat_number" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "flight_number" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "departure_time" ] }
+                  ]
+                }
+              ],
+              "credential_sets": [
+                {
+                  "options": [
+                    [ "mdl" ]
+                  ]
+                },
+                {
+                  "required": false,
+                  "options": [
+                    [ "boarding-pass" ]
+                  ]
+                }
+              ]
+            }
+       """
+    case .mdlOrBoardingPass:
         """
             {
               "credentials": [
@@ -493,8 +622,12 @@ private func calcConsentData(
               ]
             }
         """
+    case .borderCrossing:
+        nil
+    case .borderCrossingNoRetain:
+        nil
     }
-
+    
     let trustMetadata: TrustMetadata? = switch trustPointType {
     case .utopiaBrewery:
         TrustMetadata(
@@ -526,10 +659,20 @@ private func calcConsentData(
             testOnly: false,
             extensions: [:]
         )
+    case .utopiaAirlines:
+        TrustMetadata(
+            displayName: "Utopia Airlines",
+            displayIcon: utopiaAirlinesLogo.toByteString(),
+            displayIconUrl: nil,
+            privacyPolicyUrl: "https://apps.multipaz.org",
+            disclaimer: nil,
+            testOnly: false,
+            extensions: [:]
+        )
     case .none:
         nil
     }
-   
+    
     let readerRootKey = try! await Crypto.shared.createEcPrivateKey(curve: .p256)
     let readerRootCert = try! await MdocUtil.shared.generateReaderRootCertificate(
         readerRootKey: AsymmetricKey.AnonymousExplicit(privateKey: readerRootKey, algorithm: Algorithm.esp256),
@@ -539,7 +682,7 @@ private func calcConsentData(
         validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
         crlUrl: "https://apps.multipaz.org/crl"
     )
-
+    
     let readerKey = try! await Crypto.shared.createEcPrivateKey(curve: .p256)
     let readerCert = try! await MdocUtil.shared.generateReaderCertificate(
         readerRootKey: AsymmetricKey.X509CertifiedExplicit(
@@ -556,7 +699,7 @@ private func calcConsentData(
         extensions: []
     )
     let readerCertChain = X509CertChain(certificates: [readerCert, readerRootCert])
-
+    
     let readerCertChainToUse: X509CertChain? = switch trustPointType {
     case .utopiaBrewery:
         readerCertChain
@@ -564,10 +707,12 @@ private func calcConsentData(
         readerCertChain
     case .multipazIdentityReader:
         readerCertChain
+    case .utopiaAirlines:
+        readerCertChain
     case .none:
         nil
     }
-
+    
     let requester = switch verifierOrigin {
     case .none:
         Requester(certChain: readerCertChainToUse, appId: nil, origin: nil)
@@ -576,18 +721,31 @@ private func calcConsentData(
     case .otherExampleCom:
         Requester(certChain: readerCertChainToUse, appId: nil, origin: "https://other.example.com")
     }
-
+    
     let source = SimplePresentmentSource.companion.create(
         documentStore: documentStore,
         documentTypeRepository: documentTypeRepository,
         resolveTrustFn: { requester in
+            if (requester.certChain?.certificates.first?.subject.name == "CN=Encrypted Document Receiver") {
+                if (encryptionTarget != .none) {
+                    return TrustMetadata(
+                        displayName: encryptionTarget.rawValue,
+                        displayIcon: utopiaCbpLogo.toByteString(),
+                        displayIconUrl: nil,
+                        privacyPolicyUrl: nil,
+                        disclaimer: nil,
+                        testOnly: false,
+                        extensions: [:]
+                    )
+                }
+            }
             return nil
         },
-        showConsentPromptFn: { requester, trustMetadata, credentialPresentmentData, preselectedDocuments, onDocumentsInFocus in
+        showConsentPromptFn: { requester, trustMetadata, consentData, preselectedDocuments, onDocumentsInFocus in
             return try! await promptModelSilentConsent(
                 requester: requester,
                 trustMetadata: trustMetadata,
-                credentialPresentmentData: credentialPresentmentData,
+                consentData: consentData,
                 preselectedDocuments: preselectedDocuments,
                 onDocumentsInFocus: { documents in onDocumentsInFocus(documents) }
             )
@@ -595,17 +753,122 @@ private func calcConsentData(
         domainsMdocSignature: ["mdoc"],
         domainsKeyBoundSdJwt: ["sdjwt"]
     )
-
-    let query = try! DcqlQuery.companion.fromJsonString(dcql: dcqlString)
-    let presentmentData = try! await query.execute(
-        presentmentSource: source,
-        keyAgreementPossible: [],
-        transactionDataMap: [:]
-    )
     
-    return ConsentData(
+    if dcqlString != nil {
+        let query = try! DcqlQuery.companion.fromJsonString(dcql: dcqlString!)
+        let credentialQueryResult = try! await query.execute(
+            presentmentSource: source,
+            keyAgreementPossible: [],
+            transactionDataMap: [:]
+        )
+        
+        let consentData = try! await ConsentData.companion.fromCredentialQueryResult(
+            credentialQueryResult: credentialQueryResult,
+            source: source,
+        )
+        return RequestData(
+            requester: requester,
+            consentData: consentData,
+            trustMetadata: trustMetadata
+        )
+    }
+
+    var deviceRequest: DeviceRequest? = nil
+    if requestType == .borderCrossing || requestType == .borderCrossingNoRetain {
+        let intentToRetain = KotlinBoolean(value: requestType == .borderCrossing)
+        let sessionTranscript = CborArray.companion.builder()
+            .add(item: Simple.companion.NULL)
+            .add(item: Simple.companion.NULL)
+            .add(item: Bstr(value: "010203".fromHex()))
+            .end()!
+            .build()
+        let documentEncryptionKey = try! await Crypto.shared.createEcPrivateKey(curve: EcCurve.p256)
+        let now = Date.now
+        let validFrom = Calendar.current.date(byAdding: .hour, value: -1, to: now)!
+        let validUntil = Calendar.current.date(byAdding: .hour, value: 1, to: now)!
+        let certBuilder = X509Cert.Builder(
+            publicKey: documentEncryptionKey.publicKey,
+            signingKey: AsymmetricKey.AnonymousExplicit(privateKey: documentEncryptionKey, algorithm: documentEncryptionKey.curve.defaultSigningAlgorithm),
+            serialNumber: ASN1Integer(longValue: 1, tag: ASN1IntegerTag.integer.tag),
+            subject: X500Name.companion.fromName(name: "CN=Encrypted Document Receiver"),
+            issuer: X500Name.companion.fromName(name: "CN=Encrypted Document Receiver"),
+            validFrom: validFrom.toKotlinInstant().truncateToWholeSeconds(),
+            validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
+        )
+        certBuilder.includeSubjectKeyIdentifier(value: true)
+        certBuilder.setKeyUsage(keyUsage: [X509KeyUsage.keyCertSign])
+        certBuilder.setBasicConstraints(ca: true, pathLenConstraint: nil)
+        let documentEncryptionKeyCertification = try! await certBuilder.build()
+        let drBuilder = DeviceRequest.Builder(
+            sessionTranscript: sessionTranscript,
+            deviceRequestInfo: nil,
+            version: nil
+        )
+        drBuilder.addDocRequest(
+            docType: PhotoID.shared.PHOTO_ID_DOCTYPE,
+            nameSpaces: [
+                PhotoID.shared.ISO_23220_2_NAMESPACE: [
+                    "given_name": intentToRetain,
+                    "family_name": intentToRetain,
+                    "portrait": intentToRetain,
+                ]
+            ],
+            docRequestInfo: nil
+        )
+        drBuilder.addDocRequest(
+            docType: PhotoID.shared.PHOTO_ID_DOCTYPE,
+            nameSpaces: [
+                PhotoID.shared.DATAGROUPS_NAMESPACE: [
+                    "sod": intentToRetain,
+                    "dg1": intentToRetain,
+                    "dg2": intentToRetain,
+                ]
+            ],
+            docRequestInfo: DocRequestInfo(
+                alternativeDataElements: [],
+                issuerIdentifiers: [],
+                uniqueDocSetRequired: nil,
+                maximumResponseSize: nil,
+                zkRequest: nil,
+                docResponseEncryption: EncryptionParameters.companion.fromValues(
+                    recipientPublicKey: documentEncryptionKey.publicKey,
+                    recipientCertificates: [ documentEncryptionKeyCertification ],
+                    nonce: nil
+                ),
+                docFormat: nil,
+                dataElementIdentifierMapping: [:],
+                otherInfo: [:])
+        )
+        drBuilder.setDeviceRequestInfo(
+            deviceRequestInfo: DeviceRequestInfo(
+                useCases: [
+                    UseCase(
+                        mandatory: true,
+                        documentSets: [
+                            DocumentSet(
+                                docRequestIds: [0, 1]
+                            )
+                        ],
+                        purposeHints: [:]
+                    )
+                ],
+                otherInfo: [:]
+            )
+        )
+        deviceRequest = drBuilder.build()
+    }
+    
+    let iso18013Response = try! await deviceRequest!.execute(
+        presentmentSource: source,
+        keyAgreementPossible: []
+    )
+    let consentData = try! await ConsentData.companion.fromCredentialQueryResult(
+        credentialQueryResult: iso18013Response,
+        source: source,
+    )
+    return RequestData(
         requester: requester,
-        presentmentData: presentmentData,
+        consentData: consentData,
         trustMetadata: trustMetadata
     )
 }

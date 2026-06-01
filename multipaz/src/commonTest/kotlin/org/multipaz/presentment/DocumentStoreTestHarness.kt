@@ -53,6 +53,7 @@ import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.trustmanagement.TrustManager
 import org.multipaz.util.Logger
 import org.multipaz.utopia.knowntypes.PingTransaction
 import org.multipaz.util.truncateToWholeSeconds
@@ -82,6 +83,7 @@ class DocumentStoreTestHarness {
     lateinit var storage: Storage
     lateinit var softwareSecureArea: SoftwareSecureArea
     lateinit var secureAreaRepository: SecureAreaRepository
+    lateinit var readerTrustManager: TrustManager
 
     lateinit var documentStore: DocumentStore
     lateinit var docMdl: Document
@@ -136,11 +138,22 @@ class DocumentStoreTestHarness {
             .add(softwareSecureArea)
             .build()
 
+        readerTrustManager = TrustManager(storage)
+
         documentStore = buildDocumentStore(storage = storage, secureAreaRepository = secureAreaRepository) {}
 
         presentmentSource = SimplePresentmentSource(
             documentStore = documentStore,
             documentTypeRepository = documentTypeRepository,
+            resolveTrustFn = { requester ->
+                requester.certChain?.let {
+                    val trustResult = readerTrustManager.verify(chain = it.certificates)
+                    if (trustResult.isTrusted) {
+                        return@SimplePresentmentSource trustResult.trustPoints.firstOrNull()?.metadata
+                    }
+                }
+                null
+            },
             showConsentPromptFn = ::promptModelSilentConsent,
             preferSignatureToKeyAgreement = true,
             domainsMdocSignature = listOf("mdoc"),

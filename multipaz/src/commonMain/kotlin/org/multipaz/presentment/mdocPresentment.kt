@@ -85,13 +85,16 @@ suspend fun mdocPresentment(
 ): MdocResponse {
     val credentialsPresented = mutableSetOf<SecureAreaBoundCredential>()
     lateinit var eventData: EventPresentmentData
+    if (Logger.isDebugEnabled) {
+        Logger.dCbor(TAG, "DeviceRequest", deviceRequest.toDataItem())
+    }
 
     val deviceResponse = buildDeviceResponse(
         sessionTranscript = sessionTranscript,
         status = DeviceResponse.STATUS_OK,
         eReaderKey = eReaderKey,
     ) {
-        val presentmentData = try {
+        val iso18013Response = try {
             deviceRequest.execute(
                 presentmentSource = source,
                 keyAgreementPossible = keyAgreementPossible,
@@ -112,7 +115,10 @@ suspend fun mdocPresentment(
         val selection = source.showConsentPrompt(
             requester = requester,
             trustMetadata = trustMetadata,
-            credentialPresentmentData = presentmentData,
+            consentData = ConsentData.fromCredentialQueryResult(
+                credentialQueryResult = iso18013Response,
+                source = source
+            ),
             preselectedDocuments = preselectedDocuments,
             onDocumentsInFocus = onDocumentsInFocus
         )
@@ -284,6 +290,9 @@ suspend fun mdocPresentment(
             requester = requester,
             trustMetadata = trustMetadata
         )
+    }
+    if (Logger.isDebugEnabled) {
+        Logger.dCbor(TAG, "DeviceResponse", deviceResponse.toDataItem())
     }
     return MdocResponse(
         deviceResponse = deviceResponse,

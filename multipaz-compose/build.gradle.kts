@@ -93,6 +93,7 @@ kotlin {
                 implementation(compose.materialIconsExtended)
                 implementation(libs.jetbrains.navigation.compose)
                 implementation(libs.jetbrains.navigation.runtime)
+                implementation(libs.jetbrains.navigationevent.compose)
                 api(compose.runtime)
                 api(compose.foundation)
                 api(compose.material3)
@@ -101,6 +102,7 @@ kotlin {
                 api(compose.materialIconsExtended)
                 api(libs.jetbrains.navigation.compose)
                 api(libs.jetbrains.navigation.runtime)
+                api(libs.jetbrains.navigationevent.compose)
 
                 implementation(project(":multipaz"))
                 implementation(project(":multipaz-dcapi"))

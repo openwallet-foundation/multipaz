@@ -5,12 +5,11 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.Dp
 import coil3.ImageLoader
 import kotlinx.coroutines.launch
 import org.multipaz.compose.presentment.ConsentModalBottomSheet
-import org.multipaz.presentment.CredentialPresentmentSelection
+import org.multipaz.presentment.CredentialSelection
 import org.multipaz.prompt.ConsentPromptDialogModel
 import org.multipaz.prompt.PromptDialogModel
 import org.multipaz.prompt.PromptDismissedException
@@ -18,7 +17,7 @@ import org.multipaz.prompt.PromptDismissedException
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConsentPromptDialog(
-    model: PromptDialogModel<ConsentPromptDialogModel.ConsentPromptRequest, CredentialPresentmentSelection>,
+    model: PromptDialogModel<ConsentPromptDialogModel.ConsentPromptRequest, CredentialSelection>,
     imageLoader: ImageLoader?,
     maxHeight: Dp?
 ) {
@@ -34,7 +33,7 @@ fun ConsentPromptDialog(
             sheetState = sheetState,
             requester = dialogParameters.requester,
             trustMetadata = dialogParameters.trustMetadata,
-            credentialPresentmentData = dialogParameters.credentialPresentmentData,
+            consentData = dialogParameters.consentData,
             preselectedDocuments = dialogParameters.preselectedDocuments,
             imageLoader = imageLoader,
             maxHeight = maxHeight,

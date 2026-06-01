@@ -7,11 +7,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.multipaz.compose.prompt.PresentmentActivity
 import org.multipaz.document.Document
-import org.multipaz.presentment.CredentialPresentmentData
-import org.multipaz.presentment.CredentialPresentmentSelection
+import org.multipaz.presentment.CredentialSelection
 import org.multipaz.presentment.PresentmentModel
 import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentSource
+import org.multipaz.presentment.ConsentData
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.prompt.promptModelRequestConsent
 import org.multipaz.prompt.showBiometricPrompt
@@ -25,10 +25,10 @@ actual suspend fun launchAndroidPresentmentActivity(
     paData: AndroidPresentmentActivityData,
     requester: Requester,
     trustMetadata: TrustMetadata?,
-    credentialPresentmentData: CredentialPresentmentData,
+    consentData: ConsentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
-): CredentialPresentmentSelection? {
+): CredentialSelection? {
     PresentmentActivity.presentmentModel.reset(
         source = source,
         preselectedDocuments = paData.preselectedDocuments
@@ -45,7 +45,7 @@ actual suspend fun launchAndroidPresentmentActivity(
                 val selection = promptModelRequestConsent(
                     requester = requester,
                     trustMetadata = trustMetadata,
-                    credentialPresentmentData = credentialPresentmentData,
+                    consentData = consentData,
                     preselectedDocuments = paData.preselectedDocuments,
                     onDocumentsInFocus = { documents ->
                         PresentmentActivity.presentmentModel.setDocumentsSelected(selectedDocuments = documents)
@@ -56,7 +56,7 @@ actual suspend fun launchAndroidPresentmentActivity(
                 }
             } else {
                 PresentmentActivity.presentmentModel.setDocumentsSelected(
-                    selectedDocuments = credentialPresentmentData.select(emptyList())
+                    selectedDocuments = consentData.credentialQueryResult.select(emptyList())
                         .matches.map { it.credential.document }
                 )
             }
@@ -98,5 +98,5 @@ actual suspend fun launchAndroidPresentmentActivity(
     consentAndAuthJob.join()
     listenForCancellationFromUiJob.cancel()
 
-    return credentialPresentmentData.select(emptyList())
+    return consentData.credentialQueryResult.select(emptyList())
 }

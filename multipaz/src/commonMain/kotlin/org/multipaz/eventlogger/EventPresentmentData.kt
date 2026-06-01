@@ -2,7 +2,7 @@ package org.multipaz.eventlogger
 
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.crypto.X509CertChain
-import org.multipaz.presentment.CredentialPresentmentSelection
+import org.multipaz.presentment.CredentialSelection
 import org.multipaz.request.Requester
 import org.multipaz.trustmanagement.TrustMetadata
 
@@ -29,15 +29,15 @@ data class EventPresentmentData(
 
     companion object {
         /**
-         * Creates a [EventPresentmentData] from a [CredentialPresentmentSelection].
+         * Creates a [EventPresentmentData] from a [CredentialSelection].
          *
-         * @param selection the [CredentialPresentmentSelection] to create the [EventPresentmentData] from.
+         * @param selection the [CredentialSelection] to create the [EventPresentmentData] from.
          * @param requester the requester of the data.
          * @param trustMetadata a [TrustMetadata] or `null`.
          * @return a [EventPresentmentData].
          */
         fun fromPresentmentSelection(
-            selection: CredentialPresentmentSelection,
+            selection: CredentialSelection,
             requester: Requester,
             trustMetadata: TrustMetadata?,
         ): EventPresentmentData {

@@ -63,8 +63,11 @@ struct ClaimsSection : View {
 }
 
 struct RequestedDocumentSection : View {
-
+ 
     let rpName: String
+    let requester: Requester
+    let encryptionRequested: Bool
+    let encryptionTargetTrustMetadata: TrustMetadata?
     let document: Document
     let retainedClaims: [Claim]
     let notRetainedClaims: [Claim]
@@ -72,6 +75,28 @@ struct RequestedDocumentSection : View {
     let onOptionsTapped: () -> Void
 
     var body: some View {
+        let isKnown = requester.origin != nil || (rpName != "Unknown requester" && rpName != "Unknown website" && rpName != "Unknown verifier")
+        
+        let sharedText: String = {
+            if !encryptionRequested {
+                return isKnown ? "This data will be shared with \(rpName):" : "This data will be shared:"
+            }
+            if let encTargetName = encryptionTargetTrustMetadata?.displayName {
+                return isKnown ? "\(rpName) is requesting this data on behalf of \(encTargetName):" : "This data is requested on behalf of \(encTargetName):"
+            }
+            return isKnown ? "\(rpName) is requesting this data on behalf of an unknown party:" : "This data is requested on behalf of an unknown party:"
+        }()
+
+        let storedText: String = {
+            if !encryptionRequested {
+                return isKnown ? "This data will be stored by \(rpName):" : "This data will be stored:"
+            }
+            if let encTargetName = encryptionTargetTrustMetadata?.displayName {
+                return isKnown ? "\(rpName) is requesting this data on behalf of \(encTargetName) who will store it:" : "This data is requested on behalf of \(encTargetName) who will store it:"
+            }
+            return isKnown ? "\(rpName) is requesting this data on behalf of an unknown party who will store it:" : "This data is requested on behalf of an unknown party who will store it:"
+        }()
+
         HStack(alignment: .center) {
             Image(uiImage: document.renderCardArt())
                 .resizable()
@@ -95,17 +120,15 @@ struct RequestedDocumentSection : View {
                 Button(action: {
                     onOptionsTapped()
                 }) {
-                    Image(systemName: "chevron.down.circle")
-                        .imageScale(.large)
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(.gray)
                 }
             }
         }
 
-        Divider()
-
         if (!notRetainedClaims.isEmpty) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("This data will be shared with \(rpName):")
+                Text(sharedText)
                     .font(.system(size: 14, weight: .bold))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -114,7 +137,7 @@ struct RequestedDocumentSection : View {
         }
         if (!retainedClaims.isEmpty) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("This data will be stored by \(rpName):")
+                Text(storedText)
                     .font(.system(size: 14, weight: .bold))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -204,110 +227,17 @@ struct InfoSection: View {
     }
 }
 
-struct CombinationSection: View {
-    let rpName: String
-    let requester: Requester
-    let trustMetadata: TrustMetadata?
-    fileprivate let combination: Combination
-    let matchSelections: [Int]
-    let onShowOptions: (Int) -> Void
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            
-            ForEach(0..<combination.elements.count, id: \.self) { idx in
-                let element = combination.elements[idx]
-                let matchIndex = idx < matchSelections.count ? matchSelections[idx] : 0
-                let match = element.matches[matchIndex]
-                
-                let retainedClaims = Array(match.claims.filter( {
-                    if $0 is MdocClaim {
-                        ($0.key as! MdocRequestedClaim).intentToRetain == true
-                    } else {
-                        false
-                    }
-                }).values).sorted(by: { a, b in
-                    if a is MdocClaim {
-                        (a as! MdocClaim).dataElementName < (b as! MdocClaim).dataElementName
-                    } else {
-                        (a as! JsonClaim).displayName < (b as! JsonClaim).displayName
-                    }
-                })
-
-                let notRetainedClaims = Array(match.claims.filter( {
-                    if $0 is MdocClaim {
-                        ($0.key as! MdocRequestedClaim).intentToRetain == false
-                    } else {
-                        true
-                    }
-                }).values).sorted(by: { a, b in
-                    if a is MdocClaim {
-                        (a as! MdocClaim).dataElementName < (b as! MdocClaim).dataElementName
-                    } else {
-                        (a as! JsonClaim).displayName < (b as! JsonClaim).displayName
-                    }
-                })
-
-                RequestedDocumentSection(
-                    rpName: rpName,
-                    document: match.credential.document,
-                    retainedClaims: retainedClaims,
-                    notRetainedClaims: notRetainedClaims,
-                    showOptionsButton: element.matches.count > 1,
-                    onOptionsTapped: { onShowOptions(idx) }
-                )
-            }
-
-            // Note: on iOS we do not support apps requesting data so no need to handle the case
-            // where requester.origin is nil and requester.appId isn't.
-            //
-            let (infoText, showWarning) = if requester.origin == nil {
-                if let privacyPolicyUrl = trustMetadata?.privacyPolicyUrl {
-                    (
-                        "The identity reader requesting this data is trusted. " +
-                        "Review the [\(rpName) privacy policy](\(privacyPolicyUrl))",
-                        false
-                    )
-                } else if trustMetadata != nil {
-                    ("The identity reader requesting this data is trusted", false)
-                } else {
-                    (
-                        "The identity reader requesting this data is unknown. " +
-                        "Make sure you are comfortable sharing this data",
-                        true
-                    )
-                }
-            } else {
-                if let privacyPolicyUrl = trustMetadata?.privacyPolicyUrl {
-                    (
-                        "The website requesting this data is trusted. " +
-                        "Review the [\(rpName) privacy policy](\(privacyPolicyUrl))",
-                        false
-                    )
-                } else if trustMetadata != nil {
-                    ("The website requesting this data is trusted", false)
-                } else {
-                    (
-                        "The website requesting this data is unknown. " +
-                        "Make sure you are comfortable sharing this data",
-                        true
-                    )
-                }
-            }
-            Divider()
-            InfoSection(markdown: infoText, showWarning: showWarning)
-        }
-    }
-}
 
 private enum ConsentDestinations: Hashable {
     case showRequesterInfo
+    case pickSolution(useCaseIndex: Int)
 }
 
 /// A ``View`` which asks the user to approve sharing of a credentials.
 ///
 /// - Parameters:
-///   - credentialPresentmentData: the combinations of credentials and claims that the user can select.
+///   - consentData: the consent data containing use cases and solutions.
 ///   - requester: the relying party which is requesting the data.
 ///   - trustMetadata:``TrustMetadata`` conveying the level of trust in the requester, if any.
 ///   - maxHeight: the maximum height of the view.
@@ -315,25 +245,21 @@ private enum ConsentDestinations: Hashable {
 ///   - onCancel: callback when the user presses the Cancel button.
 public struct Consent: View {
     let maxHeight: CGFloat
-    let credentialPresentmentData: CredentialPresentmentData
+    let consentData: ConsentData
     let requester: Requester
     let trustMetadata: TrustMetadata?
-    let onConfirm: (_: CredentialPresentmentSelection) -> Void
+    let onConfirm: (_: CredentialSelection) -> Void
     let onCancel: () -> Void
 
-    fileprivate let combinations: [Combination]
-
     public init(
-        credentialPresentmentData: CredentialPresentmentData,
+        consentData: ConsentData,
         requester: Requester,
         trustMetadata: TrustMetadata?,
         maxHeight: CGFloat = .infinity,
-        onConfirm: @escaping (_: CredentialPresentmentSelection) -> Void,
+        onConfirm: @escaping (_: CredentialSelection) -> Void,
         onCancel: @escaping () -> Void
     ) {
-        self.credentialPresentmentData = credentialPresentmentData
-        // TODO: take preselectedDocuments
-        self.combinations = credentialPresentmentData.generateCombinations(preselectedDocuments: [])
+        self.consentData = consentData
         self.requester = requester
         self.trustMetadata = trustMetadata
         self.maxHeight = maxHeight
@@ -342,6 +268,47 @@ public struct Consent: View {
     }
 
     @State private var path = NavigationPath()
+    @State private var selections: [Int] = []
+    @State private var sheetHeight: CGFloat = 450
+
+    private func getInitialSelections(preselectedDocuments: [Document]) -> [Int] {
+        var result: [Int] = []
+        for i in 0..<consentData.useCases.count {
+            let useCase = consentData.useCases[i]
+            if preselectedDocuments.isEmpty {
+                result.append(useCase.solutions.count > 0 ? 0 : -1)
+            } else {
+                let preselectedSet = Set(preselectedDocuments)
+                var matchingIndex = -1
+                for j in 0..<useCase.solutions.count {
+                    let solution = useCase.solutions[j]
+                    if solution.credentials.count > 0 {
+                        var allMatch = true
+                        for k in 0..<solution.credentials.count {
+                            let doc = solution.credentials[k].match.credential.document
+                            if !preselectedSet.contains(doc) {
+                                allMatch = false
+                                break
+                            }
+                        }
+                        if allMatch {
+                            matchingIndex = Int(j)
+                            break
+                        }
+                    }
+                }
+                
+                if matchingIndex != -1 {
+                    result.append(matchingIndex)
+                } else if useCase.optional {
+                    result.append(-1)
+                } else {
+                    result.append(useCase.solutions.count > 0 ? 0 : -1)
+                }
+            }
+        }
+        return result
+    }
 
     public var body: some View {
         let rpName = getRelyingPartyName(
@@ -350,21 +317,42 @@ public struct Consent: View {
         )
         NavigationStack(path: $path) {
             VStack {
-                ConsentMain(
-                    maxHeight: maxHeight,
-                    credentialPresentmentData: credentialPresentmentData,
-                    rpName: rpName,
-                    requester: requester,
-                    trustMetadata: trustMetadata,
-                    combinations: combinations,
-                    onRequesterClicked: {
-                        if requester.certChain != nil {
-                            path.append(ConsentDestinations.showRequesterInfo)
-                        }
-                    },
-                    onConfirm: onConfirm,
-                    onCancel: onCancel
-                )
+                if selections.isEmpty {
+                    ProgressView()
+                } else {
+                    ConsentMain(
+                        maxHeight: maxHeight,
+                        consentData: consentData,
+                        rpName: rpName,
+                        requester: requester,
+                        trustMetadata: trustMetadata,
+                        selections: selections,
+                        sheetHeight: $sheetHeight,
+                        isActive: path.isEmpty,
+                        onRequesterClicked: {
+                            if requester.certChain != nil {
+                                path.append(ConsentDestinations.showRequesterInfo)
+                            }
+                        },
+                        onNavigateToPickSolution: { idx in
+                            path.append(ConsentDestinations.pickSolution(useCaseIndex: idx))
+                        },
+                        onConfirm: onConfirm,
+                        onCancel: onCancel
+                    )
+                }
+            }
+            .navigationTitle("Share Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("")
+                }
+            }
+            .onAppear {
+                if selections.isEmpty {
+                    selections = getInitialSelections(preselectedDocuments: [])
+                }
             }
             .navigationDestination(for: ConsentDestinations.self) { destination in
                 switch destination {
@@ -373,9 +361,21 @@ public struct Consent: View {
                         maxHeight: maxHeight,
                         requester: requester
                     )
+                case .pickSolution(let useCaseIndex):
+                    PickSolutionView(
+                        maxHeight: maxHeight,
+                        useCase: consentData.useCases[useCaseIndex],
+                        currentSolutionIndex: selections[useCaseIndex],
+                        onSolutionSelected: { solutionIndex in
+                            selections[useCaseIndex] = solutionIndex
+                            path.removeLast()
+                        }
+                    )
                 }
             }
         }
+        .presentationDetents([.height(sheetHeight)])
+        .presentationDragIndicator(.visible)
     }
 }
 
@@ -383,56 +383,53 @@ private struct ShowRequesterInfo: View {
     let maxHeight: CGFloat
     let requester: Requester
     @State private var currentPage: Int = 0
-    // Store heights for each page index
     @State private var pageHeights: [Int: CGFloat] = [:]
 
     var body: some View {
-        VStack {
-            SmartSheet(maxHeight: maxHeight) {
-            } content: {
-                let certificates = requester.certChain!.certificates
-                VStack {
-                    TabView(selection: $currentPage) {
-                        ForEach(0..<certificates.count, id: \.self) { index in
-                            X509CertViewer(certificate: certificates[index])
-                                .padding()
-                                .tag(index)
-                                .measurePageHeight(index)
-                        }
-                    }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
-                    // Dynamically size based on the current page's measured height
-                    .frame(height: pageHeights[currentPage] ?? 300)
-                    .onPreferenceChange(PageHeightsKey.self) { heights in
-                        self.pageHeights = heights
+        SmartSheet(maxHeight: maxHeight, updateDetents: false) {
+        } content: {
+            let certificates = requester.certChain!.certificates
+            VStack {
+                TabView(selection: $currentPage) {
+                    ForEach(0..<certificates.count, id: \.self) { index in
+                        X509CertViewer(certificate: certificates[index])
+                            .padding()
+                            .tag(index)
+                            .measurePageHeight(index)
                     }
                 }
-            } footer: { isAtBottom, scrollDown in
-                let certificates = requester.certChain!.certificates
-                if certificates.count > 1 {
-                    HStack(spacing: 4) {
-                        ForEach(0..<certificates.count, id: \.self) { index in
-                            Circle()
-                                .fill(
-                                    index == currentPage
-                                    ? Color.blue
-                                    : Color.primary.opacity(0.2)
-                                )
-                                .frame(width: 8, height: 8)
-                        }
-                    }
-                    .frame(height: 30)
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, 8)
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(height: pageHeights[currentPage] ?? 300)
+                .onPreferenceChange(PageHeightsKey.self) { heights in
+                    self.pageHeights = heights
                 }
+            }
+        } footer: { isAtBottom, scrollDown in
+            let certificates = requester.certChain!.certificates
+            if certificates.count > 1 {
+                HStack(spacing: 4) {
+                    ForEach(0..<certificates.count, id: \.self) { index in
+                        Circle()
+                            .fill(
+                                index == currentPage
+                                ? Color.blue
+                                : Color.primary.opacity(0.2)
+                            )
+                            .frame(width: 8, height: 8)
+                    }
+                }
+                .frame(height: 30)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 8)
             }
         }
         .navigationTitle("Requester info")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarRole(.editor)
     }
 }
 
 extension View {
-    /// Applies the standard card styling used in the consent flow
     fileprivate func cardStyle() -> some View {
         self
             .padding()
@@ -443,7 +440,6 @@ extension View {
             )
     }
     
-    /// Measures the height of a page and tags it with the index using PreferenceKey
     fileprivate func measurePageHeight(_ index: Int) -> some View {
         background(
             GeometryReader { proxy in
@@ -457,7 +453,6 @@ extension View {
     }
 }
 
-/// A PreferenceKey that aggregates heights for multiple pages in a dictionary.
 private struct PageHeightsKey: PreferenceKey {
     static let defaultValue: [Int: CGFloat] = [:]
     static func reduce(value: inout [Int: CGFloat], nextValue: () -> [Int: CGFloat]) {
@@ -467,373 +462,308 @@ private struct PageHeightsKey: PreferenceKey {
 
 private struct ConsentMain: View {
     let maxHeight: CGFloat
-    let credentialPresentmentData: CredentialPresentmentData
+    let consentData: ConsentData
     let rpName: String
     let requester: Requester
     let trustMetadata: TrustMetadata?
-    let combinations: [Combination]
+    let selections: [Int]
+    @Binding var sheetHeight: CGFloat
+    let isActive: Bool
     let onRequesterClicked: () -> Void
-    let onConfirm: (_: CredentialPresentmentSelection) -> Void
+    let onNavigateToPickSolution: (Int) -> Void
+    let onConfirm: (_: CredentialSelection) -> Void
     let onCancel: () -> Void
 
-    @State private var isFlipped = false
-    @State private var activeElementIndex = 0
-    @State private var currentPage: Int = 0
-    
-    // Tracks selections: [CombinationIndex][ElementIndex] -> MatchIndex
-    @State private var allMatchSelections: [[Int]] = []
-    
-    // Store heights for each page index
-    @State private var pageHeights: [Int: CGFloat] = [:]
-
-    private func ensureSelectionsInitialized() {
-        if allMatchSelections.isEmpty {
-            allMatchSelections = combinations.map { combination in
-                Array(repeating: 0, count: combination.elements.count)
-            }
-        }
-    }
-
     var body: some View {
-        SmartSheet(maxHeight: maxHeight) {
+        SmartSheet(maxHeight: maxHeight, updateDetents: false, heightBinding: isActive ? $sheetHeight : nil) {
             RelyingPartySection(
                 rpName: rpName,
                 trustMetadata: trustMetadata,
                 onRequesterClicked: onRequesterClicked
             )
-            .padding()
-            .onAppear { ensureSelectionsInitialized() }
+            .padding(.horizontal)
+            .padding(.bottom)
+            .padding(.top, -25)
         } content: {
-            VStack(spacing: 10) {
-                if !allMatchSelections.isEmpty {
-                    TabView(selection: $currentPage) {
-                        ForEach(0..<combinations.count, id: \.self) { index in
-                            let combination = combinations[index]
-                            let currentSelections = allMatchSelections[index]
-                            
-                            FlipView(
-                                isFlipped: isFlipped,
-                                front: {
-                                    CombinationSection(
-                                        rpName: rpName,
-                                        requester: requester,
-                                        trustMetadata: trustMetadata,
-                                        combination: combination,
-                                        matchSelections: currentSelections,
-                                        onShowOptions: { elementIdx in
-                                            activeElementIndex = elementIdx
-                                            withAnimation {
-                                                isFlipped = true
-                                            }
-                                        }
-                                    )
-                                    .cardStyle()
-                                },
-                                back: {
-                                    DocumentSelectionView(
-                                        combination: combination,
-                                        elementIndex: activeElementIndex,
-                                        initialSelection: currentSelections.indices.contains(activeElementIndex) ? currentSelections[activeElementIndex] : 0,
-                                        onBack: {
-                                            withAnimation {
-                                                isFlipped = false
-                                            }
-                                        },
-                                        onSelect: { newIndex in
-                                            allMatchSelections[index][activeElementIndex] = newIndex
-                                            withAnimation {
-                                                isFlipped = false
-                                            }
-                                        }
-                                    )
-                                    .cardStyle()
+            VStack {
+                VStack(spacing: 10) {
+                    ForEach(0..<consentData.useCases.count, id: \.self) { idx in
+                        FloatingItemList {
+                            UseCaseSection(
+                                rpName: rpName,
+                                requester: requester,
+                                trustMetadata: trustMetadata,
+                                useCase: consentData.useCases[idx],
+                                selectionIndex: selections[idx],
+                                onNavigateToPickSolution: {
+                                    onNavigateToPickSolution(idx)
                                 }
                             )
-                            .padding(.vertical, 20)
-                            .padding(.horizontal)
-                            .tag(index)
-                            .measurePageHeight(index)
                         }
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
-                    // Dynamically size the TabView to the height of the CURRENT page.
-                    .frame(height: pageHeights[currentPage] ?? 300)
-                    .onPreferenceChange(PageHeightsKey.self) { heights in
-                        self.pageHeights = heights
+                    
+                    FloatingItemList {
+                        FloatingItemContainer {
+                            let (infoText, showWarning) = getDisclaimer(requester: requester, trustMetadata: trustMetadata, rpName: rpName)
+                            InfoSection(markdown: infoText, showWarning: showWarning)
+                        }
+                        if let disclaimer = trustMetadata?.disclaimer {
+                            FloatingItemContainer {
+                                HStack(alignment: .top) {
+                                    Image(systemName: "info.circle")
+                                        .imageScale(.small)
+                                    Text(disclaimer)
+                                        .font(.system(size: 14))
+                                        .multilineTextAlignment(.leading)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
                     }
-                } else {
-                     // Loading state or empty
-                     ProgressView()
-                        .frame(height: 200)
                 }
+                .padding()
             }
         } footer: { isAtBottom, scrollDown in
             VStack(spacing: 0) {
-                // Pager Indicators
-                if !isFlipped && combinations.count > 1 {
-                    HStack(spacing: 4) {
-                        ForEach(0..<combinations.count, id: \.self) { index in
-                            Circle()
-                                .fill(
-                                    index == currentPage
-                                    ? Color.blue
-                                    : Color.primary.opacity(0.2)
-                                )
-                                .frame(width: 8, height: 8)
-                        }
+                HStack(spacing: 10) {
+                    Button(action : { onCancel() }) {
+                        Text("Cancel")
+                            .frame(maxWidth: .infinity)
                     }
-                    .padding(.bottom, 12)
-                }
-                
-                if !isFlipped {
-                    HStack(spacing: 10) {
-                        Button(action : { onCancel() }) {
-                            Text("Cancel")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.capsule)
-                        .controlSize(.large)
-                        
-                        let buttonText = if (isAtBottom) {
-                            "Share"
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    
+                    let buttonText = if (isAtBottom) {
+                        "Share"
+                    } else {
+                        "More"
+                    }
+                    Button(action : {
+                        if (!isAtBottom) {
+                            scrollDown()
                         } else {
-                            "More"
+                            onConfirm(consentData.toCredentialSelection(selections: selections.map { KotlinInt(int: Int32($0)) }))
                         }
-                        Button(action : {
-                            if (!isAtBottom) {
-                                scrollDown()
-                            } else {
-                                if combinations.indices.contains(currentPage), allMatchSelections.indices.contains(currentPage) {
-                                    let combination = combinations[currentPage]
-                                    let selections = allMatchSelections[currentPage]
-                                    
-                                    var selectedMatches: [CredentialPresentmentSetOptionMemberMatch] = []
-                                    for (idx, element) in combination.elements.enumerated() {
-                                        let matchIdx = idx < selections.count ? selections[idx] : 0
-                                        selectedMatches.append(element.matches[matchIdx])
-                                    }
-                                    onConfirm(CredentialPresentmentSelection(matches: selectedMatches))
-                                }
-                            }
-                        }) {
-                            Text(buttonText)
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.capsule)
-                        .controlSize(.large)
+                    }) {
+                        Text(buttonText)
+                            .frame(maxWidth: .infinity)
                     }
-                    .padding()
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
                 }
+                .padding()
             }
         }
     }
 }
 
-private struct FlipView<Front: View, Back: View>: View {
-    var isFlipped: Bool
-    var front: () -> Front
-    var back: () -> Back
-    
-    init(isFlipped: Bool, @ViewBuilder front: @escaping () -> Front, @ViewBuilder back: @escaping () -> Back) {
-        self.isFlipped = isFlipped
-        self.front = front
-        self.back = back
-    }
-    
-    var body: some View {
-        ZStack {
-            front()
-                .opacity(isFlipped ? 0 : 1)
-            back()
-                .opacity(isFlipped ? 1 : 0)
-                .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
-        }
-        .rotation3DEffect(.degrees(isFlipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
-    }
-}
-
-private struct DocumentSelectionView: View {
-    let combination: Combination
-    let elementIndex: Int
-    let initialSelection: Int
-    let onBack: () -> Void
-    let onSelect: (Int) -> Void
-
-    @State private var selectedIndex: Int
-    
-    init(combination: Combination, elementIndex: Int, initialSelection: Int, onBack: @escaping () -> Void, onSelect: @escaping (Int) -> Void) {
-        self.combination = combination
-        self.elementIndex = elementIndex
-        self.initialSelection = initialSelection
-        self.onBack = onBack
-        self.onSelect = onSelect
-        _selectedIndex = State(initialValue: initialSelection)
-    }
+private struct UseCaseSection: View {
+    let rpName: String
+    let requester: Requester
+    let trustMetadata: TrustMetadata?
+    let useCase: ConsentUseCase
+    let selectionIndex: Int
+    let onNavigateToPickSolution: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            ZStack {
-                HStack {
-                    Button(action: onBack) {
-                        Image(systemName: "arrow.backward")
-                            .imageScale(.large)
-                    }
-                    Spacer()
-                }
-                Text("Select document")
-                    .font(.headline)
-            }
-            .padding(.bottom, 10)
-
-            Divider()
-
-            // List of matches
-            if elementIndex < combination.elements.count {
-                let element = combination.elements[elementIndex]
-                ForEach(0..<element.matches.count, id: \.self) { idx in
-                    let match = element.matches[idx]
-                    VStack {
+        let isSelected = selectionIndex >= 0
+        let solutionIndexToShow = isSelected ? selectionIndex : 0
+        
+        if useCase.solutions.count > solutionIndexToShow {
+            let solution = useCase.solutions[solutionIndexToShow]
+            let showChevron = useCase.optional || useCase.solutions.count > 1
+            let opacity = isSelected ? 1.0 : 0.5
+            
+            Group {
+                if !isSelected {
+                    let firstCred = solution.credentials.first
+                    let typeDisplayName = firstCred?.match.credential.document.typeDisplayName ?? "Unknown Document"
+                    FloatingItemContainer {
                         HStack {
-                            Image(uiImage: match.credential.document.renderCardArt())
-                                .resizable()
-                                .scaledToFit()
-                                .frame(height: 40)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(match.credential.document.displayName ?? "Unknown Document")
+                            Image(systemName: "slash.circle")
+                                .foregroundColor(.secondary)
+                            VStack(alignment: .leading) {
+                                Text("No document returned")
                                     .font(.body)
                                     .fontWeight(.medium)
-                                if let type = match.credential.document.typeDisplayName {
-                                    Text(type)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                Text(typeDisplayName)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            if showChevron {
+                                Spacer()
+                                Button(action: onNavigateToPickSolution) {
+                                    Image(systemName: "chevron.right")
+                                        .foregroundColor(.gray)
                                 }
                             }
-                            Spacer()
-                            
-                            Image(systemName: selectedIndex == idx ? "circle.inset.filled" : "circle")
-                                .imageScale(.large)
-                                .foregroundStyle(selectedIndex == idx ? .blue : .gray)
                         }
-                        .padding(.vertical, 8)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectedIndex = idx
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                onSelect(idx)
+                        .opacity(opacity)
+                    }
+                } else {
+                    ForEach(0..<solution.credentials.count, id: \.self) { credIdx in
+                        let credential = solution.credentials[credIdx]
+                        let match = credential.match
+                        
+                        let retainedClaims = Array(match.claims.filter( {
+                            if $0.value is MdocClaim {
+                                return ($0.key as! MdocRequestedClaim).intentToRetain == true
+                            } else {
+                                return false
+                            }
+                        }).values).sorted(by: { a, b in
+                            if a is MdocClaim {
+                                return (a as! MdocClaim).dataElementName < (b as! MdocClaim).dataElementName
+                            } else {
+                                return (a as! JsonClaim).displayName < (b as! JsonClaim).displayName
+                            }
+                        })
+
+                        let notRetainedClaims = Array(match.claims.filter( {
+                            if $0.value is MdocClaim {
+                                return ($0.key as! MdocRequestedClaim).intentToRetain == false
+                            } else {
+                                return true
+                            }
+                        }).values).sorted(by: { a, b in
+                            if a is MdocClaim {
+                                return (a as! MdocClaim).dataElementName < (b as! MdocClaim).dataElementName
+                            } else {
+                                return (a as! JsonClaim).displayName < (b as! JsonClaim).displayName
+                            }
+                        })
+                        
+                        FloatingItemContainer {
+                            VStack(alignment: .leading, spacing: 10) {
+                                RequestedDocumentSection(
+                                    rpName: rpName,
+                                    requester: requester,
+                                    encryptionRequested: credential.encryptionRequested,
+                                    encryptionTargetTrustMetadata: credential.encryptionTargetTrustMetadata,
+                                    document: match.credential.document,
+                                    retainedClaims: retainedClaims,
+                                    notRetainedClaims: notRetainedClaims,
+                                    showOptionsButton: showChevron && (credIdx == 0),
+                                    onOptionsTapped: onNavigateToPickSolution
+                                )
                             }
                         }
-                        Divider()
                     }
                 }
+            }
+        } else {
+            FloatingItemContainer {
+                Text("No credentials available")
             }
         }
     }
 }
 
-private struct CombinationElement {
-    let matches: [CredentialPresentmentSetOptionMemberMatch]
-}
+private struct PickSolutionView: View {
+    let maxHeight: CGFloat
+    let useCase: ConsentUseCase
+    let currentSolutionIndex: Int
+    let onSolutionSelected: (Int) -> Void
 
-private struct Combination {
-    let elements: [CombinationElement]
-}
+    var body: some View {
+        SmartSheet(maxHeight: maxHeight, updateDetents: false) {
+        } content: {
+            VStack(spacing: 10) {
+                ForEach(0..<useCase.solutions.count, id: \.self) { idx in
+                    let solution = useCase.solutions[idx]
+                    FloatingItemList {
+                        ForEach(0..<solution.credentials.count, id: \.self) { credIdx in
+                            let credential = solution.credentials[credIdx]
+                            FloatingItemContainer {
+                                HStack {
+                                    Image(uiImage: credential.match.credential.document.renderCardArt())
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(height: 40)
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(credential.match.credential.document.displayName ?? "Unknown Document")
+                                            .font(.body)
+                                            .fontWeight(.medium)
+                                        if let type = credential.match.credential.document.typeDisplayName {
+                                            Text(type)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        onSolutionSelected(idx)
+                    }
+                }
 
-extension CredentialPresentmentData {
-
-    fileprivate func generateCombinations(preselectedDocuments: [Document]) -> [Combination] {
-        var combinations: [Combination] = []
-        let consolidated = self.consolidate()
-
-        var credentialSetsMaxPath: [Int] = []
-        for credentialSet in consolidated.credentialSets {
-            let extraSlot = credentialSet.optional ? 1 : 0
-            credentialSetsMaxPath.append(credentialSet.options.count + extraSlot)
-        }
-
-        for path in credentialSetsMaxPath.generateAllPaths() {
-            var elements: [CombinationElement] = []
-
-            for (credentialSetNum, credentialSet) in consolidated.credentialSets.enumerated() {
-                let omitCredentialSet = (path[credentialSetNum] == credentialSet.options.count)
-                if omitCredentialSet {
-                    assert(credentialSet.optional, "Path indicated omission for non-optional set")
-                } else {
-                    let option = credentialSet.options[path[credentialSetNum]]
-                    for member in option.members {
-                        elements.append(CombinationElement(matches: member.matches))
+                if useCase.optional {
+                    FloatingItemList {
+                        FloatingItemContainer {
+                            HStack {
+                                Text("Don't share anything")
+                                    .foregroundColor(.red)
+                                    .fontWeight(.medium)
+                            }
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        onSolutionSelected(-1)
                     }
                 }
             }
-            combinations.append(Combination(elements: elements))
+            .padding()
+        } footer: { _, _ in
         }
-
-        if preselectedDocuments.isEmpty {
-            return combinations
-        }
-
-        let setOfPreselectedDocuments = Set(preselectedDocuments)
-
-        for combination in combinations {
-            if combination.elements.count == preselectedDocuments.count {
-                var chosenElements: [CombinationElement] = []
-
-                for element in combination.elements {
-                    let match = element.matches.first { match in
-                        setOfPreselectedDocuments.contains(match.credential.document)
-                    }
-                    
-                    guard let foundMatch = match else {
-                        continue
-                    }
-                    
-                    chosenElements.append(CombinationElement(matches: [foundMatch]))
-                }
-
-                // Winner, winner, chicken dinner!
-                return [Combination(elements: chosenElements)]
-            }
-        }
-
-        print("Error picking combination for pre-selected documents")
-        return combinations
+        .navigationTitle("Select what to share")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarRole(.editor)
     }
 }
 
-extension Array where Element == Int {
-    
-    /// Given a list [X0, X1, ...], generates a list of lists where the `n`th position
-    /// iterates from 0 up to Xn.
-    fileprivate func generateAllPaths() -> [[Int]] {
-        if isEmpty {
-            return [[]]
+func getDisclaimer(
+    requester: Requester,
+    trustMetadata: TrustMetadata?,
+    rpName: String
+) -> (String, Bool) {
+    if requester.origin == nil {
+        if let privacyPolicyUrl = trustMetadata?.privacyPolicyUrl {
+            return (
+                "The identity reader requesting this data is trusted. " +
+                "Review the [\(rpName) privacy policy](\(privacyPolicyUrl))",
+                false
+            )
+        } else if trustMetadata != nil {
+            return ("The identity reader requesting this data is trusted", false)
+        } else {
+            return (
+                "The identity reader requesting this data is unknown. " +
+                "Make sure you are comfortable sharing this data",
+                true
+            )
         }
-        var allPaths: [[Int]] = []
-        var currentPath = Array(repeating: 0, count: count)
-        
-        generate(index: 0, currentPath: &currentPath, allPaths: &allPaths, maxPath: self)
-        
-        return allPaths
-    }
-    
-    private func generate(
-        index: Int,
-        currentPath: inout [Int],
-        allPaths: inout [[Int]],
-        maxPath: [Int]
-    ) {
-        if index == maxPath.count {
-            allPaths.append(currentPath)
-            return
-        }
-        
-        for value in 0..<maxPath[index] {
-            currentPath[index] = value
-            generate(index: index + 1, currentPath: &currentPath, allPaths: &allPaths, maxPath: maxPath)
+    } else {
+        if let privacyPolicyUrl = trustMetadata?.privacyPolicyUrl {
+            return (
+                "The website requesting this data is trusted. " +
+                "Review the [\(rpName) privacy policy](\(privacyPolicyUrl))",
+                false
+            )
+        } else if trustMetadata != nil {
+            return ("The website requesting this data is trusted", false)
+        } else {
+            return (
+                "The website requesting this data is unknown. " +
+                "Make sure you are comfortable sharing this data",
+                true
+            )
         }
     }
 }

@@ -17,7 +17,7 @@ import org.multipaz.credential.Credential
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.presentment.CredentialMatchSourceOpenID4VP
-import org.multipaz.presentment.CredentialPresentmentData
+import org.multipaz.presentment.CredentialQueryResult
 import org.multipaz.presentment.CredentialPresentmentSet
 import org.multipaz.presentment.CredentialPresentmentSetOption
 import org.multipaz.presentment.CredentialPresentmentSetOptionMember
@@ -96,7 +96,7 @@ data class DcqlQuery(
     /**
      * Executes the DCQL query.
      *
-     * If successful, this returns a [CredentialPresentmentData] which can be used in
+     * If successful, this returns a [CredentialQueryResult] which can be used in
      * an user interface for the user to select which combination of credentials to return, see
      * [Consent] composable in `multipaz-compose` and [Consent] view in `multipaz-swift` for examples
      * of how to do this.
@@ -107,7 +107,7 @@ data class DcqlQuery(
      * @param keyAgreementPossible if non-empty, a credential using Key Agreement may be returned provided
      *  its private key is using one of the given curves.
      * @param transactionDataMap list of transaction data for each queried document by query id
-     * @return the resulting [CredentialPresentmentData] if the query was successful.
+     * @return the resulting [CredentialQueryResult] if the query was successful.
      * @throws [DcqlCredentialQueryException] if it's not possible satisfy the query.
      */
     @Throws(DcqlCredentialQueryException::class, CancellationException::class)
@@ -115,7 +115,7 @@ data class DcqlQuery(
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve> = emptyList(),
         transactionDataMap: Map<String, List<TransactionData>> = emptyMap()
-    ): CredentialPresentmentData {
+    ): CredentialQueryResult {
         val credentialQueryIdToResponse = mutableMapOf<String, QueryResponse>()
         for (credentialQuery in credentialQueries) {
             val credsSatisfyingMeta = when (credentialQuery.format) {
@@ -344,7 +344,7 @@ data class DcqlQuery(
                 }
             }
         }
-        return CredentialPresentmentData(
+        return CredentialQueryResult(
             credentialSets = credentialSets
         )
     }

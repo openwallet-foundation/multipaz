@@ -74,14 +74,14 @@ class SimplePresentmentSource(
     override suspend fun showConsentPrompt(
         requester: Requester,
         trustMetadata: TrustMetadata?,
-        credentialPresentmentData: CredentialPresentmentData,
+        consentData: ConsentData,
         preselectedDocuments: List<Document>,
         onDocumentsInFocus: (documents: List<Document>) -> Unit
-    ): CredentialPresentmentSelection? {
+    ): CredentialSelection? {
         return showConsentPromptFn(
             requester,
             trustMetadata,
-            credentialPresentmentData,
+            consentData,
             preselectedDocuments,
             onDocumentsInFocus
         )

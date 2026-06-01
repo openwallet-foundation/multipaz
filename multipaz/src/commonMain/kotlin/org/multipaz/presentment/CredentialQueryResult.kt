@@ -1,96 +1,37 @@
 package org.multipaz.presentment
 
-import org.multipaz.claim.Claim
 import org.multipaz.document.Document
 import org.multipaz.util.Logger
 import org.multipaz.util.generateAllPaths
 
-private const val TAG = "CredentialPresentmentData"
+private const val TAG = "CredentialQueryResult"
 
 /**
- * An object containing data related to a credential presentment event.
+ * An object containing the result of executing a query against [org.multipaz.document.DocumentStore].
  *
- * This object is intended to be used for user interfaces for the user to consent to and
- * possible select which credentials to return. See the [Consent] composable in `multipaz-compose`
- * and [Consent] view in `multipaz-swift` for examples of how to do this.
+ * This object contains all the combinations in which the query can be satisfied, not just a single one.
+ * For just a single solution, see [CredentialSelection].
  *
  * @property credentialSets A list of credential sets which can be presented. Contains at
  *   least one set but may contain more.
  */
-data class CredentialPresentmentData(
+data class CredentialQueryResult(
     val credentialSets: List<CredentialPresentmentSet>
 ) {
-    /**
-     * Consolidates matches from several options and members into one.
-     *
-     * Applications can use this when constructing user interfaces for conveying various
-     * options to the end user.
-     *
-     * For example, for a relying party which requests an identity document (say, mDL, PID or PhotoID)
-     * and a transportation ticket (say, airline boarding pass or train ticket) the resulting
-     * [CredentialPresentmentData] after executing the request would be:
-     * ```
-     *   CredentialSet
-     *     Option
-     *       Member
-     *         Match: mDL
-     *     Option
-     *       Member
-     *         Match: PID
-     *     Option
-     *       Member
-     *         Match: PhotoID
-     *         Match: PhotoID #2
-     *   CredentialSet
-     *     Option
-     *       Member
-     *         Match: Boarding Pass BOS -> ERW
-     *     Option
-     *       Member
-     *         Match: Train Ticket Providence -> New York Penn Station
-     * ```
-     * This function consolidates options, members, and matches like so
-     * ```
-     *   CredentialSet
-     *     Option
-     *       Member
-     *         Match: mDL
-     *         Match: PID
-     *         Match: PhotoID
-     *         Match: PhotoID #2
-     *   CredentialSet
-     *     Option
-     *       Member
-     *         Match: Boarding Pass BOS -> SFO
-     *         Match: Train Ticket Providence -> New York Penn Station
-     * ```
-     * which - depending on how the application constructs its user interface - may give the user
-     * a simpler user interface for deciding which credentials to return.
-     *
-     * @return a [CredentialPresentmentData] with options, members, and matches consolidated.
-     */
-    fun consolidate(): CredentialPresentmentData {
-        val ret = mutableListOf<CredentialPresentmentSet>()
-        credentialSets.forEach { credentialSet ->
-            ret.add(credentialSet.consolidateSingleMemberOptions())
-        }
-        return CredentialPresentmentData(ret)
-    }
-
     /**
      * Selects a particular combination of credentials to present.
      *
      * If [preselectedDocuments] is empty, this picks the first option, member, and match.
      *
-     * Otherwise if [preselectedDocuments] is not empty, the options, members, and matches are
+     * Otherwise, if [preselectedDocuments] is not empty, the options, members, and matches are
      * selected such that the list of returned credentials match the documents in [preselectedDocuments].
      * If this isn't possible, the selection returned will be the same as if [preselectedDocuments]
      * was the empty list.
      *
      * @param preselectedDocuments either empty or a list of documents the user already selected.
-     * @return a [CredentialPresentmentSelection].
+     * @return a [CredentialSelection].
      */
-    fun select(preselectedDocuments: List<Document>): CredentialPresentmentSelection {
+    fun select(preselectedDocuments: List<Document>): CredentialSelection {
         if (preselectedDocuments.isNotEmpty()) {
             pickFromPreselectedDocuments(preselectedDocuments)?.let {
                 return it
@@ -104,10 +45,10 @@ data class CredentialPresentmentData(
                 matches.add(member.matches[0])
             }
         }
-        return CredentialPresentmentSelection(matches = matches)
+        return CredentialSelection(matches = matches)
     }
 
-    private fun pickFromPreselectedDocuments(preselectedDocuments: List<Document>): CredentialPresentmentSelection? {
+    private fun pickFromPreselectedDocuments(preselectedDocuments: List<Document>): CredentialSelection? {
         val credentialSetsMaxPath = mutableListOf<Int>()
         credentialSets.forEachIndexed { n, credentialSet ->
             // If a credentialSet is optional, it's an extra combination we tag at the end
@@ -142,7 +83,7 @@ data class CredentialPresentmentData(
                     }
                     chosenMatches.add(match)
                 }
-                return CredentialPresentmentSelection(chosenMatches)
+                return CredentialSelection(chosenMatches)
             }
         }
         Logger.w(TAG, "Error picking combination for pre-selected documents")
@@ -154,7 +95,7 @@ data class CredentialPresentmentData(
      *
      * @return all possible selections from the given options.
      */
-    fun getAllSelections(): List<CredentialPresentmentSelection> {
+    fun getAllSelections(): List<CredentialSelection> {
         val allSetSelections = credentialSets.map { set ->
             val selectionsForSet = mutableListOf<List<CredentialPresentmentSetOptionMemberMatch>>()
             if (set.optional) {
@@ -176,13 +117,13 @@ data class CredentialPresentmentData(
         }
 
         val paths = allSetSelections.map { it.size }.generateAllPaths()
-        val finalSelections = mutableListOf<CredentialPresentmentSelection>()
+        val finalSelections = mutableListOf<CredentialSelection>()
         for (path in paths) {
             val allMatches = mutableListOf<CredentialPresentmentSetOptionMemberMatch>()
             path.forEachIndexed { setIndex, selectionIndex ->
                 allMatches.addAll(allSetSelections[setIndex][selectionIndex])
             }
-            finalSelections.add(CredentialPresentmentSelection(allMatches))
+            finalSelections.add(CredentialSelection(allMatches))
         }
         return finalSelections
     }

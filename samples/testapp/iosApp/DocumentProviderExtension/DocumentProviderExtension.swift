@@ -111,11 +111,11 @@ func getPresentmentSource() async -> PresentmentSource {
             }
             return nil
         },
-        showConsentPromptFn: { requester, trustMetadata, credentialPresentmentData, preselectedDocuments, onDocumentsInFocus in
+        showConsentPromptFn: { requester, trustMetadata, consentData, preselectedDocuments, onDocumentsInFocus in
             try! await promptModelSilentConsent(
                 requester: requester,
                 trustMetadata: trustMetadata,
-                credentialPresentmentData: credentialPresentmentData,
+                consentData: consentData,
                 preselectedDocuments: preselectedDocuments,
                 onDocumentsInFocus: { documents in onDocumentsInFocus(documents) }
             )

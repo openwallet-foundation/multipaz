@@ -56,23 +56,23 @@ abstract class PresentmentSource(
      *
      * @param requester the relying party which is requesting the data.
      * @param trustMetadata [TrustMetadata] conveying the level of trust in the requester, if any.
-     * @param credentialPresentmentData the combinations of credentials and claims that the user can select.
+     * @param consentData the combinations of credentials and claims that the user can select.
      * @param preselectedDocuments a list of documents the user may have preselected earlier (for
      *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
      *   if the user didn't preselect.
      * @param onDocumentsInFocus called with the documents currently selected for the user, including when
      *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
-     * @return `null` if the user dismissed the prompt, otherwise a [CredentialPresentmentSelection] object
+     * @return `null` if the user dismissed the prompt, otherwise a [CredentialSelection] object
      *   conveying which credentials the user selected, if multiple options are available.
      * @see [org.multipaz.prompt.ShowConsentPromptFn] which this method wraps.
      */
     abstract suspend fun showConsentPrompt(
         requester: Requester,
         trustMetadata: TrustMetadata?,
-        credentialPresentmentData: CredentialPresentmentData,
+        consentData: ConsentData,
         preselectedDocuments: List<Document>,
         onDocumentsInFocus: (documents: List<Document>) -> Unit
-    ): CredentialPresentmentSelection?
+    ): CredentialSelection?
 
     /**
      * Chooses a credential from a document.

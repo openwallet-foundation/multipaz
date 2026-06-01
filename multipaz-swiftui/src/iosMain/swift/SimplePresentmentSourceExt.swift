@@ -1,7 +1,20 @@
+import Foundation
+import ObjectiveC
 
-// Swift-friendly version of SimplePresentmentSource() constructor which takes
-// suspend functions as parameters.
-//
+private var handlersHolderKey: UInt8 = 0
+
+private final class HandlersHolder: NSObject {
+    let resolveTrustHandler: AnyObject
+    let showConsentPromptHandler: AnyObject
+    let getBadgesHandler: AnyObject
+    
+    init(resolveTrustHandler: AnyObject, showConsentPromptHandler: AnyObject, getBadgesHandler: AnyObject) {
+        self.resolveTrustHandler = resolveTrustHandler
+        self.showConsentPromptHandler = showConsentPromptHandler
+        self.getBadgesHandler = getBadgesHandler
+    }
+}
+
 extension SimplePresentmentSource.Companion {
 
     /// Creates a new ``SimplePresentmentSource``.
@@ -23,17 +36,17 @@ extension SimplePresentmentSource.Companion {
         documentTypeRepository: DocumentTypeRepository,
         zkSystemRepository: ZkSystemRepository? = nil,
         eventLogger: EventLogger? = nil,
-        resolveTrustFn: @escaping @Sendable (
+        resolveTrustFn: @escaping @MainActor @Sendable (
             _ requester: Requester
         ) async -> TrustMetadata?,
-        showConsentPromptFn: @escaping @Sendable (
+        showConsentPromptFn: @escaping @MainActor @Sendable (
             _ requester: Requester,
             _ trustMetadata: TrustMetadata?,
-            _ credentialPresentmentData: CredentialPresentmentData,
+            _ consentData: ConsentData,
             _ preselectedDocuments: [Document],
-            _ onDocumentsInFocus: @escaping @Sendable (_ documents: [Document]) -> Void,
-        ) async -> CredentialPresentmentSelection?,
-        getBadgesFn: @escaping @Sendable (
+            _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void,
+        ) async -> CredentialSelection?,
+        getBadgesFn: @escaping @MainActor @Sendable (
             _ document: Document
         ) async -> [DocumentBadge] = { document in [] },
         preferSignatureToKeyAgreement: Bool = true,
@@ -42,97 +55,152 @@ extension SimplePresentmentSource.Companion {
         domainsKeylessSdJwt: [ String ] = [],
         domainsKeyBoundSdJwt: [ String ] = [],
     ) -> SimplePresentmentSource {
-        return SimplePresentmentSource(
+        let resolveTrustHandler = ResolveTrustHandler(f: resolveTrustFn)
+        let showConsentPromptHandler = ShowConsentPromptHandler(f: showConsentPromptFn)
+        let getBadgesHandler = GetBadgesHandler(f: getBadgesFn)
+        
+        let source = SimplePresentmentSource(
             documentStore: documentStore,
             documentTypeRepository: documentTypeRepository,
             zkSystemRepository: zkSystemRepository,
             eventLogger: eventLogger,
-            resolveTrustFn: ResolveTrustHandler(f: resolveTrustFn),
-            showConsentPromptFn: ShowConsentPromptHandler(f: showConsentPromptFn),
-            getBadgesFn: GetBadgesHandler(f: getBadgesFn),
+            resolveTrustFn: resolveTrustHandler,
+            showConsentPromptFn: showConsentPromptHandler,
+            getBadgesFn: getBadgesHandler,
             preferSignatureToKeyAgreement: preferSignatureToKeyAgreement,
             domainsMdocSignature: domainsMdocSignature,
             domainsMdocKeyAgreement: domainsMdocKeyAgreement,
             domainsKeylessSdJwt: domainsKeylessSdJwt,
             domainsKeyBoundSdJwt: domainsKeyBoundSdJwt
         )
+        
+        let holder = HandlersHolder(
+            resolveTrustHandler: resolveTrustHandler,
+            showConsentPromptHandler: showConsentPromptHandler,
+            getBadgesHandler: getBadgesHandler
+        )
+        objc_setAssociatedObject(
+            source,
+            &handlersHolderKey,
+            holder,
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
+        
+        return source
     }
 
 }
 
+private func runResolveTrust(
+    requester: Requester,
+    f: @escaping @MainActor @Sendable (Requester) async -> TrustMetadata?,
+    completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void
+) {
+    Task { @MainActor in
+        let value = await f(requester)
+        completionHandler(value, nil)
+    }
+}
+
+private func runShowConsentPrompt(
+    requester: Requester,
+    trustMetadata: TrustMetadata?,
+    consentData: ConsentData,
+    preselectedDocuments: [Document],
+    f: @escaping @MainActor @Sendable (
+        _ requester: Requester,
+        _ trustMetadata: TrustMetadata?,
+        _ consentData: ConsentData,
+        _ preselectedDocuments: [Document],
+        _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void
+    ) async -> CredentialSelection?,
+    completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void
+) {
+    Task { @MainActor in
+        // TODO: The cast for onDocumentsInFocus fails at runtime, figure out how to make it work
+        let value = await f(
+            requester,
+            trustMetadata,
+            consentData,
+            preselectedDocuments,
+            { documents in }
+        )
+        completionHandler(value, nil)
+    }
+}
+
+private func runGetBadges(
+    document: Document,
+    f: @escaping @MainActor @Sendable (Document) async -> [DocumentBadge],
+    completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void
+) {
+    Task { @MainActor in
+        let value = await f(document)
+        completionHandler(value, nil)
+    }
+}
+
 private class ResolveTrustHandler: KotlinSuspendFunction1 {
-    let f: @Sendable (
+    let f: @MainActor @Sendable (
         _ requester: Requester
     ) async -> TrustMetadata?
     
-    init(f: @escaping @Sendable (_ requester: Requester) async -> TrustMetadata?) {
+    init(f: @escaping @MainActor @Sendable (_ requester: Requester) async -> TrustMetadata?) {
         self.f = f
     }
 
     func __invoke(p1: Any?, completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void) {
         let requester = p1 as! Requester
-        let f = self.f
-        Task {
-            let value = await f(requester)
-            completionHandler(value, nil)
-        }
+        runResolveTrust(requester: requester, f: self.f, completionHandler: completionHandler)
     }
 }
 
 private class ShowConsentPromptHandler: KotlinSuspendFunction5 {
-    let f: @Sendable (
+    let f: @MainActor @Sendable (
         _ requester: Requester,
         _ trustMetadata: TrustMetadata?,
-        _ credentialPresentmentData: CredentialPresentmentData,
+        _ consentData: ConsentData,
         _ preselectedDocuments: [Document],
-        _ onDocumentsInFocus: @escaping @Sendable (_ documents: [Document]) -> Void,
-    ) async -> CredentialPresentmentSelection?
+        _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void,
+    ) async -> CredentialSelection?
     
-    init(f: @escaping @Sendable (
+    init(f: @escaping @MainActor @Sendable (
         _ requester: Requester,
         _ trustMetadata: TrustMetadata?,
-        _ credentialPresentmentData: CredentialPresentmentData,
+        _ consentData: ConsentData,
         _ preselectedDocuments: [Document],
-        _ onDocumentsInFocus: @escaping @Sendable (_ documents: [Document]) -> Void,
-    ) async -> CredentialPresentmentSelection?) {
+        _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void,
+    ) async -> CredentialSelection?) {
         self.f = f
     }
 
     func __invoke(p1: Any?, p2: Any?, p3: Any?, p4: Any?, p5: Any?, completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void) {
         let requester = p1 as! Requester
         let trustMetadata = p2 as! TrustMetadata?
-        let credentialPresentmentData = p3 as! CredentialPresentmentData
+        let consentData = p3 as! ConsentData
         let preselectedDocuments = p4 as! [Document]
-        let f = self.f
-        Task {
-            // TODO: The cast for onDocumentsInFocus fails at runtime, figure out how to make it work
-            let value = await f(
-                requester,
-                trustMetadata,
-                credentialPresentmentData,
-                preselectedDocuments,
-                { documents in }
-            )
-            completionHandler(value, nil)
-        }
+        runShowConsentPrompt(
+            requester: requester,
+            trustMetadata: trustMetadata,
+            consentData: consentData,
+            preselectedDocuments: preselectedDocuments,
+            f: self.f,
+            completionHandler: completionHandler
+        )
     }
 }
 
 private class GetBadgesHandler: KotlinSuspendFunction1 {
-    let f: @Sendable (
+    let f: @MainActor @Sendable (
         _ document: Document
     ) async -> [DocumentBadge]
     
-    init(f: @escaping @Sendable (_ document: Document) async -> [DocumentBadge]) {
+    init(f: @escaping @MainActor @Sendable (_ document: Document) async -> [DocumentBadge]) {
         self.f = f
     }
 
     func __invoke(p1: Any?, completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void) {
         let document = p1 as! Document
-        let f = self.f
-        Task {
-            let value = await f(document)
-            completionHandler(value, nil)
-        }
+        runGetBadges(document: document, f: self.f, completionHandler: completionHandler)
     }
 }

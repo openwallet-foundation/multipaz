@@ -56,6 +56,7 @@ import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.presentment.TransactionDataJson
+import org.multipaz.presentment.ConsentData
 import org.multipaz.presentment.computeTransactionResponse
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
@@ -456,10 +457,14 @@ object OpenID4VP {
         )
 
         val trustMetadata = source.resolveTrust(requester)
+
         val selection = source.showConsentPrompt(
             requester = requester,
             trustMetadata = trustMetadata,
-            credentialPresentmentData = dcqlResponse,
+            consentData = ConsentData.fromCredentialQueryResult(
+                credentialQueryResult = dcqlResponse,
+                source = source
+            ),
             preselectedDocuments = preselectedDocuments,
             onDocumentsInFocus = onDocumentsInFocus
         )

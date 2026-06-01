@@ -6,7 +6,7 @@ import org.multipaz.mdoc.request.DeviceRequestInfo
 import org.multipaz.mdoc.request.DocumentSet
 import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.buildDeviceRequest
-import org.multipaz.presentment.CredentialPresentmentData
+import org.multipaz.presentment.CredentialQueryResult
 import org.multipaz.presentment.PresentmentSource
 
 // Kotlin version of ISO18013MobileDocumentRequest
@@ -14,10 +14,10 @@ data class Iso18013Request(
     val presentmentRequests: List<Iso18013PresentmentRequest>
 ) {
 
-    suspend fun getCredentialPresentmentData(
+    suspend fun getCredentialQueryResult(
         source: PresentmentSource,
         keyAgreementPossible: List<EcCurve> = emptyList()
-    ): CredentialPresentmentData {
+    ): CredentialQueryResult {
         val documentRequest = mutableListOf<Iso18013DocumentRequest>()
 
         presentmentRequests.forEach { pr ->

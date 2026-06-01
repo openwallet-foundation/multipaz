@@ -13,7 +13,7 @@ import org.multipaz.openid.dcql.DcqlQuery
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-class CredentialPresentmentDataTest {
+class CredentialQueryResultTest {
 
     suspend fun addMdl_with_AgeOver_AgeInYears_BirthDate(harness: DocumentStoreTestHarness) {
         harness.provisionMdoc(

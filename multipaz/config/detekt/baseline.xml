@@ -377,7 +377,6 @@
     <ID>UndocumentedPublicFunction:Logger.kt$Logger$fun wCbor(tag: String, message: String, encodedCbor: ByteArray)</ID>
     <ID>UndocumentedPublicFunction:Logger.kt$Logger$fun wHex(tag: String, message: String, data: ByteArray)</ID>
     <ID>UndocumentedPublicFunction:Logger.kt$Logger$fun wJson(tag: String, message: String, json: JsonElement)</ID>
-    <ID>UndocumentedPublicFunction:MdocCannedRequest.kt$MdocCannedRequest$fun toDcqlString()</ID>
     <ID>UndocumentedPublicFunction:Mdoc_Cbor.kt$fun Mdoc.toCbor(): ByteArray</ID>
     <ID>UndocumentedPublicFunction:Mdoc_Cbor.kt$fun Mdoc.toDataItem(): DataItem</ID>
     <ID>UndocumentedPublicFunction:Mdoc_Cbor.kt$fun Mdoc_fromDataItem(dataItem: DataItem): Mdoc</ID>
@@ -712,11 +711,12 @@
     <ID>UndocumentedPublicProperty:CloudUserAuthType.kt$CloudUserAuthType$val flagValue: Long</ID>
     <ID>UndocumentedPublicProperty:Command_Cbor.kt$@CborSerializableGenerated(schemaId = "bhHugJAKoeOFre1HBWRTAstKudjKhjKGC2p789n6kkM") val Command_cborSchemaId = ByteString(110, 17, -18, -128, -112, 10, -95, -29, -123, -83, -19, 71, 5, 100, 83, 2, -53, 74, -71, -40, -54, -122, 50, -122, 11, 106, 123, -13, -39, -6, -110, 67)</ID>
     <ID>UndocumentedPublicProperty:Command_Cbor.kt$val Command.Companion.cborSchemaId: ByteString get() = Command_cborSchemaId</ID>
-    <ID>UndocumentedPublicProperty:ConsentPromptDialogModel.kt$ConsentPromptDialogModel.ConsentPromptRequest$val credentialPresentmentData: CredentialPresentmentData</ID>
+    <ID>UndocumentedPublicProperty:ConsentPromptDialogModel.kt$ConsentPromptDialogModel.ConsentPromptRequest$val CredentialQueryResult: CredentialQueryResult</ID>
     <ID>UndocumentedPublicProperty:ConsentPromptDialogModel.kt$ConsentPromptDialogModel.ConsentPromptRequest$val onDocumentsInFocus: (documents: List&lt;Document>) -> Unit</ID>
     <ID>UndocumentedPublicProperty:ConsentPromptDialogModel.kt$ConsentPromptDialogModel.ConsentPromptRequest$val preselectedDocuments: List&lt;Document></ID>
     <ID>UndocumentedPublicProperty:ConsentPromptDialogModel.kt$ConsentPromptDialogModel.ConsentPromptRequest$val requester: Requester</ID>
     <ID>UndocumentedPublicProperty:ConsentPromptDialogModel.kt$ConsentPromptDialogModel.ConsentPromptRequest$val trustMetadata: TrustMetadata?</ID>
+    <ID>UndocumentedPublicProperty:ConsentPromptDialogModel.kt$ConsentPromptDialogModel.ConsentPromptRequest$val consentData: ConsentData</ID>
     <ID>UndocumentedPublicProperty:CreateKeyRequest0_Cbor.kt$@CborSerializableGenerated(schemaId = "Pdrsl1RRuev2jXpArnb8TuC3KyUjMq4BjwzOJXiHRZA") val CreateKeyRequest0_cborSchemaId = ByteString(61, -38, -20, -105, 84, 81, -71, -21, -10, -115, 122, 64, -82, 118, -4, 78, -32, -73, 43, 37, 35, 50, -82, 1, -113, 12, -50, 37, 120, -121, 69, -112)</ID>
     <ID>UndocumentedPublicProperty:CreateKeyRequest1_Cbor.kt$@CborSerializableGenerated(schemaId = "vUOyalNVflOPP7A2GsJcRWadIvCKB9HrmcwkJK8lcg8") val CreateKeyRequest1_cborSchemaId = ByteString(-67, 67, -78, 106, 83, 85, 126, 83, -113, 63, -80, 54, 26, -62, 92, 69, 102, -99, 34, -16, -118, 7, -47, -21, -103, -52, 36, 36, -81, 37, 114, 15)</ID>
     <ID>UndocumentedPublicProperty:CreateKeyResponse0_Cbor.kt$@CborSerializableGenerated(schemaId = "iwbuVzjok2Q6MfKeINCHizGC5zY-KJNYPcJ3WvZIbp4") val CreateKeyResponse0_cborSchemaId = ByteString(-117, 6, -18, 87, 56, -24, -109, 100, 58, 49, -14, -98, 32, -48, -121, -117, 49, -126, -25, 54, 62, 40, -109, 88, 61, -62, 119, 90, -10, 72, 110, -98)</ID>

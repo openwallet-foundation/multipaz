@@ -32,6 +32,8 @@ import kotlinx.serialization.json.put
 import multipazproject.samples.testapp.generated.resources.Res
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.OID
+import org.multipaz.cbor.Simple
+import org.multipaz.cbor.buildCborArray
 import org.multipaz.certext.GoogleAccount
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
@@ -44,6 +46,8 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X509Extension
+import org.multipaz.crypto.X509KeyUsage
+import org.multipaz.crypto.buildX509Cert
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
@@ -52,13 +56,19 @@ import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.utopia.knowntypes.UtopiaBoardingPass
 import org.multipaz.documenttype.knowntypes.addKnownTypes
+import org.multipaz.mdoc.request.DeviceRequestInfo
+import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.DocumentSet
+import org.multipaz.mdoc.request.EncryptionParameters
+import org.multipaz.mdoc.request.UseCase
+import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.utopia.knowntypes.addUtopiaTypes
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.dcql.DcqlQuery
-import org.multipaz.presentment.CredentialPresentmentData
-import org.multipaz.presentment.CredentialPresentmentSelection
+import org.multipaz.presentment.CredentialSelection
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.SimplePresentmentSource
+import org.multipaz.presentment.ConsentData
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.requestConsent
 import org.multipaz.request.Requester
@@ -76,6 +86,7 @@ import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -84,9 +95,17 @@ private enum class CertChain(
 ) {
     CERT_CHAIN_UTOPIA_BREWERY("Utopia Brewery (w/ privacy policy)"),
     CERT_CHAIN_UTOPIA_BREWERY_NO_PRIVACY_POLICY("Utopia Brewery (w/o privacy policy)"),
+    CERT_CHAIN_UTOPIA_AIRLINES("Utopia Airlines"),
     CERT_CHAIN_IDENTITY_READER("Multipaz Identity Reader"),
     CERT_CHAIN_IDENTITY_READER_GOOGLE_ACCOUNT("Multipaz Identity Reader (w/ Google Account)"),
     CERT_CHAIN_NONE("None")
+}
+
+private enum class EncryptionTarget(
+    val desc: String,
+) {
+    ENCRYPTION_TARGET_UTOPIA_CBP("Utopia Customs and Border Protection"),
+    ENCRYPTION_TARGET_NONE("None")
 }
 
 private enum class Origin(
@@ -107,7 +126,7 @@ private enum class AppId(
     MESSAGES("Google Messages", "com.google.android.apps.messaging"),
 }
 
-private enum class UseCase(
+private enum class Example(
     val desc: String,
 ) {
     MDL_US_TRANSPORTATION("mDL: US transportation"),
@@ -119,8 +138,12 @@ private enum class UseCase(
     PHOTO_ID_MANDATORY("PhotoID: Mandatory data elements (2 docs)"),
     PAYMENT("Payment"),
     OPENID4VP_COMPLEX_EXAMPLE("Complex example from OpenID4VP Appendix D"),
-    BOARDING_PASS_AND_MDL_EXAMPLE("Boarding pass AND mDL"),
-    BOARDING_PASS_OR_MDL_EXAMPLE("Boarding pass OR mDL")
+    MDL_AND_BOARDING_PASS_EXAMPLE("mDL AND Boarding pass"),
+    MDL_AND_OPTIONAL_BOARDING_PASS_EXAMPLE("mDL AND optional Boarding pass"),
+    MDL_AND_OPTIONAL_BOARDING_PASS_SEPARATE_USE_CASES_EXAMPLE("mDL AND optional Boarding pass (separate use-cases)"),
+    MDL_OR_BOARDING_PASS_EXAMPLE("mDL OR Boarding pass"),
+    BORDER_CROSSING_EXAMPLE("Border crossing (photoID w/ encrypted request)"),
+    BORDER_CROSSING_EXAMPLE_NO_RETAIN("Border crossing (photoID w/ encrypted request - no retain)"),
 }
 
 private enum class PaDuration(
@@ -142,7 +165,8 @@ private enum class PaPreselectedDocuments(
     PRESELECTED_DOCUMENTS_BOARDING_PASS("Boarding pass"),
     PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID("mDL and PhotoID"),
     PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID_AND_PHOTOID("mDL and PhotoID and PhotoID"),
-    PRESELECTED_DOCUMENTS_MDL_AND_BOARDING_PASS("mDL and boarding pass")
+    PRESELECTED_DOCUMENTS_MDL_AND_BOARDING_PASS("mDL and boarding pass"),
+    PRESELECTED_DOCUMENTS_MDL_AND_OPTIONAL_BOARDING_PASS("mDL and optional boarding pass")
 }
 
 data class AndroidPresentmentActivityData(
@@ -159,10 +183,10 @@ expect suspend fun launchAndroidPresentmentActivity(
     paData: AndroidPresentmentActivityData,
     requester: Requester,
     trustMetadata: TrustMetadata?,
-    credentialPresentmentData: CredentialPresentmentData,
+    consentData: ConsentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
-): CredentialPresentmentSelection?
+): CredentialSelection?
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -172,23 +196,26 @@ fun ConsentPromptScreen(
     showToast: (message: String) -> Unit,
 ) {
     val coroutineScope = rememberCoroutineScope()
-    var useCase by remember { mutableStateOf(UseCase.MDL_US_TRANSPORTATION) }
+    var example by remember { mutableStateOf(Example.MDL_US_TRANSPORTATION) }
     var certChain by remember { mutableStateOf(CertChain.entries.first()) }
+    var encryptionTarget by remember { mutableStateOf(EncryptionTarget.entries.first()) }
     var origin by remember { mutableStateOf(Origin.entries.first()) }
     var appId by remember { mutableStateOf(AppId.entries.first()) }
     var cardArtMdl by remember { mutableStateOf(ByteArray(0)) }
     var cardArtPhotoId by remember { mutableStateOf(ByteArray(0)) }
     var cardArtBoardingPass by remember { mutableStateOf(ByteArray(0)) }
     var utopiaBreweryIcon by remember { mutableStateOf(ByteString()) }
+    var utopiaAirlinesIcon by remember { mutableStateOf(ByteString()) }
+    var utopiaCbpIcon by remember { mutableStateOf(ByteString()) }
     var identityReaderIcon by remember { mutableStateOf(ByteString()) }
     var documentStore by remember { mutableStateOf<DocumentStore?>(null) }
     var onDocumentsInFocus by remember { mutableStateOf<List<Document>?>(null) }
     var documentModel by remember { mutableStateOf<DocumentModel?>(null) }
     var paShowConsent by remember { mutableStateOf(true) }
-    var paRequireAuth by remember { mutableStateOf(true) }
+    var paRequireAuth by remember { mutableStateOf(false) }
     var paAuthRequireConfirmation by remember { mutableStateOf(false) }
-    var paConnectionDuration by remember { mutableStateOf(PaDuration.PA_DURATION_2SEC) }
-    var paSendingDuration by remember { mutableStateOf(PaDuration.PA_DURATION_2SEC) }
+    var paConnectionDuration by remember { mutableStateOf(PaDuration.PA_DURATION_NONE) }
+    var paSendingDuration by remember { mutableStateOf(PaDuration.PA_DURATION_NONE) }
     var paPreselectedDocuments by remember { mutableStateOf(PaPreselectedDocuments.PRESELECTED_DOCUMENTS_NONE)}
     lateinit var documentTypeRepository: DocumentTypeRepository
     lateinit var documentMdl: Document
@@ -201,6 +228,8 @@ fun ConsentPromptScreen(
         cardArtPhotoId = Res.readBytes("drawable/photo_id_card_art.png")
         cardArtBoardingPass = Res.readBytes("files/boarding-pass-utopia-airlines.png")
         utopiaBreweryIcon = ByteString(Res.readBytes("files/utopia-brewery.png"))
+        utopiaAirlinesIcon = ByteString(Res.readBytes("files/utopia-airlines.png"))
+        utopiaCbpIcon = ByteString(Res.readBytes("files/utopia-cbp.png"))
         identityReaderIcon = ByteString(Res.readBytes("drawable/app_icon.webp"))
 
         val storage = EphemeralStorage()
@@ -327,9 +356,9 @@ fun ConsentPromptScreen(
         item {
             SettingMultipleChoice(
                 title = "Content",
-                choices = UseCase.entries.map { it.desc },
-                initialChoice = UseCase.entries.first().desc,
-                onChoiceSelected = { choice -> useCase = UseCase.entries.find { it.desc == choice }!! },
+                choices = Example.entries.map { it.desc },
+                initialChoice = Example.entries.first().desc,
+                onChoiceSelected = { choice -> example = Example.entries.find { it.desc == choice }!! },
             )
         }
 
@@ -339,6 +368,15 @@ fun ConsentPromptScreen(
                 choices = CertChain.entries.map { it.desc },
                 initialChoice = CertChain.entries.first().desc,
                 onChoiceSelected = { choice -> certChain = CertChain.entries.find { it.desc == choice }!! },
+            )
+        }
+
+        item {
+            SettingMultipleChoice(
+                title = "Encryption Target",
+                choices = EncryptionTarget.entries.map { it.desc },
+                initialChoice = EncryptionTarget.entries.first().desc,
+                onChoiceSelected = { choice -> encryptionTarget = EncryptionTarget.entries.find { it.desc == choice }!! },
             )
         }
 
@@ -361,24 +399,27 @@ fun ConsentPromptScreen(
         }
 
         fun launchConsent(launcher: suspend (
-                source: PresentmentSource,
-                paData: AndroidPresentmentActivityData,
-                requester: Requester,
-                trustMetadata: TrustMetadata?,
-                credentialPresentmentData: CredentialPresentmentData,
-                preselectedDocuments: List<Document>,
-                onDocumentsInFocus: (documents: List<Document>) -> Unit
-            ) -> CredentialPresentmentSelection?,
+            source: PresentmentSource,
+            paData: AndroidPresentmentActivityData,
+            requester: Requester,
+            trustMetadata: TrustMetadata?,
+            consentData: ConsentData,
+            preselectedDocuments: List<Document>,
+            onDocumentsInFocus: (documents: List<Document>) -> Unit
+            ) -> CredentialSelection?,
                           paData: AndroidPresentmentActivityData,
         ) {
             coroutineScope.launch {
                 try {
                     val queryResult = getQueryResult(
-                        useCase = useCase,
+                        example = example,
                         certChain = certChain,
+                        encryptionTarget = encryptionTarget,
                         origin = origin,
                         appId = appId,
                         utopiaBreweryIcon = utopiaBreweryIcon,
+                        utopiaAirlinesIcon = utopiaAirlinesIcon,
+                        utopiaCbpIcon = utopiaCbpIcon,
                         identityReaderIcon = identityReaderIcon,
                         documentStore = documentStore,
                         documentTypeRepository = documentTypeRepository
@@ -388,7 +429,7 @@ fun ConsentPromptScreen(
                         paData,
                         queryResult.requester,
                         queryResult.source.resolveTrust(queryResult.requester),
-                        queryResult.presentmentData,
+                        queryResult.consentData,
                         emptyList(),
                         { documents ->
                             onDocumentsInFocus = documents
@@ -407,11 +448,11 @@ fun ConsentPromptScreen(
         item {
             Button(onClick = {
                 launchConsent(launcher = { source, paData,
-                                           requester, trustMetadata, credentialPresentmentData, preselectedDocuments, onDocumentsInFocus ->
+                                           requester, trustMetadata, consentData, preselectedDocuments, onDocumentsInFocus ->
                         promptModel.requestConsent(
                             requester = requester,
                             trustMetadata = trustMetadata,
-                            credentialPresentmentData = credentialPresentmentData,
+                            consentData = consentData,
                             preselectedDocuments = preselectedDocuments,
                             onDocumentsInFocus = onDocumentsInFocus,
                         )
@@ -531,6 +572,8 @@ fun ConsentPromptScreen(
                             listOf(documentMdl, documentPhotoId, documentPhotoId2)
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL_AND_BOARDING_PASS ->
                             listOf(documentMdl, documentBoardingPass)
+                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL_AND_OPTIONAL_BOARDING_PASS->
+                            listOf(documentMdl, documentBoardingPass)
                     }
                 ),
             ) }) {
@@ -543,37 +586,40 @@ fun ConsentPromptScreen(
 private data class QueryResult(
     val requester: Requester,
     val source: PresentmentSource,
-    val presentmentData: CredentialPresentmentData
+    val consentData: ConsentData
 )
 
 private suspend fun getQueryResult(
-    useCase: UseCase,
+    example: Example,
     certChain: CertChain,
+    encryptionTarget: EncryptionTarget,
     origin: Origin,
     appId: AppId,
     utopiaBreweryIcon: ByteString,
+    utopiaAirlinesIcon: ByteString,
+    utopiaCbpIcon: ByteString,
     identityReaderIcon: ByteString,
     documentStore: DocumentStore?,
     documentTypeRepository: DocumentTypeRepository
 ): QueryResult {
-    val dcql = when (useCase) {
-        UseCase.MDL_AGE_OVER_21_AND_PORTRAIT ->
+    val dcql = when (example) {
+        Example.MDL_AGE_OVER_21_AND_PORTRAIT ->
             DrivingLicense.getDocumentType().cannedRequests.find { it.id == "age_over_21_and_portrait" }!!.mdocRequest!!.toDcql(emptyList())
-        UseCase.MDL_US_TRANSPORTATION ->
+        Example.MDL_US_TRANSPORTATION ->
             DrivingLicense.getDocumentType().cannedRequests.find { it.id == "us-transportation" }!!.mdocRequest!!.toDcql(emptyList())
-        UseCase.MDL_MANDATORY ->
+        Example.MDL_MANDATORY ->
             DrivingLicense.getDocumentType().cannedRequests.find { it.id == "mandatory" }!!.mdocRequest!!.toDcql(emptyList())
-        UseCase.MDL_ALL ->
+        Example.MDL_ALL ->
             DrivingLicense.getDocumentType().cannedRequests.find { it.id == "full" }!!.mdocRequest!!.toDcql(emptyList())
-        UseCase.MDL_NAME_AND_ADDRESS_PARTIALLY_STORED ->
+        Example.MDL_NAME_AND_ADDRESS_PARTIALLY_STORED ->
             DrivingLicense.getDocumentType().cannedRequests.find { it.id == "name-and-address-partially-stored" }!!.mdocRequest!!.toDcql(emptyList())
-        UseCase.MDL_NAME_AND_ADDRESS_ALL_STORED ->
+        Example.MDL_NAME_AND_ADDRESS_ALL_STORED ->
             DrivingLicense.getDocumentType().cannedRequests.find { it.id == "name-and-address-all-stored" }!!.mdocRequest!!.toDcql(emptyList())
-        UseCase.PHOTO_ID_MANDATORY ->
+        Example.PHOTO_ID_MANDATORY ->
             PhotoID.getDocumentType().cannedRequests.find { it.id == "mandatory" }!!.mdocRequest!!.toDcql(emptyList())
-        UseCase.PAYMENT ->
+        Example.PAYMENT ->
             DigitalPaymentCredential.getDocumentType().cannedRequests.find { it.id == "payment_transaction" }!!.mdocRequest!!.toDcql(emptyList())
-        UseCase.OPENID4VP_COMPLEX_EXAMPLE -> Json.parseToJsonElement(
+        Example.OPENID4VP_COMPLEX_EXAMPLE -> Json.parseToJsonElement(
             """
             {
               "credentials": [
@@ -653,7 +699,7 @@ private suspend fun getQueryResult(
             }
             """.trimIndent()
         ).jsonObject
-        UseCase.BOARDING_PASS_AND_MDL_EXAMPLE -> Json.parseToJsonElement(
+        Example.MDL_AND_BOARDING_PASS_EXAMPLE -> Json.parseToJsonElement(
             """
             {
               "credentials": [
@@ -689,11 +735,119 @@ private suspend fun getQueryResult(
                     { "path": ["org.multipaz.example.boarding-pass.1", "departure_time" ] }
                   ]
                 }
+              ],
+              "credential_sets": [
+                {
+                  "options": [
+                    [ "mdl", "boarding-pass" ]
+                  ]
+                }
               ]
             }
             """.trimIndent()
         ).jsonObject
-        UseCase.BOARDING_PASS_OR_MDL_EXAMPLE -> Json.parseToJsonElement(
+        Example.MDL_AND_OPTIONAL_BOARDING_PASS_EXAMPLE -> Json.parseToJsonElement(
+            """
+            {
+              "credentials": [
+                {
+                  "id": "mdl",
+                  "format": "mso_mdoc",
+                  "meta": {
+                    "doctype_value": "org.iso.18013.5.1.mDL"
+                  },
+                  "claims": [
+                    { "path": ["org.iso.18013.5.1", "family_name" ] },
+                    { "path": ["org.iso.18013.5.1", "given_name" ] },
+                    { "path": ["org.iso.18013.5.1", "birth_date" ] },
+                    { "path": ["org.iso.18013.5.1", "issue_date" ] },
+                    { "path": ["org.iso.18013.5.1", "expiry_date" ] },
+                    { "path": ["org.iso.18013.5.1", "issuing_country" ] },
+                    { "path": ["org.iso.18013.5.1", "issuing_authority" ] },
+                    { "path": ["org.iso.18013.5.1", "document_number" ] },
+                    { "path": ["org.iso.18013.5.1", "portrait" ] },
+                    { "path": ["org.iso.18013.5.1", "un_distinguishing_sign" ] }
+                  ]
+                },
+                {
+                  "id": "boarding-pass",
+                  "format": "mso_mdoc",
+                  "meta": {
+                    "doctype_value": "org.multipaz.example.boarding-pass.1"
+                  },
+                  "claims": [
+                    { "path": ["org.multipaz.example.boarding-pass.1", "passenger_name" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "seat_number" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "flight_number" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "departure_time" ] }
+                  ]
+                }
+              ],
+              "credential_sets": [
+                {
+                  "options": [
+                    [ "mdl", "boarding-pass" ],
+                    [ "mdl" ]
+                  ]
+                }
+              ]
+            }
+            """.trimIndent()
+        ).jsonObject
+        Example.MDL_AND_OPTIONAL_BOARDING_PASS_SEPARATE_USE_CASES_EXAMPLE -> Json.parseToJsonElement(
+            """
+            {
+              "credentials": [
+                {
+                  "id": "mdl",
+                  "format": "mso_mdoc",
+                  "meta": {
+                    "doctype_value": "org.iso.18013.5.1.mDL"
+                  },
+                  "claims": [
+                    { "path": ["org.iso.18013.5.1", "family_name" ] },
+                    { "path": ["org.iso.18013.5.1", "given_name" ] },
+                    { "path": ["org.iso.18013.5.1", "birth_date" ] },
+                    { "path": ["org.iso.18013.5.1", "issue_date" ] },
+                    { "path": ["org.iso.18013.5.1", "expiry_date" ] },
+                    { "path": ["org.iso.18013.5.1", "issuing_country" ] },
+                    { "path": ["org.iso.18013.5.1", "issuing_authority" ] },
+                    { "path": ["org.iso.18013.5.1", "document_number" ] },
+                    { "path": ["org.iso.18013.5.1", "portrait" ] },
+                    { "path": ["org.iso.18013.5.1", "un_distinguishing_sign" ] }
+                  ]
+                },
+                {
+                  "id": "boarding-pass",
+                  "format": "mso_mdoc",
+                  "meta": {
+                    "doctype_value": "org.multipaz.example.boarding-pass.1"
+                  },
+                  "claims": [
+                    { "path": ["org.multipaz.example.boarding-pass.1", "passenger_name" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "seat_number" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "flight_number" ] },
+                    { "path": ["org.multipaz.example.boarding-pass.1", "departure_time" ] }
+                  ]
+                }
+              ],
+              "credential_sets": [
+                {
+                  "options": [
+                    [ "mdl" ]
+                  ]
+                },
+                {
+                  "required": false,
+                  "options": [
+                    [ "boarding-pass" ]
+                  ]
+                }
+              ]
+            }
+            """.trimIndent()
+        ).jsonObject
+        Example.MDL_OR_BOARDING_PASS_EXAMPLE -> Json.parseToJsonElement(
                 """
             {
               "credentials": [
@@ -741,18 +895,32 @@ private suspend fun getQueryResult(
             }
             """.trimIndent()
             ).jsonObject
+        Example.BORDER_CROSSING_EXAMPLE,
+        Example.BORDER_CROSSING_EXAMPLE_NO_RETAIN -> null
     }
     val (requester, trustMetadata) = calculateRequester(
         certChain = certChain,
         origin = origin,
         appId = appId,
         utopiaBreweryIcon = utopiaBreweryIcon,
+        utopiaAirlinesIcon = utopiaAirlinesIcon,
         identityReaderIcon = identityReaderIcon
     )
     val source = SimplePresentmentSource(
         documentStore = documentStore!!,
         documentTypeRepository = documentTypeRepository,
         resolveTrustFn = { requester ->
+            if (requester.certChain?.certificates?.firstOrNull()?.subject?.name == "CN=Encrypted Document Receiver") {
+                if (encryptionTarget.desc == "None") {
+                    return@SimplePresentmentSource null
+                } else {
+                    return@SimplePresentmentSource TrustMetadata(
+                        displayName = encryptionTarget.desc,
+                        displayIcon = utopiaCbpIcon     // For now, assume this is the only encryption target
+                    )
+                }
+            }
+
             // If available, use dynamic metadata...
             val readerCert = requester.certChain?.certificates?.first()
             val mpzExtensionData = readerCert?.getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid)
@@ -773,17 +941,113 @@ private suspend fun getQueryResult(
         domainsMdocSignature = listOf("mdoc"),
         domainsKeyBoundSdJwt = listOf("sdjwt")
     )
-    val dcqlQuery = DcqlQuery.fromJson(dcql = dcql)
-    val transactionDataMap = when (useCase) {
-        UseCase.PAYMENT -> DigitalPaymentCredential.getDocumentType()
-            .cannedRequests.find { it.id == "payment_transaction" }!!.toTransactionDataMap("cred1")
-        else -> emptyMap()
+
+    if (dcql != null) {
+        val dcqlQuery = DcqlQuery.fromJson(dcql = dcql)
+        val transactionDataMap = when (example) {
+            Example.PAYMENT -> DigitalPaymentCredential.getDocumentType()
+                .cannedRequests.find { it.id == "payment_transaction" }!!
+                .toTransactionDataMap("cred1")
+
+            else -> emptyMap()
+        }
+        val dcqlResponse = dcqlQuery.execute(
+            presentmentSource = source,
+            transactionDataMap = transactionDataMap
+        )
+        val consentData = ConsentData.fromCredentialQueryResult(
+            credentialQueryResult = dcqlResponse,
+            source = source
+        )
+        return QueryResult(requester, source, consentData)
     }
-    val dcqlResponse = dcqlQuery.execute(
+
+    val deviceRequest = when (example) {
+        Example.MDL_US_TRANSPORTATION,
+        Example.MDL_AGE_OVER_21_AND_PORTRAIT,
+        Example.MDL_MANDATORY,
+        Example.MDL_ALL,
+        Example.MDL_NAME_AND_ADDRESS_PARTIALLY_STORED,
+        Example.MDL_NAME_AND_ADDRESS_ALL_STORED,
+        Example.PHOTO_ID_MANDATORY,
+        Example.PAYMENT,
+        Example.OPENID4VP_COMPLEX_EXAMPLE,
+        Example.MDL_AND_BOARDING_PASS_EXAMPLE,
+        Example.MDL_AND_OPTIONAL_BOARDING_PASS_EXAMPLE,
+        Example.MDL_AND_OPTIONAL_BOARDING_PASS_SEPARATE_USE_CASES_EXAMPLE,
+        Example.MDL_OR_BOARDING_PASS_EXAMPLE -> {
+            throw IllegalStateException("Already covered by DCQL")
+        }
+        Example.BORDER_CROSSING_EXAMPLE,
+        Example.BORDER_CROSSING_EXAMPLE_NO_RETAIN -> {
+            val intentToRetain = example != Example.BORDER_CROSSING_EXAMPLE_NO_RETAIN
+            val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+            val documentEncryptionKey = Crypto.createEcPrivateKey(EcCurve.P256)
+            val now = Clock.System.now()
+            val documentEncryptionKeyCertification = buildX509Cert(
+                publicKey = documentEncryptionKey.publicKey,
+                signingKey = AsymmetricKey.anonymous(documentEncryptionKey, documentEncryptionKey.curve.defaultSigningAlgorithm),
+                serialNumber = ASN1Integer(1L),
+                subject = X500Name.fromName("CN=Encrypted Document Receiver"),
+                issuer = X500Name.fromName("CN=Encrypted Document Receiver"),
+                validFrom = (now - 1.hours).truncateToWholeSeconds(),
+                validUntil = (now + 1.hours).truncateToWholeSeconds()
+            ) {
+                includeSubjectKeyIdentifier()
+                setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+                setBasicConstraints(true, null)
+            }
+
+            buildDeviceRequest(
+                sessionTranscript = sessionTranscript,
+            ) {
+                addDocRequest(
+                    docType = PhotoID.PHOTO_ID_DOCTYPE,
+                    nameSpaces = mapOf(
+                        PhotoID.ISO_23220_2_NAMESPACE to mapOf(
+                            "given_name" to intentToRetain,
+                            "family_name" to intentToRetain,
+                            "portrait" to intentToRetain
+                        )
+                    ),
+                )
+                addDocRequest(
+                    docType = PhotoID.PHOTO_ID_DOCTYPE,
+                    nameSpaces = mapOf(
+                        PhotoID.DATAGROUPS_NAMESPACE to mapOf(
+                            "sod" to intentToRetain,
+                            "dg1" to intentToRetain,
+                            "dg2" to intentToRetain,
+                        )
+                    ),
+                    docRequestInfo = DocRequestInfo(
+                        docResponseEncryption = EncryptionParameters.fromValues(
+                            recipientPublicKey = documentEncryptionKey.publicKey,
+                            recipientCertificates = listOf(documentEncryptionKeyCertification)
+                        )
+                    ),
+                )
+                setDeviceRequestInfo(DeviceRequestInfo(
+                    useCases = listOf(UseCase(
+                        mandatory = true,
+                        documentSets = listOf(
+                            DocumentSet(docRequestIds = listOf(0, 1))
+                        ),
+                        purposeHints = emptyMap()
+                    ))
+                ))
+            }
+        }
+    }
+    val iso18013Response = deviceRequest.execute(
         presentmentSource = source,
-        transactionDataMap = transactionDataMap
+        keyAgreementPossible = emptyList()
     )
-    return QueryResult(requester, source, dcqlResponse)
+    val consentData = ConsentData.fromCredentialQueryResult(
+        credentialQueryResult = iso18013Response,
+        source = source
+    )
+    return QueryResult(requester, source, consentData)
 }
 
 private suspend fun calculateRequester(
@@ -791,6 +1055,7 @@ private suspend fun calculateRequester(
     origin: Origin,
     appId: AppId,
     utopiaBreweryIcon: ByteString,
+    utopiaAirlinesIcon: ByteString,
     identityReaderIcon: ByteString
 ): Pair<Requester, TrustMetadata?> {
     val now = Clock.System.now().truncateToWholeSeconds()
@@ -858,6 +1123,16 @@ private suspend fun calculateRequester(
                     displayName = "Utopia Brewery",
                     displayIcon = utopiaBreweryIcon,
                     privacyPolicyUrl = null,
+                ),
+                readerCertWithoutGoogleAccount
+            )
+        }
+        CertChain.CERT_CHAIN_UTOPIA_AIRLINES -> {
+            Pair(
+                TrustMetadata(
+                    displayName = "Utopia Airlines",
+                    displayIcon = utopiaAirlinesIcon,
+                    privacyPolicyUrl = "https://apps.multipaz.org",
                 ),
                 readerCertWithoutGoogleAccount
             )
@@ -944,6 +1219,14 @@ private suspend fun addCredentialsForOpenID4VPComplexExample(
         dsKey = dsKey,
     )
     addCredCompanyRewards(
+        documentStore = documentStore,
+        secureArea = secureArea,
+        signedAt = signedAt,
+        validFrom = validFrom,
+        validUntil = validUntil,
+        dsKey = dsKey,
+    )
+    addCredCompanyRewards2(
         documentStore = documentStore,
         secureArea = secureArea,
         signedAt = signedAt,
@@ -1091,6 +1374,28 @@ private suspend fun addCredCompanyRewards(
         vct = "https://company.example/company_rewards",
         data = listOf(
             "rewards_number" to JsonPrimitive(24601),
+        ),
+        secureArea = secureArea,
+        signedAt = signedAt,
+        validFrom = validFrom,
+        validUntil = validUntil,
+        dsKey = dsKey,
+    )
+}
+
+private suspend fun addCredCompanyRewards2(
+    documentStore: DocumentStore,
+    secureArea: SecureArea,
+    signedAt: Instant,
+    validFrom: Instant,
+    validUntil: Instant,
+    dsKey: AsymmetricKey,
+) {
+    documentStore.provisionSdJwtVc(
+        displayName = "my-other-reward-card",
+        vct = "https://company.example/company_rewards",
+        data = listOf(
+            "rewards_number" to JsonPrimitive(42),
         ),
         secureArea = secureArea,
         signedAt = signedAt,

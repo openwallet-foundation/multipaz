@@ -43,7 +43,7 @@ import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.dcql.DcqlQuery
 import org.multipaz.presentment.CredentialMatchSourceIso18013
-import org.multipaz.presentment.CredentialPresentmentData
+import org.multipaz.presentment.CredentialQueryResult
 import org.multipaz.presentment.CredentialPresentmentSet
 import org.multipaz.presentment.CredentialPresentmentSetOption
 import org.multipaz.presentment.CredentialPresentmentSetOptionMember
@@ -492,7 +492,7 @@ data class DeviceRequest private constructor(
     /**
      * Executes the ISO 18013-5 request against a [PresentmentSource].
      *
-     * If successful, this returns a [CredentialPresentmentData] which can be used in
+     * If successful, this returns a [CredentialQueryResult] which can be used in
      * an user interface for the user to select which combination of credentials to return, see
      * [Consent] composable in `multipaz-compose` and [Consent] view in `multipaz-swift` for examples
      * of how to do this.
@@ -502,14 +502,14 @@ data class DeviceRequest private constructor(
      * @param presentmentSource the [PresentmentSource] to use as a source of truth for presentment.
      * @param keyAgreementPossible if non-empty, a credential using Key Agreement may be returned provided
      *   its private key is using one of the given curves.
-     * @return the resulting [CredentialPresentmentData] if the query was successful.
+     * @return the resulting [CredentialQueryResult] if the query was successful.
      * @throws [Iso18015ResponseException] if it's not possible satisfy the query.
      */
     @Throws(Iso18015ResponseException::class, CancellationException::class)
     suspend fun execute(
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve> = emptyList(),
-    ): CredentialPresentmentData {
+    ): CredentialQueryResult {
         // First find all matches for all DocRequests
         val docRequestResults = docRequests.map { docRequest ->
             findMatchesForDocRequest(
@@ -599,7 +599,7 @@ data class DeviceRequest private constructor(
             }
         }
 
-        return CredentialPresentmentData(credentialSets)
+        return CredentialQueryResult(credentialSets)
     }
 
     private suspend fun findMatchesForDocRequest(

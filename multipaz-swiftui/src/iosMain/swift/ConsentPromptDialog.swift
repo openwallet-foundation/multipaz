@@ -2,7 +2,7 @@ import SwiftUI
 
 private struct ConsentPromptDialogData: Identifiable, Equatable {
     let id = UUID()
-    let state: PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, CredentialPresentmentSelection>
+    let state: PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, CredentialSelection>
 }
 
 struct ConsentPromptDialog: View {
@@ -18,10 +18,10 @@ struct ConsentPromptDialog: View {
         VStack {}
             .task {
                 for await state in model.dialogState {
-                    if state is PromptDialogModelNoDialogState<ConsentPromptDialogModel.ConsentPromptRequest, CredentialPresentmentSelection> {
+                    if state is PromptDialogModelNoDialogState<ConsentPromptDialogModel.ConsentPromptRequest, CredentialSelection> {
                         data = nil
-                    } else if state is PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, CredentialPresentmentSelection> {
-                        data = ConsentPromptDialogData(state: state as! PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, CredentialPresentmentSelection>)
+                    } else if state is PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, CredentialSelection> {
+                        data = ConsentPromptDialogData(state: state as! PromptDialogModelDialogShownState<ConsentPromptDialogModel.ConsentPromptRequest, CredentialSelection>)
                     }
                 }
             }
@@ -32,7 +32,7 @@ struct ConsentPromptDialog: View {
             }
             .sheet(item: $data) { data in
                 Consent(
-                    credentialPresentmentData: data.state.parameters!.credentialPresentmentData,
+                    consentData: data.state.parameters!.consentData,
                     requester: data.state.parameters!.requester,
                     trustMetadata: data.state.parameters!.trustMetadata,
                     onConfirm: { selection in

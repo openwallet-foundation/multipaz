@@ -28,10 +28,23 @@
     <string name="credential_presentment_button_share">Share</string>
     <string name="credential_presentment_headline_share_with_unknown_requester">Unknown requester</string>
     <string name="credential_presentment_headline_share_with_unknown_website">Unknown website</string>
+
     <string name="credential_presentment_share_with_known_requester">This data will be shared with %1$s:</string>
     <string name="credential_presentment_share_with_unknown_requester">This data will be shared:</string>
+
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s is requesting this data on behalf of an unknown party:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">This data is requested on behalf of an unknown party:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s is requesting this data on behalf of %2$s:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">This data is requested on behalf of %1$s:</string>
+
     <string name="credential_presentment_share_and_stored_by_known_requester">This data will be stored by %1$s:</string>
     <string name="credential_presentment_share_and_stored_by_unknown_requester">This data will be stored:</string>
+
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s is requesting this data on behalf of an unknown party who will store it:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">This data is requested this data on behalf of an unknown party who will store it:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s is requesting this data on behalf of %2$s who will store it:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">This data is requested on behalf of %1$s who will store it:</string>
+
     <string name="credential_presentment_warning_verifier_not_in_trust_list">The identity reader requesting this data is unknown. Make sure you are comfortable sharing this data</string>
     <string name="credential_presentment_warning_verifier_not_in_trust_list_anonymous">The identity reader requesting this data is anonymous. Make sure you are comfortable sharing this data</string>
     <string name="credential_presentment_warning_verifier_not_in_trust_list_website">The website requesting this data is unknown. Make sure you are comfortable sharing this data</string>
@@ -44,7 +57,11 @@
     <string name="credential_presentment_verifier_icon_description">Verifier icon</string>
     <string name="credential_presentment_data_element_icon_description">Data element icon</string>
     <string name="credential_presentment_warning_icon_description">Warning icon</string>
-    <string name="credential_presentment_select_document">Select document</string>
+    <string name="credential_presentment_select_option">Select what to share</string>
+    <string name="credential_presentment_share_something_else">Share something else…</string>
+    <string name="credential_presentment_not_sharing_any_document">Share something…</string>
+    <string name="credential_presentment_dont_return_any_document">Don't share anything</string>
+    <string name="credential_presentment_no_document_returned">No document returned</string>
     <string name="credential_presentment_requester_information">Requester information</string>
     <string name="credential_presentment_transaction_data">Includes transaction data:</string>
 

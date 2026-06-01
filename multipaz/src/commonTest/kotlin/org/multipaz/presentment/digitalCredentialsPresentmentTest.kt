@@ -138,7 +138,7 @@ class DigitalCredentialsPresentmentTest {
     }
 
     private data class ShownConsentPrompt(
-        val credentialPresentmentData: CredentialPresentmentData,
+        val credentialQueryResult: CredentialQueryResult,
         val preselectedDocuments: List<Document>,
         val requester: Requester,
         val trustPoint: TrustPoint?

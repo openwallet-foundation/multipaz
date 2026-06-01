@@ -454,6 +454,8 @@ object PhotoID {
 
         // Data elements from ISO/IEC 23220-4 Table C.3 — Data elements defined by ICAO 9303 part 10
         //
+        // TODO: replace sampleValue with real data from the sample docs used in test event
+        //
         addMdocAttribute(
             type = DocumentAttributeType.String,
             identifier = "version",
@@ -472,7 +474,7 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = byteArrayOf(1, 2, 3).toDataItem()
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -482,7 +484,7 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = byteArrayOf(1, 2, 3).toDataItem()
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -492,7 +494,7 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = byteArrayOf(1, 2, 3).toDataItem()
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,
@@ -502,7 +504,7 @@ object PhotoID {
             mandatory = false,
             mdocNamespace = DATAGROUPS_NAMESPACE,
             icon = Icon.NUMBERS,
-            sampleValue = null
+            sampleValue = byteArrayOf(1, 2, 3).toDataItem()
         )
         addMdocAttribute(
             type = DocumentAttributeType.Blob,

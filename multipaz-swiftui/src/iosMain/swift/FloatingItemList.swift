@@ -4,6 +4,10 @@ import SwiftUI
 ///
 /// The list is styled as a rounded card with a subtle shadow. The spacing between the items
 /// exposes the background color, creating a natural divider effect between each row.
+///
+/// The list is rendered to appear raised above the parent container. When using this view,
+/// make sure to leave 10 padding around it (top and sides) and 20 at the bottom, to leave
+/// enough room for its shadow.
 public struct FloatingItemList<Content: View>: View {
 
     /// An optional title displayed above the list container.

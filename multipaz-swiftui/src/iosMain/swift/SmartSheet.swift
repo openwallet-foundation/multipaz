@@ -33,6 +33,12 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
     /// Pass `.infinity` to allow the sheet to grow to the maximum available screen height.
     public var maxHeight: CGFloat
     
+    /// Whether to apply presentation detents based on the calculated height.
+    public var updateDetents: Bool
+    
+    /// Optional binding to propagate the calculated height to a parent view.
+    public var heightBinding: Binding<CGFloat>?
+    
     private let header: () -> Header
     private let content: () -> Content
     private let footer: (Bool, @escaping () -> Void) -> Footer
@@ -56,9 +62,7 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
     /// The height of the top safe area (e.g. Navigation Bar) imposed by the parent.
     @State private var topSafeAreaHeight: CGFloat = 0
     
-    // MARK: - Scroll State
-    
-    /// The current vertical scroll offset.
+    /// The vertical scroll offset.
     @State private var currentScrollY: CGFloat = 0
     
     /// The height of the visible scroll window.
@@ -75,6 +79,8 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
     /// - Parameters:
     ///   - maxHeight: The limit for the sheet's height. Defaults to 500.
     ///                Pass `.infinity` to let the sheet fill the screen if needed.
+    ///   - updateDetents: Whether to automatically apply detents to the sheet. Defaults to true.
+    ///   - heightBinding: Optional binding to publish the computed detent height to a parent container.
     ///   - header: A fixed view pinned to the top of the sheet.
     ///   - content: The scrollable content.
     ///   - footer: A fixed view pinned to the bottom. The closure receives:
@@ -82,11 +88,15 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
     ///     - `scrollDown`: A function to scroll the view down by one page (90% of visible height).
     public init(
         maxHeight: CGFloat = 500,
+        updateDetents: Bool = true,
+        heightBinding: Binding<CGFloat>? = nil,
         @ViewBuilder header: @escaping () -> Header,
         @ViewBuilder content: @escaping () -> Content,
         @ViewBuilder footer: @escaping (Bool, @escaping () -> Void) -> Footer
     ) {
         self.maxHeight = maxHeight
+        self.updateDetents = updateDetents
+        self.heightBinding = heightBinding
         self.header = header
         self.content = content
         self.footer = footer
@@ -112,7 +122,7 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
     }
     
     public var body: some View {
-        VStack(spacing: 0) {
+        let sheetContent = VStack(spacing: 0) {
             // 1. Measure Header
             header()
                 .measureSize { headerHeight = $0.height }
@@ -160,13 +170,22 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
         .background(
             GeometryReader { proxy in
                 Color.clear
-                    .onAppear { topSafeAreaHeight = proxy.safeAreaInsets.top }
-                    .onChange(of: proxy.safeAreaInsets) { topSafeAreaHeight = $0.top }
+                    .onAppear {
+                        if updateDetents || heightBinding != nil {
+                            topSafeAreaHeight = proxy.safeAreaInsets.top
+                        }
+                    }
+                    .onChange(of: proxy.safeAreaInsets) { insets in
+                        if updateDetents || heightBinding != nil {
+                            topSafeAreaHeight = insets.top
+                        }
+                    }
             }
         )
         // 5. Calculate Final Height
         // We do this in .onChange rather than a computed var to filter out "0" flickers
         .onChange(of: headerHeight + contentHeight + footerHeight + topSafeAreaHeight) {
+             guard updateDetents || heightBinding != nil else { return }
              let newTotal = headerHeight + contentHeight + footerHeight + topSafeAreaHeight
              
              // FILTER: Ignore 0 or invalid heights to prevent the "fallback loop"
@@ -180,12 +199,18 @@ public struct SmartSheet<Header: View, Content: View, Footer: View>: View {
                  // Dispatch to next runloop to ensure we aren't updating State during View render
                  DispatchQueue.main.async {
                      presentationHeight = constrained
+                     heightBinding?.wrappedValue = constrained
                  }
              }
         }
-        // Apply the calculated height as a fixed detent
-        .presentationDetents([.height(presentationHeight)])
-        .presentationDragIndicator(.visible)
+
+        if updateDetents {
+            sheetContent
+                .presentationDetents([.height(presentationHeight)])
+                .presentationDragIndicator(.visible)
+        } else {
+            sheetContent
+        }
     }
 }
 

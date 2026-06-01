@@ -1,5 +1,6 @@
 package org.multipaz.documenttype
 
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
@@ -72,4 +73,13 @@ data class MdocCannedRequest(
             }
         }
     }
+
+    /**
+     * Generates DCQL for the request.
+     *
+     * @param zkSystemSpecs list of Zero-Knowledge system specs that can handle the request; only
+     *   used when [useZkp] is `true`.
+     * @return a string with serialized [JsonObject] with the DCQL for the request.
+     */
+    fun toDcqlString(zkSystemSpecs: List<ZkSystemSpec>) = Json.encodeToString(toDcql(zkSystemSpecs))
 }

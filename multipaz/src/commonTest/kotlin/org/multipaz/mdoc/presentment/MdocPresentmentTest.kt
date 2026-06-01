@@ -1,7 +1,6 @@
 package org.multipaz.mdoc.presentment
 
 import kotlinx.coroutines.test.runTest
-import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.jsonPrimitive
@@ -17,6 +16,8 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.X509KeyUsage
+import org.multipaz.crypto.buildX509Cert
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.SampleData
@@ -27,18 +28,22 @@ import org.multipaz.mdoc.request.EncryptionParameters
 import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.util.MdocUtil
+import org.multipaz.presentment.ConsentData
 import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.presentment.mdocPresentment
+import org.multipaz.presentment.prettyPrint
 import org.multipaz.sdjwt.SdJwtKb
+import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.truncateToWholeSeconds
 import org.multipaz.util.zlibInflate
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 
 class MdocPresentmentTest {
 
@@ -51,8 +56,29 @@ class MdocPresentmentTest {
         val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
 
         val encryptionKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now()
+        val encryptionKeyCertification = buildX509Cert(
+            publicKey = encryptionKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(encryptionKey, encryptionKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Encrypted Document Receiver"),
+            issuer = X500Name.fromName("CN=Encrypted Document Receiver"),
+            validFrom = (now - 1.hours).truncateToWholeSeconds(),
+            validUntil = (now + 1.hours).truncateToWholeSeconds()
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+        harness.readerTrustManager.addX509Cert(
+            certificate = encryptionKeyCertification,
+            metadata = TrustMetadata(
+                displayName = "Encrypted Document Receiver"
+            )
+        )
         val encryptionParameters = EncryptionParameters.fromValues(
             recipientPublicKey = encryptionKey.publicKey,
+            recipientCertificates = listOf(encryptionKeyCertification)
         )
 
         val deviceRequest = buildDeviceRequest(
@@ -122,6 +148,54 @@ class MdocPresentmentTest {
         assertContentEquals(
             SampleData.PORTRAIT_BASE64URL.fromBase64Url(),
             decryptedDocuments.documents[0].issuerNamespaces.data[DrivingLicense.MDL_NAMESPACE]!!["portrait"]!!.dataElementValue.asBstr
+        )
+
+        // Check that converting to ConsentData includes the Encrypted Receiver...
+        val cd = ConsentData.fromCredentialQueryResult(
+            credentialQueryResult = deviceRequest.execute(
+                presentmentSource = harness.presentmentSource,
+            ),
+            source = harness.presentmentSource
+        )
+        assertEquals(
+            """
+                useCases:
+                  useCase:
+                    optional: false
+                      solution:
+                        credential:
+                          encryptionRequested: false
+                          encryptionTargetTrustMetadata: null
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: mDL
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: given_name
+                                  displayName: Given names
+                                  value: Erika
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: family_name
+                                  displayName: Family name
+                                  value: Mustermann
+                        credential:
+                          encryptionRequested: true
+                          encryptionTargetTrustMetadata: TrustMetadata(displayName=Encrypted Document Receiver, displayIcon=null, displayIconUrl=null, privacyPolicyUrl=null, disclaimer=null, testOnly=false, extensions={})
+                          match:
+                            credential:
+                              type: MdocCredential
+                              docId: mDL
+                              claims:
+                                claim:
+                                  nameSpace: org.iso.18013.5.1
+                                  dataElement: portrait
+                                  displayName: Photo of holder
+                                  value: Image (5318 bytes)
+            """.trimIndent().trim(),
+            cd.prettyPrint().trim()
         )
     }
 

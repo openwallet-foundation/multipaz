@@ -106,7 +106,7 @@ internal fun CredentialPresentmentSet.print(pp: PrettyPrinter) {
     pp.popIndent()
 }
 
-internal fun CredentialPresentmentData.prettyPrint(): String {
+internal fun CredentialQueryResult.prettyPrint(): String {
     val pp = PrettyPrinter()
     pp.append("credentialSets:")
     pp.pushIndent()
@@ -121,7 +121,7 @@ internal fun CredentialPresentmentData.prettyPrint(): String {
     return pp.toString()
 }
 
-internal fun CredentialPresentmentSelection.print(pp: PrettyPrinter): String {
+internal fun CredentialSelection.print(pp: PrettyPrinter): String {
     pp.append("matches:")
     pp.pushIndent()
     if (matches.size == 0) {
@@ -134,12 +134,12 @@ internal fun CredentialPresentmentSelection.print(pp: PrettyPrinter): String {
     pp.popIndent()
     return pp.toString()
 }
-internal fun CredentialPresentmentSelection.prettyPrint(): String {
+internal fun CredentialSelection.prettyPrint(): String {
     val pp = PrettyPrinter()
     return print(pp)
 }
 
-internal fun List<CredentialPresentmentSelection>.prettyPrint(): String {
+internal fun List<CredentialSelection>.prettyPrint(): String {
     val pp = PrettyPrinter()
     pp.append("selections:")
     pp.pushIndent()
@@ -148,6 +148,59 @@ internal fun List<CredentialPresentmentSelection>.prettyPrint(): String {
     } else {
         for (element in this) {
             element.print(pp)
+        }
+    }
+    pp.popIndent()
+    return pp.toString()
+}
+
+internal fun ConsentCredential.print(pp: PrettyPrinter) {
+    pp.append("credential:")
+    pp.pushIndent()
+    pp.append("encryptionRequested: $encryptionRequested")
+    pp.append("encryptionTargetTrustMetadata: $encryptionTargetTrustMetadata")
+    match.print(pp)
+    pp.popIndent()
+}
+
+internal fun ConsentUseCaseSolution.print(pp: PrettyPrinter) {
+    pp.append("solution:")
+    pp.pushIndent()
+    if (credentials.isEmpty()) {
+        pp.append("<empty>")
+    } else {
+        for (credential in credentials) {
+            credential.print(pp)
+        }
+    }
+    pp.popIndent()
+}
+
+internal fun ConsentUseCase.print(pp: PrettyPrinter) {
+    pp.append("useCase:")
+    pp.pushIndent()
+    pp.append("optional: $optional")
+    pp.pushIndent()
+    if (solutions.isEmpty()) {
+        pp.append("<empty>")
+    } else {
+        for (solution in solutions) {
+            solution.print(pp)
+        }
+    }
+    pp.popIndent()
+    pp.popIndent()
+}
+
+internal fun ConsentData.prettyPrint(): String {
+    val pp = PrettyPrinter()
+    pp.append("useCases:")
+    pp.pushIndent()
+    if (useCases.isEmpty()) {
+        pp.append("<empty>")
+    } else {
+        for (useCase in useCases) {
+            useCase.print(pp)
         }
     }
     pp.popIndent()
