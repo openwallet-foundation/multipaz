@@ -18,6 +18,7 @@ import org.multipaz.records.data.tokenToId
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.SimpleCipher
+import org.multipaz.server.common.ServerException
 import org.multipaz.util.fromBase64Url
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -44,10 +45,10 @@ suspend fun token(call: ApplicationCall) {
                 throw InvalidRequestException("'code' parameter expired")
             }
             val codeVerifier = parameters["code_verifier"]
-                ?: throw InvalidRequestException("'code_verifier' parameter missing")
+                ?: throw ServerException("invalid_grant", "'code_verifier' parameter missing")
             val digest = ByteString(Crypto.digest(Algorithm.SHA256, codeVerifier.toByteArray()))
             if (authorizationData.codeChallenge != digest) {
-                throw InvalidRequestException("authorization: bad code_verifier")
+                throw ServerException("invalid_grant", "authorization: bad code_verifier")
             }
             authorizationData.qualifiedId
         }

@@ -8,8 +8,6 @@ import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.utils.io.CancellationException
 import kotlin.time.Clock
-import kotlinx.serialization.json.addJsonObject
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
@@ -143,7 +141,7 @@ suspend fun authorizePost(call: ApplicationCall) {
     } catch (err: Exception) {
         val (error, description) = when (err) {
             is InvalidRequestException -> Pair("invalid_request", err.message)
-            is AuthorizationFailed -> Pair("authorization_failed", "Invalid credentials")
+            is AuthorizationFailed -> Pair("access_denied", "Invalid credentials")
             else -> Pair("internal",
                 (err::class.simpleName ?: "Unknown") + ": " + err.message)
         }

@@ -5,7 +5,6 @@ import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
-import io.ktor.client.request.request
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -23,6 +22,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -39,6 +39,7 @@ import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.openid4vci.credential.CredentialDisplay
 import org.multipaz.webtoken.ChallengeInvalidException
@@ -59,6 +60,7 @@ import org.multipaz.openid4vci.util.SystemOfRecordAccess
 import org.multipaz.openid4vci.util.respondWithNewDPoPNonce
 import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.rpc.backend.Configuration
+import org.multipaz.server.common.ServerException
 import org.multipaz.server.enrollment.ServerIdentity
 import org.multipaz.server.enrollment.validateServerIdentityCertificateChain
 import org.multipaz.util.toBase64Url
@@ -91,10 +93,31 @@ suspend fun credential(call: ApplicationCall) {
 
     val requestString = call.receiveText()
     val json = Json.parseToJsonElement(requestString) as JsonObject
-    val format = CredentialFormat.fromJson(json)
-    val factory = registry.byId.values.find { factory ->
-        (format == null || factory.format == format) && factory.scope == state.scope
+
+    val credentialConfigurationId = (json["credential_configuration_id"] as? JsonPrimitive)?.content
+    val credentialIdentifier = (json["credential_identifier"] as? JsonPrimitive)?.content
+
+    val factory = if (credentialConfigurationId != null) {
+        if (credentialIdentifier != null) {
+            throw InvalidRequestException(
+                "both 'credential_configuration_id' and 'credential_identifier' are specified")
+        }
+        registry.byId[credentialConfigurationId]
+            ?: throw ServerException("unknown_credential_configuration",
+                "credential_configuration_id '$credentialConfigurationId' is not known")
+    } else if (credentialIdentifier != null) {
+        // We do not (yet) use credential_identifier
+        throw ServerException("unknown_credential_identifier",
+            "credential_identifier '$credentialIdentifier' is not known")
+    } else {
+        // Legacy, we should throw an error in the future
+        Logger.e(TAG, "Neither 'credential_configuration_id' nor 'credential_identifier' in credential request")
+        val format = CredentialFormat.fromJson(json)
+        registry.byId.values.find { factory ->
+            (format == null || factory.format == format) && factory.scope == state.scope
+        }
     }
+
     if (factory == null) {
         throw IllegalStateException(
             "No credential can be created for scope '${state.scope}' and the given format")
@@ -104,9 +127,14 @@ suspend fun credential(call: ApplicationCall) {
 
     val credentialData = readSystemOfRecord(id, state)
 
-    val display = factory.display(credentialData)
-    val locale = BackendEnvironment.getInterface(Configuration::class)!!
-        .getValue("issuer_locale") ?: "en-US"
+    val configuration = BackendEnvironment.getInterface(Configuration::class)!!
+
+    val display = if (configuration.getValue("credential_display") != "false") {
+        factory.display(credentialData)
+    } else {
+        null
+    }
+    val locale = configuration.getValue("issuer_locale") ?: "en-US"
 
     val signingKey = factory.getSigningKey()
     if (factory.cryptographicBindingMethods.isEmpty()) {
@@ -150,7 +178,7 @@ suspend fun credential(call: ApplicationCall) {
     val proofType: String
     if (proofsObj == null) {
         val proof = json["proof"]
-            ?: throw InvalidRequestException("neither 'proof' or 'proofs' parameter provided")
+            ?: throw ServerException("invalid_proof","neither 'proof' or 'proofs' parameter provided")
         proofType = proof.jsonObject["proof_type"]?.jsonPrimitive?.content!!
         proofs = buildJsonArray { add(proof.jsonObject[proofType]!!) }
     } else {
@@ -174,7 +202,8 @@ suspend fun credential(call: ApplicationCall) {
     val authenticationKeysAndIds = when (proofType) {
         "attestation" -> {
             proofs.flatMap { proof ->
-                val body = validateJwt(
+                val body = try {
+                    validateJwt(
                         jwt = proof.jsonPrimitive.content,
                         jwtName = "Key attestation",
                         publicKey = null,
@@ -187,6 +216,13 @@ suspend fun credential(call: ApplicationCall) {
                                 ServerIdentity.KEY_ATTESTATION, chain, instant)
                         }
                     )
+                } catch (err: IllegalArgumentException) {
+                    if (err.cause is SignatureVerificationException) {
+                        throw ServerException("invalid_proof", err.message ?: "", err.cause)
+                    } else {
+                        throw err
+                    }
+                }
                 nonceManager.checkAndConsumeCredentialNonce(body["nonce"]!!.jsonPrimitive.content)
                 body["attested_keys"]!!.jsonArray.map { key ->
                     val publicKey = EcPublicKey.fromJwk(key.jsonObject)
@@ -205,15 +241,19 @@ suspend fun credential(call: ApplicationCall) {
             var expectedNonce: ByteString? = null
             proofs.map { proof ->
                 val chain = X509CertChain.fromX5c(proof)
-                val nonce = validateAndroidKeyAttestation(
-                    chain = chain,
-                    challenge = null,
-                    requireGmsAttestation = true,
-                    requireVerifiedBootGreen = true,
-                    requireKeyMintSecurityLevel = factory.keyMintSecurityLevel,
-                    requireAppSignatureCertificateDigests = setOf(),
-                    requireAppPackages = setOf()
-                )
+                val nonce = try {
+                    validateAndroidKeyAttestation(
+                        chain = chain,
+                        challenge = null,
+                        requireGmsAttestation = true,
+                        requireVerifiedBootGreen = true,
+                        requireKeyMintSecurityLevel = factory.keyMintSecurityLevel,
+                        requireAppSignatureCertificateDigests = setOf(),
+                        requireAppPackages = setOf()
+                    )
+                } catch (err: IllegalStateException) {
+                    throw ServerException("invalid_proof", err.message ?: "", err.cause)
+                }
                 // All nonce values must be the same. Validate the first one and ensure that
                 // the rest of them match the first one.
                 if (expectedNonce == null) {
@@ -244,15 +284,23 @@ suspend fun credential(call: ApplicationCall) {
                 val head = Json.parseToJsonElement(String(parts[0].fromBase64Url())) as JsonObject
                 val jwk = head["jwk"]!!.jsonObject
                 val authenticationKey = EcPublicKey.fromJwk(jwk)
-                val body = validateJwt(
-                    jwt = proof.jsonPrimitive.content,
-                    jwtName = "Proof of Possession",
-                    publicKey = authenticationKey,
-                    checks = mapOf(
-                        WebTokenCheck.TYP to "openid4vci-proof+jwt",
-                        WebTokenCheck.AUD to baseUrl
+                val body = try {
+                    validateJwt(
+                        jwt = proof.jsonPrimitive.content,
+                        jwtName = "Proof of Possession",
+                        publicKey = authenticationKey,
+                        checks = mapOf(
+                            WebTokenCheck.TYP to "openid4vci-proof+jwt",
+                            WebTokenCheck.AUD to baseUrl
+                        )
                     )
-                )
+                } catch (err: IllegalArgumentException) {
+                    if (err.cause is SignatureVerificationException) {
+                        throw ServerException("invalid_proof", err.message ?: "", err.cause)
+                    } else {
+                        throw err
+                    }
+                }
                 val nonce = body["nonce"]!!.jsonPrimitive.content
                 if (expectedNonce == null) {
                     expectedNonce = nonce

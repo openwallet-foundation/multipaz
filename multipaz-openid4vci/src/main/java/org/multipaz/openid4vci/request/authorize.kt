@@ -23,7 +23,6 @@ import kotlinx.serialization.json.put
 import org.multipaz.cbor.Cbor
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcCurve
 import org.multipaz.document.NameSpacedData
 import org.multipaz.documenttype.knowntypes.EUPersonalID
@@ -110,10 +109,6 @@ suspend fun authorizeGet(call: ApplicationCall) {
         getHtml(id, AUTHORIZATION_TIMEOUT, call)
     }
 }
-
-internal data class RecordsClient(
-    val signingKey: AsymmetricKey
-)
 
 private suspend fun authorizeUsingSystemOfRecord(
     id: String,
@@ -284,7 +279,7 @@ suspend fun authorizePost(call: ApplicationCall)  {
     } catch (err: Exception) {
         val (error, description) = when (err) {
             is InvalidRequestException -> Pair("invalid_request", err.message)
-            is AuthorizationFailed -> Pair("authorization_failed", "Invalid credentials")
+            is AuthorizationFailed -> Pair("access_denied", "Invalid credentials")
             else -> Pair("internal",
                 (err::class.simpleName ?: "Unknown") + ": " + err.message)
         }

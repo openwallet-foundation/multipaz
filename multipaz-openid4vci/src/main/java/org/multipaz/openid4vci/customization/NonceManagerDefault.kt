@@ -5,6 +5,7 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.backend.getTable
 import org.multipaz.rpc.handler.InvalidRequestException
+import org.multipaz.server.common.ServerException
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.Logger
 import org.multipaz.webtoken.Challenge
@@ -41,7 +42,7 @@ object NonceManagerDefault: NonceManager {
     override suspend fun checkAndConsumeCredentialNonce(nonce: String) {
         val table = BackendEnvironment.getTable(credentialChallengeTableSpec)
         if (!table.delete(nonce)) {
-            throw InvalidRequestException("Expired or invalid c_nonce")
+            throw ServerException("invalid_nonce", "Expired or invalid c_nonce")
         }
     }
 

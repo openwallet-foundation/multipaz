@@ -111,12 +111,23 @@ fun Application.installServerEnvironment(
             } catch (err: CancellationException) {
                 throw err
             } catch (err: InvalidRequestException) {
-                Logger.e(TAG, "Error", err)
+                Logger.e(TAG, "Error invalid_request: ${err.message}", err)
                 err.printStackTrace()
                 call.respondText(
                     status = HttpStatusCode.BadRequest,
                     text = buildJsonObject {
                         put("error", "invalid_request")
+                        put("error_description", err.message ?: "")
+                    }.toString(),
+                    contentType = ContentType.Application.Json
+                )
+            } catch (err: ServerException) {
+                Logger.e(TAG, "Error ${err.code}: ${err.message}", err)
+                err.printStackTrace()
+                call.respondText(
+                    status = HttpStatusCode.BadRequest,
+                    text = buildJsonObject {
+                        put("error", err.code)
                         put("error_description", err.message ?: "")
                     }.toString(),
                     contentType = ContentType.Application.Json
@@ -170,7 +181,9 @@ private val RESPONSE_COPY_KEY = AttributeKey<String>("RESPONSE_COPY_KEY")
 
 private fun Application.traceCalls(configuration: ServerConfiguration) {
     val traceFile = configuration.getValue("server_trace_file") ?: return
-    install(DoubleReceive)
+    install(DoubleReceive) {
+        cacheRawRequest = true
+    }
     val traceStream = if (traceFile == "-") {
         OutputStreamWriter(System.out)
     } else {

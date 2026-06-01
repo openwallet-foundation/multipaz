@@ -14,14 +14,17 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Uint
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.openid4vci.credential.CredentialFactoryRegistry
 import org.multipaz.openid4vci.customization.NonceManager
 import org.multipaz.rpc.backend.BackendEnvironment
@@ -33,6 +36,7 @@ import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import org.multipaz.webtoken.validateJwt
 import org.multipaz.rpc.backend.Configuration
+import org.multipaz.server.common.ServerException
 import org.multipaz.server.common.baseUrl
 import org.multipaz.server.enrollment.ServerIdentity
 import org.multipaz.server.enrollment.validateServerIdentityCertificateChain
@@ -149,7 +153,10 @@ suspend fun respondWithNewDPoPNonce(call: ApplicationCall, nonces: NonceManager.
         call.response.header("OAuth-Client-Attestation-Challenge", it)
     }
     call.response.header("WWW-Authenticate", "DPoP error=\"use_dpop_nonce\"")
-    call.respondText(status = HttpStatusCode.Unauthorized, text = "")
+    call.respondText(status = HttpStatusCode.Unauthorized, text = buildJsonObject {
+        put("error", "access_denied")
+        put("error_description", "Use fresh DPoP nonce")
+    }.toString())
 }
 
 /**
@@ -172,24 +179,31 @@ suspend fun validateClientAttestation(
     val requireIssuerMatch =
         configuration.getValue("require_client_attestation_iss_match") == "true"
 
-    val attestationBody = validateJwt(
-        jwt = clientAttestationJwt,
-        jwtName = "Client Attestation",
-        publicKey = null,
-        maxValidity = Duration.INFINITE,
-        checks = buildMap {
-            put(WebTokenCheck.TRUST, "trusted_client_attestations")  // where to find CA
-            put(WebTokenCheck.TYP, "oauth-client-attestation+jwt")
-            put(WebTokenCheck.SUB, clientId)
-            if (requireIssuerMatch) {
-                put(WebTokenCheck.X5C_CN_ISS_MATCH, "required")
+    val attestationBody = try {
+        validateJwt(
+            jwt = clientAttestationJwt,
+            jwtName = "Client Attestation",
+            publicKey = null,
+            maxValidity = Duration.INFINITE,
+            checks = buildMap {
+                put(WebTokenCheck.TRUST, "trusted_client_attestations")  // where to find CA
+                put(WebTokenCheck.TYP, "oauth-client-attestation+jwt")
+                put(WebTokenCheck.SUB, clientId)
+                if (requireIssuerMatch) {
+                    put(WebTokenCheck.X5C_CN_ISS_MATCH, "required")
+                }
+            },
+            certificateChainValidator = { chain, instant ->
+                validateServerIdentityCertificateChain(
+                    ServerIdentity.WALLET_ATTESTATION, chain, instant)
             }
-        },
-        certificateChainValidator = { chain, instant ->
-            validateServerIdentityCertificateChain(
-                ServerIdentity.WALLET_ATTESTATION, chain, instant)
+        )
+    } catch (err: IllegalArgumentException) {
+        if (err.cause is SignatureVerificationException) {
+            throw ServerException("invalid_client_attestation", err.message ?: "", err.cause)
         }
-    )
+        throw err
+    }
 
     return EcPublicKey.fromJwk(attestationBody["cnf"]!!.jsonObject["jwk"]!!.jsonObject)
 }
@@ -210,21 +224,28 @@ suspend fun validateClientAttestationPoP(
     val useClientAttestationChallenge =
         configuration.getValue("use_client_attestation_challenge") != "false"
 
-    validateJwt(
-        jwt = popJwt,
-        jwtName = "Client attestation PoP",
-        publicKey = attestationKey,
-        checks = buildMap {
-            put(WebTokenCheck.IDENT, clientId)
-            put(WebTokenCheck.TYP, "oauth-client-attestation-pop+jwt")
-            put(WebTokenCheck.ISS, clientId)
-            put(WebTokenCheck.AUD, baseUrl)
-            if (useClientAttestationChallenge) {
-                put(WebTokenCheck.CHALLENGE, "challenge")
-            }
-        },
-        nonceValidator = NonceManager.get()::checkAndConsumeClientAttestationNonce
-    )
+    try {
+        validateJwt(
+            jwt = popJwt,
+            jwtName = "Client attestation PoP",
+            publicKey = attestationKey,
+            checks = buildMap {
+                put(WebTokenCheck.IDENT, clientId)
+                put(WebTokenCheck.TYP, "oauth-client-attestation-pop+jwt")
+                put(WebTokenCheck.ISS, clientId)
+                put(WebTokenCheck.AUD, baseUrl)
+                if (useClientAttestationChallenge) {
+                    put(WebTokenCheck.CHALLENGE, "challenge")
+                }
+            },
+            nonceValidator = NonceManager.get()::checkAndConsumeClientAttestationNonce
+        )
+    } catch (err: IllegalArgumentException) {
+        if (err.cause is SignatureVerificationException) {
+            throw ServerException("invalid_client_attestation", err.message ?: "", err.cause)
+        }
+        throw err
+    }
 }
 
 suspend fun respondWithNewClientAttestationChallenge(
@@ -384,25 +405,33 @@ private suspend fun validateDPoPJwt(
     } else {
         nonceManager::checkAndConsumeAuthorizationDPoPNonce
     }
-    val body = validateJwt(
-        jwt = dpop,
-        jwtName = "DPoP JWT",
-        publicKey = publicKey,
-        checks = buildMap {
-            put(WebTokenCheck.IDENT, clientId)
-            put(WebTokenCheck.HTM, request.httpMethod.value)
-            // NB: cannot use req.requestURL, as it does not take into account potential frontends.
-            put(WebTokenCheck.HTU, "$baseUrl${request.uri}")
-            if (!initial) {
-                put(WebTokenCheck.CHALLENGE, "nonce")
-            }
-            if (accessToken != null) {
-                val athHash = Crypto.digest(Algorithm.SHA256, accessToken.encodeToByteArray())
-                put(WebTokenCheck.ATH, athHash.toBase64Url())
-            }
-        },
-        nonceValidator = nonceValidator
-    )
+    val body = try {
+        validateJwt(
+            jwt = dpop,
+            jwtName = "DPoP JWT",
+            publicKey = publicKey,
+            checks = buildMap {
+                put(WebTokenCheck.TYP, "dpop+jwt")
+                put(WebTokenCheck.IDENT, clientId)
+                put(WebTokenCheck.HTM, request.httpMethod.value)
+                // NB: cannot use req.requestURL, as it does not take into account potential frontends.
+                put(WebTokenCheck.HTU, "$baseUrl${request.uri}")
+                if (!initial) {
+                    put(WebTokenCheck.CHALLENGE, "nonce")
+                }
+                if (accessToken != null) {
+                    val athHash = Crypto.digest(Algorithm.SHA256, accessToken.encodeToByteArray())
+                    put(WebTokenCheck.ATH, athHash.toBase64Url())
+                }
+            },
+            nonceValidator = nonceValidator
+        )
+    } catch (err: IllegalArgumentException) {
+        if (err.cause is SignatureVerificationException) {
+            throw InvalidRequestException(err.message)
+        }
+        throw err
+    }
     if (accessToken == null && body.containsKey("ath")) {
         throw InvalidRequestException("DPoP JWT: 'ath' specified, but not expected")
     }
@@ -440,7 +469,7 @@ private suspend fun validateClientAssertionJwt(clientAssertionJwt: String, clien
     )
 }
 
-// We do not allow "#", "&" and "?" characters as they belong to query/fragment part of the
-// URL which must not be present
-private val plausibleUrl = Regex("^[^\\s'\"#&?]+\$")
+// We do not allow "#", characters as they belong to fragment part of the URL which
+// must not be present
+private val plausibleUrl = Regex("^[^\\s'\"#]+\$")
 

@@ -1,17 +1,10 @@
 package org.multipaz.openid4vci.server
 
-import io.ktor.http.ContentType
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
-import io.ktor.server.application.ApplicationCallPipeline
-import io.ktor.server.application.call
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.Deferred
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import org.multipaz.openid4vci.request.adminAuth
 import org.multipaz.openid4vci.request.adminSessionInfo
 import org.multipaz.openid4vci.request.adminListSessions
@@ -36,12 +29,10 @@ import org.multipaz.openid4vci.request.token
 import org.multipaz.openid4vci.request.validateAdminCookie
 import org.multipaz.openid4vci.request.wellKnownOauthAuthorization
 import org.multipaz.openid4vci.request.wellKnownOpenidCredentialIssuer
-import org.multipaz.openid4vci.util.OpenID4VCIRequestError
 import org.multipaz.server.common.ServerEnvironment
 import org.multipaz.server.request.push
 import org.multipaz.server.common.serveResources
 import org.multipaz.server.request.certificateAuthority
-import org.multipaz.util.Logger
 
 private const val TAG = "ApplicationExt"
 
@@ -49,23 +40,6 @@ private const val TAG = "ApplicationExt"
  * Defines server endpoints for HTTP GET and POST.
  */
 fun Application.configureRouting(serverEnvironment: Deferred<ServerEnvironment>) {
-    intercept(ApplicationCallPipeline.Plugins) {
-        // Customize error handling for OpenId4VCI-specific exceptions
-        try {
-            proceed()
-        } catch (err: OpenID4VCIRequestError) {
-            Logger.e(TAG, "OpenID4VCI Error", err)
-            err.printStackTrace()
-            call.respondText(
-                status = HttpStatusCode.BadRequest,
-                text = buildJsonObject {
-                    put("error", err.code)
-                    put("error_description", err.description)
-                }.toString(),
-                contentType = ContentType.Application.Json
-            )
-        }
-    }
     routing {
         push(serverEnvironment)
         certificateAuthority()

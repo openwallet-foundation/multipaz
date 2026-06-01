@@ -28,7 +28,6 @@ import org.multipaz.openid4vci.customization.NonceManager
 import org.multipaz.webtoken.ChallengeInvalidException
 import org.multipaz.openid4vci.util.IssuanceState
 import org.multipaz.openid4vci.util.OpaqueIdType
-import org.multipaz.openid4vci.util.OpenID4VCIRequestError
 import org.multipaz.openid4vci.util.SystemOfRecordAccess
 import org.multipaz.openid4vci.util.authorizeWithDpop
 import org.multipaz.openid4vci.util.codeToId
@@ -41,6 +40,7 @@ import org.multipaz.openid4vci.util.validateClientAssertion
 import org.multipaz.openid4vci.util.validateClientAttestation
 import org.multipaz.openid4vci.util.validateClientAttestationPoP
 import org.multipaz.rpc.backend.BackendEnvironment
+import org.multipaz.server.common.ServerException
 import org.multipaz.util.Logger
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -67,7 +67,7 @@ suspend fun token(call: ApplicationCall) {
             val code = parameters["code"]
                 ?: throw InvalidRequestException("'code' parameter missing")
             val codeVerifier = parameters["code_verifier"]
-                ?: throw InvalidRequestException("'code_verifier' parameter missing")
+                ?: throw ServerException("invalid_grant", "'code_verifier' parameter missing")
             digest = ByteString(Crypto.digest(Algorithm.SHA256, codeVerifier.toByteArray()))
             codeToId(OpaqueIdType.REDIRECT, code)
         }
@@ -90,17 +90,17 @@ suspend fun token(call: ApplicationCall) {
         if (state.codeChallenge == digest) {
             state.codeChallenge = null  // challenge met
         } else {
-            throw InvalidRequestException("authorization: bad code_verifier")
+            throw ServerException("invalid_grant", "authorization: bad code_verifier")
         }
     }
     if (grantType == PRE_AUTHORIZED_GRANT_TYPE && state.txCodeHash != null) {
         val txCode = parameters["tx_code"]
-            ?: throw OpenID4VCIRequestError("invalid_request", "'tx_code' parameter missing")
+            ?: throw ServerException("invalid_request", "'tx_code' parameter missing")
         val txCodeHash =
             ByteString(Crypto.digest(Algorithm.SHA256, txCode.encodeToByteArray()))
         if (txCodeHash != state.txCodeHash) {
             // TODO: only allow certain number of attempts
-            throw OpenID4VCIRequestError("invalid_grant", "incorrect 'tx_code' parameter value")
+            throw ServerException("invalid_grant", "incorrect 'tx_code' parameter value")
         }
     } else {
         if (parameters["tx_code"] != null) {

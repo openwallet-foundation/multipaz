@@ -18,7 +18,6 @@ import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X509CertChainValidationException
-import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.backend.getTable
@@ -77,6 +76,8 @@ import kotlin.time.Instant
  * @param nonceValidator function that must throw [ChallengeInvalidException] if nonce/challenge
  *  is not valid; this is used with [WebTokenCheck.CHALLENGE] check.
  * @throws ChallengeInvalidException when nonce or challenge check fails (see [WebTokenCheck.CHALLENGE])
+ * @throws IllegalArgumentException with [SignatureVerificationException] as cause when signature
+ *  verification fails
  * @throws InvalidRequestException when any other validation fails
  */
 suspend fun validateJwt(

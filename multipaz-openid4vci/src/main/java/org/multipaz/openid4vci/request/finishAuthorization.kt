@@ -1,6 +1,7 @@
 package org.multipaz.openid4vci.request
 
 import io.ktor.http.ContentType
+import io.ktor.http.URLBuilder
 import io.ktor.http.encodeURLParameter
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respondRedirect
@@ -97,29 +98,23 @@ private suspend fun processRedirect(
     state: IssuanceState
 ) {
     val redirectUri = state.redirectUri ?: throw IllegalStateException("No redirect url")
-    val parameterizedUri = buildString {
-        append(redirectUri)
-        append("?")
+
+    val parameterizedUri = URLBuilder(redirectUri).apply {
         if (error != null) {
-            append("error=")
-            append(error.encodeURLParameter())
+            parameters.append("error", error)
             val description = call.request.queryParameters["error_description"]
             if (description != null) {
-                append("&error_description=")
-                append(description.encodeURLParameter())
+                parameters.append("error_description", description)
             }
         } else {
-            append("code=")
-            append(authCode)
+            parameters.append("code", authCode!!)
         }
-        append("&iss=")
-        append(BackendEnvironment.getBaseUrl().encodeURLParameter())
+        parameters.append("iss", BackendEnvironment.getBaseUrl())
         val clientState = state.clientState
         if (!clientState.isNullOrEmpty()) {
-            append("&state=")
-            append(clientState.encodeURLParameter())
+            parameters.append("state", clientState)
         }
-    }
+    }.buildString()
     if (!redirectUri.startsWith("http://") && !redirectUri.startsWith("https://")) {
         call.respondText(
             text = """
