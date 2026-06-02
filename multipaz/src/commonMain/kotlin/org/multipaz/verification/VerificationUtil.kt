@@ -769,7 +769,7 @@ object VerificationUtil {
      *  in the request.
      * @return a list of [VerifiedPresentation], one for each credential in the response.
      */
-    internal suspend fun verifyOpenID4VPResponse(
+    suspend fun verifyOpenID4VPResponse(
         now: Instant,
         vpToken: JsonObject,
         sessionTranscript: DataItem?,
@@ -923,7 +923,7 @@ object VerificationUtil {
      * @param zkSystemRepository a [ZkSystemRepository] used for verifying ZKP proofs or `null`.
      * @return a list of [VerifiedPresentation], one for each document in the response.
      */
-    internal suspend fun verifyMdocDeviceResponse(
+    suspend fun verifyMdocDeviceResponse(
         now: Instant,
         deviceResponse: DataItem,
         sessionTranscript: DataItem,

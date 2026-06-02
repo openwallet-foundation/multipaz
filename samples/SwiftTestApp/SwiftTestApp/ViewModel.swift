@@ -8,7 +8,29 @@ import SwiftUI
 @Observable
 class ViewModel {
 
-    var path = NavigationPath()
+    var path: [Destination] = []
+
+    let verticalCardListState = VerticalCardListState()
+
+    func push(_ destination: Destination) {
+        if path.last != destination {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                path.append(destination)
+            }
+        }
+    }
+
+    func popWithoutAnimation() {
+        if !path.isEmpty {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                path.removeLast()
+            }
+        }
+    }
 
     var isLoading: Bool = true
 

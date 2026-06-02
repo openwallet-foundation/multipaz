@@ -3,10 +3,8 @@ import Multipaz
 
 struct VerticalCardListScreen: View {
     @Environment(ViewModel.self) private var viewModel
-    
-    @SceneStorage("focusedDocumentId") private var focusedDocumentId: String?
 
-    @SceneStorage("focusedDocumentShowMoreInfo") private var focusedDocumentShowMoreInfo: Bool = false
+    let focusedDocumentId: String?
 
     @Environment(\.dismiss) private var dismiss
     
@@ -21,21 +19,17 @@ struct VerticalCardListScreen: View {
                 unfocusedVisiblePercent: 25, // Show a bit more of the overlapping cards
                 allowCardReordering: true,
                 showStackWhileFocused: true,
+                state: viewModel.verticalCardListState,
                 showCardInfo: { cardInfo in
                     let docInfo = cardInfo as! DocumentInfo
                     VStack {
                         Text("\(docInfo.document.displayName ?? "Document") is focused")
                         Spacer()
-                        if (!focusedDocumentShowMoreInfo) {
-                            Text("Tap card for more info")
-                        } else {
-                            Button(action: {
-                                viewModel.path.append(Destination.documentScreen(documentId: docInfo.document.identifier))
-                            }) {
-                                Text("Even more info")
-                                    .cornerRadius(12)
-                            }
-                            .padding(.top, 8)
+                        Button(action: {
+                            viewModel.path.append(Destination.documentScreen(documentId: docInfo.document.identifier))
+                        }) {
+                            Text("More info")
+                                .cornerRadius(12)
                         }
                     }
                 },
@@ -61,43 +55,21 @@ struct VerticalCardListScreen: View {
                     }
                 },
                 onCardFocused: { cardInfo in
-                    focusedDocumentId = cardInfo.identifier
+                    viewModel.push(.verticalCardListScreen(focusedDocumentId: cardInfo.identifier))
                 },
                 onCardFocusedTapped: { _ in
-                    focusedDocumentShowMoreInfo = true
+                    viewModel.verticalCardListState.unfocus {
+                        viewModel.popWithoutAnimation()
+                    }
                 },
                 onCardFocusedStackTapped: { _ in
-                    focusedDocumentId = nil
+                    viewModel.verticalCardListState.unfocus {
+                        viewModel.popWithoutAnimation()
+                    }
                 }
             )
         }
-        .navigationTitle(focusedDocument != nil
-                         ? (focusedDocumentShowMoreInfo ? "Document Focused (more)" : "Document Focused")
-                         : "Vertical Card List"
-        )
-        // Override back button to unfocus...
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: {
-                    if focusedDocumentId != nil {
-                        if (focusedDocumentShowMoreInfo) {
-                            focusedDocumentShowMoreInfo = false
-                        } else {
-                            focusedDocumentId = nil
-                        }
-                    } else {
-                        dismiss()
-                    }
-                }) {
-                    // Recreate the native iOS back button appearance
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.backward")
-                            .font(.system(size: 17, weight: .semibold))
-                    }
-                }
-            }
-        }
+        .navigationTitle(focusedDocument != nil ? "Document Focused" : "Vertical Card List")
     }
 }
 
