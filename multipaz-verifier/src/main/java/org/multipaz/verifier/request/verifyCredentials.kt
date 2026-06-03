@@ -49,6 +49,7 @@ import org.multipaz.verification.JsonVerifiedPresentation
 import org.multipaz.verification.MdocVerifiedPresentation
 import org.multipaz.verification.QueryData
 import org.multipaz.verification.VerificationSession
+import org.multipaz.verification.VerificationUtil
 import org.multipaz.verifier.session.Session
 import org.multipaz.verifier.customization.VerifierAssistant
 import org.multipaz.verifier.customization.VerifierPresentment
@@ -88,12 +89,10 @@ suspend fun makeRequest(call: ApplicationCall) {
     val sessionId = Session.createSession()
     val encodedSessionId = encodeSessionId(sessionId)
     val transactions = transactionData?.map { it.toString() }
-    val verificationSession = VerificationSession.create(
+    val verificationSession = VerificationUtil.generateVerificationSessionForDcql(
         requestTypes = requestTypes,
-        requestDefinition = DcqlRequestDefinition(
-            dcql = dcqlQuery,
-            transactionData = transactions ?: emptyList()
-        ),
+        dcql = dcqlQuery,
+        transactionData = transactions,
         nonce = nonce,
         origin = BackendEnvironment.getDomain(),
         clientId = getClientId(sign),

@@ -25,6 +25,7 @@ import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.toDataItem
 import org.multipaz.claim.JsonClaim
 import org.multipaz.claim.MdocClaim
 import org.multipaz.crypto.Algorithm
@@ -33,6 +34,8 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.request.DeviceRequestInfo
@@ -48,6 +51,7 @@ import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.TransactionDataJson
+import org.multipaz.presentment.TransactionDataJson.Companion.convertToDocRequestOtherInfo
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.sdjwt.SdJwt
@@ -59,6 +63,7 @@ import org.multipaz.util.zlibInflate
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.random.Random
 import kotlin.time.Instant
 
 private const val TAG = "VerificationUtil"
@@ -1166,5 +1171,277 @@ object VerificationUtil {
         }
 
         return verifiedPresentations
+    }
+
+    /**
+     * Makes a request for credential presentation using
+     * [W3C Digital Credentials API](https://www.w3.org/TR/digital-credentials)
+     *
+     * Single DC request can contain sections for several protocols, the response always
+     * comes using only one of the requested protocols.
+     *
+     * @param requestTypes list of request types that should be created; multiple requests can
+     *  be created and sent, typically only one of these requests will be responded to
+     * @param dcql DCQL representation of the request, this gives the list of needed credentials
+     *   and which claims are needed from each credential
+     * @param origin protocol and authority of the server that makes the request (e.g.
+     *   `https://example.com:8000`) or an appropriate platform-specific origin for
+     *   app-to-app requests
+     * @param clientId OpenID4VP client id, must be non-null for signed request
+     * @param readerAuthenticationKey certified key to sign the request, if null the request
+     *   is unsigned
+     * @param transactionData transaction data in OpenID4VP JSON format
+     *   (before Base64Url encoding), note that credentialId uses credential ids used in DCQL
+     * @param nonce nonce to use, for OpenID4VP it will be Base64Url encoded
+     * @param encryptResponse true if response must be encrypted
+     * @param deviceEngagement ISO 18013-5 device engagement data
+     * @param handover ISO 18013-5 handover data
+     * @param documentTypeRepository repository that contains all transaction types for
+     *   transaction data that are used in the request; if no transaction data is used it can
+     *   be `null`
+     * @param state optional state parameter for OpenID4VP protocol
+     * @return a pair of the DC request and the session that is needed to process the response
+     *  to that request
+     */
+    suspend fun generateVerificationSessionForDcql(
+        requestTypes: Collection<VerificationSession.RequestType>,
+        dcql: String,
+        readerAuthenticationKey: AsymmetricKey.X509Compatible?,
+        origin: String? = null,
+        clientId: String? = null,
+        transactionData: List<String>? = null,
+        nonce: ByteString = ByteString(Random.nextBytes(18)),
+        encryptResponse: Boolean = true,
+        responseUri: String? = null,
+        documentTypeRepository: DocumentTypeRepository? = null,
+        deviceEngagement: ByteString? = null,
+        handover: DataItem? = null,
+        eReaderKey: EcPrivateKey? = null,
+        state: String? = null
+    ): VerificationSession {
+        val encryptionPrivateKey = if (encryptResponse) {
+            Crypto.createEcPrivateKey(EcCurve.P256)
+        } else {
+            null
+        }
+        val requestDefinition = DcqlRequestDefinition(dcql, transactionData)
+        val dcqlJson = Json.parseToJsonElement(dcql).jsonObject
+        val nonceStr = nonce.toByteArray().toBase64Url()
+
+        val docRequestOtherInfo = if (transactionData.isNullOrEmpty()) {
+            null
+        } else {
+            lazy {
+                TransactionDataJson.parse(
+                    base64UrlEncodedJson = transactionData.map {
+                        it.encodeToByteArray().toBase64Url()
+                    },
+                    documentTypeRepository = documentTypeRepository!!
+                ).mapValues { (_, transactionData) ->
+                    transactionData.convertToDocRequestOtherInfo()
+                }
+            }
+        }
+
+        suspend fun createOpenIDRequest(
+            responseMode: OpenID4VP.ResponseMode,
+            responseUri: String? = null,
+            version: OpenID4VP.Version = OpenID4VP.Version.DRAFT_29,
+        ): String = OpenID4VP.generateRequest(
+            version = version,
+            dcqlQuery = dcqlJson,
+            jsonTransactionData =transactionData ?: emptyList(),
+            nonce = nonceStr,
+            state = state,
+            origin = origin
+                ?: throw IllegalArgumentException("'origin' is required for OpenID4VP"),
+            clientId = clientId,
+            responseEncryptionKey = encryptionPrivateKey?.publicKey,
+            requestSigningKey = readerAuthenticationKey,
+            responseMode = responseMode,
+            responseUri = responseUri
+        ).toString()
+
+        suspend fun createIso18013Request(
+            sessionTranscript: DataItem
+        ): DataItem = buildDeviceRequestFromDcql(
+            sessionTranscript = sessionTranscript,
+            dcql = dcqlJson,
+            docRequestOtherInfo = docRequestOtherInfo?.value ?: emptyMap(),
+        ) {
+            readerAuthenticationKey?.let { addReaderAuthAll(it) }
+        }.toDataItem()
+
+        val requests = requestTypes.map { requestType ->
+            when (requestType) {
+                VerificationSession.RequestType.DC_OPENID4VP ->
+                    VerificationSession.DcOpenID4VPRequest(
+                        requestorId = origin
+                            ?: throw IllegalArgumentException("'origin' is required for DC API"),
+                        responseEncryptionKey = encryptionPrivateKey,
+                        openID4VPRequest = createOpenIDRequest(
+                            responseMode = OpenID4VP.ResponseMode.DC_API
+                        )
+                    )
+
+                VerificationSession.RequestType.DC_OPENID4VP_DRAFT_24 ->
+                    VerificationSession.DcOpenID4VPDraft24Request(
+                        requestorId = origin
+                            ?: throw IllegalArgumentException("'origin' is required for DC API"),
+                        responseEncryptionKey = encryptionPrivateKey,
+                        openID4VPRequest = createOpenIDRequest(
+                            responseMode = OpenID4VP.ResponseMode.DC_API,
+                            version = OpenID4VP.Version.DRAFT_24,
+                        )
+                    )
+
+                VerificationSession.RequestType.OPENID4VP_URI_SCHEME ->
+                    VerificationSession.OpenID4VPUriSchemeRequest(
+                        requestorId = clientId
+                            ?: throw IllegalArgumentException("clientId must be specified"),
+                        responseEncryptionKey = encryptionPrivateKey,
+                        openID4VPRequest = createOpenIDRequest(
+                            responseMode = OpenID4VP.ResponseMode.DIRECT_POST,
+                            responseUri = responseUri
+                                ?: throw IllegalArgumentException("responseUri must be specified")
+                        )
+                    )
+
+                VerificationSession.RequestType.DC_ISO_18013 -> {
+                    if (encryptionPrivateKey == null) {
+                        throw IllegalArgumentException("encryptResponse must be true")
+                    }
+                    val encryptionInfo = buildCborArray {
+                        add("dcapi")
+                        addCborMap {
+                            put("nonce", nonce.toByteArray())
+                            put("recipientPublicKey", encryptionPrivateKey.publicKey.toCoseKey().toDataItem())
+                        }
+                    }
+                    VerificationSession.DcIso18013Request(
+                        origin = origin
+                            ?: throw IllegalArgumentException("'origin' is required for DC API"),
+                        responseEncryptionKey = encryptionPrivateKey,
+                        deviceRequest = createIso18013Request(
+                            sessionTranscript = dcSessionTranscript(
+                                encryptionInfo,
+                                origin
+                            )
+                        ),
+                        encryptionInfo = encryptionInfo
+                    )
+                }
+
+                VerificationSession.RequestType.ISO_18013_PROXIMITY -> {
+                    val sessionTranscript = proximitySessionTranscript(
+                        deviceEngagement = deviceEngagement!!,
+                        handover = handover!!,
+                        eReaderKey = eReaderKey!!.publicKey
+                    )
+                    VerificationSession.Iso18013ProximityRequest(
+                        deviceEngagement = deviceEngagement,
+                        handover = handover,
+                        eDeviceKey = eReaderKey,
+                        deviceRequest = createIso18013Request(
+                            sessionTranscript = sessionTranscript
+                        )
+                    )
+                }
+            }
+        }
+
+        return VerificationSession(
+            signed = readerAuthenticationKey != null,
+            requests = requests,
+            requestDefinition = requestDefinition
+        )
+    }
+
+    internal fun proximitySessionTranscript(
+        deviceEngagement: ByteString,
+        eReaderKey: EcPublicKey,
+        handover: DataItem
+    ): DataItem {
+        val encodedEReaderKey = Cbor.encode(eReaderKey.toCoseKey().toDataItem())
+        return buildCborArray {
+            add(Tagged(Tagged.ENCODED_CBOR, deviceEngagement.toByteArray().toDataItem()))
+            add(Tagged(Tagged.ENCODED_CBOR, encodedEReaderKey.toDataItem()))
+            add(handover)
+        }
+    }
+
+    internal suspend fun dcSessionTranscript(
+        encryptionInfo: DataItem,
+        origin: String
+    ): DataItem {
+        val encodedEncryptionInfo = Cbor.encode(encryptionInfo)
+        val dcapiInfo = buildCborArray {
+            add(encodedEncryptionInfo.toBase64Url())
+            add(origin)
+        }
+        val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
+        return buildCborArray {
+            add(Simple.NULL) // DeviceEngagementBytes
+            add(Simple.NULL) // EReaderKeyBytes
+            addCborArray {
+                add("dcapi")
+                add(dcapiInfoDigest)
+            }
+        }
+    }
+
+    internal suspend fun vpSessionTranscriptDraft24(
+        origin: String,
+        clientId: String,
+        nonce: String
+    ): DataItem {
+        val handoverInfo = Cbor.encode(
+            buildCborArray {
+                add(origin)
+                add(clientId)
+                add(nonce)
+            }
+        )
+        val handoverInfoDigest = Crypto.digest(Algorithm.SHA256, handoverInfo)
+        return buildCborArray {
+            add(Simple.NULL) // DeviceEngagementBytes
+            add(Simple.NULL) // EReaderKeyBytes
+            addCborArray {
+                add("OpenID4VPDCAPIHandover")
+                add(handoverInfoDigest)
+            }
+        }
+    }
+
+    internal suspend fun vpSessionTranscript(
+        encryptionPrivateKey: EcPrivateKey?,
+        requestorId: String,
+        nonce: String,
+        responseUri: String?
+    ): DataItem {
+        val jwkThumbPrint = encryptionPrivateKey?.publicKey
+            ?.toJwkThumbprint(Algorithm.SHA256)?.toByteArray()?.toDataItem()
+        val handoverInfo = Cbor.encode(
+            buildCborArray {
+                add(requestorId)
+                add(nonce)
+                add(jwkThumbPrint ?: Simple.NULL)
+                responseUri?.let { add(it) }
+            }
+        )
+        val handoverInfoDigest = Crypto.digest(Algorithm.SHA256, handoverInfo)
+        return buildCborArray {
+            add(Simple.NULL) // DeviceEngagementBytes
+            add(Simple.NULL) // EReaderKeyBytes
+            addCborArray {
+                val handoverId = if (responseUri == null) {
+                    "OpenID4VPDCAPIHandover"
+                } else {
+                    "OpenID4VPHandover"
+                }
+                add(handoverId)
+                add(handoverInfoDigest)
+            }
+        }
     }
 }

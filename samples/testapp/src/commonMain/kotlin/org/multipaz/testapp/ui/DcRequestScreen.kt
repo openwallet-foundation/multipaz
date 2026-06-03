@@ -34,6 +34,7 @@ import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.utopia.knowntypes.wellKnownMultipleDocumentRequests
 import org.multipaz.verification.DcqlRequestDefinition
 import org.multipaz.verification.VerificationSession
+import org.multipaz.verification.VerificationUtil
 import kotlin.random.Random
 import kotlin.time.Clock
 
@@ -322,9 +323,10 @@ private suspend fun doDcRequestFlow(
         }
     }
 
-    val session = VerificationSession.create(
+    val session = VerificationUtil.generateVerificationSessionForDcql(
         requestTypes = protocol.requestTypes,
-        requestDefinition = requestDefinition,
+        dcql = requestDefinition.dcql,
+        transactionData = requestDefinition.transactionData,
         nonce = nonce,
         origin = origin,
         clientId = clientId,

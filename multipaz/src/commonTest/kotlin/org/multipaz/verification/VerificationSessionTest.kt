@@ -216,9 +216,10 @@ class VerificationSessionTest {
         nonce: ByteString,
     ): PresentmentRecord {
         val responseUri = "$ORIGIN/direct_post/test-session"
-        val session = VerificationSession.create(
+        val session = VerificationUtil.generateVerificationSessionForDcql(
             requestTypes = setOf(VerificationSession.RequestType.OPENID4VP_URI_SCHEME),
-            requestDefinition = DcqlRequestDefinition(dcql = dcql, transactionData = transactionData),
+            dcql = dcql,
+            transactionData = transactionData,
             readerAuthenticationKey = readerKey,
             origin = ORIGIN,
             clientId = CLIENT_ID,
@@ -262,9 +263,10 @@ class VerificationSessionTest {
         setup()
 
         val nonce = ByteString(Random.nextBytes(18))
-        val session = VerificationSession.create(
+        val session = VerificationUtil.generateVerificationSessionForDcql(
             requestTypes = setOf(VerificationSession.RequestType.DC_OPENID4VP),
-            requestDefinition = DcqlRequestDefinition(dcql = MDL_DCQL, transactionData = mdlPingTransactionData),
+            dcql = MDL_DCQL,
+            transactionData = mdlPingTransactionData,
             readerAuthenticationKey = readerKey,
             origin = ORIGIN,
             clientId = CLIENT_ID,
@@ -285,9 +287,9 @@ class VerificationSessionTest {
 
         val nonce = ByteString(Random.nextBytes(18))
         // OpenID4VP DRAFT_24 does not support `transaction_data`, so this request omits it.
-        val session = VerificationSession.create(
+        val session = VerificationUtil.generateVerificationSessionForDcql(
             requestTypes = setOf(VerificationSession.RequestType.DC_OPENID4VP_DRAFT_24),
-            requestDefinition = DcqlRequestDefinition(dcql = MDL_DCQL),
+            dcql = MDL_DCQL,
             readerAuthenticationKey = readerKey,
             origin = ORIGIN,
             clientId = CLIENT_ID,
@@ -307,9 +309,10 @@ class VerificationSessionTest {
         setup()
 
         val nonce = ByteString(Random.nextBytes(18))
-        val session = VerificationSession.create(
+        val session = VerificationUtil.generateVerificationSessionForDcql(
             requestTypes = setOf(VerificationSession.RequestType.DC_ISO_18013),
-            requestDefinition = DcqlRequestDefinition(dcql = MDL_DCQL, transactionData = mdlPingTransactionData),
+            dcql = MDL_DCQL,
+            transactionData = mdlPingTransactionData,
             readerAuthenticationKey = readerKey,
             origin = ORIGIN,
             clientId = CLIENT_ID,
@@ -336,9 +339,10 @@ class VerificationSessionTest {
         )
         val handover = Simple.NULL
 
-        val session = VerificationSession.create(
+        val session = VerificationUtil.generateVerificationSessionForDcql(
             requestTypes = setOf(VerificationSession.RequestType.ISO_18013_PROXIMITY),
-            requestDefinition = DcqlRequestDefinition(dcql = MDL_DCQL, transactionData = mdlPingTransactionData),
+            dcql = MDL_DCQL,
+            transactionData = mdlPingTransactionData,
             readerAuthenticationKey = readerKey,
             documentTypeRepository = harness.documentTypeRepository,
             deviceEngagement = deviceEngagement,
@@ -430,12 +434,10 @@ class VerificationSessionTest {
         expectedPingString: String,
     ) {
         val nonce = ByteString(Random.nextBytes(18))
-        val session = VerificationSession.create(
+        val session = VerificationUtil.generateVerificationSessionForDcql(
             requestTypes = setOf(requestType),
-            requestDefinition = DcqlRequestDefinition(
-                dcql = ageOver18Dcql,
-                transactionData = ageOver18TransactionData,
-            ),
+            dcql = ageOver18Dcql,
+            transactionData = ageOver18TransactionData,
             readerAuthenticationKey = readerKey,
             origin = ORIGIN,
             clientId = CLIENT_ID,

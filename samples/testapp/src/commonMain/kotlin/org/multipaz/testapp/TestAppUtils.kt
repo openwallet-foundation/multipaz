@@ -66,6 +66,7 @@ import org.multipaz.util.Logger
 import org.multipaz.util.truncateToWholeSeconds
 import org.multipaz.verification.DcqlRequestDefinition
 import org.multipaz.verification.VerificationSession
+import org.multipaz.verification.VerificationUtil
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -131,9 +132,10 @@ object TestAppUtils {
                     } ?: emptyList()
                 )
         }
-        return VerificationSession.create(
+        return VerificationUtil.generateVerificationSessionForDcql(
             requestTypes = setOf(VerificationSession.RequestType.ISO_18013_PROXIMITY),
-            requestDefinition = requestDefinition,
+            dcql = requestDefinition.dcql,
+            transactionData = requestDefinition.transactionData,
             readerAuthenticationKey = if (signRequest) app.readerKey else null,
             deviceEngagement = deviceEngagement,
             eReaderKey = eReaderKey,

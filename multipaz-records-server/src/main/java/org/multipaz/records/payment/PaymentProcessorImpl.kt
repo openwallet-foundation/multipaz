@@ -19,7 +19,7 @@ import org.multipaz.server.payment.PaymentProcessor
 import org.multipaz.server.payment.PaymentTransactionData
 import org.multipaz.server.payment.PaymentTransactionRequest
 import org.multipaz.verification.PresentmentRecord
-import org.multipaz.verification.MdocPresentmentRecord
+import org.multipaz.verification.Iso18013PresentmentRecord
 import org.multipaz.verification.OpenID4VPPresentmentRecord
 import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.util.Logger
@@ -80,7 +80,7 @@ class PaymentProcessorImpl: PaymentProcessor, RpcAuthInspector by rpcAuth {
         val documentTypeRepository =
             BackendEnvironment.getInterface(DocumentTypeRepository::class)!!
         val transactionDataMap = when (presentmentRecord) {
-            is MdocPresentmentRecord ->
+            is Iso18013PresentmentRecord ->
                 presentmentRecord.getTransactionData(documentTypeRepository)
             is OpenID4VPPresentmentRecord ->
                 presentmentRecord.getTransactionData(documentTypeRepository)

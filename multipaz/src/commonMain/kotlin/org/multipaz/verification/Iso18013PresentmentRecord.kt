@@ -33,7 +33,7 @@ import kotlin.time.Instant
  * @property origin the web origin that initiated the presentment request, only needed for nonce
  *     verification.
  */
-class MdocPresentmentRecord(
+class Iso18013PresentmentRecord(
     val response: DataItem,
     val sessionTranscript: DataItem,
     val request: DataItem,
