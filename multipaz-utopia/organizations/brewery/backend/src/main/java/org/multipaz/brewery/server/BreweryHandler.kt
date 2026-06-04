@@ -19,11 +19,11 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.Logger
-import org.multipaz.utopia.knowntypes.PaymentTransaction
 import org.multipaz.verifier.customization.VerifierAssistant
 import org.multipaz.verifier.customization.VerifierPresentment
 import java.util.UUID
@@ -66,7 +66,7 @@ suspend fun breweryCheckout(call: ApplicationCall) {
 
     val responsePayload = buildJsonObject {
         put("dcql", BREWERY_DCQL_QUERY)
-        put("protocols", buildJsonArray { add(JsonPrimitive("openid4vp-v1-signed")) })
+        put("protocols", buildJsonArray { add(JsonPrimitive("openid4vp-v1")) })
         put("transaction_data", transactionData)
     }
     call.respondText(responsePayload.toString(), ContentType.Application.Json)
@@ -202,7 +202,7 @@ class BreweryVerifierAssistant : VerifierAssistant {
      * After credential verification succeeds, check age and DPC validity.
      * Returns a custom JsonObject with `approved`, `holderName`, `issuerName`, and optionally `error`.
      */
-    override suspend fun processResponse(presentment: VerifierPresentment): JsonObject? {
+    override suspend fun processResponse(presentment: VerifierPresentment): JsonObject {
         val response = presentment.response
         Logger.i(TAG, "Credential response keys: ${response.keys}")
         Logger.i(TAG, "Credential response: $response")

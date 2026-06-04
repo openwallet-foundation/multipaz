@@ -1013,9 +1013,12 @@ object VerificationUtil {
             val transactionResponses = document.transactionResponse
             val dt = documentTypeRepository?.getDocumentTypeForMdoc(document.docType)
             val issuerSignedClaims = mutableListOf<MdocClaim>()
-            val docQueryData = queryDataMap.let { queryClaimMap ->
+            val docQueryData = if (queryData.size == 1 && deviceResponse.documents.size == 1) {
+                // single-doc requests and OpenID4VP
+                queryDataMap.values.first()
+            } else {
                 val claimSet = document.issuerNamespaces.data.mapValues { it.value.keys }
-                queryClaimMap[Pair(document.docType, claimSet)]
+                queryDataMap[Pair(document.docType, claimSet)]
             }
             document.issuerNamespaces.data.forEach { (namespaceName, issuerSignedItemsMap) ->
                 issuerSignedItemsMap.forEach { (dataElementName, issuerSignedItem) ->
@@ -1165,7 +1168,7 @@ object VerificationUtil {
                     compactSerialization = sdJwtKbCompactSerialization,
                     nonce = nonce.toBase64Url(),
                     documentTypeRepository = documentTypeRepository,
-                    transactionData = listOf()  // TODO: transactions are not handled in this case
+                    transactionData = listOf(),  // TODO: transactions are not handled in this case
                 )
             )
         }

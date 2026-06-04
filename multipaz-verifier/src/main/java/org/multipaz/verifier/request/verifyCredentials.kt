@@ -44,7 +44,6 @@ import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.verification.PresentmentRecord
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
-import org.multipaz.verification.DcqlRequestDefinition
 import org.multipaz.verification.JsonVerifiedPresentation
 import org.multipaz.verification.MdocVerifiedPresentation
 import org.multipaz.verification.QueryData
@@ -370,5 +369,5 @@ private suspend fun decodeSessionId(code: String): String {
 
 private val Claim.identifier: String get() = when (this) {
     is JsonClaim -> queryIdentifier ?: claimPath.last().jsonPrimitive.content
-    is MdocClaim -> queryIdentifier ?: displayName
+    is MdocClaim -> queryIdentifier ?: dataElementName
 }

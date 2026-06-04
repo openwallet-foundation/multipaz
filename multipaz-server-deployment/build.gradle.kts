@@ -18,7 +18,7 @@ tasks.register("collectDependencies") {
     // Depend on jar tasks for server projects plus their full runtime classpath build dependencies
     for (name in serverProjects) {
         val serverProject = project(":${name}")
-        dependsOn("${serverProject.path}:jar")
+        dependsOn(serverProject.tasks.named("jar"))
         dependsOn(serverProject.configurations.getByName("runtimeClasspath").buildDependencies)
     }
 
@@ -39,7 +39,9 @@ tasks.register("collectDependencies") {
             val runtimeCp = serverProject.configurations.getByName("runtimeClasspath")
 
             // Copy the thin server JAR
-            val shortName = name.removePrefix("multipaz-").removeSuffix("-server")
+            val baseName = name.removeSuffix(":backend")
+            val simpleName = baseName.substring(baseName.lastIndexOf(':') + 1)
+            val shortName = simpleName.removePrefix("multipaz-").removeSuffix("-server")
             val jarFile = serverProject.tasks.getByName<Jar>("jar").archiveFile.get().asFile
             jarFile.copyTo(File(jarsDir, "${shortName}.jar"), overwrite = true)
 
