@@ -1,7 +1,10 @@
 package org.multipaz.rpc
 
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.annotation.CborSerializable
+import org.multipaz.cbor.annotation.CborSerializationImplemented
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.util.fromBase64Url
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -152,6 +155,54 @@ data class IscInheritsRoot(
     val foo: Boolean
 ): IscRoot(stuff)
 
+@CborSerializationImplemented(schemaId = "")
+sealed class SiRoot(
+    open val stuff: String
+) {
+    fun toDataItem() = buildCborMap {
+        put("stuff", stuff)
+        when (this@SiRoot) {
+            is SiInheritsA -> {
+                put("type", "A")
+                put("otherStuff", otherStuff)
+            }
+            is SiInheritsB -> {
+                put("type", "B")
+                put("moarStuff", moarStuff)
+            }
+        }
+    }
+
+    companion object {
+        fun fromDataItem(dataItem: DataItem): SiRoot {
+            when (val type = dataItem["type"].asTstr) {
+                "A" -> {
+                    return SiInheritsA(
+                        stuff = dataItem["stuff"].asTstr,
+                        otherStuff = dataItem["otherStuff"].asBoolean
+                    )
+                }
+                "B" -> {
+                    return SiInheritsB(
+                        stuff = dataItem["stuff"].asTstr,
+                        moarStuff = dataItem["moarStuff"].asTstr
+                    )
+                }
+                else -> throw IllegalArgumentException("Unexpected type value $type")
+            }
+        }
+    }
+}
+
+data class SiInheritsA(
+    override val stuff: String,
+    val otherStuff: Boolean,
+): SiRoot(stuff)
+
+data class SiInheritsB(
+    override val stuff: String,
+    val moarStuff: String,
+): SiRoot(stuff)
 
 class CborSerializationTest {
     @Test
@@ -305,6 +356,21 @@ class CborSerializationTest {
         assertEquals(
             IscRoot.fromDataItem(inheritsIntermediate.toDataItem()),
             inheritsIntermediate
+        )
+    }
+
+    @Test
+    fun serializationImplemented() {
+        val a = SiInheritsA("stuff", true)
+        assertEquals(
+            a,
+            SiRoot.fromDataItem(a.toDataItem())
+        )
+
+        val b = SiInheritsB("stuff2", "yes")
+        assertEquals(
+            b,
+            SiRoot.fromDataItem(b.toDataItem())
         )
     }
 }
