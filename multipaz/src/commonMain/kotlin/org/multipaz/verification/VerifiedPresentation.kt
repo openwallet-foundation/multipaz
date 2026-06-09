@@ -2,6 +2,7 @@ package org.multipaz.verification
 
 import org.multipaz.claim.Claim
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.presentment.TransactionData
 import kotlin.time.Instant
 
 /**
@@ -19,7 +20,10 @@ import kotlin.time.Instant
  * @property validUntil the point in time this presentation is valid until.
  * @property signedAt the point in time this was signed.
  * @property expectedUpdate the point in time an update is expected, if any.
- * @property identifier DCQL identifier for this document, if any
+ * @property vpTokenIdentifier identifier for this document in OpenID4VP response, only set when
+ *   OpenID4VP is in use
+ * @property transactionData transaction data that were sent in the presentation request,
+ *   acknowledged in the response (with the acknowledgement verified).
  */
 sealed class VerifiedPresentation() {
     abstract val documentSignerCertChain: X509CertChain?
@@ -30,5 +34,6 @@ sealed class VerifiedPresentation() {
     abstract val validUntil: Instant?
     abstract val signedAt: Instant?
     abstract val expectedUpdate: Instant?
-    abstract val identifier: String?
+    abstract val vpTokenIdentifier: String?
+    abstract val transactionData: List<TransactionData>
 }

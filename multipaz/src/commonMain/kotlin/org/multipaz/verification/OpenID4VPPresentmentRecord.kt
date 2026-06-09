@@ -59,13 +59,6 @@ class OpenID4VPPresentmentRecord(
         )
     }
 
-    override fun getTransactionData(
-        documentTypeRepository: DocumentTypeRepository
-    ): Map<String, List<TransactionDataJson>> {
-        val request = Json.parseToJsonElement(vpRequest).jsonObject
-        return getTransactionData(request, documentTypeRepository)
-    }
-
     companion object {
         private fun getTransactionData(
             request: JsonObject,

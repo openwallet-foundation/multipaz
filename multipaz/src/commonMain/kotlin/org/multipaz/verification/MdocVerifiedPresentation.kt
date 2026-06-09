@@ -4,6 +4,7 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.claim.MdocClaim
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.TransactionType
+import org.multipaz.presentment.TransactionData
 import kotlin.time.Instant
 
 /**
@@ -25,5 +26,6 @@ data class MdocVerifiedPresentation(
     override val expectedUpdate: Instant?,
     val docType: String,
     val transactionResponses: Map<String, Map<String, DataItem>>?,
-    override val identifier: String?
+    override val vpTokenIdentifier: String?,
+    override val transactionData: List<TransactionData>
 ): VerifiedPresentation()

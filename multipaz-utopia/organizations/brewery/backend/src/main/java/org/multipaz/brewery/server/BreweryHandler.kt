@@ -4,7 +4,7 @@ import io.ktor.http.ContentType
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -21,12 +21,24 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.rpc.backend.BackendEnvironment
+import org.multipaz.rpc.backend.Configuration
+import org.multipaz.rpc.client.RpcAuthorizedServerClient
 import org.multipaz.rpc.handler.InvalidRequestException
+import org.multipaz.rpc.handler.RpcAuthClientSession
+import org.multipaz.rpc.handler.RpcExceptionMap
+import org.multipaz.rpc.handler.RpcNotifier
+import org.multipaz.server.common.enrollmentServerUrl
 import org.multipaz.server.common.getBaseUrl
+import org.multipaz.server.enrollment.ServerIdentity
+import org.multipaz.server.enrollment.getServerIdentity
+import org.multipaz.server.payment.PaymentProcessor
+import org.multipaz.server.payment.PaymentProcessorStub
+import org.multipaz.server.payment.PaymentTransactionRequest
 import org.multipaz.util.Logger
+import org.multipaz.util.toBase64Url
 import org.multipaz.verifier.customization.VerifierAssistant
 import org.multipaz.verifier.customization.VerifierPresentment
-import java.util.UUID
+import java.lang.IllegalStateException
 import kotlin.time.Clock
 
 private const val TAG = "BreweryHandler"
@@ -45,29 +57,44 @@ suspend fun breweryCheckout(call: ApplicationCall) {
         ?: throw InvalidRequestException("'productName' is missing")
     val priceStr = body["price"]?.jsonPrimitive?.contentOrNull
         ?: throw InvalidRequestException("'price' is missing")
-    val price = priceStr.toDoubleOrNull()
+    val amount = priceStr.toDoubleOrNull()
         ?: throw InvalidRequestException("'price' is not a number: $priceStr")
+
+    val configuration = BackendEnvironment.getInterface(Configuration::class)!!
+    val payeeAccount = configuration.getValue("payee_account")
+        ?: throw IllegalStateException("'payee_account' is not configured")
+    val serviceUrl = configuration.enrollmentServerUrl!!
+    val paymentProcessor = getPaymentProcessor(serviceUrl)
+    val paymentTransactionData = withContext(RpcAuthClientSession()) {
+        paymentProcessor.createTransaction(PaymentTransactionRequest(
+            payeeAccount = payeeAccount,
+            description = productName,
+            amount = amount,
+            currency = "USD",
+        ))
+    }
 
     val transactionData = buildJsonArray {
         add(buildJsonObject {
             put("type", PaymentTransaction.identifier)
             put("credential_ids", buildJsonArray { add(JsonPrimitive("payment")) })
             put("payload", buildJsonObject {
-                put("transaction_id", UUID.randomUUID().toString())
+                put("transaction_id", paymentTransactionData.transactionId)
                 put("payee", buildJsonObject {
-                    put("name", "Utopia Brewery")
+                    put("name", paymentTransactionData.payeeName)
+                    put("id", payeeAccount)
                 })
-                put("amount", JsonPrimitive(price))
+                put("amount", amount)
                 put("currency", "USD")
             })
         })
     }
-    Logger.i(TAG, "Checkout for '$productName' at $price USD")
+    Logger.i(TAG, "Checkout for '$productName' at $amount USD")
 
     val responsePayload = buildJsonObject {
         put("dcql", BREWERY_DCQL_QUERY)
-        put("protocols", buildJsonArray { add(JsonPrimitive("openid4vp-v1")) })
         put("transaction_data", transactionData)
+        put("nonce", paymentTransactionData.nonce.toByteArray().toBase64Url())
     }
     call.respondText(responsePayload.toString(), ContentType.Application.Json)
 }
@@ -165,6 +192,7 @@ private val BREWERY_DCQL_QUERY: JsonObject = Json.parseToJsonElement("""
       "claims": [
         { "path": ["org.multipaz.payment.sca.1", "issuer_name"] },
         { "path": ["org.multipaz.payment.sca.1", "masked_account_reference"] },
+        { "path": ["org.multipaz.payment.sca.1", "payment_instrument_id"] },
         { "path": ["org.multipaz.payment.sca.1", "holder_name"] },
         { "path": ["org.multipaz.payment.sca.1", "expiry_date"] }
       ]
@@ -239,8 +267,13 @@ class BreweryVerifierAssistant : VerifierAssistant {
             }
         }
 
-        // Stub: notify records server (fire-and-forget; errors are logged)
-        postToRecordsServer(holderName, issuerName)
+        // Process the transaction using payment service
+        val configuration = BackendEnvironment.getInterface(Configuration::class)!!
+        val serviceUrl = configuration.enrollmentServerUrl!!
+        val paymentProcessor = getPaymentProcessor(serviceUrl)
+        withContext(RpcAuthClientSession()) {
+            paymentProcessor.commitTransaction(presentment.presentmentRecord)
+        }
 
         Logger.i(TAG, "Purchase approved for $holderName via $issuerName")
         return buildJsonObject {
@@ -250,6 +283,18 @@ class BreweryVerifierAssistant : VerifierAssistant {
         }
     }
 }
+
+private suspend fun getPaymentProcessor(serviceUrl: String): PaymentProcessor {
+    val exceptionMap = RpcExceptionMap.Builder().build()
+    val dispatcher = RpcAuthorizedServerClient.connect(
+        exceptionMap = exceptionMap,
+        rpcEndpointUrl = "$serviceUrl/rpc",
+        callingServerUrl = BackendEnvironment.getBaseUrl(),
+        signingKey = getServerIdentity(ServerIdentity.PAYMENT_PROCESSOR)
+    )
+    return PaymentProcessorStub("payment", dispatcher, RpcNotifier.SILENT)
+}
+
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -307,20 +352,4 @@ fun checkAge(claims: JsonObject): Boolean {
 
     // No usable age claim found
     return false
-}
-
-/**
- * Stub: POST purchase info to the records server.
- * The OOB interface is not yet available; errors are logged and swallowed.
- */
-private suspend fun postToRecordsServer(holderName: String, issuerName: String) {
-    try {
-        val recordsUrl = BackendEnvironment.getBaseUrl() + "/records/purchase"
-        Logger.i(TAG, "Stub: would POST purchase to $recordsUrl for $holderName via $issuerName")
-        // TODO: implement actual HTTP POST once the records server OOB interface is available
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        Logger.e(TAG, "Records server stub call failed", e)
-    }
 }

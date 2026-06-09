@@ -34,6 +34,15 @@ data class PaymentAccount(
             }
         }
 
+        suspend fun restore(holderId: String, account: String) {
+            val table = BackendEnvironment.getTable(accountTableSpec)
+            val data = PaymentAccount(holderId = holderId, balance = 0.0)
+            table.insert(
+                key = account,
+                data = ByteString(data.toCbor())
+            )
+        }
+
         suspend fun get(accountId: String): PaymentAccount {
             val accountTable = BackendEnvironment.getTable(accountTableSpec)
             return accountTable.get(accountId)

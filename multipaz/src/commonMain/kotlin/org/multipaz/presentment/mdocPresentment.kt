@@ -28,6 +28,7 @@ import org.multipaz.mdoc.response.buildDeviceResponse
 import org.multipaz.mdoc.transport.MdocTransportClosedException
 import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
+import org.multipaz.openid.OpenID4VP.processTransactions
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwt
@@ -176,7 +177,7 @@ suspend fun mdocPresentment(
                     val document = MdocDocument.fromPresentment(
                         sessionTranscript = sessionTranscriptToUse,
                         eReaderKey = eReaderKey,
-                        credential = match.credential as MdocCredential,
+                        credential = match.credential,
                         requestedClaims = match.claims.keys.toList() as List<MdocRequestedClaim>,
                         deviceNamespaces = computeTransactionResponse(match),
                         errors = mapOf()
@@ -254,6 +255,11 @@ suspend fun mdocPresentment(
                         path
                     }
                     val filteredSdJwtVc = sdJwtVc.filter(pathsToDisclose)
+                    val transactionResponse = processTransactions(
+                        credential = match.credential,
+                        transactionData = match.transactionData,
+                        docRequestId = match.source.docRequest.docRequestId
+                    )
                     val sdJwtKb = filteredSdJwtVc.present(
                         signingKey = AsymmetricKey.AnonymousSecureAreaBased(
                             alias = match.credential.alias,
@@ -264,7 +270,13 @@ suspend fun mdocPresentment(
                         nonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(sessionTranscriptToUseBytes)).toBase64Url(),
                         audience = audience,
                         creationTime = creationTime
-                    )
+                    ) {
+                        if (!match.transactionData.isEmpty()) {
+                            for ((key, response) in transactionResponse) {
+                                put(key, response)
+                            }
+                        }
+                    }
                     val otherDocument = OtherDocument(
                         docFormat = "sd-jwt+kb",
                         data = ByteString(sdJwtKb.compactSerialization.encodeToByteArray().zlibDeflate())
@@ -311,6 +323,12 @@ internal suspend fun computeTransactionResponse(
             }
             put("transaction_data_hash",
                 transaction.getHash(alg ?: Algorithm.SHA256).toByteArray().toDataItem())
+            (match.source as? CredentialMatchSourceIso18013)?.let { source ->
+                // This is generally not available anywhere is the ISO 18013 response,
+                // but it is needed to verify the transaction, so we keep it in the
+                // transaction response.
+                put("doc_request_id", source.docRequest.docRequestId.toDataItem())
+            }
             transaction.type.applyCbor(
                 transactionData = transaction,
                 credential = match.credential

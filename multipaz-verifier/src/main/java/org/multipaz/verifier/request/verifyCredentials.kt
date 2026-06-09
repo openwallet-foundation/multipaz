@@ -28,7 +28,6 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
-import org.multipaz.claim.Claim
 import org.multipaz.claim.JsonClaim
 import org.multipaz.claim.MdocClaim
 import org.multipaz.documenttype.DocumentTypeRepository
@@ -41,12 +40,13 @@ import org.multipaz.server.common.getDomain
 import org.multipaz.server.enrollment.ServerIdentity
 import org.multipaz.server.enrollment.getServerIdentity
 import org.multipaz.trustmanagement.TrustManagerInterface
+import org.multipaz.util.Logger
 import org.multipaz.verification.PresentmentRecord
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import org.multipaz.verification.DcqlProcessedResponse
 import org.multipaz.verification.JsonVerifiedPresentation
 import org.multipaz.verification.MdocVerifiedPresentation
-import org.multipaz.verification.QueryData
 import org.multipaz.verification.VerificationSession
 import org.multipaz.verification.VerificationUtil
 import org.multipaz.verifier.session.Session
@@ -59,6 +59,8 @@ import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 
+private const val TAG = "verifyCredentials"
+
 private val defaultRequestTypes = setOf(
     VerificationSession.RequestType.DC_OPENID4VP,
     VerificationSession.RequestType.DC_ISO_18013,
@@ -70,7 +72,6 @@ suspend fun makeRequest(call: ApplicationCall) {
     val assistant = BackendEnvironment.getInterface(VerifierAssistant::class)
     val expandedRequest = assistant?.processRequest(rawRequest)
     val request = expandedRequest?.request ?: rawRequest
-    val nonce = expandedRequest?.nonce ?: ByteString(Random.nextBytes(15))
     val dcqlQuery = (request["dcql"] as? JsonObject)?.toString()
         ?: throw InvalidRequestException("'dcql' is missing or invalid")
     val requestTypes = (request["protocols"] as? JsonArray)?.map {
@@ -84,6 +85,9 @@ suspend fun makeRequest(call: ApplicationCall) {
     val transactionData = request["transaction_data"]?.jsonArray
     val sign = (request["sign"] as? JsonPrimitive)?.booleanOrNull != false
     val encrypt = (request["encrypt"] as? JsonPrimitive)?.booleanOrNull != false
+    val nonce = (request["nonce"] as? JsonPrimitive)?.content?.also {
+        Logger.i(TAG, "Supplied nonce: $it")
+    }
     val baseUrl = BackendEnvironment.getBaseUrl()
     val sessionId = Session.createSession()
     val encodedSessionId = encodeSessionId(sessionId)
@@ -92,7 +96,7 @@ suspend fun makeRequest(call: ApplicationCall) {
         requestTypes = requestTypes,
         dcql = dcqlQuery,
         transactionData = transactions,
-        nonce = nonce,
+        nonce = ByteString(nonce?.fromBase64Url() ?: Random.nextBytes(15)),
         origin = BackendEnvironment.getDomain(),
         clientId = getClientId(sign),
         responseUri = "$baseUrl/direct_post/$encodedSessionId",
@@ -136,12 +140,12 @@ suspend fun getOpenID4VPUriSchemaRequest(call: ApplicationCall, encodedSessionId
         ?: throw InvalidRequestException("Session '$encodedSessionId' is missing or expired")
     val verificationSession = session.verificationSession
         ?: throw InvalidRequestException("Session '$encodedSessionId': response already processed")
-    if (!verificationSession.signed) {
+    val request = verificationSession.find<VerificationSession.OpenID4VPUriSchemeRequest>()
+    val parsedRequest = Json.parseToJsonElement(request.openID4VPRequest).jsonObject
+    if (!VerificationSession.OpenID4VPRequest.isSignedRequest(parsedRequest)) {
         throw InvalidRequestException("OpenID4VP custom uri requests must be signed")
     }
-    val request = verificationSession.find<VerificationSession.OpenID4VPUriSchemeRequest>()
-    val text = Json.parseToJsonElement(request.openID4VPRequest)
-        .jsonObject["request"]!!.jsonPrimitive.content
+    val text = parsedRequest["request"]!!.jsonPrimitive.content
     call.respondText(
         contentType = ContentType.parse("application/oauth-authz-req+jwt"),
         text = text
@@ -246,7 +250,10 @@ private suspend fun processPresentation(
     val trustManager = BackendEnvironment.getInterface(TrustManagerInterface::class)!!
     val singleDocMap = mutableMapOf<String, JsonObject>()
     val multiDocMap = mutableMapOf<String, MutableList<JsonObject>>()
-    for (presentation in verifiedPresentations) {
+    val processedResponse = DcqlProcessedResponse(dcql, verifiedPresentations)
+
+    for ((id, credential) in processedResponse.credentials) {
+        val presentation = credential.presentation
         val trusted = presentation.documentSignerCertChain?.let {
             trustManager.verify(it.certificates, now).isTrusted
         }
@@ -266,14 +273,10 @@ private suspend fun processPresentation(
                     }
                 }
         }
-        val id = presentation.identifier ?: "default"
-        val queryMap = QueryData.fromDcql(Json.parseToJsonElement(dcql).jsonObject)
-            .associateBy { it.id }
-        val query = presentation.identifier?.let { queryMap[it] }
         val docResult = buildJsonObject {
             trusted?.let { put("trusted", trusted) }
             putJsonObject("claims") {
-                for (claim in presentation.issuerSignedClaims) {
+                for ((name, claim) in credential.claims) {
                     val value = when (claim) {
                         is JsonClaim -> {
                             if (claim.claimPath.size == 1 &&
@@ -292,7 +295,7 @@ private suspend fun processPresentation(
                             else -> value.toJson()
                         }
                     }
-                    put(claim.identifier, value)
+                    put(name, value)
                 }
             }
             transactions?.let { put("transactions", it) }
@@ -300,11 +303,7 @@ private suspend fun processPresentation(
                 put("zkp_used", true)
             }
         }
-        if (query?.multiple == true) {
-            multiDocMap.getOrPut(id) { mutableListOf() }.add(docResult)
-        } else {
-            singleDocMap[id] = docResult
-        }
+        singleDocMap[id] = docResult
     }
 
     val result = buildJsonObject {
@@ -365,9 +364,4 @@ private suspend fun decodeSessionId(code: String): String {
         throw IllegalArgumentException("Not a valid session id")
     }
     return buf.sliceArray(2..<buf.size).toBase64Url()
-}
-
-private val Claim.identifier: String get() = when (this) {
-    is JsonClaim -> queryIdentifier ?: claimPath.last().jsonPrimitive.content
-    is MdocClaim -> queryIdentifier ?: dataElementName
 }

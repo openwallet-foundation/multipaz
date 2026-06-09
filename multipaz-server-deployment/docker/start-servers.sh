@@ -57,7 +57,7 @@ service () {
     extra="$extra -param enrollment_server_url=${BASE_URL}/records"
   fi
   echo "Starting $service service ($instance) at port $port..."
-  java -cp "/app/jars/$service.jar:/app/libs/*" "$mainclass" \
+  java -cp "/app/jars/$service.jar:/app/libs/multipaz-$service.jar:/app/libs/*" "$mainclass" \
     -param server_port=$port \
     -param base_url=${BASE_URL}/$instance \
     -param ca_trust_servers="[\"$host\"]" \

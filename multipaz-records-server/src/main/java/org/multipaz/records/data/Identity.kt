@@ -64,7 +64,7 @@ class Identity private constructor(
                 val n = Random.nextInt(100000000).toString().padStart(8, '0')
                 val utopiaId = n.take(4) + "-" + n.substring(4, 8)
                 val core = data.core + ("utopia_id_number" to Tstr(utopiaId))
-                val records = data.records.minus("payment") // account numbers will need to be adjusted
+                val records = data.records.minus("payment") // account numbers may need to be adjusted
                 val dataToStore = IdentityData(core, records)
                 try {
                     val id = table.insert(
@@ -81,6 +81,28 @@ class Identity private constructor(
                     // try a different key
                 }
             }
+        }
+
+        /**
+         * Restores identity record from existing data, creating existing account numbers.
+         */
+        suspend fun restore(id: String, data: IdentityData) {
+            if (data.records.containsKey("payment")) {
+                for (cardData in data.records["payment"]!!.values) {
+                    val accountNumber = cardData["account_number"].asTstr
+                    PaymentAccount.restore(id, accountNumber)
+                }
+            }
+            val table = BackendEnvironment.getTable(tableSpec)
+            table.insert(
+                key = id,
+                data = ByteString(data.toCbor())
+            )
+        }
+
+        suspend fun hasId(id: String): Boolean {
+            val table = BackendEnvironment.getTable(tableSpec)
+            return table.get(id) != null
         }
 
         /**

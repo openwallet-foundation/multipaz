@@ -13,18 +13,10 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.Simple
-import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
-import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.annotation.CborSerializable
-import org.multipaz.cbor.buildCborArray
-import org.multipaz.cbor.toDataItem
-import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
-import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.openid.OpenID4VP
@@ -38,27 +30,23 @@ import kotlin.collections.component2
  * A serializable object that encapsulates all the information needed to process a verification
  * request, possibly using multiple protocols.
  *
- * Use [generateVerificationSessionForDcql] method to generate an instance of this class that contains
- * a set of requests. Verification requests can be used to ask for credential presentment.
- * Individual requests can be accessed using [find] method (or [getDcRequest] helper method
- * that creates DC API object that can contains requests in several formats). The requests
- * then should be sent to the credential holder, which will generate a single response (also
- * known as "presentation"). Then use an appropriate "processXXXResponse" method to process the
- * response and create a [PresentmentRecord]. [PresentmentRecord] then can then be verified either
- * immediately or saved and verified (or re-verified) later and used to extract presented
- * documents and transaction processing results.
+ * Use [VerificationUtil.generateVerificationSessionForDcql] method to generate an instance of
+ * this class that contains a set of requests. Verification requests can be used to ask for
+ * credential presentment. Individual requests can be accessed using [find] method
+ * (or [getDcRequest] helper method that creates DC API object that can contains requests in
+ * several formats). The requests then should be sent to the credential holder, which will
+ * generate a single response (also known as "presentation"). Then use an appropriate
+ * "processXXXResponse" method to process the response and create a [PresentmentRecord].
+ * [PresentmentRecord] then can then be verified either immediately or saved and verified
+ * (or re-verified) later and used to extract presented documents and transaction
+ * processing results.
  *
  * @param requests individual requests that are semantically equivalent, but formatted to be sent
  *  through various supported protocols
- * @param signed whether the verification request(s) are signed
- * @param requestDefinition [RequestDefinition] that describes the semantics of the verification
- *  request being processed
  */
 @CborSerializable
 class VerificationSession(
-    val requests: List<Request>,
-    val signed: Boolean,
-    val requestDefinition: RequestDefinition?,
+    val requests: List<Request>
 ) {
     /**
      * @return a request of type [T] from the list of [requests] or null if it cannot be found.
@@ -100,12 +88,14 @@ class VerificationSession(
             }
             findOrNull<DcOpenID4VPRequest>()?.let { request ->
                 addJsonObject {
-                    put("protocol", if (signed) {
+                    val parsedRequest =
+                        Json.parseToJsonElement(request.openID4VPRequest).jsonObject
+                    put("protocol", if (OpenID4VPRequest.isSignedRequest(parsedRequest)) {
                         "openid4vp-v1-signed"
                     } else {
                         "openid4vp-v1-unsigned"
                     })
-                    put("data", Json.parseToJsonElement(request.openID4VPRequest))
+                    put("data", parsedRequest)
                 }
             }
             findOrNull<DcOpenID4VPDraft24Request>()?.let { request ->
@@ -150,7 +140,6 @@ class VerificationSession(
             response = deviceResponse,
             request = request.deviceRequest,
             sessionTranscript = sessionTranscript,
-            requestDefinition = requestDefinition,
             encryptionInfo = null,
             origin = null,
             eDeviceKey = request.eDeviceKey
@@ -269,6 +258,19 @@ class VerificationSession(
          * "request" and the value being signed JWT serialized as string.
          */
         abstract val openID4VPRequest: String
+
+        companion object {
+            /**
+             * Heuristic to determine if the request was signed.
+             *
+             * We want to have a single place where it is defined in case it needs to be tweaked.
+             *
+             * @param parsedRequest [OpenID4VPRequest.openID4VPRequest] parsed as JSON object
+             * @return whether the request was signed
+             */
+            fun isSignedRequest(parsedRequest: JsonObject): Boolean =
+                !parsedRequest.containsKey("dcql_query")
+        }
     }
 
     /**
@@ -425,7 +427,6 @@ class VerificationSession(
         return Iso18013PresentmentRecord(
             response = Cbor.decode(deviceResponseRaw),
             request = request.deviceRequest,
-            requestDefinition = requestDefinition,
             origin = request.origin,
             sessionTranscript = sessionTranscript,
             encryptionInfo = ByteString(Cbor.encode(request.encryptionInfo)),
@@ -437,15 +438,15 @@ class VerificationSession(
         request: OpenID4VPRequest,
         vpToken: String
     ): PresentmentRecord {
-        val vpRequest = if (signed) {
-            // Signed request, extract JWT body
-            val parsedRequest = Json.parseToJsonElement(request.openID4VPRequest).jsonObject
+        val parsedRequest = Json.parseToJsonElement(request.openID4VPRequest).jsonObject
+        val isSigned = OpenID4VPRequest.isSignedRequest(parsedRequest)
+        val jsonRequest = if (isSigned) {
+            // This got to be signed request, extract JWT body
             val jwtParts = parsedRequest["request"]!!.jsonPrimitive.content.split('.')
-            jwtParts[1].fromBase64Url().decodeToString()
+            Json.parseToJsonElement(jwtParts[1].fromBase64Url().decodeToString()).jsonObject
         } else {
-            request.openID4VPRequest
+            parsedRequest
         }
-        val jsonRequest = Json.parseToJsonElement(vpRequest).jsonObject
         val queryData = QueryData.fromDcql(jsonRequest["dcql_query"]!!.jsonObject)
         val nonceFromRequest = jsonRequest["nonce"]!!.jsonPrimitive.content
         val sessionTranscript = if (queryData.find { it is MdocQueryData } == null) {
@@ -455,7 +456,7 @@ class VerificationSession(
             // OpenID4VP Draft 24 over W3C DC API: handover info is [origin, clientId, nonce]
             // where clientId is the request's client_id for signed requests and the synthetic
             // `web-origin:<origin>` for unsigned requests.
-            val effectiveClientId = if (signed) {
+            val effectiveClientId = if (isSigned) {
                 jsonRequest["client_id"]!!.jsonPrimitive.content
             } else {
                 "web-origin:${request.requestorId}"
@@ -475,7 +476,7 @@ class VerificationSession(
         }
         return OpenID4VPPresentmentRecord(
             vpToken = vpToken,
-            vpRequest = vpRequest,
+            vpRequest = jsonRequest.toString(),
             mdocSessionTranscript = sessionTranscript,
         )
     }

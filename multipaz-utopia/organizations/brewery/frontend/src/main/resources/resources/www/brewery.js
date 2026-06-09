@@ -170,11 +170,7 @@ async function onBuyClick() {
         const checkoutData = await checkoutResp.json();
 
         // Step 2: Present credentials via DC API (multipazVerifyCredentials is from verify_credentials.js)
-        const result = await multipazVerifyCredentials({
-            dcql: checkoutData.dcql,
-            protocols: checkoutData.protocols,
-            transaction_data: checkoutData.transaction_data
-        });
+        const result = await multipazVerifyCredentials(checkoutData);
 
         showLoading(false);
 

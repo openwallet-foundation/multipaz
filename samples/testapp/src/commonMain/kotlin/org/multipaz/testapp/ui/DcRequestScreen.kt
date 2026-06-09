@@ -32,7 +32,7 @@ import org.multipaz.util.toBase64Url
 import org.multipaz.testapp.ShowResponseMetadata
 import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.utopia.knowntypes.wellKnownMultipleDocumentRequests
-import org.multipaz.verification.DcqlRequestDefinition
+import org.multipaz.testapp.DcqlRequestDefinition
 import org.multipaz.verification.VerificationSession
 import org.multipaz.verification.VerificationUtil
 import kotlin.random.Random

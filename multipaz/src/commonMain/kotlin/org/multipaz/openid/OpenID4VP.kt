@@ -57,6 +57,7 @@ import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.presentment.TransactionDataJson
 import org.multipaz.presentment.ConsentData
+import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.computeTransactionResponse
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
@@ -711,6 +712,60 @@ object OpenID4VP {
         return Cbor.encode(deviceResponse.toDataItem()).toBase64Url()
     }
 
+    /**
+     * Processes transaction data for the given SD-JWT credential.
+     *
+     * @param credential credential which transactions are targeting, must be key-bound if any
+     *   transactions are present (i.e. [transactionData] is not empty)
+     * @param transactionData transaction data for the credential
+     * @param docRequestId index of the specific document request in the context of ISO 18013
+     *   presentation
+     * @return additional attributes to add to the SD-JWT+KB body
+     */
+    suspend fun processTransactions(
+        credential: SdJwtVcCredential,
+        transactionData: List<TransactionData>,
+        docRequestId: Int? = null
+    ): Map<String, JsonElement> {
+        val transactionResponse = mutableMapOf<String, JsonElement>()
+        for (data in transactionData) {
+            val response = data.type.applyJson(data, credential as Credential)
+            if (response != null || docRequestId != null) {
+                transactionResponse[data.type.kbJwtResponseClaimName] = if (docRequestId == null) {
+                    response!!
+                } else {
+                    buildJsonObject {
+                        if (response != null) {
+                            for ((name, value) in response.jsonObject) {
+                                put(name, value)
+                            }
+                        }
+                        put("doc_request_id", docRequestId)
+                    }
+                }
+            }
+        }
+        val hashAlgorithm = transactionData.firstNotNullOfOrNull {
+            it.getHashAlgorithm()
+        }
+        if (hashAlgorithm != null) {
+            // Non-default hash algorithm; ensure all transaction data items are
+            // using the same one
+            transactionData.forEach { data ->
+                check(hashAlgorithm == (data.getHashAlgorithm() ?: Algorithm.SHA256))
+            }
+            transactionResponse["transaction_data_hashes_alg"] =
+                JsonPrimitive(hashAlgorithm.hashAlgorithmName)
+        }
+        transactionResponse["transaction_data_hashes"] = buildJsonArray {
+            transactionData.forEach {
+                    data -> add(data.getHash(
+                hashAlgorithm ?: Algorithm.SHA256).toByteArray().toBase64Url())
+            }
+        }
+        return transactionResponse
+    }
+
     private suspend fun openID4VPSdJwt(
         version: Version,
         match: CredentialPresentmentSetOptionMemberMatch,
@@ -729,30 +784,7 @@ object OpenID4VP {
 
         (sdjwtVcCredential as Credential).increaseUsageCount()
 
-        val transactionResponse = mutableMapOf<String, JsonElement>()
-        for (data in match.transactionData) {
-            data.type.applyJson(data, (sdjwtVcCredential as Credential))?.let {
-                transactionResponse[data.type.kbJwtResponseClaimName] = it
-            }
-        }
-        val hashAlgorithm = match.transactionData.firstNotNullOfOrNull {
-            it.getHashAlgorithm()
-        }
-        if (hashAlgorithm != null) {
-            // Non-default hash algorithm; ensure all transaction data items are
-            // using the same one
-            match.transactionData.forEach { data ->
-                check(hashAlgorithm == (data.getHashAlgorithm() ?: Algorithm.SHA256))
-            }
-            transactionResponse["transaction_data_hashes_alg"] =
-                JsonPrimitive(hashAlgorithm.hashAlgorithmName)
-        }
-        transactionResponse["transaction_data_hashes"] = buildJsonArray {
-            match.transactionData.forEach {
-                data -> add(data.getHash(
-                    hashAlgorithm ?: Algorithm.SHA256).toByteArray().toBase64Url())
-            }
-        }
+        val transactionResponse = processTransactions(sdjwtVcCredential, match.transactionData)
 
         return if (sdjwtVcCredential is SecureAreaBoundCredential) {
             filteredSdJwt.present(

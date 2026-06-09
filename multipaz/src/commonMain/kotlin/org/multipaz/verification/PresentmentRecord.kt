@@ -4,7 +4,6 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.zkp.ZkSystemRepository
-import org.multipaz.presentment.TransactionData
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -38,18 +37,6 @@ sealed class PresentmentRecord() {
         documentTypeRepository: DocumentTypeRepository? = null,
         zkSystemRepository: ZkSystemRepository? = null
     ): List<VerifiedPresentation>
-
-    /**
-     * Parses and returns transaction data entries using the given [documentTypeRepository]
-     * to resolve transaction types.
-     *
-     * @param documentTypeRepository repository used to look up transaction type definitions, it
-     *  must be non-null if any transactions are present
-     * @return map from credential ID to parsed transaction data entries.
-     */
-    abstract fun getTransactionData(
-        documentTypeRepository: DocumentTypeRepository
-    ): Map<String, List<TransactionData>>
 
     companion object
 }

@@ -4,6 +4,7 @@ import kotlinx.serialization.json.JsonElement
 import org.multipaz.claim.JsonClaim
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.TransactionType
+import org.multipaz.presentment.TransactionData
 import kotlin.time.Instant
 
 /**
@@ -24,5 +25,6 @@ data class JsonVerifiedPresentation(
     override val expectedUpdate: Instant?,
     val vct: String,
     val transactionResponses: Map<String, JsonElement>?,
-    override val identifier: String?
+    override val vpTokenIdentifier: String?,
+    override val transactionData: List<TransactionData>
 ): VerifiedPresentation()

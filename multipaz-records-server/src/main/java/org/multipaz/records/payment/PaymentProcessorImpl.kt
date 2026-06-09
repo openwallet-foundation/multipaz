@@ -19,11 +19,10 @@ import org.multipaz.server.payment.PaymentProcessor
 import org.multipaz.server.payment.PaymentTransactionData
 import org.multipaz.server.payment.PaymentTransactionRequest
 import org.multipaz.verification.PresentmentRecord
-import org.multipaz.verification.Iso18013PresentmentRecord
-import org.multipaz.verification.OpenID4VPPresentmentRecord
 import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.util.Logger
 import org.multipaz.util.truncateToWholeSeconds
+import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.verification.MdocVerifiedPresentation
 import kotlin.math.roundToLong
 import kotlin.random.Random
@@ -79,14 +78,19 @@ class PaymentProcessorImpl: PaymentProcessor, RpcAuthInspector by rpcAuth {
         val now = Clock.System.now().truncateToWholeSeconds()
         val documentTypeRepository =
             BackendEnvironment.getInterface(DocumentTypeRepository::class)!!
-        val transactionDataMap = when (presentmentRecord) {
-            is Iso18013PresentmentRecord ->
-                presentmentRecord.getTransactionData(documentTypeRepository)
-            is OpenID4VPPresentmentRecord ->
-                presentmentRecord.getTransactionData(documentTypeRepository)
-        }
-        check(transactionDataMap.size == 1 && transactionDataMap.values.first().size == 1)
-        val transactionData = transactionDataMap.values.first().first()
+        val result = presentmentRecord.verify(
+            atTime = now,
+            documentTypeRepository = documentTypeRepository,
+            zkSystemRepository = BackendEnvironment.getInterface(ZkSystemRepository::class)
+        )
+        // Allow multiple documents being presented together with the payment itself
+        val payment = result.find {
+            it is MdocVerifiedPresentation && it.docType == DigitalPaymentCredential.CARD_DOCTYPE
+        } as? MdocVerifiedPresentation
+            ?: throw InvalidRequestException("Not a payment transaction")
+
+        check(payment.transactionData.size == 1)
+        val transactionData = payment.transactionData.first()
         val transactionPayload = transactionData.attributes.getCompound("payload")!!
         val transactionId = transactionPayload.getString("transaction_id")!!
         val amount = transactionPayload.getDouble("amount")!!
@@ -95,25 +99,20 @@ class PaymentProcessorImpl: PaymentProcessor, RpcAuthInspector by rpcAuth {
         val data = paymentTable.get(transactionId)
             ?: throw InvalidRequestException("Transaction '$transactionId' is invalid or expired")
         val draft = PaymentData.fromCbor(data.toByteArray())
+
+        presentmentRecord.verifyNonce(draft.nonce)
         if ((amount * 100).roundToLong() != (draft.amount * 100).roundToLong() || currency != draft.currency) {
             throw InvalidRequestException("Inconsistent transaction amount or currency")
         }
-        presentmentRecord.verifyNonce(draft.nonce)
-        val result = presentmentRecord.verify(
-            atTime = now,
-            documentTypeRepository = documentTypeRepository,
-            zkSystemRepository = BackendEnvironment.getInterface(ZkSystemRepository::class)
-        )
-        check(result.size == 1)
-        val payment = result.first() as MdocVerifiedPresentation
+
         val trustManager = BackendEnvironment.getInterface(TrustManagerInterface::class)!!
         val trustResult = trustManager.verify(payment.documentSignerCertChain.certificates, now)
         if (!trustResult.isTrusted) {
             throw InvalidRequestException("Payment instrument is not issued by a trusted issuer")
         }
         val claims = payment.issuerSignedClaims
-        val payerAccount = claims.find { it.displayName == "payment_instrument_id" }!!.value.asTstr
-        val payerName = claims.find { it.displayName == "holder_name"}?.value?.asTstr
+        val payerAccount = claims.find { it.dataElementName == "payment_instrument_id" }!!.value.asTstr
+        val payerName = claims.find { it.dataElementName == "holder_name"}?.value?.asTstr
         // We don't have transaction support in our simplistic storage interface; this lock
         // prevents conflicts/inconsistencies on a single-machine server.
         transactionLock.withLock {

@@ -34,11 +34,6 @@ sealed class Claim(
     open val attribute: DocumentAttribute?,
 ) {
     /**
-     * If this [Claim] was generated as a result of a query, claim id.
-     */
-    abstract val queryIdentifier: String?
-
-    /**
      * Returns the value of a claim as a human readable string.
      *
      * If [Claim.attribute] is set, its type is used when rendering for example to resolve integer options to strings.

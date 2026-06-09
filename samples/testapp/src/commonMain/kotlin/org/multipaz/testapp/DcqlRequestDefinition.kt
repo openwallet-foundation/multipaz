@@ -1,7 +1,7 @@
-package org.multipaz.verification
+package org.multipaz.testapp
 
 /**
- * [RequestDefinition] that is defined in terms of OpenID4VP DCQL and transaction data.
+ * A presentation request that is defined in terms of OpenID4VP DCQL and transaction data.
  *
  * @property dcql DCQL query, this gives the list of needed credentials and
  *   which claims are needed from each credential
@@ -11,6 +11,6 @@ package org.multipaz.verification
 class DcqlRequestDefinition(
     val dcql: String,
     val transactionData: List<String>? = null
-): RequestDefinition() {
+) {
     companion object
 }

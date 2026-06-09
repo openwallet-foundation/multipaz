@@ -1,6 +1,9 @@
 package org.multipaz.presentment
 
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.CborDouble
+import org.multipaz.cbor.CborFloat
+import org.multipaz.cbor.CborInt
 import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.Tagged
 import org.multipaz.crypto.Algorithm
@@ -51,7 +54,16 @@ class TransactionDataCbor(
             if (data.hasKey(name)) data[name].asNumber else null
 
         override fun getDouble(name: String): Double? =
-            if (data.hasKey(name)) data[name].asDouble else null
+            if (data.hasKey(name)) {
+                when (val v = data[name]) {
+                    is CborDouble -> v.asDouble
+                    is CborFloat -> v.asFloat.toDouble()
+                    is CborInt -> v.asNumber.toDouble()
+                    else -> throw IllegalArgumentException("Not a double")
+                }
+            } else {
+                null
+            }
 
         override fun getBoolean(name: String): Boolean? =
             if (data.hasKey(name)) data[name].asBoolean else null

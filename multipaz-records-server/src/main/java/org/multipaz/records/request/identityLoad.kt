@@ -18,6 +18,13 @@ suspend fun identityLoad(call: ApplicationCall) {
         throw InvalidRequestException("wrong password")
     }
     for (identity in request["identities"]!!.jsonArray) {
-        Identity.create(IdentityData.fromJson(identity.jsonObject))
+        val data = IdentityData.fromJson(identity.jsonObject)
+        val utopiaId = data.core["utopia_id_number"]!!.asTstr
+        if (Identity.hasId(utopiaId)) {
+            // Will assign a new id and new account numbers
+            Identity.create(data)
+        } else {
+            Identity.restore(utopiaId, data)
+        }
     }
 }

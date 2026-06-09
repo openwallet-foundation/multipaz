@@ -1,6 +1,10 @@
 package org.multipaz.mdoc.response
 
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.intOrNull
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Uint
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
@@ -13,12 +17,13 @@ import org.multipaz.mdoc.devicesigned.DeviceNamespaces
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.request.DeviceRequest
-import org.multipaz.mdoc.request.DocRequest
 import org.multipaz.mdoc.request.EncryptionParameters
 import org.multipaz.mdoc.response.DeviceResponse.Companion.STATUS_OK
 import org.multipaz.mdoc.zkp.ZkDocument
 import org.multipaz.presentment.TransactionData
 import org.multipaz.request.MdocRequestedClaim
+import org.multipaz.sdjwt.SdJwtKb
+import org.multipaz.util.zlibInflate
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -106,18 +111,43 @@ data class DeviceResponse internal constructor(
         atTime: Instant = Clock.System.now(),
     ) {
         numTimesVerifyCalled += 1
-        val requestMap = deviceRequest?.docRequests?.associateBy(DocRequestKey::fromDocRequest)
         documents_.forEach { document ->
-            val transactionData =
-                requestMap?.get(DocRequestKey.fromMdocDocument(document))
-                    ?.getTransactionData(documentTypeRepository!!)
-                        ?: emptyList()
+            val transactionData = if (deviceRequest == null) {
+                emptyList()
+            } else {
+                val docRequestId = if (deviceRequest.docRequests.size == 1) {
+                    0
+                } else {
+                    findDocRequestId(documentTypeRepository, document)
+                }
+                if (docRequestId < 0) {
+                    emptyList()
+                } else {
+                    deviceRequest.docRequests[docRequestId].getTransactionData(
+                        documentTypeRepository!!
+                    )
+                }
+            }
             document.verify(sessionTranscript, eReaderKey, transactionData, atTime)
         }
         otherDocuments.forEach { otherDocument ->
-            // TODO: transaction data is not yet supported, need to construct DocRequestKey
-            //  from the otherDocument content
-            otherDocument.verify(sessionTranscript, eReaderKey, emptyList(), atTime)
+            val transactionData = if (deviceRequest == null) {
+                emptyList()
+            } else {
+                val docRequestId = if (deviceRequest.docRequests.size == 1) {
+                    0
+                } else {
+                    findDocRequestId(documentTypeRepository, otherDocument)
+                }
+                if (docRequestId < 0) {
+                    emptyList()
+                } else {
+                    deviceRequest.docRequests[docRequestId].getTransactionData(
+                        documentTypeRepository!!
+                    )
+                }
+            }
+            otherDocument.verify(sessionTranscript, eReaderKey, transactionData, atTime)
         }
     }
 
@@ -190,27 +220,53 @@ data class DeviceResponse internal constructor(
         }
     }
 
-    private data class DocRequestKey(
-        val docType: String,
-        val claims: Map<String, Set<String>>
-    ) {
-        companion object {
-            fun fromDocRequest(docRequest: DocRequest) =
-                DocRequestKey(
-                    docType = docRequest.docType,
-                    claims = docRequest.nameSpaces.mapValues {
-                        (_, claimMap) -> claimMap.keys
-                    }
-                )
-
-            fun fromMdocDocument(mdocDocument: MdocDocument) =
-                DocRequestKey(
-                    docType = mdocDocument.docType,
-                    claims = mdocDocument.issuerNamespaces.data.mapValues {
-                        (_, claimMap) -> claimMap.keys
-                    }
-                )
+    private fun findDocRequestId(
+        documentTypeRepository: DocumentTypeRepository?,
+        doc: MdocDocument
+    ): Int {
+        if (documentTypeRepository == null) {
+            return -1
         }
+        var docRequestId: ULong? = null
+        val data = doc.deviceNamespaces.data
+        for (transactionType in documentTypeRepository.transactionTypes) {
+            val transactionResponse = data[transactionType.mdocResponseNamespace] ?: continue
+            val transactionDocRequestId = transactionResponse["doc_request_id"] as? Uint
+                ?: throw IllegalStateException(
+                    "'doc_request_id' is missing or invalid for transaction '${transactionType.identifier}'")
+            if (docRequestId == null) {
+                docRequestId = transactionDocRequestId.value
+            } else if(docRequestId != transactionDocRequestId.value) {
+                throw IllegalStateException("inconsistent 'doc_request_id' values")
+            }
+        }
+        return docRequestId?.toInt() ?: -1
+    }
+
+    private suspend fun findDocRequestId(
+        documentTypeRepository: DocumentTypeRepository?,
+        doc: OtherDocument
+    ): Int {
+        if (documentTypeRepository == null || doc.docFormat != "sd-jwt+kb") {
+            return -1
+        }
+        var docRequestId: Int? = null
+        val sdJwtBody =  SdJwtKb.fromCompactSerialization(
+            compactSerialization = doc.data.toByteArray().zlibInflate().decodeToString()
+        ).jwtBody
+        for (transactionType in documentTypeRepository.transactionTypes) {
+            val transactionResponse = sdJwtBody[transactionType.kbJwtResponseClaimName] ?: continue
+            val transactionDocRequestId =
+                ((transactionResponse as? JsonObject)?.get("doc_request_id") as? JsonPrimitive)?.intOrNull
+                    ?: throw IllegalStateException(
+                        "'doc_request_id' is missing or invalid for transaction '${transactionType.identifier}'")
+            if (docRequestId == null) {
+                docRequestId = transactionDocRequestId
+            } else if(docRequestId != transactionDocRequestId) {
+                throw IllegalStateException("inconsistent 'doc_request_id' values")
+            }
+        }
+        return docRequestId ?: -1
     }
 
     companion object {

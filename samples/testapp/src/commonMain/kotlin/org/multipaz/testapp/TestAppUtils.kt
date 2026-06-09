@@ -64,7 +64,6 @@ import org.multipaz.securearea.SecureArea
 import org.multipaz.testapp.ui.DocumentCreationMode
 import org.multipaz.util.Logger
 import org.multipaz.util.truncateToWholeSeconds
-import org.multipaz.verification.DcqlRequestDefinition
 import org.multipaz.verification.VerificationSession
 import org.multipaz.verification.VerificationUtil
 import kotlin.time.Clock

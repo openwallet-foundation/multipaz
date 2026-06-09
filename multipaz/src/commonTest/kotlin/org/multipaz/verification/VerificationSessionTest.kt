@@ -156,6 +156,7 @@ class VerificationSessionTest {
         record: PresentmentRecord,
         expectedDocType: String,
         expectedPingString: String,
+        expectedDocRequestId: Long?
     ) {
         val presentations = record.verify(
             documentTypeRepository = harness.documentTypeRepository
@@ -165,9 +166,9 @@ class VerificationSessionTest {
         assertEquals(expectedDocType, mdoc.docType)
 
         val claims = mdoc.issuerSignedClaims.associate {
-            (it.queryIdentifier ?: it.displayName) to it.value
+            it.dataElementName to it.value
         }
-        assertEquals(true, claims["over18"]!!.asBoolean)
+        assertEquals(true, claims["age_over_18"]!!.asBoolean)
 
         assertEquals(
             harness.dsKey.publicKey,
@@ -180,6 +181,7 @@ class VerificationSessionTest {
         )
         assertEquals(expectedPingString, pingResponse["string"]!!.asTstr)
         assertEquals(32, pingResponse["transaction_data_hash"]!!.asBstr.size)
+        assertEquals(expectedDocRequestId, pingResponse["doc_request_id"]?.asNumber)
     }
 
     @Test
@@ -328,6 +330,29 @@ class VerificationSessionTest {
     }
 
     @Test
+    fun testDcIso18013SdJwt() = runTest {
+        setup()
+
+        val nonce = ByteString(Random.nextBytes(18))
+        val session = VerificationUtil.generateVerificationSessionForDcql(
+            requestTypes = setOf(VerificationSession.RequestType.DC_ISO_18013),
+            dcql = EU_PID_SDJWT_DCQL,
+            transactionData = euPidPingTransactionData,
+            readerAuthenticationKey = readerKey,
+            origin = ORIGIN,
+            clientId = CLIENT_ID,
+            nonce = nonce,
+            encryptResponse = true,
+            documentTypeRepository = harness.documentTypeRepository,
+        )
+
+        val dcResponse = walletDcApiResponse(session, protocolName = "org-iso-mdoc")
+        val record = session.processDcResponse(dcResponse)
+        record.verifyNonce(nonce)
+        assertVerifiedEuPidSdJwt(record)
+    }
+
+    @Test
     fun testIso18013Proximity() = runTest {
         setup()
 
@@ -383,6 +408,7 @@ class VerificationSessionTest {
             preselected = harness.docMdl,
             expectedDocType = DrivingLicense.MDL_DOCTYPE,
             expectedPingString = "mdl text",
+            expectedDocRequestId = null
         )
     }
 
@@ -395,6 +421,7 @@ class VerificationSessionTest {
             preselected = harness.docPhotoId,
             expectedDocType = PhotoID.PHOTO_ID_DOCTYPE,
             expectedPingString = "pid text",
+            expectedDocRequestId = null
         )
     }
 
@@ -407,6 +434,7 @@ class VerificationSessionTest {
             preselected = harness.docMdl,
             expectedDocType = DrivingLicense.MDL_DOCTYPE,
             expectedPingString = "mdl text",
+            expectedDocRequestId = 0L
         )
     }
 
@@ -419,6 +447,7 @@ class VerificationSessionTest {
             preselected = harness.docPhotoId,
             expectedDocType = PhotoID.PHOTO_ID_DOCTYPE,
             expectedPingString = "pid text",
+            expectedDocRequestId = 1L
         )
     }
 
@@ -432,6 +461,7 @@ class VerificationSessionTest {
         preselected: Document,
         expectedDocType: String,
         expectedPingString: String,
+        expectedDocRequestId: Long?
     ) {
         val nonce = ByteString(Random.nextBytes(18))
         val session = VerificationUtil.generateVerificationSessionForDcql(
@@ -457,6 +487,7 @@ class VerificationSessionTest {
             record = record,
             expectedDocType = expectedDocType,
             expectedPingString = expectedPingString,
+            expectedDocRequestId = expectedDocRequestId
         )
     }
 
