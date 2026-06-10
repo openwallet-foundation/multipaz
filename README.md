@@ -69,6 +69,43 @@ At this point both API interfaces and data stored on disk are subject to change
 but we expect to provide stability guarantees post 1.0. We only expect minor changes
 for example conversion from `ByteArray` to `ByteString` and similar things.
 
+### Snapshot Builds
+
+Snapshot builds of the latest development version are automatically published to the Sonatype Central Snapshots repository on every push to the `main` branch.
+
+To use snapshot builds in a project consuming Multipaz:
+
+1. Add the Sonatype Snapshots repository to your project's `settings.gradle.kts` file:
+   ```kotlin
+   dependencyResolutionManagement {
+       repositories {
+           google()
+           mavenCentral()
+           maven {
+               url = uri("https://central.sonatype.com/repository/maven-snapshots/")
+           }
+       }
+   }
+   ```
+
+2. Reference the snapshot version of the library in your module's `build.gradle.kts` dependencies block. For example if the latest release version is 0.99.0 you can consume snapshots leading up to the next release in the following way:
+   ```kotlin
+   dependencies {
+       implementation("org.multipaz:multipaz:0.100.0-SNAPSHOT")
+   }
+   ```
+
+> [!TIP]
+> By default, Gradle caches snapshots for 24 hours. To force Gradle to check for and download the latest snapshot immediately when doing a project sync, add the following to your top-level `build.gradle.kts`:
+> ```kotlin
+> subprojects {
+>     configurations.all {
+>         resolutionStrategy.cacheChangingModulesFor(0, "seconds")
+>     }
+> }
+> ```
+> Alternatively, you can run Gradle with the `--refresh-dependencies` flag (e.g., `./gradlew build --refresh-dependencies`) to update cached snapshots on demand.
+
 ## Getting involved
 
 We have resources for people already involved and people wishing to contribute
