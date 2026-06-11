@@ -330,7 +330,8 @@ class ViewModel {
             validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
             expectedUpdate: nil,
             domain: "mdoc_user_auth",
-            randomProvider: KotlinRandom.companion
+            randomProvider: KotlinRandom.companion,
+            includeElement: { _, _ in KotlinBoolean(value: true) }
         )
         try! await document.edit(editActionFn: { editor in
             editor.provisioned = true

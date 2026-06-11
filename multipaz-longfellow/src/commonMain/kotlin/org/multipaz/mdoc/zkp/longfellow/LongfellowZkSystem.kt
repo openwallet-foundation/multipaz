@@ -48,6 +48,9 @@ class LongfellowZkSystem(): ZkSystem {
 
     companion object {
         private const val TAG = "LongfellowZkSystem"
+
+        // Matches the numeric error code in the native prover's message
+        private val errorCodeRegex = Regex("""\d+""")
     }
 
     override val name: String
@@ -190,19 +193,29 @@ class LongfellowZkSystem(): ZkSystem {
         }
         val adjustedTimestamp = timestamp.truncateToWholeSeconds()
         val encodedSessionTranscript = ByteString(Cbor.encode(sessionTranscript))
-        val proof = LongfellowNatives.runMdocProver(
-            circuit = circuitBytes,
-            circuitSize = circuitBytes.size,
-            mdoc = ByteString(longfellowDocBytes),
-            mdocSize = longfellowDocBytes.size,
-            pkx = x,
-            pky = y,
-            transcript = encodedSessionTranscript,
-            transcriptSize = encodedSessionTranscript.size,
-            now = formatDate(adjustedTimestamp),
-            zkSpec = longfellowZkSystemSpec,
-            statements = attributes
-        )
+        val proof = try {
+            LongfellowNatives.runMdocProver(
+                circuit = circuitBytes,
+                circuitSize = circuitBytes.size,
+                mdoc = ByteString(longfellowDocBytes),
+                mdocSize = longfellowDocBytes.size,
+                pkx = x,
+                pky = y,
+                transcript = encodedSessionTranscript,
+                transcriptSize = encodedSessionTranscript.size,
+                now = formatDate(adjustedTimestamp),
+                zkSpec = longfellowZkSystemSpec,
+                statements = attributes
+            )
+        } catch (e: ProofGenerationException) {
+            // The native prover only reports a numeric error code. Decode it to be human-readable
+            val code = errorCodeRegex.find(e.message ?: "")?.value?.toIntOrNull()
+            val decoded = code?.let { ProverCodeEnum.fromInt(it) }
+            if (decoded != null) {
+                throw ProofGenerationException("Proof generation failed with $decoded")
+            }
+            throw e
+        }
 
         val zkDocument = ZkDocument(
             proof=ByteString(proof),

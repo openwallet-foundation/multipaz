@@ -409,6 +409,7 @@ class DocumentType private constructor(
         expectedUpdate: Instant? = null,
         domain: String = "mdoc",
         randomProvider: Random = Random,
+        includeElement: (namespaceName: String, dataElement: MdocDataElement) -> Boolean = { _, _ -> true },
     ): MdocCredential {
         require(mdocDocumentType != null)
 
@@ -419,7 +420,7 @@ class DocumentType private constructor(
                 addNamespace(nsName) {
                     for ((deName, de) in ns.dataElements) {
                         val sampleValue = de.attribute.sampleValueMdoc
-                        if (sampleValue != null) {
+                        if (sampleValue != null && includeElement(nsName, de)) {
                             addDataElement(deName, sampleValue)
                         }
                     }

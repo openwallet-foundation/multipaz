@@ -74,6 +74,21 @@ import kotlin.time.Instant
 object TestAppUtils {
     private const val TAG = "TestAppUtils"
 
+    // The Longfellow ZK circuits can only hash a Mobile Security Object (MSO) up to roughly 2 KB,
+    // and the MSO contains a digest for *every* issuer-signed element (not just the disclosed
+    // ones). A full sample mdoc has too many elements, so its MSO overflows the circuit and proof
+    // generation fails with MDOC_PROVER_TAGGED_MSO_TOO_BIG. To keep the in-app credentials usable
+    // with ZK (matching how the issuer-server mints leaner credentials), we only provision the
+    // mandatory elements plus the handful of attributes typically proven in ZK.
+    private val ZK_FRIENDLY_NON_MANDATORY_ELEMENTS = setOf(
+        "age_over_18",
+        "age_over_21",
+        "portrait",
+        "given_name",
+        "family_name",
+        "birth_date",
+    )
+
     // This domain is for MdocCredential using mdoc ECDSA/EdDSA authentication and requiring user authentication.
     const val CREDENTIAL_DOMAIN_MDOC_USER_AUTH = "mdoc_user_auth"
 
@@ -313,6 +328,23 @@ object TestAppUtils {
                     "Erika",
                     "Erika's Driving License",
                     Res.drawable.driving_license_card_art
+                )
+                // A second, leaner mDL whose MSO is small enough for the Longfellow ZK circuits.
+                // The full mDL above overflows the circuit (MDOC_PROVER_TAGGED_MSO_TOO_BIG), so we
+                // also provision this ZK-friendly variant for proof-generation demos.
+                provisionDocument(
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain,
+                    DrivingLicense.getDocumentType(),
+                    "Erika",
+                    "Erika's Driving License (ZKP-friendly)",
+                    Res.drawable.driving_license_card_art,
+                    zkFriendly = true
                 )
                 provisionDocument(
                     documentStore,
@@ -637,6 +669,7 @@ object TestAppUtils {
         givenNameOverride: String,
         displayName: String,
         cardArtResource: DrawableResource,
+        zkFriendly: Boolean = false,
     ) {
         val cardArt = getDrawableResourceBytes(
             getSystemResourceEnvironment(),
@@ -667,7 +700,8 @@ object TestAppUtils {
                 validUntil = validUntil,
                 dsKey = dsKey,
                 numCredentialsPerDomain = numCredentialsPerDomain,
-                givenNameOverride = givenNameOverride
+                givenNameOverride = givenNameOverride,
+                zkFriendly = zkFriendly
             )
         }
 
@@ -706,12 +740,18 @@ object TestAppUtils {
         validUntil: Instant,
         dsKey: AsymmetricKey.X509Certified,
         numCredentialsPerDomain: Int,
-        givenNameOverride: String
+        givenNameOverride: String,
+        zkFriendly: Boolean = false
     ) {
         val issuerNamespaces = buildIssuerNamespaces {
             for ((nsName, ns) in documentType.mdocDocumentType?.namespaces!!) {
                 addNamespace(nsName) {
                     for ((deName, de) in ns.dataElements) {
+                        if (zkFriendly &&
+                            !de.mandatory &&
+                            de.attribute.identifier !in ZK_FRIENDLY_NON_MANDATORY_ELEMENTS) {
+                            continue
+                        }
                         val sampleValue = de.attribute.sampleValueMdoc
                         if (sampleValue != null) {
                             val value = if (deName.startsWith("given_name")) {

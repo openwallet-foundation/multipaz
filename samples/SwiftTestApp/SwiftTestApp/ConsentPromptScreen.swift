@@ -206,7 +206,8 @@ private func calcRequestData(
         validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
         expectedUpdate: nil,
         domain: "mdoc",
-        randomProvider: KotlinRandom.companion
+        randomProvider: KotlinRandom.companion,
+        includeElement: { _, _ in KotlinBoolean(value: true) }
     )
     
     let photoIdDoc = try! await documentStore.createDocument(
@@ -241,7 +242,8 @@ private func calcRequestData(
         validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
         expectedUpdate: nil,
         domain: "mdoc",
-        randomProvider: KotlinRandom.companion
+        randomProvider: KotlinRandom.companion,
+        includeElement: { _, _ in KotlinBoolean(value: true) }
     )
     
     let photoIdDoc2 = try! await documentStore.createDocument(
@@ -276,7 +278,8 @@ private func calcRequestData(
         validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
         expectedUpdate: nil,
         domain: "mdoc",
-        randomProvider: KotlinRandom.companion
+        randomProvider: KotlinRandom.companion,
+        includeElement: { _, _ in KotlinBoolean(value: true) }
     )
     
     let boardingPassDoc = try! await documentStore.createDocument(
@@ -311,7 +314,8 @@ private func calcRequestData(
         validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
         expectedUpdate: nil,
         domain: "mdoc",
-        randomProvider: KotlinRandom.companion
+        randomProvider: KotlinRandom.companion,
+        includeElement: { _, _ in KotlinBoolean(value: true) }
     )
     
     try! await addCredentialsForOpenID4VPComplexExample(
