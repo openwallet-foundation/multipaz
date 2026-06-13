@@ -57,7 +57,7 @@ service () {
     extra="$extra -param enrollment_server_url=${BASE_URL}/records"
   fi
   echo "Starting $service service ($instance) at port $port..."
-  java -cp "/app/jars/$service.jar:/app/libs/multipaz-$service.jar:/app/libs/*" "$mainclass" \
+  java -cp "/app/jars/$service-server.jar:/app/jars/$service.jar:/app/libs/*" "$mainclass" \
     -param server_port=$port \
     -param base_url=${BASE_URL}/$instance \
     -param ca_trust_servers="[\"$host\"]" \
@@ -94,8 +94,6 @@ service openid4vci openid4vci org.multipaz.openid4vci.server.Main 8007 -param ad
 service csa csa org.multipaz.csa.server.Main 8005
 service verifier verifier org.multipaz.verifier.server.Main 8006
 service backend backend org.multipaz.backend.server.Main 8008
-service upay upay org.multipaz.upay.server.Main 8009
-service brewery brewery org.multipaz.brewery.server.Main 8010
 
 if [ "$INIT" = "0" ]
 then

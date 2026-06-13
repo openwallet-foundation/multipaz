@@ -27,12 +27,10 @@ COPY multipaz-server-deployment/docker/nginx.conf /etc/nginx/nginx.conf
 
 # Copy Multipaz services configurations
 COPY multipaz-server-deployment/docker/services/backend.conf /etc/multipaz/backend.conf
-COPY multipaz-server-deployment/docker/services/brewery.conf /etc/multipaz/brewery.conf
 COPY multipaz-server-deployment/docker/services/csa.conf /etc/multipaz/csa.conf
 COPY multipaz-server-deployment/docker/services/openid4vci.conf /etc/multipaz/openid4vci.conf
 COPY multipaz-server-deployment/docker/services/records.conf /etc/multipaz/records.conf
 COPY multipaz-server-deployment/docker/services/verifier.conf /etc/multipaz/verifier.conf
-COPY multipaz-server-deployment/docker/services/upay.conf /etc/multipaz/upay.conf
 
 # Copy initial data
 COPY multipaz-server-deployment/docker/init/records.json /app/init/records.json

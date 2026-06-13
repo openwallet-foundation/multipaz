@@ -4,10 +4,15 @@ plugins {
     id("maven-publish")
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.ktor)
 }
 
 val projectVersionCode: Int by rootProject.extra
 val projectVersionName: String by rootProject.extra
+
+application {
+    mainClass.set("org.multipaz.records.server.Main")
+}
 
 kotlin {
     jvmToolchain(17)
@@ -47,7 +52,9 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.ktor.server.test.host)
+}
+
+ktor {
 }
 
 group = "org.multipaz"
@@ -68,8 +75,8 @@ publishing {
     }
     publications.withType(MavenPublication::class) {
         pom {
-            name.set("multipaz-openid4vci")
-            description.set("Multipaz SDK openid4vci module")
+            name.set("multipaz-records")
+            description.set("Multipaz SDK records module")
             url.set("https://github.com/openwallet-foundation/multipaz")
             licenses {
                 license {
@@ -93,5 +100,3 @@ publishing {
         }
     }
 }
-
-

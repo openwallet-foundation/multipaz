@@ -30,6 +30,7 @@ dependencies {
     implementation(project(":multipaz-doctypes"))
     implementation(project(":multipaz-utopia"))
     implementation(project(":multipaz-server"))
+    implementation(project(":multipaz-records"))
 
     implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.serialization.json)

@@ -71,7 +71,7 @@ suspend fun makeRequest(call: ApplicationCall) {
     val rawRequest = Json.parseToJsonElement(call.receiveText()) as JsonObject
     val assistant = BackendEnvironment.getInterface(VerifierAssistant::class)
     val expandedRequest = assistant?.processRequest(rawRequest)
-    val request = expandedRequest?.request ?: rawRequest
+    val request = expandedRequest ?: rawRequest
     val dcqlQuery = (request["dcql"] as? JsonObject)?.toString()
         ?: throw InvalidRequestException("'dcql' is missing or invalid")
     val requestTypes = (request["protocols"] as? JsonArray)?.map {

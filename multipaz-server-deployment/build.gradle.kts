@@ -2,13 +2,14 @@
 // Tasks for building Docker images and deployment bundles
 
 val serverProjects = listOf(
+    "multipaz-verifier",
     "multipaz-verifier-server",
+    "multipaz-openid4vci",
     "multipaz-openid4vci-server",
     "multipaz-backend-server",
+    "multipaz-records",
     "multipaz-records-server",
     "multipaz-csa-server",
-    "multipaz-upay-server",
-    "multipaz-utopia:organizations:brewery:backend"
 )
 
 tasks.register("collectDependencies") {
@@ -41,7 +42,7 @@ tasks.register("collectDependencies") {
             // Copy the thin server JAR
             val baseName = name.removeSuffix(":backend")
             val simpleName = baseName.substring(baseName.lastIndexOf(':') + 1)
-            val shortName = simpleName.removePrefix("multipaz-").removeSuffix("-server")
+            val shortName = simpleName.removePrefix("multipaz-")
             val jarFile = serverProject.tasks.getByName<Jar>("jar").archiveFile.get().asFile
             jarFile.copyTo(File(jarsDir, "${shortName}.jar"), overwrite = true)
 

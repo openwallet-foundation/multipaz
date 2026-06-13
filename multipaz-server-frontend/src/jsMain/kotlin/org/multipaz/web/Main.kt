@@ -1,7 +1,5 @@
 package org.multipaz.web
 
-import org.multipaz.web.records.PersonApp
-import org.multipaz.web.records.RecordsApp
 import org.multipaz.web.tools.ConverterApp
 import react.create
 import react.dom.client.createRoot
@@ -10,8 +8,6 @@ import web.dom.document
 
 // Map class names to app implementations
 private val apps = mapOf(
-    "multipaz-records-list" to RecordsApp,
-    "multipaz-records-person" to PersonApp,
     "multipaz-converter" to ConverterApp
 )
 

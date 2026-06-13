@@ -14,7 +14,7 @@ interface VerifierAssistant {
      * @param request JSON request as sent by the front-end
      * @returns if non-null, rewritten request that will actually get processed
      */
-    suspend fun processRequest(request: JsonObject): ExpandedRequest?
+    suspend fun processRequest(request: JsonObject): JsonObject?
 
     /**
      * Processes a successful presentment.
@@ -24,9 +24,4 @@ interface VerifierAssistant {
      * @returns if non-null, the result that should be returned to the front-end
      */
     suspend fun processResponse(presentment: VerifierPresentment): JsonObject?
-
-    class ExpandedRequest(
-        val request: JsonObject,
-        val nonce: ByteString?
-    )
 }
