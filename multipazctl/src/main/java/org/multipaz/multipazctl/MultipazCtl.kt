@@ -153,6 +153,8 @@ object MultipazCtl {
             getArg(args, "out_certificate", "ds_certificate.pem")
         val privateKeyOutputFilename =
             getArg(args, "out_private_key", "ds_private_key.pem")
+        val jwkOutputFilename =
+            getArg(args, "out_jwk", "ds_jwk.json")
 
         // Requirements for the IACA certificate is defined in ISO/IEC 18013-5:2021 Annex B
 
@@ -199,6 +201,22 @@ object MultipazCtl {
             it.close()
         }
         println("- Wrote DS cert to $certificateOutputFilename")
+
+        File(jwkOutputFilename).outputStream().bufferedWriter().let {
+            val json = dsKey.toJwk(buildJsonObject {
+                put(
+                    key = "x5c",
+                    element = X509CertChain(
+                        certificates = listOf(dsCertificate, iacaCert)
+                    ).toX5c(excludeRoot = false)
+                )
+            })
+            it.write(Json {
+                prettyPrint = true
+            }.encodeToString(json))
+            it.close()
+        }
+        println("- Wrote DS cert and key to $jwkOutputFilename")
     }
 
     suspend fun generateReaderRoot(args: Array<String>) {
@@ -390,6 +408,7 @@ Generate a DS certificate and corresponding private key:
         [--iaca_private_key iaca_private_key.pem]
         [--out_certificate ds_certificate.pem]
         [--out_private_key ds_private_key.pem]
+        [--out_jwk ds_jwk.json]
         [--subject 'CN=OWF Multipaz TEST DS,C=US']
         [--validity_in_years 1]
         [--curve P-256]
