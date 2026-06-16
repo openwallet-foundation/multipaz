@@ -387,7 +387,7 @@ object VerificationUtil {
                     sessionTranscript = sessionTranscript,
                     // TODO: UseCases is optional even in a 1.1 request but iOS 26 currently assumes it's set.
                     //   This has been reported to Apple so this can be removed once their bug-fix is out.
-                    deviceRequestInfo = DeviceRequestInfo(
+                    deviceRequestInfo = DeviceRequestInfo.fromValues(
                         useCases = listOf(UseCase(
                             mandatory = true,
                             documentSets = listOf(

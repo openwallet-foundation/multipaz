@@ -6,43 +6,45 @@ import org.multipaz.cbor.putCborArray
 
 
 /**
- * Device request info according to ISO 18013-5.
+ * Device request info according to ISO 18013-5 Second Edition.
  *
- * @property useCases list of use-cases.
- * @property otherInfo other request info.
+ * This is represented as a [DataItem] to preserve the order for serialization and deserialization.
+ *
+ * @property dataItem a [DataItem] which is a map as defined in ISO/IEC 18013-5 Second Edition.
  */
 data class DeviceRequestInfo(
-    val useCases: List<UseCase> = emptyList(),
-    val otherInfo: Map<String, DataItem> = emptyMap()
+    val dataItem: DataItem
 ) {
-    internal fun toDataItem() = buildCborMap {
-        if (useCases.isNotEmpty()) {
-            putCborArray("useCases") {
-                useCases.forEach {
-                    add(it.toDataItem())
-                }
-            }
-        }
-        otherInfo.forEach { (key, value) ->
-            put(key, value)
-        }
-    }
+    /** @property useCases list of use-cases.
+     */
+    val useCases: List<UseCase>
+        get() = dataItem.getOrNull("useCases")?.asArray?.map { UseCase.fromDataItem(it) } ?: emptyList()
 
     companion object {
-        internal fun fromDataItem(dataItem: DataItem): DeviceRequestInfo {
-            val otherInfo = mutableMapOf<String, DataItem>()
-            for ((otherKeyDataItem, otherValue) in dataItem.asMap) {
-                val otherKey = otherKeyDataItem.asTstr
-                when (otherKey) {
-                    "useCases" -> continue
-                    else -> otherInfo[otherKey] = otherValue
+        /**
+         * Constructs a [org.multipaz.mdoc.request.DeviceRequestInfo] from values.
+         *
+         * @property useCases list of use-cases.
+         * @property otherInfo other request info.
+         * @return a [org.multipaz.mdoc.request.DeviceRequestInfo].
+         */
+        fun fromValues(
+            useCases: List<UseCase> = emptyList(),
+            otherInfo: Map<String, DataItem> = emptyMap()
+        ): DeviceRequestInfo {
+            val dataItem = buildCborMap {
+                if (useCases.isNotEmpty()) {
+                    putCborArray("useCases") {
+                        useCases.forEach {
+                            add(it.toDataItem())
+                        }
+                    }
+                }
+                otherInfo.forEach { (key, value) ->
+                    put(key, value)
                 }
             }
-            return DeviceRequestInfo(
-                useCases = dataItem.getOrNull("useCases")?.asArray?.map { UseCase.fromDataItem(it) }
-                    ?: emptyList(),
-                otherInfo = otherInfo
-            )
+            return DeviceRequestInfo(dataItem)
         }
     }
 }

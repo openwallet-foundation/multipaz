@@ -83,7 +83,7 @@ class MdocPresentmentTest {
 
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = sessionTranscript,
-            deviceRequestInfo = DeviceRequestInfo(useCases = listOf(UseCase(
+            deviceRequestInfo = DeviceRequestInfo.fromValues(useCases = listOf(UseCase(
                 mandatory = true,
                 documentSets = listOf(DocumentSet(docRequestIds = listOf(0, 1))),
                 purposeHints = mapOf()

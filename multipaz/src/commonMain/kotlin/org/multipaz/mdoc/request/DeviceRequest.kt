@@ -113,7 +113,7 @@ data class DeviceRequest private constructor(
                 if (deviceRequestInfo != null) {
                     add(Tagged(
                         tagNumber = Tagged.ENCODED_CBOR,
-                        taggedItem = Bstr(Cbor.encode(deviceRequestInfo.toDataItem()))
+                        taggedItem = Bstr(Cbor.encode(deviceRequestInfo.dataItem))
                     ))
                 } else {
                     add(Simple.NULL)
@@ -193,7 +193,7 @@ data class DeviceRequest private constructor(
         deviceRequestInfo?.let {
             put("deviceRequestInfo", Tagged(
                 tagNumber = Tagged.ENCODED_CBOR,
-                taggedItem = Bstr(Cbor.encode(it.toDataItem()))
+                taggedItem = Bstr(Cbor.encode(it.dataItem))
             ))
         }
         if (readerAuthAll_.isNotEmpty()) {
@@ -224,7 +224,7 @@ data class DeviceRequest private constructor(
             }
             val deviceRequestInfo = dataItem.getOrNull("deviceRequestInfo")?.let {
                 if (version.mdocVersionCompareTo("1.1") >= 0) {
-                    DeviceRequestInfo.fromDataItem(it.asTaggedEncodedCbor)
+                    DeviceRequestInfo(it.asTaggedEncodedCbor)
                 } else {
                     Logger.w(TAG, "Ignoring deviceRequestInfo field since version is less than 1.1")
                     null
@@ -419,7 +419,7 @@ data class DeviceRequest private constructor(
                 deviceRequestInfo?.let {
                     add(Tagged(
                         tagNumber = Tagged.ENCODED_CBOR,
-                        taggedItem = Bstr(Cbor.encode(it.toDataItem()))
+                        taggedItem = Bstr(Cbor.encode(it.dataItem))
                     ))
                 } ?: add(Simple.NULL)
             }
@@ -1135,14 +1135,14 @@ internal fun deviceRequestCalcDeviceRequestInfo(
     }
 
     return if (useCases.isNotEmpty()) {
-        DeviceRequestInfo(
+        DeviceRequestInfo.fromValues(
             useCases = useCases,
             otherInfo = otherInfo
         )
     } else {
         // TODO: UseCases is optional even in a 1.1 request but iOS 26 currently assumes it's set.
         //   This has been reported to Apple so this can be removed once their bug-fix is out.
-        DeviceRequestInfo(
+        DeviceRequestInfo.fromValues(
             useCases = listOf(
                 UseCase(
                     mandatory = true,

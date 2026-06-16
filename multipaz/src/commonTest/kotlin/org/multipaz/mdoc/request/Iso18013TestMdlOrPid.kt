@@ -48,7 +48,7 @@ class Iso18013TestMdlOrPid {
         private fun mdlOrPidQuery(): DeviceRequest {
             return buildDeviceRequest(
                 sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
-                deviceRequestInfo = DeviceRequestInfo(
+                deviceRequestInfo = DeviceRequestInfo.fromValues(
                     useCases = listOf(
                         UseCase(
                             mandatory = true,

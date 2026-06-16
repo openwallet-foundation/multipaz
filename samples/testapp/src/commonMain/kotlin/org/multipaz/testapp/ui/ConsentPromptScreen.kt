@@ -1027,7 +1027,7 @@ private suspend fun getQueryResult(
                         )
                     ),
                 )
-                setDeviceRequestInfo(DeviceRequestInfo(
+                setDeviceRequestInfo(DeviceRequestInfo.fromValues(
                     useCases = listOf(UseCase(
                         mandatory = true,
                         documentSets = listOf(

@@ -33,7 +33,7 @@ data class Iso18013Request(
         // Rebuild the parsed request as a proper DeviceRequest...
         val deviceRequest = buildDeviceRequest(
             sessionTranscript = Simple.NULL,
-            deviceRequestInfo =  DeviceRequestInfo(
+            deviceRequestInfo =  DeviceRequestInfo.fromValues(
                 useCases = presentmentRequests.map { pr ->
                     UseCase(
                         mandatory = pr.isMandatory,
