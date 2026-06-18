@@ -107,6 +107,8 @@ import org.multipaz.prompt.promptModelSilentConsent
 import org.multipaz.provisioning.DocumentProvisioningHandler
 import org.multipaz.provisioning.ProvisioningModel
 import org.multipaz.request.Requester
+import org.multipaz.request.RequesterIdentity
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.secure_area_test_app.ui.CloudSecureAreaScreen
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.cloud.CloudSecureArea
@@ -265,28 +267,37 @@ class App private constructor (val promptModel: PromptModel) {
         )
     }
 
-    suspend fun resolveTrust(requester: Requester): TrustMetadata? {
+    suspend fun resolveTrust(requester: Requester): TrustedRequesterIdentity? {
+        // Pick the first trusted
+        for (requesterIdentity in requester.requesterIdentities) {
+            val trustMetadata = resolveTrust(requesterIdentity) ?: continue
+            return TrustedRequesterIdentity(requesterIdentity, trustMetadata)
+        }
+        return null
+    }
+
+    private suspend fun resolveTrust(requesterIdentity: RequesterIdentity): TrustMetadata? {
         // If available, use dynamic metadata in Multipaz X509 extension for a Google account... Since this is
         // TestApp also trust the "Untrusted Devices" CA (production wallets would not want to do that)
-        val rootPublicKey = requester.certChain?.certificates?.last()?.ecPublicKey
+        val rootPublicKey = requesterIdentity.certChain.certificates.last().ecPublicKey
         if (rootPublicKey == MULTIPAZ_IDENTITY_READER_CERT_PUBLIC_KEY ||
             rootPublicKey == MULTIPAZ_IDENTITY_READER_CERT_UNTRUSTED_DEVICES_PUBLIC_KEY) {
-            val readerCert = requester.certChain!!.certificates.first()
+            val readerCert = requesterIdentity.certChain.certificates.first()
             readerCert.getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid)?.let { extData ->
                 MultipazExtension.fromCbor(extData).googleAccount?.let { googleAccount ->
                     if (googleAccount.emailAddress != null && googleAccount.profilePictureUri != null) {
                         return TrustMetadata(
-                            displayName = googleAccount.emailAddress,
-                            displayIconUrl = googleAccount.profilePictureUri,
-                            disclaimer = "The email and picture shown are from the requester's Google Account. " +
-                                    "This information has been verified but may not be their real identity"
-                        )
+                                displayName = googleAccount.emailAddress,
+                                displayIconUrl = googleAccount.profilePictureUri,
+                                disclaimer = "The email and picture shown are from the requester's Google Account. " +
+                                        "This information has been verified but may not be their real identity",
+                            )
                     }
                 }
             }
         }
         // Otherwise use our readerTrustManager...
-        requester.certChain?.let { certChain ->
+        requesterIdentity.certChain.let { certChain ->
             val trustResult = readerTrustManager.verify(certChain.certificates)
             if (trustResult.isTrusted) {
                 return trustResult.trustPoints.first().metadata
@@ -711,6 +722,28 @@ class App private constructor (val promptModel: PromptModel) {
                         privacyPolicyUrl = "https://apps.multipaz.org"
                     ),
                     certificate = MULTIPAZ_IDENTITY_READER_CERT_UNTRUSTED_DEVICES,
+                ))
+                // "secondary" verifier identity for multisigned request testing
+                add(TrustEntryX509Cert(
+                    identifier = "Secondary Verifier Identity",
+                    metadata = TrustMetadata(
+                        displayName = "Secondary Verifier Identity",
+                        privacyPolicyUrl = "https://apps.multipaz.org"
+                    ),
+                    certificate = X509Cert.fromPem("""
+                        -----BEGIN CERTIFICATE-----
+                        MIICDTCCAZOgAwIBAgIQMCloGIxTSblptvBQkKLg7zAKBggqhkjOPQQDAzAZMRcwFQYDVQQDDA5z
+                        ZWNvbmRhcnkgcm9vdDAeFw0yNjA2MjIwMjMzMjVaFw0zMTA2MjIwMjMzMjVaMBkxFzAVBgNVBAMM
+                        DnNlY29uZGFyeSByb290MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAESXo1mV/8EwV2azIIJt12vO4s
+                        9QUa5sGr1k0C9Or/0063S92gjzQWRsqs6MgO4DfxA/C4alEPnUZ0Nl0ylWXsVISY1oiWZCIzLz+4
+                        Trdt95RtZDis2pTJxvqIDSBmoShbo4GfMIGcMA4GA1UdDwEB/wQEAwIBBjASBgNVHRMBAf8ECDAG
+                        AQH/AgEAMDYGA1UdHwQvMC0wK6ApoCeGJWh0dHBzOi8vcmVhZGVyLWNhLmV4YW1wbGUuY29tL2Ny
+                        bC5jcmwwHQYDVR0OBBYEFFUcUqsC/ET2XyVpb0NO9e7RxDYaMB8GA1UdIwQYMBaAFFUcUqsC/ET2
+                        XyVpb0NO9e7RxDYaMAoGCCqGSM49BAMDA2gAMGUCMQClOf4ArIb5uNM353fjt5XMl5UlNlGDoywj
+                        c7Suz6E9PHlLsWGtqO3xDHaJGWBcd5UCMHGzTCI4qATnnFUoq6d5yDIewrUpl2NkhGbXqJvXJ9fB
+                        F7h0WtDmwDVbFBdororOhg==
+                        -----END CERTIFICATE-----
+                    """.trimIndent())
                 ))
                 // Some reader identities from the Multipaz Identity Reader as distributed from apps.multipaz.org
                 for ((displayName: String, displayIcon: ByteString?, cert: X509Cert) in listOf(

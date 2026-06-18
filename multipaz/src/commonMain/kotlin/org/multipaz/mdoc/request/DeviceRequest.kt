@@ -35,7 +35,6 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.SignatureVerificationException
-import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.response.Iso18015ResponseException
@@ -51,9 +50,11 @@ import org.multipaz.presentment.CredentialPresentmentSetOptionMemberMatch
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.TransactionDataCbor
+import org.multipaz.request.Iso18013RequesterIdentity
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
+import org.multipaz.request.RequesterIdentity
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.util.Logger
 import kotlin.coroutines.cancellation.CancellationException
@@ -824,20 +825,33 @@ data class DeviceRequest private constructor(
         return list.toList()
     }
 
-    fun getRequester(): X509CertChain? {
+    /**
+     * Get the list of identities used to sign this request, one for each signature.
+     *
+     * NB: [RequesterIdentity.clientId] is not used for ISO 18013 protocols and is set to null.
+     *
+     * @return list of [RequesterIdentity] objects representing the request signatures.
+     */
+    fun getRequesterIdentities(): List<RequesterIdentity> {
         if (readerAuthAll.isNotEmpty()) {
-            return (readerAuthAll.first().protectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
-                ?: readerAuthAll.first().unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
+            return readerAuthAll.map {
+                Iso18013RequesterIdentity(
+                    certChain = (it.protectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
+                        ?: it.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
                     )!!.asX509CertChain
+                )
+            }
         }
         for (docRequest in docRequests) {
             docRequest.readerAuth?.let {
-                return (it.protectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
+                return listOf(Iso18013RequesterIdentity(
+                    certChain = (it.protectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
                     ?: it.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
                         )!!.asX509CertChain
+                ))
             }
         }
-        return null
+        return emptyList()
     }
 
     /**

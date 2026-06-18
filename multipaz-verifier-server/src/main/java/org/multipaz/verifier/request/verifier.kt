@@ -98,6 +98,7 @@ import org.multipaz.util.toBase64Url
 import org.multipaz.util.zlibInflate
 import org.multipaz.utopia.knowntypes.addUtopiaTypes
 import org.multipaz.verification.VerificationUtil
+import org.multipaz.verification.VerifierIdentity
 import java.net.URLEncoder
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
@@ -2018,9 +2019,13 @@ private suspend fun calcDcRequestNewRawDcql(
         dcql = Json.decodeFromString<JsonObject>(rawDcql),
         nonce = nonce,
         origin = origin,
-        clientId = "x509_san_dns:${session.host}",
         responseEncryptionKey = if (encryptResponse) readerKey.publicKey else null,
-        readerAuthenticationKey = readerAuthKey,
+        verifierIdentities = listOf(
+            VerifierIdentity(
+                key = readerAuthKey,
+                clientId = "x509_san_dns:${session.host}"
+            )
+        )
     )
 
     val dcRequestProtocol = request["requests"]!!.jsonArray[0].jsonObject["protocol"]!!.jsonPrimitive.content
@@ -2077,9 +2082,10 @@ private suspend fun calcDcRequestNew(
             claims = claims,
             nonce = nonce,
             origin = origin,
-            clientId = "x509_san_dns:${session.host}",
             responseEncryptionKey = if (encryptResponse) readerKey.publicKey else null,
-            readerAuthenticationKey = readerAuthKey
+            verifierIdentities = listOf(
+                VerifierIdentity(readerAuthKey, "x509_san_dns:${session.host}")
+            )
         )
     } else {
         val claims = mutableListOf<MdocRequestedClaim>()
@@ -2107,9 +2113,12 @@ private suspend fun calcDcRequestNew(
             claims = claims,
             nonce = nonce,
             origin = origin,
-            clientId = "x509_san_dns:${session.host}",
             responseEncryptionKey = if (encryptResponse) readerKey.publicKey else null,
-            readerAuthenticationKey = if (signRequest) readerAuthKey else null,
+            verifierIdentities = buildList {
+                if (signRequest) {
+                    add(VerifierIdentity(readerAuthKey, "x509_san_dns:${session.host}"))
+                }
+            },
             zkSystemSpecs = zkSystemSpecs
         )
     }
@@ -2149,13 +2158,12 @@ private suspend fun calcDcRequestStringOpenID4VPforDCQL(
     return OpenID4VP.generateRequest(
         version = version,
         origin = session.origin,
-        clientId = "x509_san_dns:${session.host}",
         nonce = nonce.toByteArray().toBase64Url(),
         responseEncryptionKey = if (encryptResponse) readerPublicKey else null,
-        requestSigningKey = if (signRequest) {
-            readerAuthKey
-        } else {
-            null
+        verifierIdentities = buildList {
+            if (signRequest) {
+                add(VerifierIdentity(readerAuthKey, "x509_san_dns:${session.host}"))
+            }
         },
         responseMode = responseMode,
         responseUri = responseUri,

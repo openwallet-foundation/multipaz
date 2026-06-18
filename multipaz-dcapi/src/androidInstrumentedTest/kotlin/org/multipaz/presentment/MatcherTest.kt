@@ -39,6 +39,7 @@ import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
+import org.multipaz.verification.VerifierIdentity
 import kotlin.random.Random
 
 // Tests for the matcher in multipaz-models/src/androidMain/matcher ...
@@ -94,10 +95,11 @@ class MatcherTest {
         val requestData = OpenID4VP.generateRequest(
             version = version,
             origin = ORIGIN,
-            clientId = CLIENT_ID,
             nonce = nonce,
             responseEncryptionKey = encryptionKey?.publicKey,
-            requestSigningKey = readerAuthKey,
+            verifierIdentities = buildList {
+                readerAuthKey?.let { add(VerifierIdentity(it, CLIENT_ID)) }
+            },
             responseMode = OpenID4VP.ResponseMode.DC_API,
             responseUri = null,
             dcqlQuery = Json.decodeFromString(JsonObject.serializer(), dcql)

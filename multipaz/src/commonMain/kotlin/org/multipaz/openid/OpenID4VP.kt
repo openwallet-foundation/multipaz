@@ -32,7 +32,6 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
 import org.multipaz.eventlogger.EventPresentmentData
 import org.multipaz.webtoken.buildJwt
@@ -59,9 +58,13 @@ import org.multipaz.presentment.TransactionDataJson
 import org.multipaz.presentment.ConsentData
 import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.computeTransactionResponse
+import org.multipaz.request.OpenID4VPRequesterIdentity
+import org.multipaz.request.RequesterIdentity
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import org.multipaz.verification.VerifierIdentity
+import org.multipaz.webtoken.buildMultisignedJwt
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
@@ -84,10 +87,10 @@ object OpenID4VP {
      *
      * @param version the version of OpenID4vp to generate the request for.
      * @param origin the origin, e.g. `https://verifier.multipaz.org` or `android:apk-key-hash:<sha256_hash-of-apk-signing-cert>`.
-     * @param clientId the client ID, e.g. `x509_san_dns:verifier.multipaz.org` or `null`.
      * @param nonce the nonce to use.
      * @param responseEncryptionKey the key to encrypt the response against or `null`.
-     * @param requestSigningKey the key to sign the request with or `null`.
+     * @param verifierIdentities verifier identities that are used to sign the request (there may be
+     *  multiple for multisigned requests, or none for unsigned requests).
      * @param responseMode the response mode.
      * @param responseUri the response URI or `null`.
      * @param dcqlQuery the DCQL query.
@@ -99,10 +102,9 @@ object OpenID4VP {
     suspend fun generateRequest(
         version: Version,
         origin: String,
-        clientId: String?,
         nonce: String,
         responseEncryptionKey: EcPublicKey?,
-        requestSigningKey: AsymmetricKey?,
+        verifierIdentities: List<VerifierIdentity>,
         responseMode: ResponseMode,
         responseUri: String?,
         dcqlQuery: JsonObject,
@@ -111,12 +113,13 @@ object OpenID4VP {
     ): JsonObject {
         if (version == Version.DRAFT_24) {
             check(jsonTransactionData.isEmpty())
+            check(verifierIdentities.size <= 1)
             return generateRequestDraft24(
                 origin = origin,
-                clientId = clientId,
+                clientId = verifierIdentities.firstOrNull()?.clientId,
                 nonce = nonce,
                 responseEncryptionKey = responseEncryptionKey,
-                requestSigningKey = requestSigningKey,
+                requestSigningKey = verifierIdentities.firstOrNull()?.key,
                 responseMode = responseMode,
                 responseUri = responseUri,
                 dclqQuery = dcqlQuery
@@ -138,9 +141,9 @@ object OpenID4VP {
                 }
             )
             responseUri?.let { put("response_uri", it)}
-            if (requestSigningKey != null) {
-                require(clientId != null) { "clientId must be set for signed requests"}
-                put("client_id", clientId)
+            if (verifierIdentities.size == 1) {
+                // for multisign request, client_id goes into the header instead
+                put("client_id", verifierIdentities.first().clientId)
                 putJsonArray("expected_origins") {
                     add(origin)
                 }
@@ -185,16 +188,30 @@ object OpenID4VP {
             }
         }
 
-        return buildJsonObject {
-            if (requestSigningKey == null) {
+        return if (verifierIdentities.isEmpty()) {
+            // unsigned request
+            buildJsonObject {
                 jsonBuildBlock()
-            } else {
-                put("request", buildJwt(
-                    key = requestSigningKey,
-                    type = "oauth-authz-req+jwt",
-                    builderAction = jsonBuildBlock
-                ))
             }
+        } else if (verifierIdentities.size == 1) {
+            // single signature, compact serialization
+            buildJsonObject {
+                put(
+                    "request", buildJwt(
+                        key = verifierIdentities.first().key,
+                        type = "oauth-authz-req+jwt",
+                        builderAction = jsonBuildBlock
+                    )
+                )
+            }
+        } else {
+            // multisigned request
+            buildMultisignedJwt(
+                keys = verifierIdentities.map { it.key },
+                type = "oauth-authz-req+jwt",
+                builderAction = jsonBuildBlock,
+                header = { index -> put("client_id", verifierIdentities[index].clientId) }
+            )
         }
     }
 
@@ -304,8 +321,8 @@ object OpenID4VP {
      * @param origin the origin of the requester or `null` if not known.
      * @param request the authorization request object according to OpenID4VP Section 5 Authorization
      *   Request.
-     * @param requesterCertChain the X.509 certificate chain if the request is signed or `null`
-     *   if the request is not signed.
+     * @param requesterIdentities verifier identities that were used to sign the request (there
+     *  may be multiple for multisigned requests, or none for unsigned requests).
      * @return the generated response according to OpenID4VP Section 8 Response.
      * @throws PresentmentCanceledException if the user canceled in a consent prompt.
      * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
@@ -324,7 +341,7 @@ object OpenID4VP {
         appId: String?,
         origin: String?,
         request: JsonObject,
-        requesterCertChain: X509CertChain?,
+        requesterIdentities: List<RequesterIdentity>,
         onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
     ): OpenID4VPResponse {
         Logger.iJson(TAG, "request", request)
@@ -347,32 +364,7 @@ object OpenID4VP {
         }
         // TODO: in the future, maybe flat out reject requests that doesn't use encrypted response
 
-
         // TODO: handle expected_origins
-
-        // For unsigned requests, we must ignore client_id as per OpenID4VP section A.2. Request:
-        //
-        //   The client_id parameter MUST be omitted in unsigned requests defined in Appendix A.3.1. The Wallet
-        //   determines the effective Client Identifier from the Origin. The effective Client Identifier is
-        //   composed of a synthetic Client Identifier Scheme of web-origin and the Origin itself. For example,
-        //   an Origin of https://verifier.example.com would result in an effective Client Identifier of
-        //   web-origin:https://verifier.example.com. The transport of the request and Origin to the Wallet
-        //   is platform-specific and is out of scope of OpenID4VP over the W3C Digital Credentials API. The
-        //   Wallet MUST ignore any client_id parameter that is present in an unsigned request.
-        //
-        val clientId = if (requesterCertChain != null) {
-            request["client_id"]?.jsonPrimitive?.content
-                ?: throw IllegalArgumentException("client_id not set on a signed request")
-        } else {
-            val syntheticOrigin = "web-origin:$origin"
-            if (request.containsKey("client_id")) {
-                Logger.w(
-                    TAG, "Ignoring client_id value of ${request["client_id"]} for an unsigned request, " +
-                            "using synthetic origin $syntheticOrigin instead"
-                )
-            }
-            syntheticOrigin
-        }
 
         // Get public key to encrypt response against...
         var reEncAlg: Algorithm = Algorithm.UNSET
@@ -452,16 +444,45 @@ object OpenID4VP {
         }
 
         val requester = Requester(
-            certChain = requesterCertChain,
+            requesterIdentities = requesterIdentities,
             appId = appId,
             origin = origin
         )
 
-        val trustMetadata = source.resolveTrust(requester)
+        val trustedRequesterIdentity = source.resolveTrust(requester)
+
+        // For unsigned requests, we must ignore client_id as per OpenID4VP section A.2. Request:
+        //
+        //   The client_id parameter MUST be omitted in unsigned requests defined in Appendix A.3.1. The Wallet
+        //   determines the effective Client Identifier from the Origin. The effective Client Identifier is
+        //   composed of a synthetic Client Identifier Scheme of web-origin and the Origin itself. For example,
+        //   an Origin of https://verifier.example.com would result in an effective Client Identifier of
+        //   web-origin:https://verifier.example.com. The transport of the request and Origin to the Wallet
+        //   is platform-specific and is out of scope of OpenID4VP over the W3C Digital Credentials API. The
+        //   Wallet MUST ignore any client_id parameter that is present in an unsigned request.
+        //
+        val clientId = (trustedRequesterIdentity?.identity as? OpenID4VPRequesterIdentity)?.clientId ?: run {
+            if (requester.requesterIdentities.isEmpty()) {
+                // Unsigned request
+                val syntheticOrigin = "web-origin:$origin"
+                if (request.containsKey("client_id")) {
+                    Logger.w(
+                        TAG,
+                        "Ignoring client_id value of ${request["client_id"]} for an unsigned request, " +
+                                "using synthetic origin $syntheticOrigin instead"
+                    )
+                }
+                syntheticOrigin
+            } else {
+                // Signed request, but none of the signatures are trusted. Just pick the first one.
+                // clientId must not be null in the context of OpenID4VP protocol
+                (requester.requesterIdentities.first() as OpenID4VPRequesterIdentity).clientId
+            }
+        }
 
         val selection = source.showConsentPrompt(
             requester = requester,
-            trustMetadata = trustMetadata,
+            trustedRequesterIdentity = trustedRequesterIdentity,
             consentData = ConsentData.fromCredentialQueryResult(
                 credentialQueryResult = dcqlResponse,
                 source = source
@@ -569,7 +590,7 @@ object OpenID4VP {
             eventData = EventPresentmentData.fromPresentmentSelection(
                 selection = selection,
                 requester = requester,
-                trustMetadata = trustMetadata
+                trustedRequesterIdentity = trustedRequesterIdentity,
             ),
             state = (request["state"] as? JsonPrimitive)?.content
         )

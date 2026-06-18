@@ -11,7 +11,7 @@ final class RequestAuthorizationViewModel: ObservableObject {
     var source: PresentmentSource!
     var consentData: ConsentData!
     var requester: Requester!
-    var trustMetadata: TrustMetadata? = nil
+    var trustedRequesterIdentity: TrustedRequesterIdentity? = nil
 
     func startLoadingRequest(
         requestContext: ISO18013MobileDocumentRequestContext,
@@ -52,7 +52,7 @@ final class RequestAuthorizationViewModel: ObservableObject {
                     source: source
                 )
                 requester = Requester(
-                    certChain: nil,
+                    requesterIdentities: [],
                     appId: nil,
                     origin: requestContext.requestingWebsiteOrigin?.getOrigin()
                 )
@@ -62,13 +62,15 @@ final class RequestAuthorizationViewModel: ObservableObject {
                     let certChain = auth.authenticationCertificateChain.map { secCert in
                         X509Cert(encoded: ByteString(bytes: (SecCertificateCopyData(secCert) as Data).toByteArray()))
                     }
-                    
+                    let requesterIdentities = [
+                        Iso18013RequesterIdentity(certChain: X509CertChain(certificates: certChain))
+                    ]
                     requester = Requester(
-                        certChain: X509CertChain(certificates: certChain),
+                        requesterIdentities: requesterIdentities,
                         appId: nil,
                         origin: requestContext.requestingWebsiteOrigin?.getOrigin()
                     )
-                    trustMetadata = try! await source.resolveTrust(requester: requester)
+                    trustedRequesterIdentity = try! await source.resolveTrust(requester: requester)
                 }
             }
             print("Prepared PresentmentSource in \(sourceDuration.toMilliseconds()) msec")
@@ -111,7 +113,7 @@ public struct RequestAuthorizationView : View {
                 Consent(
                     consentData: viewModel.consentData,
                     requester: viewModel.requester,
-                    trustMetadata: viewModel.trustMetadata,
+                    trustedRequesterIdentity: viewModel.trustedRequesterIdentity,
                     maxHeight: .infinity,
                     onConfirm: { selection in
                         Task {

@@ -46,6 +46,7 @@ import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.prompt.promptModelSilentConsent
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.securearea.SecureAreaRepository
@@ -146,10 +147,14 @@ class DocumentStoreTestHarness {
             documentStore = documentStore,
             documentTypeRepository = documentTypeRepository,
             resolveTrustFn = { requester ->
-                requester.certChain?.let {
-                    val trustResult = readerTrustManager.verify(chain = it.certificates)
-                    if (trustResult.isTrusted) {
-                        return@SimplePresentmentSource trustResult.trustPoints.firstOrNull()?.metadata
+                for (requesterIdentity in requester.requesterIdentities) {
+                    requesterIdentity.certChain.let { certChain ->
+                        val trustResult = readerTrustManager.verify(chain = certChain.certificates)
+                        if (trustResult.isTrusted) {
+                            return@SimplePresentmentSource trustResult.trustPoints.firstOrNull()?.metadata?.let {
+                                TrustedRequesterIdentity(requesterIdentity, it)
+                            }
+                        }
                     }
                 }
                 null
@@ -550,7 +555,7 @@ class DocumentStoreTestHarness {
         }
 
         val identityAttributes = buildJsonObject {
-            for ((claimName, attribute) in documentType.jsonDocumentType!!.claims) {
+            for ((claimName, attribute) in documentType.jsonDocumentType.claims) {
                 // Skip sub-claims.
                 if (claimName.contains('.')) {
                     continue
@@ -571,7 +576,7 @@ class DocumentStoreTestHarness {
 
         addSdJwtVcCredentialWithData(
             document = document,
-            vct = documentType.jsonDocumentType!!.vct,
+            vct = documentType.jsonDocumentType.vct,
             identityAttributes = identityAttributes,
             signedAt = signedAt,
             validFrom = validFrom,

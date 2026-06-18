@@ -18,7 +18,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -30,11 +32,16 @@ import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
 import org.multipaz.claim.JsonClaim
 import org.multipaz.claim.MdocClaim
+import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.Crypto
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.rpc.backend.BackendEnvironment
+import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.SimpleCipher
+import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.server.common.getDomain
 import org.multipaz.server.enrollment.ServerIdentity
@@ -49,9 +56,11 @@ import org.multipaz.verification.JsonVerifiedPresentation
 import org.multipaz.verification.MdocVerifiedPresentation
 import org.multipaz.verification.VerificationSession
 import org.multipaz.verification.VerificationUtil
+import org.multipaz.verification.VerifierIdentity
 import org.multipaz.verifier.session.Session
 import org.multipaz.verifier.customization.VerifierAssistant
 import org.multipaz.verifier.customization.VerifierPresentment
+import kotlin.IllegalArgumentException
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
@@ -83,7 +92,11 @@ suspend fun makeRequest(call: ApplicationCall) {
         }
     }?.toSet() ?: defaultRequestTypes
     val transactionData = request["transaction_data"]?.jsonArray
-    val sign = (request["sign"] as? JsonPrimitive)?.booleanOrNull != false
+    val verifierIdentities = when (val signSetting = request["sign"]) {
+        is JsonPrimitive if signSetting.booleanOrNull == false -> emptyList()
+        is JsonArray -> signSetting.map { getVerifierIdentity(it.jsonPrimitive.content) }
+        else -> listOf(getVerifierIdentity("default"))
+    }
     val encrypt = (request["encrypt"] as? JsonPrimitive)?.booleanOrNull != false
     val nonce = (request["nonce"] as? JsonPrimitive)?.content?.also {
         Logger.i(TAG, "Supplied nonce: $it")
@@ -98,10 +111,9 @@ suspend fun makeRequest(call: ApplicationCall) {
         transactionData = transactions,
         nonce = ByteString(nonce?.fromBase64Url() ?: Random.nextBytes(15)),
         origin = BackendEnvironment.getDomain(),
-        clientId = getClientId(sign),
         responseUri = "$baseUrl/direct_post/$encodedSessionId",
         documentTypeRepository = BackendEnvironment.getInterface(DocumentTypeRepository::class)!!,
-        readerAuthenticationKey = if (sign) getServerIdentity(ServerIdentity.VERIFIER) else null,
+        verifierIdentities = verifierIdentities,
         encryptResponse = encrypt,
         state = encodedSessionId
     )
@@ -110,7 +122,9 @@ suspend fun makeRequest(call: ApplicationCall) {
         contentType = ContentType.Application.Json,
         text = buildJsonObject {
             put("session_id", encodedSessionId)
-            put("client_id", getClientId(sign))
+            if (verifierIdentities.isNotEmpty()) {
+                put("client_id", verifierIdentities.first().clientId)
+            }
             putJsonObject("dc_request") {
                put("digital", verificationSession.getDcRequest())
                put("mediation", "required")
@@ -144,6 +158,9 @@ suspend fun getOpenID4VPUriSchemaRequest(call: ApplicationCall, encodedSessionId
     val parsedRequest = Json.parseToJsonElement(request.openID4VPRequest).jsonObject
     if (!VerificationSession.OpenID4VPRequest.isSignedRequest(parsedRequest)) {
         throw InvalidRequestException("OpenID4VP custom uri requests must be signed")
+    }
+    if (VerificationSession.OpenID4VPRequest.isMultisignedRequest(parsedRequest)) {
+        throw InvalidRequestException("OpenID4VP custom uri requests must be single-signed")
     }
     val text = parsedRequest["request"]!!.jsonPrimitive.content
     call.respondText(
@@ -210,6 +227,18 @@ suspend fun getResult(call: ApplicationCall, encodedSessionId: String) {
     } else {
         respondWithResult(call, sessionId, session, presentationRecord)
     }
+}
+
+suspend fun listIdentities(call: ApplicationCall) {
+    val verifierIdentityNames = getVerifierIdentityMap().keys.sorted()
+    call.respondText(
+        contentType = ContentType.Application.Json,
+        text = buildJsonArray {
+            for (name in verifierIdentityNames) {
+                add(name)
+            }
+        }.toString()
+    )
 }
 
 private suspend fun respondWithResult(
@@ -334,14 +363,11 @@ private suspend fun processPresentation(
     return revised ?: result
 }
 
-private suspend fun getClientId(sign: Boolean): String =
-    if (sign) {
-        val baseUrl = BackendEnvironment.getBaseUrl()
-        val host = Url(baseUrl).host
-        "x509_san_dns:$host"
-    } else {
-        "web-origin:" + BackendEnvironment.getDomain()
-    }
+private suspend fun getClientId(): String {
+    val baseUrl = BackendEnvironment.getBaseUrl()
+    val host = Url(baseUrl).host
+    return "x509_san_dns:$host"
+}
 
 private suspend fun encodeSessionId(sessionId: String): String {
     val buf = ByteStringBuilder()
@@ -365,3 +391,32 @@ private suspend fun decodeSessionId(code: String): String {
     }
     return buf.sliceArray(2..<buf.size).toBase64Url()
 }
+
+private val verifierIdentitiesLock = Mutex()
+private var verifierIdentities: Map<String, VerifierIdentity>? = null
+
+private suspend fun getVerifierIdentity(name: String): VerifierIdentity =
+    getVerifierIdentityMap()[name] ?: throw IllegalArgumentException()
+
+private suspend fun getVerifierIdentityMap(): Map<String, VerifierIdentity> =
+    verifierIdentitiesLock.withLock {
+        verifierIdentities ?: run {
+            val config = BackendEnvironment.getInterface(Configuration::class)!!
+            val secureAreaRepository = BackendEnvironment.getInterface(SecureAreaRepository::class)
+            val identities = config.getValue("verifier_identities")
+            buildMap {
+                if (identities != null) {
+                    for ((name, value) in Json.parseToJsonElement(identities).jsonObject) {
+                        val key = AsymmetricKey.parse(value.jsonObject, secureAreaRepository) as AsymmetricKey.X509Certified
+                        val cert = key.certChain.certificates[0]
+                        val certHash = Crypto.digest(Algorithm.SHA256, cert.encoded.toByteArray()).toBase64Url()
+                        put(name, VerifierIdentity(key, "x509_hash:$certHash"))
+                    }
+                }
+                put("default", VerifierIdentity(
+                    key = getServerIdentity(ServerIdentity.VERIFIER),
+                    clientId = getClientId()
+                ))
+            }.also { verifierIdentities = it }
+        }
+    }

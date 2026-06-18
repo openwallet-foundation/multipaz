@@ -34,6 +34,19 @@ async function onLoad() {
             transactionDataPresent.checked = false;
         }
     });
+    const identityList = await (await fetch("verifier_identities")).json();
+    const signing = document.getElementById("signing");
+    for (let name of identityList) {
+        let input = document.createElement("input");
+        input.type = "checkbox"
+        input.id = "sign-" + name;
+        input.checked = name == "default";
+        let label = document.createElement("label");
+        label.setAttribute("for", "sign-" + name);
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(" " + name));
+        signing.append(label);
+    }
 }
 
 async function run() {
@@ -51,7 +64,18 @@ async function run() {
     if (transactionDataPresent.checked && transactionDataText.trim().length !== 0) {
         req["transaction_data"] = JSON.parse(transactionDataText);
     }
-    req.sign = document.getElementById("sign-request").checked
+
+    req.sign = [];
+    const signing = document.getElementById("signing");
+    for (let child = signing.firstChild; child; child = child.nextSibling) {
+        if (child.localName == "label") {
+            let input = child.firstElementChild
+            if (input.localName == "input" && input.id.startsWith("sign-") && input.checked) {
+                req.sign.push(input.id.substring(5))
+            }
+        }
+    }
+
     req.encrypt = document.getElementById("encrypt-response").checked
     const result = document.getElementById("result");
     result.innerHTML = "";

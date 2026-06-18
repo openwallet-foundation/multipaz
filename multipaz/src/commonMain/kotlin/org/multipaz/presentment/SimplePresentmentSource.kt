@@ -15,8 +15,8 @@ import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
-import org.multipaz.trustmanagement.TrustMetadata
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -53,7 +53,7 @@ class SimplePresentmentSource(
     override val documentTypeRepository: DocumentTypeRepository,
     override val zkSystemRepository: ZkSystemRepository? = null,
     override val eventLogger: EventLogger? = null,
-    private val resolveTrustFn: suspend (requester: Requester) -> TrustMetadata? = { requester -> null },
+    private val resolveTrustFn: suspend (requester: Requester) -> TrustedRequesterIdentity? = { null },
     private val showConsentPromptFn: ShowConsentPromptFn = ::promptModelRequestConsent,
     private val getBadgesFn: suspend (document: Document) -> List<DocumentBadge> = { document -> emptyList() },
     val preferSignatureToKeyAgreement: Boolean = true,
@@ -67,20 +67,20 @@ class SimplePresentmentSource(
     zkSystemRepository = zkSystemRepository,
     eventLogger = eventLogger
 ) {
-    override suspend fun resolveTrust(requester: Requester): TrustMetadata? {
+    override suspend fun resolveTrust(requester: Requester): TrustedRequesterIdentity? {
         return resolveTrustFn(requester)
     }
 
     override suspend fun showConsentPrompt(
         requester: Requester,
-        trustMetadata: TrustMetadata?,
+        trustedRequesterIdentity: TrustedRequesterIdentity?,
         consentData: ConsentData,
         preselectedDocuments: List<Document>,
         onDocumentsInFocus: (documents: List<Document>) -> Unit
     ): CredentialSelection? {
         return showConsentPromptFn(
             requester,
-            trustMetadata,
+            trustedRequesterIdentity,
             consentData,
             preselectedDocuments,
             onDocumentsInFocus

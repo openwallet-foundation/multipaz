@@ -24,6 +24,7 @@ import org.multipaz.digitalcredentials.getDefault
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.util.toBase64Url
+import org.multipaz.verification.VerifierIdentity
 import kotlin.random.Random
 
 // This is like the tests in org.multipaz.openid.dcql.* in commonTest but this time for
@@ -59,7 +60,7 @@ class MatcherDcqlQueryExecuteTest {
         harness.initialize()
         harnessInitializer(harness)
 
-        val nonce = Random.Default.nextBytes(16).toBase64Url()
+        val nonce = Random.nextBytes(16).toBase64Url()
 
         val readerAuthKey = if (signRequest) {
             val key = Crypto.createEcPrivateKey(EcCurve.P256)
@@ -84,10 +85,11 @@ class MatcherDcqlQueryExecuteTest {
         val requestData = OpenID4VP.generateRequest(
             version = version,
             origin = ORIGIN,
-            clientId = CLIENT_ID,
             nonce = nonce,
             responseEncryptionKey = encryptionKey?.publicKey,
-            requestSigningKey = readerAuthKey,
+            verifierIdentities = buildList {
+                readerAuthKey?.let { add(VerifierIdentity(it, CLIENT_ID)) }
+            },
             responseMode = OpenID4VP.ResponseMode.DC_API,
             responseUri = null,
             dcqlQuery = Json.decodeFromString(JsonObject.serializer(), dcql)

@@ -5,6 +5,7 @@ import org.multipaz.presentment.CredentialQueryResult
 import org.multipaz.presentment.CredentialSelection
 import org.multipaz.presentment.ConsentData
 import org.multipaz.request.Requester
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.trustmanagement.TrustMetadata
 
 /**
@@ -21,7 +22,7 @@ import org.multipaz.trustmanagement.TrustMetadata
  */
 typealias ShowConsentPromptFn = suspend (
     requester: Requester,
-    trustMetadata: TrustMetadata?,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
     consentData: ConsentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
@@ -34,7 +35,7 @@ typealias ShowConsentPromptFn = suspend (
  */
 suspend fun promptModelSilentConsent(
     requester: Requester,
-    trustMetadata: TrustMetadata?,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
     consentData: ConsentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
@@ -63,20 +64,20 @@ suspend fun promptModelSilentConsent(
  */
 suspend fun promptModelRequestConsent(
     requester: Requester,
-    trustMetadata: TrustMetadata?,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
     consentData: ConsentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
 ): CredentialSelection? {
-    try {
-        return PromptModel.get().requestConsent(
+    return try {
+        PromptModel.get().requestConsent(
             requester = requester,
-            trustMetadata = trustMetadata,
+            trustedRequesterIdentity = trustedRequesterIdentity,
             consentData = consentData,
             preselectedDocuments = preselectedDocuments,
             onDocumentsInFocus = onDocumentsInFocus,
         )
     } catch (_: PromptDismissedException) {
-        return null
+        null
     }
 }

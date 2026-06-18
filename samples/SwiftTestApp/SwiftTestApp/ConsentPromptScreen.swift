@@ -90,7 +90,7 @@ struct ConsentPromptScreen: View {
                             )
                             let selection = try await promptModelRequestConsent(
                                 requester: requestData.requester,
-                                trustMetadata: requestData.trustMetadata,
+                                trustedRequesterIdentity: requestData.trustedRequesterIdentity,
                                 consentData: requestData.consentData,
                                 preselectedDocuments: [],
                                 onDocumentsInFocus: { documents in }
@@ -117,7 +117,7 @@ struct ConsentPromptScreen: View {
 private struct RequestData {
     let requester: Requester
     let consentData: ConsentData
-    let trustMetadata: TrustMetadata?
+    let trustedRequesterIdentity: TrustedRequesterIdentity?
 }
 
 private func calcRequestData(
@@ -703,52 +703,66 @@ private func calcRequestData(
         extensions: []
     )
     let readerCertChain = X509CertChain(certificates: [readerCert, readerRootCert])
+    let requesterIdentity = Iso18013RequesterIdentity(certChain: readerCertChain)
+    let requesterIdentities: [RequesterIdentity] = [requesterIdentity]
     
-    let readerCertChainToUse: X509CertChain? = switch trustPointType {
+    let readerIdentities: [RequesterIdentity] = switch trustPointType {
     case .utopiaBrewery:
-        readerCertChain
+        requesterIdentities
     case .utopiaBreweryNoPrivacyPolicy:
-        readerCertChain
+        requesterIdentities
     case .multipazIdentityReader:
-        readerCertChain
+        requesterIdentities
     case .utopiaAirlines:
-        readerCertChain
+        requesterIdentities
     case .none:
-        nil
+        []
     }
     
     let requester = switch verifierOrigin {
     case .none:
-        Requester(certChain: readerCertChainToUse, appId: nil, origin: nil)
+        Requester(requesterIdentities: requesterIdentities, appId: nil, origin: nil)
     case .verifierMultipazOrg:
-        Requester(certChain: readerCertChainToUse, appId: nil, origin: "https://verifier.multipaz.org")
+        Requester(requesterIdentities: requesterIdentities, appId: nil, origin: "https://verifier.multipaz.org")
     case .otherExampleCom:
-        Requester(certChain: readerCertChainToUse, appId: nil, origin: "https://other.example.com")
+        Requester(requesterIdentities: requesterIdentities, appId: nil, origin: "https://other.example.com")
+    }
+    
+    let trustedRequesterIdentity: TrustedRequesterIdentity? = if trustMetadata == nil {
+        nil
+    } else {
+        TrustedRequesterIdentity(
+            identity: requesterIdentity,
+            trustMetadata: trustMetadata!
+        )
     }
     
     let source = SimplePresentmentSource.companion.create(
         documentStore: documentStore,
         documentTypeRepository: documentTypeRepository,
         resolveTrustFn: { requester in
-            if (requester.certChain?.certificates.first?.subject.name == "CN=Encrypted Document Receiver") {
-                if (encryptionTarget != .none) {
-                    return TrustMetadata(
-                        displayName: encryptionTarget.rawValue,
-                        displayIcon: utopiaCbpLogo.toByteString(),
-                        displayIconUrl: nil,
-                        privacyPolicyUrl: nil,
-                        disclaimer: nil,
-                        testOnly: false,
-                        extensions: [:]
-                    )
+            for requesterIdentity in requester.requesterIdentities {
+                if (requesterIdentity.certChain.certificates.first!.subject.name == "CN=Encrypted Document Receiver") {
+                    if (encryptionTarget != .none) {
+                        let trustMetadata = TrustMetadata(
+                            displayName: encryptionTarget.rawValue,
+                            displayIcon: utopiaCbpLogo.toByteString(),
+                            displayIconUrl: nil,
+                            privacyPolicyUrl: nil,
+                            disclaimer: nil,
+                            testOnly: false,
+                            extensions: [:]
+                        )
+                        return TrustedRequesterIdentity(identity: requesterIdentity, trustMetadata: trustMetadata)
+                    }
                 }
             }
             return nil
         },
-        showConsentPromptFn: { requester, trustMetadata, consentData, preselectedDocuments, onDocumentsInFocus in
+        showConsentPromptFn: { requester, trustedRequesterIdentity, consentData, preselectedDocuments, onDocumentsInFocus in
             return try! await promptModelSilentConsent(
                 requester: requester,
-                trustMetadata: trustMetadata,
+                trustedRequesterIdentity: trustedRequesterIdentity,
                 consentData: consentData,
                 preselectedDocuments: preselectedDocuments,
                 onDocumentsInFocus: { documents in onDocumentsInFocus(documents) }
@@ -773,7 +787,7 @@ private func calcRequestData(
         return RequestData(
             requester: requester,
             consentData: consentData,
-            trustMetadata: trustMetadata
+            trustedRequesterIdentity: trustedRequesterIdentity
         )
     }
 
@@ -844,7 +858,7 @@ private func calcRequestData(
                 otherInfo: [:])
         )
         drBuilder.setDeviceRequestInfo(
-            deviceRequestInfo: DeviceRequestInfo(
+            deviceRequestInfo: DeviceRequestInfo.companion.fromValues(
                 useCases: [
                     UseCase(
                         mandatory: true,
@@ -873,7 +887,7 @@ private func calcRequestData(
     return RequestData(
         requester: requester,
         consentData: consentData,
-        trustMetadata: trustMetadata
+        trustedRequesterIdentity: trustedRequesterIdentity
     )
 }
 

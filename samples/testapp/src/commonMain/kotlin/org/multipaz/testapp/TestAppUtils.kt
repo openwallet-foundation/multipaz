@@ -66,6 +66,7 @@ import org.multipaz.util.Logger
 import org.multipaz.util.truncateToWholeSeconds
 import org.multipaz.verification.VerificationSession
 import org.multipaz.verification.VerificationUtil
+import org.multipaz.verification.VerifierIdentity
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -150,7 +151,11 @@ object TestAppUtils {
             requestTypes = setOf(VerificationSession.RequestType.ISO_18013_PROXIMITY),
             dcql = requestDefinition.dcql,
             transactionData = requestDefinition.transactionData,
-            readerAuthenticationKey = if (signRequest) app.readerKey else null,
+            verifierIdentities = buildList {
+                if (signRequest) {
+                    add(VerifierIdentity(app.readerKey))
+                }
+            },
             deviceEngagement = deviceEngagement,
             eReaderKey = eReaderKey,
             handover = handover,

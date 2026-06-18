@@ -247,21 +247,21 @@ public struct Consent: View {
     let maxHeight: CGFloat
     let consentData: ConsentData
     let requester: Requester
-    let trustMetadata: TrustMetadata?
+    let trustedRequesterIdentity: TrustedRequesterIdentity?
     let onConfirm: (_: CredentialSelection) -> Void
     let onCancel: () -> Void
 
     public init(
         consentData: ConsentData,
         requester: Requester,
-        trustMetadata: TrustMetadata?,
+        trustedRequesterIdentity: TrustedRequesterIdentity?,
         maxHeight: CGFloat = .infinity,
         onConfirm: @escaping (_: CredentialSelection) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.consentData = consentData
         self.requester = requester
-        self.trustMetadata = trustMetadata
+        self.trustedRequesterIdentity = trustedRequesterIdentity
         self.maxHeight = maxHeight
         self.onConfirm = onConfirm
         self.onCancel = onCancel
@@ -313,7 +313,7 @@ public struct Consent: View {
     public var body: some View {
         let rpName = getRelyingPartyName(
             requester: requester,
-            trustMetadata: trustMetadata
+            trustMetadata: trustedRequesterIdentity?.trustMetadata
         )
         NavigationStack(path: $path) {
             VStack {
@@ -325,12 +325,12 @@ public struct Consent: View {
                         consentData: consentData,
                         rpName: rpName,
                         requester: requester,
-                        trustMetadata: trustMetadata,
+                        trustMetadata: trustedRequesterIdentity?.trustMetadata,
                         selections: selections,
                         sheetHeight: $sheetHeight,
                         isActive: path.isEmpty,
                         onRequesterClicked: {
-                            if requester.certChain != nil {
+                            if trustedRequesterIdentity != nil {
                                 path.append(ConsentDestinations.showRequesterInfo)
                             }
                         },
@@ -359,7 +359,8 @@ public struct Consent: View {
                 case .showRequesterInfo:
                     ShowRequesterInfo(
                         maxHeight: maxHeight,
-                        requester: requester
+                        requester: requester,
+                        trustedRequesterIdentity: trustedRequesterIdentity!
                     )
                 case .pickSolution(let useCaseIndex):
                     PickSolutionView(
@@ -382,13 +383,14 @@ public struct Consent: View {
 private struct ShowRequesterInfo: View {
     let maxHeight: CGFloat
     let requester: Requester
+    let trustedRequesterIdentity: TrustedRequesterIdentity
     @State private var currentPage: Int = 0
     @State private var pageHeights: [Int: CGFloat] = [:]
 
     var body: some View {
         SmartSheet(maxHeight: maxHeight, updateDetents: false) {
         } content: {
-            let certificates = requester.certChain!.certificates
+            let certificates = trustedRequesterIdentity.identity.certChain.certificates
             VStack {
                 TabView(selection: $currentPage) {
                     ForEach(0..<certificates.count, id: \.self) { index in
@@ -405,7 +407,7 @@ private struct ShowRequesterInfo: View {
                 }
             }
         } footer: { isAtBottom, scrollDown in
-            let certificates = requester.certChain!.certificates
+            let certificates = trustedRequesterIdentity.identity.certChain.certificates
             if certificates.count > 1 {
                 HStack(spacing: 4) {
                     ForEach(0..<certificates.count, id: \.self) { index in

@@ -41,7 +41,8 @@ extern "C" void matcher(void) {
 
             if (protocolValue == "openid4vp" ||
                 protocolValue == "openid4vp-v1-unsigned" ||
-                protocolValue == "openid4vp-v1-signed") {
+                protocolValue == "openid4vp-v1-signed" ||
+                protocolValue == "openid4vp-v1-multisigned") {
 
                 auto request = OpenID4VPRequest::parseOpenID4VP(protocolData, protocolValue);
                 auto dcqlResponse = request->dclqQuery.execute(db, protocolValue);

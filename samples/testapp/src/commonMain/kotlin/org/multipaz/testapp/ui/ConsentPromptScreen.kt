@@ -71,7 +71,10 @@ import org.multipaz.presentment.SimplePresentmentSource
 import org.multipaz.presentment.ConsentData
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.requestConsent
+import org.multipaz.request.Iso18013RequesterIdentity
 import org.multipaz.request.Requester
+import org.multipaz.request.RequesterIdentity
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
@@ -182,7 +185,7 @@ expect suspend fun launchAndroidPresentmentActivity(
     source: PresentmentSource,
     paData: AndroidPresentmentActivityData,
     requester: Requester,
-    trustMetadata: TrustMetadata?,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
     consentData: ConsentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
@@ -402,7 +405,7 @@ fun ConsentPromptScreen(
             source: PresentmentSource,
             paData: AndroidPresentmentActivityData,
             requester: Requester,
-            trustMetadata: TrustMetadata?,
+            trustedRequesterIdentity: TrustedRequesterIdentity?,
             consentData: ConsentData,
             preselectedDocuments: List<Document>,
             onDocumentsInFocus: (documents: List<Document>) -> Unit
@@ -424,11 +427,13 @@ fun ConsentPromptScreen(
                         documentStore = documentStore,
                         documentTypeRepository = documentTypeRepository
                     )
+                    val trustedRequesterIdentity =
+                        queryResult.source.resolveTrust(queryResult.requester)
                     launcher(
                         queryResult.source,
                         paData,
                         queryResult.requester,
-                        queryResult.source.resolveTrust(queryResult.requester),
+                        trustedRequesterIdentity,
                         queryResult.consentData,
                         emptyList(),
                         { documents ->
@@ -447,11 +452,11 @@ fun ConsentPromptScreen(
 
         item {
             Button(onClick = {
-                launchConsent(launcher = { source, paData,
-                                           requester, trustMetadata, consentData, preselectedDocuments, onDocumentsInFocus ->
+                launchConsent(launcher = { source, paData, requester, trustedRequesterIdentity, consentData,
+                                           preselectedDocuments, onDocumentsInFocus ->
                         promptModel.requestConsent(
                             requester = requester,
-                            trustMetadata = trustMetadata,
+                            trustedRequesterIdentity = trustedRequesterIdentity,
                             consentData = consentData,
                             preselectedDocuments = preselectedDocuments,
                             onDocumentsInFocus = onDocumentsInFocus,
@@ -910,33 +915,18 @@ private suspend fun getQueryResult(
         documentStore = documentStore!!,
         documentTypeRepository = documentTypeRepository,
         resolveTrustFn = { requester ->
-            if (requester.certChain?.certificates?.firstOrNull()?.subject?.name == "CN=Encrypted Document Receiver") {
-                if (encryptionTarget.desc == "None") {
-                    return@SimplePresentmentSource null
-                } else {
-                    return@SimplePresentmentSource TrustMetadata(
-                        displayName = encryptionTarget.desc,
-                        displayIcon = utopiaCbpIcon     // For now, assume this is the only encryption target
-                    )
-                }
+            for (requesterIdentity in requester.requesterIdentities) {
+                val trustMetadata = resolveTrust(
+                    encryptionTarget,
+                    utopiaCbpIcon,
+                    requesterIdentity
+                ) ?: continue
+                return@SimplePresentmentSource TrustedRequesterIdentity(requesterIdentity, trustMetadata)
             }
-
-            // If available, use dynamic metadata...
-            val readerCert = requester.certChain?.certificates?.first()
-            val mpzExtensionData = readerCert?.getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid)
-            if (mpzExtensionData != null) {
-                val mpzExtension = MultipazExtension.fromCbor(mpzExtensionData)
-                mpzExtension.googleAccount?.let {
-                    return@SimplePresentmentSource TrustMetadata(
-                        displayName = it.emailAddress,
-                        displayIconUrl = it.profilePictureUri,
-                        disclaimer = "The email and picture shown are from the requester's Google Account. " +
-                                "This information has been verified but may not be their real identity"
-                    )
-                }
+            // Otherwise, just base it on the trustMetadata
+            trustMetadata?.let {
+                TrustedRequesterIdentity(requester.requesterIdentities.first(), it)
             }
-            // Otherwise, just return the trustMetadata
-            trustMetadata
         },
         domainsMdocSignature = listOf("mdoc"),
         domainsKeyBoundSdJwt = listOf("sdjwt")
@@ -1048,6 +1038,40 @@ private suspend fun getQueryResult(
         source = source
     )
     return QueryResult(requester, source, consentData)
+}
+
+private fun resolveTrust(
+    encryptionTarget: EncryptionTarget,
+    utopiaCbpIcon: ByteString,
+    requesterIdentity: RequesterIdentity
+): TrustMetadata? {
+    if (requesterIdentity.certChain.certificates.first().subject.name == "CN=Encrypted Document Receiver") {
+        return if (encryptionTarget.desc == "None") {
+            null
+        } else {
+            TrustMetadata(
+                displayName = encryptionTarget.desc,
+                displayIcon = utopiaCbpIcon,     // For now, assume this is the only encryption target
+            )
+        }
+    }
+
+    // If available, use dynamic metadata...
+    val readerCert = requesterIdentity.certChain.certificates.first()
+    val mpzExtensionData = readerCert.getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid)
+    if (mpzExtensionData != null) {
+        val mpzExtension = MultipazExtension.fromCbor(mpzExtensionData)
+        mpzExtension.googleAccount?.let {
+            return TrustMetadata(
+                displayName = it.emailAddress,
+                displayIconUrl = it.profilePictureUri,
+                disclaimer = "The email and picture shown are from the requester's Google Account. " +
+                        "This information has been verified but may not be their real identity",
+            )
+        }
+    }
+
+    return null
 }
 
 private suspend fun calculateRequester(
@@ -1162,7 +1186,13 @@ private suspend fun calculateRequester(
 
     return Pair(
         Requester(
-            certChain = readerCert?.let { X509CertChain(certificates = listOf(readerCert, readerRootCert)) },
+            requesterIdentities = buildList {
+                readerCert?.let {
+                    add(Iso18013RequesterIdentity(
+                        certChain = X509CertChain(certificates = listOf(readerCert, readerRootCert))
+                    ))
+                }
+            },
             appId = appId.appId,
             origin = origin.origin
         ),

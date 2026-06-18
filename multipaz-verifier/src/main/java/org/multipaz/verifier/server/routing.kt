@@ -10,6 +10,7 @@ import org.multipaz.server.request.certificateAuthority
 import org.multipaz.server.request.push
 import org.multipaz.verifier.request.getOpenID4VPUriSchemaRequest
 import org.multipaz.verifier.request.getResult
+import org.multipaz.verifier.request.listIdentities
 import org.multipaz.verifier.request.makeRequest
 import org.multipaz.verifier.request.processDirectPost
 import org.multipaz.verifier.request.processResponse
@@ -23,6 +24,9 @@ fun Routing.configureVerifier(environment: Deferred<ServerEnvironment>) {
     serveResources()
     post("/make_request") {
         makeRequest(call)
+    }
+    get("/verifier_identities") {
+        listIdentities(call)
     }
     get("/openid4vp_request/{sessionId}") {
         getOpenID4VPUriSchemaRequest(call, call.parameters["sessionId"]!!)

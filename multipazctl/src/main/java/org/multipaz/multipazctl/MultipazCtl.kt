@@ -308,6 +308,8 @@ object MultipazCtl {
         val privateKeyOutputFilename =
             getArg(args, "out_private_key", "reader_private_key.pem")
         val dnsName = getArg(args, "dns_name", "localhost")
+        val jwkOutputFilename =
+            getArg(args, "out_jwk", "ds_jwk.json")
 
         // Requirements for the Reader Root certificate is defined in ISO/IEC 18013-5:2021 Annex B
 
@@ -335,7 +337,7 @@ object MultipazCtl {
                 ),
                 readerKey = readerKey.publicKey,
                 subject = subject,
-                dnsName = dnsName,
+                dnsName = dnsName.ifEmpty { null },
                 serial = serial,
                 validFrom = validFrom,
                 validUntil = validUntil
@@ -358,6 +360,22 @@ object MultipazCtl {
             it.close()
         }
         println("- Wrote reader cert to $certificateOutputFilename")
+
+        File(jwkOutputFilename).outputStream().bufferedWriter().let {
+            val json = readerKey.toJwk(buildJsonObject {
+                put(
+                    key = "x5c",
+                    element = X509CertChain(
+                        certificates = listOf(readerCertificate, readerRootCert)
+                    ).toX5c(excludeRoot = false)
+                )
+            })
+            it.write(Json {
+                prettyPrint = true
+            }.encodeToString(json))
+            it.close()
+        }
+        println("- Wrote reader cert and key to $jwkOutputFilename")
     }
 
     fun printJwk(args: Array<String>) {
@@ -431,8 +449,9 @@ Generate a reader certificate and corresponding private key:
         [--reader_root_private_key reader_root_private_key.pem]
         [--out_certificate reader_certificate.pem]
         [--out_private_key reader_private_key.pem]
+        [--out_jwk reader_jwk.json]        
         [--subject 'CN=OWF Multipaz TEST Reader,C=US']
-        [--dns_name localhost]
+        [--dns_name localhost]        
         [--validity_in_years 1]
         [--curve P-256]
 

@@ -35,6 +35,7 @@ import org.multipaz.utopia.knowntypes.wellKnownMultipleDocumentRequests
 import org.multipaz.testapp.DcqlRequestDefinition
 import org.multipaz.verification.VerificationSession
 import org.multipaz.verification.VerificationUtil
+import org.multipaz.verification.VerifierIdentity
 import kotlin.random.Random
 import kotlin.time.Clock
 
@@ -329,11 +330,10 @@ private suspend fun doDcRequestFlow(
         transactionData = requestDefinition.transactionData,
         nonce = nonce,
         origin = origin,
-        clientId = clientId,
-        readerAuthenticationKey = if (protocol.signRequest) {
-            app.readerKey
-        } else {
-            null
+        verifierIdentities = buildList {
+            if (protocol.signRequest) {
+                add(VerifierIdentity(app.readerKey, clientId))
+            }
         },
         documentTypeRepository = app.documentTypeRepository,
     )

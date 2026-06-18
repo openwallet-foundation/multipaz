@@ -107,15 +107,15 @@ suspend fun mdocPresentment(
             throw IllegalStateException("Error satisfying request", e)
         }
         val requester = Requester(
-            certChain = deviceRequest.getRequester(),
+            requesterIdentities = deviceRequest.getRequesterIdentities(),
             appId = requesterAppId,
             origin = requesterOrigin,
         )
         onWaitingForUserInput()
-        val trustMetadata = source.resolveTrust(requester)
+        val trustedRequesterIdentity = source.resolveTrust(requester)
         val selection = source.showConsentPrompt(
             requester = requester,
-            trustMetadata = trustMetadata,
+            trustedRequesterIdentity = trustedRequesterIdentity,
             consentData = ConsentData.fromCredentialQueryResult(
                 credentialQueryResult = iso18013Response,
                 source = source
@@ -300,7 +300,7 @@ suspend fun mdocPresentment(
         eventData = EventPresentmentData.fromPresentmentSelection(
             selection = selection,
             requester = requester,
-            trustMetadata = trustMetadata
+            trustedRequesterIdentity = trustedRequesterIdentity,
         )
     }
     if (Logger.isDebugEnabled) {

@@ -32,16 +32,18 @@
             <!-- Dynamically populated, see addTab() -->
         </div>
 
-        <div class="mb-3 w-50" style="flex-basis: 40%;">
-            <input type="checkbox" id="sign-request" checked="checked"/>
-            <label for="sign-request">Sign Request</label>
+        <br/>
+        <p class="fs-5 col-md-8">Request options:</p>
+
+        <div class="d-flex gap-4 flex-wrap" id="signing">
+            <span>Request Signing:</span>
         </div>
         <div class="mb-3 w-50" style="flex-basis: 40%;">
             <input type="checkbox" id="encrypt-response" checked="checked"/>
             <label for="encrypt-response">Encrypt Response</label>
         </div>
 
-        Selected protocol for retrieval:
+        <p class="fs-5 col-md-8">Selected protocol for retrieval:</p>
 
         <div class="d-flex gap-4 flex-wrap">
             <label>
@@ -52,7 +54,10 @@
                 <input type="checkbox" id="protocol-dc-vp" checked/>
                 W3C DC API (OpenID4VP 1.0)
             </label>
-            Fallback: URI scheme (OpenID4VP 1.0)
+            <label>
+                <input type="checkbox" id="protocol-uri-vp" checked/>
+                haip: url (OpenID4VP 1.0)
+            </label>
         </div>
 
     </main>

@@ -469,6 +469,13 @@ std::unique_ptr<OpenID4VPRequest> OpenID4VPRequest::parseOpenID4VP(cJSON* dataJs
         std::string payloadBase64 = jwtStr.substr(firstDot + 1, secondDot - firstDot - 1);
         std::string payload = base64UrlDecode(payloadBase64);
         dataJson = cJSON_Parse(payload.c_str());
+    } else {
+        cJSON* payloadItem = cJSON_GetObjectItem(dataJson, "payload");
+        if (payloadItem != nullptr) {
+            std::string payloadBase64 = std::string(cJSON_GetStringValue(payloadItem));
+            std::string payload = base64UrlDecode(payloadBase64);
+            dataJson = cJSON_Parse(payload.c_str());
+        }
     }
 
     cJSON* query = cJSON_GetObjectItem(dataJson, "dcql_query");

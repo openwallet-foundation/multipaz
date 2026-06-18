@@ -471,7 +471,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -492,7 +493,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -513,7 +515,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -529,7 +532,8 @@ class TestCredentialSets {
                                   value: Erika
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -552,7 +556,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -931,7 +936,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -952,7 +958,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -973,7 +980,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -994,7 +1002,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -1010,7 +1019,8 @@ class TestCredentialSets {
                                   value: Erika
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -1033,7 +1043,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -1161,7 +1172,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -1182,7 +1194,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -1203,7 +1216,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -1219,7 +1233,8 @@ class TestCredentialSets {
                                   value: Erika
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -1296,7 +1311,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -1371,7 +1387,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -1462,7 +1479,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -1478,7 +1496,8 @@ class TestCredentialSets {
                                   value: Erika
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -1586,7 +1605,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -1602,7 +1622,8 @@ class TestCredentialSets {
                                   value: Erika
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential
@@ -1625,7 +1646,8 @@ class TestCredentialSets {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: KeyBoundSdJwtVcCredential

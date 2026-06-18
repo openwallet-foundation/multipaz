@@ -41,6 +41,7 @@ import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.openid.OpenID4VP
+import org.multipaz.request.OpenID4VPRequesterIdentity
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
@@ -114,8 +115,11 @@ suspend fun uriSchemePresentment(
     val reqJwt = (httpResponse.body() as ByteArray).decodeToString()
     val info = JsonWebSignature.getInfo(reqJwt)
     val requestObject = info.claimsSet
-    val requesterChain = info.x5c!!
-    JsonWebSignature.verify(reqJwt, requesterChain.certificates.first().ecPublicKey)
+    val requesterIdentity = OpenID4VPRequesterIdentity(
+        certChain = info.x5c!!,
+        clientId = requestObject["client_id"]!!.jsonPrimitive.content
+    )
+    JsonWebSignature.verify(reqJwt, requesterIdentity.certChain.certificates.first().ecPublicKey)
     check(info.type == "oauth-authz-req+jwt")
 
     val responseUri = requestObject["response_uri"]?.jsonPrimitive?.content
@@ -127,7 +131,7 @@ suspend fun uriSchemePresentment(
         appId = appId,
         origin = origin ?: "",
         request = requestObject,
-        requesterCertChain = requesterChain,
+        requesterIdentities = listOf(requesterIdentity),
         onDocumentsInFocus = onDocumentsInFocus
     )
     val response = responseObject.response

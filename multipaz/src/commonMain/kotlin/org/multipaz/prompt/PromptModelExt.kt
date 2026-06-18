@@ -5,8 +5,8 @@ import org.multipaz.presentment.CredentialSelection
 import org.multipaz.presentment.ConsentData
 import org.multipaz.prompt.PassphrasePromptDialogModel.PassphraseRequest
 import org.multipaz.request.Requester
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.securearea.PassphraseConstraints
-import org.multipaz.trustmanagement.TrustMetadata
 import kotlin.coroutines.cancellation.CancellationException
 
 fun PromptModel.getPassphraseDialogModel() = getDialogModel(PassphrasePromptDialogModel.DialogType)
@@ -57,7 +57,7 @@ suspend fun PromptModel.requestPassphrase(
  * Shows a consent prompt to the user for presentment of credentials.
  *
  * @param requester the relying party which is requesting the data.
- * @param trustMetadata [TrustMetadata] conveying the level of trust in the requester, if any.
+ * @param trustedRequesterIdentity conveys the level of trust in the requester, if any.
  * @param consentData the combinations of credentials and claims that the user can select.
  * @param preselectedDocuments a list of documents the user may have preselected earlier (for
  *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
@@ -79,7 +79,7 @@ suspend fun PromptModel.requestPassphrase(
 )
 suspend fun PromptModel.requestConsent(
     requester: Requester,
-    trustMetadata: TrustMetadata?,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
     consentData: ConsentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
@@ -87,7 +87,7 @@ suspend fun PromptModel.requestConsent(
     return getDialogModel(ConsentPromptDialogModel.DialogType).displayPrompt(
         parameters = ConsentPromptDialogModel.ConsentPromptRequest(
             requester = requester,
-            trustMetadata = trustMetadata,
+            trustedRequesterIdentity = trustedRequesterIdentity,
             consentData = consentData,
             preselectedDocuments = preselectedDocuments,
             onDocumentsInFocus = onDocumentsInFocus,

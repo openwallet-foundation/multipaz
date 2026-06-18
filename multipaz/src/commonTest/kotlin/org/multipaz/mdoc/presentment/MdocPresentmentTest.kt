@@ -165,7 +165,8 @@ class MdocPresentmentTest {
                       solution:
                         credential:
                           encryptionRequested: false
-                          encryptionTargetTrustMetadata: null
+                          encryptionTargetTrustMetadata:
+                            displayName: null
                           match:
                             credential:
                               type: MdocCredential
@@ -183,7 +184,8 @@ class MdocPresentmentTest {
                                   value: Mustermann
                         credential:
                           encryptionRequested: true
-                          encryptionTargetTrustMetadata: TrustMetadata(displayName=Encrypted Document Receiver, displayIcon=null, displayIconUrl=null, privacyPolicyUrl=null, disclaimer=null, testOnly=false, extensions={})
+                          encryptionTargetTrustMetadata:
+                            displayName: Encrypted Document Receiver
                           match:
                             credential:
                               type: MdocCredential

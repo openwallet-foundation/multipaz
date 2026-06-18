@@ -11,6 +11,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Simple
+import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
@@ -29,6 +30,8 @@ import org.multipaz.openid.OpenID4VP
 import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.presentment.digitalCredentialsPresentment
 import org.multipaz.presentment.mdocPresentment
+import org.multipaz.request.OpenID4VPRequesterIdentity
+import org.multipaz.util.toBase64Url
 import org.multipaz.utopia.knowntypes.PingTransaction
 import org.multipaz.utopia.knowntypes.wellKnownMultipleDocumentRequests
 import kotlin.random.Random
@@ -39,7 +42,8 @@ import kotlin.test.assertNotNull
 
 class VerificationSessionTest {
     private val harness = DocumentStoreTestHarness()
-    private lateinit var readerKey: AsymmetricKey.X509Certified
+    private lateinit var readerIdentity: VerifierIdentity
+    private lateinit var secondaryIdentity: VerifierIdentity
     private val mdlPingTransactionData: List<String> by lazy {
         listOf(PingTransaction.sampleData.toJsonText(credentialId = "mDL"))
     }
@@ -75,11 +79,45 @@ class VerificationSessionTest {
             validUntil = harness.validUntil,
             extensions = emptyList()
         )
-        readerKey = AsymmetricKey.X509CertifiedExplicit(
-            certChain = X509CertChain(
-                listOf(readerCert) + harness.readerRootKey.certChain.certificates
+        readerIdentity = VerifierIdentity(
+            key = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(
+                    listOf(readerCert) + harness.readerRootKey.certChain.certificates
+                ),
+                privateKey = readerPrivateKey
             ),
-            privateKey = readerPrivateKey
+            clientId = CLIENT_ID
+        )
+        val secondaryRootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val secondaryRootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = AsymmetricKey.anonymous(secondaryRootKey),
+            subject = X500Name.fromName("CN=Secondary Root"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            crlUrl = "https://example.com/crl"
+        )
+        val secondaryPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val secondaryCert = MdocUtil.generateReaderCertificate(
+            readerRootKey = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(secondaryRootCert)),
+                privateKey = secondaryRootKey
+            ),
+            readerKey = secondaryPrivateKey.publicKey,
+            subject = X500Name.fromName("CN=Seconary"),
+            dnsName = null,
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            extensions = emptyList()
+        )
+        val certHash = Crypto.digest(Algorithm.SHA256, secondaryCert.encoded.toByteArray())
+        secondaryIdentity = VerifierIdentity(
+            key = AsymmetricKey.X509CertifiedExplicit(
+                certChain = X509CertChain(listOf(secondaryCert, secondaryRootCert)),
+                privateKey = secondaryPrivateKey
+            ),
+            clientId = "x509_hash:${certHash.toBase64Url()}"
         )
     }
 
@@ -222,9 +260,8 @@ class VerificationSessionTest {
             requestTypes = setOf(VerificationSession.RequestType.OPENID4VP_URI_SCHEME),
             dcql = dcql,
             transactionData = transactionData,
-            readerAuthenticationKey = readerKey,
+            verifierIdentities = listOf(readerIdentity),
             origin = ORIGIN,
-            clientId = CLIENT_ID,
             nonce = nonce,
             encryptResponse = true,
             responseUri = responseUri,
@@ -247,7 +284,7 @@ class VerificationSessionTest {
             appId = null,
             origin = ORIGIN,
             request = jwsInfo.claimsSet,
-            requesterCertChain = requesterCertChain,
+            requesterIdentities = listOf(OpenID4VPRequesterIdentity(requesterCertChain, CLIENT_ID)),
         )
         // Encrypted direct_post.jwt: response is { "response": "<JWE compact serialization>" }.
         val jwe = responseObject.response["response"]!!.jsonPrimitive.content
@@ -269,9 +306,8 @@ class VerificationSessionTest {
             requestTypes = setOf(VerificationSession.RequestType.DC_OPENID4VP),
             dcql = MDL_DCQL,
             transactionData = mdlPingTransactionData,
-            readerAuthenticationKey = readerKey,
+            verifierIdentities = listOf(readerIdentity),
             origin = ORIGIN,
-            clientId = CLIENT_ID,
             nonce = nonce,
             encryptResponse = true,
             documentTypeRepository = harness.documentTypeRepository,
@@ -292,9 +328,8 @@ class VerificationSessionTest {
         val session = VerificationUtil.generateVerificationSessionForDcql(
             requestTypes = setOf(VerificationSession.RequestType.DC_OPENID4VP_DRAFT_24),
             dcql = MDL_DCQL,
-            readerAuthenticationKey = readerKey,
+            verifierIdentities = listOf(readerIdentity),
             origin = ORIGIN,
-            clientId = CLIENT_ID,
             nonce = nonce,
             encryptResponse = true,
             documentTypeRepository = harness.documentTypeRepository,
@@ -315,9 +350,8 @@ class VerificationSessionTest {
             requestTypes = setOf(VerificationSession.RequestType.DC_ISO_18013),
             dcql = MDL_DCQL,
             transactionData = mdlPingTransactionData,
-            readerAuthenticationKey = readerKey,
+            verifierIdentities = listOf(readerIdentity),
             origin = ORIGIN,
-            clientId = CLIENT_ID,
             nonce = nonce,
             encryptResponse = true,
             documentTypeRepository = harness.documentTypeRepository,
@@ -338,9 +372,8 @@ class VerificationSessionTest {
             requestTypes = setOf(VerificationSession.RequestType.DC_ISO_18013),
             dcql = EU_PID_SDJWT_DCQL,
             transactionData = euPidPingTransactionData,
-            readerAuthenticationKey = readerKey,
+            verifierIdentities = listOf(readerIdentity),
             origin = ORIGIN,
-            clientId = CLIENT_ID,
             nonce = nonce,
             encryptResponse = true,
             documentTypeRepository = harness.documentTypeRepository,
@@ -368,7 +401,7 @@ class VerificationSessionTest {
             requestTypes = setOf(VerificationSession.RequestType.ISO_18013_PROXIMITY),
             dcql = MDL_DCQL,
             transactionData = mdlPingTransactionData,
-            readerAuthenticationKey = readerKey,
+            verifierIdentities = listOf(readerIdentity),
             documentTypeRepository = harness.documentTypeRepository,
             deviceEngagement = deviceEngagement,
             handover = handover,
@@ -404,11 +437,24 @@ class VerificationSessionTest {
         setup()
         runMultiAgeOver18(
             requestType = VerificationSession.RequestType.DC_OPENID4VP,
-            protocolName = "openid4vp-v1-signed",
             preselected = harness.docMdl,
             expectedDocType = DrivingLicense.MDL_DOCTYPE,
             expectedPingString = "mdl text",
-            expectedDocRequestId = null
+            expectedDocRequestId = null,
+            multisign = false
+        )
+    }
+
+    @Test
+    fun testMultiDcOpenID4VPMdlMultisign() = runTest {
+        setup()
+        runMultiAgeOver18(
+            requestType = VerificationSession.RequestType.DC_OPENID4VP,
+            preselected = harness.docMdl,
+            expectedDocType = DrivingLicense.MDL_DOCTYPE,
+            expectedPingString = "mdl text",
+            expectedDocRequestId = null,
+            multisign = true
         )
     }
 
@@ -417,11 +463,11 @@ class VerificationSessionTest {
         setup()
         runMultiAgeOver18(
             requestType = VerificationSession.RequestType.DC_OPENID4VP,
-            protocolName = "openid4vp-v1-signed",
             preselected = harness.docPhotoId,
             expectedDocType = PhotoID.PHOTO_ID_DOCTYPE,
             expectedPingString = "pid text",
-            expectedDocRequestId = null
+            expectedDocRequestId = null,
+            multisign = false
         )
     }
 
@@ -430,11 +476,24 @@ class VerificationSessionTest {
         setup()
         runMultiAgeOver18(
             requestType = VerificationSession.RequestType.DC_ISO_18013,
-            protocolName = "org-iso-mdoc",
             preselected = harness.docMdl,
             expectedDocType = DrivingLicense.MDL_DOCTYPE,
             expectedPingString = "mdl text",
-            expectedDocRequestId = 0L
+            expectedDocRequestId = 0L,
+            multisign = false
+        )
+    }
+
+    @Test
+    fun testMultiDcIso18013MdlMultisign() = runTest {
+        setup()
+        runMultiAgeOver18(
+            requestType = VerificationSession.RequestType.DC_ISO_18013,
+            preselected = harness.docMdl,
+            expectedDocType = DrivingLicense.MDL_DOCTYPE,
+            expectedPingString = "mdl text",
+            expectedDocRequestId = 0L,
+            multisign = true
         )
     }
 
@@ -443,11 +502,11 @@ class VerificationSessionTest {
         setup()
         runMultiAgeOver18(
             requestType = VerificationSession.RequestType.DC_ISO_18013,
-            protocolName = "org-iso-mdoc",
             preselected = harness.docPhotoId,
             expectedDocType = PhotoID.PHOTO_ID_DOCTYPE,
             expectedPingString = "pid text",
-            expectedDocRequestId = 1L
+            expectedDocRequestId = 1L,
+            multisign = false
         )
     }
 
@@ -457,24 +516,38 @@ class VerificationSessionTest {
      */
     private suspend fun runMultiAgeOver18(
         requestType: VerificationSession.RequestType,
-        protocolName: String,
         preselected: Document,
         expectedDocType: String,
         expectedPingString: String,
-        expectedDocRequestId: Long?
+        expectedDocRequestId: Long?,
+        multisign: Boolean
     ) {
         val nonce = ByteString(Random.nextBytes(18))
         val session = VerificationUtil.generateVerificationSessionForDcql(
             requestTypes = setOf(requestType),
             dcql = ageOver18Dcql,
             transactionData = ageOver18TransactionData,
-            readerAuthenticationKey = readerKey,
+            verifierIdentities = buildList {
+                if (multisign) {
+                    add(secondaryIdentity)
+                }
+                add(readerIdentity)
+            },
             origin = ORIGIN,
-            clientId = CLIENT_ID,
             nonce = nonce,
             encryptResponse = true,
             documentTypeRepository = harness.documentTypeRepository,
         )
+        val protocolName = when (requestType) {
+            VerificationSession.RequestType.DC_ISO_18013 -> "org-iso-mdoc"
+            VerificationSession.RequestType.DC_OPENID4VP ->
+                if (multisign) {
+                    "openid4vp-v1-multisigned"
+                } else {
+                    "openid4vp-v1-signed"
+                }
+            else -> throw IllegalArgumentException("Unexpected requestType: $requestType")
+        }
 
         val dcResponse = walletDcApiResponse(
             session = session,

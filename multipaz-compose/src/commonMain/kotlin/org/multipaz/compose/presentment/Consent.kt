@@ -126,6 +126,7 @@ import org.multipaz.presentment.ConsentData
 import org.multipaz.presentment.ConsentUseCase
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.Requester
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.Logger
 import kotlin.math.min
@@ -140,7 +141,7 @@ private const val TAG = "Consent"
  *
  * @param modifier a [Modifier].
  * @param requester the relying party which is requesting the data.
- * @param trustMetadata [TrustMetadata] conveying the level of trust in the requester, if any.
+ * @param trustedRequesterIdentity conveys the level of trust in the requester, if any.
  * @param consentData the combinations of credentials and claims that the user can select.
  * @param preselectedDocuments the list of documents the user may have preselected earlier (for
  * example an OS-provided credential picker like Android's Credential Manager) or the empty list
@@ -156,7 +157,7 @@ private const val TAG = "Consent"
 fun Consent(
     modifier: Modifier = Modifier,
     requester: Requester,
-    trustMetadata: TrustMetadata?,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
     consentData: ConsentData,
     preselectedDocuments: List<Document>,
     imageLoader: ImageLoader?,
@@ -263,7 +264,7 @@ fun Consent(
                     composable("main") {
                         ConsentPage(
                             requester = requester,
-                            trustMetadata = trustMetadata,
+                            trustedRequesterIdentity = trustedRequesterIdentity,
                             appInfo = appInfo,
                             imageLoader = imageLoader,
                             consentData = consentData,
@@ -287,8 +288,7 @@ fun Consent(
 
                     composable("showRequesterInfo") {
                         ShowRequesterInfoPage(
-                            requester = requester,
-                            trustMetadata = trustMetadata,
+                            trustedRequesterIdentity = trustedRequesterIdentity,
                             onBackClicked = {
                                 navController.navigateUp()
                             },
@@ -318,8 +318,7 @@ fun Consent(
 
 @Composable
 private fun ShowRequesterInfoPage(
-    requester: Requester,
-    trustMetadata: TrustMetadata?,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
     onBackClicked: () -> Unit,
 ) {
     Column(
@@ -350,7 +349,7 @@ private fun ShowRequesterInfoPage(
             }
         }
 
-        requester.certChain?.let { certChain ->
+        trustedRequesterIdentity?.identity?.certChain?.let { certChain ->
             Box(
                 modifier = Modifier.fillMaxHeight()
             ) {
@@ -420,7 +419,7 @@ private data class RequesterDisplayData(
 @Composable
 private fun ConsentPage(
     requester: Requester,
-    trustMetadata: TrustMetadata?,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
     appInfo: ApplicationInfo?,
     imageLoader: ImageLoader?,
     consentData: ConsentData,
@@ -433,6 +432,7 @@ private fun ConsentPage(
 ) {
     val scrollState = rememberScrollState()
 
+    val trustMetadata = trustedRequesterIdentity?.trustMetadata
     val requesterDisplayData = if (trustMetadata != null) {
         RequesterDisplayData(
             name = trustMetadata.displayName,
@@ -457,9 +457,8 @@ private fun ConsentPage(
 
     Column {
         RelyingPartySection(
-            requester = requester,
+            trustedRequesterIdentity = trustedRequesterIdentity,
             requesterDisplayData = requesterDisplayData,
-            trustMetadata = trustMetadata,
             imageLoader = imageLoader,
             consentData = consentData,
             selections = selections,
@@ -500,7 +499,7 @@ private fun ConsentPage(
                     FloatingItemContainer {
                         RelyingPartyTrailer(
                             requester = requester,
-                            trustMetadata = trustMetadata
+                            trustMetadata = trustMetadata,
                         )
                     }
 
@@ -1061,7 +1060,7 @@ private fun RelyingPartyTrailer(
         } else if (requester.appId != null) {
             stringResource(Res.string.credential_presentment_warning_verifier_not_in_trust_list_app)
         } else {
-            if (requester.certChain != null) {
+            if (requester.requesterIdentities.isNotEmpty()) {
                 stringResource(Res.string.credential_presentment_warning_verifier_not_in_trust_list)
             } else {
                 stringResource(Res.string.credential_presentment_warning_verifier_not_in_trust_list_anonymous)
@@ -1209,9 +1208,8 @@ private fun ClaimsView(
 
 @Composable
 private fun RelyingPartySection(
-    requester: Requester,
     requesterDisplayData: RequesterDisplayData,
-    trustMetadata: TrustMetadata?,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
     imageLoader: ImageLoader?,
     consentData: ConsentData,
     selections: List<Int>,
@@ -1225,23 +1223,19 @@ private fun RelyingPartySection(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        val requesterName = if (requesterDisplayData.name != null) {
-            requesterDisplayData.name
-        } else {
-            if (trustMetadata != null && requester.certChain != null) {
-                // If we have a trust point without `displayName` use the name in the root certificate.
-                requester.certChain!!.certificates.last().subject.name
-            } else {
-                // We could distinguish between anonymous and unknown request but that's already
-                // done in the warning text
-                stringResource(Res.string.credential_presentment_headline_share_with_unknown_requester)
-            }
-        }
+        val requesterName = requesterDisplayData.name
+            // If we have a trust point without `displayName` use the name in the root certificate.
+            ?: trustedRequesterIdentity?.identity?.certChain?.certificates?.last()?.subject?.name
+            // We could distinguish between anonymous and unknown request but that's already
+            // done in the warning text
+            ?: stringResource(Res.string.credential_presentment_headline_share_with_unknown_requester)
 
         if (requesterDisplayData.icon != null) {
             Icon(
                 modifier = Modifier.size(80.dp)
-                    .clickable(enabled = requester.certChain != null) { onShowRequesterInfo() },
+                    .clickable(enabled = trustedRequesterIdentity?.identity?.certChain != null) {
+                        onShowRequesterInfo()
+                    },
                 bitmap = requesterDisplayData.icon,
                 contentDescription = stringResource(Res.string.credential_presentment_verifier_icon_description),
                 tint = Color.Unspecified,
@@ -1250,7 +1244,9 @@ private fun RelyingPartySection(
         } else if (requesterDisplayData.iconUrl != null && imageLoader != null) {
             AsyncImage(
                 modifier = Modifier.size(80.dp)
-                    .clickable(enabled = requester.certChain != null) { onShowRequesterInfo() },
+                    .clickable(enabled = trustedRequesterIdentity?.identity?.certChain != null) {
+                        onShowRequesterInfo()
+                    },
                 model = requesterDisplayData.iconUrl,
                 imageLoader = imageLoader,
                 contentScale = ContentScale.Crop,
@@ -1260,7 +1256,9 @@ private fun RelyingPartySection(
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             modifier = Modifier
-                .clickable(enabled = requester.certChain != null) { onShowRequesterInfo() },
+                .clickable(enabled = trustedRequesterIdentity?.identity?.certChain != null) {
+                    onShowRequesterInfo()
+                },
             text = requesterName,
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.titleLarge,

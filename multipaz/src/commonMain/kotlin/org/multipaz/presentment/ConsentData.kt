@@ -1,7 +1,9 @@
 package org.multipaz.presentment
 
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.request.Iso18013RequesterIdentity
 import org.multipaz.request.Requester
+import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.generateAllPaths
 
 private const val TAG = "ConsentData"
@@ -55,7 +57,7 @@ data class ConsentData private constructor(
         /**
          * Creates a [ConsentData] from a [CredentialQueryResult].
          *
-         * The given [PresentmentSource] is used to look up [TrustMetaData] for keys used
+         * The given [PresentmentSource] is used to look up [TrustMetadata] for keys used
          * to encrypt data to.
          *
          * @param credentialQueryResult the [CredentialQueryResult] to use.
@@ -86,7 +88,12 @@ data class ConsentData private constructor(
                                                 }
                                             }
                                         val encryptionTargetTrustMetadata = encryptionTargetCertificationChain?.let {
-                                            source.resolveTrust(Requester(certChain = it))
+                                            val requester = Requester(
+                                                requesterIdentities = listOf(
+                                                    Iso18013RequesterIdentity(certChain = it)
+                                                )
+                                            )
+                                            source.resolveTrust(requester)?.trustMetadata
                                         }
                                         credentials.add(
                                             ConsentCredential(

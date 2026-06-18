@@ -14,10 +14,6 @@
      * This function uses DC API using ISO 18013 Annex C and OpenID4VP v1 protocols with fallback
      * to "haip-vp" URL scheme.
      *
-     * Note that ISO 18013 Annex C only supports ISO mDoc credential format and does not (yet)
-     * support transaction data, it is turned off if there are non-mDoc documents requested or
-     * transaction data is used.
-     *
      * Parameters: this function takes a single object parameter with the following fields:
      * - dcql (required): DCQL query (as Json object), as described in OpenID4VP spec
      * - transaction_data (optional): transaction data as an array of Json objects as described
@@ -26,6 +22,9 @@
      *   following values are supported: "org-iso-mdoc" (ISO 18013 Annex C, DC API),
      *   "openid4vp-v1" (OpenID4VP v1 DC API), "openid4vp-v1-uri" (OpenID4VP url scheme).
      *   All are enabled by default.
+     * - nonce base64url-encoded nonce for the request, will be generated if omitted
+     * - sign if the request should be signed (true/false), defaults to true; can also be an array
+     *   of verifier identity names (the default identity is named "default")
      */
     window.multipazVerifyCredentials = async function(request) {
         const adjustedRequest = {};

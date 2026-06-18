@@ -45,6 +45,7 @@ import org.multipaz.trustmanagement.TrustPoint
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import org.multipaz.verification.VerifierIdentity
 import kotlin.collections.iterator
 import kotlin.random.Random
 import kotlin.test.Test
@@ -193,10 +194,13 @@ class DigitalCredentialsPresentmentTest {
         val request = OpenID4VP.generateRequest(
             version = version,
             origin = ORIGIN,
-            clientId = CLIENT_ID,
             nonce = nonce,
             responseEncryptionKey = encryptionKey?.publicKey,
-            requestSigningKey = readerAuthKey,
+            verifierIdentities = buildList {
+                readerAuthKey?.let {
+                    add(VerifierIdentity(it, CLIENT_ID))
+                }
+            },
             responseMode = OpenID4VP.ResponseMode.DC_API,
             responseUri = null,
             dcqlQuery = dcql,

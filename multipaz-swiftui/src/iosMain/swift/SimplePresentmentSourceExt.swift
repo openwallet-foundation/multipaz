@@ -38,10 +38,10 @@ extension SimplePresentmentSource.Companion {
         eventLogger: EventLogger? = nil,
         resolveTrustFn: @escaping @MainActor @Sendable (
             _ requester: Requester
-        ) async -> TrustMetadata?,
+        ) async -> TrustedRequesterIdentity?,
         showConsentPromptFn: @escaping @MainActor @Sendable (
             _ requester: Requester,
-            _ trustMetadata: TrustMetadata?,
+            _ trustMetadata: TrustedRequesterIdentity?,
             _ consentData: ConsentData,
             _ preselectedDocuments: [Document],
             _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void,
@@ -93,7 +93,7 @@ extension SimplePresentmentSource.Companion {
 
 private func runResolveTrust(
     requester: Requester,
-    f: @escaping @MainActor @Sendable (Requester) async -> TrustMetadata?,
+    f: @escaping @MainActor @Sendable (Requester) async -> TrustedRequesterIdentity?,
     completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void
 ) {
     Task { @MainActor in
@@ -104,12 +104,12 @@ private func runResolveTrust(
 
 private func runShowConsentPrompt(
     requester: Requester,
-    trustMetadata: TrustMetadata?,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
     consentData: ConsentData,
     preselectedDocuments: [Document],
     f: @escaping @MainActor @Sendable (
         _ requester: Requester,
-        _ trustMetadata: TrustMetadata?,
+        _ trustedRequesterIdentity: TrustedRequesterIdentity?,
         _ consentData: ConsentData,
         _ preselectedDocuments: [Document],
         _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void
@@ -120,7 +120,7 @@ private func runShowConsentPrompt(
         // TODO: The cast for onDocumentsInFocus fails at runtime, figure out how to make it work
         let value = await f(
             requester,
-            trustMetadata,
+            trustedRequesterIdentity,
             consentData,
             preselectedDocuments,
             { documents in }
@@ -143,9 +143,9 @@ private func runGetBadges(
 private class ResolveTrustHandler: KotlinSuspendFunction1 {
     let f: @MainActor @Sendable (
         _ requester: Requester
-    ) async -> TrustMetadata?
+    ) async -> TrustedRequesterIdentity?
     
-    init(f: @escaping @MainActor @Sendable (_ requester: Requester) async -> TrustMetadata?) {
+    init(f: @escaping @MainActor @Sendable (_ requester: Requester) async -> TrustedRequesterIdentity?) {
         self.f = f
     }
 
@@ -158,7 +158,7 @@ private class ResolveTrustHandler: KotlinSuspendFunction1 {
 private class ShowConsentPromptHandler: KotlinSuspendFunction5 {
     let f: @MainActor @Sendable (
         _ requester: Requester,
-        _ trustMetadata: TrustMetadata?,
+        _ trustedRequesterIdentity: TrustedRequesterIdentity?,
         _ consentData: ConsentData,
         _ preselectedDocuments: [Document],
         _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void,
@@ -166,7 +166,7 @@ private class ShowConsentPromptHandler: KotlinSuspendFunction5 {
     
     init(f: @escaping @MainActor @Sendable (
         _ requester: Requester,
-        _ trustMetadata: TrustMetadata?,
+        _ trustedRequesterIdentity: TrustedRequesterIdentity?,
         _ consentData: ConsentData,
         _ preselectedDocuments: [Document],
         _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void,
@@ -176,12 +176,12 @@ private class ShowConsentPromptHandler: KotlinSuspendFunction5 {
 
     func __invoke(p1: Any?, p2: Any?, p3: Any?, p4: Any?, p5: Any?, completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void) {
         let requester = p1 as! Requester
-        let trustMetadata = p2 as! TrustMetadata?
+        let trustedRequesterIdentity = p2 as! TrustedRequesterIdentity?
         let consentData = p3 as! ConsentData
         let preselectedDocuments = p4 as! [Document]
         runShowConsentPrompt(
             requester: requester,
-            trustMetadata: trustMetadata,
+            trustedRequesterIdentity: trustedRequesterIdentity,
             consentData: consentData,
             preselectedDocuments: preselectedDocuments,
             f: self.f,

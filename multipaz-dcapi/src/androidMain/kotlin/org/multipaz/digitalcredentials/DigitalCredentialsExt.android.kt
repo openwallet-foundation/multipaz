@@ -406,6 +406,7 @@ internal actual val defaultSupportedProtocols: Set<String>
 private val supportedProtocols = setOf(
     "openid4vp-v1-signed",
     "openid4vp-v1-unsigned",
+    "openid4vp-v1-multisigned",
     "org-iso-mdoc",
     "openid4vp",
 )
