@@ -43,6 +43,7 @@ private suspend fun fetchResource(call: ApplicationCall, path: String) {
                 "css" -> ContentType.Text.CSS
                 "jpeg", "jpg" -> ContentType.Image.JPEG
                 "png" -> ContentType.Image.PNG
+		        "webp" -> ContentType.Image.WEBP
                 else -> ContentType.Application.OctetStream
             },
             provider = { resource.bytes.toByteArray() }
