@@ -152,12 +152,10 @@ actual object Crypto {
         aad: ByteArray?
     ): ByteArray {
         when (algorithm) {
-            Algorithm.A128GCM -> {}
-            Algorithm.A192GCM -> {}
-            Algorithm.A256GCM -> {}
-            else -> {
-                throw IllegalArgumentException("Unsupported algorithm $algorithm")
-            }
+            Algorithm.A128GCM -> require(key.size == 16) { "Key size must be 16 bytes for AES-128-GCM" }
+            Algorithm.A192GCM -> require(key.size == 24) { "Key size must be 24 bytes for AES-192-GCM" }
+            Algorithm.A256GCM -> require(key.size == 32) { "Key size must be 32 bytes for AES-256-GCM" }
+            else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
         return Cipher.getInstance("AES/GCM/NoPadding").run {
             init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce))

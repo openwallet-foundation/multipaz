@@ -169,7 +169,7 @@ class SessionEncryption(
             iv.append(ivIdentifier)
             iv.append(encryptedCounter.toUInt())
             messageCiphertext = Crypto.encrypt(
-                Algorithm.A128GCM,
+                Algorithm.A256GCM,
                 skSelf,
                 iv.toByteString().toByteArray(),
                 messagePlaintext
@@ -230,7 +230,7 @@ class SessionEncryption(
             iv.append(ivIdentifier)
             iv.append(decryptedCounter.toUInt())
             plainText = Crypto.decrypt(
-                Algorithm.A128GCM,
+                Algorithm.A256GCM,
                 skRemote,
                 iv.toByteString().toByteArray(),
                 messageCiphertext

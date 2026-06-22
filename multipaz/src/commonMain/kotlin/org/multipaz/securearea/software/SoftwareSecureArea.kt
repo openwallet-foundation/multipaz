@@ -103,7 +103,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
                 val cleartextPrivateKey = Cbor.encode(privateKey.toCoseKey().toDataItem())
                 val iv = Random.Default.nextBytes(12)
                 val encryptedPrivateKey = Crypto.encrypt(
-                    Algorithm.A128GCM,
+                    Algorithm.A256GCM,
                     secretKey,
                     iv,
                     cleartextPrivateKey
