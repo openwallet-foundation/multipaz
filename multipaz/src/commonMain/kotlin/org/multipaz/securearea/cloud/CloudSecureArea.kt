@@ -462,7 +462,7 @@ open class CloudSecureArea protected constructor(
             appendUInt32(ivIdentifier)
             appendUInt32(encryptedCounter++)
         }.toByteArray()
-        return Crypto.encrypt(Algorithm.A128GCM, skDevice!!, iv, messagePlaintext)
+        return Crypto.encrypt(Algorithm.A256GCM, skDevice!!, iv, messagePlaintext)
     }
 
     private suspend fun decryptFromCloud(messageCiphertext: ByteArray): ByteArray {

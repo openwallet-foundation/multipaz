@@ -111,12 +111,18 @@ class CloudSecureAreaServer(
     private val openid4vciKeyAttestationCertification: String?,
     private val passphraseFailureEnforcer: PassphraseFailureEnforcer
 ) {
+    private val stateEncryptionAlg: Algorithm get() = when (serverSecureAreaBoundKey.size) {
+        16 -> Algorithm.A128GCM
+        24 -> Algorithm.A192GCM
+        32 -> Algorithm.A256GCM
+        else -> throw IllegalStateException("Unexpected key size: ${serverSecureAreaBoundKey.size}")
+    }
     private suspend fun encryptState(plaintext: ByteArray): ByteArray {
         val counter = encryptionGcmCounter
         val iv = ByteBuffer.allocate(12)
         iv.putInt(0, 0x00000000)
         iv.putLong(counter)
-        val ciphertext = Crypto.encrypt(Algorithm.A128GCM, serverSecureAreaBoundKey, iv.array(), plaintext)
+        val ciphertext = Crypto.encrypt(stateEncryptionAlg, serverSecureAreaBoundKey, iv.array(), plaintext)
         return iv.array() + ciphertext
     }
 
@@ -124,7 +130,7 @@ class CloudSecureAreaServer(
         require(cipherText.size >= 12) { "input too short" }
         val iv = cipherText.copyOfRange(0, 12)
         val encryptedData = cipherText.copyOfRange(12, cipherText.size)
-        val plaintext = Crypto.decrypt(Algorithm.A128GCM, serverSecureAreaBoundKey, iv, encryptedData)
+        val plaintext = Crypto.decrypt(stateEncryptionAlg, serverSecureAreaBoundKey, iv, encryptedData)
         return plaintext
     }
 
@@ -1015,7 +1021,7 @@ class CloudSecureAreaServer(
         val ivIdentifier = 0x00000000
         iv.putInt(4, ivIdentifier)
         iv.putInt(8, e2eeState.encryptedCounter++)
-        return Crypto.encrypt(Algorithm.A128GCM, e2eeState.skCloud!!, iv.array(), messagePlaintext)
+        return Crypto.encrypt(Algorithm.A256GCM, e2eeState.skCloud!!, iv.array(), messagePlaintext)
     }
 
     private suspend fun doE2EERequest(
@@ -1041,7 +1047,7 @@ class CloudSecureAreaServer(
         iv.putInt(8, e2eeState.decryptedCounter)
         val plainText = try {
             Crypto.decrypt(
-                Algorithm.A128GCM,
+                Algorithm.A256GCM,
                 e2eeState.skDevice!!,
                 iv.array(),
                 request.encryptedRequest)
