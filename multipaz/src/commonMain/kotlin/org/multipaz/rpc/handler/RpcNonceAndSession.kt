@@ -90,11 +90,30 @@ class RpcNonceAndSession(
             method: String,
             payload: Bstr,
             timeout: Duration = 10.minutes,
+        ): RpcNonceAndSession {
+            return validateAndExtractNonceAndSession(
+                assertion = assertion,
+                target = target,
+                method = method,
+                payload = payload,
+                timeout = timeout,
+                nonceChecker = { clientId, nonce, expiration ->
+                    checkNonce(clientId, nonce, expiration)
+                }
+            )
+        }
+
+        suspend fun validateAndExtractNonceAndSession(
+            assertion: AssertionRpcAuth,
+            target: String,
+            method: String,
+            payload: Bstr,
+            timeout: Duration,
             nonceChecker: suspend (
                 clientId: String,
                 nonce: ByteString,
                 expiration: Instant
-            ) -> RpcNonceAndSession = ::checkNonce
+            ) -> RpcNonceAndSession
         ): RpcNonceAndSession {
             val payloadHash = ByteString(Crypto.digest(Algorithm.SHA256, payload.value))
             if (payloadHash != assertion.payloadHash) {
