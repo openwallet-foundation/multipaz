@@ -26,10 +26,15 @@ struct Credential {
     // This is the empty string if not available as a VC.
     std::string vcVct;
 
+    // This is the set of protocols the credential can be exported on.
+    std::vector<std::string> protocols;
+
     // Maps from claimName to Claim.
     std::map<std::string, Claim> claims;
 
     Claim* findMatchingClaim(const DcqlRequestedClaim& claim);
+
+    bool supportsProtocol(const std::string& protocol);
 
     bool matchesRequest(const Request& request);
 
@@ -48,7 +53,7 @@ struct Claim {
 
 struct CredentialDatabase {
     CredentialDatabase(const uint8_t* encodedDatabase, size_t encodedDatabaseLength);
-    std::vector<std::string> protocols;
+    //std::vector<std::string> protocols;
     std::vector<Credential> credentials;
 };
 

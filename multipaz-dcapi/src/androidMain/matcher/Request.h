@@ -37,7 +37,7 @@ struct MdocRequest : public Request {
     // The logic is now encapsulated in this query object
     DcqlQuery dcqlQuery;
 
-    std::vector<Combination> getCredentialCombinations(const CredentialDatabase* db);
+    std::vector<Combination> getCredentialCombinations(const CredentialDatabase* db, const std::string& protocol);
 
     static std::unique_ptr<MdocRequest> parseMdocApi(const std::string& protocolName, cJSON *requestJson);
 };

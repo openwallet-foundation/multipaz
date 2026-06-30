@@ -66,7 +66,7 @@ struct DcqlQuery {
 
     void log();
 
-    std::optional<DcqlResponse> execute(CredentialDatabase* credentialDatabase);
+    std::optional<DcqlResponse> execute(CredentialDatabase* credentialDatabase, const std::string& protocol);
 
     static DcqlQuery parse(cJSON* dcqlQuery);
 };

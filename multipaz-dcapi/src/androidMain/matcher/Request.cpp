@@ -439,8 +439,8 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
     return std::unique_ptr<MdocRequest> { new MdocRequest(protocolName, dcqlQuery) };
 }
 
-std::vector<Combination> MdocRequest::getCredentialCombinations(const CredentialDatabase* db) {
-    auto result = dcqlQuery.execute((CredentialDatabase*)db);
+std::vector<Combination> MdocRequest::getCredentialCombinations(const CredentialDatabase* db, const std::string& protocol) {
+    auto result = dcqlQuery.execute((CredentialDatabase*)db, protocol);
     if (result.has_value()) {
         return result.value().getCredentialCombinations();
     }

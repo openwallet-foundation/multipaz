@@ -44,7 +44,7 @@ extern "C" void matcher(void) {
                 protocolValue == "openid4vp-v1-signed") {
 
                 auto request = OpenID4VPRequest::parseOpenID4VP(protocolData, protocolValue);
-                auto dcqlResponse = request->dclqQuery.execute(db);
+                auto dcqlResponse = request->dclqQuery.execute(db, protocolValue);
                 if (dcqlResponse.has_value()) {
                     auto combinations = dcqlResponse.value().getCredentialCombinations();
                     for (auto const &combination: combinations) {
@@ -55,7 +55,7 @@ extern "C" void matcher(void) {
 
             } else if (protocolValue == "org.iso.mdoc" || protocolValue == "org-iso-mdoc") {
                 auto request = MdocRequest::parseMdocApi(protocolValue, protocolData);
-                auto combinations = request->getCredentialCombinations(db);
+                auto combinations = request->getCredentialCombinations(db, protocolValue);
                 for (auto const& combination : combinations) {
                     combination.addToCredmanPicker(*request);
                 }

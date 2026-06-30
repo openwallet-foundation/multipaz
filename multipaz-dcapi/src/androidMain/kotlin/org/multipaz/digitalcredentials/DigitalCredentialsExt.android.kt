@@ -26,7 +26,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
@@ -38,6 +37,10 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
+import org.multipaz.document.androidCredmanBitmap
+import org.multipaz.document.androidCredmanExchangeProtocols
+import org.multipaz.document.androidCredmanSubtitle
+import org.multipaz.document.androidCredmanTitle
 import org.multipaz.documenttype.DocumentAttribute
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
@@ -209,9 +212,10 @@ private suspend fun exportMdocCredential(
 ): DataItem {
     val credentialType = documentTypeRepository.getDocumentTypeForMdoc(credential.docType)
 
-    val cardArt = document.cardArt?.toByteArray()
-    val displayName = document.displayName ?: "Unnamed Credential"
-    val displayNameSub = document.typeDisplayName ?: "Unknown Credential Type"
+    val cardArt = document.androidCredmanBitmap?.toByteArray() ?: document.cardArt?.toByteArray()
+    val displayName = document.androidCredmanTitle ?: document.displayName ?: "Unnamed Document"
+    val displayNameSub = document.androidCredmanSubtitle ?: document.typeDisplayName ?: "Unknown Document Type"
+    val exchangeProtocols = document.androidCredmanExchangeProtocols
 
     val cardArtResized = resizedCardArt(cardArt)
 
@@ -226,6 +230,11 @@ private suspend fun exportMdocCredential(
         put("title", displayName)
         put("subtitle", displayNameSub)
         put("bitmap", cardArtResized ?: byteArrayOf())
+        if (exchangeProtocols != null) {
+            putCborArray("protocols") {
+                exchangeProtocols.forEach { add(it) }
+            }
+        }
         putCborMap("mdoc") {
             put("documentId", document.identifier)
             put("docType", credential.docType)
@@ -270,9 +279,10 @@ private suspend fun exportSdJwtVcCredential(
     credential: SdJwtVcCredential,
     documentTypeRepository: DocumentTypeRepository
 ): DataItem {
-    val cardArt = document.cardArt?.toByteArray()
-    val displayName = document.displayName ?: "Unnamed Credential"
-    val displayNameSub = document.typeDisplayName ?: "Unknown Credential Type"
+    val cardArt = document.androidCredmanBitmap?.toByteArray() ?: document.cardArt?.toByteArray()
+    val displayName = document.androidCredmanTitle ?: document.displayName ?: "Unnamed Document"
+    val displayNameSub = document.androidCredmanSubtitle ?: document.typeDisplayName ?: "Unknown Document Type"
+    val exchangeProtocols = document.androidCredmanExchangeProtocols
 
     val cardArtResized = resizedCardArt(cardArt)
 
@@ -288,6 +298,11 @@ private suspend fun exportSdJwtVcCredential(
         put("title", displayName)
         put("subtitle", displayNameSub)
         put("bitmap", cardArtResized ?: byteArrayOf())
+        if (exchangeProtocols != null) {
+            putCborArray("protocols") {
+                exchangeProtocols.forEach { add(it) }
+            }
+        }
         putCborMap("sdjwt") {
             put("documentId", document.identifier)
             put("vct", credential.vct)

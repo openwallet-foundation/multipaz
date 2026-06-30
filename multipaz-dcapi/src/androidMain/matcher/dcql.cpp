@@ -198,13 +198,16 @@ bool CredentialSetOptionIsSatisfied(
     return true;
 }
 
-std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDatabase) {
+std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDatabase, const std::string& protocol) {
     std::vector<DcqlResponseCredentialSet> credentialSets;
 
     std::map<std::string, QueryResponse> credentialQueryIdToResponse;
     for (auto& query: dcqlCredentialQueries) {
         std::vector<Credential*> credsSatifyingMeta;
         for (auto& cred: credentialDatabase->credentials) {
+            if (!cred.supportsProtocol(protocol)) {
+                continue;
+            }
             if (query.format == "mso_mdoc" || query.format == "mso_mdoc_zk") {
                 if (cred.mdocDocType == query.mdocDocType) {
                     credsSatifyingMeta.push_back(&cred);

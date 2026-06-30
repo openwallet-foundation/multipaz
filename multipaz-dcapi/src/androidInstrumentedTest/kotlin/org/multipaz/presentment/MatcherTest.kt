@@ -34,6 +34,7 @@ import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.calculateCredentialDatabase
 import org.multipaz.digitalcredentials.getDefault
+import org.multipaz.document.setAndroidCredmanExchangeProtocols
 import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.util.Logger
@@ -2187,6 +2188,190 @@ class MatcherTest {
                     Family name: Mustermann
                     Given names: Erika
                   SetEntry set_index 1
+                    cred_id 0 org-iso-mdoc __EU PID 2__
+                    Family name: Mustermann
+                    Given names: Max
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_ExchangeProtocols() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionStandardDocuments()
+                // docMdl will only support org-iso-mdoc, so it should NOT match for openid4vp-v1-signed
+                harness.docMdl.setAndroidCredmanExchangeProtocols(listOf("org-iso-mdoc"))
+                // docEuPid supports openid4vp-v1-signed, so it should match
+                harness.docEuPid.setAndroidCredmanExchangeProtocols(listOf("openid4vp-v1-signed"))
+                // docEuPid2 is not modified, so it supports all protocols by default, so it should match
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "org.iso.18013.5.1.mDL"
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "given_name"
+                              ]
+                            },
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "family_name"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "meta": {
+                            "vct_values": [
+                              "urn:eudi:pid:1"
+                            ]
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "family_name"
+                              ]
+                            },
+                            {
+                              "path": [
+                                "given_name"
+                              ]
+                            }
+                          ]
+                        }
+                      ],
+                      "credential_sets": [
+                        {
+                          "options": [
+                            [
+                              "mdl"
+                            ],
+                            [
+                              "pid"
+                            ]
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 openid4vp-v1-signed
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __EU PID__
+                    Family name: Mustermann
+                    Given names: Erika
+                  SetEntry set_index 0
+                    cred_id 0 openid4vp-v1-signed __EU PID 2__
+                    Family name: Mustermann
+                    Given names: Max
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_ExchangeProtocols() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionStandardDocuments()
+                // docMdl will only support org-iso-mdoc, so it should match
+                harness.docMdl.setAndroidCredmanExchangeProtocols(listOf("org-iso-mdoc"))
+                // docEuPid supports openid4vp-v1-signed, so it should NOT match
+                harness.docEuPid.setAndroidCredmanExchangeProtocols(listOf("openid4vp-v1-signed"))
+                // docEuPid2 has no protocols configured, so it should match
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "org.iso.18013.5.1.mDL"
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "given_name"
+                              ]
+                            },
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "family_name"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "meta": {
+                            "vct_values": [
+                              "urn:eudi:pid:1"
+                            ]
+                          },
+                          "claims": [
+                            {
+                              "path": [
+                                "family_name"
+                              ]
+                            },
+                            {
+                              "path": [
+                                "given_name"
+                              ]
+                            }
+                          ]
+                        }
+                      ],
+                      "credential_sets": [
+                        {
+                          "options": [
+                            [
+                              "mdl"
+                            ],
+                            [
+                              "pid"
+                            ]
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim(),
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Given names: Erika
+                    Family name: Mustermann
+                  SetEntry set_index 0
                     cred_id 0 org-iso-mdoc __EU PID 2__
                     Family name: Mustermann
                     Given names: Max
