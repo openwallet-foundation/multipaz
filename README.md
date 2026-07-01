@@ -106,6 +106,34 @@ To use snapshot builds in a project consuming Multipaz:
 > ```
 > Alternatively, you can run Gradle with the `--refresh-dependencies` flag (e.g., `./gradlew build --refresh-dependencies`) to update cached snapshots on demand.
 
+## Upgrading Kotlin/JS NPM Lockfiles
+
+This project uses Kotlin Multiplatform (KMP) JS and Wasm targets. NPM dependency versions are pinned in `kotlin-js-store/yarn.lock` and `kotlin-js-store/wasm/yarn.lock` to ensure build reproducibility.
+
+To upgrade the locked package versions (e.g., to address Dependabot vulnerability alerts):
+
+1. **Clean intermediate Gradle build artifacts:**
+   ```shell
+   $ ./gradlew clean
+   ```
+
+2. **Generate the initial NPM workspaces:**
+   ```shell
+   $ ./gradlew kotlinUpgradeYarnLock kotlinWasmUpgradeYarnLock
+   ```
+
+3. **Upgrade npm package versions using Yarn:**
+   ```shell
+   $ cd build/js && npx yarn upgrade
+   $ cd ../wasm && npx yarn upgrade
+   $ cd ../..
+   ```
+
+4. **Persist the updated lockfiles to the repository store:**
+   ```shell
+   $ ./gradlew kotlinUpgradeYarnLock kotlinWasmUpgradeYarnLock
+   ```
+
 ## Getting involved
 
 We have resources for people already involved and people wishing to contribute
