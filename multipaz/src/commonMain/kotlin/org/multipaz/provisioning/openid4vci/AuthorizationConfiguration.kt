@@ -27,7 +27,7 @@ internal data class AuthorizationConfiguration(
             val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
 
             // Fetch issuer metadata
-            val metadataUrl = wellKnown(url, "oauth-authorization-server")
+            val metadataUrl = wellKnown(url, "oauth-authorization-server", dropTrailingSlash = true)
             val metadataRequest = httpClient.get(metadataUrl) {}
             if (metadataRequest.status != HttpStatusCode.OK) {
                 throw IllegalStateException("Invalid issuer, no $metadataUrl")
