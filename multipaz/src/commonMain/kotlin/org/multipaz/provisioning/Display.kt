@@ -8,13 +8,21 @@ import org.multipaz.cbor.annotation.CborSerializable
  *
  * This is used to describe both issuers and credentials.
  *
- * @property text User-visible text.
- * @property logo Image bytes in PNG or JPEG format.
+ * @property text user-visible name.
+ * @property logo image bytes in PNG or JPEG format.
+ * @property description user-visible description.
+ * @property textColor text color as CSS numerical color value.
+ * @property backgroundColor background color as CSS numerical color value.
+ * @property backgroundImage background image bytes in PNG or JPEG format.
  */
 @CborSerializable
 data class Display(
     val text: String,
-    val logo: ByteString?
+    val logo: ByteString? = null,
+    val description: String? = null,
+    val textColor: String? = null,
+    val backgroundColor: String? = null,
+    val backgroundImage: ByteString? = null
 ) {
     companion object
 }

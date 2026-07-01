@@ -119,7 +119,7 @@ internal open class JsonParsing(val source: String) {
     ): Display {
         val displayJson = element?.arrayOrNull("display")
         if (displayJson == null || displayJson.isEmpty()) {
-            return Display("Untitled", null)
+            return Display("Untitled")
         }
         var bestMatch: JsonObject? = null
         var bestRank = Int.MAX_VALUE
@@ -144,25 +144,39 @@ internal open class JsonParsing(val source: String) {
                 bestMatch = displayObj
             }
         }
-        val text = bestMatch!!.string("name")
-        val logoObj = bestMatch.objOrNull("logo")
-        var logo: ByteString? = null
-        if (logoObj != null) {
-            val uri = logoObj.stringOrNull("uri")
-            if (uri != null) {
-                if (uri.startsWith("data:")) {
-                    val start = uri.indexOf(",")
-                    if (start > 0) {
-                        logo = ByteString(uri.substring(start + 1).fromBase64())
-                    }
-                } else {
-                    val response = httpClient.get(uri)
-                    if (response.status == HttpStatusCode.OK) {
-                        logo = ByteString(response.readRawBytes())
-                    }
-                }
+        return Display(
+            text = bestMatch!!.string("name"),
+            logo = loadImage(
+                logoObj = bestMatch.objOrNull("logo"),
+                httpClient = httpClient
+            ),
+            description = bestMatch.stringOrNull("description"),
+            backgroundColor = bestMatch.stringOrNull("background_color"),
+            textColor = bestMatch.stringOrNull("text_color"),
+            backgroundImage = loadImage(
+                logoObj = bestMatch.objOrNull("background_image"),
+                httpClient = httpClient
+            )
+        )
+    }
+
+    private suspend fun loadImage(
+        logoObj: JsonObject?,
+        httpClient: HttpClient
+    ): ByteString? {
+        val uri = logoObj?.stringOrNull("uri") ?: return null
+        if (uri.startsWith("data:")) {
+            val start = uri.indexOf(",")
+            if (start > 0) {
+                return ByteString(uri.substring(start + 1).fromBase64())
+            }
+        } else {
+            val response = httpClient.get(uri)
+            if (response.status == HttpStatusCode.OK) {
+                return ByteString(response.readRawBytes())
             }
         }
-        return Display(text, logo)
+        return null
     }
+
 }
