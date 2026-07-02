@@ -261,6 +261,117 @@ class MatcherTest {
         )
     }
 
+    /**
+     * When a request lists several protocols as alternatives, a document must still be offered for a
+     * supported protocol even if a recognized-but-unsupported protocol is listed first. Here the mDL
+     * is exported for org-iso-mdoc only, and the request lists the (draft) openid4vp protocol before
+     * org-iso-mdoc. The matcher must fall through to org-iso-mdoc and offer the mDL, instead of
+     * stopping at the first recognized protocol (which matches no credential here).
+     */
+    @Test
+    fun testMatcher_protocolOrder_fallsThroughToSupported() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.provisionStandardDocuments()
+        // The mDL is exported for the ISO mdoc protocol only, not the (draft) openid4vp protocol.
+        harness.docMdl.setAndroidCredmanExchangeProtocols(listOf("org-iso-mdoc"))
+
+        val dcql =
+            """
+                {
+                  "credentials": [{
+                      "id": "mdl",
+                      "format": "mso_mdoc",
+                      "meta": { "doctype_value": "org.iso.18013.5.1.mDL" },
+                      "claims": [
+                        { "path": ["org.iso.18013.5.1", "given_name"] },
+                        { "path": ["org.iso.18013.5.1", "family_name"] }
+                ]}]}
+            """.trimIndent().trim()
+
+        val nonce = Random.nextBytes(16).toBase64Url()
+
+        // First alternative: the (draft) openid4vp protocol (unsigned) — not supported by the mDL.
+        val openid4vpData = OpenID4VP.generateRequest(
+            version = OpenID4VP.Version.DRAFT_24,
+            origin = ORIGIN,
+            nonce = nonce,
+            responseEncryptionKey = null,
+            verifierIdentities = emptyList(),
+            responseMode = OpenID4VP.ResponseMode.DC_API,
+            responseUri = null,
+            dcqlQuery = Json.decodeFromString(JsonObject.serializer(), dcql)
+        )
+
+        // Second alternative: the org-iso-mdoc protocol — supported by the mDL.
+        val encryptionKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val encryptionInfo = buildCborArray {
+            add("dcapi")
+            addCborMap {
+                put("nonce", nonce.toByteArray())
+                put("recipientPublicKey", encryptionKey.toCoseKey().toDataItem())
+            }
+        }
+        val base64EncryptionInfo = Cbor.encode(encryptionInfo).toBase64Url()
+        val dcapiInfo = buildCborArray {
+            add(base64EncryptionInfo)
+            add(ORIGIN)
+        }
+        val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            addCborArray {
+                add("dcapi")
+                add(dcapiInfoDigest)
+            }
+        }
+        val deviceRequest = buildDeviceRequestFromDcql(
+            sessionTranscript = sessionTranscript,
+            dcqlString = dcql,
+        ) {}
+        val base64DeviceRequest = Cbor.encode(deviceRequest.toDataItem()).toBase64Url()
+
+        val credentialDatabase = calculateCredentialDatabase(
+            appName = "Test App",
+            documentStore = harness.documentStore,
+            documentTypeRepository = harness.documentTypeRepository,
+            selectedProtocols = DigitalCredentials.getDefault().supportedProtocols,
+        )
+
+        var result = runMatcher(
+            request = buildJsonObject {
+                putJsonArray("requests") {
+                    // (draft) openid4vp FIRST — recognized but matches no credential here
+                    addJsonObject {
+                        put("protocol", "openid4vp")
+                        put("data", openid4vpData)
+                    }
+                    // org-iso-mdoc SECOND — the mDL supports this
+                    addJsonObject {
+                        put("protocol", "org-iso-mdoc")
+                        putJsonObject("data") {
+                            put("deviceRequest", base64DeviceRequest)
+                            put("encryptionInfo", base64EncryptionInfo)
+                        }
+                    }
+                }
+            }.toString().encodeToByteArray(),
+            credentialDatabase = Cbor.encode(credentialDatabase)
+        )
+        for (docId in harness.documentStore.listDocumentIds()) {
+            val doc = harness.documentStore.lookupDocument(docId)!!
+            result = result.replace(docId, "__${doc.displayName!!}__")
+        }
+
+        // The matcher falls through from the unmatched openid4vp entry to org-iso-mdoc and offers the
+        // mDL. Without the fall-through fix, this result would be empty.
+        Assert.assertTrue(
+            "Expected the mDL to be offered over org-iso-mdoc, but the matcher output was:\n$result",
+            result.contains("org-iso-mdoc") && result.contains("__mDL__")
+        )
+    }
+
     @Test
     fun testMatcher_OpenID4VP_sdjwt_simple() = runTest {
         val matcherResult = testMatcherDcql(
