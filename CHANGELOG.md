@@ -5,9 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.100.0] - Expected June 2026
+## [0.100.0] - 2026-07-08
 Significant changes since Multipaz 0.99.0 include:
-- [To be written]
+
+- Support for a new NFCv2 engagement protocol, including support for sequence numbers.
+- Implementation of SD-JWT Digital Payment Credentials (DPC) and support for SD-JWT VC in ISO 18013-5 DeviceRequest and DeviceResponse.
+- Introduction of higher-level Verifier APIs, and fully decoupled the `VerificationSession` API from DCQL.
+- Support for controlling how documents are exported to Android Credential Manager (Credman), and fallback support for matching protocols in the Digital Credentials API.
+- Support for parsing additional fields from OpenID4VCI display metadata, and support for multi-signed requests.
+- ZKP improvements, including issuing ZKP-friendly mDLs in the test app and surfacing ZKP errors to Kotlin.
+- Hoisted state in `VerticalCardList` for SwiftUI and Compose, and added support for use-case driven consent prompts.
+- BLE reliability improvements, including L2CAP connect retry logic.
+- Splitting off `multipaz-utopia` into its own repository.
+- Fixed Ed25519 signing in `AndroidKeystoreSecureArea`.
 
 ## [0.99.0] - 2026-05-04
 Significant changes since Multipaz 0.98.0 include:
