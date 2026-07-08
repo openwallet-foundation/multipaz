@@ -191,6 +191,7 @@ private class TestKeyUnlockDataProvider(
     override suspend fun getKeyUnlockData(
         secureArea: SecureArea,
         alias: String,
+        algorithm: Algorithm,
         unlockReason: Reason
     ): KeyUnlockData = keyUnlockData
 }

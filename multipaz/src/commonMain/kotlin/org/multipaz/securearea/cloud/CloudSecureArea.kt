@@ -716,6 +716,7 @@ open class CloudSecureArea protected constructor(
                     val unlockData = unlockDataProvider.getKeyUnlockData(
                         secureArea = this,
                         alias = alias,
+                        algorithm = getKeyInfo(alias).algorithm,
                         unlockReason = unlockReason
                     )
                     op.invoke(unlockData)
@@ -971,6 +972,7 @@ open class CloudSecureArea protected constructor(
         override suspend fun getKeyUnlockData(
             secureArea: SecureArea,
             alias: String,
+            algorithm: Algorithm,
             unlockReason: Reason
         ): KeyUnlockData {
             check(secureArea is CloudSecureArea)

@@ -1,5 +1,6 @@
 package org.multipaz.securearea
 
+import org.multipaz.crypto.Algorithm
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
 import org.multipaz.prompt.PromptModel
@@ -34,11 +35,13 @@ interface KeyUnlockDataProvider : CoroutineContext.Element {
      *
      * @param secureArea Secure Area where the locked key resides
      * @param alias locked key's alias
+     * @param algorithm the algorithm to use for the key,
      * @param unlockReason conveys the reason for the operation (e.g. credential presentment)
      */
     suspend fun getKeyUnlockData(
         secureArea: SecureArea,
         alias: String,
+        algorithm: Algorithm,
         unlockReason: Reason
     ): KeyUnlockData
 }

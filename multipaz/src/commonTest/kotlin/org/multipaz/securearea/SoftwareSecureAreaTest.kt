@@ -407,6 +407,7 @@ class SoftwareSecureAreaTest {
         override suspend fun getKeyUnlockData(
             secureArea: SecureArea,
             alias: String,
+            algorithm: Algorithm,
             unlockReason: Reason
         ): KeyUnlockData = keyUnlockData
     }

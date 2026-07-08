@@ -171,7 +171,12 @@ class SecureEnclaveSecureArea private constructor(
         // TODO: implement default KeyUnlockDataProvider by converting
         //  OperationReason to OperationReason.HumanReadable using PromptModel
         //  and the creating LAContext with title/subtitle from OperationReason.HumanReadable
-        val unlockData = unlockDataProvider?.getKeyUnlockData(this, alias, unlockReason)
+        val unlockData = unlockDataProvider?.getKeyUnlockData(
+            secureArea = this,
+            alias = alias,
+            algorithm = getKeyInfo(alias).algorithm,
+            unlockReason = unlockReason
+        )
         check(unlockData is SecureEnclaveKeyUnlockData?)
         return Crypto.secureEnclaveEcSign(keyBlob, dataToSign, unlockData)
     }
@@ -188,7 +193,12 @@ class SecureEnclaveSecureArea private constructor(
         // TODO: implement default KeyUnlockDataProvider by converting
         //  OperationReason to OperationReason.HumanReadable using PromptModel
         //  and the creating LAContext with title/subtitle from OperationReason.HumanReadable
-        val unlockData = unlockDataProvider?.getKeyUnlockData(this, alias, unlockReason)
+        val unlockData = unlockDataProvider?.getKeyUnlockData(
+            secureArea = this,
+            alias = alias,
+            algorithm = getKeyInfo(alias).algorithm,
+            unlockReason = unlockReason
+        )
         check(unlockData is SecureEnclaveKeyUnlockData?)
         return Crypto.secureEnclaveEcKeyAgreement(keyBlob, otherKey, unlockData)
     }

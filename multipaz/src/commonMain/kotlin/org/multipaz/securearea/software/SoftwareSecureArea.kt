@@ -225,6 +225,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
             val unlockData = unlockDataProvider.getKeyUnlockData(
                 secureArea = this,
                 alias = alias,
+                algorithm = getKeyInfo(alias).algorithm,
                 unlockReason = unlockReason
             )
             op.invoke(unlockData)
@@ -298,6 +299,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         override suspend fun getKeyUnlockData(
             secureArea: SecureArea,
             alias: String,
+            algorithm: Algorithm,
             unlockReason: Reason
         ): KeyUnlockData {
             secureArea as SoftwareSecureArea
@@ -318,7 +320,6 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
                             PassphraseEvaluation.OK
                         } catch (e: Exception) {
                             if (e is CancellationException) throw e
-                            // TODO: translations
                             PassphraseEvaluation.TryAgain
                         }
                     }

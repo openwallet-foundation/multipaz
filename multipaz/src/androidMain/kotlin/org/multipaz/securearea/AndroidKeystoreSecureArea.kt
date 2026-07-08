@@ -460,7 +460,12 @@ class AndroidKeystoreSecureArea private constructor(
         } catch (_: KeyLockedException) {
             val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
                 ?: AndroidKeystoreDefaultKeyUnlockDataProvider
-            val unlockData = unlockDataProvider.getKeyUnlockData(this, alias, unlockReason)
+            val unlockData = unlockDataProvider.getKeyUnlockData(
+                secureArea = this,
+                alias = alias,
+                algorithm = getKeyInfo(alias).algorithm,
+                unlockReason = unlockReason
+            )
             signNonInteractive(alias, dataToSign, unlockData)
         }
 
@@ -522,7 +527,11 @@ class AndroidKeystoreSecureArea private constructor(
             } catch (_: KeyLockedException) {
                 val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
                     ?: AndroidKeystoreDefaultKeyUnlockDataProvider
-                unlockDataProvider.getKeyUnlockData(this, alias, unlockReason)
+                unlockDataProvider.getKeyUnlockData(
+                    secureArea = this,
+                    alias = alias,
+                    algorithm = getKeyInfo(alias).algorithm,
+                    unlockReason = unlockReason)
             }
         } while (true)
     }
