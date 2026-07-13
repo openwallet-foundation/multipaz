@@ -1,0 +1,27 @@
+name: Require Linked Issue
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  check-linked-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify PR links an issue
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          # Matches: Fixes #12 | Closes owner/repo#12 | Resolves https://github.com/owner/repo/issues/12
+          # Requires real digits after '#', so the template placeholder
+          # '#<issue_number_goes_here>' does NOT count as a match.
+          pattern='(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+(#[0-9]+|[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#[0-9]+|https://github\.com/[^ ]+/issues/[0-9]+)'
+          if echo "$PR_BODY" | grep -iEq "$pattern"; then
+            echo "✅ Linked issue found."
+          else
+            echo "::error::This PR must link an issue using a keyword like `Fixes #123`. See the PR template."
+            exit 1
+          fi

@@ -6,6 +6,10 @@ here are some pointers about what we're looking for:
 
 ## Contributing to Code
 
+- Every PR must link an issue. Reference it in the PR description using a closing keyword,
+  e.g. `Fixes #123` (or `Closes`/`Resolves`), as prompted by the PR template. This is enforced
+  in CI, so a PR that doesn't link an issue will fail the `check-linked-issue` check. It's a good
+  idea to open an issue first for discussion.
 - A PR should not contain unrelated changes
   - In particular do not include unrelated changes even despite how tempting it is to e.g. change
     `check(!something.isEmpty())` to `check(something.isNotEmpty())` in a unrelated file,
