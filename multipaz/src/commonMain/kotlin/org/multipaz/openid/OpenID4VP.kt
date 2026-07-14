@@ -54,7 +54,6 @@ import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.presentment.PresentmentUnlockReason
-import org.multipaz.presentment.TransactionDataJson
 import org.multipaz.presentment.ConsentData
 import org.multipaz.presentment.TransactionData
 import org.multipaz.presentment.computeTransactionResponse
@@ -427,9 +426,14 @@ object OpenID4VP {
 
         val vpTokens = mutableMapOf<String, String>()
         val dcqlQuery = DcqlQuery.fromJson(request["dcql_query"]!!.jsonObject)
-        val transactionDataMap = request["transaction_data"]?.let {
+        val transactionDataMap = request["transaction_data"]?.let { list ->
+            if (list !is JsonArray) {
+                throw IllegalStateException("Invalid 'transaction_data'")
+            }
             try {
-                TransactionDataJson.parse(it, source.documentTypeRepository)
+                source.documentTypeRepository.parseJsonTransactions(list.map {
+                    it.jsonPrimitive.content
+                })
             } catch (err: IllegalArgumentException) {
                 throw IllegalStateException("Problem processing transaction(s)", err)
             }
@@ -745,12 +749,12 @@ object OpenID4VP {
      */
     suspend fun processTransactions(
         credential: SdJwtVcCredential,
-        transactionData: List<TransactionData>,
+        transactionData: List<TransactionData<*>>,
         docRequestId: Int? = null
     ): Map<String, JsonElement> {
         val transactionResponse = mutableMapOf<String, JsonElement>()
         for (data in transactionData) {
-            val response = data.type.applyJson(data, credential as Credential)
+            val response = data.applyJson(credential as Credential)
             if (response != null || docRequestId != null) {
                 transactionResponse[data.type.kbJwtResponseClaimName] = if (docRequestId == null) {
                     response!!
@@ -766,21 +770,19 @@ object OpenID4VP {
                 }
             }
         }
-        val hashAlgorithm = transactionData.firstNotNullOfOrNull {
-            it.getHashAlgorithm()
-        }
+        val hashAlgorithm = transactionData.firstNotNullOfOrNull { it.hashAlgorithms?.first() }
         if (hashAlgorithm != null) {
             // Non-default hash algorithm; ensure all transaction data items are
             // using the same one
             transactionData.forEach { data ->
-                check(hashAlgorithm == (data.getHashAlgorithm() ?: Algorithm.SHA256))
+                check(hashAlgorithm == (data.hashAlgorithms?.first() ?: Algorithm.SHA256))
             }
             transactionResponse["transaction_data_hashes_alg"] =
                 JsonPrimitive(hashAlgorithm.hashAlgorithmName)
         }
         transactionResponse["transaction_data_hashes"] = buildJsonArray {
             transactionData.forEach {
-                    data -> add(data.getHash(
+                    data -> add(data.computeHash(
                 hashAlgorithm ?: Algorithm.SHA256).toByteArray().toBase64Url())
             }
         }

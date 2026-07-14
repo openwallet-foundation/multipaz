@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.request
 
+import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
@@ -49,7 +50,6 @@ import org.multipaz.presentment.CredentialPresentmentSetOptionMember
 import org.multipaz.presentment.CredentialPresentmentSetOptionMemberMatch
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.TransactionData
-import org.multipaz.presentment.TransactionDataCbor
 import org.multipaz.request.Iso18013RequesterIdentity
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
@@ -482,7 +482,7 @@ data class DeviceRequest private constructor(
         val credential: Credential,
         val claims: Map<RequestedClaim, Claim>,
         val docRequest: DocRequest,
-        val transactionData: List<TransactionData>
+        val transactionData: List<TransactionData<*>>
     )
 
     private data class DocRequestResult(
@@ -776,7 +776,7 @@ data class DeviceRequest private constructor(
                 presentmentSource.documentTypeRepository
             )
             for (transaction in transactionData) {
-                if (!transaction.type.isApplicable(transaction, cred)) {
+                if (!transaction.isApplicable(cred)) {
                     didNotMatch = true
                     break
                 }
@@ -806,11 +806,11 @@ data class DeviceRequest private constructor(
     private fun extractTransactionData(
         requestInfo: DocRequestInfo?,
         documentTypeRepository: DocumentTypeRepository?
-    ): List<TransactionData> {
+    ): List<TransactionData<*>> {
         if (requestInfo == null || documentTypeRepository == null) {
             return emptyList()
         }
-        val list = mutableListOf<TransactionData>()
+        val list = mutableListOf<TransactionData<*>>()
         for (knownType in documentTypeRepository.transactionTypes) {
             if (!requestInfo.otherInfo.containsKey(knownType.mdocRequestInfoKeyName)) {
                 continue
@@ -820,7 +820,7 @@ data class DeviceRequest private constructor(
                 || transactionCbor.taggedItem !is Bstr) {
                 throw IllegalArgumentException("Incorrectly encoded transaction data '${knownType.identifier}'")
             }
-            list.add(TransactionDataCbor(knownType, transactionCbor))
+            list.add(knownType.parseCbor(ByteString(transactionCbor.taggedItem.asBstr)))
         }
         return list.toList()
     }

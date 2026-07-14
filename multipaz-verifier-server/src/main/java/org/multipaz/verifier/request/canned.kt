@@ -13,6 +13,7 @@ import kotlinx.serialization.json.putJsonArray
 import org.multipaz.documenttype.SingleDocumentCannedRequest
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.rpc.backend.BackendEnvironment
+import org.multipaz.util.toBase64Url
 import org.multipaz.utopia.knowntypes.wellKnownMultipleDocumentRequests
 
 suspend fun cannedRequests(call: ApplicationCall) {
@@ -132,15 +133,8 @@ fun JsonArrayBuilder.addSingleDocumentRequest(
         if (singleDocumentRequest.transactionData.isNotEmpty()) {
             putJsonArray("transaction_data") {
                 for (transactionData in singleDocumentRequest.transactionData) {
-                    addJsonObject {
-                        put("type", transactionData.transactionType.identifier)
-                        putJsonArray("credential_ids") {
-                            add("cred1")  // toDcql() above uses this id
-                        }
-                        for ((name, value) in transactionData.attributes.asMap) {
-                            put(name.asTstr, value.toJson())
-                        }
-                    }
+                    val serialized = transactionData.getSerializedJson(listOf("cred1"))
+                    add(Json.parseToJsonElement(serialized))
                 }
             }
         }

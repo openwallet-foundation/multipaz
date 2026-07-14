@@ -165,7 +165,7 @@ data class DeviceResponse internal constructor(
      */
     suspend fun verifySingleDoc(
         sessionTranscript: DataItem,
-        transactionData: List<TransactionData>,
+        transactionData: List<TransactionData<*>>,
         atTime: Instant = Clock.System.now(),
     ) {
         if (documents_.size == 1 && zkDocuments.isEmpty()) {

@@ -50,8 +50,6 @@ import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.presentment.TransactionData
-import org.multipaz.presentment.TransactionDataJson
-import org.multipaz.presentment.TransactionDataJson.Companion.convertToDocRequestOtherInfo
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.sdjwt.SdJwt
@@ -755,7 +753,7 @@ object VerificationUtil {
         nonce: String,
         documentTypeRepository: DocumentTypeRepository?,
         zkSystemRepository: ZkSystemRepository?,
-        transactionDataMap: Map<String, List<TransactionDataJson>> = emptyMap(),
+        transactionDataMap: Map<String, List<TransactionData<*>>> = emptyMap(),
         queryData: Map<String, QueryData>
     ): List<VerifiedPresentation> {
         val verifiedPresentations = mutableListOf<VerifiedPresentation>()
@@ -804,7 +802,7 @@ object VerificationUtil {
         compactSerialization: String,
         nonce: String,
         documentTypeRepository: DocumentTypeRepository?,
-        transactionData: List<TransactionData>,
+        transactionData: List<TransactionData<*>>,
         identifier: String? = null
     ): VerifiedPresentation {
         val (sdJwt, sdJwtKb) = if (compactSerialization.endsWith("~")) {
@@ -945,7 +943,7 @@ object VerificationUtil {
         sessionTranscript: DataItem,
         documentTypeRepository: DocumentTypeRepository?,
         zkSystemRepository: ZkSystemRepository?,
-        transactionData: List<TransactionData>,
+        transactionData: List<TransactionData<*>>,
         vpTokenIdentifier: String
     ): List<VerifiedPresentation> {
         val deviceResponse = DeviceResponse.fromDataItem(deviceResponse)
@@ -1180,13 +1178,16 @@ object VerificationUtil {
             null
         } else {
             lazy {
-                TransactionDataJson.parse(
-                    base64UrlEncodedJson = transactionData.map {
-                        it.encodeToByteArray().toBase64Url()
-                    },
-                    documentTypeRepository = documentTypeRepository!!
-                ).mapValues { (_, transactionData) ->
-                    transactionData.convertToDocRequestOtherInfo()
+                documentTypeRepository!!.parseJsonTransactions(transactionData.map {
+                    it.encodeToByteArray().toBase64Url()
+                }).mapValues { (_, transactionData) ->
+                    transactionData.associate { data ->
+                        val converted = data.convertToCbor()
+                        converted.type.mdocRequestInfoKeyName to Tagged(
+                            tagNumber = Tagged.ENCODED_CBOR,
+                            taggedItem = Bstr(converted.serialized.toByteArray())
+                        )
+                    }
                 }
             }
         }

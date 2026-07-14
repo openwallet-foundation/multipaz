@@ -41,7 +41,7 @@ private data class QueryResponse(
 private data class QueryResponseMatch(
     val credential: Credential,
     val claims: Map<RequestedClaim, Claim>,
-    val transactionData: List<TransactionData>
+    val transactionData: List<TransactionData<*>>
 )
 
 private fun DcqlCredentialSetOption.isSatisfied(
@@ -114,7 +114,7 @@ data class DcqlQuery(
     suspend fun execute(
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve> = emptyList(),
-        transactionDataMap: Map<String, List<TransactionData>> = emptyMap()
+        transactionDataMap: Map<String, List<TransactionData<*>>> = emptyMap()
     ): CredentialQueryResult {
         val credentialQueryIdToResponse = mutableMapOf<String, QueryResponse>()
         for (credentialQuery in credentialQueries) {
@@ -172,7 +172,7 @@ data class DcqlQuery(
                     }
                     val transactionData = transactionDataMap[credentialQuery.id] ?: emptyList()
                     for (transaction in transactionData) {
-                        if (!transaction.type.isApplicable(transaction, cred)) {
+                        if (!transaction.isApplicable(cred)) {
                             didNotMatch = true
                             break
                         }
@@ -217,7 +217,7 @@ data class DcqlQuery(
                         }
                         val transactionData = transactionDataMap[credentialQuery.id] ?: emptyList()
                         for (transaction in transactionData) {
-                            if (!transaction.type.isApplicable(transaction, cred)) {
+                            if (!transaction.isApplicable(cred)) {
                                 didNotMatch = true
                                 break
                             }

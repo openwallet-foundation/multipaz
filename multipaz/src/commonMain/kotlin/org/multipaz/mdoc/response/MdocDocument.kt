@@ -73,7 +73,7 @@ class MdocDocument(
     /**
      * List of verified transaction data which was sent in the request
      */
-    lateinit var transactionData: List<TransactionData>
+    lateinit var transactionData: List<TransactionData<*>>
     /**
      * Transaction response indexed by [TransactionType.identifier]
      */
@@ -122,7 +122,7 @@ class MdocDocument(
     internal suspend fun verify(
         sessionTranscript: DataItem,
         eReaderKey: AsymmetricKey?,
-        transactionData: List<TransactionData>,
+        transactionData: List<TransactionData<*>>,
         atTime: Instant,
     ) {
         // First check the issuer signature..
@@ -248,7 +248,7 @@ class MdocDocument(
                 }
                 val hash = response["transaction_data_hash"] as? Bstr
                     ?: throw IllegalStateException("Invalid response for transaction '${transaction.type.identifier}'")
-                val expectedHash = transaction.getHash(hashAlg ?: Algorithm.SHA256)
+                val expectedHash = transaction.computeHash(hashAlg ?: Algorithm.SHA256)
                 if (ByteString(hash.asBstr) != expectedHash) {
                     throw IllegalStateException("Transaction hash failed to verify for '${transaction.type.identifier}'")
                 }

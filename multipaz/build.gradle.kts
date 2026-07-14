@@ -15,6 +15,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.buildconfig)
     alias(libs.plugins.skie)
+    alias(libs.plugins.kotlinSerialization)
     id("maven-publish")
     id("org.jetbrains.dokka") version "2.1.0"
 }

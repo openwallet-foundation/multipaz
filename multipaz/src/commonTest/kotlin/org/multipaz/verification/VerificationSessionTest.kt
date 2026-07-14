@@ -45,10 +45,10 @@ class VerificationSessionTest {
     private lateinit var readerIdentity: VerifierIdentity
     private lateinit var secondaryIdentity: VerifierIdentity
     private val mdlPingTransactionData: List<String> by lazy {
-        listOf(PingTransaction.sampleData.toJsonText(credentialId = "mDL"))
+        listOf(PingTransaction.sampleData.getSerializedJson(credentialIds = listOf("mDL")))
     }
     private val euPidPingTransactionData: List<String> by lazy {
-        listOf(PingTransaction.sampleData.toJsonText(credentialId = "pid"))
+        listOf(PingTransaction.sampleData.getSerializedJson(credentialIds = listOf("pid")))
     }
 
     /**

@@ -58,7 +58,7 @@ data class EncryptedDocuments internal constructor(
         recipientPrivateKey: AsymmetricKey,
         encryptionParameters: EncryptionParameters,
         sessionTranscript: DataItem,
-        transactionDataList: List<List<TransactionData>> = emptyList(),
+        transactionDataList: List<List<TransactionData<*>>> = emptyList(),
         atTime: Instant = Clock.System.now()
     ): EncryptedDocumentsPlaintext {
         val encSessionTranscript = buildCborArray {

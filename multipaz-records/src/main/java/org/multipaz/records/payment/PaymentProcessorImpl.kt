@@ -6,6 +6,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.rpc.annotation.RpcState
 import org.multipaz.rpc.backend.BackendEnvironment
@@ -91,10 +92,10 @@ class PaymentProcessorImpl: PaymentProcessor, RpcAuthInspector by rpcAuth {
 
         check(payment.transactionData.size == 1)
         val transactionData = payment.transactionData.first()
-        val transactionPayload = transactionData.attributes.getCompound("payload")!!
-        val transactionId = transactionPayload.getString("transaction_id")!!
-        val amount = transactionPayload.getDouble("amount")!!
-        val currency = transactionPayload.getString("currency")!!
+        val transactionPayload = transactionData.payload as PaymentTransaction.Payload
+        val transactionId = transactionPayload.transactionId
+        val amount = transactionPayload.amount
+        val currency = transactionPayload.currency
         val paymentTable = BackendEnvironment.getTable(PaymentData.paymentsTableSpec)
         val data = paymentTable.get(transactionId)
             ?: throw InvalidRequestException("Transaction '$transactionId' is invalid or expired")

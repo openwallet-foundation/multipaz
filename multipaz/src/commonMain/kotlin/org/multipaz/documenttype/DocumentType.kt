@@ -317,7 +317,7 @@ class DocumentType private constructor(
             mdocDataElements: Map<String, Map<String, Boolean>>? = null,
             mdocUseZkp: Boolean = false,
             jsonClaims: List<String>? = null,
-            cannedTransactionData: List<CannedTransactionData> = listOf()
+            cannedTransactionData: List<CannedTransactionData<*>> = listOf()
         ) = apply {
             val mdocRequest = if (mdocDataElements == null) {
                 null

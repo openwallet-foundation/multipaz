@@ -32,7 +32,7 @@ data class OtherDocument(
     /**
      * List of verified transaction data which was sent in the request
      */
-    lateinit var transactionData: List<TransactionData>
+    lateinit var transactionData: List<TransactionData<*>>
 
     internal fun toDataItem() = buildCborMap {
         put("docFormat", docFormat)
@@ -42,7 +42,7 @@ data class OtherDocument(
     internal suspend fun verify(
         sessionTranscript: DataItem,
         eReaderKey: AsymmetricKey?,
-        transactionData: List<TransactionData>,
+        transactionData: List<TransactionData<*>>,
         atTime: Instant,
     ) {
         when (docFormat) {
@@ -58,7 +58,7 @@ data class OtherDocument(
     internal suspend fun verifySdJwtVc(
         sessionTranscript: DataItem,
         eReaderKey: AsymmetricKey?,
-        transactionData: List<TransactionData>,
+        transactionData: List<TransactionData<*>>,
         atTime: Instant,
     ) {
         val sdJwtKb = SdJwtKb.fromCompactSerialization(data.toByteArray().zlibInflate().decodeToString())

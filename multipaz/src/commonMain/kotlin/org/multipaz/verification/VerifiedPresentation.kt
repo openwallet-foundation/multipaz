@@ -35,5 +35,5 @@ sealed class VerifiedPresentation() {
     abstract val signedAt: Instant?
     abstract val expectedUpdate: Instant?
     abstract val vpTokenIdentifier: String?
-    abstract val transactionData: List<TransactionData>
+    abstract val transactionData: List<TransactionData<*>>
 }

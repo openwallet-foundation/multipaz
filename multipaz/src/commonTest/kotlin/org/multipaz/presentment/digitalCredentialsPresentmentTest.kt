@@ -3,8 +3,12 @@ package org.multipaz.presentment
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNamingStrategy
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -21,6 +25,8 @@ import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Uint
 import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.putCborArray
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
@@ -31,9 +37,6 @@ import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
-import org.multipaz.documenttype.DocumentAttribute
-import org.multipaz.documenttype.DocumentAttributeType
-import org.multipaz.documenttype.MdocDataElement
 import org.multipaz.documenttype.TransactionType
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.util.MdocUtil
@@ -53,42 +56,126 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class DigitalCredentialsPresentmentTest {
-    private object FooTransactionType: TransactionType(
+    internal abstract class BooleanTransaction(
+        displayName: String,
+        identifier: String,
+        kbJwtResponseClaimName: String = identifier,
+        mdocResponseNamespace: String = identifier
+    ): TransactionType<Boolean>(
+        displayName = displayName,
+        identifier = identifier,
+        kbJwtResponseClaimName = kbJwtResponseClaimName,
+        mdocResponseNamespace = mdocResponseNamespace
+    ) {
+        @Serializable
+        data class JsonData(
+            val type: String,
+            val credentialIds: List<String>,
+            val transactionDataHashesAlg: List<String>?,
+            val succeed: Boolean
+        )
+
+        override fun serializeCbor(
+            payload: Boolean,
+            hashAlgorithms: List<Algorithm>?
+        ): ByteString = ByteString(
+            Cbor.encode(buildCborMap {
+                put("succeed", payload)
+                coseHashAlgorithms(hashAlgorithms)?.let { algs ->
+                    putCborArray("transactionDataHashesAlg") {
+                        for (alg in algs) {
+                            add(alg)
+                        }
+                    }
+                }
+            })
+        )
+
+        override fun serializeJson(
+            payload: Boolean,
+            credentialIds: List<String>,
+            hashAlgorithms: List<Algorithm>?
+        ): String = jsonFormat.encodeToString(
+            value = JsonData(
+                type = identifier,
+                transactionDataHashesAlg = joseHashAlgorithms(hashAlgorithms),
+                credentialIds = credentialIds,
+                succeed = payload
+            )
+        )
+
+        override fun parseJson(serialized: ByteString): TransactionData<Boolean> {
+            val jsonString = serialized.decodeToString().fromBase64Url().decodeToString()
+            val data = jsonFormat.decodeFromString<JsonData>(jsonString)
+            return TransactionData(
+                type = this,
+                serialized = serialized,
+                hashAlgorithms = parseJoseHashAlgorithms(data.transactionDataHashesAlg),
+                payload = data.succeed,
+            )
+        }
+
+        override fun parseCbor(serialized: ByteString): TransactionData<Boolean> {
+            val data = Cbor.decode(serialized.toByteArray())
+            return TransactionData(
+                type = this,
+                serialized = serialized,
+                hashAlgorithms = if (data.hasKey("transactionDataHashesAlg")) {
+                    parseCoseHashAlgorithms(
+                        data["transactionDataHashesAlg"].asArray.map {
+                            it.asNumber
+                        })
+                } else {
+                    null
+                },
+                payload = data["succeed"].asBoolean,
+            )
+        }
+
+        override suspend fun isApplicable(
+            transactionData: TransactionData<Boolean>,
+            credential: Credential
+        ): Boolean {
+            return transactionData.payload
+        }
+
+        companion object {
+            @OptIn(ExperimentalSerializationApi::class)
+            private val jsonFormat = Json {
+                explicitNulls = false
+                namingStrategy = JsonNamingStrategy.SnakeCase
+            }
+        }
+    }
+
+    private object FooTransactionType: BooleanTransaction(
         displayName = "Foo",
         identifier = "foo",
-        attributes = transactionDataElements,
         kbJwtResponseClaimName = "kb_foo",
         mdocResponseNamespace = "FooNS"
     ) {
+
         override suspend fun isApplicable(
-            transactionData: TransactionData,
+            transactionData: TransactionData<Boolean>,
             credential: Credential
         ): Boolean {
-            return transactionData.attributes.getBoolean("succeed")!!
+            return transactionData.payload
         }
 
         override suspend fun applyCbor(
-            transactionData: TransactionData,
+            transactionData: TransactionData<Boolean>,
             credential: Credential
         ): Map<String, DataItem> = buildMap {
             put("result", Uint(42UL))
         }
     }
 
-    private object BarTransactionType: TransactionType(
+    private object BarTransactionType: BooleanTransaction(
         displayName = "Bar",
-        identifier = "bar",
-        attributes = transactionDataElements
+        identifier = "bar"
     ) {
-        override suspend fun isApplicable(
-            transactionData: TransactionData,
-            credential: Credential
-        ): Boolean {
-            return transactionData.attributes.getBoolean("succeed")!!
-        }
-
         override suspend fun applyCbor(
-            transactionData: TransactionData,
+            transactionData: TransactionData<Boolean>,
             credential: Credential
         ): Map<String, DataItem> = buildMap {
             put("result", Uint(57UL))
@@ -96,13 +183,12 @@ class DigitalCredentialsPresentmentTest {
     }
 
     // Unregistered transaction type, will cause an error
-    private object BuzTransactionType: TransactionType(
+    private object BuzTransactionType: BooleanTransaction(
         displayName = "Buz",
         identifier = "buz",
-        attributes = transactionDataElements
     ) {
         override suspend fun isApplicable(
-            transactionData: TransactionData,
+            transactionData: TransactionData<Boolean>,
             credential: Credential
         ): Boolean = true
     }
@@ -114,16 +200,6 @@ class DigitalCredentialsPresentmentTest {
         private const val DNS_NAME = "verifier.multipaz.org"
         private const val ORIGIN = "https://verifier.multipaz.org"
         private const val APP_ID = "org.multipaz.testApp"
-
-        private val transactionDataElements = listOf(MdocDataElement(
-            attribute = DocumentAttribute(
-                type = DocumentAttributeType.Boolean,
-                identifier = "succeed",
-                displayName = "succeed",
-                description = "if false, transaction will be rejected"
-            ),
-            mandatory = true
-        ))
     }
 
     val documentStoreTestHarness = DocumentStoreTestHarness()
@@ -363,11 +439,10 @@ class DigitalCredentialsPresentmentTest {
             transactionData = if (transactionData.isEmpty()) {
                 emptyList()
             } else {
-                TransactionDataJson.parse(
+                documentStoreTestHarness.documentTypeRepository.parseJsonTransactions(
                     base64UrlEncodedJson = transactionData.map {
                         it.encodeToByteArray().toBase64Url()
-                    },
-                    documentTypeRepository = documentStoreTestHarness.documentTypeRepository
+                    }
                 ).values.first()
             }
         )
@@ -416,11 +491,10 @@ class DigitalCredentialsPresentmentTest {
             transactionData = if (transactionData.isEmpty()) {
                 emptyList()
             } else {
-                TransactionDataJson.parse(
+                documentStoreTestHarness.documentTypeRepository.parseJsonTransactions(
                     base64UrlEncodedJson = transactionData.map {
                         it.encodeToByteArray().toBase64Url()
-                    },
-                    documentTypeRepository = documentStoreTestHarness.documentTypeRepository
+                    }
                 ).values.first()
             }
         ).filterKeys { key -> !setOf("iat", "nbf", "exp", "cnf").contains(key) }  // filter out variable claims
@@ -720,7 +794,7 @@ class DigitalCredentialsPresentmentTest {
     }
 
     private fun makeTransactionData(
-        transactionType: TransactionType,
+        transactionType: TransactionType<Boolean>,
         credentialId: String,
         succeed: Boolean = true,
         algorithms: List<Algorithm>? = null

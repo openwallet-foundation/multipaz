@@ -1,67 +1,83 @@
 package org.multipaz.presentment
 
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.Crypto
+import org.multipaz.document.Document
 import org.multipaz.documenttype.TransactionType
 
 /**
- * An abstract object that describes transaction data item.
+ * An object that holds transaction data.
  *
- * Exact format of the transaction data and hashing rules depend on the presentation protocol.
+ * Transaction data is held in two representation: serialized and parsed. Serialized representation
+ * is raw sequence of bytes that reflects how transaction data is encoded in the verification
+ * protocol (transaction response includes hash of the serialized representation). Parsed
+ * representation includes transaction type that describes what kind of transaction this is,
+ * the list of hash algorithms that the verifier accepts for this transaction in the order of
+ * preference, and transaction payload which is transaction-type-specific data.
  *
  * @param type type of the transaction data item
+ * @param serialized serialized representation of the transaction data
+ * @param hashAlgorithms accepted hash algorithm override list for this transaction data in
+ *   the order of preference
+ * @param payload transaction payload
  */
-sealed class TransactionData(
-    val type: TransactionType
+class TransactionData<PayloadT: Any>(
+    val type: TransactionType<PayloadT>,
+    val serialized: ByteString,
+    val hashAlgorithms: List<Algorithm>?,
+    val payload: PayloadT,
 ) {
-    /**
-     * Transaction attributes
-     */
-    abstract val attributes: Attributes
-    /**
-     * Hash algorithm override for this transaction data.
-     *
-     * By default [Algorithm.SHA256] is used, but transaction data can specify a list of the desired
-     * algorithms.
-     *
-     * @return the first supported algorithm in the list specified by the transaction data.
-     */
-    abstract fun getHashAlgorithm(): Algorithm?
-
     /**
      * Computes hash of the transaction data.
      *
      * It is important that the verifier uses the same algorithm as the presenter (NB: the set
      * of supported hash algorithms may differ!).
      *
-     * @return hash of the transaction data
+     * @return hash of the serialized transaction data
      */
-    abstract suspend fun getHash(algorithm: Algorithm = Algorithm.SHA256): ByteString
+    suspend fun computeHash(algorithm: Algorithm = Algorithm.SHA256): ByteString =
+        ByteString(Crypto.digest(algorithm, serialized.toByteArray()))
 
     /**
-     * A set of attributes either in the transaction data itself or in one of the compound
-     * objects that it contains.
+     * Determines if this transaction is applicable to the given credential.
      *
-     * Transaction can come in either JSON or CBOR format depending on the presentment protocol.
-     * This helps writing code generically, so it works with either format.
+     * When transaction cannot be processed, it removes a particular "use case" or credential
+     * set option from consideration. If other options are available, presentment still may
+     * succeed.
+     *
+     * @param credential one of the credentials in the [Document] being considered
+     * @return true if transaction can be processed false if it cannot
      */
-    interface Attributes {
-        /** @return string attribute */
-        fun getString(name: String): String?
+    suspend fun isApplicable(credential: Credential) = type.isApplicable(this, credential)
 
-        /** @return integer attribute */
-        fun getLong(name: String): Long?
+    /**
+     * Applies transaction in the context of OpenID4VP presentment.
+     *
+     * See [TransactionType.applyJson]
+     *
+     * @param credential credential being presented
+     * @return transaction-specific data that should be added to the presentment.
+     */
+    suspend fun applyJson(credential: Credential) = type.applyJson(this, credential)
 
-        /** @return number attribute */
-        fun getDouble(name: String): Double?
+    /**
+     * Applies transaction in the context of ISO ISO/IEC 18013 presentment.
+     *
+     * See [TransactionType.applyCbor]
+     *
+     * @param credential credential being presented
+     * @return transaction-specific data that should be added to the presentment.
+     */
+    suspend fun applyCbor(credential: Credential) = type.applyCbor(this, credential)
 
-        /** @return boolean attribute */
-        fun getBoolean(name: String): Boolean?
-
-        /** @return binary attribute */
-        fun getBlob(name: String): ByteString?
-
-        /** @return compound attribute */
-        fun getCompound(name: String): Attributes?
-    }
+    /**
+     * Creates equivalent transaction data for use in ISO ISO/IEC 18013 protocols.
+     *
+     * @return new [TransactionData] object that holds the same payload and hash algorithm, but
+     *  its [TransactionData.serialized] is formatted for use in ISO ISO/IEC 18013 protocols.
+     */
+    fun convertToCbor(): TransactionData<PayloadT> =
+        type.parseCbor(type.serializeCbor(payload, hashAlgorithms))
 }

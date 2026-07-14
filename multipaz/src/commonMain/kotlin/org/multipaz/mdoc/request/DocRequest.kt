@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.request
 
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborMap
@@ -10,7 +11,7 @@ import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.presentment.TransactionDataCbor
+import org.multipaz.presentment.TransactionData
 
 /**
  * Document request according to ISO 18013-5.
@@ -78,10 +79,10 @@ data class DocRequest internal constructor(
      */
     fun getTransactionData(
         documentTypeRepository: DocumentTypeRepository
-    ): List<TransactionDataCbor> = buildList {
+    ): List<TransactionData<*>> = buildList {
         for (transactionType in documentTypeRepository.transactionTypes) {
             docRequestInfo?.otherInfo[transactionType.mdocRequestInfoKeyName]?.let { data ->
-                add(TransactionDataCbor(transactionType, data as Tagged))
+                add(transactionType.parseCbor(ByteString((data as Tagged).taggedItem.asBstr)))
             }
         }
     }

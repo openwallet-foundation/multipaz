@@ -16,10 +16,18 @@
 
 package org.multipaz.documenttype
 
+import kotlinx.io.bytestring.encodeToByteString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.multipaz.presentment.TransactionData
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
+import org.multipaz.util.fromBase64Url
 
 /**
  * A class that contains the metadata of Document and transaction types.
@@ -31,7 +39,7 @@ import org.multipaz.request.RequestedClaim
  */
 class DocumentTypeRepository {
     private val _documentTypes = mutableListOf<DocumentType>()
-    private val _transactionTypes = mutableListOf<TransactionType>()
+    private val _transactionTypes = mutableListOf<TransactionType<*>>()
     private val _extraSingleDocumentCannedRequests = mutableListOf<SingleDocumentCannedRequest>()
 
     /**
@@ -48,7 +56,7 @@ class DocumentTypeRepository {
     /**
      * All the transaction types in the repository.
      */
-    val transactionTypes: List<TransactionType>
+    val transactionTypes: List<TransactionType<*>>
         get() = _transactionTypes
 
     /**
@@ -64,7 +72,7 @@ class DocumentTypeRepository {
      *
      * @param transactionType new [TransactionType]
      */
-    fun addTransactionType(transactionType: TransactionType) {
+    fun addTransactionType(transactionType: TransactionType<*>) {
         for (existingType in transactionTypes) {
             check(existingType.identifier != transactionType.identifier)
             check(existingType.kbJwtResponseClaimName != transactionType.kbJwtResponseClaimName)
@@ -164,6 +172,34 @@ class DocumentTypeRepository {
      * @param identifier transaction identifier, see [TransactionType.identifier]
      * @return registered [TransactionType] or null, if not found in the repository
      */
-    fun getTransactionTypeByIdentifier(identifier: String): TransactionType? =
+    fun getTransactionTypeByIdentifier(identifier: String): TransactionType<*>? =
         _transactionTypes.find { it.identifier == identifier }
+
+    /**
+     * Parses OpenID4VP JSON-encoded transaction data.
+     *
+     * @param base64UrlEncodedJson encoded transaction data (array of base64url-encoded items)
+     * @return map of credential id to the list of applicable transaction data items
+     */
+    fun parseJsonTransactions(
+        base64UrlEncodedJson: List<String>,
+    ): Map<String, List<TransactionData<*>>> {
+        val map = mutableMapOf<String, MutableList<TransactionData<*>>>()
+        for (base64UrlText in base64UrlEncodedJson) {
+            val data = Json.parseToJsonElement(
+                base64UrlText.fromBase64Url().decodeToString()
+            ).jsonObject
+            val credentialIds = (data["credential_ids"] as? JsonArray)
+                ?: throw IllegalArgumentException("Missing 'credential_ids' in transaction data")
+            val typeId = (data["type"] as? JsonPrimitive)?.contentOrNull
+                ?: throw IllegalArgumentException("Missing or invalid 'type' in transaction data")
+            val type = getTransactionTypeByIdentifier(typeId)
+                ?: throw IllegalArgumentException("Unknown transaction type '$typeId'")
+            val parsed = type.parseJson(base64UrlText.encodeToByteString())
+            for (id in credentialIds) {
+                map.getOrPut(id.jsonPrimitive.content) { mutableListOf() }.add(parsed)
+            }
+        }
+        return map.mapValues { (_, list) -> list.toList() }
+    }
 }

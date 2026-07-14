@@ -144,7 +144,7 @@ class CborSymbolProcessor(
                 "kotlin.Double" -> return "${base}asDouble"
                 "kotlin.Boolean" -> return "${base}asBoolean"
                 "kotlin.time.Instant" -> "${base}asDateTimeString"
-                "kotlin.time.LocalDate" -> "${base}asDateString"
+                "kotlinx.datetime.LocalDate" -> "${base}asDateString"
                 DATA_ITEM_CLASS -> return code
                 else -> return if (declaration is KSClassDeclaration &&
                     declaration.classKind == ClassKind.ENUM_CLASS
@@ -816,7 +816,7 @@ class CborSymbolProcessor(
         return if (name.startsWith(superName)) {
             name.substring(superName.length)
         } else if (name.endsWith(superName)) {
-            name.substring(0, name.length - superName.length)
+            name.dropLast(superName.length)
         } else if (subclass.parentDeclaration != null &&
             (subclass.parentDeclaration === superclass
                 || subclass.parentDeclaration == superclass.parentDeclaration)) {
@@ -905,7 +905,7 @@ class CborSymbolProcessor(
 
         val graphHasher = GraphHasher {
             object: HashBuilder {
-                val digest = MessageDigest.getInstance("SHA3-256");
+                val digest = MessageDigest.getInstance("SHA3-256")
                 override fun update(data: ByteString) = digest.update(data.toByteArray())
                 override fun build(): ByteString = ByteString(digest.digest())
             }
@@ -934,7 +934,7 @@ class CborSymbolProcessor(
                         }
                     }
                 }
-                val random = ByteString(Random.Default.nextBytes(32)).toBase64Url()
+                val random = ByteString(Random.nextBytes(32)).toBase64Url()
                 logger.error("Specify ($className) schemaId on one of the loop members, e.g, schemaId = \"$random\"")
                 return emptyMap()
             }

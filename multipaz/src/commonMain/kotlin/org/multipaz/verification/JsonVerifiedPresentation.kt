@@ -26,5 +26,5 @@ data class JsonVerifiedPresentation(
     val vct: String,
     val transactionResponses: Map<String, JsonElement>?,
     override val vpTokenIdentifier: String?,
-    override val transactionData: List<TransactionData>
+    override val transactionData: List<TransactionData<*>>
 ): VerifiedPresentation()

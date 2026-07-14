@@ -16,6 +16,6 @@ data class CredentialPresentmentSetOptionMemberMatch(
     val credential: Credential,
     val claims: Map<RequestedClaim, Claim>,
     val source: CredentialMatchSource,
-    val transactionData: List<TransactionData>
+    val transactionData: List<TransactionData<*>>
 )
 

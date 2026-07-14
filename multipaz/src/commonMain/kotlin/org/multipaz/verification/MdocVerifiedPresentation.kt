@@ -27,5 +27,5 @@ data class MdocVerifiedPresentation(
     val docType: String,
     val transactionResponses: Map<String, Map<String, DataItem>>?,
     override val vpTokenIdentifier: String?,
-    override val transactionData: List<TransactionData>
+    override val transactionData: List<TransactionData<*>>
 ): VerifiedPresentation()

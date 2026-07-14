@@ -1,11 +1,14 @@
 @file:OptIn(ExperimentalWasmDsl::class)
 
+import org.gradle.kotlin.dsl.project
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.multipaz.lokalize.util.OutputFormat
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlinSerialization)
     id("maven-publish")
     id("org.jetbrains.dokka") version "2.1.0"
     id("org.multipaz.lokalize.convention")
@@ -69,6 +72,7 @@ kotlin {
 
     sourceSets {
         val commonMain by getting {
+            kotlin.srcDir("build/generated/ksp/metadata/commonMain/kotlin")
             dependencies {
                 implementation(project(":multipaz"))
                 implementation(project(":multipaz-doctypes"))
@@ -110,6 +114,29 @@ kotlin {
             }
         }
     }
+}
+
+dependencies {
+    add("kspCommonMainMetadata", project(":multipaz-cbor-rpc"))
+    add("kspJvmTest", project(":multipaz-cbor-rpc"))
+}
+
+tasks.all {
+    if (name == "compileDebugKotlinAndroid" || name == "compileReleaseKotlinAndroid" ||
+        name == "androidReleaseSourcesJar" || name == "iosArm64SourcesJar" ||
+        name == "iosSimulatorArm64SourcesJar" || name == "iosX64SourcesJar" ||
+        name == "jsSourcesJar" || name == "wasmJsSourcesJar"  || name == "jvmSourcesJar" || name == "sourcesJar") {
+        dependsOn("kspCommonMainKotlinMetadata")
+    }
+}
+
+tasks["compileKotlinIosX64"].dependsOn("kspCommonMainKotlinMetadata")
+tasks["compileKotlinIosArm64"].dependsOn("kspCommonMainKotlinMetadata")
+tasks["compileKotlinIosSimulatorArm64"].dependsOn("kspCommonMainKotlinMetadata")
+tasks["compileKotlinJvm"].dependsOn("kspCommonMainKotlinMetadata")
+if (!disableWebTargets) {
+    tasks["compileKotlinJs"].dependsOn("kspCommonMainKotlinMetadata")
+    tasks["compileKotlinWasmJs"].dependsOn("kspCommonMainKotlinMetadata")
 }
 
 group = "org.multipaz"

@@ -66,7 +66,7 @@ class SdJwtKb private constructor(
         checkNonce: (nonce: String) -> Boolean,
         checkAudience: (audience: String) -> Boolean,
         checkCreationTime: (creationTime: Instant) -> Boolean,
-        transactionData: List<TransactionData> = listOf()
+        transactionData: List<TransactionData<*>> = listOf()
     ): JsonObject {
         try {
             JsonWebSignature.verify("$kbHeader.$kbBody.$kbSignature", sdJwt.kbKey!!)
@@ -120,7 +120,7 @@ class SdJwtKb private constructor(
                     throw IllegalStateException("Invalid transaction data hash value")
                 }
                 val responseHash = ByteString(hash.content.fromBase64Url())
-                if (transaction.getHash(hashAlgorithm) != responseHash) {
+                if (transaction.computeHash(hashAlgorithm) != responseHash) {
                     throw IllegalStateException("Transaction data hash mismatch")
                 }
             }
