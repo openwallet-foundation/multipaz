@@ -52,7 +52,7 @@ val X509ParserComponent = FC {
                 margin = Margin(0.px, 0.px, 16.px, 0.px)
                 color = Color("#f8fafc")
             }
-            +"X.509 Certificate Parser"
+            +"Certificate Parser"
         }
 
         if (parsedCert != null || parseError.isNotEmpty()) {

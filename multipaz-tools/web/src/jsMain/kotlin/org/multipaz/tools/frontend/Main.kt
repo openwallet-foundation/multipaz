@@ -41,6 +41,7 @@ fun pathToTab(path: String): String {
         "/compress" -> "compress"
         "/converter" -> "converter"
         "/x509" -> "x509"
+        "/cert-converter" -> "cert-converter"
         "/keygen" -> "key-generator"
         "/cert" -> "cert-generator"
         "/ndef" -> "ndef-parse"
@@ -56,6 +57,7 @@ fun tabToPath(tab: String): String {
         "compress" -> "/compress"
         "converter" -> "/converter"
         "x509" -> "/x509"
+        "cert-converter" -> "/cert-converter"
         "key-generator" -> "/keygen"
         "cert-generator" -> "/cert"
         "ndef-parse" -> "/ndef"
@@ -138,13 +140,14 @@ val App = FC {
 
             val tabs = listOf(
                 "cbor-decode" to "CBOR Decoder",
-                "mdoc-view" to "ISO mdoc DeviceResponse inspector",
+                "mdoc-view" to "ISO mdoc DeviceResponse Parser",
                 "sd-jwt-inspect" to "SD-JWT Parser",
                 "compress" to "Compression Tool",
                 "converter" to "Format Converter",
-                "x509" to "X.509 Certificate Parser",
-                "key-generator" to "Key Generator",
+                "x509" to "Certificate Parser",
+                "cert-converter" to "Certificate Converter",
                 "cert-generator" to "Certificate Generator",
+                "key-generator" to "Key Generator",
                 "ndef-parse" to "NDEF Parser"
             )
 
@@ -194,6 +197,7 @@ val App = FC {
                 "compress" -> CompressionComponent {}
                 "converter" -> ConverterComponent {}
                 "x509" -> X509ParserComponent {}
+                "cert-converter" -> CertConverterComponent {}
                 "key-generator" -> KeyGeneratorComponent {}
                 "cert-generator" -> CertGeneratorComponent {}
                 "ndef-parse" -> NdefParserComponent {}
