@@ -92,3 +92,6 @@ include(":xcframework")
 include(":multipaz-server-frontend")
 include(":multipaz-server-deployment")
 include(":multipaz-swiftui")
+include(":multipaz-tools:web")
+include(":multipaz-tools:server")
+
