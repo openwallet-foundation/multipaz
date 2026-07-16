@@ -37,6 +37,7 @@ fun pathToTab(path: String): String {
     return when (path) {
         "/cbor" -> "cbor-decode"
         "/mdocDeviceResponse" -> "mdoc-view"
+        "/msoNamespaces" -> "mso-namespaces-view"
         "/sdjwt" -> "sd-jwt-inspect"
         "/compress" -> "compress"
         "/converter" -> "converter"
@@ -53,6 +54,7 @@ fun tabToPath(tab: String): String {
     return when (tab) {
         "cbor-decode" -> "/cbor"
         "mdoc-view" -> "/mdocDeviceResponse"
+        "mso-namespaces-view" -> "/msoNamespaces"
         "sd-jwt-inspect" -> "/sdjwt"
         "compress" -> "/compress"
         "converter" -> "/converter"
@@ -141,6 +143,7 @@ val App = FC {
             val tabs = listOf(
                 "cbor-decode" to "CBOR Decoder",
                 "mdoc-view" to "ISO mdoc DeviceResponse Parser",
+                "mso-namespaces-view" to "ISO mdoc MSO and IssuerNameSpaces",
                 "sd-jwt-inspect" to "SD-JWT Parser",
                 "compress" to "Compression Tool",
                 "converter" to "Format Converter",
@@ -193,6 +196,7 @@ val App = FC {
             when (activeTab) {
                 "cbor-decode" -> CborDecoderComponent {}
                 "mdoc-view" -> MdocViewerComponent {}
+                "mso-namespaces-view" -> MsoNamespacesViewerComponent {}
                 "sd-jwt-inspect" -> SdJwtInspectorComponent {}
                 "compress" -> CompressionComponent {}
                 "converter" -> ConverterComponent {}
