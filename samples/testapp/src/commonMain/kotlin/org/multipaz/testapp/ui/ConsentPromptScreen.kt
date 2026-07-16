@@ -96,8 +96,8 @@ import kotlin.time.Instant
 private enum class CertChain(
     val desc: String,
 ) {
-    CERT_CHAIN_UTOPIA_BREWERY("Utopia Brewery (w/ privacy policy)"),
-    CERT_CHAIN_UTOPIA_BREWERY_NO_PRIVACY_POLICY("Utopia Brewery (w/o privacy policy)"),
+    CERT_CHAIN_UTOPIA_MARKETPLACE("Utopia Marketplace (w/ privacy policy)"),
+    CERT_CHAIN_UTOPIA_MARKETPLACE_NO_PRIVACY_POLICY("Utopia Marketplace (w/o privacy policy)"),
     CERT_CHAIN_UTOPIA_AIRLINES("Utopia Airlines"),
     CERT_CHAIN_IDENTITY_READER("Multipaz Identity Reader"),
     CERT_CHAIN_IDENTITY_READER_GOOGLE_ACCOUNT("Multipaz Identity Reader (w/ Google Account)"),
@@ -207,7 +207,7 @@ fun ConsentPromptScreen(
     var cardArtMdl by remember { mutableStateOf(ByteArray(0)) }
     var cardArtPhotoId by remember { mutableStateOf(ByteArray(0)) }
     var cardArtBoardingPass by remember { mutableStateOf(ByteArray(0)) }
-    var utopiaBreweryIcon by remember { mutableStateOf(ByteString()) }
+    var utopiaMarketplaceIcon by remember { mutableStateOf(ByteString()) }
     var utopiaAirlinesIcon by remember { mutableStateOf(ByteString()) }
     var utopiaCbpIcon by remember { mutableStateOf(ByteString()) }
     var identityReaderIcon by remember { mutableStateOf(ByteString()) }
@@ -230,7 +230,7 @@ fun ConsentPromptScreen(
         cardArtMdl = Res.readBytes("files/utopia_driving_license_card_art.png")
         cardArtPhotoId = Res.readBytes("drawable/photo_id_card_art.png")
         cardArtBoardingPass = Res.readBytes("files/boarding-pass-utopia-airlines.png")
-        utopiaBreweryIcon = ByteString(Res.readBytes("files/utopia-brewery.png"))
+        utopiaMarketplaceIcon = ByteString(Res.readBytes("files/utopia-marketplace.png"))
         utopiaAirlinesIcon = ByteString(Res.readBytes("files/utopia-airlines.png"))
         utopiaCbpIcon = ByteString(Res.readBytes("files/utopia-cbp.png"))
         identityReaderIcon = ByteString(Res.readBytes("drawable/app_icon.webp"))
@@ -420,7 +420,7 @@ fun ConsentPromptScreen(
                         encryptionTarget = encryptionTarget,
                         origin = origin,
                         appId = appId,
-                        utopiaBreweryIcon = utopiaBreweryIcon,
+                        utopiaMarketplaceIcon = utopiaMarketplaceIcon,
                         utopiaAirlinesIcon = utopiaAirlinesIcon,
                         utopiaCbpIcon = utopiaCbpIcon,
                         identityReaderIcon = identityReaderIcon,
@@ -600,7 +600,7 @@ private suspend fun getQueryResult(
     encryptionTarget: EncryptionTarget,
     origin: Origin,
     appId: AppId,
-    utopiaBreweryIcon: ByteString,
+    utopiaMarketplaceIcon: ByteString,
     utopiaAirlinesIcon: ByteString,
     utopiaCbpIcon: ByteString,
     identityReaderIcon: ByteString,
@@ -907,7 +907,7 @@ private suspend fun getQueryResult(
         certChain = certChain,
         origin = origin,
         appId = appId,
-        utopiaBreweryIcon = utopiaBreweryIcon,
+        utopiaMarketplaceIcon = utopiaMarketplaceIcon,
         utopiaAirlinesIcon = utopiaAirlinesIcon,
         identityReaderIcon = identityReaderIcon
     )
@@ -1078,7 +1078,7 @@ private suspend fun calculateRequester(
     certChain: CertChain,
     origin: Origin,
     appId: AppId,
-    utopiaBreweryIcon: ByteString,
+    utopiaMarketplaceIcon: ByteString,
     utopiaAirlinesIcon: ByteString,
     identityReaderIcon: ByteString
 ): Pair<Requester, TrustMetadata?> {
@@ -1131,21 +1131,21 @@ private suspend fun calculateRequester(
     )
 
     val (trustMetadata, readerCert) = when (certChain) {
-        CertChain.CERT_CHAIN_UTOPIA_BREWERY -> {
+        CertChain.CERT_CHAIN_UTOPIA_MARKETPLACE -> {
             Pair(
                 TrustMetadata(
-                    displayName = "Utopia Brewery",
-                    displayIcon = utopiaBreweryIcon,
+                    displayName = "Utopia Marketplace",
+                    displayIcon = utopiaMarketplaceIcon,
                     privacyPolicyUrl = "https://apps.multipaz.org",
                 ),
                 readerCertWithoutGoogleAccount
             )
         }
-        CertChain.CERT_CHAIN_UTOPIA_BREWERY_NO_PRIVACY_POLICY -> {
+        CertChain.CERT_CHAIN_UTOPIA_MARKETPLACE_NO_PRIVACY_POLICY -> {
             Pair(
             TrustMetadata(
-                    displayName = "Utopia Brewery",
-                    displayIcon = utopiaBreweryIcon,
+                    displayName = "Utopia Marketplace",
+                    displayIcon = utopiaMarketplaceIcon,
                     privacyPolicyUrl = null,
                 ),
                 readerCertWithoutGoogleAccount

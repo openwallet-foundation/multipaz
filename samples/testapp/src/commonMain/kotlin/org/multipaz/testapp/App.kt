@@ -670,7 +670,7 @@ class App private constructor (val promptModel: PromptModel) {
                     identifier = "${idCount++}",
                     metadata = TrustMetadata(
                         displayName = "Multipaz TestApp",
-                        displayIcon = ByteString(Res.readBytes("files/utopia-brewery.png")),
+                        displayIcon = ByteString(Res.readBytes("files/utopia-marketplace.png")),
                         privacyPolicyUrl = "https://apps.multipaz.org"
                     ),
                     certificate = readerRootKey.certChain.certificates.first(),

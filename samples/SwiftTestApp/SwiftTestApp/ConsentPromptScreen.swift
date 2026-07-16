@@ -19,8 +19,8 @@ private enum RequestType: String, CaseIterable {
 }
 
 private enum TrustPointType: String, CaseIterable {
-    case utopiaBrewery = "Utopia Brewery"
-    case utopiaBreweryNoPrivacyPolicy = "Utopia Brewery (no privacy policy)"
+    case utopiaMarketplace = "Utopia Marketplace"
+    case utopiaMarketplaceNoPrivacyPolicy = "Utopia Marketplace (no privacy policy)"
     case multipazIdentityReader = "Multipaz Identity Reader"
     case utopiaAirlines = "Utopia Airlines"
     case none = "None"
@@ -142,7 +142,7 @@ private func calcRequestData(
     let mdlCardArt = UIImage(named: "driving_license_card_art")!.pngData()!
     let photoIdCardArt = UIImage(named: "photo_id_card_art")!.pngData()!
     let boardingPassCardArt = UIImage(named: "boarding-pass-utopia-airlines")!.pngData()!
-    let utopiaBreweryLogo = UIImage(named: "utopia-brewery")!.pngData()!
+    let utopiaMarketplaceLogo = UIImage(named: "utopia-marketplace")!.pngData()!
     let utopiaAirlinesLogo = UIImage(named: "utopia-airlines")!.pngData()!
     let utopiaCbpLogo = UIImage(named: "utopia-cbp")!.pngData()!
     
@@ -633,20 +633,20 @@ private func calcRequestData(
     }
     
     let trustMetadata: TrustMetadata? = switch trustPointType {
-    case .utopiaBrewery:
+    case .utopiaMarketplace:
         TrustMetadata(
-            displayName: "Utopia Brewery",
-            displayIcon: utopiaBreweryLogo.toByteString(),
+            displayName: "Utopia Marketplace",
+            displayIcon: utopiaMarketplaceLogo.toByteString(),
             displayIconUrl: nil,
             privacyPolicyUrl: "https://apps.multipaz.org",
             disclaimer: nil,
             testOnly: false,
             extensions: [:]
         )
-    case .utopiaBreweryNoPrivacyPolicy:
+    case .utopiaMarketplaceNoPrivacyPolicy:
         TrustMetadata(
-            displayName: "Utopia Brewery",
-            displayIcon: utopiaBreweryLogo.toByteString(),
+            displayName: "Utopia Marketplace",
+            displayIcon: utopiaMarketplaceLogo.toByteString(),
             displayIconUrl: nil,
             privacyPolicyUrl: nil,
             disclaimer: nil,
@@ -707,9 +707,9 @@ private func calcRequestData(
     let requesterIdentities: [RequesterIdentity] = [requesterIdentity]
     
     let readerIdentities: [RequesterIdentity] = switch trustPointType {
-    case .utopiaBrewery:
+    case .utopiaMarketplace:
         requesterIdentities
-    case .utopiaBreweryNoPrivacyPolicy:
+    case .utopiaMarketplaceNoPrivacyPolicy:
         requesterIdentities
     case .multipazIdentityReader:
         requesterIdentities
