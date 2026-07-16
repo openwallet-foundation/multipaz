@@ -45,7 +45,7 @@ import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.server.common.getDomain
 import org.multipaz.server.enrollment.ServerIdentity
-import org.multipaz.server.enrollment.getServerIdentity
+import org.multipaz.server.enrollment.getServerIdentityCertified
 import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.util.Logger
 import org.multipaz.verification.PresentmentRecord
@@ -414,7 +414,7 @@ private suspend fun getVerifierIdentityMap(): Map<String, VerifierIdentity> =
                     }
                 }
                 put("default", VerifierIdentity(
-                    key = getServerIdentity(ServerIdentity.VERIFIER),
+                    key = getServerIdentityCertified(ServerIdentity.VERIFIER),
                     clientId = getClientId()
                 ))
             }.also { verifierIdentities = it }

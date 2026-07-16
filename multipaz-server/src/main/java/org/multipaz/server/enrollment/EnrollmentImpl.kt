@@ -158,19 +158,19 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
     private class ServerIdentityRecord(
         // Lazy deferred seems exotic, but that's what's needed here. We do not want to launch
         // enrollment until ServerIdentityRecord is created and registered.
-        var signingKeyDeferred: Lazy<Deferred<AsymmetricKey.X509Certified>>,
+        var signingKeyDeferred: Lazy<Deferred<AsymmetricKey>>,
         val requestId: String? = null,
         val expiration: Instant? = null,
         val responseChannel: Channel<AsymmetricKey.X509Certified>? = null
     ) {
         companion object {
-            fun fromKey(key: AsymmetricKey): ServerIdentityRecord {
-                val cert = (key as AsymmetricKey.X509Certified).certChain.certificates.first()
-                return ServerIdentityRecord(
+            fun fromKey(key: AsymmetricKey): ServerIdentityRecord =
+                ServerIdentityRecord(
                     signingKeyDeferred = Eager(CompletableDeferred(key)),
-                    expiration = cert.validityNotAfter - MIN_VALIDITY_DURATION
+                    expiration = (key as? AsymmetricKey.X509Certified)
+                        ?.let { it.certChain.certificates.first().validityNotAfter - MIN_VALIDITY_DURATION }
+                        ?: Instant.DISTANT_FUTURE
                 )
-            }
         }
     }
 
@@ -200,7 +200,7 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
          */
         suspend fun getServerIdentity(
             serverIdentity: ServerIdentity,
-        ): Deferred<AsymmetricKey.X509Certified> {
+        ): Deferred<AsymmetricKey> {
             val record = enrollmentsMap[serverIdentity]
             val validRecord = if (record != null &&
                 (record.expiration == null || record.expiration > Clock.System.now())) {
@@ -234,9 +234,9 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
                 Json.parseToJsonElement(it).jsonObject[keyName]?.let { keyJson ->
                     val secureAreaRepository =
                         backendEnvironment.getInterface(SecureAreaRepository::class)
-                    val loadedKey = AsymmetricKey.parse(keyJson, secureAreaRepository) as AsymmetricKey.X509Certified
+                    val loadedKey = AsymmetricKey.parse(keyJson, secureAreaRepository)
                     return ServerIdentityRecord.fromKey(loadedKey).also {
-                        val cert = loadedKey.certChain.certificates.first()
+                        val cert = (loadedKey as? AsymmetricKey.X509Certified)?.certChain?.certificates?.first()
                         // If configuration is wrong, it has to be re-configured correctly
                         if(!isValid(cert, serverIdentity, configuration)) {
                             val message = "Configuration error: certificate for 'server_identities.${serverIdentity.jsonName}' is not generated correctly"
@@ -346,12 +346,16 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
         }
 
         private fun isValid(
-            cert: X509Cert,
+            cert: X509Cert?,
             identity: ServerIdentity,
             configuration: Configuration
         ): Boolean {
             if (identity != ServerIdentity.VERIFIER) {
                 return true
+            }
+            if (cert == null) {
+                Logger.w(TAG, "Reader key must have certificate chain")
+                return false
             }
             // check that the certificate satisfies the requirements
             if (!cert.keyUsage.contains(X509KeyUsage.DIGITAL_SIGNATURE)) {

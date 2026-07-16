@@ -189,7 +189,12 @@ suspend fun validateJwt(
             val kid = header["kid"]?.jsonPrimitive?.content
                 ?: throw InvalidRequestException(
                 "$jwtName: either 'iss' and 'kid' or 'x5c' must be specified")
-            caPublicKey("$issuer#$kid", caName)
+            if (issuer == null || issuer == kid) {
+                // self-issued
+                caPublicKey(kid, caName)
+            } else {
+                caPublicKey("$issuer#$kid", caName)
+            }
         }
     }
 

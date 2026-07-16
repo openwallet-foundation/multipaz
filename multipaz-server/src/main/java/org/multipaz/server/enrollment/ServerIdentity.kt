@@ -172,8 +172,15 @@ enum class ServerIdentity(
  * The private key alias and the certificate chain are then stored in the database, so they can
  * be used in the future.
  */
-suspend fun getServerIdentity(serverIdentity: ServerIdentity): AsymmetricKey.X509Certified =
+suspend fun getServerIdentity(serverIdentity: ServerIdentity): AsymmetricKey =
     EnrollmentImpl.getServerIdentity(serverIdentity).await()
+
+/**
+ * Same as [getServerIdentity], but the returned key is required to have associated certificate
+ * chain.
+ */
+suspend fun getServerIdentityCertified(serverIdentity: ServerIdentity): AsymmetricKey.X509Certified =
+    getServerIdentity(serverIdentity) as AsymmetricKey.X509Certified
 
 private class CachedIdentity(val signingKey: AsymmetricKey)
 

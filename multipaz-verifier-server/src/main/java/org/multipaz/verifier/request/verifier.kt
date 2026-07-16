@@ -83,7 +83,7 @@ import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.server.common.baseUrl
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.server.enrollment.ServerIdentity
-import org.multipaz.server.enrollment.getServerIdentity
+import org.multipaz.server.enrollment.getServerIdentityCertified
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.TrustManager
@@ -358,7 +358,7 @@ private suspend fun clientId(): String {
 }
 
 private suspend fun getReaderIdentity(): AsymmetricKey.X509Certified =
-    getServerIdentity(ServerIdentity.VERIFIER)
+    getServerIdentityCertified(ServerIdentity.VERIFIER)
 
 private suspend fun handleGetAvailableRequests(
     call: ApplicationCall,

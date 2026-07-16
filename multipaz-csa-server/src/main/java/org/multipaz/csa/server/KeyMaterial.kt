@@ -9,8 +9,8 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.server.enrollment.ServerIdentity
-import org.multipaz.server.enrollment.getServerIdentity
 import org.multipaz.server.common.persistentServerKey
+import org.multipaz.server.enrollment.getServerIdentityCertified
 
 /**
  * Various keys used by the Cloud Secure Area.
@@ -27,8 +27,8 @@ data class KeyMaterial(
         fun create(backendEnvironment: Deferred<BackendEnvironment>): Deferred<KeyMaterial> {
             return CoroutineScope(Dispatchers.Default).async {
                 withContext(backendEnvironment.await()) {
-                    val attestationSigningKey = getServerIdentity(ServerIdentity.KEY_ATTESTATION)
-                    val bindingKey = getServerIdentity(ServerIdentity.CLOUD_SECURE_AREA_BINDING)
+                    val attestationSigningKey = getServerIdentityCertified(ServerIdentity.KEY_ATTESTATION)
+                    val bindingKey = getServerIdentityCertified(ServerIdentity.CLOUD_SECURE_AREA_BINDING)
                     KeyMaterial(
                         attestationKey = attestationSigningKey,
                         cloudBindingKey = bindingKey,
