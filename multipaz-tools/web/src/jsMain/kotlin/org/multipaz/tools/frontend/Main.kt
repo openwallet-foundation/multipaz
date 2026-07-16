@@ -42,6 +42,7 @@ fun pathToTab(path: String): String {
         "/compress" -> "compress"
         "/converter" -> "converter"
         "/x509" -> "x509"
+        "/asn1" -> "asn1"
         "/cert-converter" -> "cert-converter"
         "/keygen" -> "key-generator"
         "/cert" -> "cert-generator"
@@ -59,6 +60,7 @@ fun tabToPath(tab: String): String {
         "compress" -> "/compress"
         "converter" -> "/converter"
         "x509" -> "/x509"
+        "asn1" -> "/asn1"
         "cert-converter" -> "/cert-converter"
         "key-generator" -> "/keygen"
         "cert-generator" -> "/cert"
@@ -69,6 +71,7 @@ fun tabToPath(tab: String): String {
 
 val App = FC {
     var activeTab by useState(pathToTab(window.location.pathname))
+    var activeDropdown by useState<String?>(null)
 
     useEffect(activeTab) {
         val currentPath = tabToPath(activeTab)
@@ -88,6 +91,7 @@ val App = FC {
     }
 
     div {
+        onClick = { activeDropdown = null }
         css {
             minHeight = 100.vh
             display = Display.flex
@@ -134,51 +138,132 @@ val App = FC {
             css {
                 display = Display.flex
                 justifyContent = JustifyContent.center
-                gap = 12.px
+                gap = 24.px
                 padding = Padding(16.px, 24.px)
                 background = Color("#1e293b") // slate 800
                 borderBottom = Border(1.px, LineStyle.solid, Color("#334155"))
             }
 
-            val tabs = listOf(
-                "cbor-decode" to "CBOR Decoder",
-                "mdoc-view" to "ISO mdoc DeviceResponse Parser",
-                "mso-namespaces-view" to "ISO mdoc MSO and IssuerNameSpaces",
-                "sd-jwt-inspect" to "SD-JWT Parser",
-                "compress" to "Compression Tool",
-                "converter" to "Format Converter",
-                "x509" to "Certificate Parser",
-                "cert-converter" to "Certificate Converter",
-                "cert-generator" to "Certificate Generator",
-                "key-generator" to "Key Generator",
-                "ndef-parse" to "NDEF Parser"
+            data class Category(
+                val id: String,
+                val title: String,
+                val tabs: List<Pair<String, String>>
             )
 
-            for ((tabId, tabTitle) in tabs) {
-                button {
+            val categories = listOf(
+                Category("decoders", "Decoders & Parsers", listOf(
+                    "cbor-decode" to "CBOR Decoder",
+                    "asn1" to "ASN.1 Decoder",
+                    "ndef-parse" to "NDEF Parser"
+                )),
+                Category("identity", "ISO mdoc & SD-JWT", listOf(
+                    "mdoc-view" to "ISO mdoc DeviceResponse Parser",
+                    "mso-namespaces-view" to "ISO mdoc MSO & IssuerNameSpaces",
+                    "sd-jwt-inspect" to "SD-JWT Parser"
+                )),
+                Category("certs", "Certificates & Keys", listOf(
+                    "x509" to "Certificate Parser",
+                    "cert-converter" to "Certificate Converter",
+                    "cert-generator" to "Certificate Generator",
+                    "key-generator" to "Key Generator"
+                )),
+                Category("utilities", "Utilities", listOf(
+                    "compress" to "Compression Tool",
+                    "converter" to "Format Converter"
+                ))
+            )
+
+            for (category in categories) {
+                val isCategoryActive = category.tabs.any { it.first == activeTab }
+                val isOpen = activeDropdown == category.id
+
+                div {
                     css {
-                        padding = Padding(10.px, 20.px)
-                        border = None.none
-                        borderRadius = 8.px
-                        fontSize = 15.px
-                        fontWeight = FontWeight.bold
-                        cursor = Cursor.pointer
-                        transition = "all 0.2s".unsafeCast<Transition>()
-                        if (activeTab == tabId) {
-                            background = Color("#3b82f6") // blue 500
-                            color = Color("#ffffff")
-                            boxShadow = BoxShadow(0.px, 4.px, 12.px, Color("rgba(59, 130, 246, 0.3)"))
-                        } else {
-                            background = Color("transparent")
-                            color = Color("#94a3b8")
-                            hover {
-                                background = Color("#334155")
-                                color = Color("#f1f5f9")
+                        position = Position.relative
+                    }
+
+                    button {
+                        css {
+                            padding = Padding(10.px, 20.px)
+                            border = None.none
+                            borderRadius = 8.px
+                            fontSize = 15.px
+                            fontWeight = FontWeight.bold
+                            cursor = Cursor.pointer
+                            transition = "all 0.2s".unsafeCast<Transition>()
+                            if (isCategoryActive) {
+                                background = Color("#3b82f6") // blue 500
+                                color = Color("#ffffff")
+                                boxShadow = BoxShadow(0.px, 4.px, 12.px, Color("rgba(59, 130, 246, 0.3)"))
+                            } else {
+                                background = if (isOpen) Color("#334155") else Color("transparent")
+                                color = if (isOpen) Color("#f1f5f9") else Color("#94a3b8")
+                                hover {
+                                    background = Color("#334155")
+                                    color = Color("#f1f5f9")
+                                }
+                            }
+                        }
+                        onClick = { event ->
+                            event.stopPropagation()
+                            activeDropdown = if (isOpen) null else category.id
+                        }
+                        +category.title
+                        +" ▾"
+                    }
+
+                    if (isOpen) {
+                        div {
+                            css {
+                                position = Position.absolute
+                                top = 100.pct
+                                marginTop = 8.px
+                                left = 0.px
+                                zIndex = integer(50)
+                                background = Color("#1e293b")
+                                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                borderRadius = 8.px
+                                padding = 8.px
+                                display = Display.flex
+                                flexDirection = FlexDirection.column
+                                gap = 4.px
+                                minWidth = 260.px
+                                boxShadow = BoxShadow(0.px, 10.px, 15.px, Color("rgba(0, 0, 0, 0.5)"))
+                            }
+
+                            for ((tabId, tabTitle) in category.tabs) {
+                                val isTabActive = activeTab == tabId
+                                button {
+                                    css {
+                                        padding = Padding(8.px, 16.px)
+                                        textAlign = TextAlign.left
+                                        border = None.none
+                                        borderRadius = 6.px
+                                        cursor = Cursor.pointer
+                                        fontSize = 14.px
+                                        fontWeight = FontWeight.bold
+                                        transition = "all 0.2s".unsafeCast<Transition>()
+                                        if (isTabActive) {
+                                            background = Color("#2563eb") // blue 600
+                                            color = Color("#ffffff")
+                                        } else {
+                                            background = Color("transparent")
+                                            color = Color("#94a3b8")
+                                            hover {
+                                                background = Color("#334155")
+                                                color = Color("#f1f5f9")
+                                            }
+                                        }
+                                    }
+                                    onClick = {
+                                        activeTab = tabId
+                                        activeDropdown = null
+                                    }
+                                    +tabTitle
+                                }
                             }
                         }
                     }
-                    onClick = { activeTab = tabId }
-                    +tabTitle
                 }
             }
         }
@@ -201,6 +286,7 @@ val App = FC {
                 "compress" -> CompressionComponent {}
                 "converter" -> ConverterComponent {}
                 "x509" -> X509ParserComponent {}
+                "asn1" -> Asn1DecoderComponent {}
                 "cert-converter" -> CertConverterComponent {}
                 "key-generator" -> KeyGeneratorComponent {}
                 "cert-generator" -> CertGeneratorComponent {}
