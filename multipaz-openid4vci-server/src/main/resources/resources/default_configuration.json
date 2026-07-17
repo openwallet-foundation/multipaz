@@ -240,11 +240,39 @@
       "x": "T1e0RX1raACcc_pUYiahl6bk7DzSolNGWwlgqX_6rVc",
       "y": "KLxC0QBTMy2H5-eFwQSQtJR3IxpAlKlvVSgAeJcS7fI",
       "alg": "ES256"
+    },
+    "multipaz_wallet_dev_client_assertion": {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "KVc4rpPEuyGNvtN2YYSEh-NJy68KvuKQz-d-YdgvWEU",
+      "y": "Kqw_o1gK0tRe0ydgj4NL5NT8DE5NvYn-1Gwg9PpFTTw",
+      "alg": "ES256"
+    },
+    "multipaz_wallet_client_assertion": {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "gWZlorEcyhmM1bpYnfMPB1m5djAyguT9heZ2cjz0SU4",
+      "y": "T19zdqquVgGQ7NbgZElVuzkFSUCmDzL2UcJqsUkYwE8",
+      "alg": "ES256"
     }
   },
   "trusted_client_attestations": {
     "urn:uuid:60f8c117-b692-4de8-8f7f-636ff852baa6": "MIIBxTCCAUugAwIBAgIJAOQTL9qcQopZMAoGCCqGSM49BAMDMDgxNjA0BgNVBAMTLXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjAeFw0yNDA5MjMyMjUxMzFaFw0zNDA5MjMyMjUxMzFaMDgxNjA0BgNVBAMTLXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjB2MBAGByqGSM49AgEGBSuBBAAiA2IABN4D7fpNMAv4EtxyschbITpZ6iNH90rGapa6YEO/uhKnC6VpPt5RUrJyhbvwAs0edCPthRfIZwfwl5GSEOS0mKGCXzWdRv4GGX/Y0m7EYypox+tzfnRTmoVX3v6OxQiapKMhMB8wHQYDVR0OBBYEFPqAK5EjiQbxFAeWt//DCaWtC57aMAoGCCqGSM49BAMDA2gAMGUCMEO01fJKCy+iOTpaVp9LfO7jiXcXksn2BA22reiR9ahDRdGNCrH1E3Q2umQAssSQbQIxAIz1FTHbZPcEbA5uE5lCZlRG/DQxlZhk/rZrkPyXFhqEgfMnQ45IJ6f8Utlg+4Wiiw==",
-    "multipaz_wallet_attestation": "MIIBZjCCAQygAwIBAgIJALeOfaT23Xl4MAoGCCqGSM49BAMCMCYxJDAiBgNVBAMMG211bHRpcGF6X3dhbGxldF9hdHRlc3RhdGlvbjAeFw0yNTEwMDIwMjUzNThaFw0zNTA5MzAwMjUzNThaMCYxJDAiBgNVBAMMG211bHRpcGF6X3dhbGxldF9hdHRlc3RhdGlvbjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABIy2TeFHLTgP9OMs7/osKPuZsOITKIE+/HirAmyxxRrgfFcrNNcBtbkJ6aofpt+csdFZnf1UpCvE7vWTsX4Xp4ejIzAhMA4GA1UdDwEB/wQEAwIBhjAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49BAMCA0gAMEUCIF0xO2hhKUc4nj0kBBJkb3yCeIlkLeyZg1bGx9+SL0qHAiEArUd5SSxPsuSHVga0UBryJy2awvbUlI79QaBWX3LTuII="
+    "multipaz_wallet_attestation": "MIIBZjCCAQygAwIBAgIJALeOfaT23Xl4MAoGCCqGSM49BAMCMCYxJDAiBgNVBAMMG211bHRpcGF6X3dhbGxldF9hdHRlc3RhdGlvbjAeFw0yNTEwMDIwMjUzNThaFw0zNTA5MzAwMjUzNThaMCYxJDAiBgNVBAMMG211bHRpcGF6X3dhbGxldF9hdHRlc3RhdGlvbjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABIy2TeFHLTgP9OMs7/osKPuZsOITKIE+/HirAmyxxRrgfFcrNNcBtbkJ6aofpt+csdFZnf1UpCvE7vWTsX4Xp4ejIzAhMA4GA1UdDwEB/wQEAwIBhjAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49BAMCA0gAMEUCIF0xO2hhKUc4nj0kBBJkb3yCeIlkLeyZg1bGx9+SL0qHAiEArUd5SSxPsuSHVga0UBryJy2awvbUlI79QaBWX3LTuII=",
+    "multipaz_wallet_dev_wallet_attestation": {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "Th4KWikz1b_Glvu0f7sKRwqMvFKbzDztx-ZH5d7fh2k",
+      "y": "cJRpOculvS8wRljxlI9BW_vLrEOvJLEyOyu8ovlIQr8",
+      "alg": "ES256"
+    },
+    "multipaz_wallet_wallet_attestation": {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "e04Cr2N71cIzKLvS6Aj1yi0blKOdnElkRnid1YFRHNw",
+      "y": "UXC5oNIe-W5COrTUx-emdRsQHha9kjx6G8FHMbGytdo",
+      "alg": "ES256"
+    }
   },
   "trusted_key_attestations": {
     "urn:uuid:60f8c117-b692-4de8-8f7f-636ff852baa6": "MIIBxTCCAUugAwIBAgIJAOQTL9qcQopZMAoGCCqGSM49BAMDMDgxNjA0BgNVBAMTLXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjAeFw0yNDA5MjMyMjUxMzFaFw0zNDA5MjMyMjUxMzFaMDgxNjA0BgNVBAMTLXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjB2MBAGByqGSM49AgEGBSuBBAAiA2IABN4D7fpNMAv4EtxyschbITpZ6iNH90rGapa6YEO/uhKnC6VpPt5RUrJyhbvwAs0edCPthRfIZwfwl5GSEOS0mKGCXzWdRv4GGX/Y0m7EYypox+tzfnRTmoVX3v6OxQiapKMhMB8wHQYDVR0OBBYEFPqAK5EjiQbxFAeWt//DCaWtC57aMAoGCCqGSM49BAMDA2gAMGUCMEO01fJKCy+iOTpaVp9LfO7jiXcXksn2BA22reiR9ahDRdGNCrH1E3Q2umQAssSQbQIxAIz1FTHbZPcEbA5uE5lCZlRG/DQxlZhk/rZrkPyXFhqEgfMnQ45IJ6f8Utlg+4Wiiw==",
@@ -253,6 +281,20 @@
       "crv": "P-256",
       "x": "gV6qaaY4o9pWw2XkWH45d92_JVKFPsMr_eszFCZ4jiU",
       "y": "rmzbybii_BwR2sa9C6YwREFf2hRBFURBejRiod1n1RI",
+      "alg": "ES256"
+    },
+    "multipaz_wallet_dev_key_attestation": {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "R4zWyNjC5Q9UNt1UsbjE5jMxwq_BK6XZW7Sby58a1Sc",
+      "y": "G1vw5bbkDWLZud3ISL5znZTWSIplQajopI1nmvmIQ6w",
+      "alg": "ES256"
+    },
+    "multipaz_wallet_key_attestation": {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "8D0VMoWiPWHVxTXOPj3zuuoBEhbSnltzT3KHMfc8HHA",
+      "y": "ea_kZ-tYuekI9hg2VBjSwg1VSeHog82h0vjN25yCoRY",
       "alg": "ES256"
     }
   }
