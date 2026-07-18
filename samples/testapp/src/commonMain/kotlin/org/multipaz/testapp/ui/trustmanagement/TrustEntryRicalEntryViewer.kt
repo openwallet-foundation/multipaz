@@ -1,4 +1,4 @@
-package org.multipaz.compose.trustmanagement
+package org.multipaz.testapp.ui.trustmanagement
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -15,16 +15,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.certificateviewer.X509CertViewer
 import org.multipaz.compose.items.FloatingItemHeadingAndText
 import org.multipaz.compose.items.FloatingItemList
-import org.multipaz.multipaz_compose.generated.resources.Res
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_extensions
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_entry_title
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_is_trust_anchor
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_is_trust_anchor_false
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_is_trust_anchor_true
+import org.multipaz.compose.trustmanagement.TrustEntryInfo
+import org.multipaz.compose.trustmanagement.TrustManagerModel
 import org.multipaz.trustmanagement.TrustEntryBasedTrustManager
 
 /**
@@ -66,19 +61,19 @@ fun TrustEntryRicalEntryViewer(
 
         FloatingItemList(
             modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
-            title = stringResource(Res.string.trust_entry_rical_entry_title)
+            title = "RICAL entry"
         ) {
             FloatingItemHeadingAndText(
-                heading = stringResource(Res.string.trust_entry_rical_is_trust_anchor),
+                heading = "Trust anchor",
                 text = if (ricalCertInfo.isTrustAnchor) {
-                    stringResource(Res.string.trust_entry_rical_is_trust_anchor_true)
+                    "Yes"
                 } else {
-                    stringResource(Res.string.trust_entry_rical_is_trust_anchor_false)
+                    "No"
                 }
             )
             if (ricalCertInfo.extensions.isNotEmpty()) {
                 ItemWithExtensions(
-                    heading = stringResource(Res.string.trust_entry_extensions),
+                    heading = "Extensions",
                     extensions = ricalCertInfo.extensions
                 )
             }

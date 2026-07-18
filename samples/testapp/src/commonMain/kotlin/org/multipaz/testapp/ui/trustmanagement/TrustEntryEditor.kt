@@ -1,4 +1,4 @@
-package org.multipaz.compose.trustmanagement
+package org.multipaz.testapp.ui.trustmanagement
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -31,18 +31,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
-import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.cropRotateScaleImage
 import org.multipaz.compose.decodeImage
 import org.multipaz.compose.encodeImageToPng
 import org.multipaz.compose.pickers.rememberImagePicker
-import org.multipaz.multipaz_compose.generated.resources.Res
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_editor_change
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_editor_name_label
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_editor_remove
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_editor_test_only_rical
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_editor_test_only_vical
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_editor_test_only_x509
+import org.multipaz.compose.trustmanagement.TrustEntryInfo
+import org.multipaz.compose.trustmanagement.getFallbackName
 import org.multipaz.trustmanagement.TrustEntryRical
 import org.multipaz.trustmanagement.TrustEntryVical
 import org.multipaz.trustmanagement.TrustEntryX509Cert
@@ -68,10 +62,11 @@ fun TrustEntryEditor(
     imageLoader: ImageLoader,
     newMetadata: MutableState<TrustMetadata>
 ) {
+    val entry = trustEntryInfo.entry
     var nameText by remember { mutableStateOf(
-        TextFieldValue(trustEntryInfo.entry.metadata.displayName ?: "")
+        TextFieldValue(entry.metadata.displayName ?: "")
     )}
-    val fallbackName = trustEntryInfo.entry.getFallbackName(trustEntryInfo.signedVical, trustEntryInfo.signedRical)
+    val fallbackName = entry.getFallbackName(trustEntryInfo.signedVical, trustEntryInfo.signedRical)
 
     val imagePicker = rememberImagePicker(
         allowMultiple = false,
@@ -129,7 +124,7 @@ fun TrustEntryEditor(
                         contentDescription = null
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(stringResource(Res.string.trust_entry_editor_change))
+                    Text("Change")
                 }
                 TextButton(
                     enabled = newMetadata.value.displayIcon != null,
@@ -144,7 +139,7 @@ fun TrustEntryEditor(
                         contentDescription = null
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(stringResource(Res.string.trust_entry_editor_remove))
+                    Text("Remove")
                 }
             }
         }
@@ -156,7 +151,7 @@ fun TrustEntryEditor(
         ) {
             OutlinedTextField(
                 value = nameText,
-                label = { Text(text = stringResource(Res.string.trust_entry_editor_name_label)) },
+                label = { Text(text = "Name") },
                 placeholder = {
                     Text(text = fallbackName)
                 },
@@ -187,10 +182,10 @@ fun TrustEntryEditor(
                     }
                 )
                 Text(
-                    text = when (trustEntryInfo.entry) {
-                        is TrustEntryX509Cert -> stringResource(Res.string.trust_entry_editor_test_only_x509)
-                        is TrustEntryVical -> stringResource(Res.string.trust_entry_editor_test_only_vical)
-                        is TrustEntryRical -> stringResource(Res.string.trust_entry_editor_test_only_rical)
+                    text = when (entry) {
+                        is TrustEntryX509Cert -> "This certificate is for testing only"
+                        is TrustEntryVical -> "This VICAL is for testing only"
+                        is TrustEntryRical -> "This RICAL is for testing only"
                     }
                 )
             }

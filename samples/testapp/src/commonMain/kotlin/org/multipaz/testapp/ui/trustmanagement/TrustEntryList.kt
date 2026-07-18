@@ -1,4 +1,4 @@
-package org.multipaz.compose.trustmanagement
+package org.multipaz.testapp.ui.trustmanagement
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -17,6 +17,9 @@ import org.multipaz.compose.branding.Branding
 import org.multipaz.compose.decodeImage
 import org.multipaz.compose.items.FloatingItemList
 import org.multipaz.compose.items.FloatingItemText
+import org.multipaz.compose.trustmanagement.TrustEntryInfo
+import org.multipaz.compose.trustmanagement.TrustManagerModel
+import org.multipaz.compose.trustmanagement.getDetails
 import org.multipaz.trustmanagement.TrustEntry
 import org.multipaz.trustmanagement.TrustEntryBasedTrustManager
 

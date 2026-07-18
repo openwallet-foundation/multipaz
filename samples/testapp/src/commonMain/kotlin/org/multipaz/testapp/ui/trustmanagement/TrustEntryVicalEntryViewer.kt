@@ -1,4 +1,4 @@
-package org.multipaz.compose.trustmanagement
+package org.multipaz.testapp.ui.trustmanagement
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -15,14 +15,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.certificateviewer.X509CertViewer
 import org.multipaz.compose.items.FloatingItemHeadingAndText
 import org.multipaz.compose.items.FloatingItemList
-import org.multipaz.multipaz_compose.generated.resources.Res
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_extensions
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_entry_document_types
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_entry_title
+import org.multipaz.compose.trustmanagement.TrustEntryInfo
+import org.multipaz.compose.trustmanagement.TrustManagerModel
 import org.multipaz.trustmanagement.TrustEntryBasedTrustManager
 
 /**
@@ -64,15 +61,15 @@ fun TrustEntryVicalEntryViewer(
 
         FloatingItemList(
             modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
-            title = stringResource(Res.string.trust_entry_vical_entry_title)
+            title = "VICAL entry"
         ) {
             FloatingItemHeadingAndText(
-                heading = stringResource(Res.string.trust_entry_vical_entry_document_types),
+                heading = "Document Types",
                 text = vicalCertInfo.docTypes.joinToString("\n")
             )
             if (vicalCertInfo.extensions.isNotEmpty()) {
                 ItemWithExtensions(
-                    heading = stringResource(Res.string.trust_entry_extensions),
+                    heading = "Extensions",
                     extensions = vicalCertInfo.extensions
                 )
             }

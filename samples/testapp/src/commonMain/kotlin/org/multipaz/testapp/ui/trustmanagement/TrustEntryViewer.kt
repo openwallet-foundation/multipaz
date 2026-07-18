@@ -1,4 +1,4 @@
-package org.multipaz.compose.trustmanagement
+package org.multipaz.testapp.ui.trustmanagement
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -21,7 +21,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
-import org.jetbrains.compose.resources.stringResource
 import org.multipaz.asn1.OID
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
@@ -33,36 +32,13 @@ import org.multipaz.compose.datetime.formattedDateTime
 import org.multipaz.compose.items.FloatingItemHeadingAndText
 import org.multipaz.compose.items.FloatingItemList
 import org.multipaz.compose.items.FloatingItemText
+import org.multipaz.compose.trustmanagement.TrustEntryInfo
+import org.multipaz.compose.trustmanagement.TrustManagerModel
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.mdoc.rical.RicalCertificateInfo
 import org.multipaz.mdoc.rical.SignedRical
 import org.multipaz.mdoc.vical.SignedVical
 import org.multipaz.mdoc.vical.VicalCertificateInfo
-import org.multipaz.multipaz_compose.generated.resources.Res
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_certificates_title
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_click_to_view_chain
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_details_certificate
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_extensions
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_no
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_data_title
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_details_id
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_details_type
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_details_url
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_rical_details_valid_until
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_signer
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_test_only_label
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_data_title
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_details_issue
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_details_issued_at
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_details_next_update
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_details_provider
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_details_update_url
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_details_valid_until
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_vical_details_version
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_warning_rical_just_imported
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_warning_vical_just_imported
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_warning_x509_just_imported
-import org.multipaz.multipaz_compose.generated.resources.trust_entry_yes
 import org.multipaz.trustmanagement.TrustEntryBasedTrustManager
 import org.multipaz.trustmanagement.TrustEntryRical
 import org.multipaz.trustmanagement.TrustEntryVical
@@ -97,6 +73,7 @@ fun TrustEntryViewer(
     val entryInfo = trustManagerModel.trustManagerInfos.collectAsState().value?.find {
         it.entry.identifier == trustEntryId
     } ?: return
+    val entry = entryInfo.entry
 
     Column() {
         if (justImported) {
@@ -104,10 +81,10 @@ fun TrustEntryViewer(
                 modifier = Modifier.padding(bottom = 16.dp)
             ) {
                 Text(
-                    text = when (entryInfo.entry) {
-                        is TrustEntryX509Cert -> stringResource(Res.string.trust_entry_warning_x509_just_imported)
-                        is TrustEntryVical -> stringResource(Res.string.trust_entry_warning_vical_just_imported)
-                        is TrustEntryRical -> stringResource(Res.string.trust_entry_warning_rical_just_imported)
+                    text = when (entry) {
+                        is TrustEntryX509Cert -> "This certificate was just imported. Please check its fingerprint to make sure you trust it"
+                        is TrustEntryVical -> "This VICAL was just imported. Please check the signer certificate chain to make sure you trust the provider"
+                        is TrustEntryRical -> "This RICAL was just imported. Please check the signer certificate chain to make sure you trust the provider"
                     }
                 )
             }
@@ -142,22 +119,22 @@ fun TrustEntryViewer(
                 modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
                 title = null
             ) {
-                FloatingItemHeadingAndText(stringResource(Res.string.trust_entry_test_only_label),
-                    if (entryInfo.entry.metadata.testOnly) {
-                        stringResource(Res.string.trust_entry_yes)
+                FloatingItemHeadingAndText("Test only",
+                    if (entry.metadata.testOnly) {
+                        "Yes"
                     } else {
-                        stringResource(Res.string.trust_entry_no)
+                        "No"
                     }
                 )
             }
 
-            when (entryInfo.entry) {
+            when (entry) {
                 is TrustEntryX509Cert -> {
-                    X509CertViewer(certificate = entryInfo.entry.certificate)
+                    X509CertViewer(certificate = entry.certificate)
                 }
                 is TrustEntryVical -> {
                     VicalDetails(
-                        trustEntry = entryInfo.entry,
+                        trustEntry = entry,
                         signedVical = entryInfo.signedVical!!,
                         onViewVicalEntry = onViewVicalEntry,
                         onViewCertificateChain = onViewSignerCertificateChain
@@ -165,7 +142,7 @@ fun TrustEntryViewer(
                 }
                 is TrustEntryRical -> {
                     RicalDetails(
-                        trustEntry = entryInfo.entry,
+                        trustEntry = entry,
                         signedRical = entryInfo.signedRical!!,
                         onViewRicalEntry = onViewRicalEntry,
                         onViewCertificateChain = onViewSignerCertificateChain
@@ -185,50 +162,50 @@ private fun VicalDetails(
 ) {
     FloatingItemList(
         modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
-        title = stringResource(Res.string.trust_entry_vical_data_title)
+        title = "VICAL data"
     ) {
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_vical_details_version),
+            heading = "Version",
             text = signedVical.vical.version
         )
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_vical_details_provider),
+            heading = "Provider",
             text = signedVical.vical.vicalProvider
         )
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_vical_details_issue),
+            heading = "Issue",
             text = signedVical.vical.vicalIssueID.toString()
         )
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_vical_details_issued_at),
+            heading = "Issued at",
             text = formattedDateTime(signedVical.vical.date)
         )
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_vical_details_next_update),
+            heading = "Next update",
             text = signedVical.vical.nextUpdate?.let {
                 formattedDateTime(it)
             } ?: AnnotatedString("-")
         )
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_vical_details_valid_until),
+            heading = "Valid until",
             text = signedVical.vical.notAfter?.let {
                 formattedDateTime(it)
             } ?: AnnotatedString("-")
         )
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_vical_details_update_url),
+            heading = "Update URL",
             text = signedVical.vical.vicalUrl ?: "-"
         )
         FloatingItemHeadingAndText(
-            stringResource(Res.string.trust_entry_signer),
-            stringResource(Res.string.trust_entry_click_to_view_chain),
+            "Signer",
+            "Click to view certificate chain",
             modifier = Modifier.clickable {
                 onViewCertificateChain(signedVical.vicalProviderCertificateChain)
             }
         )
         if (signedVical.vical.extensions.isNotEmpty()) {
             ItemWithExtensions(
-                heading = stringResource(Res.string.trust_entry_extensions),
+                heading = "Extensions",
                 extensions = signedVical.vical.extensions
             )
         }
@@ -236,14 +213,14 @@ private fun VicalDetails(
 
     FloatingItemList(
         modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
-        title = stringResource(Res.string.trust_entry_certificates_title)
+        title = "Certificates"
     ) {
         signedVical.vical.certificateInfos.forEachIndexed { n, certificateInfo ->
             FloatingItemText(
                 modifier = Modifier.clickable { onViewVicalEntry(n) },
                 image = { certificateInfo.RenderIconWithFallback() },
                 text = certificateInfo.displayNameWithFallback,
-                secondary = stringResource(Res.string.trust_entry_details_certificate),
+                secondary = "Certificate",
             )
         }
     }
@@ -258,54 +235,54 @@ private fun RicalDetails(
 ) {
     FloatingItemList(
         modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
-        title = stringResource(Res.string.trust_entry_rical_data_title)
+        title = "RICAL data"
     ) {
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_rical_details_type),
+            heading = "Type",
             text = signedRical.rical.type
         )
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_vical_details_version),
+            heading = "Version",
             text = signedRical.rical.version
         )
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_vical_details_provider),
+            heading = "Provider",
             text = signedRical.rical.provider
         )
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_rical_details_id),
+            heading = "ID",
             text = signedRical.rical.id?.toString() ?: "-"
         )
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_vical_details_issued_at),
+            heading = "Issued at",
             text = formattedDateTime(signedRical.rical.date)
         )
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_vical_details_next_update),
+            heading = "Next update",
             text = signedRical.rical.nextUpdate?.let {
                 formattedDateTime(it)
             } ?: AnnotatedString("-")
         )
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_rical_details_valid_until),
+            heading = "Valid until",
             text = signedRical.rical.notAfter?.let {
                 formattedDateTime(it)
             } ?: AnnotatedString("-")
         )
         FloatingItemHeadingAndText(
-            heading = stringResource(Res.string.trust_entry_rical_details_url),
+            heading = "URL",
             text = signedRical.rical.latestRicalUrl ?: "-"
         )
         FloatingItemHeadingAndText(
-            stringResource(Res.string.trust_entry_signer),
-            stringResource(Res.string.trust_entry_click_to_view_chain),
+            "Signer",
+            "Click to view certificate chain",
             modifier = Modifier.clickable {
                 onViewCertificateChain(signedRical.ricalProviderCertificateChain)
             }
         )
         if (signedRical.rical.extensions.isNotEmpty()) {
             ItemWithExtensions(
-                heading = stringResource(Res.string.trust_entry_extensions),
+                heading = "Extensions",
                 extensions = signedRical.rical.extensions
             )
         }
@@ -313,14 +290,14 @@ private fun RicalDetails(
 
     FloatingItemList(
         modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
-        title = stringResource(Res.string.trust_entry_certificates_title)
+        title = "Certificates"
     ) {
         signedRical.rical.certificateInfos.forEachIndexed { n, certificateInfo ->
             FloatingItemText(
                 modifier = Modifier.clickable { onViewRicalEntry(n) },
                 image = { certificateInfo.RenderIconWithFallback() },
                 text = certificateInfo.displayNameWithFallback,
-                secondary = stringResource(Res.string.trust_entry_details_certificate),
+                secondary = "Certificate",
             )
         }
     }
@@ -352,7 +329,6 @@ internal fun ItemWithExtensions(
         modifier = modifier
     )
 }
-
 
 /**
  * Generates an avatar icon for a [VicalCertificateInfo] based on its display name.
