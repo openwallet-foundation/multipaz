@@ -37,5 +37,3 @@ sealed class Event(
 
     companion object
 }
-
-// TODO: Add events for provisioning, PII updates, MSO updates, etc

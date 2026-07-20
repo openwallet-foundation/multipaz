@@ -80,11 +80,20 @@ import org.multipaz.eventlogger.EventPresentmentUriSchemeOpenID4VP
 import org.multipaz.eventlogger.EventProvisioning
 import org.multipaz.eventlogger.EventProvisioningIssuerDataOpenID4VCI
 import org.multipaz.eventlogger.EventSimple
+import org.multipaz.eventlogger.EventVerification
 import org.multipaz.eventlogger.SimpleEventLogger
 import org.multipaz.eventlogger.toDataItem
 import org.multipaz.prompt.PromptModel
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
+import org.multipaz.verification.MdocVerifiedPresentation
+import org.multipaz.verification.JsonVerifiedPresentation
+import org.multipaz.verification.VerifiedPresentation
+import org.multipaz.verification.Iso18013PresentmentRecord
+import org.multipaz.verification.OpenID4VPPresentmentRecord
+import org.multipaz.compose.getOutlinedImageVector
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.CancellationException
 import kotlin.time.Clock
 
 @OptIn(ExperimentalMaterial3Api::class, FormatStringsInDatetimeFormats::class)
@@ -261,6 +270,17 @@ private fun EventViewer(
         }
         is EventProvisioning -> {
             EventViewerProvisioning(
+                event = event,
+                documentTypeRepository = documentTypeRepository,
+                documentModel = documentModel,
+                imageLoader = imageLoader,
+                onViewCertificateChain = onViewCertificateChain,
+                timeZone = timeZone,
+                modifier = modifier
+            )
+        }
+        is EventVerification -> {
+            EventViewerVerification(
                 event = event,
                 documentTypeRepository = documentTypeRepository,
                 documentModel = documentModel,
@@ -599,5 +619,155 @@ private fun ExtractClaimsItems(
                 )
             }
         )
+    }
+}
+
+@Composable
+private fun EventViewerVerification(
+    event: EventVerification,
+    documentTypeRepository: DocumentTypeRepository,
+    documentModel: DocumentModel,
+    imageLoader: ImageLoader,
+    onViewCertificateChain: (certChain: X509CertChain) -> Unit,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    modifier: Modifier = Modifier
+) {
+    val eventDateTime = event.timestamp.toLocalDateTime(timeZone = timeZone)
+    val eventDateTimeString = eventDateTime.formatLocalized(
+        dateStyle = FormatStyle.LONG,
+        timeStyle = FormatStyle.LONG
+    )
+
+    val protocol = when (event.presentmentRecord) {
+        is Iso18013PresentmentRecord -> "ISO 18013-5 mdoc presentment"
+        is OpenID4VPPresentmentRecord -> "OpenID4VP presentation"
+    }
+
+    var verifiedPresentations by remember { mutableStateOf<List<VerifiedPresentation>?>(null) }
+    var verificationError by remember { mutableStateOf<Throwable?>(null) }
+
+    LaunchedEffect(event) {
+        try {
+            verifiedPresentations = event.presentmentRecord.verify(
+                atTime = event.timestamp,
+                documentTypeRepository = documentTypeRepository
+            )
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            verificationError = t
+        }
+    }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        val imageSize = 80.dp
+        Icon(
+            imageVector = org.multipaz.documenttype.Icon.BADGE.getOutlinedImageVector(),
+            contentDescription = null,
+            modifier = Modifier.size(imageSize)
+        )
+
+        Text(
+            text = "Verification Result",
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+
+        FloatingItemList(
+            modifier = Modifier.padding(top = 10.dp, bottom = 20.dp)
+        ) {
+            FloatingItemHeadingAndText(
+                heading = "Date and time",
+                text = eventDateTimeString
+            )
+
+            FloatingItemHeadingAndText(
+                heading = "Presentment protocol",
+                text = protocol
+            )
+
+            if (verificationError != null) {
+                FloatingItemHeadingAndText(
+                    heading = "Verification status",
+                    text = buildAnnotatedString {
+                        withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.error)) {
+                            append("Failed: ${verificationError?.message}")
+                        }
+                    }
+                )
+            } else if (verifiedPresentations == null) {
+                FloatingItemHeadingAndText(
+                    heading = "Verification status",
+                    text = "Verifying..."
+                )
+            } else {
+                FloatingItemHeadingAndText(
+                    heading = "Verification status",
+                    text = "Verified successfully"
+                )
+            }
+        }
+
+        verifiedPresentations?.forEachIndexed { index, vp ->
+            val formatText = when (vp) {
+                is MdocVerifiedPresentation -> "ISO mdoc"
+                is JsonVerifiedPresentation -> "IETF SD-JWT VC"
+            }
+            val titleText = when (vp) {
+                is MdocVerifiedPresentation -> "Document ${index + 1}: ${vp.docType} ($formatText)"
+                is JsonVerifiedPresentation -> "Document ${index + 1}: ${vp.vct} ($formatText)"
+            }
+            FloatingItemList(
+                modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
+                title = titleText
+            ) {
+                vp.documentSignerCertChain?.let { certChain ->
+                    FloatingItemHeadingAndText(
+                        heading = "Issuer certificate chain",
+                        text = "Click to view",
+                        modifier = Modifier.clickable {
+                            onViewCertificateChain(certChain)
+                        }
+                    )
+                }
+
+                if (vp.zkpUsed) {
+                    FloatingItemHeadingAndText(
+                        heading = "ZK proof",
+                        text = "Successfully verified \uD83E\uDE84"
+                    )
+                }
+
+                for (n in listOf(0, 1)) {
+                    val (claims, suffix) = if (n == 0) {
+                        Pair(vp.issuerSignedClaims, "")
+                    } else {
+                        Pair(vp.deviceSignedClaims, " (Device Signed)")
+                    }
+                    claims.forEach { claim ->
+                        val typedClaim = Claim.fromDataItem(
+                            dataItem = claim.toDataItem(),
+                            documentTypeRepository = documentTypeRepository
+                        )
+                        val textValue = typedClaim.render()
+                        FloatingItemHeadingAndText(
+                            heading = typedClaim.displayName + suffix,
+                            text = textValue,
+                            image = {
+                                val icon = typedClaim.attribute?.icon ?: org.multipaz.documenttype.Icon.PERSON
+                                Icon(
+                                    imageVector = icon.getOutlinedImageVector(),
+                                    contentDescription = null
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
     }
 }

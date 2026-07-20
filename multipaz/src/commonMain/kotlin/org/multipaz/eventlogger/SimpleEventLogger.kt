@@ -39,7 +39,7 @@ private const val TAG = "SimpleEventLogger"
  * @property partitionId A logical partition identifier to group events. Defaults to "default".
  * @property expireAfter the amount of time to keep events, use [Duration.INFINITE] to never expire events.
  * @property clock The time source used to timestamp events. Defaults to [Clock.System].
- * @property onAddEvent Function to inject additional metadata or drop the event by returning `null`.
+ * @property onAddEvent Function to inject additional metadata or drop the event by returning `null`. Note that the injected data is added (merged) to the event's existing application-specific data, rather than replacing it.
  * @property scope a [CoroutineScope] used by [addEventAsync], to add events asynchronously.
  */
 class SimpleEventLogger(
@@ -117,18 +117,18 @@ class SimpleEventLogger(
         val eventWithTimestamp = event.copy(
             identifier = key,
             timestamp = now,
-            appData = emptyMap()
+            appData = event.appData
         )
 
-        val appData = onAddEvent(eventWithTimestamp)
-        if (appData == null) {
+        val injectedAppData = onAddEvent(eventWithTimestamp)
+        if (injectedAppData == null) {
             return null
         }
 
         val eventWithAppData = event.copy(
             identifier = key,
             timestamp = now,
-            appData = appData
+            appData = event.appData + injectedAppData
         )
 
         storageTable.insert(

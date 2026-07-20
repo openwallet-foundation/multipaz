@@ -36,6 +36,7 @@ import org.multipaz.testapp.DcqlRequestDefinition
 import org.multipaz.verification.VerificationSession
 import org.multipaz.verification.VerificationUtil
 import org.multipaz.verification.VerifierIdentity
+import org.multipaz.eventlogger.EventVerification
 import kotlin.random.Random
 import kotlin.time.Clock
 
@@ -346,6 +347,9 @@ private suspend fun doDcRequestFlow(
     val t0 = Clock.System.now()
     val dcResponseObject = app.digitalCredentials.request(dcRequestObject)
     Logger.iJson(TAG, "Response", dcResponseObject)
+
+    val presentmentRecord = session.processDcResponse(dcResponse = dcResponseObject)
+    app.eventLogger.addEventAsync(EventVerification(presentmentRecord = presentmentRecord))
 
     val metadata = ShowResponseMetadata(
         engagementType = "OS-provided CredentialManager API",

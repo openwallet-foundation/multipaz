@@ -511,6 +511,55 @@ class SimpleEventLoggerTests {
         job.cancel()
     }
 
+    @Test
+    fun testOnAddEventAppendsToAppData() = runTest {
+        val fakeClock = FakeClock(Instant.fromEpochMilliseconds(1000))
+        val ephemeralStorage = EphemeralStorage(fakeClock)
+        val originalAppData = mapOf("original_key" to "original_value".toDataItem())
+        val injectedAppData = mapOf("injected_key" to "injected_value".toDataItem())
+
+        val logger = SimpleEventLogger(
+            storage = ephemeralStorage,
+            partitionId = "test-partition",
+            clock = fakeClock,
+            onAddEvent = { _ -> injectedAppData }
+        )
+
+        val eventBase = EventPresentmentIso18013Proximity(
+            identifier = "",
+            timestamp = Instant.DISTANT_PAST,
+            appData = originalAppData,
+            presentmentData = EventPresentmentData(
+                requesterName = "Test Requester",
+                requesterCertChain = null,
+                trustMetadata = null,
+                requestedDocuments = listOf(
+                    EventPresentmentDataDocument(
+                        documentId = "test-document-id",
+                        documentName = "Test Document",
+                        claims = emptyMap()
+                    )
+                ),
+            ),
+            request = Simple.NULL,
+            response = Simple.NULL,
+            sessionTranscript = Simple.NULL
+        )
+
+        val savedEvent = logger.addEvent(eventBase)
+
+        // Verify returned event contains the merged appData
+        assertNotNull(savedEvent)
+        assertEquals(2, savedEvent.appData.size)
+        assertEquals("original_value".toDataItem(), savedEvent.appData["original_key"])
+        assertEquals("injected_value".toDataItem(), savedEvent.appData["injected_key"])
+
+        // Verify storage state contains the merged appData
+        val eventsInDb = logger.getEvents()
+        assertEquals(1, eventsInDb.size)
+        assertEquals(savedEvent.appData, eventsInDb.first().appData)
+    }
+
     // --- Fakes ---
 
     class FakeClock(var currentTime: Instant = Instant.fromEpochMilliseconds(0)) : Clock {

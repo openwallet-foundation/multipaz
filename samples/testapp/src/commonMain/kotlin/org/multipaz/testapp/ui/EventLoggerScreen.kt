@@ -52,7 +52,11 @@ import org.multipaz.eventlogger.EventPresentmentIso18013Proximity
 import org.multipaz.eventlogger.EventPresentmentUriSchemeOpenID4VP
 import org.multipaz.eventlogger.EventProvisioning
 import org.multipaz.eventlogger.EventSimple
+import org.multipaz.eventlogger.EventVerification
 import org.multipaz.eventlogger.SimpleEventLogger
+import org.multipaz.verification.Iso18013PresentmentRecord
+import org.multipaz.verification.OpenID4VPPresentmentRecord
+import org.multipaz.compose.getOutlinedImageVector
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -208,6 +212,16 @@ private fun EventItem(
                 modifier = modifier
             )
         }
+        is EventVerification -> {
+            EventItemVerification(
+                event = event,
+                imageLoader = imageLoader,
+                documentModel = documentModel,
+                imageSize = imageSize,
+                timeZone = timeZone,
+                modifier = modifier
+            )
+        }
         is EventSimple -> {
             FloatingItemCenteredText(
                 text = "EventSimple w/ ${event.appData.size} bytes of data"
@@ -309,4 +323,34 @@ private fun getSharingType(origin: String?): String {
         }
     }
     return "Shared with website"
+}
+
+@Composable
+private fun EventItemVerification(
+    event: EventVerification,
+    imageLoader: ImageLoader,
+    documentModel: DocumentModel,
+    imageSize: Dp = 40.dp,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    modifier: Modifier = Modifier
+) {
+    val eventDateTimeString = event.timestamp.toLocalDateTime(timeZone = timeZone).formatLocalized()
+    val protocol = when (event.presentmentRecord) {
+        is Iso18013PresentmentRecord -> "ISO 18013-5"
+        is OpenID4VPPresentmentRecord -> "OpenID4VP"
+    }
+    val text = "$eventDateTimeString • $protocol"
+
+    FloatingItemText(
+        modifier = modifier,
+        image = {
+            Icon(
+                imageVector = org.multipaz.documenttype.Icon.BADGE.getOutlinedImageVector(),
+                contentDescription = null,
+                modifier = Modifier.size(imageSize)
+            )
+        },
+        text = "Verified credentials",
+        secondary = text,
+    )
 }
