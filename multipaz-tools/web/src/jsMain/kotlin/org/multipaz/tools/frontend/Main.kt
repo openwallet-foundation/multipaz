@@ -11,13 +11,13 @@ import react.create
 import react.dom.client.createRoot
 import react.dom.html.ReactHTML.button
 import react.dom.html.ReactHTML.div
-import react.dom.html.ReactHTML.h1
-import react.dom.html.ReactHTML.p
-import react.dom.html.ReactHTML.nav
 import react.dom.html.ReactHTML.footer
-import react.useState
+import react.dom.html.ReactHTML.h1
+import react.dom.html.ReactHTML.nav
+import react.dom.html.ReactHTML.p
 import react.useEffect
 import react.useEffectOnce
+import react.useState
 import web.cssom.*
 import web.dom.Element
 import org.multipaz.util.Platform
@@ -37,6 +37,10 @@ fun pathToTab(path: String): String {
     return when (path) {
         "/cbor" -> "cbor-decode"
         "/mdocDeviceResponse" -> "mdoc-view"
+        "/mdocDeviceRequest" -> "device-request-parse"
+        "/deviceRequest" -> "device-request-parse"
+        "/iso18013-7-annex-c" -> "annex-c-parse"
+        "/annexC" -> "annex-c-parse"
         "/msoNamespaces" -> "mso-namespaces-view"
         "/sdjwt" -> "sd-jwt-inspect"
         "/compress" -> "compress"
@@ -47,6 +51,8 @@ fun pathToTab(path: String): String {
         "/keygen" -> "key-generator"
         "/cert" -> "cert-generator"
         "/ndef" -> "ndef-parse"
+        "/event" -> "event-decode"
+        "/events" -> "event-decode"
         else -> "cbor-decode"
     }
 }
@@ -55,6 +61,8 @@ fun tabToPath(tab: String): String {
     return when (tab) {
         "cbor-decode" -> "/cbor"
         "mdoc-view" -> "/mdocDeviceResponse"
+        "device-request-parse" -> "/mdocDeviceRequest"
+        "annex-c-parse" -> "/iso18013-7-annex-c"
         "mso-namespaces-view" -> "/msoNamespaces"
         "sd-jwt-inspect" -> "/sdjwt"
         "compress" -> "/compress"
@@ -65,6 +73,7 @@ fun tabToPath(tab: String): String {
         "key-generator" -> "/keygen"
         "cert-generator" -> "/cert"
         "ndef-parse" -> "/ndef"
+        "event-decode" -> "/event"
         else -> "/cbor"
     }
 }
@@ -158,6 +167,8 @@ val App = FC {
                 )),
                 Category("identity", "ISO mdoc & SD-JWT", listOf(
                     "mdoc-view" to "ISO mdoc DeviceResponse Parser",
+                    "device-request-parse" to "ISO mdoc DeviceRequest Parser",
+                    "annex-c-parse" to "ISO 18013-7 Annex C Parser",
                     "mso-namespaces-view" to "ISO mdoc MSO & IssuerNameSpaces",
                     "sd-jwt-inspect" to "SD-JWT Parser"
                 )),
@@ -169,7 +180,8 @@ val App = FC {
                 )),
                 Category("utilities", "Utilities", listOf(
                     "compress" to "Compression Tool",
-                    "converter" to "Format Converter"
+                    "converter" to "Format Converter",
+                    "event-decode" to "Multipaz Event Decoder"
                 ))
             )
 
@@ -281,6 +293,8 @@ val App = FC {
             when (activeTab) {
                 "cbor-decode" -> CborDecoderComponent {}
                 "mdoc-view" -> MdocViewerComponent {}
+                "device-request-parse" -> DeviceRequestParserComponent {}
+                "annex-c-parse" -> AnnexCParserComponent {}
                 "mso-namespaces-view" -> MsoNamespacesViewerComponent {}
                 "sd-jwt-inspect" -> SdJwtInspectorComponent {}
                 "compress" -> CompressionComponent {}
@@ -291,6 +305,7 @@ val App = FC {
                 "key-generator" -> KeyGeneratorComponent {}
                 "cert-generator" -> CertGeneratorComponent {}
                 "ndef-parse" -> NdefParserComponent {}
+                "event-decode" -> EventDecoderComponent {}
             }
         }
 

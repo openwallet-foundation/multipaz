@@ -15,7 +15,7 @@ import kotlin.time.Instant
  * @property documentId the unique identifier of the document.
  * @property documentName the name of the document, if available.
  * @property display display information for the document.
- * @property credentialsFetched the credentials fetched, keyed by credential configuration ID.
+ * @property credentialsFetched the credentials fetched, keyed by credential domain.
  */
 data class EventProvisioning(
     override val identifier: String = "",

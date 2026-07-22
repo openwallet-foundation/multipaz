@@ -173,8 +173,6 @@ fun EventViewerScreen(
                             coroutineScope.launch {
                                 val event = eventLogger.getEvents().find { it.identifier == eventId }
                                 if (event != null) {
-                                    // For TestApp, just do a text file for now. In the future we might define
-                                    // a binary format and provide tools for offline analysis.
                                     val format = DateTimeComponents.Format {
                                         byUnicodePattern("yyyyMMdd-HHmmss")
                                     }
@@ -182,15 +180,15 @@ fun EventViewerScreen(
                                         format = format,
                                         offset = TimeZone.currentSystemDefault().offsetAt(Clock.System.now())
                                     )
+                                    val eventDataItem = event.toDataItem()
+                                    val type = eventDataItem["type"].asTstr
+                                    val eventBytes = Cbor.encode(eventDataItem)
                                     val shareManager = ShareManager()
                                     shareManager.shareDocument(
-                                        content = Cbor.toDiagnostics(
-                                            item = event.toDataItem(),
-                                            options = setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR)
-                                        ).encodeToByteArray(),
-                                        filename = "mpztestapp-event-${timeStampString}.txt",
-                                        mimeType = "text/plain",
-                                        title = "Multipaz TestApp Event recorded ${event.timestamp}"
+                                        content = eventBytes,
+                                        filename = "mpztestapp-Event-${type}-${timeStampString}.mpzevent",
+                                        mimeType = "application/vnd.multipaz.mpzevent",
+                                        title = "Multipaz Event for ${type} recorded at ${event.timestamp}"
                                     )
                                 }
                             }

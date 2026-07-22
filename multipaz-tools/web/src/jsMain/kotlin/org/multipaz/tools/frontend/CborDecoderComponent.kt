@@ -206,22 +206,29 @@ val CborDecoderComponent = FC {
                         if (copyStatus.isNotEmpty()) +copyStatus else +"Copy to Clipboard"
                     }
                 }
-                pre {
-                    css {
-                        background = Color("#020617")
-                        border = Border(1.px, LineStyle.solid, Color("#334155"))
-                        borderRadius = 8.px
-                        padding = 16.px
-                        overflow = "auto".unsafeCast<Overflow>()
-                        maxHeight = 500.px
-                    }
-                    code {
+                if (outputDiagnostics.startsWith("Error")) {
+                    pre {
                         css {
-                            fontFamily = FontFamily.monospace
-                            color = if (outputDiagnostics.startsWith("Error")) Color("#ef4444") else Color("#38bdf8")
-                            fontSize = 14.px
+                            background = Color("#020617")
+                            border = Border(1.px, LineStyle.solid, Color("#334155"))
+                            borderRadius = 8.px
+                            padding = 16.px
+                            overflow = "auto".unsafeCast<Overflow>()
+                            maxHeight = 500.px
                         }
-                        +outputDiagnostics
+                        code {
+                            css {
+                                fontFamily = FontFamily.monospace
+                                color = Color("#ef4444")
+                                fontSize = 14.px
+                            }
+                            +outputDiagnostics
+                        }
+                    }
+                } else {
+                    CborDiagnosticViewer {
+                        diagText = outputDiagnostics
+                        maxHeight = 500.px
                     }
                 }
             }

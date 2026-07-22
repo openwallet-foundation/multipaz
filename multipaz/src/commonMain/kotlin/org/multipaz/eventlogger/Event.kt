@@ -13,8 +13,13 @@ import kotlin.time.Instant
  * Any data recorded needs to be able to work on other systems (e.g. forensic analysis)
  * and in the future where e.g. the user might have deleted the document that they presented.
  *
+ * The MIME type `application/vnd.multipaz.mpzevent` can be used for serialized [Event]
+ * structures and the file extension `.mpzevent` can be used for files containing events
+ * encoded in this format. The [Multipaz Tools](http://tools.multipaz.org/) website can
+ * decode files in this format, in a privacy-preserving way.
+ *
  * As such, data should be copied into the event and use of identifiers to point to e.g.
- * documents, credentials, or trust entries is only allowed if there it's optional or not
+ * documents, credentials, or trust entries is only allowed if they're optional or not
  * the only source of truth.
  *
  * @property identifier A unique identifier for the event.
