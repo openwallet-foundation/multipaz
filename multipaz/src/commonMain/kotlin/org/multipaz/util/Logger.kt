@@ -50,9 +50,34 @@ object Logger {
          * The log level, from the lowest to the highest priority.
          */
         enum class Level {
+            /**
+             * This level contains debug information, including traces of structures that may contain PII.
+             *
+             * This is disabled by default, use [isDebugEnabled] to enable.
+             */
             DEBUG,
+
+            /**
+             * This level contains information messages which may help developers and should never contain
+             * any PII since it's enabled by default.
+             */
             INFO,
+
+            /**
+             * This level contains warning messages for unexpected conditions, recoverable failures, or non-fatal
+             * events (such as retries, fallback behavior, or degraded functionality) that do not prevent the app
+             * or operation from continuing.
+             *
+             * Like [INFO], this level is enabled by default and should never contain any PII.
+             */
             WARNING,
+
+            /**
+             * This level contains error messages for severe issues, unhandled exceptions, or unrecoverable failures
+             * where an operation or process failed to complete successfully.
+             *
+             * Like [INFO], this level is enabled by default and should never contain any PII.
+             */
             ERROR,
         }
 
@@ -62,7 +87,15 @@ object Logger {
         fun print(level: Level, tag: String, msg: String, throwable: Throwable?)
     }
 
-    var isDebugEnabled = true // TODO: make false by default
+    /**
+     * Whether to print debug messages or not.
+     *
+     * **Note**: turning on debug messages significantly increasing the amount of messages being
+     * printed and these messages may include PII. Use with caution.
+     *
+     * Note that this is process-wide so library code should never touch this.
+     */
+    var isDebugEnabled = false
 
     /**
      * Optional [LogPrinter] property for overriding the default functionality with a custom

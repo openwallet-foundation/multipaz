@@ -83,7 +83,8 @@ suspend fun Iso18013Presentment(
     if (transport.state.value != MdocTransport.State.CONNECTED) {
         throw IllegalStateException("Expected state CONNECTED but found ${transport.state.value}")
     }
-    //Logger.iCbor(TAG, "DeviceEngagement", mechanism.encodedDeviceEngagement.toByteArray())
+    Logger.dCbor(TAG, "Handover", handover)
+    Logger.dCbor(TAG, "DeviceEngagement", deviceEngagement)
     var numRequestsServed = 0
     var sendSessionTermination = true
     var sessionEncryption: SessionEncryption? = null
@@ -119,6 +120,7 @@ suspend fun Iso18013Presentment(
                     add(Tagged(Tagged.ENCODED_CBOR, Bstr(eReaderKey.encodedCoseKey)))
                     add(handover)
                 }
+                Logger.dCbor(TAG, "SessionTranscript", sessionTranscript)
                 encodedSessionTranscript = Cbor.encode(sessionTranscript)
                 sessionEncryption = SessionEncryption(
                     role = MdocRole.MDOC,
@@ -137,7 +139,6 @@ suspend fun Iso18013Presentment(
             }
 
             val deviceRequestCbor = Cbor.decode(encodedDeviceRequest!!)
-            Logger.iCbor(TAG, "DeviceRequest", deviceRequestCbor)
             val deviceRequest = DeviceRequest.fromDataItem(deviceRequestCbor)
             deviceRequest.verifyReaderAuthentication(sessionTranscript)
             val responseObject = mdocPresentment(

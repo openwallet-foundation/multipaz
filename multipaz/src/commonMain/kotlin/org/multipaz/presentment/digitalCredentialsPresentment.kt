@@ -123,9 +123,11 @@ suspend fun digitalCredentialsPresentment(
     source: PresentmentSource,
     onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
 ): JsonObject {
-    when (protocol) {
+    Logger.d(TAG, "Handling W3C DC request from origin $origin and appId ${appId ?: "<not set>"}")
+    Logger.dJson(TAG, "Request", data)
+    val response = when (protocol) {
         "openid4vp", "openid4vp-v1-unsigned", "openid4vp-v1-signed", "openid4vp-v1-multisigned" -> {
-            return digitalCredentialsOpenID4VPProtocol(
+            digitalCredentialsOpenID4VPProtocol(
                 protocol = protocol,
                 data = data,
                 appId = appId,
@@ -136,7 +138,7 @@ suspend fun digitalCredentialsPresentment(
             )
         }
         "org.iso.mdoc", "org-iso-mdoc" -> {
-            return digitalCredentialsMdocApiProtocol(
+            digitalCredentialsMdocApiProtocol(
                 protocol = protocol,
                 data = data,
                 appId = appId,
@@ -150,6 +152,8 @@ suspend fun digitalCredentialsPresentment(
             throw IllegalStateException("Protocol $protocol is not supported")
         }
     }
+    Logger.dJson(TAG, "Response", response)
+    return response
 }
 
 @OptIn(ExperimentalEncodingApi::class)
@@ -251,12 +255,11 @@ private suspend fun digitalCredentialsMdocApiProtocol(
     source: PresentmentSource,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
 ): JsonObject {
-    val arfRequest = data
-    val deviceRequestBase64 = arfRequest["deviceRequest"]!!.jsonPrimitive.content
-    val encryptionInfoBase64 = arfRequest["encryptionInfo"]!!.jsonPrimitive.content
+    val deviceRequestBase64 = data["deviceRequest"]!!.jsonPrimitive.content
+    val encryptionInfoBase64 = data["encryptionInfo"]!!.jsonPrimitive.content
 
     val encryptionInfo = Cbor.decode(encryptionInfoBase64.fromBase64Url())
-    Logger.iCbor(TAG, "encryptionInfo", encryptionInfo)
+    Logger.dCbor(TAG, "encryptionInfo", encryptionInfo)
     if (encryptionInfo.asArray[0].asTstr != "dcapi") {
         throw IllegalArgumentException("Malformed EncryptionInfo")
     }
@@ -268,7 +271,7 @@ private suspend fun digitalCredentialsMdocApiProtocol(
         add(origin)
     }
 
-    Logger.iCbor(TAG, "dcapiInfo", dcapiInfo)
+    Logger.dCbor(TAG, "dcapiInfo", dcapiInfo)
     val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
     val sessionTranscript = buildCborArray {
         add(Simple.NULL) // DeviceEngagementBytes
@@ -278,6 +281,7 @@ private suspend fun digitalCredentialsMdocApiProtocol(
             add(dcapiInfoDigest)
         }
     }
+    Logger.dCbor(TAG, "SessionTranscript", sessionTranscript)
 
     val deviceRequest = DeviceRequest.fromDataItem(Cbor.decode(deviceRequestBase64.fromBase64Url()))
     deviceRequest.verifyReaderAuthentication(sessionTranscript)
