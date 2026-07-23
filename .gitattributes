@@ -1,0 +1,4 @@
+# Kotlin rendered from the values*/strings.json resources by the lokalize plugin's
+# generateMultipazStrings task. Checked in so downstreams on non-Gradle build systems can compile
+# the source tree as-is (issue #1811); collapsed by default in diffs since it is never hand-edited.
+*/src/commonMain/generated/** linguist-generated=true

@@ -10,7 +10,8 @@ Gradle plugin for Android/Kotlin Multiplatform internationalization that enforce
 - **Build Integration**: Fails builds on missing translations (configurable)
 - **Plural Support**: Properly translates all plural quantity variants (one, other, few, many)
 - **Worker Isolation**: Uses Gradle Worker API for safe classpath isolation
-- **Code Generation**: Generates Kotlin constants from JSON resources for compile-time safe access
+- **Code Generation**: Generates Kotlin constants from JSON resources for compile-time safe access, checked into the source tree so downstreams on non-Gradle build systems can compile as-is
+- **Drift Protection**: `lokalizeCheckGenerated` (wired into `check`) fails the build if the committed generated sources fall out of sync with the JSON resources
 - **Convention Plugin**: Pre-configured settings for consistent usage across modules
 
 ## Installation
@@ -114,17 +115,40 @@ Generates missing translations using AI.
 
 ### `generateMultipazStrings` (JSON format only)
 
-Generates Kotlin code from JSON string resources for compile-time safe access.
+Renders Kotlin code from JSON string resources for compile-time safe access.
 
 ```bash
 ./gradlew :module:generateMultipazStrings
 ```
 
-- Only available when `outputFormat.set(OutputFormat.JSON)`
+- Only does anything when `outputFormat.set(OutputFormat.JSON)` (skips for XML modules)
 - Scans all `values*/strings.json` files
-- Generates Kotlin files with embedded string maps
+- Writes Kotlin files with embedded string maps into the **checked-in** source
+  directory (`generatedSourceDir`, default `src/commonMain/generated/`)
 - Creates a central access object with `getString()`, `getMapForLocale()`, and `containsKey()` methods
 - Useful for platforms where file access is unreliable (e.g., iOS)
+
+The generated Kotlin is committed to version control, not produced into `build/`
+on every compile. Compiling reads the committed sources directly and never
+regenerates. **After editing any `strings.json`, run this task and commit the
+result alongside the JSON change** — otherwise `lokalizeCheckGenerated` will fail
+(see below). This keeps the source tree compilable as-is for downstreams that
+build without Gradle (issue #1811).
+
+### `lokalizeCheckGenerated` (JSON format only)
+
+Guards against the committed generated sources drifting from the JSON resources.
+
+```bash
+./gradlew :module:lokalizeCheckGenerated
+```
+
+- Renders the Kotlin in memory and compares it against the committed files under
+  `generatedSourceDir`; fails the build (printing the exact
+  `generateMultipazStrings` command to run) if they differ
+- Wired into `check`, so `./gradlew check` — and `./gradlew build`, which CI runs
+  — enforce it on every PR. It is the only thing standing between a `strings.json`
+  edit and stale committed sources, since generation is off the compile path.
 
 **Generated API:**
 ```kotlin
@@ -155,6 +179,7 @@ val languages = GeneratedTranslations.allLanguages
 | `resourcesDir` | `Property<String>` | `"src/commonMain/composeResources"` | Resources base path |
 | `generatedTranslationsPackageName` | `Property<String>` | `"org.multipaz.doctypes.generated"` | Package for the generated `GeneratedTranslations` and per-language `Strings_*` files |
 | `stringKeysPackageName` | `Property<String>` | `"org.multipaz.doctypes.localization"` | Package for the generated `GeneratedStringKeys` object |
+| `generatedSourceDir` | `Property<String>` | `"src/commonMain/generated"` | Checked-in directory the JSON code generator writes into (empty for XML modules) |
 
 ### Output Formats
 
@@ -437,8 +462,12 @@ export LOKALIZE_API_KEY="your-key"
 export LOKALIZE_API_KEY="your-key"
 ./gradlew :multipaz-doctypes:lokalizeFix
 
-# Generate Kotlin code from JSON resources
+# Regenerate the checked-in Kotlin from the JSON resources, then commit the result
+# (both the strings.json changes and src/commonMain/generated/ together)
 ./gradlew :multipaz-doctypes:generateMultipazStrings
+
+# Verify the committed sources are in sync (also runs as part of `check`)
+./gradlew :multipaz-doctypes:lokalizeCheckGenerated
 ```
 
 ### Example: multipaz-utopia (JSON format, custom packages)
@@ -461,8 +490,9 @@ lokalize {
 
 ```bash
 ./gradlew :multipaz-utopia:lokalizeCheck
-./gradlew :multipaz-utopia:lokalizeFix      # requires LOKALIZE_API_KEY
-./gradlew :multipaz-utopia:generateMultipazStrings
+./gradlew :multipaz-utopia:lokalizeFix               # requires LOKALIZE_API_KEY
+./gradlew :multipaz-utopia:generateMultipazStrings   # then commit src/commonMain/generated/
+./gradlew :multipaz-utopia:lokalizeCheckGenerated    # verify (also part of `check`)
 ```
 
 ## CI/CD Integration
@@ -475,8 +505,11 @@ lokalize {
   env:
     LOKALIZE_API_KEY: ${{ secrets.LOKALIZE_API_KEY }}
 
-- name: Generate Code (JSON format)
-  run: ./gradlew :module:generateMultipazStrings
+# Do NOT regenerate in CI. The generated sources are committed; CI only verifies
+# they are in sync. lokalizeCheckGenerated is wired into `check`, so a plain
+# `./gradlew build` already enforces this — run it explicitly only if you skip check.
+- name: Verify Generated Sources (JSON format)
+  run: ./gradlew :module:lokalizeCheckGenerated
 ```
 
 ### GitLab CI
@@ -500,7 +533,8 @@ The plugin uses a layered architecture:
 - **TranslationWorkAction**: Runs in isolated Gradle Worker process
 - **ResourceWriter**: Merges translations preserving existing content
 - **ResourceWriterStrategy**: Interface for format-specific writing (XML/JSON)
-- **GenerateStringsTask**: Generates Kotlin code from JSON resources
+- **GenerateStringsTask**: Renders Kotlin code from JSON resources into the checked-in source tree
+- **LokalizeVerifyGeneratedTask**: Backs `lokalizeCheckGenerated`; renders in memory and fails on drift from the committed sources
 
 Worker isolation ensures classpath isolation between the plugin and project dependencies.
 
