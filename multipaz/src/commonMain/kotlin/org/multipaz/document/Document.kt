@@ -366,7 +366,7 @@ class Document internal constructor(
     private suspend fun deleteCredentialIfInvalidated(credential: Credential) {
         try {
             if (credential.isInvalidated()) {
-                Logger.i(TAG, "Deleting invalidated credential ${credential.identifier}")
+                Logger.d(TAG, "Deleting invalidated credential ${credential.identifier}")
                 deleteCredential(credential.identifier)
             }
         } catch (err: IllegalArgumentException) {
