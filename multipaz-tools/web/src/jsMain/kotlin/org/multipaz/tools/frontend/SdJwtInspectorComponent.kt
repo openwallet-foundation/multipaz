@@ -2,36 +2,46 @@
 package org.multipaz.tools.frontend
 
 import emotion.react.css
+import kotlinx.browser.window
+import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.multipaz.sdjwt.SdJwt
+import org.multipaz.sdjwt.SdJwtKb
+import org.multipaz.util.fromBase64
+import org.multipaz.util.fromBase64Url
+import org.multipaz.util.toBase64
+import org.multipaz.util.toBase64Url
+import org.multipaz.util.zlibInflate
 import react.FC
+import react.dom.html.ReactHTML.button
 import react.dom.html.ReactHTML.div
 import react.dom.html.ReactHTML.h2
 import react.dom.html.ReactHTML.h3
 import react.dom.html.ReactHTML.h4
-import react.dom.html.ReactHTML.p
-import react.dom.html.ReactHTML.button
-import react.dom.html.ReactHTML.textarea
-import react.dom.html.ReactHTML.span
+import react.dom.html.ReactHTML.img
 import react.dom.html.ReactHTML.label
-import react.dom.html.ReactHTML.table
-import react.dom.html.ReactHTML.thead
-import react.dom.html.ReactHTML.tbody
-import react.dom.html.ReactHTML.tr
-import react.dom.html.ReactHTML.th
-import react.dom.html.ReactHTML.td
+import react.dom.html.ReactHTML.p
 import react.dom.html.ReactHTML.pre
+import react.dom.html.ReactHTML.span
+import react.dom.html.ReactHTML.table
+import react.dom.html.ReactHTML.tbody
+import react.dom.html.ReactHTML.td
+import react.dom.html.ReactHTML.textarea
+import react.dom.html.ReactHTML.th
+import react.dom.html.ReactHTML.thead
+import react.dom.html.ReactHTML.tr
 import react.useState
 import web.cssom.*
-import kotlinx.coroutines.launch
-import kotlinx.serialization.json.*
-import org.multipaz.sdjwt.SdJwt
-import org.multipaz.util.fromBase64Url
-import org.multipaz.util.zlibInflate
 
 val SdJwtInspectorComponent = FC {
     var rawInput by useState("")
     var parsedSdJwt by useState<SdJwt?>(null)
+    var parsedSdJwtKb by useState<SdJwtKb?>(null)
     var parseError by useState("")
-    var showDisclosures by useState(true)
 
     div {
         css {
@@ -48,7 +58,7 @@ val SdJwtInspectorComponent = FC {
                 margin = Margin(0.px, 0.px, 16.px, 0.px)
                 color = Color("#f8fafc")
             }
-            +"SD-JWT Token Parser"
+            +"SD-JWT & SD-JWT+KB Token Parser"
         }
 
         if (parsedSdJwt != null || parseError.isNotEmpty()) {
@@ -69,6 +79,7 @@ val SdJwtInspectorComponent = FC {
                 }
                 onClick = {
                     parsedSdJwt = null
+                    parsedSdJwtKb = null
                     parseError = ""
                 }
                 +"← Clear and Go Back"
@@ -90,7 +101,7 @@ val SdJwtInspectorComponent = FC {
                     color = Color("#94a3b8")
                     marginBottom = 24.px
                 }
-                +"Decode and inspect an SD-JWT token (compact serialization). Splitting the token into the Issuer Signed JWT header/body, the individual claim Disclosures, and Key Binding signatures."
+                +"Decode and inspect SD-JWT and SD-JWT+KB tokens (compact serialization). Parses Issuer-Signed JWT header/body, individual claim Disclosures, and Key Binding JWTs (KB-JWT)."
             }
 
             label {
@@ -100,7 +111,7 @@ val SdJwtInspectorComponent = FC {
                     marginBottom = 8.px
                     color = Color("#cbd5e1")
                 }
-                +"SD-JWT Token (Compact representation ending with '~' or carrying disclosures):"
+                +"SD-JWT / SD-JWT+KB Token:"
             }
 
             textarea {
@@ -121,7 +132,7 @@ val SdJwtInspectorComponent = FC {
                     }
                 }
                 value = rawInput
-                placeholder = "Paste SD-JWT (e.g. eyJhbGciOiJFUzI1NiIs...~WyJHcTJza...~)"
+                placeholder = "Paste SD-JWT or SD-JWT+KB (e.g. eyJhbGciOiJFUzI1NiIs...~WyJHcTJza...~eyJhbG...)"
                 onChange = { rawInput = it.target.value }
             }
 
@@ -158,26 +169,44 @@ val SdJwtInspectorComponent = FC {
                                 } catch (e: Throwable) {
                                     bytes
                                 }
-                                decompressedBytes.decodeToString()
+                                decompressedBytes.decodeToString().trim()
                             }
-                            val sdjwt = SdJwt.fromCompactSerialization(token)
-                            // Eagerly evaluate properties to catch exceptions here
-                            sdjwt.issuer
-                            sdjwt.credentialType
-                            sdjwt.subject
-                            sdjwt.issuedAt
-                            sdjwt.validUntil
-                            sdjwt.digestAlg
-                            sdjwt.disclosures
-                            parsedSdJwt = sdjwt
-                            parseError = ""
+
+                            if (!token.endsWith("~")) {
+                                // Attempt parsing as SD-JWT+KB first
+                                try {
+                                    val sdJwtKb = SdJwtKb.fromCompactSerialization(token)
+                                    parsedSdJwtKb = sdJwtKb
+                                    parsedSdJwt = sdJwtKb.sdJwt
+                                    parseError = ""
+                                } catch (e1: Throwable) {
+                                    // Fallback to standard SD-JWT with appended trailing tilde
+                                    try {
+                                        val sdjwt = SdJwt.fromCompactSerialization("$token~")
+                                        parsedSdJwtKb = null
+                                        parsedSdJwt = sdjwt
+                                        parseError = ""
+                                    } catch (e2: Throwable) {
+                                        parseError = "Error parsing SD-JWT / SD-JWT+KB: ${e1.message ?: e1.toString()}"
+                                        parsedSdJwtKb = null
+                                        parsedSdJwt = null
+                                    }
+                                }
+                            } else {
+                                // Standard SD-JWT ending in '~'
+                                val sdjwt = SdJwt.fromCompactSerialization(token)
+                                parsedSdJwtKb = null
+                                parsedSdJwt = sdjwt
+                                parseError = ""
+                            }
                         } catch (e: Throwable) {
-                            parseError = "Error parsing SD-JWT: " + (e.message ?: "Unknown error")
+                            parseError = "Error parsing SD-JWT: " + (e.message ?: e.toString())
+                            parsedSdJwtKb = null
                             parsedSdJwt = null
                         }
                     }
                 }
-                +"Inspect SD-JWT"
+                +"Inspect SD-JWT / SD-JWT+KB"
             }
         }
 
@@ -187,14 +216,44 @@ val SdJwtInspectorComponent = FC {
                     marginTop = 32.px
                 }
 
-                h3 {
-                    css {
-                        fontSize = 1.4.rem
-                        fontWeight = FontWeight.bold
-                        marginBottom = 16.px
-                        color = Color("#f1f5f9")
+                div {
+                    css { display = Display.flex; justifyContent = JustifyContent.spaceBetween; alignItems = AlignItems.center; marginBottom = 16.px }
+
+                    h3 {
+                        css {
+                            fontSize = 1.4.rem
+                            fontWeight = FontWeight.bold
+                            margin = 0.px
+                            color = Color("#f1f5f9")
+                        }
+                        +"Decoded Issuer-Signed JWT"
                     }
-                    +"Decoded Issuer-Signed JWT"
+
+                    if (parsedSdJwtKb != null) {
+                        span {
+                            css {
+                                background = Color("#7c3aed")
+                                color = Color("#ffffff")
+                                fontWeight = FontWeight.bold
+                                padding = Padding(6.px, 12.px)
+                                borderRadius = 6.px
+                                fontSize = 13.px
+                            }
+                            +"SD-JWT+KB (Key Binding Detected)"
+                        }
+                    } else {
+                        span {
+                            css {
+                                background = Color("#2563eb")
+                                color = Color("#ffffff")
+                                fontWeight = FontWeight.bold
+                                padding = Padding(6.px, 12.px)
+                                borderRadius = 6.px
+                                fontSize = 13.px
+                            }
+                            +"SD-JWT (Issuer Signed)"
+                        }
+                    }
                 }
 
                 div {
@@ -319,6 +378,76 @@ val SdJwtInspectorComponent = FC {
                     }
                 }
 
+                // KB-JWT (Key Binding JWT) Section if SD-JWT+KB
+                parsedSdJwtKb?.let { kb ->
+                    div {
+                        css {
+                            background = Color("#0f172a")
+                            border = Border(1.px, LineStyle.solid, Color("#7c3aed"))
+                            borderRadius = 12.px
+                            padding = 24.px
+                            marginBottom = 32.px
+                        }
+
+                        h3 {
+                            css { fontSize = 1.3.rem; color = Color("#a78bfa"); marginTop = 0.px; marginBottom = 12.px }
+                            +"🔐 Key Binding JWT (KB-JWT Payload)"
+                        }
+
+                        p {
+                            css { color = Color("#94a3b8"); fontSize = 13.px; marginBottom = 16.px }
+                            +"Claims signed by the device-bound key to bind the credential to the verifier session:"
+                        }
+
+                        pre {
+                            css {
+                                background = Color("#1e293b")
+                                border = Border(1.px, LineStyle.solid, Color("#475569"))
+                                borderRadius = 8.px
+                                color = Color("#38bdf8")
+                                fontSize = 13.px
+                                fontFamily = FontFamily.monospace
+                                padding = 14.px
+                                overflowX = "auto".unsafeCast<Overflow>()
+                                marginBottom = 16.px
+                            }
+                            +Json { prettyPrint = true }.encodeToString(kb.jwtBody)
+                        }
+
+                        div {
+                            css { display = Display.flex; flexDirection = FlexDirection.column; gap = 8.px; fontSize = 13.px }
+
+                            kb.jwtBody["nonce"]?.jsonPrimitive?.content?.let { nonceVal ->
+                                div {
+                                    span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Nonce: " }
+                                    span { css { color = Color("#4ade80"); fontFamily = FontFamily.monospace }; +nonceVal }
+                                }
+                            }
+
+                            kb.jwtBody["aud"]?.jsonPrimitive?.content?.let { audVal ->
+                                div {
+                                    span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Audience (aud): " }
+                                    span { css { color = Color("#f1f5f9") }; +audVal }
+                                }
+                            }
+
+                            kb.jwtBody["iat"]?.jsonPrimitive?.content?.let { iatVal ->
+                                div {
+                                    span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Issued At (iat): " }
+                                    span { css { color = Color("#cbd5e1") }; +iatVal }
+                                }
+                            }
+
+                            kb.jwtBody["sd_hash"]?.jsonPrimitive?.content?.let { sdHashVal ->
+                                div {
+                                    span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"SD Hash (sd_hash): " }
+                                    span { css { color = Color("#38bdf8"); fontFamily = FontFamily.monospace }; +sdHashVal }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Disclosures Table
                 if (sdjwt.disclosures.isNotEmpty()) {
                     h3 {
@@ -370,7 +499,64 @@ val SdJwtInspectorComponent = FC {
                                     td { css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); color = Color("#64748b") }; +(index + 1).toString() }
                                     td { css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontFamily = FontFamily.monospace; fontSize = 12.px; color = Color("#cbd5e1") }; +decoded.first }
                                     td { css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontWeight = FontWeight.bold; color = Color("#38bdf8") }; +decoded.second }
-                                    td { css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontFamily = FontFamily.monospace; color = Color("#34d399") }; +decoded.third }
+                                    td {
+                                        css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontFamily = FontFamily.monospace; color = Color("#34d399") }
+                                        
+                                        val claimName = decoded.second
+                                        val claimValRaw = decoded.third
+                                        val claimValueStr = claimValRaw.removeSurrounding("\"")
+
+                                        val imgUri = if (claimName.equals("picture", ignoreCase = true) && claimValueStr.length > 500) {
+                                            if (claimValueStr.startsWith("data:image/")) {
+                                                claimValueStr
+                                            } else {
+                                                try {
+                                                    val bytes = try {
+                                                        claimValueStr.fromBase64()
+                                                    } catch (e1: Throwable) {
+                                                        try {
+                                                            claimValueStr.fromBase64Url()
+                                                        } catch (e2: Throwable) {
+                                                            null
+                                                        }
+                                                    }
+
+                                                    if (bytes != null && bytes.size >= 3 && (bytes[0].toInt() and 0xFF) == 0xFF && (bytes[1].toInt() and 0xFF) == 0xD8 && (bytes[2].toInt() and 0xFF) == 0xFF) {
+                                                        "data:image/jpeg;base64,${bytes.toBase64()}"
+                                                    } else if (bytes != null && bytes.size >= 4 && (bytes[0].toInt() and 0xFF) == 0x89 && (bytes[1].toInt() and 0xFF) == 0x50 && (bytes[2].toInt() and 0xFF) == 0x4E && (bytes[3].toInt() and 0xFF) == 0x47) {
+                                                        "data:image/png;base64,${bytes.toBase64()}"
+                                                    } else {
+                                                        null
+                                                    }
+                                                } catch (e: Throwable) {
+                                                    null
+                                                }
+                                            }
+                                        } else {
+                                            null
+                                        }
+
+                                        if (imgUri != null) {
+                                            img {
+                                                src = imgUri
+                                                css {
+                                                    maxWidth = 180.px
+                                                    maxHeight = 220.px
+                                                    borderRadius = 8.px
+                                                    border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                                    boxShadow = BoxShadow(0.px, 2.px, 6.px, Color("rgba(0,0,0,0.3)"))
+                                                    display = Display.block
+                                                    marginBottom = 8.px
+                                                }
+                                            }
+                                            div {
+                                                css { fontSize = 11.px; color = Color("#64748b"); fontFamily = FontFamily.monospace }
+                                                +"${claimValueStr.take(64)}..."
+                                            }
+                                        } else {
+                                            +decoded.third
+                                        }
+                                    }
                                 }
                             }
                         }
