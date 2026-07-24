@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
  * @param heading will be shown in bold at the top.
  * @param content will be shown below the heading.
  * @param modifier a [Modifier].
+ * @param showChevron whether to show a right chevron icon on the right side.
  * @param image optional image, shown to the left of the text.
  * @param trailingContent optional trailing content.
  */
@@ -26,10 +27,14 @@ fun FloatingItemHeadingAndContent(
     heading: String,
     content: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    showChevron: Boolean = false,
     image: @Composable () -> Unit = {},
     trailingContent: @Composable () -> Unit = {},
 ) {
-    FloatingItemContainer(modifier = modifier) {
+    FloatingItemContainer(
+        modifier = modifier,
+        showChevron = showChevron,
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp, alignment = Alignment.Start),
