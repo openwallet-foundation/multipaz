@@ -5,6 +5,7 @@ import org.multipaz.claim.MdocClaim
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.TransactionType
 import org.multipaz.presentment.TransactionData
+import org.multipaz.revocation.RevocationStatus
 import kotlin.time.Instant
 
 /**
@@ -27,5 +28,6 @@ data class MdocVerifiedPresentation(
     val docType: String,
     val transactionResponses: Map<String, Map<String, DataItem>>?,
     override val vpTokenIdentifier: String?,
-    override val transactionData: List<TransactionData<*>>
+    override val transactionData: List<TransactionData<*>>,
+    override val revocationStatus: RevocationStatus? = null,
 ): VerifiedPresentation()

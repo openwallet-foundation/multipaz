@@ -886,7 +886,8 @@ object VerificationUtil {
             vct = vct,
             transactionResponses = transactionResults,
             vpTokenIdentifier = identifier,
-            transactionData = transactionData
+            transactionData = transactionData,
+            revocationStatus = sdJwt.revocationStatus
         )
     }
 
@@ -1018,7 +1019,8 @@ object VerificationUtil {
                     docType = document.docType,
                     transactionResponses = transactionResponses.ifEmpty { null },
                     vpTokenIdentifier = vpTokenIdentifier,
-                    transactionData = document.transactionData
+                    transactionData = document.transactionData,
+                    revocationStatus = document.mso.revocationStatus
                 )
             )
         }
