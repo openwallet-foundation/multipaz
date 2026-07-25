@@ -3,6 +3,7 @@ package org.multipaz.verification
 import org.multipaz.claim.Claim
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.presentment.TransactionData
+import org.multipaz.revocation.RevocationStatus
 import kotlin.time.Instant
 
 /**
@@ -24,6 +25,7 @@ import kotlin.time.Instant
  *   OpenID4VP is in use
  * @property transactionData transaction data that were sent in the presentation request,
  *   acknowledged in the response (with the acknowledgement verified).
+ * @property revocationStatus the revocation status, if present.
  */
 sealed class VerifiedPresentation() {
     abstract val documentSignerCertChain: X509CertChain?
@@ -36,4 +38,5 @@ sealed class VerifiedPresentation() {
     abstract val expectedUpdate: Instant?
     abstract val vpTokenIdentifier: String?
     abstract val transactionData: List<TransactionData<*>>
+    abstract val revocationStatus: RevocationStatus?
 }
