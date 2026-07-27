@@ -17,7 +17,8 @@ package org.multipaz.util
 
 import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import kotlin.time.Clock
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -241,51 +242,73 @@ object Logger {
         hex(Level.ERROR, tag, message, data)
     }
 
-    private fun cbor(level: Level, tag: String, message: String, encodedCbor: ByteArray) {
-        val sb = "$message: ${encodedCbor.size} bytes of CBOR: " + encodedCbor.toHex() +
+    private fun cbor(
+        level: Level,
+        tag: String,
+        message: String,
+        encodedCbor: ByteArray? = null,
+        dataItem: DataItem? = null
+    ) {
+        val bytes = encodedCbor ?: Cbor.encode(dataItem!!)
+        val cdnString = try {
+            if (dataItem != null) {
+                Cdn.encode(dataItem, CdnGeneratorOptions.Pretty)
+            } else {
+                Cdn.encode(bytes, CdnGeneratorOptions.Pretty)
+            }
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            if (encodedCbor != null) {
+                printLine(
+                    Level.WARNING,
+                    tag,
+                    "$message: ${encodedCbor.size} bytes of invalid CBOR: ${encodedCbor.toHex()}",
+                    e
+                )
+            }
+            throw e
+        }
+        val sb = "$message: ${bytes.size} bytes of CBOR: " + bytes.toHex() +
                 "\n" +
                 "In diagnostic notation:\n" +
-                Cbor.toDiagnostics(
-                    encodedCbor,
-                    setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR)
-                )
+                cdnString
         printLine(level, tag, sb, null)
     }
 
     fun dCbor(tag: String, message: String, encodedCbor: ByteArray) {
         if (isDebugEnabled) {
-            cbor(Level.DEBUG, tag, message, encodedCbor)
+            cbor(Level.DEBUG, tag, message, encodedCbor = encodedCbor)
         }
     }
 
     fun iCbor(tag: String, message: String, encodedCbor: ByteArray) {
-        cbor(Level.INFO, tag, message, encodedCbor)
+        cbor(Level.INFO, tag, message, encodedCbor = encodedCbor)
     }
 
     fun wCbor(tag: String, message: String, encodedCbor: ByteArray) {
-        cbor(Level.WARNING, tag, message, encodedCbor)
+        cbor(Level.WARNING, tag, message, encodedCbor = encodedCbor)
     }
 
     fun eCbor(tag: String, message: String, encodedCbor: ByteArray) {
-        cbor(Level.ERROR, tag, message, encodedCbor)
+        cbor(Level.ERROR, tag, message, encodedCbor = encodedCbor)
     }
 
     fun dCbor(tag: String, message: String, dataItem: DataItem) {
         if (isDebugEnabled) {
-            cbor(Level.DEBUG, tag, message, Cbor.encode(dataItem))
+            cbor(Level.DEBUG, tag, message, dataItem = dataItem)
         }
     }
 
     fun iCbor(tag: String, message: String, dataItem: DataItem) {
-        cbor(Level.INFO, tag, message, Cbor.encode(dataItem))
+        cbor(Level.INFO, tag, message, dataItem = dataItem)
     }
 
     fun wCbor(tag: String, message: String, dataItem: DataItem) {
-        cbor(Level.WARNING, tag, message, Cbor.encode(dataItem))
+        cbor(Level.WARNING, tag, message, dataItem = dataItem)
     }
 
     fun eCbor(tag: String, message: String, dataItem: DataItem) {
-        cbor(Level.ERROR, tag, message, Cbor.encode(dataItem))
+        cbor(Level.ERROR, tag, message, dataItem = dataItem)
     }
 
     @OptIn(ExperimentalSerializationApi::class)
