@@ -219,12 +219,8 @@ publishing {
     }
 }
 
-tasks.configureEach {
-    if (name == "androidReleaseSourcesJar") {
-        dependsOn("generateMultipazStrings")
-    }
-}
-
+// multipaz-compose keeps its translations as Compose Resources (strings.xml), so lokalize only
+// validates and AI-fills them here - it generates no Kotlin (outputFormat defaults to XML).
 lokalize {
     resourcesDir.set("src/commonMain/composeResources")
 }
