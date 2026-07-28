@@ -41,6 +41,8 @@ fun pathToTab(path: String): String {
         "/deviceRequest" -> "device-request-parse"
         "/iso18013-7-annex-c" -> "annex-c-parse"
         "/annexC" -> "annex-c-parse"
+        "/iso18013-7-verifier" -> "iso18013-7-verifier"
+        "/verifier" -> "iso18013-7-verifier"
         "/msoNamespaces" -> "mso-namespaces-view"
         "/sdjwt" -> "sd-jwt-inspect"
         "/compress" -> "compress"
@@ -63,6 +65,7 @@ fun tabToPath(tab: String): String {
         "mdoc-view" -> "/mdocDeviceResponse"
         "device-request-parse" -> "/mdocDeviceRequest"
         "annex-c-parse" -> "/iso18013-7-annex-c"
+        "iso18013-7-verifier" -> "/iso18013-7-verifier"
         "mso-namespaces-view" -> "/msoNamespaces"
         "sd-jwt-inspect" -> "/sdjwt"
         "compress" -> "/compress"
@@ -166,6 +169,7 @@ val App = FC {
                     "ndef-parse" to "NDEF Parser"
                 )),
                 Category("identity", "ISO mdoc & SD-JWT", listOf(
+                    "iso18013-7-verifier" to "ISO 18013-7 Verifier",
                     "mdoc-view" to "ISO mdoc DeviceResponse Parser",
                     "device-request-parse" to "ISO mdoc DeviceRequest Parser",
                     "annex-c-parse" to "ISO 18013-7 Annex C Parser",
@@ -291,6 +295,7 @@ val App = FC {
             }
 
             when (activeTab) {
+                "iso18013-7-verifier" -> Iso180137VerifierComponent {}
                 "cbor-decode" -> CborDecoderComponent {}
                 "mdoc-view" -> MdocViewerComponent {}
                 "device-request-parse" -> DeviceRequestParserComponent {}

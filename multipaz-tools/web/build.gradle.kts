@@ -34,6 +34,8 @@ kotlin {
                 dependencies {
                     implementation(project(":multipaz"))
                     implementation(project(":multipaz-doctypes"))
+                    implementation(project(":multipaz-utopia"))
+                    implementation(project(":multipaz-longfellow"))
                     implementation(libs.kotlinx.coroutines.core)
                     implementation(libs.kotlinx.datetime)
                     implementation(libs.kotlinx.serialization.json)
