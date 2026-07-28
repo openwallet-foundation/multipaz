@@ -161,7 +161,7 @@ val App = FC {
 
             val categories = listOf(
                 Category("decoders", "Decoders & Parsers", listOf(
-                    "cbor-decode" to "CBOR Decoder",
+                    "cbor-decode" to "CBOR and CDN",
                     "asn1" to "ASN.1 Decoder",
                     "ndef-parse" to "NDEF Parser"
                 )),
