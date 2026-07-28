@@ -18,7 +18,7 @@ private class NfcIsoTagUsb(
     private val driver: CcidDriver,
 ): NfcIsoTag() {
     override val maxTransceiveLength: Int
-        get() = 0xfeff
+        get() = driver.maxCommandLength
 
     override suspend fun transceive(command: CommandApdu): ResponseApdu {
         val commandApduBytes = command.encode()
@@ -44,6 +44,7 @@ private class NfcIsoTagUsb(
 internal class NfcTagReaderUsb(
     private val manager: UsbManager,
     private val device: UsbDevice,
+    private val interfaceIndex: Int,
 ): NfcTagReader {
     override val external: Boolean
         get() = true
@@ -62,14 +63,15 @@ internal class NfcTagReaderUsb(
     ): T {
         val driver = CcidDriver(
             usbManager = manager,
-            device = device
+            device = device,
+            interfaceIndex = interfaceIndex
         )
         driver.connect()
         try {
             val result = suspendCancellableCoroutine<T> { continuation ->
                 var readJob: Job? = null
 
-                driver.setListener(listener = object : CcidDriverListener {
+                val listener = object : CcidDriverListener {
                     override fun onCardInserted() {
                         Logger.i(TAG, "Card inserted")
                         if (readJob == null) {
@@ -96,14 +98,24 @@ internal class NfcTagReaderUsb(
                     override fun onCardRemoved() {
                         Logger.i(TAG, "Card removed")
                     }
-                })
+                }
+
+                driver.setListener(listener = listener)
+
+                try {
+                    val status = driver.getCardStatus()
+                    if (status == CardStatus.PRESENT_ACTIVE || status == CardStatus.PRESENT_INACTIVE) {
+                        listener.onCardInserted()
+                    }
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to query initial card status", e)
+                }
 
                 continuation.invokeOnCancellation {
                     readJob?.cancel()
                     driver.disconnect()
                 }
             }
-            driver.disconnect()
             return result
         } catch (e: Exception) {
             if (e is CancellationException) throw e
