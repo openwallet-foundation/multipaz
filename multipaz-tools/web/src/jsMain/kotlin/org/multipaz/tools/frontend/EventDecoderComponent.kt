@@ -58,6 +58,7 @@ import react.dom.html.ReactHTML.th
 import react.dom.html.ReactHTML.thead
 import react.dom.html.ReactHTML.tr
 import react.useState
+import react.useEffectOnce
 import web.cssom.*
 import web.file.File
 import web.file.FileReader
@@ -87,6 +88,34 @@ val EventDecoderComponent: FC<Props> = FC {
     var parseError by useState("")
     var fileName by useState("")
     var copyEventHexStatus by useState("")
+
+    fun decodeInput(inputStr: String) {
+        val cleanInput = inputStr.trim()
+        if (cleanInput.isEmpty()) return
+        mainScope.launch {
+            try {
+                val bytes = decodeInputToBytes(cleanInput)
+                val res = parseEventFromBytes(bytes)
+                parsedEventHolder = res.first?.let { EventHolder(it) }
+                parseError = res.second
+                if (fileName.isEmpty()) fileName = "Input Payload"
+                if (res.first != null) {
+                    updateUrlHashPayload(cleanInput)
+                }
+            } catch (e: Throwable) {
+                parseError = "Error reading input: " + (e.message ?: "Invalid format")
+                parsedEventHolder = null
+            }
+        }
+    }
+
+    useEffectOnce {
+        val hashPayload = getUrlHashPayload()
+        if (hashPayload.isNotEmpty()) {
+            rawInput = hashPayload
+            decodeInput(hashPayload)
+        }
+    }
 
     val parsedEvent = parsedEventHolder?.event
 
@@ -134,6 +163,8 @@ val EventDecoderComponent: FC<Props> = FC {
                         parsedEventHolder = null
                         parseError = ""
                         fileName = ""
+                        rawInput = ""
+                        updateUrlHashPayload("")
                     }
                     +"← Clear and Decode Another Event"
                 }
@@ -299,18 +330,7 @@ val EventDecoderComponent: FC<Props> = FC {
                 }
                 disabled = rawInput.trim().isEmpty()
                 onClick = {
-                    mainScope.launch {
-                        try {
-                            val bytes = decodeInputToBytes(rawInput)
-                            val res = parseEventFromBytes(bytes)
-                            parsedEventHolder = res.first?.let { EventHolder(it) }
-                            parseError = res.second
-                            fileName = "Pasted Input"
-                        } catch (e: Throwable) {
-                            parseError = "Error reading input: " + (e.message ?: "Invalid format")
-                            parsedEventHolder = null
-                        }
-                    }
+                    decodeInput(rawInput)
                 }
                 +"Decode Event"
             }

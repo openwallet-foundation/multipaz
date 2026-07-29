@@ -10,7 +10,15 @@ import react.dom.html.ReactHTML.textarea
 import react.dom.html.ReactHTML.label
 import react.dom.html.ReactHTML.pre
 import react.dom.html.ReactHTML.code
+import react.dom.html.ReactHTML.input
 import react.useState
+import react.useEffectOnce
+import js.typedarrays.Int8Array
+import js.typedarrays.toByteArray
+import org.multipaz.util.toHex
+import web.file.File
+import web.file.FileReader
+import web.html.InputType
 import web.cssom.*
 import kotlinx.browser.window
 import org.multipaz.asn1.ASN1
@@ -19,6 +27,35 @@ val Asn1DecoderComponent = FC {
     var rawInput by useState("")
     var outputText by useState("")
     var copyStatus by useState("")
+
+    fun decodeInput(inputStr: String) {
+        val cleanInput = inputStr.trim()
+        if (cleanInput.isEmpty()) return
+        try {
+            val bytes = decodeInputToBytes(cleanInput)
+            if (bytes.isEmpty()) {
+                outputText = "Input is empty"
+            } else {
+                val objects = ASN1.decodeMultiple(bytes)
+                if (objects.isEmpty()) {
+                    outputText = "No ASN.1 objects decoded."
+                } else {
+                    outputText = objects.joinToString("\n") { ASN1.print(it) }
+                    updateUrlHashPayload(cleanInput)
+                }
+            }
+        } catch (e: Exception) {
+            outputText = "Error decoding: " + (e.message ?: "Unknown decoding error")
+        }
+    }
+
+    useEffectOnce {
+        val hashPayload = getUrlHashPayload()
+        if (hashPayload.isNotEmpty()) {
+            rawInput = hashPayload
+            decodeInput(hashPayload)
+        }
+    }
 
     div {
         css {
@@ -46,14 +83,64 @@ val Asn1DecoderComponent = FC {
             +"Decode raw ASN.1 DER bytes (represented as Hex or Base64 / Base64Url) to a human-readable structure tree."
         }
 
-        label {
+        div {
             css {
-                display = Display.block
-                fontWeight = FontWeight.normal
+                display = Display.flex
+                justifyContent = JustifyContent.spaceBetween
+                alignItems = AlignItems.center
                 marginBottom = 8.px
-                color = Color("#cbd5e1")
             }
-            +"ASN.1 Raw Data (Hex, Base64 or Base64Url):"
+
+            label {
+                css {
+                    fontWeight = FontWeight.normal
+                    color = Color("#cbd5e1")
+                }
+                +"ASN.1 Raw Data (Hex, Base64 or Base64Url):"
+            }
+
+            label {
+                css {
+                    background = Color("#334155")
+                    border = None.none
+                    color = Color("#f1f5f9")
+                    padding = Padding(4.px, 12.px)
+                    borderRadius = 6.px
+                    cursor = Cursor.pointer
+                    fontSize = 13.px
+                    fontWeight = FontWeight.normal
+                    hover {
+                        background = Color("#475569")
+                    }
+                }
+                +"📁 Load data"
+                input {
+                    type = "file".unsafeCast<InputType>()
+                    accept = ".asn1,.der,.bin,.hex,.txt,*/*"
+                    css {
+                        display = None.none
+                    }
+                    onChange = { event ->
+                        val fileList = event.target.asDynamic().files
+                        if (fileList != null && fileList.length > 0) {
+                            val file = fileList[0].unsafeCast<File>()
+                            val reader = FileReader()
+                            reader.asDynamic().onload = {
+                                val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
+                                val bytes = Int8Array(arrayBuffer).toByteArray()
+                                val text = bytes.decodeToString()
+                                if (text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
+                                    rawInput = text.trim()
+                                } else {
+                                    rawInput = bytes.toHex()
+                                }
+                                outputText = ""
+                            }
+                            reader.readAsArrayBuffer(file)
+                        }
+                    }
+                }
+            }
         }
 
         textarea {
@@ -99,21 +186,7 @@ val Asn1DecoderComponent = FC {
             }
             disabled = rawInput.trim().isEmpty()
             onClick = {
-                try {
-                    val bytes = decodeInputToBytes(rawInput)
-                    if (bytes.isEmpty()) {
-                        outputText = "Input is empty"
-                    } else {
-                        val objects = ASN1.decodeMultiple(bytes)
-                        if (objects.isEmpty()) {
-                            outputText = "No ASN.1 objects decoded."
-                        } else {
-                            outputText = objects.joinToString("\n") { ASN1.print(it) }
-                        }
-                    }
-                } catch (e: Exception) {
-                    outputText = "Error decoding: " + (e.message ?: "Unknown decoding error")
-                }
+                decodeInput(rawInput)
             }
             +"Decode ASN.1"
         }

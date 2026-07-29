@@ -37,6 +37,7 @@ import react.dom.html.ReactHTML.th
 import react.dom.html.ReactHTML.thead
 import react.dom.html.ReactHTML.tr
 import react.useState
+import react.useEffectOnce
 import web.cssom.*
 import web.file.File
 import web.file.FileReader
@@ -223,6 +224,33 @@ val DeviceRequestParserComponent: FC<Props> = FC {
     var copyHexStatus by useState("")
     var copyDiagStatus by useState("")
 
+    fun parseInput(inputStr: String) {
+        val cleanInput = inputStr.trim()
+        if (cleanInput.isEmpty()) return
+        mainScope.launch {
+            try {
+                val bytes = decodeInputToBytes(cleanInput)
+                val dataItem = Cbor.decode(bytes)
+                val devReq = DeviceRequest.fromDataItem(dataItem)
+                parsedResult = ParsedRequestResult(devReq, dataItem, bytes.toHex())
+                parseError = ""
+                if (fileName.isEmpty()) fileName = "Input Payload"
+                updateUrlHashPayload(cleanInput)
+            } catch (e: Throwable) {
+                parseError = "Error parsing DeviceRequest: " + (e.message ?: "Invalid structure")
+                parsedResult = null
+            }
+        }
+    }
+
+    useEffectOnce {
+        val hashPayload = getUrlHashPayload()
+        if (hashPayload.isNotEmpty()) {
+            rawInput = hashPayload
+            parseInput(hashPayload)
+        }
+    }
+
     div {
         css {
             background = Color("#1e293b")
@@ -267,6 +295,8 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                         parsedResult = null
                         parseError = ""
                         fileName = ""
+                        rawInput = ""
+                        updateUrlHashPayload("")
                     }
                     +"← Clear and Decode Another Request"
                 }
@@ -493,19 +523,7 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                 }
                 disabled = rawInput.trim().isEmpty()
                 onClick = {
-                    mainScope.launch {
-                        try {
-                            val bytes = decodeInputToBytes(rawInput)
-                            val dataItem = Cbor.decode(bytes)
-                            val devReq = DeviceRequest.fromDataItem(dataItem)
-                            parsedResult = ParsedRequestResult(devReq, dataItem, bytes.toHex())
-                            parseError = ""
-                            if (fileName.isEmpty()) fileName = "Pasted Input"
-                        } catch (e: Throwable) {
-                            parseError = "Error parsing DeviceRequest: " + (e.message ?: "Invalid structure")
-                            parsedResult = null
-                        }
-                    }
+                    parseInput(rawInput)
                 }
                 +"Decode DeviceRequest"
             }

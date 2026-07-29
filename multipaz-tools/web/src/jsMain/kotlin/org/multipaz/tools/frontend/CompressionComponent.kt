@@ -10,7 +10,13 @@ import react.dom.html.ReactHTML.textarea
 import react.dom.html.ReactHTML.label
 import react.dom.html.ReactHTML.select
 import react.dom.html.ReactHTML.option
+import react.dom.html.ReactHTML.input
 import react.useState
+import react.useEffectOnce
+import js.typedarrays.Int8Array
+import js.typedarrays.toByteArray
+import web.file.File
+import web.file.FileReader
 import web.cssom.*
 import web.html.InputType
 import kotlinx.coroutines.launch
@@ -31,6 +37,67 @@ val CompressionComponent = FC {
     var operation by useState("compress") // "compress" or "decompress"
     var inputFormat by useState("hex") // "hex" or "base64" or "utf8"
     var outputFormat by useState("hex") // "hex" or "base64" or "utf8"
+
+    fun processCompression(inputStr: String) {
+        val cleanInput = inputStr.trim()
+        if (cleanInput.isEmpty()) return
+        mainScope.launch {
+            try {
+                val inputBytes = when (inputFormat) {
+                    "utf8" -> cleanInput.encodeToByteArray()
+                    "base64" -> cleanInput.fromBase64()
+                    else -> {
+                        try {
+                            decodeInputToBytes(cleanInput)
+                        } catch (e: Exception) {
+                            cleanInput.encodeToByteArray()
+                        }
+                    }
+                }
+
+                if (inputBytes.isEmpty()) {
+                    parseError = "Input data is empty"
+                    outputResult = ""
+                    return@launch
+                }
+
+                val processedBytes = if (operation == "compress") {
+                    if (method == "zlib") {
+                        inputBytes.zlibDeflate()
+                    } else {
+                        inputBytes.deflate()
+                    }
+                } else {
+                    if (method == "zlib") {
+                        inputBytes.zlibInflate()
+                    } else {
+                        inputBytes.inflate()
+                    }
+                }
+
+                val resultStr = when (outputFormat) {
+                    "utf8" -> processedBytes.decodeToString()
+                    "base64" -> processedBytes.toBase64()
+                    else -> processedBytes.toHex()
+                }
+
+                outputResult = resultStr
+                parseError = ""
+                updateUrlHashPayload(cleanInput)
+            } catch (e: Throwable) {
+                parseError = "Processing error: " + (e.message ?: "Unknown error")
+                outputResult = ""
+            }
+        }
+    }
+
+    useEffectOnce {
+        val hashPayload = getUrlHashPayload()
+        if (hashPayload.isNotEmpty()) {
+            rawInput = hashPayload
+            processCompression(hashPayload)
+        }
+    }
 
     div {
         css {
@@ -69,6 +136,8 @@ val CompressionComponent = FC {
                 onClick = {
                     outputResult = ""
                     parseError = ""
+                    rawInput = ""
+                    updateUrlHashPayload("")
                 }
                 +"← Clear and Go Back"
             }
@@ -130,14 +199,63 @@ val CompressionComponent = FC {
                 +"Compress or decompress binary payloads using DEFLATE (RFC 1951) or zlib (RFC 1950) wrappers. Input can be parsed from hex or base64, and output is generated in your preferred format."
             }
 
-            label {
+            div {
                 css {
-                    display = Display.block
-                    fontWeight = FontWeight.bold
+                    display = Display.flex
+                    justifyContent = JustifyContent.spaceBetween
+                    alignItems = AlignItems.center
                     marginBottom = 8.px
-                    color = Color("#cbd5e1")
                 }
-                +"Input Payload:"
+
+                label {
+                    css {
+                        fontWeight = FontWeight.bold
+                        color = Color("#cbd5e1")
+                    }
+                    +"Input Payload:"
+                }
+
+                label {
+                    css {
+                        background = Color("#334155")
+                        border = None.none
+                        color = Color("#f1f5f9")
+                        padding = Padding(4.px, 12.px)
+                        borderRadius = 6.px
+                        cursor = Cursor.pointer
+                        fontSize = 13.px
+                        fontWeight = FontWeight.normal
+                        hover {
+                            background = Color("#475569")
+                        }
+                    }
+                    +"📁 Load data"
+                    input {
+                        type = "file".unsafeCast<InputType>()
+                        accept = ".bin,.hex,.txt,*/*"
+                        css {
+                            display = None.none
+                        }
+                        onChange = { event ->
+                            val fileList = event.target.asDynamic().files
+                            if (fileList != null && fileList.length > 0) {
+                                val file = fileList[0].unsafeCast<File>()
+                                val reader = FileReader()
+                                reader.asDynamic().onload = {
+                                    val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
+                                    val bytes = Int8Array(arrayBuffer).toByteArray()
+                                    val text = bytes.decodeToString()
+                                    if (text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
+                                        rawInput = text.trim()
+                                    } else {
+                                        rawInput = bytes.toHex()
+                                    }
+                                }
+                                reader.readAsArrayBuffer(file)
+                            }
+                        }
+                    }
+                }
             }
 
             textarea {
@@ -325,54 +443,7 @@ val CompressionComponent = FC {
                 }
                 disabled = rawInput.trim().isEmpty()
                 onClick = {
-                    mainScope.launch {
-                        try {
-                            val cleanInput = rawInput.trim()
-                            val inputBytes = when (inputFormat) {
-                                "utf8" -> cleanInput.encodeToByteArray()
-                                "base64" -> cleanInput.fromBase64()
-                                else -> {
-                                    try {
-                                        decodeInputToBytes(cleanInput)
-                                    } catch (e: Exception) {
-                                        cleanInput.encodeToByteArray()
-                                    }
-                                }
-                            }
-
-                            if (inputBytes.isEmpty()) {
-                                parseError = "Input data is empty"
-                                outputResult = ""
-                                return@launch
-                            }
-
-                            val processedBytes = if (operation == "compress") {
-                                if (method == "zlib") {
-                                    inputBytes.zlibDeflate()
-                                } else {
-                                    inputBytes.deflate()
-                                }
-                            } else {
-                                if (method == "zlib") {
-                                    inputBytes.zlibInflate()
-                                } else {
-                                    inputBytes.inflate()
-                                }
-                            }
-
-                            val resultStr = when (outputFormat) {
-                                "utf8" -> processedBytes.decodeToString()
-                                "base64" -> processedBytes.toBase64()
-                                else -> processedBytes.toHex()
-                            }
-
-                            outputResult = resultStr
-                            parseError = ""
-                        } catch (e: Throwable) {
-                            parseError = "Processing error: " + (e.message ?: "Unknown error")
-                            outputResult = ""
-                        }
-                    }
+                    processCompression(rawInput)
                 }
                 +(if (operation == "compress") "Compress Payload" else "Decompress Payload")
             }

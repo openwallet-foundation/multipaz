@@ -14,6 +14,7 @@ import react.dom.html.ReactHTML.input
 import react.dom.html.ReactHTML.select
 import react.dom.html.ReactHTML.option
 import react.useState
+import react.useEffectOnce
 import web.cssom.*
 import web.file.File
 import web.file.FileReader
@@ -42,6 +43,52 @@ val CborDecoderComponent = FC {
     var copyStatus by useState("")
     var copyHexStatus by useState("")
     var copyB64Status by useState("")
+
+    fun processInput(inputStr: String) {
+        val cleanInput = inputStr.trim()
+        if (cleanInput.isEmpty()) return
+        if (mode == "decode") {
+            try {
+                val bytes = decodeInputToBytes(cleanInput)
+                if (bytes.isEmpty()) {
+                    outputDiagnostics = "Input is empty"
+                } else {
+                    val options = CdnGeneratorOptions(
+                        prettyPrint = prettyPrint,
+                        useEmbeddedCborShorthand = decodeEmbeddedCbor,
+                        useApplicationExtensions = useAppExtensions,
+                        sortMapKeys = sortKeys,
+                        byteStringFormat = bstrFormat
+                    )
+                    outputDiagnostics = Cdn.encode(bytes, options)
+                    updateUrlHashPayload(cleanInput)
+                }
+            } catch (e: Exception) {
+                outputDiagnostics = "Error decoding: " + (e.message ?: "Unknown decoding error")
+            }
+        } else {
+            try {
+                val item = Cdn.parse(cleanInput)
+                val encodedBytes = Cbor.encode(item)
+                outputHex = encodedBytes.toHex()
+                outputB64Url = encodedBytes.toBase64Url()
+                outputDiagnostics = ""
+                updateUrlHashPayload(cleanInput)
+            } catch (e: Exception) {
+                outputDiagnostics = "Error parsing CDN: " + (e.message ?: "Unknown syntax error")
+                outputHex = ""
+                outputB64Url = ""
+            }
+        }
+    }
+
+    useEffectOnce {
+        val hashPayload = getUrlHashPayload()
+        if (hashPayload.isNotEmpty()) {
+            rawInput = hashPayload
+            processInput(hashPayload)
+        }
+    }
 
     div {
         css {
@@ -345,23 +392,7 @@ val CborDecoderComponent = FC {
                 }
                 disabled = rawInput.trim().isEmpty()
                 onClick = {
-                    try {
-                        val bytes = decodeInputToBytes(rawInput)
-                        if (bytes.isEmpty()) {
-                            outputDiagnostics = "Input is empty"
-                        } else {
-                            val options = CdnGeneratorOptions(
-                                prettyPrint = prettyPrint,
-                                useEmbeddedCborShorthand = decodeEmbeddedCbor,
-                                useApplicationExtensions = useAppExtensions,
-                                sortMapKeys = sortKeys,
-                                byteStringFormat = bstrFormat
-                            )
-                            outputDiagnostics = Cdn.encode(bytes, options)
-                        }
-                    } catch (e: Exception) {
-                        outputDiagnostics = "Error decoding: " + (e.message ?: "Unknown decoding error")
-                    }
+                    processInput(rawInput)
                 }
                 +"Decode to CDN"
             }
@@ -535,17 +566,7 @@ val CborDecoderComponent = FC {
                 }
                 disabled = rawInput.trim().isEmpty()
                 onClick = {
-                    try {
-                        val item = Cdn.parse(rawInput)
-                        val encodedBytes = Cbor.encode(item)
-                        outputHex = encodedBytes.toHex()
-                        outputB64Url = encodedBytes.toBase64Url()
-                        outputDiagnostics = ""
-                    } catch (e: Exception) {
-                        outputDiagnostics = "Error parsing CDN: " + (e.message ?: "Unknown syntax error")
-                        outputHex = ""
-                        outputB64Url = ""
-                    }
+                    processInput(rawInput)
                 }
                 +"Encode to CBOR"
             }
