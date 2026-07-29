@@ -272,6 +272,10 @@ val App = FC {
                                         }
                                     }
                                     onClick = {
+                                        val targetPath = tabToPath(tabId)
+                                        if (window.location.pathname != targetPath || window.location.hash.isNotEmpty()) {
+                                            window.history.pushState(null, "", targetPath)
+                                        }
                                         activeTab = tabId
                                         activeDropdown = null
                                     }

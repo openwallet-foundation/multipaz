@@ -27,9 +27,15 @@ import react.dom.html.ReactHTML.textarea
 import react.dom.html.ReactHTML.th
 import react.dom.html.ReactHTML.thead
 import react.dom.html.ReactHTML.tr
+import react.dom.html.ReactHTML.input
 import react.useEffectOnce
 import react.useState
+import js.typedarrays.Int8Array
+import js.typedarrays.toByteArray
 import web.cssom.*
+import web.file.File
+import web.file.FileReader
+import web.html.InputType
 
 val MdocViewerComponent = FC {
     var rawInput by useState("")
@@ -69,23 +75,42 @@ val MdocViewerComponent = FC {
         }
     }
 
-    useEffectOnce {
-        val pendingHex = window.localStorage.getItem("pending_mdoc_hex")
-        if (!pendingHex.isNullOrBlank()) {
-            window.localStorage.removeItem("pending_mdoc_hex")
-            rawInput = pendingHex
-            mainScope.launch {
-                try {
-                    val bytes = decodeInputToBytes(pendingHex)
-                    if (bytes.isNotEmpty()) {
-                        val dataItem = Cbor.decode(bytes)
-                        val response = DeviceResponse.fromDataItem(dataItem)
-                        processResponse(response)
-                    }
-                } catch (e: Throwable) {
-                    parseError = "Error parsing DeviceResponse: " + (e.message ?: e.toString())
+    fun parseInput(inputStr: String) {
+        val cleanInput = inputStr.trim()
+        if (cleanInput.isEmpty()) return
+        mainScope.launch {
+            try {
+                val bytes = decodeInputToBytes(cleanInput)
+                if (bytes.isEmpty()) {
+                    parseError = "Input is empty"
+                    parsedResponse = null
+                } else {
+                    val dataItem = Cbor.decode(bytes)
+                    val response = DeviceResponse.fromDataItem(dataItem)
+                    processResponse(response)
+                    updateUrlHashPayload(cleanInput)
                 }
+            } catch (e: Throwable) {
+                parseError = "Error parsing DeviceResponse: " + (e.message ?: e.toString())
+                parsedResponse = null
             }
+        }
+    }
+
+    useEffectOnce {
+        val hashPayload = getUrlHashPayload()
+        val pendingHex = window.localStorage.getItem("pending_mdoc_hex")
+        val inputToParse = if (hashPayload.isNotEmpty()) {
+            hashPayload
+        } else if (!pendingHex.isNullOrBlank()) {
+            window.localStorage.removeItem("pending_mdoc_hex")
+            pendingHex
+        } else {
+            ""
+        }
+        if (inputToParse.isNotEmpty()) {
+            rawInput = inputToParse
+            parseInput(inputToParse)
         }
     }
 
@@ -127,6 +152,8 @@ val MdocViewerComponent = FC {
                     parsedResponse = null
                     decompressedOtherDocs = emptyMap()
                     parseError = ""
+                    rawInput = ""
+                    updateUrlHashPayload("")
                 }
                 +"← Clear and Go Back"
             }
@@ -150,14 +177,63 @@ val MdocViewerComponent = FC {
                 +"Inspect a raw DeviceResponse CBOR structure (Hex or Base64 format). Decodes version, status, mdoc documents, SD-JWT / OtherDocuments, ZK documents, and EncryptedDocuments."
             }
 
-            label {
+            div {
                 css {
-                    display = Display.block
-                    fontWeight = FontWeight.bold
+                    display = Display.flex
+                    justifyContent = JustifyContent.spaceBetween
+                    alignItems = AlignItems.center
                     marginBottom = 8.px
-                    color = Color("#cbd5e1")
                 }
-                +"DeviceResponse (Hex or Base64):"
+
+                label {
+                    css {
+                        fontWeight = FontWeight.bold
+                        color = Color("#cbd5e1")
+                    }
+                    +"DeviceResponse (Hex or Base64):"
+                }
+
+                label {
+                    css {
+                        background = Color("#334155")
+                        border = None.none
+                        color = Color("#f1f5f9")
+                        padding = Padding(4.px, 12.px)
+                        borderRadius = 6.px
+                        cursor = Cursor.pointer
+                        fontSize = 13.px
+                        fontWeight = FontWeight.normal
+                        hover {
+                            background = Color("#475569")
+                        }
+                    }
+                    +"📁 Load data"
+                    input {
+                        type = "file".unsafeCast<InputType>()
+                        accept = ".cbor,.bin,.hex,.txt,*/*"
+                        css {
+                            display = None.none
+                        }
+                        onChange = { event ->
+                            val fileList = event.target.asDynamic().files
+                            if (fileList != null && fileList.length > 0) {
+                                val file = fileList[0].unsafeCast<File>()
+                                val reader = FileReader()
+                                reader.asDynamic().onload = {
+                                    val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
+                                    val bytes = Int8Array(arrayBuffer).toByteArray()
+                                    val text = bytes.decodeToString()
+                                    if (text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
+                                        rawInput = text.trim()
+                                    } else {
+                                        rawInput = bytes.toHex()
+                                    }
+                                }
+                                reader.readAsArrayBuffer(file)
+                            }
+                        }
+                    }
+                }
             }
 
             textarea {
@@ -203,22 +279,7 @@ val MdocViewerComponent = FC {
                 }
                 disabled = rawInput.trim().isEmpty()
                 onClick = {
-                    mainScope.launch {
-                        try {
-                            val bytes = decodeInputToBytes(rawInput)
-                            if (bytes.isEmpty()) {
-                                parseError = "Input is empty"
-                                parsedResponse = null
-                            } else {
-                                val dataItem = Cbor.decode(bytes)
-                                val response = DeviceResponse.fromDataItem(dataItem)
-                                processResponse(response)
-                            }
-                        } catch (e: Throwable) {
-                            parseError = "Error parsing DeviceResponse: " + (e.message ?: e.toString())
-                            parsedResponse = null
-                        }
-                    }
+                    parseInput(rawInput)
                 }
                 +"Parse DeviceResponse"
             }

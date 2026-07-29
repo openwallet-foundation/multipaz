@@ -29,3 +29,37 @@ fun decodeInputToBytes(input: String): ByteArray {
     
     throw IllegalArgumentException("Could not decode input as Hex, Base64Url or Base64")
 }
+
+fun getUrlHashPayload(): String {
+    val hash = kotlinx.browser.window.location.hash
+    if (hash.startsWith("#") && hash.length > 1) {
+        val raw = hash.substring(1)
+        return try {
+            js("decodeURIComponent(raw)").unsafeCast<String>()
+        } catch (e: Throwable) {
+            raw
+        }
+    }
+    return ""
+}
+
+fun updateUrlHashPayload(payload: String) {
+    val currentPath = tabToPath(pathToTab(kotlinx.browser.window.location.pathname))
+    val clean = payload.trim()
+    if (clean.isNotEmpty()) {
+        val encoded = try {
+            js("encodeURIComponent(clean)").unsafeCast<String>()
+        } catch (e: Throwable) {
+            clean
+        }
+        val targetUrl = "$currentPath#$encoded"
+        if (kotlinx.browser.window.location.pathname + kotlinx.browser.window.location.hash != targetUrl) {
+            kotlinx.browser.window.history.replaceState(null, "", targetUrl)
+        }
+    } else {
+        if (kotlinx.browser.window.location.hash.isNotEmpty()) {
+            kotlinx.browser.window.history.replaceState(null, "", currentPath)
+        }
+    }
+}
+

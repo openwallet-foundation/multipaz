@@ -34,7 +34,15 @@ import react.dom.html.ReactHTML.textarea
 import react.dom.html.ReactHTML.th
 import react.dom.html.ReactHTML.thead
 import react.dom.html.ReactHTML.tr
+import react.dom.html.ReactHTML.input
 import react.useState
+import react.useEffectOnce
+import js.typedarrays.Int8Array
+import js.typedarrays.toByteArray
+import org.multipaz.util.toHex
+import web.file.File
+import web.file.FileReader
+import web.html.InputType
 import web.cssom.*
 
 val SdJwtInspectorComponent = FC {
@@ -42,6 +50,69 @@ val SdJwtInspectorComponent = FC {
     var parsedSdJwt by useState<SdJwt?>(null)
     var parsedSdJwtKb by useState<SdJwtKb?>(null)
     var parseError by useState("")
+
+    fun parseInput(inputStr: String) {
+        val cleanInput = inputStr.trim()
+        if (cleanInput.isEmpty()) return
+        mainScope.launch {
+            try {
+                val token = if (cleanInput.contains(".") || cleanInput.contains("~")) {
+                    cleanInput
+                } else {
+                    val bytes = decodeInputToBytes(cleanInput)
+                    val decompressedBytes = try {
+                        bytes.zlibInflate()
+                    } catch (e: Throwable) {
+                        bytes
+                    }
+                    decompressedBytes.decodeToString().trim()
+                }
+
+                if (!token.endsWith("~")) {
+                    // Attempt parsing as SD-JWT+KB first
+                    try {
+                        val sdJwtKb = SdJwtKb.fromCompactSerialization(token)
+                        parsedSdJwtKb = sdJwtKb
+                        parsedSdJwt = sdJwtKb.sdJwt
+                        parseError = ""
+                        updateUrlHashPayload(cleanInput)
+                    } catch (e1: Throwable) {
+                        // Fallback to standard SD-JWT with appended trailing tilde
+                        try {
+                            val sdjwt = SdJwt.fromCompactSerialization("$token~")
+                            parsedSdJwtKb = null
+                            parsedSdJwt = sdjwt
+                            parseError = ""
+                            updateUrlHashPayload(cleanInput)
+                        } catch (e2: Throwable) {
+                            parseError = "Error parsing SD-JWT / SD-JWT+KB: ${e1.message ?: e1.toString()}"
+                            parsedSdJwtKb = null
+                            parsedSdJwt = null
+                        }
+                    }
+                } else {
+                    // Standard SD-JWT ending in '~'
+                    val sdjwt = SdJwt.fromCompactSerialization(token)
+                    parsedSdJwtKb = null
+                    parsedSdJwt = sdjwt
+                    parseError = ""
+                    updateUrlHashPayload(cleanInput)
+                }
+            } catch (e: Throwable) {
+                parseError = "Error parsing SD-JWT: " + (e.message ?: e.toString())
+                parsedSdJwtKb = null
+                parsedSdJwt = null
+            }
+        }
+    }
+
+    useEffectOnce {
+        val hashPayload = getUrlHashPayload()
+        if (hashPayload.isNotEmpty()) {
+            rawInput = hashPayload
+            parseInput(hashPayload)
+        }
+    }
 
     div {
         css {
@@ -81,6 +152,8 @@ val SdJwtInspectorComponent = FC {
                     parsedSdJwt = null
                     parsedSdJwtKb = null
                     parseError = ""
+                    rawInput = ""
+                    updateUrlHashPayload("")
                 }
                 +"← Clear and Go Back"
             }
@@ -104,14 +177,63 @@ val SdJwtInspectorComponent = FC {
                 +"Decode and inspect SD-JWT and SD-JWT+KB tokens (compact serialization). Parses Issuer-Signed JWT header/body, individual claim Disclosures, and Key Binding JWTs (KB-JWT)."
             }
 
-            label {
+            div {
                 css {
-                    display = Display.block
-                    fontWeight = FontWeight.bold
+                    display = Display.flex
+                    justifyContent = JustifyContent.spaceBetween
+                    alignItems = AlignItems.center
                     marginBottom = 8.px
-                    color = Color("#cbd5e1")
                 }
-                +"SD-JWT / SD-JWT+KB Token:"
+
+                label {
+                    css {
+                        fontWeight = FontWeight.bold
+                        color = Color("#cbd5e1")
+                    }
+                    +"SD-JWT / SD-JWT+KB Token:"
+                }
+
+                label {
+                    css {
+                        background = Color("#334155")
+                        border = None.none
+                        color = Color("#f1f5f9")
+                        padding = Padding(4.px, 12.px)
+                        borderRadius = 6.px
+                        cursor = Cursor.pointer
+                        fontSize = 13.px
+                        fontWeight = FontWeight.normal
+                        hover {
+                            background = Color("#475569")
+                        }
+                    }
+                    +"📁 Load data"
+                    input {
+                        type = "file".unsafeCast<InputType>()
+                        accept = ".vc,.jwt,.sdjwt,.bin,.hex,.txt,*/*"
+                        css {
+                            display = None.none
+                        }
+                        onChange = { event ->
+                            val fileList = event.target.asDynamic().files
+                            if (fileList != null && fileList.length > 0) {
+                                val file = fileList[0].unsafeCast<File>()
+                                val reader = FileReader()
+                                reader.asDynamic().onload = {
+                                    val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
+                                    val bytes = Int8Array(arrayBuffer).toByteArray()
+                                    val text = bytes.decodeToString()
+                                    if (text.contains(".") || text.contains("~") || text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
+                                        rawInput = text.trim()
+                                    } else {
+                                        rawInput = bytes.toHex()
+                                    }
+                                }
+                                reader.readAsArrayBuffer(file)
+                            }
+                        }
+                    }
+                }
             }
 
             textarea {
@@ -157,54 +279,7 @@ val SdJwtInspectorComponent = FC {
                 }
                 disabled = rawInput.trim().isEmpty()
                 onClick = {
-                    mainScope.launch {
-                        try {
-                            val inputStr = rawInput.trim()
-                            val token = if (inputStr.contains(".") || inputStr.contains("~")) {
-                                inputStr
-                            } else {
-                                val bytes = decodeInputToBytes(inputStr)
-                                val decompressedBytes = try {
-                                    bytes.zlibInflate()
-                                } catch (e: Throwable) {
-                                    bytes
-                                }
-                                decompressedBytes.decodeToString().trim()
-                            }
-
-                            if (!token.endsWith("~")) {
-                                // Attempt parsing as SD-JWT+KB first
-                                try {
-                                    val sdJwtKb = SdJwtKb.fromCompactSerialization(token)
-                                    parsedSdJwtKb = sdJwtKb
-                                    parsedSdJwt = sdJwtKb.sdJwt
-                                    parseError = ""
-                                } catch (e1: Throwable) {
-                                    // Fallback to standard SD-JWT with appended trailing tilde
-                                    try {
-                                        val sdjwt = SdJwt.fromCompactSerialization("$token~")
-                                        parsedSdJwtKb = null
-                                        parsedSdJwt = sdjwt
-                                        parseError = ""
-                                    } catch (e2: Throwable) {
-                                        parseError = "Error parsing SD-JWT / SD-JWT+KB: ${e1.message ?: e1.toString()}"
-                                        parsedSdJwtKb = null
-                                        parsedSdJwt = null
-                                    }
-                                }
-                            } else {
-                                // Standard SD-JWT ending in '~'
-                                val sdjwt = SdJwt.fromCompactSerialization(token)
-                                parsedSdJwtKb = null
-                                parsedSdJwt = sdjwt
-                                parseError = ""
-                            }
-                        } catch (e: Throwable) {
-                            parseError = "Error parsing SD-JWT: " + (e.message ?: e.toString())
-                            parsedSdJwtKb = null
-                            parsedSdJwt = null
-                        }
-                    }
+                    parseInput(rawInput)
                 }
                 +"Inspect SD-JWT / SD-JWT+KB"
             }
