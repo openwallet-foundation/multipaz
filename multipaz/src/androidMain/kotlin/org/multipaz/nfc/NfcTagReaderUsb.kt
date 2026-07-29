@@ -80,7 +80,9 @@ internal class NfcTagReaderUsb(
                                 try {
                                     val funcResult = tagInteractionFunc(tag)
                                     if (funcResult != null) {
-                                        continuation.resume(funcResult)
+                                        if (continuation.isActive) {
+                                            continuation.resume(funcResult)
+                                        }
                                     }
                                 } catch (e: NfcTagLostException) {
                                     // This is to properly handle emulated tags - such as on Android - which may be showing
@@ -88,7 +90,9 @@ internal class NfcTagReaderUsb(
                                     Logger.w(TAG, "Tag lost", e)
                                 } catch (e: Exception) {
                                     if (e is CancellationException) throw e
-                                    continuation.resumeWithException(e)
+                                    if (continuation.isActive) {
+                                        continuation.resumeWithException(e)
+                                    }
                                 }
                                 readJob = null
                             }
@@ -97,6 +101,8 @@ internal class NfcTagReaderUsb(
 
                     override fun onCardRemoved() {
                         Logger.i(TAG, "Card removed")
+                        readJob?.cancel()
+                        readJob = null
                     }
                 }
 
@@ -121,6 +127,8 @@ internal class NfcTagReaderUsb(
             if (e is CancellationException) throw e
             driver.disconnect()
             throw e
+        } finally {
+            driver.setListener(null)
         }
     }
 }
