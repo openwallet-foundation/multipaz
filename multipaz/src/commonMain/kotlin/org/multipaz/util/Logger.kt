@@ -250,29 +250,35 @@ object Logger {
         dataItem: DataItem? = null
     ) {
         val bytes = encodedCbor ?: Cbor.encode(dataItem!!)
-        val cdnString = try {
-            if (dataItem != null) {
+        try {
+            val cdnString = if (dataItem != null) {
                 Cdn.encode(dataItem, CdnGeneratorOptions.Pretty)
             } else {
                 Cdn.encode(bytes, CdnGeneratorOptions.Pretty)
             }
-        } catch (e: Throwable) {
+            val sb = "$message: ${bytes.size} bytes of CBOR: " + bytes.toHex() +
+                    "\n" +
+                    "In diagnostic notation:\n" +
+                    cdnString
+            printLine(
+                level = level,
+                tag = tag,
+                msg = sb,
+                throwable = null
+            )
+        } catch (e: Exception) {
             if (e is CancellationException) throw e
             if (encodedCbor != null) {
                 printLine(
-                    Level.WARNING,
-                    tag,
-                    "$message: ${encodedCbor.size} bytes of invalid CBOR: ${encodedCbor.toHex()}",
-                    e
+                    level = level,
+                    tag = tag,
+                    msg = "$message: ${encodedCbor.size} bytes of invalid CBOR: ${encodedCbor.toHex()}",
+                    throwable = null
                 )
+            } else {
+                throw e
             }
-            throw e
         }
-        val sb = "$message: ${bytes.size} bytes of CBOR: " + bytes.toHex() +
-                "\n" +
-                "In diagnostic notation:\n" +
-                cdnString
-        printLine(level, tag, sb, null)
     }
 
     fun dCbor(tag: String, message: String, encodedCbor: ByteArray) {
