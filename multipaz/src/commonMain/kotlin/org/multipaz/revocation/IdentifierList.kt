@@ -12,12 +12,9 @@ import org.multipaz.webtoken.WebTokenClaim
 import org.multipaz.webtoken.WebTokenClaim.Companion.put
 import org.multipaz.webtoken.buildCwt
 import org.multipaz.webtoken.validateCwt
-import kotlin.random.Random
 import kotlin.time.Clock
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /**
@@ -29,19 +26,28 @@ import kotlin.time.Instant
  *
  * @param [identifiers] set of identifiers of revoked document
  * @param [creationTime] time when this object was created
+ * @param [expirationTime] time when this object expires and should be refreshed
  */
 class IdentifierList(
     private val identifiers: Set<ByteString>,
-    val creationTime: Instant = Clock.System.now()
+    val creationTime: Instant = Clock.System.now(),
+    val expirationTime: Instant = creationTime + 20.minutes
 ) {
+    /**
+     * Serializes this list as CWT.
+     *
+     * @param key key for CWT signing
+     * @param subject CWT subject field (typically URL which is used to serve this identifier list)
+     * @return serialized CWT
+     */
     suspend fun serializeAsCwt(
         key: AsymmetricKey,
         subject: String,
-        expiresIn: Duration = 20.minutes + Random.Default.nextInt(1000).seconds
     ) = buildCwt(
         key = key,
         type = "application/identifierlist+cwt",
-        expiresIn = expiresIn
+        creationTime = creationTime,
+        expiresIn = expirationTime - creationTime
     ) {
         put(WebTokenClaim.Sub, subject)
         putCborMap(IDENTIFIER_LIST_CLAIM) {
@@ -51,20 +57,43 @@ class IdentifierList(
                 }
             }
         }
-        put(TTL_CLAIM, expiresIn.inWholeSeconds)
+        put(TTL_CLAIM, (expirationTime - creationTime).inWholeSeconds)
     }
 
+    /**
+     * Checks if this identifier list contains the given identifier
+     *
+     * @param identifier identifier to check
+     * @return if this list contains the given identifier
+     */
     fun contains(identifier: ByteString) = identifiers.contains(identifier)
 
+    /**
+     * Checks if this identifier list contains the given identifier
+     *
+     * @param identifier identifier to check
+     * @return if this list contains the given identifier
+     */
     fun contains(identifier: Bstr) = identifiers.contains(ByteString(identifier.value))
 
+    /**
+     * Builder class for [IdentifierList].
+     */
     class Builder {
         private val identifiers = mutableSetOf<ByteString>()
 
+        /**
+         * Adds an identifier to the list.
+         *
+         * @param identifier identifier to add
+         */
         fun add(identifier: ByteString) {
             identifiers.add(identifier)
         }
 
+        /**
+         * Builds [IdentifierList] object.
+         */
         fun build(): IdentifierList {
             return IdentifierList(identifiers.toSet())
         }

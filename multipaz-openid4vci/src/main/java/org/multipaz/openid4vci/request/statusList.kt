@@ -8,6 +8,8 @@ import io.ktor.server.response.header
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
 import io.ktor.util.date.GMTDate
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.multipaz.openid4vci.util.CredentialState
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.server.common.getBaseUrl
@@ -16,13 +18,13 @@ import org.multipaz.revocation.StatusList
 import org.multipaz.server.enrollment.ServerIdentity
 import org.multipaz.server.enrollment.getServerIdentity
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
-@Volatile
-private var cachedStatusList: CompressedStatusList? = null
+private val cachedStatusListLock = Mutex()
 
-@Volatile
-private var lastInvalidationTime: Instant = Clock.System.now()
+// Maps bucket id to last invalidation time and up-to-date CompressedStatusList (if any)
+private var cachedStatusListMap = mutableMapOf<String, Pair<Instant, CompressedStatusList?>>()
 
 suspend fun statusList(call: ApplicationCall, bucket: String) {
     val accept = call.request.headers[HttpHeaders.Accept] ?: ""
@@ -38,14 +40,25 @@ suspend fun statusList(call: ApplicationCall, bucket: String) {
         }
     }
 
-    val statusList = cachedStatusList ?: run {
-        var list: List<Pair<Int, CredentialState.Status>>
+    val cached = cachedStatusListLock.withLock {
+        cachedStatusListMap[bucket]?.second
+    }
+    val minValidity = Clock.System.now() + 20.seconds
+    val statusList = if (cached != null && cached.expirationTime > minValidity) {
+        cached
+    } else {
+        // Need to be initialized only to make the compiler happy
+        var list: List<Pair<Int, CredentialState.Status>> = emptyList()
         while (true) {
             val started = Clock.System.now()
             // For now, grab the whole list in one shot
             list = CredentialState.listNonValidCredentials(bucket)
-            if (started > lastInvalidationTime) {
-                break
+            cachedStatusListLock.withLock {
+                val entry = cachedStatusListMap[bucket]
+                // either never invalidated (or requested) or built after last invalidation
+                if (entry == null || started > entry.first) {
+                    break
+                }
             }
         }
         val moreThanOneBit = list.find { (_, status) -> status.encoded > 1 } != null
@@ -53,7 +66,11 @@ suspend fun statusList(call: ApplicationCall, bucket: String) {
         for ((index, status) in list) {
             statusListBuilder.addStatus(index, status.encoded)
         }
-        statusListBuilder.build().compress().also { cachedStatusList = it }
+        statusListBuilder.build().compress().also {
+            cachedStatusListLock.withLock {
+                cachedStatusListMap[bucket] = Pair(it.creationTime, it)
+            }
+        }
     }
 
     val creation = statusList.creationTime.toEpochMilliseconds()
@@ -84,7 +101,6 @@ private val STATUSLIST_CWT = ContentType("application", "statuslist+cwt")
 
 private val COMMA_SEPARATOR = Regex(",\\s*")
 
-fun invalidateStatusList() {
-    lastInvalidationTime = Clock.System.now()
-    cachedStatusList = null
+suspend fun invalidateStatusList(bucket: String) = cachedStatusListLock.withLock {
+    cachedStatusListMap[bucket] = Pair(Clock.System.now(), null)
 }
