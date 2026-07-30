@@ -11,8 +11,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
@@ -598,7 +599,7 @@ val AnnexCParserComponent: FC<Props> = FC {
                     }
 
                     CborDiagnosticViewer {
-                        diagText = Cbor.toDiagnostics(req.encryptionInfoDataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                        diagText = Cdn.encode(req.encryptionInfoDataItem, CdnGeneratorOptions.Pretty)
                         maxHeight = 250.px
                     }
                 }
@@ -696,7 +697,7 @@ val AnnexCParserComponent: FC<Props> = FC {
                     }
 
                     CborDiagnosticViewer {
-                        diagText = Cbor.toDiagnostics(req.devReqDataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                        diagText = Cdn.encode(req.devReqDataItem, CdnGeneratorOptions.Pretty)
                         maxHeight = 350.px
                     }
                 }
@@ -780,7 +781,7 @@ val AnnexCParserComponent: FC<Props> = FC {
                     }
 
                     CborDiagnosticViewer {
-                        diagText = Cbor.toDiagnostics(resp.responseDataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                        diagText = Cdn.encode(resp.responseDataItem, CdnGeneratorOptions.Pretty)
                         maxHeight = 350.px
                     }
                 }

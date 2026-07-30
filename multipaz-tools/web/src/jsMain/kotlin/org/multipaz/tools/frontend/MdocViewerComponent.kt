@@ -5,7 +5,8 @@ import emotion.react.css
 import kotlinx.browser.window
 import kotlinx.coroutines.launch
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.util.toBase64
 import org.multipaz.util.toHex
@@ -617,9 +618,9 @@ val MdocViewerComponent = FC {
                                                                     }
                                                                 }
                                                             } else {
-                                                                +try {
-                                                                    Cbor.toDiagnostics(item.dataElementValue, setOf(DiagnosticOption.EMBEDDED_CBOR))
-                                                                } catch (e: Throwable) {
+                                                                 +try {
+                                                                     Cdn.encode(item.dataElementValue)
+                                                                 } catch (e: Throwable) {
                                                                     "Error formatting item"
                                                                 }
                                                             }
@@ -739,12 +740,12 @@ val MdocViewerComponent = FC {
 
                             label {
                                 css { display = Display.block; fontSize = 12.px; fontWeight = FontWeight.bold; color = Color("#94a3b8"); marginBottom = 6.px }
-                                +"ZkDocument CBOR Diagnostics:"
+                                +"ZkDocument CBOR CDN View:"
                             }
 
                             CborDiagnosticViewer {
                                 diagText = try {
-                                    Cbor.toDiagnostics(zkDoc.toDataItem(), setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                                    Cdn.encode(zkDoc.toDataItem(), CdnGeneratorOptions.Pretty)
                                 } catch (e: Throwable) {
                                     "Error formatting ZkDocument: ${e.message}"
                                 }

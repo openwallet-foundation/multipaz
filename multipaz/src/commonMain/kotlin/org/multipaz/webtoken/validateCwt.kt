@@ -132,7 +132,8 @@ suspend fun validateCwt(
                 body[claim]
             }
             if (fieldValue != expectedValue) {
-                throw InvalidRequestException("$cwtName: '${claim.strKey}' is incorrect or missing")
+                throw InvalidRequestException("$cwtName: '${claim.strKey}' is incorrect or missing. " +
+                        "Expected `$expectedValue`, got `$fieldValue`")
             }
         }
     }

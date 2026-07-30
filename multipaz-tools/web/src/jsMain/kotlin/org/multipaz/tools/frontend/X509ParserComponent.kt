@@ -35,7 +35,8 @@ import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.ASN1Sequence
 import org.multipaz.asn1.OID
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.util.AndroidAttestationExtensionParser
@@ -760,10 +761,7 @@ private fun formatExtensionValue(cert: X509Cert, extOid: String, extData: ByteAr
             AndroidAttestationExtensionParser(cert).prettyPrint()
 
         OID.X509_EXTENSION_ANDROID_KEYSTORE_PROVISIONING_INFORMATION.oid ->
-            Cbor.toDiagnostics(
-                extData,
-                setOf(DiagnosticOption.PRETTY_PRINT),
-            )
+            Cdn.encode(extData, CdnGeneratorOptions.Pretty)
 
         OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid ->
             MultipazExtension.fromCbor(extData).prettyPrint()

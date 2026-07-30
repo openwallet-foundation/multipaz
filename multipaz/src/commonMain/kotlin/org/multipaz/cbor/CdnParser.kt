@@ -143,7 +143,9 @@ internal class CdnParser(
                 }
             }
 
-            TokenType.EMBEDDED_CBOR_OPEN -> {
+            TokenType.EMBEDDED_CBOR_OPEN, TokenType.EXTENSION_EMBEDDED_CBOR_OPEN -> {
+                val isExtension = token.type == TokenType.EXTENSION_EMBEDDED_CBOR_OPEN
+                val extId = if (isExtension) token.extraData as String else null
                 advance() // consume <<
                 depth++
                 val seq = mutableListOf<DataItem>()
@@ -156,7 +158,33 @@ internal class CdnParser(
                 expect(TokenType.EMBEDDED_CBOR_CLOSE, "Expected '>>' closing embedded CBOR literal")
                 depth--
                 val encodedBytes = seq.fold(byteArrayOf()) { acc, item -> acc + Cbor.encode(item) }
-                Tagged(Tagged.ENCODED_CBOR, Bstr(encodedBytes))
+                if (isExtension) {
+                    when (extId) {
+                        "b1" -> {
+                            val bytes = seq.fold(byteArrayOf()) { acc, item ->
+                                acc + when (item) {
+                                    is Bstr -> item.value
+                                    is Tstr -> item.value.encodeToByteArray()
+                                    else -> throw CdnException("Expected string in b1 sequence", token.line, token.column)
+                                }
+                            }
+                            Bstr(bytes)
+                        }
+                        "t1" -> {
+                            val text = seq.fold("") { acc, item ->
+                                acc + when (item) {
+                                    is Tstr -> item.value
+                                    is Bstr -> item.value.decodeToString()
+                                    else -> throw CdnException("Expected string in t1 sequence", token.line, token.column)
+                                }
+                            }
+                            Tstr(text)
+                        }
+                        else -> throw CdnException("Unrecognized extension literal '$extId<<...>>'", token.line, token.column)
+                    }
+                } else {
+                    Bstr(encodedBytes)
+                }
             }
 
             TokenType.LBRACKET -> parseArray(indefinite = false)

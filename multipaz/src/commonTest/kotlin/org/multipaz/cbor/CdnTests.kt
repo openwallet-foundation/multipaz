@@ -1,10 +1,20 @@
 package org.multipaz.cbor
 
+import kotlinx.coroutines.test.runTest
+import org.multipaz.asn1.ASN1Integer
+import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.X500Name
+import org.multipaz.crypto.buildX509Cert
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 class CdnTests {
 
@@ -71,7 +81,7 @@ class CdnTests {
 
     @Test
     fun testArrays() {
-        val expected = CborArray.builder().add(1).add(2).add(3).end().build()
+        val expected = buildCborArray { add(1); add(2); add(3) }
         assertEquals(expected, Cdn.parse("[1, 2, 3]"))
 
         val indefExpected = CborArray(mutableListOf<DataItem>(Uint(1UL), Uint(2UL)), indefiniteLength = true)
@@ -83,7 +93,7 @@ class CdnTests {
 
     @Test
     fun testMaps() {
-        val expected = CborMap.builder().put("key", "value").put(1, 2).end().build()
+        val expected = buildCborMap { put("key", "value"); put(1, 2) }
         assertEquals(expected, Cdn.parse("{\"key\": \"value\", 1: 2}"))
         assertEquals(expected, Cdn.parse("{\"key\" => \"value\", 1 => 2}"))
 
@@ -109,10 +119,89 @@ class CdnTests {
         assertEquals(tagged, Cdn.parse("32(\"https://example.com\")"))
 
         val embeddedCbor = Cdn.parse("<< 1234 >>")
-        assertTrue(embeddedCbor is Tagged && embeddedCbor.tagNumber == Tagged.ENCODED_CBOR)
-        assertEquals(Uint(1234UL), Cbor.decode((embeddedCbor.taggedItem as Bstr).value))
+        assertTrue(embeddedCbor is Bstr)
+        assertEquals(Uint(1234UL), Cbor.decode(embeddedCbor.asBstr))
+        assertEquals("<< 1234 >>", Cdn.encode(embeddedCbor, CdnGeneratorOptions(useEmbeddedCborOpportunistically = true)))
 
-        assertEquals("<< 1234 >>", Cdn.encode(embeddedCbor))
+        val taggedEmbeddedCbor = Cdn.parse("24(<< 1234 >>)")
+        assertTrue(taggedEmbeddedCbor is Tagged && taggedEmbeddedCbor.tagNumber == Tagged.ENCODED_CBOR)
+        assertEquals(Uint(1234UL), Cbor.decode((taggedEmbeddedCbor.taggedItem as Bstr).value))
+        assertEquals("24(<< 1234 >>)", Cdn.encode(taggedEmbeddedCbor))
+    }
+
+    @Test
+    fun testUseEmbeddedCborOpportunistically() {
+        val protectedHeader = Cbor.encode(buildCborMap { put(1L, -7L) })
+        val payload = Cbor.encode(buildCborMap { put("foo", "bar") })
+        val coseSign1 = Tagged(
+            18L,
+            buildCborArray {
+                add(protectedHeader)
+                add(buildCborMap {})
+                add(payload)
+                add(byteArrayOf(0x01, 0x02))
+            }
+        )
+
+        val cdnWithEmbedded = Cdn.encode(coseSign1, CdnGeneratorOptions(useEmbeddedCborOpportunistically = true, annotateCoseOpportunistically = false))
+        assertEquals("18([<< {1: -7} >>, {}, << {\"foo\": \"bar\"} >>, h'0102'])", cdnWithEmbedded)
+
+        val cdnWithoutEmbedded = Cdn.encode(coseSign1, CdnGeneratorOptions(useEmbeddedCborOpportunistically = false, annotateCoseOpportunistically = false))
+        assertEquals("18([h'a10126', {}, h'a163666f6f63626172', h'0102'])", cdnWithoutEmbedded)
+
+        val mapWithEmbeddedBstr = buildCborMap {
+            put("plain_bytes", byteArrayOf(0x01, 0x02))
+            put("cbor_bytes", Cbor.encode(Tstr("hello")))
+        }
+        val cdnMapWithEmbedded = Cdn.encode(mapWithEmbeddedBstr, CdnGeneratorOptions(useEmbeddedCborOpportunistically = true))
+        assertEquals("{\"plain_bytes\": h'0102', \"cbor_bytes\": << \"hello\" >>}", cdnMapWithEmbedded)
+
+        // Verify round trip parsing: << ... >> parses into untagged Bstr
+        val parsedBstr = Cdn.parse("<< \"hello\" >>")
+        assertEquals(Bstr(Cbor.encode(Tstr("hello"))), parsedBstr)
+
+        // Verify round trip parsing: 24(<< ... >>) parses into Tagged(24, Bstr)
+        val parsedTagged = Cdn.parse("24(<< \"hello\" >>)")
+        assertEquals(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(Tstr("hello")))), parsedTagged)
+    }
+
+    @Test
+    fun testUseEmbeddedCertsOpportunistically() = runTest {
+        val key = Crypto.createEcPrivateKey(EcCurve.P256)
+        val cert = buildX509Cert(
+            publicKey = key.publicKey,
+            signingKey = AsymmetricKey.anonymous(key, Algorithm.ES256),
+            serialNumber = ASN1Integer(1),
+            subject = X500Name.fromName("CN=Test Cert"),
+            issuer = X500Name.fromName("CN=Test Cert"),
+            validFrom = Instant.fromEpochMilliseconds(1000000000000L),
+            validUntil = Instant.fromEpochMilliseconds(2000000000000L)
+        ) {}
+
+        val certBstr = Bstr(cert.encoded.toByteArray())
+        val cdnWithCert = Cdn.encode(certBstr, CdnGeneratorOptions(useEmbeddedCertsOpportunistically = true))
+        assertTrue(cdnWithCert.startsWith("cert'''\n# Subject DN: CN=Test Cert\n# Issuer DN: CN=Test Cert\n-----BEGIN CERTIFICATE-----\n"))
+        assertTrue(cdnWithCert.endsWith("\n-----END CERTIFICATE-----\n'''"))
+
+        val prettyCertCdn = Cdn.encode(buildCborMap { put(33L, certBstr) }, CdnGeneratorOptions.Pretty)
+        assertTrue(prettyCertCdn.contains("33:\n  # Subject DN: CN=Test Cert\n  # Issuer DN: CN=Test Cert\n  cert'''\n    -----BEGIN CERTIFICATE-----\n"))
+
+        val certArrayMap = buildCborMap {
+            put(33L, buildCborArray {
+                add(certBstr)
+                add(certBstr)
+            })
+        }
+        val prettyCertArrayCdn = Cdn.encode(certArrayMap, CdnGeneratorOptions.Pretty)
+        assertTrue(prettyCertArrayCdn.contains("33: [\n    # Subject DN: CN=Test Cert\n    # Issuer DN: CN=Test Cert\n    cert'''\n"))
+        assertFalse(prettyCertArrayCdn.contains("[\n\n"))
+        assertFalse(prettyCertArrayCdn.contains("''',\n\n"))
+
+        val parsedBack = Cdn.parse(cdnWithCert)
+        assertEquals(certBstr, parsedBack)
+
+        val cdnWithoutCert = Cdn.encode(certBstr, CdnGeneratorOptions(useEmbeddedCertsOpportunistically = false))
+        assertTrue(cdnWithoutCert.startsWith("h'"))
     }
 
     @Test
@@ -126,7 +215,7 @@ class CdnTests {
         """.trimIndent()
 
         val parsed = Cdn.parse(cdnWithComments)
-        assertEquals(CborMap.builder().put("foo", "bar").end().build(), parsed)
+        assertEquals(buildCborMap { put("foo", "bar") }, parsed)
     }
 
     @Test
@@ -157,7 +246,7 @@ class CdnTests {
 
     @Test
     fun testPrettyPrintOptions() {
-        val map = CborMap.builder().put("a", 1).put("b", 2).end().build()
+        val map = buildCborMap { put("a", 1); put("b", 2) }
         val prettyCdn = Cdn.encode(map, CdnGeneratorOptions.Pretty)
         assertTrue(prettyCdn.contains("\n"))
         assertTrue(prettyCdn.contains("  \"a\": 1"))
@@ -187,7 +276,7 @@ class CdnTests {
             override fun parseLiteral(content: String, delimiter: Char): DataItem {
                 return Tstr("CUSTOM:$content")
             }
-            override fun format(item: DataItem, options: CdnGeneratorOptions): String? {
+            override fun format(item: DataItem, options: CdnGeneratorOptions, indent: Int): String? {
                 if (item is Tstr && item.value.startsWith("CUSTOM:")) {
                     return "custom'${item.value.removePrefix("CUSTOM:")}'"
                 }
@@ -208,12 +297,20 @@ class CdnTests {
         assertEquals(0.0015, (floatItem as CborDouble).value, 1e-9)
 
         val embeddedSeq = Cdn.parse("<< 10, 20 >>")
-        assertTrue(embeddedSeq is Tagged && embeddedSeq.tagNumber == 24L)
-        val bytes = (embeddedSeq.taggedItem as Bstr).value
+        assertTrue(embeddedSeq is Bstr)
+        val bytes = embeddedSeq.asBstr
         val (offset1, decoded1) = Cbor.decode(bytes, 0)
         val (_, decoded2) = Cbor.decode(bytes, offset1)
         assertEquals(Uint(10UL), decoded1)
         assertEquals(Uint(20UL), decoded2)
+
+        val taggedSeq = Cdn.parse("24(<< 10, 20 >>)")
+        assertTrue(taggedSeq is Tagged && taggedSeq.tagNumber == 24L)
+        val taggedBytes = (taggedSeq.taggedItem as Bstr).value
+        val (tOffset1, tDecoded1) = Cbor.decode(taggedBytes, 0)
+        val (_, tDecoded2) = Cbor.decode(taggedBytes, tOffset1)
+        assertEquals(Uint(10UL), tDecoded1)
+        assertEquals(Uint(20UL), tDecoded2)
     }
 
     @Test
@@ -244,8 +341,8 @@ class CdnTests {
             CborDouble(12.34),
             Tstr("roundtrip test"),
             Bstr(byteArrayOf(0x0a, 0x0b, 0x0c)),
-            CborArray.builder().add("element").add(true).end().build(),
-            CborMap.builder().put("x", 10).put("y", 20).end().build(),
+            buildCborArray { add("element"); add(true) },
+            buildCborMap { put("x", 10); put("y", 20) },
             Tagged(0L, Tstr("2026-07-27T16:00:00Z"))
         )
 
@@ -254,5 +351,100 @@ class CdnTests {
             val decodedItem = Cdn.parse(cdnStr)
             assertEquals(item, decodedItem, "Roundtrip failed for item: $item")
         }
+    }
+
+    @Test
+    fun testOpportunisticCoseSign1() {
+        val protectedMap = buildCborMap {
+            put(1, -7)
+            put(33, Bstr("certData".encodeToByteArray()))
+        }
+        val protectedBytes = Cbor.encode(protectedMap)
+        val coseSign1 = Tagged(
+            18L,
+            buildCborArray {
+                add(Bstr(protectedBytes))
+                add(buildCborMap {})
+                add(Bstr("payload".encodeToByteArray()))
+                add(Bstr("signature".encodeToByteArray()))
+            }
+        )
+
+        val prettyAnnotated = Cdn.encode(coseSign1, CdnGeneratorOptions.Pretty)
+        assertTrue(prettyAnnotated.contains("# COSE_Sign1"))
+        assertTrue(prettyAnnotated.contains("/protected/"))
+        assertTrue(prettyAnnotated.contains("/unprotected/"))
+        assertTrue(prettyAnnotated.contains("/payload/"))
+        assertTrue(prettyAnnotated.contains("/signature/"))
+        assertTrue(prettyAnnotated.contains("/alg/"))
+        assertTrue(prettyAnnotated.contains("# ES256: ECDSA with SHA-256"))
+        assertTrue(prettyAnnotated.contains("/x5chain/"))
+
+        val roundtripItem = Cdn.parse(prettyAnnotated)
+        assertEquals(coseSign1, roundtripItem)
+    }
+
+    @Test
+    fun testOpportunisticCoseMac0() {
+        val protectedMap = buildCborMap {
+            put(1, 5)
+        }
+        val protectedBytes = Cbor.encode(protectedMap)
+        val coseMac0 = Tagged(
+            17L,
+            buildCborArray {
+                add(Bstr(protectedBytes))
+                add(buildCborMap {})
+                add(Bstr("payload".encodeToByteArray()))
+                add(Bstr("macTag".encodeToByteArray()))
+            }
+        )
+
+        val prettyAnnotated = Cdn.encode(coseMac0, CdnGeneratorOptions.Pretty)
+        assertTrue(prettyAnnotated.contains("# COSE_Mac0"))
+        assertTrue(prettyAnnotated.contains("/protected/"))
+        assertTrue(prettyAnnotated.contains("/unprotected/"))
+        assertTrue(prettyAnnotated.contains("/payload/"))
+        assertTrue(prettyAnnotated.contains("/tag/"))
+        assertTrue(prettyAnnotated.contains("/alg/"))
+        assertTrue(prettyAnnotated.contains("# HMAC_SHA256: HMAC with SHA-256"))
+
+        val roundtripItem = Cdn.parse(prettyAnnotated)
+        assertEquals(coseMac0, roundtripItem)
+    }
+
+    @Test
+    fun testOpportunisticCoseKey() {
+        val ecKey = buildCborMap {
+            put(1, 2)
+            put(3, -7)
+            put(-1, 1)
+            put(-2, Bstr(ByteArray(32)))
+            put(-3, Bstr(ByteArray(32)))
+        }
+
+        val prettyAnnotated = Cdn.encode(ecKey, CdnGeneratorOptions.Pretty)
+        assertTrue(prettyAnnotated.contains("# COSE_Key"))
+        assertTrue(prettyAnnotated.contains("/kty/ 1: 2, # EC2"))
+        assertTrue(prettyAnnotated.contains("/alg/ 3: -7, # ES256: ECDSA with SHA-256"))
+        assertTrue(prettyAnnotated.contains("/crv/ -1: 1, # P-256"))
+        assertTrue(prettyAnnotated.contains("/x/ -2"))
+        assertTrue(prettyAnnotated.contains("/y/ -3"))
+
+        val roundtripItem = Cdn.parse(prettyAnnotated)
+        assertEquals(ecKey, roundtripItem)
+    }
+
+    @Test
+    fun testOpportunisticCoseDisabled() {
+        val ecKey = buildCborMap {
+            put(1, 2)
+            put(3, -7)
+            put(-1, 1)
+        }
+        val noCoseOptions = CdnGeneratorOptions(prettyPrint = true, annotateCoseOpportunistically = false)
+        val text = Cdn.encode(ecKey, noCoseOptions)
+        assertTrue(!text.contains("/ kty /"))
+        assertTrue(!text.contains("# EC2"))
     }
 }
