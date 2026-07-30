@@ -2,7 +2,6 @@ package org.multipaz.openid4vci.request
 
 import io.ktor.http.ContentType
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.request.receiveParameters
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import kotlinx.serialization.json.Json
@@ -45,8 +44,8 @@ suspend fun adminSetCredentialStatus(call: ApplicationCall) {
         status = status,
         expiration = credential.expiration
     )
-    invalidateStatusList()
-    invalidateIdentifierList()
+    invalidateStatusList(bucket)
+    invalidateIdentifierList(bucket)
     call.respondText(
         text = buildJsonObject {
             put("success", true)
