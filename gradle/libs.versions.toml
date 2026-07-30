@@ -62,8 +62,10 @@ kotlin-wrappers-em = "2025.12.1-11.14.0"
 koog = "0.8.0"
 junit-jupiter = "5.10.0"
 jetbrains-navigationevent = "1.0.1"
+jj2000 = "5.2"
 
 [libraries]
+jj2000 = { module = "edu.ucar:jj2000", version.ref = "jj2000" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit-jupiter" }
 junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit-jupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
