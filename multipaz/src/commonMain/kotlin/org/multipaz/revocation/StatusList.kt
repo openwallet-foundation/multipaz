@@ -189,9 +189,10 @@ class StatusList(
             cwt: ByteArray,
             publicKey: EcPublicKey? = null,
             checks: Map<WebTokenCheck, String> = mapOf(),
+            atTime: Instant = Clock.System.now(),
             maxValidity: Duration = 365.days
         ): StatusList =
-            CompressedStatusList.fromCwt(cwt, publicKey, checks, maxValidity).decompress()
+            CompressedStatusList.fromCwt(cwt, publicKey, checks, atTime, maxValidity).decompress()
 
         /**
          * Parses CBOR as status list.

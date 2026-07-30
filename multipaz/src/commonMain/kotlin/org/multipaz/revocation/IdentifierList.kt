@@ -7,12 +7,14 @@ import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.webtoken.WebTokenCheck
 import org.multipaz.webtoken.WebTokenClaim
 import org.multipaz.webtoken.WebTokenClaim.Companion.put
 import org.multipaz.webtoken.buildCwt
 import org.multipaz.webtoken.validateCwt
 import kotlin.time.Clock
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
@@ -103,10 +105,27 @@ class IdentifierList(
         private const val IDENTIFIER_LIST_CLAIM = 65530L
         private const val TTL_CLAIM = 65534L
 
+        /**
+         * Parses and validates CWT that holds the identifier list.
+         *
+         * CWT signature can be validated either by passing [WebTokenCheck.TRUST] key in
+         * the [checks] map or using non-null [publicKey] (see [validateCwt]).
+         *
+         * @param cwt identifier list CWT representation
+         * @param publicKey public key of the issuance server signing key (optional)
+         * @param checks additional checks for JWT validation
+         * @param atTime time instant to check for expiration
+         * @param maxValidity maximum CWT validity duration to accept
+         * @return parsed [IdentifierList]
+         * @throws IllegalArgumentException when [cwt] cannot be parsed as CWT identifier list
+         * @throws InvalidRequestException when CWT validation fails
+         */
         suspend fun fromCwt(
             cwt: ByteArray,
             publicKey: EcPublicKey? = null,
-            checks: Map<WebTokenCheck, String> = mapOf()
+            checks: Map<WebTokenCheck, String> = mapOf(),
+            atTime: Instant = Clock.System.now(),
+            maxValidity: Duration = 365.days
         ): IdentifierList {
             val body = validateCwt(
                 cwt = cwt,
@@ -116,7 +135,8 @@ class IdentifierList(
                     putAll(checks)
                 },
                 publicKey = publicKey,
-                maxValidity = 365.days
+                atTime = atTime,
+                maxValidity = maxValidity
             )
             if (!body.hasKey(IDENTIFIER_LIST_CLAIM)) {
                 throw IllegalArgumentException("not a valid identifier list CWT")
