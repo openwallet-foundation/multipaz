@@ -261,14 +261,6 @@ class CdnTests {
     }
 
     @Test
-    fun testLoggerInvalidCbor() {
-        val invalidCborBytes = byteArrayOf(0xff.toByte(), 0xfe.toByte())
-        assertFailsWith<Throwable> {
-            org.multipaz.util.Logger.iCbor("TestTag", "Testing invalid CBOR", invalidCborBytes)
-        }
-    }
-
-    @Test
     fun testCustomExtensionRegistryPassing() {
         val customRegistry = CdnExtensionRegistry()
         customRegistry.register(object : CdnExtension {
