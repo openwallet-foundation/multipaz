@@ -10,8 +10,9 @@ import js.typedarrays.toByteArray
 import kotlinx.browser.window
 import kotlinx.coroutines.launch
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cose.Cose
 import org.multipaz.cose.toCoseLabel
@@ -162,7 +163,7 @@ external interface ItemsRequestViewerBlockProps : Props {
 private val ItemsRequestViewerBlock: FC<ItemsRequestViewerBlockProps> = FC { props ->
     var copyStatus by useState("")
     val itemsReqHex = Cbor.encode(props.itemsReqItem).toHex()
-    val itemsReqDiag = Cbor.toDiagnostics(props.itemsReqItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+    val itemsReqDiag = Cdn.encode(props.itemsReqItem, CdnGeneratorOptions.Pretty)
 
     div {
         css {
@@ -340,12 +341,12 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                             }
                         }
                         onClick = {
-                            val diag = Cbor.toDiagnostics(result.rawDataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                            val diag = Cdn.encode(result.rawDataItem, CdnGeneratorOptions.Pretty)
                             window.navigator.asDynamic().clipboard.writeText(diag)
-                            copyDiagStatus = "Copied Diagnostics!"
+                            copyDiagStatus = "Copied CDN!"
                             window.setTimeout({ copyDiagStatus = "" }, 2000)
                         }
-                        +if (copyDiagStatus.isNotEmpty()) copyDiagStatus else "Copy CBOR Diagnostics"
+                        +if (copyDiagStatus.isNotEmpty()) copyDiagStatus else "Copy CDN"
                     }
                 }
             }
@@ -764,7 +765,7 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                         }
 
                         CborDiagnosticViewer {
-                            diagText = Cbor.toDiagnostics(info.dataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                            diagText = Cdn.encode(info.dataItem, CdnGeneratorOptions.Pretty)
                             maxHeight = 250.px
                         }
                     }
@@ -776,11 +777,11 @@ val DeviceRequestParserComponent: FC<Props> = FC {
 
                     label {
                         css { display = Display.block; fontWeight = FontWeight.bold; color = Color("#cbd5e1"); marginBottom = 8.px }
-                        +"Full DeviceRequest CBOR Diagnostic Notation:"
+                        +"Full DeviceRequest CBOR CDN View:"
                     }
 
                     CborDiagnosticViewer {
-                        diagText = Cbor.toDiagnostics(rawDataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                        diagText = Cdn.encode(rawDataItem, CdnGeneratorOptions.Pretty)
                         maxHeight = 400.px
                     }
                 }

@@ -37,6 +37,9 @@ val CborDecoderComponent = FC {
     var outputB64Url by useState("")
     var prettyPrint by useState(true)
     var decodeEmbeddedCbor by useState(true)
+    var useEmbeddedCborOpportunistically by useState(true)
+    var useEmbeddedCertsOpportunistically by useState(true)
+    var annotateCoseOpportunistically by useState(true)
     var useAppExtensions by useState(true)
     var sortKeys by useState(false)
     var bstrFormat by useState(ByteStringFormat.HEX)
@@ -56,6 +59,9 @@ val CborDecoderComponent = FC {
                     val options = CdnGeneratorOptions(
                         prettyPrint = prettyPrint,
                         useEmbeddedCborShorthand = decodeEmbeddedCbor,
+                        useEmbeddedCborOpportunistically = useEmbeddedCborOpportunistically,
+                        useEmbeddedCertsOpportunistically = useEmbeddedCertsOpportunistically,
+                        annotateCoseOpportunistically = annotateCoseOpportunistically,
                         useApplicationExtensions = useAppExtensions,
                         sortMapKeys = sortKeys,
                         byteStringFormat = bstrFormat
@@ -301,7 +307,58 @@ val CborDecoderComponent = FC {
                         checked = decodeEmbeddedCbor
                         onChange = { decodeEmbeddedCbor = it.target.checked }
                     }
-                    +"Decode embedded CBOR (<< ... >>)"
+                    +"Tag 24 embedded CBOR (<< ... >>)"
+                }
+
+                label {
+                    css {
+                        display = Display.flex
+                        alignItems = AlignItems.center
+                        gap = 8.px
+                        cursor = Cursor.pointer
+                        color = Color("#cbd5e1")
+                        fontWeight = FontWeight.normal
+                    }
+                    input {
+                        type = "checkbox".unsafeCast<InputType>()
+                        checked = useEmbeddedCborOpportunistically
+                        onChange = { useEmbeddedCborOpportunistically = it.target.checked }
+                    }
+                    +"Opportunistic embedded CBOR (<< ... >>)"
+                }
+
+                label {
+                    css {
+                        display = Display.flex
+                        alignItems = AlignItems.center
+                        gap = 8.px
+                        cursor = Cursor.pointer
+                        color = Color("#cbd5e1")
+                        fontWeight = FontWeight.normal
+                    }
+                    input {
+                        type = "checkbox".unsafeCast<InputType>()
+                        checked = useEmbeddedCertsOpportunistically
+                        onChange = { useEmbeddedCertsOpportunistically = it.target.checked }
+                    }
+                    +"Opportunistic X.509 certs (cert'''...''')"
+                }
+
+                label {
+                    css {
+                        display = Display.flex
+                        alignItems = AlignItems.center
+                        gap = 8.px
+                        cursor = Cursor.pointer
+                        color = Color("#cbd5e1")
+                        fontWeight = FontWeight.normal
+                    }
+                    input {
+                        type = "checkbox".unsafeCast<InputType>()
+                        checked = annotateCoseOpportunistically
+                        onChange = { annotateCoseOpportunistically = it.target.checked }
+                    }
+                    +"Opportunistic COSE (/label/, # alg)"
                 }
 
                 label {
@@ -414,7 +471,7 @@ val CborDecoderComponent = FC {
                                 fontWeight = FontWeight.normal
                                 color = Color("#cbd5e1")
                             }
-                            +"Diagnostic Output (CDN):"
+                            +"CDN Output:"
                         }
                         button {
                             css {

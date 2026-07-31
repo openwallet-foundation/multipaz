@@ -1,5 +1,7 @@
 package org.multipaz.cbor
 
+import kotlinx.io.bytestring.ByteString
+import org.multipaz.crypto.X509Cert
 import org.multipaz.util.fromBase64
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.fromHex
@@ -26,7 +28,7 @@ interface CdnExtension {
     /**
      * Formats a [DataItem] into CDN extension syntax, or returns `null` if not applicable.
      */
-    fun format(item: DataItem, options: CdnGeneratorOptions): String?
+    fun format(item: DataItem, options: CdnGeneratorOptions, indent: Int = 0): String?
 }
 
 /**
@@ -58,13 +60,14 @@ class CdnExtensionRegistry {
          */
         val Default: CdnExtensionRegistry by lazy {
             CdnExtensionRegistry().apply {
-                register(HexExtension)
-                register(Base64Extension)
+                register(CertExtension)
                 register(DateTimeExtension)
                 register(IpExtension)
                 register(FloatExtension)
                 register(StringConcatByteExtension)
                 register(StringConcatTextExtension)
+                register(HexExtension)
+                register(Base64Extension)
             }
         }
     }
@@ -82,7 +85,7 @@ object HexExtension : CdnExtension {
         return Bstr(bytes)
     }
 
-    override fun format(item: DataItem, options: CdnGeneratorOptions): String? {
+    override fun format(item: DataItem, options: CdnGeneratorOptions, indent: Int): String? {
         if (options.byteStringFormat == ByteStringFormat.HEX && item is Bstr) {
             return "h'${item.value.toHex()}'"
         }
@@ -106,7 +109,7 @@ object Base64Extension : CdnExtension {
         return Bstr(bytes)
     }
 
-    override fun format(item: DataItem, options: CdnGeneratorOptions): String? {
+    override fun format(item: DataItem, options: CdnGeneratorOptions, indent: Int): String? {
         if (options.byteStringFormat == ByteStringFormat.BASE64 && item is Bstr) {
             return "b64'${item.value.toBase64()}'"
         }
@@ -124,7 +127,7 @@ object DateTimeExtension : CdnExtension {
         return Tagged(Tagged.DATE_TIME_STRING, Tstr(content))
     }
 
-    override fun format(item: DataItem, options: CdnGeneratorOptions): String? {
+    override fun format(item: DataItem, options: CdnGeneratorOptions, indent: Int): String? {
         if (!options.useApplicationExtensions) return null
         if (item is Tagged && item.tagNumber == Tagged.DATE_TIME_STRING && item.taggedItem is Tstr) {
             return "dt'${(item.taggedItem as Tstr).value}'"
@@ -163,7 +166,7 @@ object IpExtension : CdnExtension {
         }
     }
 
-    override fun format(item: DataItem, options: CdnGeneratorOptions): String? {
+    override fun format(item: DataItem, options: CdnGeneratorOptions, indent: Int): String? {
         if (!options.useApplicationExtensions) return null
         if (item is Tagged) {
             if (item.tagNumber == 52L && item.taggedItem is Bstr && item.taggedItem.asBstr.size == 4) {
@@ -239,7 +242,7 @@ object FloatExtension : CdnExtension {
         throw CdnException("Invalid float extension literal: $content")
     }
 
-    override fun format(item: DataItem, options: CdnGeneratorOptions): String? = null
+    override fun format(item: DataItem, options: CdnGeneratorOptions, indent: Int): String? = null
 
     private fun float16ToFloat(bits: Int): Float {
         val s = (bits shr 15) and 0x01
@@ -275,7 +278,7 @@ object StringConcatByteExtension : CdnExtension {
         return Bstr(content.encodeToByteArray())
     }
 
-    override fun format(item: DataItem, options: CdnGeneratorOptions): String? = null
+    override fun format(item: DataItem, options: CdnGeneratorOptions, indent: Int): String? = null
 }
 
 /**
@@ -288,5 +291,47 @@ object StringConcatTextExtension : CdnExtension {
         return Tstr(content)
     }
 
-    override fun format(item: DataItem, options: CdnGeneratorOptions): String? = null
+    override fun format(item: DataItem, options: CdnGeneratorOptions, indent: Int): String? = null
+}
+
+/**
+ * Extension for X.509 certificates: `cert'''-----BEGIN CERTIFICATE-----...-----END CERTIFICATE-----'''`.
+ */
+object CertExtension : CdnExtension {
+    override val identifier: String = "cert"
+
+    override fun parseLiteral(content: String, delimiter: Char): DataItem {
+        val cert = X509Cert.fromPem(content)
+        return Bstr(cert.encoded.toByteArray())
+    }
+
+    override fun format(item: DataItem, options: CdnGeneratorOptions, indent: Int): String? {
+        if (!options.useApplicationExtensions || !options.useEmbeddedCertsOpportunistically) return null
+        if (item is Bstr) {
+            val bytes = item.value
+            // Fast path check: X.509 DER certificate MUST start with 0x30 (SEQUENCE) and be >= 64 bytes
+            if (bytes.size < 64 || bytes[0] != 0x30.toByte()) {
+                return null
+            }
+            try {
+                val cert = X509Cert(ByteString(bytes))
+                cert.version // Trigger parsing to ensure valid X.509 structure
+                val pem = cert.toPem().trim()
+                return if (options.prettyPrint) {
+                    val itemIndentStr = " ".repeat(indent)
+                    val pemIndentStr = " ".repeat(indent + options.indentSize)
+                    val subjectLine = "$itemIndentStr# Subject DN: ${cert.subject.name}"
+                    val issuerLine = "$itemIndentStr# Issuer DN: ${cert.issuer.name}"
+                    val indentedPem = pem.lines().joinToString("\n") { "$pemIndentStr$it" }
+                    val block = "$subjectLine\n$issuerLine\n${itemIndentStr}cert'''\n$indentedPem\n$itemIndentStr'''"
+                    if (indent > 0) "\n$block" else block
+                } else {
+                    "cert'''\n# Subject DN: ${cert.subject.name}\n# Issuer DN: ${cert.issuer.name}\n$pem\n'''"
+                }
+            } catch (_: Throwable) {
+                // Not a valid X.509 certificate
+            }
+        }
+        return null
+    }
 }

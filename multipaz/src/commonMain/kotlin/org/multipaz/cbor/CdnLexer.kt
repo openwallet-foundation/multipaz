@@ -8,6 +8,7 @@ internal enum class TokenType {
     STRING_RAW_DOUBLE,
     STRING_RAW_SINGLE,
     EXTENSION_LITERAL,
+    EXTENSION_EMBEDDED_CBOR_OPEN, // e.g. b1<<, t1<<, hash<<
     EMBEDDED_CBOR_OPEN,  // <<
     EMBEDDED_CBOR_CLOSE, // >>
     LBRACKET,            // [
@@ -118,6 +119,10 @@ internal class CdnLexer(private val input: String) {
             skipWhitespaceAndComments()
             if (pos < input.length) {
                 val nextCh = input[pos]
+                if (nextCh == '<' && peek(1) == '<') {
+                    advance(2)
+                    return Token(TokenType.EXTENSION_EMBEDDED_CBOR_OPEN, "<<", startLine, startCol, extraData = id)
+                }
                 if (nextCh == '"' && peek(1) == '"' && peek(2) == '"') {
                     val rawToken = readRawString(true, startLine, startCol)
                     return Token(TokenType.EXTENSION_LITERAL, rawToken.text, startLine, startCol, extraData = id)

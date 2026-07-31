@@ -42,6 +42,16 @@ data class CdnGeneratorOptions(
     val useEmbeddedCborShorthand: Boolean = true,
 
     /**
+     * Whether to format any byte string using `<< ... >>` embedded CBOR notation when it contains valid encoded CBOR.
+     */
+    val useEmbeddedCborOpportunistically: Boolean = true,
+
+    /**
+     * Whether to format byte strings containing valid X.509 certificates using `cert'''...'''` PEM notation.
+     */
+    val useEmbeddedCertsOpportunistically: Boolean = true,
+
+    /**
      * Whether to format tagged items using application extension literals (e.g. `dt'...'`, `ip'...'`).
      */
     val useApplicationExtensions: Boolean = true,
@@ -50,6 +60,26 @@ data class CdnGeneratorOptions(
      * Whether map keys should be sorted.
      */
     val sortMapKeys: Boolean = false,
+
+    /**
+     * Whether to heuristically detect COSE data structures (e.g., COSE_Sign1, COSE_Mac0, COSE_Key)
+     * and annotate their elements, header parameters, key parameters, and algorithms with descriptive comments.
+     *
+     * Following the draft-ietf-cbor-edn-literals convention:
+     * - Structure labels and key names are placed in inline comments (`/ label /`).
+     * - Parameter values and algorithms are annotated with line comments (`# value`).
+     *
+     * ### Supported Structures:
+     * - **COSE_Sign1** (RFC 9052 Section 4.2): 4-element array `[/ protected /, / unprotected /, / payload /, / signature /]`.
+     * - **COSE_Mac0** (RFC 9052 Section 6.2): 4-element array `[/ protected /, / unprotected /, / payload /, / tag /]`.
+     * - **COSE_Key** (RFC 9052 Section 7): Map containing `/ kty / 1` and key parameters (`/ alg /`, `/ crv /`, `/ x /`, `/ y /`, `/ d /`, `/ k /`).
+     *
+     * ### Heuristic Detection:
+     * - **COSE_Sign1**: Tag 18 OR 4-element array `[bstr, map, bstr/null, bstr]` containing recognized COSE header labels.
+     * - **COSE_Mac0**: Tag 17 OR 4-element array `[bstr, map, bstr/null, bstr]` containing recognized MAC algorithm/header labels.
+     * - **COSE_Key**: Map containing integer key `1` (`kty`) matching valid key types (`1` OKP, `2` EC2, `3` RSA, `4` Symmetric).
+     */
+    val annotateCoseOpportunistically: Boolean = true,
 
     /**
      * Extension registry for formatting application extensions.

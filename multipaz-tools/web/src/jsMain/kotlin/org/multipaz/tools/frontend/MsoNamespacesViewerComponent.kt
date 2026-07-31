@@ -35,7 +35,8 @@ import web.html.InputType
 import web.cssom.*
 import kotlinx.coroutines.launch
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
 import org.multipaz.mdoc.mso.MobileSecurityObject
@@ -488,7 +489,7 @@ private fun react.ChildrenBuilder.renderMsoDetails(mso: MobileSecurityObject) {
                 }
                 code {
                     +try {
-                        Cbor.toDiagnostics(mso.deviceKey.toCoseKey().toDataItem(), setOf(DiagnosticOption.EMBEDDED_CBOR))
+                        Cdn.encode(mso.deviceKey.toCoseKey().toDataItem())
                     } catch (e: Throwable) {
                         "Error formatting device key"
                     }
@@ -538,7 +539,7 @@ private fun react.ChildrenBuilder.renderMsoDetails(mso: MobileSecurityObject) {
                     }
                     code {
                         +try {
-                            Cbor.toDiagnostics(revocationStatus.toDataItem(), setOf(DiagnosticOption.EMBEDDED_CBOR))
+                            Cdn.encode(revocationStatus.toDataItem())
                         } catch (e: Throwable) {
                             "Error formatting revocation status"
                         }
@@ -692,7 +693,7 @@ private fun react.ChildrenBuilder.renderNamespacesDetails(namespaces: IssuerName
                                         }
                                     } else {
                                         +try {
-                                            Cbor.toDiagnostics(item.dataElementValue, setOf(DiagnosticOption.EMBEDDED_CBOR))
+                                            Cdn.encode(item.dataElementValue)
                                         } catch (e: Throwable) {
                                             "Error formatting item"
                                         }

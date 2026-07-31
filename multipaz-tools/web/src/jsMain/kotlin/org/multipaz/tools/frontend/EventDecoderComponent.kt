@@ -10,8 +10,9 @@ import js.typedarrays.toByteArray
 import kotlinx.browser.window
 import kotlinx.coroutines.launch
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.eventlogger.Event
@@ -527,7 +528,7 @@ private val CborDataBlock: FC<CborDataBlockProps> = FC { props ->
     var copyHexStatus by useState("")
     val encodedBytes = Cbor.encode(props.dataItem)
     val hexString = encodedBytes.toHex()
-    val diagText = Cbor.toDiagnostics(props.dataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+    val diagText = Cdn.encode(props.dataItem, CdnGeneratorOptions.Pretty)
 
     div {
         css {
@@ -1083,7 +1084,7 @@ private val CredentialCard: FC<CredentialCardProps> = FC { props ->
         // CBOR diagnostic preview if data is valid CBOR
         val diagPreview = try {
             val dataItem = Cbor.decode(bytes)
-            Cbor.toDiagnostics(dataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+            Cdn.encode(dataItem, CdnGeneratorOptions.Pretty)
         } catch (e: Throwable) {
             null
         }
@@ -1617,7 +1618,7 @@ private fun react.ChildrenBuilder.renderEventAppDataSection(appData: Map<String,
                 }
 
                 CborDiagnosticViewer {
-                    diagText = Cbor.toDiagnostics(dataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                    diagText = Cdn.encode(dataItem, CdnGeneratorOptions.Pretty)
                     maxHeight = 200.px
                 }
             }

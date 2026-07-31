@@ -28,7 +28,8 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.mdoc.util.MdocUtil
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
-import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.addCborMap
@@ -2569,9 +2570,9 @@ val Iso180137VerifierComponent: FC<Props> = FC {
             if (generatedDevReqDataItem != null) {
                 div {
                     css { marginTop = 12.px }
-                    h4 { css { fontSize = 13.px; color = Color("#94a3b8"); margin = Margin(0.px, 0.px, 6.px, 0.px) }; +"DeviceRequest CBOR Diagnostic View:" }
+                    h4 { css { fontSize = 13.px; color = Color("#94a3b8"); margin = Margin(0.px, 0.px, 6.px, 0.px) }; +"DeviceRequest CBOR CDN View:" }
                     CborDiagnosticViewer {
-                        diagText = Cbor.toDiagnostics(generatedDevReqDataItem!!, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                        diagText = Cdn.encode(generatedDevReqDataItem!!, CdnGeneratorOptions.Pretty)
                         maxHeight = 220.px
                     }
                 }
@@ -2782,7 +2783,7 @@ val Iso180137VerifierComponent: FC<Props> = FC {
                 }
 
                 CborDiagnosticViewer {
-                    diagText = Cbor.toDiagnostics(resp.deviceResponse, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                    diagText = Cdn.encode(resp.deviceResponse, CdnGeneratorOptions.Pretty)
                     maxHeight = 300.px
                 }
             }
