@@ -126,6 +126,8 @@ class CompressedStatusList(
          * @param jwt status list JWT representation
          * @param publicKey public key of the issuance server signing key (optional)
          * @param checks additional checks for JWT validation
+         * @param atTime time instant to check for expiration
+         * @param maxValidity maximum JWT validity duration to accept
          * @return parsed [CompressedStatusList]
          * @throws IllegalArgumentException when [jwt] cannot be parsed as JWT status list
          * @throws InvalidRequestException when JWT validation fails
@@ -134,6 +136,7 @@ class CompressedStatusList(
             jwt: String,
             publicKey: EcPublicKey? = null,
             checks: Map<WebTokenCheck, String> = mapOf(),
+            atTime: Instant = Clock.System.now(),
             maxValidity: Duration = 365.days
         ): CompressedStatusList {
             val body = validateJwt(
@@ -144,6 +147,7 @@ class CompressedStatusList(
                     putAll(checks)
                 },
                 publicKey = publicKey,
+                atTime = atTime,
                 maxValidity = maxValidity
             )
             val expirationTime = body["exp"]?.let {
@@ -190,6 +194,7 @@ class CompressedStatusList(
          * @param cwt status list CWT representation
          * @param publicKey public key of the issuance server signing key (optional)
          * @param checks additional checks for JWT validation
+         * @param atTime time instant to check for expiration
          * @param maxValidity maximum CWT validity duration to accept
          * @return parsed [CompressedStatusList]
          * @throws IllegalArgumentException when [cwt] cannot be parsed as CWT status list
@@ -199,6 +204,7 @@ class CompressedStatusList(
             cwt: ByteArray,
             publicKey: EcPublicKey? = null,
             checks: Map<WebTokenCheck, String> = mapOf(),
+            atTime: Instant = Clock.System.now(),
             maxValidity: Duration = 365.days
         ): CompressedStatusList {
             val body = validateCwt(
@@ -209,6 +215,7 @@ class CompressedStatusList(
                     putAll(checks)
                 },
                 publicKey = publicKey,
+                atTime = atTime,
                 maxValidity = maxValidity
             )
             if (!body.hasKey(STATUS_LIST_CLAIM)) {

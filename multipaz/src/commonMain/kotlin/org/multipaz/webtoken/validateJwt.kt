@@ -72,7 +72,7 @@ import kotlin.time.Instant
  *  the certificate chain is not valid it should throw [InvalidRequestException] exception,
  *  the returned value should indicate if the chain is trusted (in which case
  *  [WebTokenCheck.TRUST] check is not performed) or not ([WebTokenCheck.TRUST] still applies).
- * @param clock clock that determines current time to check for expiration.
+ * @param atTime time instant for expiration check.
  * @param nonceValidator function that must throw [ChallengeInvalidException] if nonce/challenge
  *  is not valid; this is used with [WebTokenCheck.CHALLENGE] check.
  * @throws ChallengeInvalidException when nonce or challenge check fails (see [WebTokenCheck.CHALLENGE])
@@ -87,7 +87,7 @@ suspend fun validateJwt(
     checks: Map<WebTokenCheck, String> = mapOf(),
     maxValidity: Duration = 10.hours,
     certificateChainValidator: (suspend (chain: X509CertChain, atTime: Instant) -> Boolean)? = null,
-    clock: Clock = Clock.System,
+    atTime: Instant = Clock.System.now(),
     nonceValidator: suspend (nonce: String) -> Unit = Challenge::validateAndConsume
 ): JsonObject {
     require(publicKey == null || certificateChainValidator == null)
@@ -102,34 +102,32 @@ suspend fun validateJwt(
         parts[1].fromBase64Url().decodeToString()
     ).jsonObject
 
-    val now = clock.now()
-
     val algorithm = header["alg"]?.jsonPrimitive?.content?.let {
         Algorithm.fromJoseAlgorithmIdentifier(it)
     }
 
     val expiration = body[WebTokenClaim.Exp] ?: run {
         if (maxValidity == Duration.INFINITE) {
-            now + 1.seconds
+            atTime + 1.seconds
         } else {
             val iat = body[WebTokenClaim.Iat]
                 ?: throw InvalidRequestException("$jwtName: either 'exp' or 'iat' is required")
-            if (iat > now) {
+            if (iat > atTime) {
                 // Allow no more than 5 seconds clock mismatch
-                if (iat > now + 5.seconds) {
+                if (iat > atTime + 5.seconds) {
                     throw InvalidRequestException("$jwtName: 'iat' is in future")
                 }
-                now + maxValidity
+                atTime + maxValidity
             } else {
                 iat + maxValidity
             }
         }
     }
 
-    if (expiration < now) {
+    if (expiration < atTime) {
         throw InvalidRequestException("$jwtName: expired")
     }
-    if (maxValidity != Duration.INFINITE && expiration > now + maxValidity) {
+    if (maxValidity != Duration.INFINITE && expiration > atTime + maxValidity) {
         throw InvalidRequestException("$jwtName: expiration is too far in the future")
     }
 
@@ -148,7 +146,7 @@ suspend fun validateJwt(
     val caValidated = try {
         certificateChain != null &&
             (certificateChainValidator ?: ::basicCertificateChainValidator)
-                .invoke(certificateChain, now)
+                .invoke(certificateChain, atTime)
     } catch (err: InvalidRequestException) {
         throw InvalidRequestException("$jwtName: ${err.message}")
     }
