@@ -49,10 +49,24 @@ val SdJwtInspectorComponent = FC {
     var rawInput by useState("")
     var parsedSdJwt by useState<SdJwt?>(null)
     var parsedSdJwtKb by useState<SdJwtKb?>(null)
+    var processedPayload by useState<JsonObject?>(null)
     var parseError by useState("")
 
+    suspend fun calculateProcessedPayload(sdjwt: SdJwt): JsonObject? {
+        val issuerKey = sdjwt.x5c?.certificates?.firstOrNull()?.ecPublicKey
+        return try {
+            sdjwt.verify(issuerKey = issuerKey)
+        } catch (e: Throwable) {
+            try {
+                sdjwt.verify(issuerKey = null)
+            } catch (e2: Throwable) {
+                null
+            }
+        }
+    }
+
     fun parseInput(inputStr: String) {
-        val cleanInput = inputStr.trim()
+        val cleanInput = inputStr.replace(Regex("[\\s\\r\\n\\t]"), "")
         if (cleanInput.isEmpty()) return
         mainScope.launch {
             try {
@@ -65,7 +79,7 @@ val SdJwtInspectorComponent = FC {
                     } catch (e: Throwable) {
                         bytes
                     }
-                    decompressedBytes.decodeToString().trim()
+                    decompressedBytes.decodeToString().replace(Regex("[\\s\\r\\n\\t]"), "")
                 }
 
                 if (!token.endsWith("~")) {
@@ -74,6 +88,7 @@ val SdJwtInspectorComponent = FC {
                         val sdJwtKb = SdJwtKb.fromCompactSerialization(token)
                         parsedSdJwtKb = sdJwtKb
                         parsedSdJwt = sdJwtKb.sdJwt
+                        processedPayload = calculateProcessedPayload(sdJwtKb.sdJwt)
                         parseError = ""
                         updateUrlHashPayload(cleanInput)
                     } catch (e1: Throwable) {
@@ -82,12 +97,14 @@ val SdJwtInspectorComponent = FC {
                             val sdjwt = SdJwt.fromCompactSerialization("$token~")
                             parsedSdJwtKb = null
                             parsedSdJwt = sdjwt
+                            processedPayload = calculateProcessedPayload(sdjwt)
                             parseError = ""
                             updateUrlHashPayload(cleanInput)
                         } catch (e2: Throwable) {
                             parseError = "Error parsing SD-JWT / SD-JWT+KB: ${e1.message ?: e1.toString()}"
                             parsedSdJwtKb = null
                             parsedSdJwt = null
+                            processedPayload = null
                         }
                     }
                 } else {
@@ -95,6 +112,7 @@ val SdJwtInspectorComponent = FC {
                     val sdjwt = SdJwt.fromCompactSerialization(token)
                     parsedSdJwtKb = null
                     parsedSdJwt = sdjwt
+                    processedPayload = calculateProcessedPayload(sdjwt)
                     parseError = ""
                     updateUrlHashPayload(cleanInput)
                 }
@@ -102,6 +120,7 @@ val SdJwtInspectorComponent = FC {
                 parseError = "Error parsing SD-JWT: " + (e.message ?: e.toString())
                 parsedSdJwtKb = null
                 parsedSdJwt = null
+                processedPayload = null
             }
         }
     }
@@ -129,7 +148,7 @@ val SdJwtInspectorComponent = FC {
                 margin = Margin(0.px, 0.px, 16.px, 0.px)
                 color = Color("#f8fafc")
             }
-            +"SD-JWT & SD-JWT+KB Token Parser"
+            +"SD-JWT, SD-JWT+KB & JWT Token Parser"
         }
 
         if (parsedSdJwt != null || parseError.isNotEmpty()) {
@@ -174,7 +193,7 @@ val SdJwtInspectorComponent = FC {
                     color = Color("#94a3b8")
                     marginBottom = 24.px
                 }
-                +"Decode and inspect SD-JWT and SD-JWT+KB tokens (compact serialization). Parses Issuer-Signed JWT header/body, individual claim Disclosures, and Key Binding JWTs (KB-JWT)."
+                +"Decode and inspect SD-JWT, SD-JWT+KB, and standard JWT tokens. Parses Issuer-Signed JWT header/body, individual claim Disclosures, and Key Binding JWTs (KB-JWT)."
             }
 
             div {
@@ -190,7 +209,7 @@ val SdJwtInspectorComponent = FC {
                         fontWeight = FontWeight.bold
                         color = Color("#cbd5e1")
                     }
-                    +"SD-JWT / SD-JWT+KB Token:"
+                    +"SD-JWT / SD-JWT+KB / JWT Token:"
                 }
 
                 label {
@@ -254,7 +273,7 @@ val SdJwtInspectorComponent = FC {
                     }
                 }
                 value = rawInput
-                placeholder = "Paste SD-JWT or SD-JWT+KB (e.g. eyJhbGciOiJFUzI1NiIs...~WyJHcTJza...~eyJhbG...)"
+                placeholder = "Paste SD-JWT, SD-JWT+KB, or standard JWT (e.g. eyJhbGciOiJFUzI1...)"
                 onChange = { rawInput = it.target.value }
             }
 
@@ -281,7 +300,7 @@ val SdJwtInspectorComponent = FC {
                 onClick = {
                     parseInput(rawInput)
                 }
-                +"Inspect SD-JWT / SD-JWT+KB"
+                +"Inspect Token (SD-JWT / JWT)"
             }
         }
 
@@ -333,8 +352,8 @@ val SdJwtInspectorComponent = FC {
 
                 div {
                     css {
-                        display = Display.grid
-                        gridTemplateColumns = "repeat(auto-fit, minmax(300px, 1fr))".unsafeCast<GridTemplateColumns>()
+                        display = Display.flex
+                        flexDirection = FlexDirection.column
                         gap = 24.px
                         marginBottom = 32.px
                     }
@@ -380,7 +399,7 @@ val SdJwtInspectorComponent = FC {
                                 fontWeight = FontWeight.bold
                                 marginBottom = 12.px
                             }
-                            +"JWT Payload / Claims"
+                            +"Raw JWT Payload / Claims"
                         }
                         pre {
                             css {
@@ -390,6 +409,35 @@ val SdJwtInspectorComponent = FC {
                                 overflowX = "auto".unsafeCast<Overflow>()
                             }
                             +Json { prettyPrint = true }.encodeToString(sdjwt.jwtBody)
+                        }
+                    }
+
+                    // Processed Payload Card (calculated via SdJwt.verify())
+                    processedPayload?.let { payload ->
+                        div {
+                            css {
+                                background = Color("#0f172a")
+                                border = Border(1.px, LineStyle.solid, Color("#059669"))
+                                borderRadius = 8.px
+                                padding = 20.px
+                            }
+                            h4 {
+                                css {
+                                    color = Color("#34d399")
+                                    fontWeight = FontWeight.bold
+                                    marginBottom = 12.px
+                                }
+                                +"Processed SD-JWT Payload"
+                            }
+                            pre {
+                                css {
+                                    color = Color("#34d399")
+                                    fontSize = 13.px
+                                    fontFamily = FontFamily.monospace
+                                    overflowX = "auto".unsafeCast<Overflow>()
+                                }
+                                +Json { prettyPrint = true }.encodeToString(payload)
+                            }
                         }
                     }
                 }
@@ -407,11 +455,13 @@ val SdJwtInspectorComponent = FC {
                         flexDirection = FlexDirection.column
                         gap = 8.px
                     }
-                    div {
-                        span { css { color = Color("#64748b"); fontWeight = FontWeight.bold } }
-                        +"Issuer (iss): "
-                        span { css { color = Color("#f1f5f9") } }
-                        +sdjwt.issuer
+                    sdjwt.issuer?.let { iss ->
+                        div {
+                            span { css { color = Color("#64748b"); fontWeight = FontWeight.bold } }
+                            +"Issuer (iss / issuer): "
+                            span { css { color = Color("#f1f5f9") } }
+                            +iss
+                        }
                     }
                     sdjwt.credentialType?.let { vct ->
                         div {
