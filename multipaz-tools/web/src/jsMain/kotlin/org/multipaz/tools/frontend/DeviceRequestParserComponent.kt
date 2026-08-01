@@ -296,10 +296,9 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                         parsedResult = null
                         parseError = ""
                         fileName = ""
-                        rawInput = ""
                         updateUrlHashPayload("")
                     }
-                    +"← Clear and Decode Another Request"
+                    +"← Back to Input"
                 }
 
                 if (parsedResult != null) {
@@ -392,6 +391,32 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                     marginBottom = 16.px
                 }
 
+                if (rawInput.isNotEmpty()) {
+                    button {
+                        css {
+                            padding = Padding(10.px, 20.px)
+                            background = Color("#334155")
+                            color = Color("#f1f5f9")
+                            border = Border(1.px, LineStyle.solid, Color("#475569"))
+                            borderRadius = 8.px
+                            cursor = Cursor.pointer
+                            fontWeight = FontWeight.bold
+                            fontSize = 14.px
+                            hover {
+                                background = Color("#475569")
+                            }
+                        }
+                        onClick = {
+                            rawInput = ""
+                            parsedResult = null
+                            parseError = ""
+                            fileName = ""
+                            updateUrlHashPayload("")
+                        }
+                        +"🗑️ Clear Input"
+                    }
+                }
+
                 button {
                     css {
                         padding = Padding(10.px, 20.px)
@@ -434,7 +459,6 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                     +"📁 Choose File"
                     input {
                         type = "file".unsafeCast<InputType>()
-                        accept = ".cbor,.bin,.hex,*/*"
                         css {
                             display = None.none
                         }
@@ -447,26 +471,13 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                                 reader.asDynamic().onload = {
                                     val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
                                     val bytes = Int8Array(arrayBuffer).toByteArray()
-                                    try {
-                                        val dataItem = Cbor.decode(bytes)
-                                        val devReq = DeviceRequest.fromDataItem(dataItem)
-                                        parsedResult = ParsedRequestResult(devReq, dataItem, bytes.toHex())
-                                        parseError = ""
-                                        fileName = name
-                                    } catch (e: Throwable) {
-                                        val text = bytes.decodeToString()
-                                        try {
-                                            val decodedBytes = decodeInputToBytes(text)
-                                            val dataItem = Cbor.decode(decodedBytes)
-                                            val devReq = DeviceRequest.fromDataItem(dataItem)
-                                            parsedResult = ParsedRequestResult(devReq, dataItem, decodedBytes.toHex())
-                                            parseError = ""
-                                            fileName = name
-                                        } catch (err: Throwable) {
-                                            parseError = "Error parsing DeviceRequest: " + (err.message ?: "Invalid CBOR payload")
-                                            parsedResult = null
-                                        }
+                                    val text = bytes.decodeToString()
+                                    rawInput = if (text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
+                                        text.trim()
+                                    } else {
+                                        bytes.toHex()
                                     }
+                                    fileName = name
                                 }
                                 reader.readAsArrayBuffer(file)
                             }

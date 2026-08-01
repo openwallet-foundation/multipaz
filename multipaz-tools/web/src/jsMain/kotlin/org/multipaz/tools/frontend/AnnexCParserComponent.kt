@@ -330,10 +330,9 @@ val AnnexCParserComponent: FC<Props> = FC {
                     parsedRequest = null
                     parsedResponse = null
                     parseError = ""
-                    rawInput = ""
                     updateUrlHashPayload("")
                 }
-                +"← Clear and Decode Another"
+                +"← Back to Input"
             }
 
             if (parseError.isNotEmpty()) {
@@ -367,39 +366,72 @@ val AnnexCParserComponent: FC<Props> = FC {
                     +if (mode == "request") "Paste W3C Digital Credentials Request JSON:" else "Paste W3C Digital Credentials Response JSON:"
                 }
 
-                label {
+                div {
                     css {
-                        background = Color("#334155")
-                        border = None.none
-                        color = Color("#f1f5f9")
-                        padding = Padding(4.px, 12.px)
-                        borderRadius = 6.px
-                        cursor = Cursor.pointer
-                        fontSize = 13.px
-                        fontWeight = FontWeight.normal
-                        hover {
-                            background = Color("#475569")
+                        display = Display.flex
+                        gap = 8.px
+                        alignItems = AlignItems.center
+                    }
+
+                    if (rawInput.isNotEmpty()) {
+                        button {
+                            css {
+                                background = Color("#334155")
+                                border = None.none
+                                color = Color("#f1f5f9")
+                                padding = Padding(4.px, 12.px)
+                                borderRadius = 6.px
+                                cursor = Cursor.pointer
+                                fontSize = 13.px
+                                fontWeight = FontWeight.normal
+                                hover {
+                                    background = Color("#475569")
+                                }
+                            }
+                            onClick = {
+                                rawInput = ""
+                                parsedRequest = null
+                                parsedResponse = null
+                                parseError = ""
+                                updateUrlHashPayload("")
+                            }
+                            +"🗑️ Clear"
                         }
                     }
-                    +"📁 Load data"
-                    input {
-                        type = "file".unsafeCast<InputType>()
-                        accept = ".json,.bin,.hex,.txt,*/*"
+
+                    label {
                         css {
-                            display = None.none
+                            background = Color("#334155")
+                            border = None.none
+                            color = Color("#f1f5f9")
+                            padding = Padding(4.px, 12.px)
+                            borderRadius = 6.px
+                            cursor = Cursor.pointer
+                            fontSize = 13.px
+                            fontWeight = FontWeight.normal
+                            hover {
+                                background = Color("#475569")
+                            }
                         }
-                        onChange = { event ->
-                            val fileList = event.target.asDynamic().files
-                            if (fileList != null && fileList.length > 0) {
-                                val file = fileList[0].unsafeCast<File>()
-                                val reader = FileReader()
-                                reader.asDynamic().onload = {
-                                    val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
-                                    val bytes = Int8Array(arrayBuffer).toByteArray()
-                                    val text = bytes.decodeToString()
-                                    rawInput = text.trim()
+                        +"📁 Load data"
+                        input {
+                            type = "file".unsafeCast<InputType>()
+                            css {
+                                display = None.none
+                            }
+                            onChange = { event ->
+                                val fileList = event.target.asDynamic().files
+                                if (fileList != null && fileList.length > 0) {
+                                    val file = fileList[0].unsafeCast<File>()
+                                    val reader = FileReader()
+                                    reader.asDynamic().onload = {
+                                        val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
+                                        val bytes = Int8Array(arrayBuffer).toByteArray()
+                                        val text = bytes.decodeToString()
+                                        rawInput = text.trim()
+                                    }
+                                    reader.readAsArrayBuffer(file)
                                 }
-                                reader.readAsArrayBuffer(file)
                             }
                         }
                     }

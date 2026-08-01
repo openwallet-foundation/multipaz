@@ -65,8 +65,9 @@ val ConverterComponent = FC {
                 onClick = {
                     outputResult = ""
                     parseError = ""
+                    updateUrlHashPayload("")
                 }
-                +"← Clear and Go Back"
+                +"← Back to Input"
             }
 
             if (parseError.isNotEmpty()) {
@@ -126,14 +127,45 @@ val ConverterComponent = FC {
                 +"Convert binary payloads or plain text between Hex, Base64, Base64URL, and UTF-8 string encodings."
             }
 
-            label {
+            div {
                 css {
-                    display = Display.block
-                    fontWeight = FontWeight.bold
+                    display = Display.flex
+                    justifyContent = JustifyContent.spaceBetween
+                    alignItems = AlignItems.center
                     marginBottom = 8.px
-                    color = Color("#cbd5e1")
                 }
-                +"Input Payload:"
+
+                label {
+                    css {
+                        fontWeight = FontWeight.bold
+                        color = Color("#cbd5e1")
+                    }
+                    +"Input Payload:"
+                }
+
+                if (rawInput.isNotEmpty()) {
+                    button {
+                        css {
+                            background = Color("#334155")
+                            border = None.none
+                            color = Color("#f1f5f9")
+                            padding = Padding(4.px, 12.px)
+                            borderRadius = 6.px
+                            cursor = Cursor.pointer
+                            fontSize = 13.px
+                            fontWeight = FontWeight.normal
+                            hover {
+                                background = Color("#475569")
+                            }
+                        }
+                        onClick = {
+                            rawInput = ""
+                            outputResult = ""
+                            parseError = ""
+                        }
+                        +"🗑️ Clear"
+                    }
+                }
             }
 
             textarea {

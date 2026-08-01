@@ -36,6 +36,7 @@ fun main() {
 fun pathToTab(path: String): String {
     return when (path) {
         "/cbor" -> "cbor-decode"
+        "/cdn" -> "cdn-decode"
         "/mdocDeviceResponse" -> "mdoc-view"
         "/mdocDeviceRequest" -> "device-request-parse"
         "/deviceRequest" -> "device-request-parse"
@@ -62,6 +63,7 @@ fun pathToTab(path: String): String {
 fun tabToPath(tab: String): String {
     return when (tab) {
         "cbor-decode" -> "/cbor"
+        "cdn-decode" -> "/cdn"
         "mdoc-view" -> "/mdocDeviceResponse"
         "device-request-parse" -> "/mdocDeviceRequest"
         "annex-c-parse" -> "/iso18013-7-annex-c"
@@ -123,39 +125,43 @@ val App = FC {
             color = Color("#f1f5f9") // slate 100
         }
 
-        if (currentHash.startsWith("#") && currentHash.length > 1) {
-            button {
-                css {
-                    position = Position.fixed
-                    top = 20.px
-                    right = 20.px
-                    zIndex = integer(1000)
-                    padding = Padding(10.px, 18.px)
-                    fontSize = 14.px
-                    fontWeight = FontWeight.bold
-                    backgroundColor = Color("#2563eb")
-                    color = Color("#ffffff")
-                    border = None.none
-                    borderRadius = 8.px
-                    cursor = Cursor.pointer
-                    display = Display.flex
-                    alignItems = AlignItems.center
-                    gap = 8.px
-                    boxShadow = BoxShadow(0.px, 4.px, 16.px, Color("rgba(0, 0, 0, 0.5)"))
-                    hover {
-                        backgroundColor = Color("#1d4ed8")
+        div {
+            key = "short-link-container"
+            if (currentHash.startsWith("#") && currentHash.length > 1) {
+                button {
+                    css {
+                        position = Position.fixed
+                        top = 20.px
+                        right = 20.px
+                        zIndex = integer(1000)
+                        padding = Padding(10.px, 18.px)
+                        fontSize = 14.px
+                        fontWeight = FontWeight.bold
+                        backgroundColor = Color("#2563eb")
+                        color = Color("#ffffff")
+                        border = None.none
+                        borderRadius = 8.px
+                        cursor = Cursor.pointer
+                        display = Display.flex
+                        alignItems = AlignItems.center
+                        gap = 8.px
+                        boxShadow = BoxShadow(0.px, 4.px, 16.px, Color("rgba(0, 0, 0, 0.5)"))
+                        hover {
+                            backgroundColor = Color("#1d4ed8")
+                        }
                     }
+                    onClick = { event ->
+                        event.stopPropagation()
+                        isShortLinkModalOpen = true
+                    }
+                    +"🔗 Create Short Link"
                 }
-                onClick = { event ->
-                    event.stopPropagation()
-                    isShortLinkModalOpen = true
-                }
-                +"🔗 Create Short Link"
             }
         }
 
         // Header
         div {
+            key = "header"
             css {
                 position = Position.relative
                 background = Color("linear-gradient(to bottom, #1e293b, #0f172a)")
@@ -196,6 +202,7 @@ val App = FC {
 
         // Navigation Bar
         nav {
+            key = "nav"
             css {
                 display = Display.flex
                 justifyContent = JustifyContent.center
@@ -213,9 +220,10 @@ val App = FC {
 
             val categories = listOf(
                 Category("decoders", "Decoders & Parsers", listOf(
-                    "cbor-decode" to "CBOR and CDN",
+                    "cbor-decode" to "CBOR Decoder",
+                    "cdn-decode" to "CDN Decoder",
                     "asn1" to "ASN.1 Decoder",
-                    "ndef-parse" to "NDEF Parser"
+                    "ndef-parse" to "NDEF Decoder"
                 )),
                 Category("identity", "ISO mdoc & SD-JWT", listOf(
                     "iso18013-7-verifier" to "ISO 18013-7 Verifier",
@@ -339,6 +347,7 @@ val App = FC {
 
         // Content Area
         div {
+            key = "content-area"
             css {
                 flexGrow = number(1.0)
                 padding = Padding(40.px, 24.px)
@@ -348,22 +357,23 @@ val App = FC {
             }
 
             when (activeTab) {
-                "iso18013-7-verifier" -> Iso180137VerifierComponent {}
-                "cbor-decode" -> CborDecoderComponent {}
-                "mdoc-view" -> MdocViewerComponent {}
-                "device-request-parse" -> DeviceRequestParserComponent {}
-                "annex-c-parse" -> AnnexCParserComponent {}
-                "mso-namespaces-view" -> MsoNamespacesViewerComponent {}
-                "sd-jwt-inspect" -> SdJwtInspectorComponent {}
-                "compress" -> CompressionComponent {}
-                "converter" -> ConverterComponent {}
-                "x509" -> X509ParserComponent {}
-                "asn1" -> Asn1DecoderComponent {}
-                "cert-converter" -> CertConverterComponent {}
-                "key-generator" -> KeyGeneratorComponent {}
-                "cert-generator" -> CertGeneratorComponent {}
-                "ndef-parse" -> NdefParserComponent {}
-                "event-decode" -> EventDecoderComponent {}
+                "iso18013-7-verifier" -> Iso180137VerifierComponent { key = "iso18013-7-verifier" }
+                "cbor-decode" -> CborDecoderComponent { key = "cbor-decode" }
+                "cdn-decode" -> CdnDecoderComponent { key = "cdn-decode" }
+                "mdoc-view" -> MdocViewerComponent { key = "mdoc-view" }
+                "device-request-parse" -> DeviceRequestParserComponent { key = "device-request-parse" }
+                "annex-c-parse" -> AnnexCParserComponent { key = "annex-c-parse" }
+                "mso-namespaces-view" -> MsoNamespacesViewerComponent { key = "mso-namespaces-view" }
+                "sd-jwt-inspect" -> SdJwtInspectorComponent { key = "sd-jwt-inspect" }
+                "compress" -> CompressionComponent { key = "compress" }
+                "converter" -> ConverterComponent { key = "converter" }
+                "x509" -> X509ParserComponent { key = "x509" }
+                "asn1" -> Asn1DecoderComponent { key = "asn1" }
+                "cert-converter" -> CertConverterComponent { key = "cert-converter" }
+                "key-generator" -> KeyGeneratorComponent { key = "key-generator" }
+                "cert-generator" -> CertGeneratorComponent { key = "cert-generator" }
+                "ndef-parse" -> NdefParserComponent { key = "ndef-parse" }
+                "event-decode" -> EventDecoderComponent { key = "event-decode" }
             }
         }
 

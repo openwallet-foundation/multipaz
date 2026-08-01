@@ -77,7 +77,7 @@ val NdefParserComponent = FC {
                 margin = Margin(0.px, 0.px, 16.px, 0.px)
                 color = Color("#f8fafc")
             }
-            +"NDEF Message Parser"
+            +"NDEF Decoder"
         }
 
         if (parsedMessage != null || parseError.isNotEmpty()) {
@@ -99,10 +99,9 @@ val NdefParserComponent = FC {
                 onClick = {
                     parsedMessage = null
                     parseError = ""
-                    rawInput = ""
                     updateUrlHashPayload("")
                 }
-                +"← Clear and Go Back"
+                +"← Back to Input"
             }
 
             if (parseError.isNotEmpty()) {
@@ -338,43 +337,75 @@ val NdefParserComponent = FC {
                     +"NDEF Encoded Payload (Hex or Base64):"
                 }
 
-                label {
+                div {
                     css {
-                        background = Color("#334155")
-                        border = None.none
-                        color = Color("#f1f5f9")
-                        padding = Padding(4.px, 12.px)
-                        borderRadius = 6.px
-                        cursor = Cursor.pointer
-                        fontSize = 13.px
-                        fontWeight = FontWeight.normal
-                        hover {
-                            background = Color("#475569")
+                        display = Display.flex
+                        gap = 8.px
+                        alignItems = AlignItems.center
+                    }
+
+                    if (rawInput.isNotEmpty()) {
+                        button {
+                            css {
+                                background = Color("#334155")
+                                border = None.none
+                                color = Color("#f1f5f9")
+                                padding = Padding(4.px, 12.px)
+                                borderRadius = 6.px
+                                cursor = Cursor.pointer
+                                fontSize = 13.px
+                                fontWeight = FontWeight.normal
+                                hover {
+                                    background = Color("#475569")
+                                }
+                            }
+                            onClick = {
+                                rawInput = ""
+                                parsedMessage = null
+                                parseError = ""
+                                updateUrlHashPayload("")
+                            }
+                            +"🗑️ Clear"
                         }
                     }
-                    +"📁 Load data"
-                    input {
-                        type = "file".unsafeCast<InputType>()
-                        accept = ".ndef,.bin,.hex,.txt,*/*"
+
+                    label {
                         css {
-                            display = None.none
+                            background = Color("#334155")
+                            border = None.none
+                            color = Color("#f1f5f9")
+                            padding = Padding(4.px, 12.px)
+                            borderRadius = 6.px
+                            cursor = Cursor.pointer
+                            fontSize = 13.px
+                            fontWeight = FontWeight.normal
+                            hover {
+                                background = Color("#475569")
+                            }
                         }
-                        onChange = { event ->
-                            val fileList = event.target.asDynamic().files
-                            if (fileList != null && fileList.length > 0) {
-                                val file = fileList[0].unsafeCast<File>()
-                                val reader = FileReader()
-                                reader.asDynamic().onload = {
-                                    val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
-                                    val bytes = Int8Array(arrayBuffer).toByteArray()
-                                    val text = bytes.decodeToString()
-                                    if (text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
-                                        rawInput = text.trim()
-                                    } else {
-                                        rawInput = bytes.toHex()
+                        +"📁 Load data"
+                        input {
+                            type = "file".unsafeCast<InputType>()
+                            css {
+                                display = None.none
+                            }
+                            onChange = { event ->
+                                val fileList = event.target.asDynamic().files
+                                if (fileList != null && fileList.length > 0) {
+                                    val file = fileList[0].unsafeCast<File>()
+                                    val reader = FileReader()
+                                    reader.asDynamic().onload = {
+                                        val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
+                                        val bytes = Int8Array(arrayBuffer).toByteArray()
+                                        val text = bytes.decodeToString()
+                                        if (text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
+                                            rawInput = text.trim()
+                                        } else {
+                                            rawInput = bytes.toHex()
+                                        }
                                     }
+                                    reader.readAsArrayBuffer(file)
                                 }
-                                reader.readAsArrayBuffer(file)
                             }
                         }
                     }
