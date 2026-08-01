@@ -331,7 +331,7 @@ val EventDecoderComponent: FC<Props> = FC {
                     fontFamily = FontFamily.monospace
                     padding = 12.px
                     resize = "none".unsafeCast<Resize>()
-                    marginBottom = 16.px
+                    marginBottom = 4.px
                     focus {
                         outline = None.none
                         borderColor = Color("#3b82f6")
@@ -340,6 +340,10 @@ val EventDecoderComponent: FC<Props> = FC {
                 value = rawInput
                 placeholder = "Paste Event Hex (e.g. A36A...) or Base64 / Base64Url string here..."
                 onChange = { rawInput = it.target.value }
+            }
+
+            DetectedInputBadge {
+                input = rawInput
             }
 
             button {
@@ -576,7 +580,7 @@ private val CborDataBlock: FC<CborDataBlockProps> = FC { props ->
 
             span {
                 css { color = Color("#38bdf8"); fontWeight = FontWeight.bold; fontSize = 14.px }
-                +"${props.title} (${encodedBytes.size} bytes)"
+                +props.title
             }
 
             button {
@@ -1083,7 +1087,7 @@ private val CredentialCard: FC<CredentialCardProps> = FC { props ->
 
                 span {
                     css { color = Color("#f1f5f9"); fontWeight = FontWeight.bold; fontSize = 14.px }
-                    +"Credential #${props.index + 1} (${bytes.size} bytes)"
+                    +"Credential #${props.index + 1}"
                 }
             }
 
@@ -1607,9 +1611,16 @@ private fun react.ChildrenBuilder.renderEventSimpleSection(ev: EventSimple) {
             +"Simple Event Data"
         }
 
-        div {
-            css { color = Color("#cbd5e1"); fontSize = 14.px; fontFamily = FontFamily.monospace }
-            +"Payload Size: ${ev.data.size} bytes"
+        val diagText = try {
+            Cdn.encode(Cbor.decode(ev.data.toByteArray()), CdnGeneratorOptions.Pretty)
+        } catch (e: Exception) {
+            ev.data.toByteArray().toHex()
+        }
+
+        CborDiagnosticViewer {
+            this.diagText = diagText
+            this.byteCount = ev.data.size
+            this.maxHeight = 300.px
         }
     }
 }

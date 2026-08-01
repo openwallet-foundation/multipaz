@@ -423,7 +423,7 @@ val NdefParserComponent = FC {
                     fontFamily = FontFamily.monospace
                     padding = 12.px
                     resize = "none".unsafeCast<Resize>()
-                    marginBottom = 24.px
+                    marginBottom = 4.px
                     focus {
                         outline = None.none
                         borderColor = Color("#3b82f6")
@@ -432,6 +432,10 @@ val NdefParserComponent = FC {
                 value = rawInput
                 placeholder = "Paste NDEF hex bytes (e.g. D1010A5504676f6f676c652e636f6d) or base64..."
                 onChange = { rawInput = it.target.value }
+            }
+
+            DetectedInputBadge {
+                input = rawInput
             }
 
             button {

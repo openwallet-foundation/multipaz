@@ -485,7 +485,7 @@ val AnnexCParserComponent: FC<Props> = FC {
                     fontFamily = FontFamily.monospace
                     padding = 12.px
                     resize = "none".unsafeCast<Resize>()
-                    marginBottom = 16.px
+                    marginBottom = 4.px
                     focus {
                         outline = None.none
                         borderColor = Color("#3b82f6")
@@ -494,6 +494,10 @@ val AnnexCParserComponent: FC<Props> = FC {
                 value = rawInput
                 placeholder = if (mode == "request") "Paste {\"deviceRequest\": \"...\", \"encryptionInfo\": \"...\"}..." else "Paste {\"response\": \"...\"}..."
                 onChange = { rawInput = it.target.value }
+            }
+
+            DetectedInputBadge {
+                input = rawInput
             }
 
             button {

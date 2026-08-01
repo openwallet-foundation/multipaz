@@ -123,6 +123,18 @@ val CdnDecoderComponent = FC {
                     +parseError
                 }
             } else {
+                val byteCount = outputHex.length / 2
+                div {
+                    css {
+                        fontSize = 13.px
+                        color = Color("#94a3b8")
+                        marginBottom = 16.px
+                    }
+                    val formattedSize = formatNumberWithCommas(byteCount)
+                    val unit = if (byteCount == 1) "byte" else "bytes"
+                    +"Encoded CBOR size: $formattedSize $unit"
+                }
+
                 div {
                     css {
                         display = Display.flex
@@ -348,7 +360,7 @@ val CdnDecoderComponent = FC {
                         fontFamily = FontFamily.monospace
                         padding = 12.px
                         resize = "none".unsafeCast<Resize>()
-                        marginBottom = 24.px
+                        marginBottom = 4.px
                         focus {
                             outline = None.none
                             borderColor = Color("#3b82f6")
@@ -357,6 +369,11 @@ val CdnDecoderComponent = FC {
                     value = rawInput
                     placeholder = "[1, 2, \"hello\", dt'2026-07-27T16:00:00Z', << {\"ver\": \"1.0\"} >>]"
                     onChange = { rawInput = it.target.value }
+                }
+
+                DetectedInputBadge {
+                    input = rawInput
+                    isCdnOnly = true
                 }
 
                 button {
