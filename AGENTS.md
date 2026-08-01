@@ -48,6 +48,16 @@ You should also be familiar with the project's [README.md](README.md) file.
 ## 5. Compilation and testing
 It is critical that all code you deliver compiles successfully and passes all relevant test suites. A task is not considered complete until these verification steps have been performed.
 
+## 6. Commits
+The following rules apply when being asked to generate a commit.
+* The commit message should detail the changes being committed, not all the prompts that led to here. This includes changes to the source that was done by others, for example the human driving the AI.
+* Commit messages must be detailed and to the point. If referring to classes or types in the project enclose it in backticks, if referring to function or method names use trailing open and close parenthesis. 
+* First line of the commit message must end in a period and be no longer than 72 characters and should avoid using type or function names. 
+* Commit messages must have a "Test:" stanza detailing how the change was tested. 
+* Commit messages have a Signed-off-by line.
+
+Do not automatically create a commit when implementing the code, only create one if the user requests it.
+
 ### Gradle Check (All Host Tests)
 *   **Run All Host Unit Tests:** `./gradlew check`
 *   **Run All Device Unit Tests:** `./gradlew connectedCheck`
