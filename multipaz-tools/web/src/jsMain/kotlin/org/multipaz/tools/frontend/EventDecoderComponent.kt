@@ -164,10 +164,9 @@ val EventDecoderComponent: FC<Props> = FC {
                         parsedEventHolder = null
                         parseError = ""
                         fileName = ""
-                        rawInput = ""
                         updateUrlHashPayload("")
                     }
-                    +"← Clear and Decode Another Event"
+                    +"← Back to Input"
                 }
 
                 if (parsedEvent != null) {
@@ -237,6 +236,32 @@ val EventDecoderComponent: FC<Props> = FC {
                     marginBottom = 16.px
                 }
 
+                if (rawInput.isNotEmpty()) {
+                    button {
+                        css {
+                            padding = Padding(10.px, 20.px)
+                            background = Color("#334155")
+                            color = Color("#f1f5f9")
+                            border = Border(1.px, LineStyle.solid, Color("#475569"))
+                            borderRadius = 8.px
+                            cursor = Cursor.pointer
+                            fontWeight = FontWeight.bold
+                            fontSize = 14.px
+                            hover {
+                                background = Color("#475569")
+                            }
+                        }
+                        onClick = {
+                            rawInput = ""
+                            parsedEventHolder = null
+                            parseError = ""
+                            fileName = ""
+                            updateUrlHashPayload("")
+                        }
+                        +"🗑️ Clear Input"
+                    }
+                }
+
                 label {
                     css {
                         display = Display.inlineFlex
@@ -254,10 +279,9 @@ val EventDecoderComponent: FC<Props> = FC {
                             background = Color("#475569")
                         }
                     }
-                    +"📁 Choose File (.mpzevent)"
+                    +"📁 Choose File"
                     input {
                         type = "file".unsafeCast<InputType>()
-                        accept = ".mpzevent,*/*"
                         css {
                             display = None.none
                         }
@@ -270,9 +294,12 @@ val EventDecoderComponent: FC<Props> = FC {
                                 reader.asDynamic().onload = {
                                     val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
                                     val bytes = Int8Array(arrayBuffer).toByteArray()
-                                    val res = parseEventFromBytes(bytes)
-                                    parsedEventHolder = res.first?.let { EventHolder(it) }
-                                    parseError = res.second
+                                    val text = bytes.decodeToString()
+                                    rawInput = if (text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
+                                        text.trim()
+                                    } else {
+                                        bytes.toHex()
+                                    }
                                     fileName = name
                                 }
                                 reader.readAsArrayBuffer(file)

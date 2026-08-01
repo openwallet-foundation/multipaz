@@ -63,6 +63,5 @@ fun updateUrlHashPayload(payload: String) {
             kotlinx.browser.window.history.replaceState(null, "", currentPath)
         }
     }
-    onHashChangeListeners.forEach { it() }
 }
 
