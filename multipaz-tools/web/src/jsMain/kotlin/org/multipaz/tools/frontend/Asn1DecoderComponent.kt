@@ -30,7 +30,11 @@ val Asn1DecoderComponent = FC {
 
     fun decodeInput(inputStr: String) {
         val cleanInput = inputStr.trim()
-        if (cleanInput.isEmpty()) return
+        if (cleanInput.isEmpty()) {
+            outputText = ""
+            updateUrlHashPayload("")
+            return
+        }
         try {
             val bytes = decodeInputToBytes(cleanInput)
             if (bytes.isEmpty()) {
@@ -75,127 +79,31 @@ val Asn1DecoderComponent = FC {
             +"ASN.1 Decoder"
         }
 
-        p {
-            css {
-                color = Color("#94a3b8")
-                marginBottom = 24.px
-            }
-            +"Decode raw ASN.1 DER bytes (represented as Hex or Base64 / Base64Url) to a human-readable structure tree."
-        }
-
-        div {
-            css {
-                display = Display.flex
-                justifyContent = JustifyContent.spaceBetween
-                alignItems = AlignItems.center
-                marginBottom = 8.px
-            }
-
-            label {
-                css {
-                    fontWeight = FontWeight.normal
-                    color = Color("#cbd5e1")
-                }
-                +"ASN.1 Raw Data (Hex, Base64 or Base64Url):"
-            }
-
-            label {
-                css {
-                    background = Color("#334155")
-                    border = None.none
-                    color = Color("#f1f5f9")
-                    padding = Padding(4.px, 12.px)
-                    borderRadius = 6.px
-                    cursor = Cursor.pointer
-                    fontSize = 13.px
-                    fontWeight = FontWeight.normal
-                    hover {
-                        background = Color("#475569")
-                    }
-                }
-                +"📁 Load data"
-                input {
-                    type = "file".unsafeCast<InputType>()
-                    accept = ".asn1,.der,.bin,.hex,.txt,*/*"
-                    css {
-                        display = None.none
-                    }
-                    onChange = { event ->
-                        val fileList = event.target.asDynamic().files
-                        if (fileList != null && fileList.length > 0) {
-                            val file = fileList[0].unsafeCast<File>()
-                            val reader = FileReader()
-                            reader.asDynamic().onload = {
-                                val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
-                                val bytes = Int8Array(arrayBuffer).toByteArray()
-                                val text = bytes.decodeToString()
-                                if (text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
-                                    rawInput = text.trim()
-                                } else {
-                                    rawInput = bytes.toHex()
-                                }
-                                outputText = ""
-                            }
-                            reader.readAsArrayBuffer(file)
-                        }
-                    }
-                }
-            }
-        }
-
-        textarea {
-            css {
-                width = 100.pct
-                height = 150.px
-                background = Color("#0f172a")
-                border = Border(1.px, LineStyle.solid, Color("#475569"))
-                borderRadius = 8.px
-                color = Color("#f1f5f9")
-                fontFamily = FontFamily.monospace
-                padding = 12.px
-                resize = "none".unsafeCast<Resize>()
-                marginBottom = 16.px
-                focus {
-                    outline = None.none
-                    borderColor = Color("#3b82f6")
-                }
-            }
-            value = rawInput
-            placeholder = "Paste ASN.1 DER hex (e.g. 308201a0...) or Base64 here"
-            onChange = { rawInput = it.target.value }
-        }
-
-        button {
-            css {
-                padding = Padding(12.px, 24.px)
-                fontSize = 16.px
-                fontWeight = FontWeight.bold
-                backgroundColor = Color("#3b82f6")
-                color = Color("#ffffff")
-                border = None.none
-                borderRadius = 8.px
-                cursor = Cursor.pointer
-                transition = "all 0.2s".unsafeCast<Transition>()
-                hover {
-                    backgroundColor = Color("#2563eb")
-                }
-                disabled {
-                    backgroundColor = Color("#475569")
-                    cursor = Cursor.notAllowed
-                }
-            }
-            disabled = rawInput.trim().isEmpty()
-            onClick = {
-                decodeInput(rawInput)
-            }
-            +"Decode ASN.1"
-        }
-
         if (outputText.isNotEmpty()) {
-            div {
+            button {
                 css {
-                    marginTop = 32.px
+                    padding = Padding(10.px, 20.px)
+                    fontSize = 14.px
+                    fontWeight = FontWeight.bold
+                    backgroundColor = Color("#334155")
+                    color = Color("#f1f5f9")
+                    border = None.none
+                    borderRadius = 8.px
+                    cursor = Cursor.pointer
+                    marginBottom = 24.px
+                    hover {
+                        backgroundColor = Color("#475569")
+                    }
                 }
+                onClick = {
+                    rawInput = ""
+                    outputText = ""
+                    updateUrlHashPayload("")
+                }
+                +"← Clear and Go Back"
+            }
+
+            div {
                 div {
                     css {
                         display = Display.flex
@@ -250,6 +158,123 @@ val Asn1DecoderComponent = FC {
                         +outputText
                     }
                 }
+            }
+        } else {
+            p {
+                css {
+                    color = Color("#94a3b8")
+                    marginBottom = 24.px
+                }
+                +"Decode raw ASN.1 DER bytes (represented as Hex or Base64 / Base64Url) to a human-readable structure tree."
+            }
+
+            div {
+                css {
+                    display = Display.flex
+                    justifyContent = JustifyContent.spaceBetween
+                    alignItems = AlignItems.center
+                    marginBottom = 8.px
+                }
+
+                label {
+                    css {
+                        fontWeight = FontWeight.normal
+                        color = Color("#cbd5e1")
+                    }
+                    +"ASN.1 Raw Data (Hex, Base64 or Base64Url):"
+                }
+
+                label {
+                    css {
+                        background = Color("#334155")
+                        border = None.none
+                        color = Color("#f1f5f9")
+                        padding = Padding(4.px, 12.px)
+                        borderRadius = 6.px
+                        cursor = Cursor.pointer
+                        fontSize = 13.px
+                        fontWeight = FontWeight.normal
+                        hover {
+                            background = Color("#475569")
+                        }
+                    }
+                    +"📁 Load data"
+                    input {
+                        type = "file".unsafeCast<InputType>()
+                        accept = ".asn1,.der,.bin,.hex,.txt,*/*"
+                        css {
+                            display = None.none
+                        }
+                        onChange = { event ->
+                            val fileList = event.target.asDynamic().files
+                            if (fileList != null && fileList.length > 0) {
+                                val file = fileList[0].unsafeCast<File>()
+                                val reader = FileReader()
+                                reader.asDynamic().onload = {
+                                    val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
+                                    val bytes = Int8Array(arrayBuffer).toByteArray()
+                                    val text = bytes.decodeToString()
+                                    val loadedInput = if (text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
+                                        text.trim()
+                                    } else {
+                                        bytes.toHex()
+                                    }
+                                    rawInput = loadedInput
+                                    decodeInput(loadedInput)
+                                }
+                                reader.readAsArrayBuffer(file)
+                            }
+                        }
+                    }
+                }
+            }
+
+            textarea {
+                css {
+                    width = 100.pct
+                    height = 150.px
+                    background = Color("#0f172a")
+                    border = Border(1.px, LineStyle.solid, Color("#475569"))
+                    borderRadius = 8.px
+                    color = Color("#f1f5f9")
+                    fontFamily = FontFamily.monospace
+                    padding = 12.px
+                    resize = "none".unsafeCast<Resize>()
+                    marginBottom = 16.px
+                    focus {
+                        outline = None.none
+                        borderColor = Color("#3b82f6")
+                    }
+                }
+                value = rawInput
+                placeholder = "Paste ASN.1 DER hex (e.g. 308201a0...) or Base64 here"
+                onChange = { rawInput = it.target.value }
+            }
+
+            button {
+                css {
+                    padding = Padding(12.px, 24.px)
+                    fontSize = 16.px
+                    fontWeight = FontWeight.bold
+                    backgroundColor = Color("#3b82f6")
+                    color = Color("#ffffff")
+                    border = None.none
+                    borderRadius = 8.px
+                    cursor = Cursor.pointer
+                    transition = "all 0.2s".unsafeCast<Transition>()
+                    hover {
+                        backgroundColor = Color("#2563eb")
+                    }
+                    disabled {
+                        backgroundColor = Color("#475569")
+                        cursor = Cursor.notAllowed
+                    }
+                }
+                disabled = rawInput.trim().isEmpty()
+                onClick = {
+                    decodeInput(rawInput)
+                }
+                +"Decode ASN.1"
             }
         }
     }
