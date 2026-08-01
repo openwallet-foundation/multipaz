@@ -43,6 +43,8 @@ fun getUrlHashPayload(): String {
     return ""
 }
 
+val onHashChangeListeners = mutableSetOf<() -> Unit>()
+
 fun updateUrlHashPayload(payload: String) {
     val currentPath = tabToPath(pathToTab(kotlinx.browser.window.location.pathname))
     val clean = payload.trim()
@@ -61,5 +63,6 @@ fun updateUrlHashPayload(payload: String) {
             kotlinx.browser.window.history.replaceState(null, "", currentPath)
         }
     }
+    onHashChangeListeners.forEach { it() }
 }
 

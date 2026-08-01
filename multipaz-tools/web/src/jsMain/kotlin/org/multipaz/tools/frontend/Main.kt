@@ -84,23 +84,34 @@ fun tabToPath(tab: String): String {
 val App = FC {
     var activeTab by useState(pathToTab(window.location.pathname))
     var activeDropdown by useState<String?>(null)
+    var isShortLinkModalOpen by useState(false)
+    val (_, setTick) = useState(0)
 
     useEffect(activeTab) {
         val currentPath = tabToPath(activeTab)
         if (window.location.pathname != currentPath) {
             window.history.pushState(null, "", currentPath)
+            setTick { it + 1 }
         }
     }
 
     useEffectOnce {
+        val listener = {
+            setTick { it + 1 }
+        }
+
         val handler: (org.w3c.dom.events.Event) -> Unit = {
             activeTab = pathToTab(window.location.pathname)
+            listener()
         }
+
+        onHashChangeListeners.add(listener)
         window.addEventListener("popstate", handler)
-        this.coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion {
-            window.removeEventListener("popstate", handler)
-        }
+        window.addEventListener("hashchange", handler)
+        window.setInterval(listener, 100)
     }
+
+    val currentHash = window.location.hash
 
     div {
         onClick = { activeDropdown = null }
@@ -112,9 +123,41 @@ val App = FC {
             color = Color("#f1f5f9") // slate 100
         }
 
+        if (currentHash.startsWith("#") && currentHash.length > 1) {
+            button {
+                css {
+                    position = Position.fixed
+                    top = 20.px
+                    right = 20.px
+                    zIndex = integer(1000)
+                    padding = Padding(10.px, 18.px)
+                    fontSize = 14.px
+                    fontWeight = FontWeight.bold
+                    backgroundColor = Color("#2563eb")
+                    color = Color("#ffffff")
+                    border = None.none
+                    borderRadius = 8.px
+                    cursor = Cursor.pointer
+                    display = Display.flex
+                    alignItems = AlignItems.center
+                    gap = 8.px
+                    boxShadow = BoxShadow(0.px, 4.px, 16.px, Color("rgba(0, 0, 0, 0.5)"))
+                    hover {
+                        backgroundColor = Color("#1d4ed8")
+                    }
+                }
+                onClick = { event ->
+                    event.stopPropagation()
+                    isShortLinkModalOpen = true
+                }
+                +"🔗 Create Short Link"
+            }
+        }
+
         // Header
         div {
             css {
+                position = Position.relative
                 background = Color("linear-gradient(to bottom, #1e293b, #0f172a)")
                 borderBottom = Border(1.px, LineStyle.solid, Color("#334155"))
                 padding = Padding(32.px, 24.px)
@@ -143,6 +186,12 @@ val App = FC {
                 }
                 +"Secure, fully client-side tools for working with CBOR, X.509 certificates, EC keys, ISO mdocs, IETF SD-JWT VCs, and more."
             }
+        }
+
+        ShortLinkModalComponent {
+            isOpen = isShortLinkModalOpen
+            onClose = { isShortLinkModalOpen = false }
+            targetPath = window.location.pathname + window.location.hash
         }
 
         // Navigation Bar
