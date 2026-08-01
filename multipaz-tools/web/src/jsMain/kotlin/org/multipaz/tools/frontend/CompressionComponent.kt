@@ -300,7 +300,7 @@ val CompressionComponent = FC {
                     fontFamily = FontFamily.monospace
                     padding = 12.px
                     resize = "none".unsafeCast<Resize>()
-                    marginBottom = 24.px
+                    marginBottom = 4.px
                     focus {
                         outline = None.none
                         borderColor = Color("#3b82f6")
@@ -309,6 +309,10 @@ val CompressionComponent = FC {
                 value = rawInput
                 placeholder = "Paste payload here (e.g. Hex representation, Base64, or raw text if compressing)..."
                 onChange = { rawInput = it.target.value }
+            }
+
+            DetectedInputBadge {
+                input = rawInput
             }
 
             // Grid for settings

@@ -179,7 +179,7 @@ val ConverterComponent = FC {
                     fontFamily = FontFamily.monospace
                     padding = 12.px
                     resize = "none".unsafeCast<Resize>()
-                    marginBottom = 24.px
+                    marginBottom = 4.px
                     focus {
                         outline = None.none
                         borderColor = Color("#3b82f6")
@@ -188,6 +188,10 @@ val ConverterComponent = FC {
                 value = rawInput
                 placeholder = "Paste input data here..."
                 onChange = { rawInput = it.target.value }
+            }
+
+            DetectedInputBadge {
+                input = rawInput
             }
 
             // Grid for settings

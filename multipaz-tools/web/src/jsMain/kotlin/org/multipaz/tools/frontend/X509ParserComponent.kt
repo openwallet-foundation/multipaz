@@ -724,7 +724,7 @@ val X509ParserComponent = FC {
                     fontFamily = FontFamily.monospace
                     padding = 12.px
                     resize = "none".unsafeCast<Resize>()
-                    marginBottom = 24.px
+                    marginBottom = 4.px
                     focus {
                         outline = None.none
                         borderColor = Color("#3b82f6")
@@ -733,6 +733,10 @@ val X509ParserComponent = FC {
                 value = rawInput
                 placeholder = "Paste certificate here (PEM format, Hex or Base64 bytes)..."
                 onChange = { rawInput = it.target.value }
+            }
+
+            DetectedInputBadge {
+                input = rawInput
             }
 
             button {

@@ -432,6 +432,10 @@ val MsoNamespacesViewerComponent = FC {
                         placeholder = "Paste data here..."
                         onChange = { rawInput = it.target.value }
                     }
+
+                    DetectedInputBadge {
+                        input = rawInput
+                    }
                 }
             }
 

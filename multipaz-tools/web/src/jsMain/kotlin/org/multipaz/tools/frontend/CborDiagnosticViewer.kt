@@ -3,10 +3,13 @@ package org.multipaz.tools.frontend
 import emotion.react.css
 import react.FC
 import react.Props
+import react.dom.html.ReactHTML.div
 import react.dom.html.ReactHTML.code
 import react.dom.html.ReactHTML.pre
 import react.dom.html.ReactHTML.span
 import web.cssom.*
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.Cbor
 
 private enum class TokenType {
     PLAIN,
@@ -21,6 +24,12 @@ private enum class TokenType {
 }
 
 private data class Token(val text: String, val type: TokenType)
+
+fun formatNumberWithCommas(number: Int): String {
+    val str = number.toString()
+    val regex = Regex("(\\d)(?=(\\d{3})+$)")
+    return str.replace(regex, "$1,")
+}
 
 private fun tokenizeCborDiagnostics(diagText: String): List<Token> {
     val tokens = mutableListOf<Token>()
@@ -207,22 +216,46 @@ private fun tokenizeCborDiagnostics(diagText: String): List<Token> {
 
 external interface CborDiagnosticViewerProps : Props {
     var diagText: String
+    var byteCount: Int?
     var maxHeight: Length?
 }
 
 val CborDiagnosticViewer: FC<CborDiagnosticViewerProps> = FC { props ->
     val tokens = tokenizeCborDiagnostics(props.diagText)
 
-    pre {
-        css {
-            background = Color("#020617")
-            border = Border(1.px, LineStyle.solid, Color("#334155"))
-            borderRadius = 8.px
-            padding = 16.px
-            overflow = "auto".unsafeCast<Overflow>()
-            maxHeight = props.maxHeight ?: 400.px
-            margin = 0.px
+    val calculatedByteCount = props.byteCount ?: try {
+        if (props.diagText.isNotBlank()) {
+            Cbor.encode(Cdn.parse(props.diagText)).size
+        } else null
+    } catch (e: Throwable) {
+        null
+    }
+
+    div {
+        if (calculatedByteCount != null) {
+            div {
+                css {
+                    fontSize = 12.px
+                    color = Color("#94a3b8")
+                    fontWeight = FontWeight.normal
+                    marginBottom = 6.px
+                }
+                val formatted = formatNumberWithCommas(calculatedByteCount)
+                val unit = if (calculatedByteCount == 1) "byte" else "bytes"
+                +"Encoded CBOR size: $formatted $unit"
+            }
         }
+
+        pre {
+            css {
+                background = Color("#020617")
+                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                borderRadius = 8.px
+                padding = 16.px
+                overflow = Auto.auto
+                maxHeight = props.maxHeight ?: 400.px
+                margin = 0.px
+            }
         code {
             css {
                 fontFamily = FontFamily.monospace
@@ -260,4 +293,5 @@ val CborDiagnosticViewer: FC<CborDiagnosticViewerProps> = FC { props ->
             }
         }
     }
+}
 }
