@@ -429,15 +429,32 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
             }
         } ?: return null
 
-        val hasSign1Headers = hasCoseHeader(pMap, COSE_HEADER_LABELS) || hasCoseHeader(uMap, COSE_HEADER_LABELS)
-        val hasMac0Headers = hasCoseHeader(pMap, COSE_HEADER_LABELS) || hasCoseHeader(uMap, COSE_HEADER_LABELS)
+        val alg = getCoseAlgorithm(pMap) ?: getCoseAlgorithm(uMap)
+        if (alg != null) {
+            if (alg in COSE_MAC_ALGORITHM_IDS) {
+                return CoseStructureType.COSE_MAC0
+            }
+            return CoseStructureType.COSE_SIGN1
+        }
 
+        if (hasCoseHeader(pMap, setOf(33L)) || hasCoseHeader(uMap, setOf(33L))) {
+            return CoseStructureType.COSE_SIGN1
+        }
+
+        val hasCoseHeaders = hasCoseHeader(pMap, COSE_HEADER_LABELS) || hasCoseHeader(uMap, COSE_HEADER_LABELS)
         return when {
-            hasSign1Headers -> CoseStructureType.COSE_SIGN1
-            hasMac0Headers -> CoseStructureType.COSE_MAC0
-            isTaggedCose -> CoseStructureType.COSE_SIGN1
+            hasCoseHeaders || isTaggedCose -> CoseStructureType.COSE_SIGN1
             else -> null
         }
+    }
+
+    private fun getCoseAlgorithm(map: CborMap): Long? {
+        for ((key, value) in map.items) {
+            if (getIntegerKey(key) == 1L) {
+                return getIntegerValue(value)
+            }
+        }
+        return null
     }
 
     private fun isCoseHeaderMap(map: CborMap): Boolean {
@@ -578,5 +595,6 @@ internal class CdnGenerator(private val options: CdnGeneratorOptions) {
     companion object {
         private val COSE_HEADER_LABELS = setOf(1L, 2L, 3L, 4L, 5L, 6L, 33L)
         private val COSE_KEY_PARAM_LABELS = setOf(2L, 3L, 4L, 5L, -1L, -2L, -3L, -4L)
+        private val COSE_MAC_ALGORITHM_IDS = setOf(4L, 5L, 6L, 7L, 14L, 15L, 25L, 26L)
     }
 }
