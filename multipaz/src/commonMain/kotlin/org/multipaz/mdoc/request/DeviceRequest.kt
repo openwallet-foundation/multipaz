@@ -631,6 +631,13 @@ data class DeviceRequest private constructor(
             }
         }
 
+        // Zero-Knowledge Proofs (via Longfellow) currently only support ECDSA, so key agreement (MACing) cannot be used.
+        val effectiveKeyAgreementPossible = if (docRequest.docRequestInfo?.zkRequest != null) {
+            emptyList()
+        } else {
+            keyAgreementPossible
+        }
+
         val matches = mutableListOf<DocRequestMatch>()
         // Sort by displayName to ensure deterministic order
         for (cred in candidates.sortedBy { it.document.displayName }) {
@@ -638,7 +645,7 @@ data class DeviceRequest private constructor(
                 cred = cred,
                 docRequest = docRequest,
                 presentmentSource = presentmentSource,
-                keyAgreementPossible = keyAgreementPossible,
+                keyAgreementPossible = effectiveKeyAgreementPossible,
             )
             if (bestMatch != null) {
                 matches.add(bestMatch)

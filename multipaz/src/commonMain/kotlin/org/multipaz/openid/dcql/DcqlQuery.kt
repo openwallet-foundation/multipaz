@@ -146,6 +146,13 @@ data class DcqlQuery(
                 else -> emptyList()
             }
 
+            // Zero-Knowledge Proofs (via Longfellow) currently only support ECDSA, so key agreement (MACing) cannot be used.
+            val effectiveKeyAgreementPossible = if (credentialQuery.format == "mso_mdoc_zk") {
+                emptyList()
+            } else {
+                keyAgreementPossible
+            }
+
             val matches = mutableListOf<QueryResponseMatch>()
             // We sort on displayName b/c otherwise it's sorted on Document.identifier which can be unpredictable
             for (cred in credsSatisfyingMeta.sortedBy { it.document.displayName }) {
@@ -181,7 +188,7 @@ data class DcqlQuery(
                         val credential = presentmentSource.selectCredential(
                             document = cred.document,
                             requestedClaims = credentialQuery.claims,
-                            keyAgreementPossible = keyAgreementPossible
+                            keyAgreementPossible = effectiveKeyAgreementPossible
                         )
                         if (credential == null) {
                             throw DcqlCredentialQueryException("Error selecting credential with id ${credentialQuery.id}")
@@ -229,7 +236,7 @@ data class DcqlQuery(
                                     credential = presentmentSource.selectCredential(
                                         document = cred.document,
                                         requestedClaims = credentialQuery.claims,
-                                        keyAgreementPossible = keyAgreementPossible
+                                        keyAgreementPossible = effectiveKeyAgreementPossible
                                     )!!,
                                     claims = matchingClaimValues,
                                     transactionData = transactionData

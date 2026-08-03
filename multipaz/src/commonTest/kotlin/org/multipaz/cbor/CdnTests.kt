@@ -406,6 +406,32 @@ class CdnTests {
     }
 
     @Test
+    fun testOpportunisticUntaggedCoseMac0() {
+        val protectedMap = buildCborMap {
+            put(1, 5)
+        }
+        val protectedBytes = Cbor.encode(protectedMap)
+        val untaggedCoseMac0 = buildCborArray {
+            add(Bstr(protectedBytes))
+            add(buildCborMap {})
+            add(Bstr("payload".encodeToByteArray()))
+            add(Bstr("macTag".encodeToByteArray()))
+        }
+
+        val prettyAnnotated = Cdn.encode(untaggedCoseMac0, CdnGeneratorOptions.Pretty)
+        assertTrue(prettyAnnotated.contains("# COSE_Mac0"))
+        assertTrue(prettyAnnotated.contains("/protected/"))
+        assertTrue(prettyAnnotated.contains("/unprotected/"))
+        assertTrue(prettyAnnotated.contains("/payload/"))
+        assertTrue(prettyAnnotated.contains("/tag/"))
+        assertTrue(prettyAnnotated.contains("/alg/"))
+        assertTrue(prettyAnnotated.contains("# HMAC_SHA256: HMAC with SHA-256"))
+
+        val roundtripItem = Cdn.parse(prettyAnnotated)
+        assertEquals(untaggedCoseMac0, roundtripItem)
+    }
+
+    @Test
     fun testOpportunisticCoseKey() {
         val ecKey = buildCborMap {
             put(1, 2)
