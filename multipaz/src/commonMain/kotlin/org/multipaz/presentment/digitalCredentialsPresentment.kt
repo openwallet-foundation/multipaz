@@ -283,7 +283,9 @@ private suspend fun digitalCredentialsMdocApiProtocol(
     }
     Logger.dCbor(TAG, "SessionTranscript", sessionTranscript)
 
-    val deviceRequest = DeviceRequest.fromDataItem(Cbor.decode(deviceRequestBase64.fromBase64Url()))
+    val encodedDeviceRequest = deviceRequestBase64.fromBase64Url()
+    Logger.dCbor(TAG, "DeviceRequest", encodedDeviceRequest)
+    val deviceRequest = DeviceRequest.fromDataItem(Cbor.decode(encodedDeviceRequest))
     deviceRequest.verifyReaderAuthentication(sessionTranscript)
     val responseObject = mdocPresentment(
         deviceRequest = deviceRequest,

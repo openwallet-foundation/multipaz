@@ -258,7 +258,7 @@ object Logger {
             }
             val sb = "$message: ${bytes.size} bytes of CBOR: " + bytes.toHex() +
                     "\n" +
-                    "In diagnostic notation:\n" +
+                    "In Concise Diagnostic Notation:\n" +
                     cdnString
             printLine(
                 level = level,

@@ -288,6 +288,7 @@ fun Consent(
 
                     composable("showRequesterInfo") {
                         ShowRequesterInfoPage(
+                            requester = requester,
                             trustedRequesterIdentity = trustedRequesterIdentity,
                             onBackClicked = {
                                 navController.navigateUp()
@@ -318,6 +319,7 @@ fun Consent(
 
 @Composable
 private fun ShowRequesterInfoPage(
+    requester: Requester,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
     onBackClicked: () -> Unit,
 ) {
@@ -349,7 +351,10 @@ private fun ShowRequesterInfoPage(
             }
         }
 
-        trustedRequesterIdentity?.identity?.certChain?.let { certChain ->
+        val certChainToShow = trustedRequesterIdentity?.identity?.certChain
+            ?: requester.requesterIdentities.firstOrNull()?.certChain
+
+        certChainToShow?.let { certChain ->
             Box(
                 modifier = Modifier.fillMaxHeight()
             ) {
@@ -457,6 +462,7 @@ private fun ConsentPage(
 
     Column {
         RelyingPartySection(
+            requester = requester,
             trustedRequesterIdentity = trustedRequesterIdentity,
             requesterDisplayData = requesterDisplayData,
             imageLoader = imageLoader,
@@ -1208,6 +1214,7 @@ private fun ClaimsView(
 
 @Composable
 private fun RelyingPartySection(
+    requester: Requester,
     requesterDisplayData: RequesterDisplayData,
     trustedRequesterIdentity: TrustedRequesterIdentity?,
     imageLoader: ImageLoader?,
@@ -1230,10 +1237,15 @@ private fun RelyingPartySection(
             // done in the warning text
             ?: stringResource(Res.string.credential_presentment_headline_share_with_unknown_requester)
 
+        // Make the RP requester icon / string clickable if we have a certificate chain
+        val showRequesterInfoEnabled = trustedRequesterIdentity?.identity?.certChain != null ||
+                requester.requesterIdentities.isNotEmpty()
+        println("showRequesterInfoEnabled $showRequesterInfoEnabled")
+
         if (requesterDisplayData.icon != null) {
             Icon(
                 modifier = Modifier.size(80.dp)
-                    .clickable(enabled = trustedRequesterIdentity?.identity?.certChain != null) {
+                    .clickable(enabled = showRequesterInfoEnabled) {
                         onShowRequesterInfo()
                     },
                 bitmap = requesterDisplayData.icon,
@@ -1244,7 +1256,7 @@ private fun RelyingPartySection(
         } else if (requesterDisplayData.iconUrl != null && imageLoader != null) {
             AsyncImage(
                 modifier = Modifier.size(80.dp)
-                    .clickable(enabled = trustedRequesterIdentity?.identity?.certChain != null) {
+                    .clickable(enabled = showRequesterInfoEnabled) {
                         onShowRequesterInfo()
                     },
                 model = requesterDisplayData.iconUrl,
@@ -1256,7 +1268,7 @@ private fun RelyingPartySection(
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             modifier = Modifier
-                .clickable(enabled = trustedRequesterIdentity?.identity?.certChain != null) {
+                .clickable(enabled = showRequesterInfoEnabled) {
                     onShowRequesterInfo()
                 },
             text = requesterName,

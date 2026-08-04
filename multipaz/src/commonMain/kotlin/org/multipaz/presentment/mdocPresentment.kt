@@ -86,9 +86,6 @@ suspend fun mdocPresentment(
 ): MdocResponse {
     val credentialsPresented = mutableSetOf<SecureAreaBoundCredential>()
     lateinit var eventData: EventPresentmentData
-    if (Logger.isDebugEnabled) {
-        Logger.dCbor(TAG, "DeviceRequest", deviceRequest.toDataItem())
-    }
 
     val deviceResponse = buildDeviceResponse(
         sessionTranscript = sessionTranscript,
