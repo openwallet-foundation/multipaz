@@ -23,11 +23,20 @@ import react.dom.html.ReactHTML.select
 import react.dom.html.ReactHTML.option
 import react.dom.html.ReactHTML.pre
 import react.dom.html.ReactHTML.code
+import react.dom.html.ReactHTML.input
 import react.useState
+import react.useEffectOnce
+import js.typedarrays.Int8Array
+import js.typedarrays.toByteArray
+import org.multipaz.util.toHex
+import web.file.File
+import web.file.FileReader
+import web.html.InputType
 import web.cssom.*
 import kotlinx.coroutines.launch
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
 import org.multipaz.mdoc.mso.MobileSecurityObject
@@ -123,6 +132,35 @@ val MsoNamespacesViewerComponent = FC {
         throw IllegalArgumentException("Could not identify or parse the input data structure. Try selecting the format explicitly.")
     }
 
+    fun parseRawInput(inputStr: String) {
+        val cleanInput = inputStr.trim()
+        if (cleanInput.isEmpty()) return
+        mainScope.launch {
+            try {
+                val bytes = decodeInputToBytes(cleanInput)
+                if (bytes.isEmpty()) {
+                    parseError = "Input is empty"
+                    parsedResult = null
+                } else {
+                    parsedResult = parseInput(bytes, selectedType)
+                    parseError = ""
+                    updateUrlHashPayload(cleanInput)
+                }
+            } catch (e: Throwable) {
+                parseError = "Error parsing: " + (e.message ?: "Unknown error")
+                parsedResult = null
+            }
+        }
+    }
+
+    useEffectOnce {
+        val hashPayload = getUrlHashPayload()
+        if (hashPayload.isNotEmpty()) {
+            rawInput = hashPayload
+            parseRawInput(hashPayload)
+        }
+    }
+
     div {
         css {
             background = Color("#1e293b")
@@ -160,8 +198,9 @@ val MsoNamespacesViewerComponent = FC {
                 onClick = {
                     parsedResult = null
                     parseError = ""
+                    updateUrlHashPayload("")
                 }
-                +"← Clear and Go Back"
+                +"← Back to Input"
             }
 
             if (parseError.isNotEmpty()) {
@@ -282,15 +321,96 @@ val MsoNamespacesViewerComponent = FC {
                 }
 
                 div {
-                    label {
+                    div {
                         css {
-                            display = Display.block
-                            fontWeight = FontWeight.bold
+                            display = Display.flex
+                            justifyContent = JustifyContent.spaceBetween
+                            alignItems = AlignItems.center
                             marginBottom = 6.px
-                            color = Color("#cbd5e1")
-                            fontSize = 14.px
                         }
-                        +"Input Data (Hex or Base64):"
+
+                        label {
+                            css {
+                                fontWeight = FontWeight.bold
+                                color = Color("#cbd5e1")
+                                fontSize = 14.px
+                            }
+                            +"Input Data (Hex or Base64):"
+                        }
+
+                        div {
+                            css {
+                                display = Display.flex
+                                gap = 8.px
+                                alignItems = AlignItems.center
+                            }
+
+                            if (rawInput.isNotEmpty()) {
+                                button {
+                                    css {
+                                        background = Color("#334155")
+                                        border = None.none
+                                        color = Color("#f1f5f9")
+                                        padding = Padding(4.px, 12.px)
+                                        borderRadius = 6.px
+                                        cursor = Cursor.pointer
+                                        fontSize = 13.px
+                                        fontWeight = FontWeight.normal
+                                        hover {
+                                            background = Color("#475569")
+                                        }
+                                    }
+                                    onClick = {
+                                        rawInput = ""
+                                        parsedResult = null
+                                        parseError = ""
+                                        updateUrlHashPayload("")
+                                    }
+                                    +"🗑️ Clear"
+                                }
+                            }
+
+                            label {
+                                css {
+                                    background = Color("#334155")
+                                    border = None.none
+                                    color = Color("#f1f5f9")
+                                    padding = Padding(4.px, 12.px)
+                                    borderRadius = 6.px
+                                    cursor = Cursor.pointer
+                                    fontSize = 13.px
+                                    fontWeight = FontWeight.normal
+                                    hover {
+                                        background = Color("#475569")
+                                    }
+                                }
+                                +"📁 Load data"
+                                input {
+                                    type = "file".unsafeCast<InputType>()
+                                    css {
+                                        display = None.none
+                                    }
+                                    onChange = { event ->
+                                        val fileList = event.target.asDynamic().files
+                                        if (fileList != null && fileList.length > 0) {
+                                            val file = fileList[0].unsafeCast<File>()
+                                            val reader = FileReader()
+                                            reader.asDynamic().onload = {
+                                                val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
+                                                val bytes = Int8Array(arrayBuffer).toByteArray()
+                                                val text = bytes.decodeToString()
+                                                if (text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
+                                                    rawInput = text.trim()
+                                                } else {
+                                                    rawInput = bytes.toHex()
+                                                }
+                                            }
+                                            reader.readAsArrayBuffer(file)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                     textarea {
                         css {
@@ -311,6 +431,10 @@ val MsoNamespacesViewerComponent = FC {
                         value = rawInput
                         placeholder = "Paste data here..."
                         onChange = { rawInput = it.target.value }
+                    }
+
+                    DetectedInputBadge {
+                        input = rawInput
                     }
                 }
             }
@@ -336,21 +460,7 @@ val MsoNamespacesViewerComponent = FC {
                 }
                 disabled = rawInput.trim().isEmpty()
                 onClick = {
-                    mainScope.launch {
-                        try {
-                            val bytes = decodeInputToBytes(rawInput)
-                            if (bytes.isEmpty()) {
-                                parseError = "Input is empty"
-                                parsedResult = null
-                            } else {
-                                parsedResult = parseInput(bytes, selectedType)
-                                parseError = ""
-                            }
-                        } catch (e: Throwable) {
-                            parseError = "Error parsing: " + (e.message ?: "Unknown error")
-                            parsedResult = null
-                        }
-                    }
+                    parseRawInput(rawInput)
                 }
                 +"Parse"
             }
@@ -414,7 +524,7 @@ private fun react.ChildrenBuilder.renderMsoDetails(mso: MobileSecurityObject) {
                 }
                 code {
                     +try {
-                        Cbor.toDiagnostics(mso.deviceKey.toCoseKey().toDataItem(), setOf(DiagnosticOption.EMBEDDED_CBOR))
+                        Cdn.encode(mso.deviceKey.toCoseKey().toDataItem())
                     } catch (e: Throwable) {
                         "Error formatting device key"
                     }
@@ -464,7 +574,7 @@ private fun react.ChildrenBuilder.renderMsoDetails(mso: MobileSecurityObject) {
                     }
                     code {
                         +try {
-                            Cbor.toDiagnostics(revocationStatus.toDataItem(), setOf(DiagnosticOption.EMBEDDED_CBOR))
+                            Cdn.encode(revocationStatus.toDataItem())
                         } catch (e: Throwable) {
                             "Error formatting revocation status"
                         }
@@ -618,7 +728,7 @@ private fun react.ChildrenBuilder.renderNamespacesDetails(namespaces: IssuerName
                                         }
                                     } else {
                                         +try {
-                                            Cbor.toDiagnostics(item.dataElementValue, setOf(DiagnosticOption.EMBEDDED_CBOR))
+                                            Cdn.encode(item.dataElementValue)
                                         } catch (e: Throwable) {
                                             "Error formatting item"
                                         }

@@ -4,6 +4,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import org.multipaz.cbor.Bstr
@@ -23,8 +24,8 @@ import org.multipaz.util.zlibInflate
 import org.multipaz.webtoken.buildCwt
 import org.multipaz.webtoken.validateCwt
 import org.multipaz.webtoken.WebTokenClaim
+import org.multipaz.webtoken.WebTokenClaim.Companion.get
 import org.multipaz.webtoken.WebTokenClaim.Companion.put
-import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -45,11 +46,13 @@ import kotlin.time.Instant
  *        spec above
  * @param creationTime time of the status list creation, useful to determine freshness when
  *        the status list is served through HTTP in one of its serialized forms.
+ * @param expirationTime when this status list expires
  */
 class CompressedStatusList(
     val bitsPerItem: Int,
     private val compressedStatusList: ByteArray,
     val creationTime: Instant = Clock.System.now(),
+    val expirationTime: Instant = creationTime + 20.minutes
 ) {
     init {
         require(bitsPerItem == 1 || bitsPerItem == 2 || bitsPerItem == 4 || bitsPerItem == 8)
@@ -60,25 +63,23 @@ class CompressedStatusList(
      *
      * @param key key that is used to sign JWT
      * @param subject value for `sub` claim in JWT
-     * @param expiresIn how long the status list is valid (random duration about half an hour
-     *    by default, so that update requests don't all come at the same time)
      * @return signed JWT that represents this status list
      */
     suspend fun serializeAsJwt(
         key: AsymmetricKey,
         subject: String,
-        expiresIn: Duration = 20.minutes + Random.Default.nextInt(1000).seconds
     ) = buildJwt(
         key = key,
         type = "statuslist+jwt",
-        expiresIn = expiresIn
+        creationTime = creationTime,
+        expiresIn = expirationTime - creationTime
     ) {
         put("sub", subject)
         putJsonObject("status_list") {
             put("bits", bitsPerItem)
             put("lst", compressedStatusList.toBase64Url())
         }
-        put("ttl", expiresIn.inWholeSeconds)
+        put("ttl", (expirationTime - creationTime).inWholeSeconds)
     }
 
     /**
@@ -86,25 +87,23 @@ class CompressedStatusList(
      *
      * @param key key that is used to sign JWT
      * @param subject value for `sub` claim in JWT
-     * @param expiresIn how long the status list is valid (random duration about half an our
-     *    by default, so that update requests don't all come at the same time)
      * @return signed JWT that represents this status list
      */
     suspend fun serializeAsCwt(
         key: AsymmetricKey,
-        subject: String,
-        expiresIn: Duration = 20.minutes + Random.Default.nextInt(1000).seconds
+        subject: String
     ) = buildCwt(
         key = key,
         type = "application/statuslist+cwt",
-        expiresIn = expiresIn
+        creationTime = creationTime,
+        expiresIn = expirationTime - creationTime
     ) {
         put(WebTokenClaim.Sub, subject)
         putCborMap(STATUS_LIST_CLAIM) {
             put("bits", bitsPerItem)
             put("lst", compressedStatusList)
         }
-        put(TTL_CLAIM, expiresIn.inWholeSeconds)
+        put(TTL_CLAIM, (expirationTime - creationTime).inWholeSeconds)
     }
 
     /**
@@ -127,6 +126,8 @@ class CompressedStatusList(
          * @param jwt status list JWT representation
          * @param publicKey public key of the issuance server signing key (optional)
          * @param checks additional checks for JWT validation
+         * @param atTime time instant to check for expiration
+         * @param maxValidity maximum JWT validity duration to accept
          * @return parsed [CompressedStatusList]
          * @throws IllegalArgumentException when [jwt] cannot be parsed as JWT status list
          * @throws InvalidRequestException when JWT validation fails
@@ -135,6 +136,7 @@ class CompressedStatusList(
             jwt: String,
             publicKey: EcPublicKey? = null,
             checks: Map<WebTokenCheck, String> = mapOf(),
+            atTime: Instant = Clock.System.now(),
             maxValidity: Duration = 365.days
         ): CompressedStatusList {
             val body = validateJwt(
@@ -145,11 +147,20 @@ class CompressedStatusList(
                     putAll(checks)
                 },
                 publicKey = publicKey,
+                atTime = atTime,
                 maxValidity = maxValidity
             )
+            val expirationTime = body["exp"]?.let {
+                Instant.fromEpochSeconds(it.jsonPrimitive.long)
+            } ?: body["ttl"]?.let { ttl ->
+                val issuedAt = body["iat"]?.let { Instant.fromEpochSeconds(it.jsonPrimitive.long) }
+                    ?: Clock.System.now()
+                issuedAt + ttl.jsonPrimitive.long.seconds
+            } ?: (Clock.System.now() + 20.minutes)
             return fromJson(
                 json = body["status_list"]?.jsonObject
-                    ?: throw IllegalArgumentException("missing required 'status_list' claim")
+                    ?: throw IllegalArgumentException("missing required 'status_list' claim"),
+                expirationTime = expirationTime
             )
         }
 
@@ -159,16 +170,18 @@ class CompressedStatusList(
          * This method is mostly useful for testing, as JSON is typically wrapped in JWT.
          *
          * @param json JSON status list representation
+         * @param expirationTime time when this status list expires
          * @return parsed [CompressedStatusList]
          * @throws IllegalArgumentException when [json] does not represent status list
          */
-        fun fromJson(json: JsonObject): CompressedStatusList {
+        fun fromJson(json: JsonObject, expirationTime: Instant): CompressedStatusList {
             val lst = json["lst"]
                 ?: throw IllegalArgumentException("missing 'lst' in 'status_list' claim")
             return CompressedStatusList(
                 bitsPerItem = json["bits"]?.jsonPrimitive?.intOrNull
                     ?: throw IllegalArgumentException("missing 'bits' in 'status_list' claim"),
-                compressedStatusList = lst.jsonPrimitive.content.fromBase64Url()
+                compressedStatusList = lst.jsonPrimitive.content.fromBase64Url(),
+                expirationTime = expirationTime
             )
         }
 
@@ -181,6 +194,7 @@ class CompressedStatusList(
          * @param cwt status list CWT representation
          * @param publicKey public key of the issuance server signing key (optional)
          * @param checks additional checks for JWT validation
+         * @param atTime time instant to check for expiration
          * @param maxValidity maximum CWT validity duration to accept
          * @return parsed [CompressedStatusList]
          * @throws IllegalArgumentException when [cwt] cannot be parsed as CWT status list
@@ -190,6 +204,7 @@ class CompressedStatusList(
             cwt: ByteArray,
             publicKey: EcPublicKey? = null,
             checks: Map<WebTokenCheck, String> = mapOf(),
+            atTime: Instant = Clock.System.now(),
             maxValidity: Duration = 365.days
         ): CompressedStatusList {
             val body = validateCwt(
@@ -200,12 +215,20 @@ class CompressedStatusList(
                     putAll(checks)
                 },
                 publicKey = publicKey,
+                atTime = atTime,
                 maxValidity = maxValidity
             )
             if (!body.hasKey(STATUS_LIST_CLAIM)) {
                 throw IllegalArgumentException("not a valid status list CWT")
             }
-            return fromDataItem(body[STATUS_LIST_CLAIM])
+            val expirationTime = if (body.hasKey(WebTokenClaim.Exp.numKey!!)) {
+                body[WebTokenClaim.Exp]!!
+            } else if (body.hasKey(TTL_CLAIM)) {
+                (body[WebTokenClaim.Iat] ?: Clock.System.now()) + body[TTL_CLAIM].asNumber.seconds
+            } else {
+                Clock.System.now() + 20.minutes
+            }
+            return fromDataItem(body[STATUS_LIST_CLAIM], expirationTime)
         }
 
         /**
@@ -214,10 +237,11 @@ class CompressedStatusList(
          * This method is mostly useful for testing, as CBOR is typically wrapped in JWT.
          *
          * @param dataItem CBOR status list representation
+         * @param expirationTime time when this status list expires
          * @return parsed [CompressedStatusList]
-         * @throws IllegalArgumentException when [cbor] does not represent status list
+         * @throws IllegalArgumentException when [dataItem] does not represent status list
          */
-        fun fromDataItem(dataItem: DataItem): CompressedStatusList {
+        fun fromDataItem(dataItem: DataItem, expirationTime: Instant): CompressedStatusList {
             val map = dataItem as? CborMap
                 ?: throw IllegalArgumentException("invalid 'status_list' claim")
             val lst = map["lst"] as? Bstr
@@ -226,7 +250,8 @@ class CompressedStatusList(
                 ?: throw IllegalArgumentException("missing 'bits' in 'status_list' claim")
             return CompressedStatusList(
                 bitsPerItem = bits.value.toInt(),
-                compressedStatusList = lst.value
+                compressedStatusList = lst.value,
+                expirationTime = expirationTime
             )
         }
     }

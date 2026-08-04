@@ -141,11 +141,11 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
                 ?: getAppOrigin(callingAppInfo.signingInfoCompat.signingCertificateHistory[0].toByteArray())
             val option = credentialRequest.credentialOptions[0] as GetDigitalCredentialOption
             val json = Json.parseToJsonElement(option.requestJson).jsonObject
-            Logger.iJson(TAG, "Request Json", json)
+            Logger.dJson(TAG, "Request Json", json)
             val selectionInfo = getSetSelection(credentialRequest)
                 ?: getSelection(credentialRequest)
                 ?:  throw IllegalStateException("Unable to get credman selection")
-            Logger.i(TAG, "SelectionInfo: $selectionInfo")
+            Logger.d(TAG, "SelectionInfo: $selectionInfo")
 
             val documents = selectionInfo.documentIds.map {
                 settings.source.documentStore.lookupForCredmanId(it)

@@ -20,6 +20,7 @@ java {
 
 dependencies {
     implementation(project(":multipaz"))
+    implementation(libs.sqlite.jdbc)
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.logging)
     implementation(libs.logback.classic)

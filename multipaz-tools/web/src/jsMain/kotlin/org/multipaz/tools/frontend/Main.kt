@@ -36,11 +36,14 @@ fun main() {
 fun pathToTab(path: String): String {
     return when (path) {
         "/cbor" -> "cbor-decode"
+        "/cdn" -> "cdn-decode"
         "/mdocDeviceResponse" -> "mdoc-view"
         "/mdocDeviceRequest" -> "device-request-parse"
         "/deviceRequest" -> "device-request-parse"
         "/iso18013-7-annex-c" -> "annex-c-parse"
         "/annexC" -> "annex-c-parse"
+        "/iso18013-7-verifier" -> "iso18013-7-verifier"
+        "/verifier" -> "iso18013-7-verifier"
         "/msoNamespaces" -> "mso-namespaces-view"
         "/sdjwt" -> "sd-jwt-inspect"
         "/compress" -> "compress"
@@ -60,9 +63,11 @@ fun pathToTab(path: String): String {
 fun tabToPath(tab: String): String {
     return when (tab) {
         "cbor-decode" -> "/cbor"
+        "cdn-decode" -> "/cdn"
         "mdoc-view" -> "/mdocDeviceResponse"
         "device-request-parse" -> "/mdocDeviceRequest"
         "annex-c-parse" -> "/iso18013-7-annex-c"
+        "iso18013-7-verifier" -> "/iso18013-7-verifier"
         "mso-namespaces-view" -> "/msoNamespaces"
         "sd-jwt-inspect" -> "/sdjwt"
         "compress" -> "/compress"
@@ -81,23 +86,34 @@ fun tabToPath(tab: String): String {
 val App = FC {
     var activeTab by useState(pathToTab(window.location.pathname))
     var activeDropdown by useState<String?>(null)
+    var isShortLinkModalOpen by useState(false)
+    val (_, setTick) = useState(0)
 
     useEffect(activeTab) {
         val currentPath = tabToPath(activeTab)
         if (window.location.pathname != currentPath) {
             window.history.pushState(null, "", currentPath)
+            setTick { it + 1 }
         }
     }
 
     useEffectOnce {
+        val listener = {
+            setTick { it + 1 }
+        }
+
         val handler: (org.w3c.dom.events.Event) -> Unit = {
             activeTab = pathToTab(window.location.pathname)
+            listener()
         }
+
+        onHashChangeListeners.add(listener)
         window.addEventListener("popstate", handler)
-        this.coroutineContext[kotlinx.coroutines.Job]?.invokeOnCompletion {
-            window.removeEventListener("popstate", handler)
-        }
+        window.addEventListener("hashchange", handler)
+        window.setInterval(listener, 100)
     }
+
+    val currentHash = window.location.hash
 
     div {
         onClick = { activeDropdown = null }
@@ -109,9 +125,45 @@ val App = FC {
             color = Color("#f1f5f9") // slate 100
         }
 
+        div {
+            key = "short-link-container"
+            if (currentHash.startsWith("#") && currentHash.length > 1) {
+                button {
+                    css {
+                        position = Position.fixed
+                        top = 20.px
+                        right = 20.px
+                        zIndex = integer(1000)
+                        padding = Padding(10.px, 18.px)
+                        fontSize = 14.px
+                        fontWeight = FontWeight.bold
+                        backgroundColor = Color("#2563eb")
+                        color = Color("#ffffff")
+                        border = None.none
+                        borderRadius = 8.px
+                        cursor = Cursor.pointer
+                        display = Display.flex
+                        alignItems = AlignItems.center
+                        gap = 8.px
+                        boxShadow = BoxShadow(0.px, 4.px, 16.px, Color("rgba(0, 0, 0, 0.5)"))
+                        hover {
+                            backgroundColor = Color("#1d4ed8")
+                        }
+                    }
+                    onClick = { event ->
+                        event.stopPropagation()
+                        isShortLinkModalOpen = true
+                    }
+                    +"🔗 Create Short Link"
+                }
+            }
+        }
+
         // Header
         div {
+            key = "header"
             css {
+                position = Position.relative
                 background = Color("linear-gradient(to bottom, #1e293b, #0f172a)")
                 borderBottom = Border(1.px, LineStyle.solid, Color("#334155"))
                 padding = Padding(32.px, 24.px)
@@ -142,8 +194,15 @@ val App = FC {
             }
         }
 
+        ShortLinkModalComponent {
+            isOpen = isShortLinkModalOpen
+            onClose = { isShortLinkModalOpen = false }
+            targetPath = window.location.pathname + window.location.hash
+        }
+
         // Navigation Bar
         nav {
+            key = "nav"
             css {
                 display = Display.flex
                 justifyContent = JustifyContent.center
@@ -162,10 +221,12 @@ val App = FC {
             val categories = listOf(
                 Category("decoders", "Decoders & Parsers", listOf(
                     "cbor-decode" to "CBOR Decoder",
+                    "cdn-decode" to "CDN Decoder",
                     "asn1" to "ASN.1 Decoder",
-                    "ndef-parse" to "NDEF Parser"
+                    "ndef-parse" to "NDEF Decoder"
                 )),
                 Category("identity", "ISO mdoc & SD-JWT", listOf(
+                    "iso18013-7-verifier" to "ISO 18013-7 Verifier",
                     "mdoc-view" to "ISO mdoc DeviceResponse Parser",
                     "device-request-parse" to "ISO mdoc DeviceRequest Parser",
                     "annex-c-parse" to "ISO 18013-7 Annex C Parser",
@@ -268,6 +329,10 @@ val App = FC {
                                         }
                                     }
                                     onClick = {
+                                        val targetPath = tabToPath(tabId)
+                                        if (window.location.pathname != targetPath || window.location.hash.isNotEmpty()) {
+                                            window.history.pushState(null, "", targetPath)
+                                        }
                                         activeTab = tabId
                                         activeDropdown = null
                                     }
@@ -282,6 +347,7 @@ val App = FC {
 
         // Content Area
         div {
+            key = "content-area"
             css {
                 flexGrow = number(1.0)
                 padding = Padding(40.px, 24.px)
@@ -291,21 +357,23 @@ val App = FC {
             }
 
             when (activeTab) {
-                "cbor-decode" -> CborDecoderComponent {}
-                "mdoc-view" -> MdocViewerComponent {}
-                "device-request-parse" -> DeviceRequestParserComponent {}
-                "annex-c-parse" -> AnnexCParserComponent {}
-                "mso-namespaces-view" -> MsoNamespacesViewerComponent {}
-                "sd-jwt-inspect" -> SdJwtInspectorComponent {}
-                "compress" -> CompressionComponent {}
-                "converter" -> ConverterComponent {}
-                "x509" -> X509ParserComponent {}
-                "asn1" -> Asn1DecoderComponent {}
-                "cert-converter" -> CertConverterComponent {}
-                "key-generator" -> KeyGeneratorComponent {}
-                "cert-generator" -> CertGeneratorComponent {}
-                "ndef-parse" -> NdefParserComponent {}
-                "event-decode" -> EventDecoderComponent {}
+                "iso18013-7-verifier" -> Iso180137VerifierComponent { key = "iso18013-7-verifier" }
+                "cbor-decode" -> CborDecoderComponent { key = "cbor-decode" }
+                "cdn-decode" -> CdnDecoderComponent { key = "cdn-decode" }
+                "mdoc-view" -> MdocViewerComponent { key = "mdoc-view" }
+                "device-request-parse" -> DeviceRequestParserComponent { key = "device-request-parse" }
+                "annex-c-parse" -> AnnexCParserComponent { key = "annex-c-parse" }
+                "mso-namespaces-view" -> MsoNamespacesViewerComponent { key = "mso-namespaces-view" }
+                "sd-jwt-inspect" -> SdJwtInspectorComponent { key = "sd-jwt-inspect" }
+                "compress" -> CompressionComponent { key = "compress" }
+                "converter" -> ConverterComponent { key = "converter" }
+                "x509" -> X509ParserComponent { key = "x509" }
+                "asn1" -> Asn1DecoderComponent { key = "asn1" }
+                "cert-converter" -> CertConverterComponent { key = "cert-converter" }
+                "key-generator" -> KeyGeneratorComponent { key = "key-generator" }
+                "cert-generator" -> CertGeneratorComponent { key = "cert-generator" }
+                "ndef-parse" -> NdefParserComponent { key = "ndef-parse" }
+                "event-decode" -> EventDecoderComponent { key = "event-decode" }
             }
         }
 

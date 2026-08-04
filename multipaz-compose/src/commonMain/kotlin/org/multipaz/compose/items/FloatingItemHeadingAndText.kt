@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
  * @param heading will be shown in bold at the top.
  * @param text will be shown below the heading.
  * @param modifier a [Modifier].
+ * @param showChevron whether to show a right chevron icon on the right side.
  * @param image optional image, shown to the left of the text.
  * @param trailingContent optional trailing content.
  */
@@ -28,6 +29,7 @@ fun FloatingItemHeadingAndText(
     heading: String,
     text: AnnotatedString,
     modifier: Modifier = Modifier,
+    showChevron: Boolean = false,
     image: @Composable () -> Unit = {},
     trailingContent: @Composable () -> Unit = {},
 ) {
@@ -39,6 +41,7 @@ fun FloatingItemHeadingAndText(
             }
         },
         modifier = modifier,
+        showChevron = showChevron,
         image = image,
         trailingContent = trailingContent
     )
@@ -50,6 +53,7 @@ fun FloatingItemHeadingAndText(
  * @param heading will be shown in bold at the top.
  * @param text will be shown below the heading.
  * @param modifier a [Modifier].
+ * @param showChevron whether to show a right chevron icon on the right side.
  * @param image optional image, shown to the left of the text.
  * @param trailingContent optional trailing content.
  */
@@ -58,6 +62,7 @@ fun FloatingItemHeadingAndText(
     heading: String,
     text: String,
     modifier: Modifier = Modifier,
+    showChevron: Boolean = false,
     image: @Composable () -> Unit = {},
     trailingContent: @Composable () -> Unit = {},
 ) {
@@ -65,6 +70,7 @@ fun FloatingItemHeadingAndText(
         heading = heading,
         text = AnnotatedString(text),
         modifier = modifier,
+        showChevron = showChevron,
         image = image,
         trailingContent = trailingContent
     )

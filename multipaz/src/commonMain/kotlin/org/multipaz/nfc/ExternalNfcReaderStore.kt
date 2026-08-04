@@ -39,12 +39,14 @@ class ExternalNfcReaderStore(
      * @param displayName a human-readable name for the device.
      * @param vendorId the vendor ID of the USB device.
      * @param productId the product ID of the USB device.
+     * @param interfaceIndex the USB interface index for the CCID interface on the device.
      * @return a [ExternalNfcReaderUsb] for the added device.
      */
     suspend fun addUsbReader(
         displayName: String,
         vendorId: Int,
-        productId: Int
+        productId: Int,
+        interfaceIndex: Int
     ): ExternalNfcReaderUsb {
         val id = storageTable.insert(
             key = null,
@@ -56,8 +58,10 @@ class ExternalNfcReaderStore(
             addedAt = Clock.System.now(),
             displayName = displayName,
             vendorId = vendorId,
-            productId = productId
+            productId = productId,
+            interfaceIndex = interfaceIndex
         )
+        reader.store = this
         storageTable.update(
             key = id,
             data = ByteString(Cbor.encode(reader.toDataItem())),
@@ -71,6 +75,34 @@ class ExternalNfcReaderStore(
                 .sortedBy { it.addedAt }
         }
         return reader
+    }
+
+    /**
+     * Sets the user display name for a reader.
+     *
+     * @param reader the reader to update.
+     * @param userDisplayName the new user display name, or null to clear it.
+     */
+    suspend fun setUserDisplayName(reader: ExternalNfcReader, userDisplayName: String?) {
+        val updatedReader = when (reader) {
+            is ExternalNfcReaderUsb -> reader.copy(userDisplayName = userDisplayName)
+        }.apply { store = this@ExternalNfcReaderStore }
+
+        storageTable.update(
+            key = reader.id,
+            data = ByteString(Cbor.encode(updatedReader.toDataItem())),
+            partitionId = partitionId
+        )
+        _readers.update { current ->
+            current.toMutableList()
+                .apply {
+                    val idx = indexOfFirst { it.id == reader.id }
+                    if (idx != -1) {
+                        set(idx, updatedReader)
+                    }
+                }
+                .sortedBy { it.addedAt }
+        }
     }
 
     /**
@@ -97,6 +129,7 @@ class ExternalNfcReaderStore(
         val readers = mutableListOf<ExternalNfcReader>()
         for ((key, encodedData) in storageTable.enumerateWithData(partitionId = partitionId)) {
             val reader = ExternalNfcReader.fromDataItem(Cbor.decode(encodedData.toByteArray()))
+            reader.store = this
             readers.add(reader)
         }
         _readers.update { current ->
@@ -108,7 +141,7 @@ class ExternalNfcReaderStore(
 
     companion object {
         private val tableSpec = StorageTableSpec(
-            name = "ExternalNfcReaderStore",
+            name = "ExternalNfcReaderStore1",
             supportPartitions = true,
             supportExpiration = false,
         )

@@ -10,8 +10,9 @@ import js.typedarrays.toByteArray
 import kotlinx.browser.window
 import kotlinx.coroutines.launch
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cose.Cose
 import org.multipaz.cose.toCoseLabel
@@ -37,6 +38,7 @@ import react.dom.html.ReactHTML.th
 import react.dom.html.ReactHTML.thead
 import react.dom.html.ReactHTML.tr
 import react.useState
+import react.useEffectOnce
 import web.cssom.*
 import web.file.File
 import web.file.FileReader
@@ -161,7 +163,7 @@ external interface ItemsRequestViewerBlockProps : Props {
 private val ItemsRequestViewerBlock: FC<ItemsRequestViewerBlockProps> = FC { props ->
     var copyStatus by useState("")
     val itemsReqHex = Cbor.encode(props.itemsReqItem).toHex()
-    val itemsReqDiag = Cbor.toDiagnostics(props.itemsReqItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+    val itemsReqDiag = Cdn.encode(props.itemsReqItem, CdnGeneratorOptions.Pretty)
 
     div {
         css {
@@ -223,6 +225,33 @@ val DeviceRequestParserComponent: FC<Props> = FC {
     var copyHexStatus by useState("")
     var copyDiagStatus by useState("")
 
+    fun parseInput(inputStr: String) {
+        val cleanInput = inputStr.trim()
+        if (cleanInput.isEmpty()) return
+        mainScope.launch {
+            try {
+                val bytes = decodeInputToBytes(cleanInput)
+                val dataItem = Cbor.decode(bytes)
+                val devReq = DeviceRequest.fromDataItem(dataItem)
+                parsedResult = ParsedRequestResult(devReq, dataItem, bytes.toHex())
+                parseError = ""
+                if (fileName.isEmpty()) fileName = "Input Payload"
+                updateUrlHashPayload(cleanInput)
+            } catch (e: Throwable) {
+                parseError = "Error parsing DeviceRequest: " + (e.message ?: "Invalid structure")
+                parsedResult = null
+            }
+        }
+    }
+
+    useEffectOnce {
+        val hashPayload = getUrlHashPayload()
+        if (hashPayload.isNotEmpty()) {
+            rawInput = hashPayload
+            parseInput(hashPayload)
+        }
+    }
+
     div {
         css {
             background = Color("#1e293b")
@@ -267,8 +296,9 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                         parsedResult = null
                         parseError = ""
                         fileName = ""
+                        updateUrlHashPayload("")
                     }
-                    +"← Clear and Decode Another Request"
+                    +"← Back to Input"
                 }
 
                 if (parsedResult != null) {
@@ -310,12 +340,12 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                             }
                         }
                         onClick = {
-                            val diag = Cbor.toDiagnostics(result.rawDataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                            val diag = Cdn.encode(result.rawDataItem, CdnGeneratorOptions.Pretty)
                             window.navigator.asDynamic().clipboard.writeText(diag)
-                            copyDiagStatus = "Copied Diagnostics!"
+                            copyDiagStatus = "Copied CDN!"
                             window.setTimeout({ copyDiagStatus = "" }, 2000)
                         }
-                        +if (copyDiagStatus.isNotEmpty()) copyDiagStatus else "Copy CBOR Diagnostics"
+                        +if (copyDiagStatus.isNotEmpty()) copyDiagStatus else "Copy CDN"
                     }
                 }
             }
@@ -361,6 +391,32 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                     marginBottom = 16.px
                 }
 
+                if (rawInput.isNotEmpty()) {
+                    button {
+                        css {
+                            padding = Padding(10.px, 20.px)
+                            background = Color("#334155")
+                            color = Color("#f1f5f9")
+                            border = Border(1.px, LineStyle.solid, Color("#475569"))
+                            borderRadius = 8.px
+                            cursor = Cursor.pointer
+                            fontWeight = FontWeight.bold
+                            fontSize = 14.px
+                            hover {
+                                background = Color("#475569")
+                            }
+                        }
+                        onClick = {
+                            rawInput = ""
+                            parsedResult = null
+                            parseError = ""
+                            fileName = ""
+                            updateUrlHashPayload("")
+                        }
+                        +"🗑️ Clear Input"
+                    }
+                }
+
                 button {
                     css {
                         padding = Padding(10.px, 20.px)
@@ -403,7 +459,6 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                     +"📁 Choose File"
                     input {
                         type = "file".unsafeCast<InputType>()
-                        accept = ".cbor,.bin,.hex,*/*"
                         css {
                             display = None.none
                         }
@@ -416,26 +471,13 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                                 reader.asDynamic().onload = {
                                     val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
                                     val bytes = Int8Array(arrayBuffer).toByteArray()
-                                    try {
-                                        val dataItem = Cbor.decode(bytes)
-                                        val devReq = DeviceRequest.fromDataItem(dataItem)
-                                        parsedResult = ParsedRequestResult(devReq, dataItem, bytes.toHex())
-                                        parseError = ""
-                                        fileName = name
-                                    } catch (e: Throwable) {
-                                        val text = bytes.decodeToString()
-                                        try {
-                                            val decodedBytes = decodeInputToBytes(text)
-                                            val dataItem = Cbor.decode(decodedBytes)
-                                            val devReq = DeviceRequest.fromDataItem(dataItem)
-                                            parsedResult = ParsedRequestResult(devReq, dataItem, decodedBytes.toHex())
-                                            parseError = ""
-                                            fileName = name
-                                        } catch (err: Throwable) {
-                                            parseError = "Error parsing DeviceRequest: " + (err.message ?: "Invalid CBOR payload")
-                                            parsedResult = null
-                                        }
+                                    val text = bytes.decodeToString()
+                                    rawInput = if (text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
+                                        text.trim()
+                                    } else {
+                                        bytes.toHex()
                                     }
+                                    fileName = name
                                 }
                                 reader.readAsArrayBuffer(file)
                             }
@@ -466,7 +508,7 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                     fontFamily = FontFamily.monospace
                     padding = 12.px
                     resize = "none".unsafeCast<Resize>()
-                    marginBottom = 16.px
+                    marginBottom = 4.px
                     focus {
                         outline = None.none
                         borderColor = Color("#3b82f6")
@@ -475,6 +517,10 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                 value = rawInput
                 placeholder = "Paste DeviceRequest Hex (e.g. A26776657273696F6E63312E30...) or Base64 string here..."
                 onChange = { rawInput = it.target.value }
+            }
+
+            DetectedInputBadge {
+                input = rawInput
             }
 
             button {
@@ -493,19 +539,7 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                 }
                 disabled = rawInput.trim().isEmpty()
                 onClick = {
-                    mainScope.launch {
-                        try {
-                            val bytes = decodeInputToBytes(rawInput)
-                            val dataItem = Cbor.decode(bytes)
-                            val devReq = DeviceRequest.fromDataItem(dataItem)
-                            parsedResult = ParsedRequestResult(devReq, dataItem, bytes.toHex())
-                            parseError = ""
-                            if (fileName.isEmpty()) fileName = "Pasted Input"
-                        } catch (e: Throwable) {
-                            parseError = "Error parsing DeviceRequest: " + (e.message ?: "Invalid structure")
-                            parsedResult = null
-                        }
-                    }
+                    parseInput(rawInput)
                 }
                 +"Decode DeviceRequest"
             }
@@ -746,7 +780,7 @@ val DeviceRequestParserComponent: FC<Props> = FC {
                         }
 
                         CborDiagnosticViewer {
-                            diagText = Cbor.toDiagnostics(info.dataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                            diagText = Cdn.encode(info.dataItem, CdnGeneratorOptions.Pretty)
                             maxHeight = 250.px
                         }
                     }
@@ -758,11 +792,11 @@ val DeviceRequestParserComponent: FC<Props> = FC {
 
                     label {
                         css { display = Display.block; fontWeight = FontWeight.bold; color = Color("#cbd5e1"); marginBottom = 8.px }
-                        +"Full DeviceRequest CBOR Diagnostic Notation:"
+                        +"Full DeviceRequest CBOR CDN View:"
                     }
 
                     CborDiagnosticViewer {
-                        diagText = Cbor.toDiagnostics(rawDataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                        diagText = Cdn.encode(rawDataItem, CdnGeneratorOptions.Pretty)
                         maxHeight = 400.px
                     }
                 }

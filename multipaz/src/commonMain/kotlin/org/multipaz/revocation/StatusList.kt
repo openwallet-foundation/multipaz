@@ -10,8 +10,11 @@ import org.multipaz.webtoken.validateJwt
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.util.zlibDeflate
 import org.multipaz.webtoken.validateCwt
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 
 /**
  * Status list as defined in
@@ -57,13 +60,20 @@ class StatusList(
     /**
      * Creates compressed form of the status list.
      */
-    suspend fun compress(): CompressedStatusList =
-        CompressedStatusList(bitsPerItem, statusList.zlibDeflate(9))
+    suspend fun compress(timeToLive: Duration = 20.minutes): CompressedStatusList {
+        val creationTime = Clock.System.now()
+        return CompressedStatusList(
+            bitsPerItem = bitsPerItem,
+            compressedStatusList = statusList.zlibDeflate(9),
+            creationTime = creationTime,
+            expirationTime = creationTime + timeToLive
+        )
+    }
 
     /**
      * Builder class for [StatusList].
      *
-     * This helps creating [StatusList] from a set of per-index status codes. Only non-zero
+     * This helps to create [StatusList] from a set of per-index status codes. Only non-zero
      * status values need to be supplied.
      *
      * @param bitsPerItem number of bits per status code, must be 1, 2, 4, or 8.
@@ -83,7 +93,7 @@ class StatusList(
             else -> throw IllegalArgumentException("bitsPerItem = $bitsPerItem")
         }
 
-        // Mask to extract bit in byte index from bit index
+        // Mask to extract a bit in byte index from bit index
         private val bitIndexMask: Int = (-1 shl perByteShift).inv()
         private val maxStatus: Int = (-1 shl bitsPerItem).inv()
 
@@ -100,7 +110,7 @@ class StatusList(
          *     codes equal to zero may be omitted
          */
         fun addStatus(index: Int, status: Int) {
-            require(status >= 0 && status <= maxStatus) { "Invalid status: $status" }
+            require(status in 0..maxStatus) { "Invalid status: $status" }
             if (index <= lastIndex) {
                 throw IllegalArgumentException("non-increasing index: $index")
             }
@@ -154,11 +164,12 @@ class StatusList(
          * This method is mostly useful for testing, as JSON is typically wrapped in JWT.
          *
          * @param json JSON status list representation
+         * @param expirationTime time when this status list expires
          * @return parsed [StatusList]
          * @throws IllegalArgumentException when [json] does not represent status list
          */
-        suspend fun fromJson(json: JsonObject): StatusList =
-            CompressedStatusList.fromJson(json).decompress()
+        suspend fun fromJson(json: JsonObject, expirationTime: Instant): StatusList =
+            CompressedStatusList.fromJson(json, expirationTime).decompress()
 
         /**
          * Parses and validates CWT that holds the status list.
@@ -178,9 +189,10 @@ class StatusList(
             cwt: ByteArray,
             publicKey: EcPublicKey? = null,
             checks: Map<WebTokenCheck, String> = mapOf(),
+            atTime: Instant = Clock.System.now(),
             maxValidity: Duration = 365.days
         ): StatusList =
-            CompressedStatusList.fromCwt(cwt, publicKey, checks, maxValidity).decompress()
+            CompressedStatusList.fromCwt(cwt, publicKey, checks, atTime, maxValidity).decompress()
 
         /**
          * Parses CBOR as status list.
@@ -188,10 +200,11 @@ class StatusList(
          * This method is mostly useful for testing, as CBOR is typically wrapped in JWT.
          *
          * @param dataItem CBOR status list representation
+         * @param expirationTime time when this status list expires
          * @return parsed [CompressedStatusList]
          * @throws IllegalArgumentException when [dataItem] does not represent status list
          */
-        suspend fun fromDataItem(dataItem: DataItem): StatusList =
-            CompressedStatusList.fromDataItem(dataItem).decompress()
+        suspend fun fromDataItem(dataItem: DataItem, expirationTime: Instant): StatusList =
+            CompressedStatusList.fromDataItem(dataItem, expirationTime).decompress()
     }
 }

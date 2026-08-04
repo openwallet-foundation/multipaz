@@ -12,7 +12,15 @@ import react.dom.html.ReactHTML.textarea
 import react.dom.html.ReactHTML.span
 import react.dom.html.ReactHTML.label
 import react.dom.html.ReactHTML.pre
+import react.dom.html.ReactHTML.input
 import react.useState
+import react.useEffectOnce
+import js.typedarrays.Int8Array
+import js.typedarrays.toByteArray
+import org.multipaz.util.toHex
+import web.file.File
+import web.file.FileReader
+import web.html.InputType
 import web.cssom.*
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
@@ -27,7 +35,8 @@ import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.ASN1Sequence
 import org.multipaz.asn1.OID
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.util.AndroidAttestationExtensionParser
@@ -36,6 +45,43 @@ val X509ParserComponent = FC {
     var rawInput by useState("")
     var parsedCert by useState<X509Cert?>(null)
     var parseError by useState("")
+
+    fun parseCert(inputStr: String) {
+        mainScope.launch {
+            try {
+                val cleanInput = inputStr.trim()
+                val cert = if (cleanInput.contains("-----BEGIN")) {
+                    X509Cert.fromPem(cleanInput)
+                } else {
+                    val bytes = decodeInputToBytes(cleanInput)
+                    X509Cert(ByteString(bytes))
+                }
+                
+                // Eagerly evaluate core fields to check parsing success
+                cert.subject.name
+                cert.issuer.name
+                cert.serialNumber
+                cert.version
+                cert.validityNotBefore
+                cert.validityNotAfter
+                
+                parsedCert = cert
+                parseError = ""
+                updateUrlHashPayload(cleanInput)
+            } catch (e: Throwable) {
+                parseError = "Error parsing certificate: " + (e.message ?: "Unknown error")
+                parsedCert = null
+            }
+        }
+    }
+
+    useEffectOnce {
+        val hashPayload = getUrlHashPayload()
+        if (hashPayload.isNotEmpty()) {
+            rawInput = hashPayload
+            parseCert(hashPayload)
+        }
+    }
 
     div {
         css {
@@ -74,8 +120,9 @@ val X509ParserComponent = FC {
                 onClick = {
                     parsedCert = null
                     parseError = ""
+                    updateUrlHashPayload("")
                 }
-                +"← Clear and Go Back"
+                +"← Back to Input"
             }
 
             if (parseError.isNotEmpty()) {
@@ -574,14 +621,96 @@ val X509ParserComponent = FC {
                 +"Decode and view metadata of an X.509 Certificate. Supports PEM format (carrying BEGIN/END headers), raw base64 or hex encoded certificate bytes."
             }
 
-            label {
+            div {
                 css {
-                    display = Display.block
-                    fontWeight = FontWeight.bold
+                    display = Display.flex
+                    justifyContent = JustifyContent.spaceBetween
+                    alignItems = AlignItems.center
                     marginBottom = 8.px
-                    color = Color("#cbd5e1")
                 }
-                +"X.509 Certificate (PEM, Base64, or Hex):"
+
+                label {
+                    css {
+                        fontWeight = FontWeight.bold
+                        color = Color("#cbd5e1")
+                    }
+                    +"X.509 Certificate (PEM, Base64, or Hex):"
+                }
+
+                div {
+                    css {
+                        display = Display.flex
+                        gap = 8.px
+                        alignItems = AlignItems.center
+                    }
+
+                    if (rawInput.isNotEmpty()) {
+                        button {
+                            css {
+                                background = Color("#334155")
+                                border = None.none
+                                color = Color("#f1f5f9")
+                                padding = Padding(4.px, 12.px)
+                                borderRadius = 6.px
+                                cursor = Cursor.pointer
+                                fontSize = 13.px
+                                fontWeight = FontWeight.normal
+                                hover {
+                                    background = Color("#475569")
+                                }
+                            }
+                            onClick = {
+                                rawInput = ""
+                                parsedCert = null
+                                parseError = ""
+                                updateUrlHashPayload("")
+                            }
+                            +"🗑️ Clear"
+                        }
+                    }
+
+                    label {
+                        css {
+                            background = Color("#334155")
+                            border = None.none
+                            color = Color("#f1f5f9")
+                            padding = Padding(4.px, 12.px)
+                            borderRadius = 6.px
+                            cursor = Cursor.pointer
+                            fontSize = 13.px
+                            fontWeight = FontWeight.normal
+                            hover {
+                                background = Color("#475569")
+                            }
+                        }
+                        +"📁 Load data"
+                        input {
+                            type = "file".unsafeCast<InputType>()
+                            accept = ".der,.cer,.crt,.pem,.bin,.hex,.txt,*/*"
+                            css {
+                                display = None.none
+                            }
+                            onChange = { event ->
+                                val fileList = event.target.asDynamic().files
+                                if (fileList != null && fileList.length > 0) {
+                                    val file = fileList[0].unsafeCast<File>()
+                                    val reader = FileReader()
+                                    reader.asDynamic().onload = {
+                                        val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
+                                        val bytes = Int8Array(arrayBuffer).toByteArray()
+                                        val text = bytes.decodeToString()
+                                        if (text.contains("-----BEGIN") || text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
+                                            rawInput = text.trim()
+                                        } else {
+                                            rawInput = bytes.toHex()
+                                        }
+                                    }
+                                    reader.readAsArrayBuffer(file)
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             textarea {
@@ -595,7 +724,7 @@ val X509ParserComponent = FC {
                     fontFamily = FontFamily.monospace
                     padding = 12.px
                     resize = "none".unsafeCast<Resize>()
-                    marginBottom = 24.px
+                    marginBottom = 4.px
                     focus {
                         outline = None.none
                         borderColor = Color("#3b82f6")
@@ -604,6 +733,10 @@ val X509ParserComponent = FC {
                 value = rawInput
                 placeholder = "Paste certificate here (PEM format, Hex or Base64 bytes)..."
                 onChange = { rawInput = it.target.value }
+            }
+
+            DetectedInputBadge {
+                input = rawInput
             }
 
             button {
@@ -627,31 +760,7 @@ val X509ParserComponent = FC {
                 }
                 disabled = rawInput.trim().isEmpty()
                 onClick = {
-                    mainScope.launch {
-                        try {
-                            val cleanInput = rawInput.trim()
-                            val cert = if (cleanInput.contains("-----BEGIN")) {
-                                X509Cert.fromPem(cleanInput)
-                            } else {
-                                val bytes = decodeInputToBytes(cleanInput)
-                                X509Cert(ByteString(bytes))
-                            }
-                            
-                            // Eagerly evaluate core fields to check parsing success
-                            cert.subject.name
-                            cert.issuer.name
-                            cert.serialNumber
-                            cert.version
-                            cert.validityNotBefore
-                            cert.validityNotAfter
-                            
-                            parsedCert = cert
-                            parseError = ""
-                        } catch (e: Throwable) {
-                            parseError = "Error parsing certificate: " + (e.message ?: "Unknown error")
-                            parsedCert = null
-                        }
-                    }
+                    parseCert(rawInput)
                 }
                 +"Parse Certificate"
             }
@@ -688,10 +797,7 @@ private fun formatExtensionValue(cert: X509Cert, extOid: String, extData: ByteAr
             AndroidAttestationExtensionParser(cert).prettyPrint()
 
         OID.X509_EXTENSION_ANDROID_KEYSTORE_PROVISIONING_INFORMATION.oid ->
-            Cbor.toDiagnostics(
-                extData,
-                setOf(DiagnosticOption.PRETTY_PRINT),
-            )
+            Cdn.encode(extData, CdnGeneratorOptions.Pretty)
 
         OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid ->
             MultipazExtension.fromCbor(extData).prettyPrint()

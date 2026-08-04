@@ -165,6 +165,7 @@ class MdocNfcEngagementHelper(
                         )
                     )
                     val initialNdefMessagePayload = initialNdefMessage.encode()
+                    Logger.dHex(TAG, "Prepared NDEF message", initialNdefMessagePayload)
                     val bsb = ByteStringBuilder()
                     bsb.append((initialNdefMessagePayload.size/0x100).and(0xff).toByte())
                     bsb.append(initialNdefMessagePayload.size.and(0xff).toByte())
@@ -187,6 +188,7 @@ class MdocNfcEngagementHelper(
                         skipUuids = false,
                     )
                     val hsPayload = handoverSelectMessage.encode()
+                    Logger.dHex(TAG, "Prepared Handover Select message", hsPayload)
 
                     val handover = buildCborArray {
                         add(hsPayload)                      // Handover Select message
@@ -344,12 +346,19 @@ class MdocNfcEngagementHelper(
     }
 
     private suspend fun ndefTransact(message: NdefMessage): NdefMessage {
-        return when (negotiatedHandoverState) {
+        if (Logger.isDebugEnabled) {
+            Logger.dHex(TAG, "Received NDEF message", message.encode())
+        }
+        val response = when (negotiatedHandoverState) {
             NegotiatedHandoverState.NOT_STARTED -> throw IllegalStateException("Unexpected message - Negotiated Handover not started")
             NegotiatedHandoverState.EXPECT_SERVICE_SELECT -> ndefTransactHandleServiceSelect(message)
             NegotiatedHandoverState.EXPECT_HANDOVER_REQUEST_MESSAGE -> ndefTransactHandleHandoverRequest(message)
             NegotiatedHandoverState.EXPECT_HANDOVER_SELECT_MESSAGE -> throw IllegalStateException("Negotiated Handover is complete")
         }
+        if (Logger.isDebugEnabled) {
+            Logger.dHex(TAG, "Responding with NDEF message", response.encode())
+        }
+        return response
     }
 
     private suspend fun processUpdateBinaryNdefMessage(message: NdefMessage): ResponseApdu {
@@ -435,28 +444,42 @@ class MdocNfcEngagementHelper(
      * @return the response.
      */
     suspend fun processApdu(command: CommandApdu): ResponseApdu {
-        if (raisedError) {
-            Logger.w(TAG, "processApdu: Already in error state, responding to APDU with status 6f00")
-            return ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_NO_PRECISE_DIAGNOSIS)
+        if (Logger.isDebugEnabled) {
+            Logger.dHex(TAG, "Command APDU", command.encode())
         }
-        try {
-            when (command.ins) {
-                Nfc.INS_SELECT -> {
-                    when (command.p1) {
-                        Nfc.INS_SELECT_P1_FILE -> return processSelectFile(command)
-                        Nfc.INS_SELECT_P1_APPLICATION -> return processSelectApplication(command)
+        val response = if (raisedError) {
+            Logger.w(TAG, "processApdu: Already in error state, responding to APDU with status 6f00")
+            ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_NO_PRECISE_DIAGNOSIS)
+        } else {
+            try {
+                when (command.ins) {
+                    Nfc.INS_SELECT -> {
+                        when (command.p1) {
+                            Nfc.INS_SELECT_P1_FILE -> processSelectFile(command)
+                            Nfc.INS_SELECT_P1_APPLICATION -> processSelectApplication(command)
+                            else -> {
+                                raiseError("Command ${command.p1} of INS_SELECT in $command not supported, returning 6d00")
+                                ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_INSTRUCTION_NOT_SUPPORTED_OR_INVALID)
+                            }
+                        }
+                    }
+                    Nfc.INS_READ_BINARY -> processReadBinary(command)
+                    Nfc.INS_UPDATE_BINARY -> processUpdateBinary(command)
+                    else -> {
+                        raiseError("Instruction ${command.ins} of $command not supported, returning 6d00")
+                        ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_INSTRUCTION_NOT_SUPPORTED_OR_INVALID)
                     }
                 }
-                Nfc.INS_READ_BINARY -> return processReadBinary(command)
-                Nfc.INS_UPDATE_BINARY -> return processUpdateBinary(command)
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                raiseError("Error processing APDU: ${error.message}", error)
+                ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_NO_PRECISE_DIAGNOSIS)
             }
-            raiseError("Command APDU $command not supported, returning 6d00")
-            return ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_INSTRUCTION_NOT_SUPPORTED_OR_INVALID)
-        } catch (error: Exception) {
-            if (error is CancellationException) throw error
-            raiseError("Error processing APDU: ${error.message}", error)
-            return ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_NO_PRECISE_DIAGNOSIS)
         }
+        if (Logger.isDebugEnabled) {
+            Logger.dHex(TAG, "Response APDU", response.encode())
+        }
+        return response
     }
 
     /**

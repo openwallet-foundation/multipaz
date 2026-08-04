@@ -343,7 +343,7 @@ object OpenID4VP {
         requesterIdentities: List<RequesterIdentity>,
         onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
     ): OpenID4VPResponse {
-        Logger.iJson(TAG, "request", request)
+        Logger.dJson(TAG, "request", request)
 
         val nonce = request["nonce"]!!.jsonPrimitive.content
         val responseModeText = request["response_mode"]!!.jsonPrimitive.content
@@ -564,7 +564,7 @@ object OpenID4VP {
                 }
             }
         }
-        Logger.iJson(TAG, "vpToken", vpToken)
+        Logger.dJson(TAG, "vpToken", vpToken)
 
         // If using ZKP the response will be huge so compression helps
         val compressionLevel = if (usingZk) 9 else null
@@ -689,7 +689,7 @@ object OpenID4VP {
                 }
             }
         )
-        Logger.iCbor(TAG, "handoverInfo", handoverInfo)
+        Logger.dCbor(TAG, "handoverInfo", handoverInfo)
 
         val handoverString = if (responseUri != null) {
             "OpenID4VPHandover"
@@ -707,8 +707,8 @@ object OpenID4VP {
                 }
             }
         )
-        Logger.iCbor(TAG, "handoverInfo", handoverInfo)
-        Logger.iCbor(TAG, "encodedSessionTranscript", encodedSessionTranscript)
+        Logger.dCbor(TAG, "handoverInfo", handoverInfo)
+        Logger.dCbor(TAG, "encodedSessionTranscript", encodedSessionTranscript)
 
         val mdocCredential = match.credential as MdocCredential
         val document = MdocDocument.fromPresentment(

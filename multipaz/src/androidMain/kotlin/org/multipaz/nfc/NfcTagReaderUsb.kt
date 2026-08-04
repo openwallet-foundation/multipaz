@@ -18,7 +18,7 @@ private class NfcIsoTagUsb(
     private val driver: CcidDriver,
 ): NfcIsoTag() {
     override val maxTransceiveLength: Int
-        get() = 0xfeff
+        get() = driver.maxCommandLength
 
     override suspend fun transceive(command: CommandApdu): ResponseApdu {
         val commandApduBytes = command.encode()
@@ -44,6 +44,7 @@ private class NfcIsoTagUsb(
 internal class NfcTagReaderUsb(
     private val manager: UsbManager,
     private val device: UsbDevice,
+    private val interfaceIndex: Int,
 ): NfcTagReader {
     override val external: Boolean
         get() = true
@@ -62,14 +63,15 @@ internal class NfcTagReaderUsb(
     ): T {
         val driver = CcidDriver(
             usbManager = manager,
-            device = device
+            device = device,
+            interfaceIndex = interfaceIndex
         )
         driver.connect()
         try {
             val result = suspendCancellableCoroutine<T> { continuation ->
                 var readJob: Job? = null
 
-                driver.setListener(listener = object : CcidDriverListener {
+                val listener = object : CcidDriverListener {
                     override fun onCardInserted() {
                         Logger.i(TAG, "Card inserted")
                         if (readJob == null) {
@@ -78,7 +80,9 @@ internal class NfcTagReaderUsb(
                                 try {
                                     val funcResult = tagInteractionFunc(tag)
                                     if (funcResult != null) {
-                                        continuation.resume(funcResult)
+                                        if (continuation.isActive) {
+                                            continuation.resume(funcResult)
+                                        }
                                     }
                                 } catch (e: NfcTagLostException) {
                                     // This is to properly handle emulated tags - such as on Android - which may be showing
@@ -86,7 +90,9 @@ internal class NfcTagReaderUsb(
                                     Logger.w(TAG, "Tag lost", e)
                                 } catch (e: Exception) {
                                     if (e is CancellationException) throw e
-                                    continuation.resumeWithException(e)
+                                    if (continuation.isActive) {
+                                        continuation.resumeWithException(e)
+                                    }
                                 }
                                 readJob = null
                             }
@@ -95,20 +101,34 @@ internal class NfcTagReaderUsb(
 
                     override fun onCardRemoved() {
                         Logger.i(TAG, "Card removed")
+                        readJob?.cancel()
+                        readJob = null
                     }
-                })
+                }
+
+                driver.setListener(listener = listener)
+
+                try {
+                    val status = driver.getCardStatus()
+                    if (status == CardStatus.PRESENT_ACTIVE || status == CardStatus.PRESENT_INACTIVE) {
+                        listener.onCardInserted()
+                    }
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to query initial card status", e)
+                }
 
                 continuation.invokeOnCancellation {
                     readJob?.cancel()
                     driver.disconnect()
                 }
             }
-            driver.disconnect()
             return result
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             driver.disconnect()
             throw e
+        } finally {
+            driver.setListener(null)
         }
     }
 }

@@ -11,8 +11,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
@@ -40,7 +41,14 @@ import react.dom.html.ReactHTML.textarea
 import react.dom.html.ReactHTML.th
 import react.dom.html.ReactHTML.thead
 import react.dom.html.ReactHTML.tr
+import react.dom.html.ReactHTML.input
 import react.useState
+import react.useEffectOnce
+import js.typedarrays.Int8Array
+import js.typedarrays.toByteArray
+import web.file.File
+import web.file.FileReader
+import web.html.InputType
 import web.cssom.*
 import kotlin.random.Random
 
@@ -124,6 +132,96 @@ val AnnexCParserComponent: FC<Props> = FC {
 
     var copyRespHexStatus by useState("")
     var copyEncPayloadHexStatus by useState("")
+
+    fun parseInput(inputStr: String) {
+        val cleanInput = inputStr.trim()
+        if (cleanInput.isEmpty()) return
+        mainScope.launch {
+            try {
+                val jsonObj = Json.parseToJsonElement(cleanInput).jsonObject
+                if (mode == "request") {
+                    val devReqB64 = jsonObj["deviceRequest"]?.jsonPrimitive?.content
+                        ?: error("Missing 'deviceRequest' field in JSON")
+                    val encInfoB64 = jsonObj["encryptionInfo"]?.jsonPrimitive?.content
+                        ?: error("Missing 'encryptionInfo' field in JSON")
+
+                    val devReqBytes = devReqB64.fromBase64Url()
+                    val devReqDataItem = Cbor.decode(devReqBytes)
+                    val devReq = DeviceRequest.fromDataItem(devReqDataItem)
+
+                    val encInfoBytes = encInfoB64.fromBase64Url()
+                    val encInfoDataItem = Cbor.decode(encInfoBytes)
+
+                    var nonceHex: String? = null
+                    var recipientPublicKeyPem: String? = null
+                    var recipientPublicKeyCurve: String? = null
+
+                    try {
+                        val paramsMap = encInfoDataItem.asArray[1].asMap
+                        paramsMap[Tstr("nonce")]?.let {
+                            nonceHex = it.asBstr.toHex()
+                        }
+                        paramsMap[Tstr("recipientPublicKey")]?.let { coseKeyItem ->
+                            val ecPublicKey = coseKeyItem.asCoseKey.ecPublicKey
+                            recipientPublicKeyPem = ecPublicKey.toPem()
+                            recipientPublicKeyCurve = ecPublicKey.curve.name
+                        }
+                    } catch (e: Throwable) {
+                        // optional field extraction fallback
+                    }
+
+                    parsedRequest = ParsedRequestData(
+                        deviceRequest = devReq,
+                        devReqHex = devReqBytes.toHex(),
+                        devReqDataItem = devReqDataItem,
+                        encryptionInfoDataItem = encInfoDataItem,
+                        encInfoHex = encInfoBytes.toHex(),
+                        nonceHex = nonceHex,
+                        recipientPublicKeyPem = recipientPublicKeyPem,
+                        recipientPublicKeyCurve = recipientPublicKeyCurve
+                    )
+                    parseError = ""
+                    updateUrlHashPayload(cleanInput)
+                } else {
+                    val respB64 = jsonObj["response"]?.jsonPrimitive?.content
+                        ?: error("Missing 'response' field in JSON")
+
+                    val respBytes = respB64.fromBase64Url()
+                    val respDataItem = Cbor.decode(respBytes)
+
+                    var encryptedPayloadHex: String? = null
+                    try {
+                        val paramsMap = respDataItem.asArray[1].asMap
+                        paramsMap[Tstr("enc")]?.let {
+                            encryptedPayloadHex = it.asBstr.toHex()
+                        }
+                    } catch (e: Throwable) {
+                        // optional payload extraction fallback
+                    }
+
+                    parsedResponse = ParsedResponseData(
+                        responseDataItem = respDataItem,
+                        responseHex = respBytes.toHex(),
+                        encryptedPayloadHex = encryptedPayloadHex
+                    )
+                    parseError = ""
+                    updateUrlHashPayload(cleanInput)
+                }
+            } catch (e: Throwable) {
+                parseError = "Error parsing W3C Digital Credentials JSON: " + (e.message ?: "Invalid JSON / Base64Url / CBOR structure")
+                parsedRequest = null
+                parsedResponse = null
+            }
+        }
+    }
+
+    useEffectOnce {
+        val hashPayload = getUrlHashPayload()
+        if (hashPayload.isNotEmpty()) {
+            rawInput = hashPayload
+            parseInput(hashPayload)
+        }
+    }
 
     div {
         css {
@@ -232,8 +330,9 @@ val AnnexCParserComponent: FC<Props> = FC {
                     parsedRequest = null
                     parsedResponse = null
                     parseError = ""
+                    updateUrlHashPayload("")
                 }
-                +"← Clear and Decode Another"
+                +"← Back to Input"
             }
 
             if (parseError.isNotEmpty()) {
@@ -251,14 +350,92 @@ val AnnexCParserComponent: FC<Props> = FC {
                 }
             }
         } else {
-            label {
+            div {
                 css {
-                    display = Display.block
-                    fontWeight = FontWeight.bold
+                    display = Display.flex
+                    justifyContent = JustifyContent.spaceBetween
+                    alignItems = AlignItems.center
                     marginBottom = 8.px
-                    color = Color("#cbd5e1")
                 }
-                +if (mode == "request") "Paste W3C Digital Credentials Request JSON:" else "Paste W3C Digital Credentials Response JSON:"
+
+                label {
+                    css {
+                        fontWeight = FontWeight.bold
+                        color = Color("#cbd5e1")
+                    }
+                    +if (mode == "request") "Paste W3C Digital Credentials Request JSON:" else "Paste W3C Digital Credentials Response JSON:"
+                }
+
+                div {
+                    css {
+                        display = Display.flex
+                        gap = 8.px
+                        alignItems = AlignItems.center
+                    }
+
+                    if (rawInput.isNotEmpty()) {
+                        button {
+                            css {
+                                background = Color("#334155")
+                                border = None.none
+                                color = Color("#f1f5f9")
+                                padding = Padding(4.px, 12.px)
+                                borderRadius = 6.px
+                                cursor = Cursor.pointer
+                                fontSize = 13.px
+                                fontWeight = FontWeight.normal
+                                hover {
+                                    background = Color("#475569")
+                                }
+                            }
+                            onClick = {
+                                rawInput = ""
+                                parsedRequest = null
+                                parsedResponse = null
+                                parseError = ""
+                                updateUrlHashPayload("")
+                            }
+                            +"🗑️ Clear"
+                        }
+                    }
+
+                    label {
+                        css {
+                            background = Color("#334155")
+                            border = None.none
+                            color = Color("#f1f5f9")
+                            padding = Padding(4.px, 12.px)
+                            borderRadius = 6.px
+                            cursor = Cursor.pointer
+                            fontSize = 13.px
+                            fontWeight = FontWeight.normal
+                            hover {
+                                background = Color("#475569")
+                            }
+                        }
+                        +"📁 Load data"
+                        input {
+                            type = "file".unsafeCast<InputType>()
+                            css {
+                                display = None.none
+                            }
+                            onChange = { event ->
+                                val fileList = event.target.asDynamic().files
+                                if (fileList != null && fileList.length > 0) {
+                                    val file = fileList[0].unsafeCast<File>()
+                                    val reader = FileReader()
+                                    reader.asDynamic().onload = {
+                                        val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
+                                        val bytes = Int8Array(arrayBuffer).toByteArray()
+                                        val text = bytes.decodeToString()
+                                        rawInput = text.trim()
+                                    }
+                                    reader.readAsArrayBuffer(file)
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             div {
@@ -308,7 +485,7 @@ val AnnexCParserComponent: FC<Props> = FC {
                     fontFamily = FontFamily.monospace
                     padding = 12.px
                     resize = "none".unsafeCast<Resize>()
-                    marginBottom = 16.px
+                    marginBottom = 4.px
                     focus {
                         outline = None.none
                         borderColor = Color("#3b82f6")
@@ -317,6 +494,10 @@ val AnnexCParserComponent: FC<Props> = FC {
                 value = rawInput
                 placeholder = if (mode == "request") "Paste {\"deviceRequest\": \"...\", \"encryptionInfo\": \"...\"}..." else "Paste {\"response\": \"...\"}..."
                 onChange = { rawInput = it.target.value }
+            }
+
+            DetectedInputBadge {
+                input = rawInput
             }
 
             button {
@@ -335,81 +516,7 @@ val AnnexCParserComponent: FC<Props> = FC {
                 }
                 disabled = rawInput.trim().isEmpty()
                 onClick = {
-                    mainScope.launch {
-                        try {
-                            val jsonObj = Json.parseToJsonElement(rawInput.trim()).jsonObject
-                            if (mode == "request") {
-                                val devReqB64 = jsonObj["deviceRequest"]?.jsonPrimitive?.content
-                                    ?: error("Missing 'deviceRequest' field in JSON")
-                                val encInfoB64 = jsonObj["encryptionInfo"]?.jsonPrimitive?.content
-                                    ?: error("Missing 'encryptionInfo' field in JSON")
-
-                                val devReqBytes = devReqB64.fromBase64Url()
-                                val devReqDataItem = Cbor.decode(devReqBytes)
-                                val devReq = DeviceRequest.fromDataItem(devReqDataItem)
-
-                                val encInfoBytes = encInfoB64.fromBase64Url()
-                                val encInfoDataItem = Cbor.decode(encInfoBytes)
-
-                                var nonceHex: String? = null
-                                var recipientPublicKeyPem: String? = null
-                                var recipientPublicKeyCurve: String? = null
-
-                                try {
-                                    val paramsMap = encInfoDataItem.asArray[1].asMap
-                                    paramsMap[Tstr("nonce")]?.let {
-                                        nonceHex = it.asBstr.toHex()
-                                    }
-                                    paramsMap[Tstr("recipientPublicKey")]?.let { coseKeyItem ->
-                                        val ecPublicKey = coseKeyItem.asCoseKey.ecPublicKey
-                                        recipientPublicKeyPem = ecPublicKey.toPem()
-                                        recipientPublicKeyCurve = ecPublicKey.curve.name
-                                    }
-                                } catch (e: Throwable) {
-                                    // optional field extraction fallback
-                                }
-
-                                parsedRequest = ParsedRequestData(
-                                    deviceRequest = devReq,
-                                    devReqHex = devReqBytes.toHex(),
-                                    devReqDataItem = devReqDataItem,
-                                    encryptionInfoDataItem = encInfoDataItem,
-                                    encInfoHex = encInfoBytes.toHex(),
-                                    nonceHex = nonceHex,
-                                    recipientPublicKeyPem = recipientPublicKeyPem,
-                                    recipientPublicKeyCurve = recipientPublicKeyCurve
-                                )
-                                parseError = ""
-                            } else {
-                                val respB64 = jsonObj["response"]?.jsonPrimitive?.content
-                                    ?: error("Missing 'response' field in JSON")
-
-                                val respBytes = respB64.fromBase64Url()
-                                val respDataItem = Cbor.decode(respBytes)
-
-                                var encryptedPayloadHex: String? = null
-                                try {
-                                    val paramsMap = respDataItem.asArray[1].asMap
-                                    paramsMap[Tstr("enc")]?.let {
-                                        encryptedPayloadHex = it.asBstr.toHex()
-                                    }
-                                } catch (e: Throwable) {
-                                    // optional payload extraction fallback
-                                }
-
-                                parsedResponse = ParsedResponseData(
-                                    responseDataItem = respDataItem,
-                                    responseHex = respBytes.toHex(),
-                                    encryptedPayloadHex = encryptedPayloadHex
-                                )
-                                parseError = ""
-                            }
-                        } catch (e: Throwable) {
-                            parseError = "Error parsing W3C Digital Credentials JSON: " + (e.message ?: "Invalid JSON / Base64Url / CBOR structure")
-                            parsedRequest = null
-                            parsedResponse = null
-                        }
-                    }
+                    parseInput(rawInput)
                 }
                 +if (mode == "request") "Decode Request JSON" else "Decode Response JSON"
             }
@@ -528,7 +635,7 @@ val AnnexCParserComponent: FC<Props> = FC {
                     }
 
                     CborDiagnosticViewer {
-                        diagText = Cbor.toDiagnostics(req.encryptionInfoDataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                        diagText = Cdn.encode(req.encryptionInfoDataItem, CdnGeneratorOptions.Pretty)
                         maxHeight = 250.px
                     }
                 }
@@ -626,7 +733,7 @@ val AnnexCParserComponent: FC<Props> = FC {
                     }
 
                     CborDiagnosticViewer {
-                        diagText = Cbor.toDiagnostics(req.devReqDataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                        diagText = Cdn.encode(req.devReqDataItem, CdnGeneratorOptions.Pretty)
                         maxHeight = 350.px
                     }
                 }
@@ -710,7 +817,7 @@ val AnnexCParserComponent: FC<Props> = FC {
                     }
 
                     CborDiagnosticViewer {
-                        diagText = Cbor.toDiagnostics(resp.responseDataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                        diagText = Cdn.encode(resp.responseDataItem, CdnGeneratorOptions.Pretty)
                         maxHeight = 350.px
                     }
                 }

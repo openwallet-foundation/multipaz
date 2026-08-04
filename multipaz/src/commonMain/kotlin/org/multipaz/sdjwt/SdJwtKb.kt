@@ -52,7 +52,7 @@ class SdJwtKb private constructor(
     /**
      * Verifies a SD-JWT+KB according to Section 7.3 of the SD-JWT specification
      *
-     * @param issuerKey the issuer's key to use for verification.
+     * @param issuerKey the issuer's key to use for verification or `null` to not perform issuer signature validation.
      * @param checkNonce a function to check that the nonce in the KB JWT is as expected.
      * @param checkAudience a function to check that the audience in the KB JWT is as expected.
      * @param checkCreationTime a function to check that the creation time in the KB JWT is as expected.
@@ -62,10 +62,10 @@ class SdJwtKb private constructor(
      * @throws IllegalStateException if [checkNonce], [checkAudience], or [checkCreationTime] returns false.
      */
     suspend fun verify(
-        issuerKey: EcPublicKey,
-        checkNonce: (nonce: String) -> Boolean,
-        checkAudience: (audience: String) -> Boolean,
-        checkCreationTime: (creationTime: Instant) -> Boolean,
+        issuerKey: EcPublicKey? = null,
+        checkNonce: (nonce: String) -> Boolean = { true },
+        checkAudience: (audience: String) -> Boolean = { true },
+        checkCreationTime: (creationTime: Instant) -> Boolean = { true },
         transactionData: List<TransactionData<*>> = listOf()
     ): JsonObject {
         try {

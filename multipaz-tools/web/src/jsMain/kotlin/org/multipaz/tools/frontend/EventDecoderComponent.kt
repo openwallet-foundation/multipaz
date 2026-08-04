@@ -10,8 +10,9 @@ import js.typedarrays.toByteArray
 import kotlinx.browser.window
 import kotlinx.coroutines.launch
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.eventlogger.Event
@@ -58,6 +59,7 @@ import react.dom.html.ReactHTML.th
 import react.dom.html.ReactHTML.thead
 import react.dom.html.ReactHTML.tr
 import react.useState
+import react.useEffectOnce
 import web.cssom.*
 import web.file.File
 import web.file.FileReader
@@ -87,6 +89,34 @@ val EventDecoderComponent: FC<Props> = FC {
     var parseError by useState("")
     var fileName by useState("")
     var copyEventHexStatus by useState("")
+
+    fun decodeInput(inputStr: String) {
+        val cleanInput = inputStr.trim()
+        if (cleanInput.isEmpty()) return
+        mainScope.launch {
+            try {
+                val bytes = decodeInputToBytes(cleanInput)
+                val res = parseEventFromBytes(bytes)
+                parsedEventHolder = res.first?.let { EventHolder(it) }
+                parseError = res.second
+                if (fileName.isEmpty()) fileName = "Input Payload"
+                if (res.first != null) {
+                    updateUrlHashPayload(cleanInput)
+                }
+            } catch (e: Throwable) {
+                parseError = "Error reading input: " + (e.message ?: "Invalid format")
+                parsedEventHolder = null
+            }
+        }
+    }
+
+    useEffectOnce {
+        val hashPayload = getUrlHashPayload()
+        if (hashPayload.isNotEmpty()) {
+            rawInput = hashPayload
+            decodeInput(hashPayload)
+        }
+    }
 
     val parsedEvent = parsedEventHolder?.event
 
@@ -134,8 +164,9 @@ val EventDecoderComponent: FC<Props> = FC {
                         parsedEventHolder = null
                         parseError = ""
                         fileName = ""
+                        updateUrlHashPayload("")
                     }
-                    +"← Clear and Decode Another Event"
+                    +"← Back to Input"
                 }
 
                 if (parsedEvent != null) {
@@ -205,6 +236,32 @@ val EventDecoderComponent: FC<Props> = FC {
                     marginBottom = 16.px
                 }
 
+                if (rawInput.isNotEmpty()) {
+                    button {
+                        css {
+                            padding = Padding(10.px, 20.px)
+                            background = Color("#334155")
+                            color = Color("#f1f5f9")
+                            border = Border(1.px, LineStyle.solid, Color("#475569"))
+                            borderRadius = 8.px
+                            cursor = Cursor.pointer
+                            fontWeight = FontWeight.bold
+                            fontSize = 14.px
+                            hover {
+                                background = Color("#475569")
+                            }
+                        }
+                        onClick = {
+                            rawInput = ""
+                            parsedEventHolder = null
+                            parseError = ""
+                            fileName = ""
+                            updateUrlHashPayload("")
+                        }
+                        +"🗑️ Clear Input"
+                    }
+                }
+
                 label {
                     css {
                         display = Display.inlineFlex
@@ -222,10 +279,9 @@ val EventDecoderComponent: FC<Props> = FC {
                             background = Color("#475569")
                         }
                     }
-                    +"📁 Choose File (.mpzevent)"
+                    +"📁 Choose File"
                     input {
                         type = "file".unsafeCast<InputType>()
-                        accept = ".mpzevent,*/*"
                         css {
                             display = None.none
                         }
@@ -238,9 +294,12 @@ val EventDecoderComponent: FC<Props> = FC {
                                 reader.asDynamic().onload = {
                                     val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
                                     val bytes = Int8Array(arrayBuffer).toByteArray()
-                                    val res = parseEventFromBytes(bytes)
-                                    parsedEventHolder = res.first?.let { EventHolder(it) }
-                                    parseError = res.second
+                                    val text = bytes.decodeToString()
+                                    rawInput = if (text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
+                                        text.trim()
+                                    } else {
+                                        bytes.toHex()
+                                    }
                                     fileName = name
                                 }
                                 reader.readAsArrayBuffer(file)
@@ -272,7 +331,7 @@ val EventDecoderComponent: FC<Props> = FC {
                     fontFamily = FontFamily.monospace
                     padding = 12.px
                     resize = "none".unsafeCast<Resize>()
-                    marginBottom = 16.px
+                    marginBottom = 4.px
                     focus {
                         outline = None.none
                         borderColor = Color("#3b82f6")
@@ -281,6 +340,10 @@ val EventDecoderComponent: FC<Props> = FC {
                 value = rawInput
                 placeholder = "Paste Event Hex (e.g. A36A...) or Base64 / Base64Url string here..."
                 onChange = { rawInput = it.target.value }
+            }
+
+            DetectedInputBadge {
+                input = rawInput
             }
 
             button {
@@ -299,18 +362,7 @@ val EventDecoderComponent: FC<Props> = FC {
                 }
                 disabled = rawInput.trim().isEmpty()
                 onClick = {
-                    mainScope.launch {
-                        try {
-                            val bytes = decodeInputToBytes(rawInput)
-                            val res = parseEventFromBytes(bytes)
-                            parsedEventHolder = res.first?.let { EventHolder(it) }
-                            parseError = res.second
-                            fileName = "Pasted Input"
-                        } catch (e: Throwable) {
-                            parseError = "Error reading input: " + (e.message ?: "Invalid format")
-                            parsedEventHolder = null
-                        }
-                    }
+                    decodeInput(rawInput)
                 }
                 +"Decode Event"
             }
@@ -507,7 +559,7 @@ private val CborDataBlock: FC<CborDataBlockProps> = FC { props ->
     var copyHexStatus by useState("")
     val encodedBytes = Cbor.encode(props.dataItem)
     val hexString = encodedBytes.toHex()
-    val diagText = Cbor.toDiagnostics(props.dataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+    val diagText = Cdn.encode(props.dataItem, CdnGeneratorOptions.Pretty)
 
     div {
         css {
@@ -528,7 +580,7 @@ private val CborDataBlock: FC<CborDataBlockProps> = FC { props ->
 
             span {
                 css { color = Color("#38bdf8"); fontWeight = FontWeight.bold; fontSize = 14.px }
-                +"${props.title} (${encodedBytes.size} bytes)"
+                +props.title
             }
 
             button {
@@ -1035,7 +1087,7 @@ private val CredentialCard: FC<CredentialCardProps> = FC { props ->
 
                 span {
                     css { color = Color("#f1f5f9"); fontWeight = FontWeight.bold; fontSize = 14.px }
-                    +"Credential #${props.index + 1} (${bytes.size} bytes)"
+                    +"Credential #${props.index + 1}"
                 }
             }
 
@@ -1063,7 +1115,7 @@ private val CredentialCard: FC<CredentialCardProps> = FC { props ->
         // CBOR diagnostic preview if data is valid CBOR
         val diagPreview = try {
             val dataItem = Cbor.decode(bytes)
-            Cbor.toDiagnostics(dataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+            Cdn.encode(dataItem, CdnGeneratorOptions.Pretty)
         } catch (e: Throwable) {
             null
         }
@@ -1559,9 +1611,16 @@ private fun react.ChildrenBuilder.renderEventSimpleSection(ev: EventSimple) {
             +"Simple Event Data"
         }
 
-        div {
-            css { color = Color("#cbd5e1"); fontSize = 14.px; fontFamily = FontFamily.monospace }
-            +"Payload Size: ${ev.data.size} bytes"
+        val diagText = try {
+            Cdn.encode(Cbor.decode(ev.data.toByteArray()), CdnGeneratorOptions.Pretty)
+        } catch (e: Exception) {
+            ev.data.toByteArray().toHex()
+        }
+
+        CborDiagnosticViewer {
+            this.diagText = diagText
+            this.byteCount = ev.data.size
+            this.maxHeight = 300.px
         }
     }
 }
@@ -1597,7 +1656,7 @@ private fun react.ChildrenBuilder.renderEventAppDataSection(appData: Map<String,
                 }
 
                 CborDiagnosticViewer {
-                    diagText = Cbor.toDiagnostics(dataItem, setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR))
+                    diagText = Cdn.encode(dataItem, CdnGeneratorOptions.Pretty)
                     maxHeight = 200.px
                 }
             }

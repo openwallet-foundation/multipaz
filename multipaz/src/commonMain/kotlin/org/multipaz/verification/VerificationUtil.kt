@@ -279,7 +279,7 @@ object VerificationUtil {
                         }
                     }.toDataItem()
                 )
-                Logger.iCbor(TAG, "deviceRequest", encodedDeviceRequest)
+                Logger.dCbor(TAG, "deviceRequest", encodedDeviceRequest)
                 val dr = DeviceRequest.fromDataItem(Cbor.decode(encodedDeviceRequest))
                 dr.verifyReaderAuthentication(sessionTranscript)
                 val base64DeviceRequest = encodedDeviceRequest.toBase64Url()
@@ -660,7 +660,7 @@ object VerificationUtil {
                     }
                 }
                 val encodedHandoverInfo = Cbor.encode(handoverInfo)
-                Logger.iCbor(TAG, "handoverInfo", encodedHandoverInfo)
+                Logger.dCbor(TAG, "handoverInfo", encodedHandoverInfo)
                 val encodedHandoverInfoDigest = Crypto.digest(Algorithm.SHA256, encodedHandoverInfo)
                 val sessionTranscript = buildCborArray {
                     add(Simple.NULL) // DeviceEngagementBytes
@@ -670,7 +670,7 @@ object VerificationUtil {
                         add(encodedHandoverInfoDigest)
                     }
                 }
-                Logger.iCbor(TAG, "sessionTranscript", Cbor.encode(sessionTranscript))
+                Logger.dCbor(TAG, "sessionTranscript", Cbor.encode(sessionTranscript))
                 return OpenID4VPDcResponse(
                     vpToken = vpToken,
                     sessionTranscript = sessionTranscript
@@ -886,7 +886,8 @@ object VerificationUtil {
             vct = vct,
             transactionResponses = transactionResults,
             vpTokenIdentifier = identifier,
-            transactionData = transactionData
+            transactionData = transactionData,
+            revocationStatus = sdJwt.revocationStatus
         )
     }
 
@@ -1018,7 +1019,8 @@ object VerificationUtil {
                     docType = document.docType,
                     transactionResponses = transactionResponses.ifEmpty { null },
                     vpTokenIdentifier = vpTokenIdentifier,
-                    transactionData = document.transactionData
+                    transactionData = document.transactionData,
+                    revocationStatus = document.mso.revocationStatus
                 )
             )
         }

@@ -214,11 +214,23 @@ sealed class X509Signed() {
 
     companion object {
         @OptIn(ExperimentalEncodingApi::class)
-        internal fun fromPemHelper(pemEncoding: String, name: String): ByteString =
-            ByteString(Base64.Mime.decode(pemEncoding
-                .replace("-----BEGIN $name-----", "")
-                .replace("-----END $name-----", "")
-                .trim()))
+        internal fun fromPemHelper(pemEncoding: String, name: String): ByteString {
+            val beginTag = "-----BEGIN $name-----"
+            val endTag = "-----END $name-----"
+            val startIndex = pemEncoding.indexOf(beginTag)
+            val endIndex = pemEncoding.indexOf(endTag)
+            val base64Content = if (startIndex != -1 && endIndex != -1 && endIndex > startIndex) {
+                pemEncoding.substring(startIndex + beginTag.length, endIndex)
+            } else {
+                pemEncoding.lines()
+                    .map { it.trim() }
+                    .filterNot { it.startsWith("#") }
+                    .joinToString("")
+                    .replace(beginTag, "")
+                    .replace(endTag, "")
+            }
+            return ByteString(Base64.Mime.decode(base64Content.trim()))
+        }
 
         internal fun parseName(obj: ASN1Sequence): X500Name {
             val components = mutableMapOf<String, ASN1String>()

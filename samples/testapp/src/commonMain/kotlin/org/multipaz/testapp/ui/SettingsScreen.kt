@@ -333,6 +333,17 @@ fun SettingsScreen(
         }
 
         item {
+            SettingHeadline("Logging Options")
+        }
+        item {
+            SettingToggle(
+                title = "Enable Debug Logging",
+                isChecked = app.settingsModel.loggingDebugEnabled.collectAsState().value,
+                onCheckedChange = { app.settingsModel.loggingDebugEnabled.value = it },
+            )
+        }
+
+        item {
             HorizontalDivider(
                 modifier = Modifier.padding(8.dp)
             )

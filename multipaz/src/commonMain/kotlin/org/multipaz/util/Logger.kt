@@ -17,7 +17,8 @@ package org.multipaz.util
 
 import kotlinx.coroutines.CancellationException
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import kotlin.time.Clock
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -50,9 +51,34 @@ object Logger {
          * The log level, from the lowest to the highest priority.
          */
         enum class Level {
+            /**
+             * This level contains debug information, including traces of structures that may contain PII.
+             *
+             * This is disabled by default, use [isDebugEnabled] to enable.
+             */
             DEBUG,
+
+            /**
+             * This level contains information messages which may help developers and should never contain
+             * any PII since it's enabled by default.
+             */
             INFO,
+
+            /**
+             * This level contains warning messages for unexpected conditions, recoverable failures, or non-fatal
+             * events (such as retries, fallback behavior, or degraded functionality) that do not prevent the app
+             * or operation from continuing.
+             *
+             * Like [INFO], this level is enabled by default and should never contain any PII.
+             */
             WARNING,
+
+            /**
+             * This level contains error messages for severe issues, unhandled exceptions, or unrecoverable failures
+             * where an operation or process failed to complete successfully.
+             *
+             * Like [INFO], this level is enabled by default and should never contain any PII.
+             */
             ERROR,
         }
 
@@ -62,7 +88,15 @@ object Logger {
         fun print(level: Level, tag: String, msg: String, throwable: Throwable?)
     }
 
-    var isDebugEnabled = true // TODO: make false by default
+    /**
+     * Whether to print debug messages or not.
+     *
+     * **Note**: turning on debug messages significantly increasing the amount of messages being
+     * printed and these messages may include PII. Use with caution.
+     *
+     * Note that this is process-wide so library code should never touch this.
+     */
+    var isDebugEnabled = false
 
     /**
      * Optional [LogPrinter] property for overriding the default functionality with a custom
@@ -208,51 +242,79 @@ object Logger {
         hex(Level.ERROR, tag, message, data)
     }
 
-    private fun cbor(level: Level, tag: String, message: String, encodedCbor: ByteArray) {
-        val sb = "$message: ${encodedCbor.size} bytes of CBOR: " + encodedCbor.toHex() +
-                "\n" +
-                "In diagnostic notation:\n" +
-                Cbor.toDiagnostics(
-                    encodedCbor,
-                    setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR)
+    private fun cbor(
+        level: Level,
+        tag: String,
+        message: String,
+        encodedCbor: ByteArray? = null,
+        dataItem: DataItem? = null
+    ) {
+        val bytes = encodedCbor ?: Cbor.encode(dataItem!!)
+        try {
+            val cdnString = if (dataItem != null) {
+                Cdn.encode(dataItem, CdnGeneratorOptions.Pretty)
+            } else {
+                Cdn.encode(bytes, CdnGeneratorOptions.Pretty)
+            }
+            val sb = "$message: ${bytes.size} bytes of CBOR: " + bytes.toHex() +
+                    "\n" +
+                    "In diagnostic notation:\n" +
+                    cdnString
+            printLine(
+                level = level,
+                tag = tag,
+                msg = sb,
+                throwable = null
+            )
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            if (encodedCbor != null) {
+                printLine(
+                    level = level,
+                    tag = tag,
+                    msg = "$message: ${encodedCbor.size} bytes of invalid CBOR: ${encodedCbor.toHex()}",
+                    throwable = null
                 )
-        printLine(level, tag, sb, null)
+            } else {
+                throw e
+            }
+        }
     }
 
     fun dCbor(tag: String, message: String, encodedCbor: ByteArray) {
         if (isDebugEnabled) {
-            cbor(Level.DEBUG, tag, message, encodedCbor)
+            cbor(Level.DEBUG, tag, message, encodedCbor = encodedCbor)
         }
     }
 
     fun iCbor(tag: String, message: String, encodedCbor: ByteArray) {
-        cbor(Level.INFO, tag, message, encodedCbor)
+        cbor(Level.INFO, tag, message, encodedCbor = encodedCbor)
     }
 
     fun wCbor(tag: String, message: String, encodedCbor: ByteArray) {
-        cbor(Level.WARNING, tag, message, encodedCbor)
+        cbor(Level.WARNING, tag, message, encodedCbor = encodedCbor)
     }
 
     fun eCbor(tag: String, message: String, encodedCbor: ByteArray) {
-        cbor(Level.ERROR, tag, message, encodedCbor)
+        cbor(Level.ERROR, tag, message, encodedCbor = encodedCbor)
     }
 
     fun dCbor(tag: String, message: String, dataItem: DataItem) {
         if (isDebugEnabled) {
-            cbor(Level.DEBUG, tag, message, Cbor.encode(dataItem))
+            cbor(Level.DEBUG, tag, message, dataItem = dataItem)
         }
     }
 
     fun iCbor(tag: String, message: String, dataItem: DataItem) {
-        cbor(Level.INFO, tag, message, Cbor.encode(dataItem))
+        cbor(Level.INFO, tag, message, dataItem = dataItem)
     }
 
     fun wCbor(tag: String, message: String, dataItem: DataItem) {
-        cbor(Level.WARNING, tag, message, Cbor.encode(dataItem))
+        cbor(Level.WARNING, tag, message, dataItem = dataItem)
     }
 
     fun eCbor(tag: String, message: String, dataItem: DataItem) {
-        cbor(Level.ERROR, tag, message, Cbor.encode(dataItem))
+        cbor(Level.ERROR, tag, message, dataItem = dataItem)
     }
 
     @OptIn(ExperimentalSerializationApi::class)

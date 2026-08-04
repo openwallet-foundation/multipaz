@@ -19,13 +19,18 @@ import androidx.compose.ui.text.style.TextAlign
  *
  * @param text the text to show.
  * @param modifier a [androidx.compose.ui.Modifier].
+ * @param showChevron whether to show a right chevron icon on the right side.
  */
 @Composable
 fun FloatingItemCenteredText(
     text: AnnotatedString,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showChevron: Boolean = false,
 ) {
-    FloatingItemContainer(modifier = modifier) {
+    FloatingItemContainer(
+        modifier = modifier,
+        showChevron = showChevron,
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -48,14 +53,17 @@ fun FloatingItemCenteredText(
  *
  * @param text the text to show.
  * @param modifier a [Modifier].
+ * @param showChevron whether to show a right chevron icon on the right side.
  */
 @Composable
 fun FloatingItemCenteredText(
     text: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showChevron: Boolean = false,
 ) {
     FloatingItemCenteredText(
-        text = androidx.compose.ui.text.AnnotatedString(text),
-        modifier = modifier
+        text = AnnotatedString(text),
+        modifier = modifier,
+        showChevron = showChevron,
     )
 }

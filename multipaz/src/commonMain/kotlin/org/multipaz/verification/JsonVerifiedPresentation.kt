@@ -5,6 +5,7 @@ import org.multipaz.claim.JsonClaim
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.TransactionType
 import org.multipaz.presentment.TransactionData
+import org.multipaz.revocation.RevocationStatus
 import kotlin.time.Instant
 
 /**
@@ -26,5 +27,6 @@ data class JsonVerifiedPresentation(
     val vct: String,
     val transactionResponses: Map<String, JsonElement>?,
     override val vpTokenIdentifier: String?,
-    override val transactionData: List<TransactionData<*>>
+    override val transactionData: List<TransactionData<*>>,
+    override val revocationStatus: RevocationStatus? = null,
 ): VerifiedPresentation()

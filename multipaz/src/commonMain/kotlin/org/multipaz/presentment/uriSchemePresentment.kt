@@ -250,6 +250,7 @@ private suspend fun mdocUriSchemePresentment(
         add(Cbor.decode(readerEngagement.eDeviceKeyBytes.toByteArray()))
         add(engagementToApp)
     }
+    Logger.dCbor(TAG, "SessionTranscript", sessionTranscript)
 
     val sessionEncryption = SessionEncryption(
         role = MdocRole.MDOC,

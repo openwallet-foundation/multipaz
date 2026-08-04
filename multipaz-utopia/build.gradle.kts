@@ -162,6 +162,15 @@ android {
 // during Android's mergeJavaResource step in downstream consumers (issue #1714).
 // Nothing reads these JSONs at runtime — they are build-time inputs to the lokalize
 // plugin only; runtime translations are baked into GeneratedTranslations as constants.
+//
+// The Kotlin rendered from those JSONs is checked in under src/commonMain/generated/ rather than
+// generated into build/ on every compile, so that downstreams on non-Gradle build systems see a
+// source tree that compiles as-is (issue #1811). It is a pure function of the committed
+// values*/strings.json, and lokalizeCheckGenerated (wired into `check`) fails the build if the two
+// drift apart. After editing strings, run:
+//
+//     ./gradlew :multipaz-utopia:generateMultipazStrings
+//
 lokalize {
     outputFormat.set(OutputFormat.JSON)
     resourcesDir.set("src/commonMain/lokalize")

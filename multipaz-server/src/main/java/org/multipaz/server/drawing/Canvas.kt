@@ -12,6 +12,21 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.cache
 import org.multipaz.util.findFirstGood
+import colorspace.ColorSpace
+import jj2000.disp.BlkImgDataSrcImageProducer
+import jj2000.j2k.codestream.HeaderInfo
+import jj2000.j2k.codestream.reader.BitstreamReaderAgent
+import jj2000.j2k.codestream.reader.HeaderDecoder
+import jj2000.j2k.decoder.Decoder
+import jj2000.j2k.fileformat.reader.FileFormatReader
+import jj2000.j2k.image.BlkImgDataSrc
+import jj2000.j2k.image.DataBlkInt
+import jj2000.j2k.image.ImgDataConverter
+import jj2000.j2k.image.invcomptransf.InvCompTransf
+import jj2000.j2k.io.RandomAccessIO
+import jj2000.j2k.util.ISRandomAccessIO
+import jj2000.j2k.util.ParameterList
+import jj2000.j2k.wavelet.synthesis.InverseWT
 import java.awt.Color
 import java.awt.Font
 import java.awt.Graphics2D
@@ -21,6 +36,7 @@ import java.awt.geom.AffineTransform
 import java.awt.geom.Rectangle2D
 import java.awt.geom.RoundRectangle2D
 import java.awt.image.BufferedImage
+import java.awt.image.PixelGrabber
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
@@ -365,8 +381,72 @@ class Canvas private constructor(val bufferedImage: BufferedImage) {
                 )
             }
 
-        private fun loadImage(bytes: ByteString): BufferedImage =
-            ImageIO.read(ByteArrayInputStream(bytes.toByteArray()))
+        private fun loadImage(bytes: ByteString): BufferedImage {
+            val byteArray = bytes.toByteArray()
+            val image = ImageIO.read(ByteArrayInputStream(byteArray))
+            if (image != null) {
+                return image
+            }
+            return decodeJpeg2000ToBufferedImage(byteArray)
+        }
+
+        private fun decodeJpeg2000ToBufferedImage(bytes: ByteArray): BufferedImage {
+            val defPl = ParameterList()
+            val pinfo = Decoder.getAllParameters()
+            if (pinfo != null) {
+                for (i in pinfo.indices.reversed()) {
+                    if (pinfo[i][3] != null) {
+                        defPl.put(pinfo[i][0], pinfo[i][3])
+                    }
+                }
+            }
+            val pl = ParameterList(defPl)
+            pl.setProperty("u", "on")
+            val isr = ISRandomAccessIO(ByteArrayInputStream(bytes))
+            val ffr = FileFormatReader(isr)
+            ffr.readFileFormat()
+            val stream: RandomAccessIO = if (ffr.JP2FFUsed) {
+                ISRandomAccessIO(ByteArrayInputStream(bytes, ffr.firstCodeStreamPos, ffr.firstCodeStreamLength))
+            } else {
+                isr
+            }
+
+            val hi = HeaderInfo()
+            val hd = HeaderDecoder(stream, pl, hi)
+            val decSpec = hd.decoderSpecs
+            val nComp = hd.numComps
+            val breader = BitstreamReaderAgent.createInstance(stream, hd, pl, decSpec, false, hi)
+            val depth = IntArray(nComp) { i -> hd.getOriginalBitDepth(i) }
+
+            val entDec = hd.createEntropyDecoder(breader, pl)
+            val roiDecoder = hd.createROIDeScaler(entDec, pl, decSpec)
+            val dequant = hd.createDequantizer(roiDecoder, depth, decSpec)
+            val invWT = InverseWT.createInstance(dequant, decSpec)
+            invWT.setImgResLevel(breader.imgRes)
+
+            val converter = ImgDataConverter(invWT, 0)
+            val icomp = InvCompTransf(converter, decSpec, depth, pl)
+
+            var src: BlkImgDataSrc = icomp
+            if (ffr.JP2FFUsed && "off" != pl.getParameter("nocolorspace")) {
+                val csMap = ColorSpace(isr, hd, pl)
+                src = hd.createChannelDefinitionMapper(src, csMap)
+                src = hd.createResampler(src, csMap)
+                src = hd.createPalettizedColorSpaceMapper(src, csMap)
+                src = hd.createColorSpaceMapper(src, csMap)
+            }
+
+            val producer = BlkImgDataSrcImageProducer(src)
+            val width = src.imgWidth
+            val height = src.imgHeight
+            val pixels = IntArray(width * height)
+            val pg = PixelGrabber(producer, 0, 0, width, height, pixels, 0, width)
+            pg.grabPixels()
+
+            val image = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
+            image.setRGB(0, 0, width, height, pixels, 0, width)
+            return image
+        }
 
         private fun toPaint(argb: UInt): Color {
             return Color(argb.toInt(), true)

@@ -21,7 +21,8 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.util.toHex
 
 val KeyGeneratorComponent = FC {
@@ -158,8 +159,8 @@ val KeyGeneratorComponent = FC {
                         cosePrivateText = Cbor.encode(key.toCoseKey().toDataItem()).toHex()
                         cosePublicText = Cbor.encode(key.publicKey.toCoseKey().toDataItem()).toHex()
 
-                        diagPrivateText = Cbor.toDiagnostics(key.toCoseKey().toDataItem(), setOf(DiagnosticOption.PRETTY_PRINT))
-                        diagPublicText = Cbor.toDiagnostics(key.publicKey.toCoseKey().toDataItem(), setOf(DiagnosticOption.PRETTY_PRINT))
+                        diagPrivateText = Cdn.encode(key.toCoseKey().toDataItem(), CdnGeneratorOptions.Pretty)
+                        diagPublicText = Cdn.encode(key.publicKey.toCoseKey().toDataItem(), CdnGeneratorOptions.Pretty)
 
                         pemPrivateText = key.toPem()
                         pemPublicText = key.publicKey.toPem()
@@ -285,7 +286,7 @@ val KeyGeneratorComponent = FC {
                             listOf(
                                 "jwk" to "JWK (JSON)",
                                 "cose" to "COSE Hex (CBOR)",
-                                "diagnostic" to "Diagnostic",
+                                "diagnostic" to "CDN",
                                 "pem" to "PEM"
                             ).forEach { (tabId, tabTitle) ->
                                 button {
@@ -390,7 +391,7 @@ val KeyGeneratorComponent = FC {
                             listOf(
                                 "jwk" to "JWK (JSON)",
                                 "cose" to "COSE Hex (CBOR)",
-                                "diagnostic" to "Diagnostic",
+                                "diagnostic" to "CDN",
                                 "pem" to "PEM"
                             ).forEach { (tabId, tabTitle) ->
                                 button {
