@@ -224,11 +224,15 @@ class ViewModel {
         
         let dcApi = try! await DigitalCredentialsCompanion.shared.getDefault()
         if dcApi.registerAvailable {
-            try! await dcApi.register(
-                documentStore: documentStore,
-                documentTypeRepository: documentTypeRepository,
-                selectedProtocols: dcApi.supportedProtocols
-            )
+            do {
+                try await dcApi.register(
+                    documentStore: documentStore,
+                    documentTypeRepository: documentTypeRepository,
+                    selectedProtocols: dcApi.supportedProtocols
+                )
+            } catch {
+                print("Error registering with DigitalCredentials API: \(error)")
+            }
             Task {
                 for await _ in documentStore.eventFlow {
                     do {

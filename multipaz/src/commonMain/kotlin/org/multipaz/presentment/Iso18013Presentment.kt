@@ -138,7 +138,12 @@ suspend fun Iso18013Presentment(
                 break
             }
 
-            val deviceRequestCbor = Cbor.decode(encodedDeviceRequest!!)
+            if (encodedDeviceRequest == null) {
+                throw IllegalStateException("No data in message from reader")
+            }
+
+            Logger.dCbor(TAG, "DeviceRequest", encodedDeviceRequest)
+            val deviceRequestCbor = Cbor.decode(encodedDeviceRequest)
             val deviceRequest = DeviceRequest.fromDataItem(deviceRequestCbor)
             deviceRequest.verifyReaderAuthentication(sessionTranscript)
             val responseObject = mdocPresentment(

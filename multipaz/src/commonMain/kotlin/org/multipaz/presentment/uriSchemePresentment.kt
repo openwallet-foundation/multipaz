@@ -287,6 +287,7 @@ private suspend fun mdocUriSchemePresentment(
             throw IllegalStateException("No data in message from reader")
         }
 
+        Logger.dCbor(TAG, "DeviceRequest", messageFromReader)
         val deviceRequest = DeviceRequest.fromDataItem(Cbor.decode(messageFromReader))
         deviceRequest.verifyReaderAuthentication(sessionTranscript)
         val responseObject = mdocPresentment(
