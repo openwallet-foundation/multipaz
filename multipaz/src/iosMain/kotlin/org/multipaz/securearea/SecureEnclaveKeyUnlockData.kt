@@ -8,5 +8,5 @@ import platform.LocalAuthentication.LAContext
  * @param authenticationContext platform native [LAContext](https://developer.apple.com/documentation/LocalAuthentication/LAContext) object.
  */
 class SecureEnclaveKeyUnlockData(
-    val authenticationContext: LAContext
+    val authenticationContext: LAContext = LAContext()
 ): KeyUnlockData

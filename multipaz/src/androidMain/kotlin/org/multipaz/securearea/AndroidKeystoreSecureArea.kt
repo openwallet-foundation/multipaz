@@ -607,6 +607,24 @@ class AndroidKeystoreSecureArea private constructor(
         return false
     }
 
+    override suspend fun unlockKey(
+        alias: String,
+        unlockReason: Reason
+    ): KeyUnlockData? {
+        val keyInfo = getKeyInfo(alias)
+        if (keyInfo.userAuthenticationTypes.isEmpty()) {
+            return null
+        }
+        val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
+            ?: AndroidKeystoreDefaultKeyUnlockDataProvider
+        return unlockDataProvider.getKeyUnlockData(
+            secureArea = this,
+            alias = alias,
+            algorithm = keyInfo.algorithm,
+            unlockReason = unlockReason
+        )
+    }
+
     override suspend fun getKeyInfo(alias: String): AndroidKeystoreKeyInfo {
         val (privateKey, data) = loadKeyIgnoreKeyInvalidated(alias)
         return try {

@@ -922,6 +922,24 @@ open class CloudSecureArea protected constructor(
         return platformSecureArea.getKeyInvalidated(getLocalKeyAlias(alias))
     }
 
+    override suspend fun unlockKey(
+        alias: String,
+        unlockReason: Reason
+    ): KeyUnlockData? {
+        val keyInfo = getKeyInfo(alias)
+        if (!keyInfo.isPassphraseRequired) {
+            return null
+        }
+        val unlockDataProvider = currentCoroutineContext()[KeyUnlockDataProvider.Key]
+            ?: DefaultKeyUnlockDataProvider
+        return unlockDataProvider.getKeyUnlockData(
+            secureArea = this,
+            alias = alias,
+            algorithm = keyInfo.algorithm,
+            unlockReason = unlockReason
+        )
+    }
+
     private suspend fun saveKeyMetadata(
         alias: String,
         settings: CloudCreateKeySettings,

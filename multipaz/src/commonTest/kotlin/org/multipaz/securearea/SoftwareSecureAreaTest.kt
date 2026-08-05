@@ -401,6 +401,32 @@ class SoftwareSecureAreaTest {
         }
     }
 
+    @Test
+    fun testUnlockKey() = runTest {
+        val storage = EphemeralStorage()
+        val sa = SoftwareSecureArea.create(storage)
+
+        // Key without passphrase requirement -> unlockKey returns null
+        sa.createKey("unlockedKey", CreateKeySettings())
+        assertNull(sa.unlockKey("unlockedKey"))
+
+        // Key with passphrase requirement -> unlockKey returns SoftwareKeyUnlockData when provider is present
+        sa.createKey(
+            "lockedKey",
+            SoftwareCreateKeySettings.Builder()
+                .setPassphraseRequired(true, "correctPassword", PassphraseConstraints.NONE)
+                .build()
+        )
+
+        val unlockData = SoftwareKeyUnlockData("correctPassword")
+        withContext(MockKeyUnlockDataProvider(unlockData)) {
+            val result = sa.unlockKey("lockedKey")
+            assertNotNull(result)
+            assertTrue(result is SoftwareKeyUnlockData)
+            assertEquals("correctPassword", (result as SoftwareKeyUnlockData).passphrase)
+        }
+    }
+
     private class MockKeyUnlockDataProvider(
         val keyUnlockData: KeyUnlockData
     ): KeyUnlockDataProvider {

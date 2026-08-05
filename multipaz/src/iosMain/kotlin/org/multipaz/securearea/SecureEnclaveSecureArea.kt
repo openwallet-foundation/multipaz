@@ -211,4 +211,13 @@ class SecureEnclaveSecureArea private constructor(
     override suspend fun getKeyInvalidated(alias: String): Boolean {
         return false
     }
+
+    override suspend fun unlockKey(
+        alias: String,
+        unlockReason: Reason
+    ): KeyUnlockData? {
+        // Biometric prompts are automatically shown by iOS when using Secure Enclave keys,
+        // so explicit pre-unlock authentication is not required.
+        return null
+    }
 }

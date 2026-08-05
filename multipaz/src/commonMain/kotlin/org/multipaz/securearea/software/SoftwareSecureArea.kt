@@ -295,6 +295,24 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         return false
     }
 
+    override suspend fun unlockKey(
+        alias: String,
+        unlockReason: Reason
+    ): KeyUnlockData? {
+        val keyInfo = getKeyInfo(alias)
+        if (!keyInfo.isPassphraseProtected) {
+            return null
+        }
+        val unlockDataProvider = currentCoroutineContext()[KeyUnlockDataProvider.Key]
+            ?: DefaultKeyUnlockDataProvider
+        return unlockDataProvider.getKeyUnlockData(
+            secureArea = this,
+            alias = alias,
+            algorithm = keyInfo.algorithm,
+            unlockReason = unlockReason
+        )
+    }
+
     object DefaultKeyUnlockDataProvider: KeyUnlockDataProvider {
         override suspend fun getKeyUnlockData(
             secureArea: SecureArea,
