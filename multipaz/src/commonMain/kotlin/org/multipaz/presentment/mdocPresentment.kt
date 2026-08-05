@@ -1,5 +1,6 @@
 package org.multipaz.presentment
 
+import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.decodeToString
 import org.multipaz.cbor.Bstr
@@ -33,6 +34,8 @@ import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.securearea.KeyUnlockDataProvider
+import org.multipaz.securearea.buildPreloadedKeyUnlockDataProvider
 import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.zlibDeflate
@@ -42,48 +45,136 @@ import kotlin.time.Instant
 
 private const val TAG = "mdocPresentment"
 
+
 /**
- * Present ISO mdoc credentials according to ISO/IEC 18013-5:2021.
+ * Obtains user consent for ISO mdoc presentment according to ISO/IEC 18013-5:2021.
  *
  * @param deviceRequest The device request.
- * @param eReaderKey The ephemeral reader key, if available.
- * @param sessionTranscript the session transcript.
  * @param source the source of truth used for presentment.
  * @param keyAgreementPossible the list of curves for which key agreement is possible.
  * @param requesterAppId the appId if an app is making the request or `null`.
  * @param requesterOrigin the origin or `null`.
- * @param creationTime the time to use for `creationTime` when presenting credentials such as SD-JWT+KB VCs.
  * @param preselectedDocuments the list of documents the user may have preselected earlier (for
  *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
  *   if the user didn't preselect.
  * @param onWaitingForUserInput called when waiting for input from the user (consent or authentication)
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
- * @return a [MdocResponse] containing [DeviceResponse] and [EventPresentmentData].
+ * @return a [CredentialSelection] containing the user's selection.
  * @throws PresentmentCanceledException if the user canceled in a consent prompt.
  * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
 @Throws(
     CancellationException::class,
     IllegalStateException::class,
-    MdocTransportClosedException::class,
-    Iso18013PresentmentTimeoutException::class,
     PresentmentCanceledException::class,
     PresentmentCannotSatisfyRequestException::class
 )
-suspend fun mdocPresentment(
+suspend fun mdocPresentmentObtainConsent(
+    deviceRequest: DeviceRequest,
+    source: PresentmentSource,
+    keyAgreementPossible: List<EcCurve> = emptyList(),
+    requesterAppId: String? = null,
+    requesterOrigin: String? = null,
+    preselectedDocuments: List<Document> = emptyList(),
+    onWaitingForUserInput: () -> Unit = {},
+    onDocumentsInFocus: (documents: List<Document>) -> Unit = {}
+): CredentialSelection {
+    val iso18013Response = try {
+        deviceRequest.execute(
+            presentmentSource = source,
+            keyAgreementPossible = keyAgreementPossible,
+        )
+    } catch (e: Iso18015ResponseException) {
+        throw PresentmentCannotSatisfyRequestException("Error satisfying the request", e)
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        throw IllegalStateException("Error satisfying request", e)
+    }
+    val requester = Requester(
+        requesterIdentities = deviceRequest.getRequesterIdentities(),
+        appId = requesterAppId,
+        origin = requesterOrigin,
+    )
+    onWaitingForUserInput()
+    val trustedRequesterIdentity = source.resolveTrust(requester)
+    val selection = source.showConsentPrompt(
+        requester = requester,
+        trustedRequesterIdentity = trustedRequesterIdentity,
+        consentData = ConsentData.fromCredentialQueryResult(
+            credentialQueryResult = iso18013Response,
+            source = source
+        ),
+        preselectedDocuments = preselectedDocuments,
+        onDocumentsInFocus = onDocumentsInFocus
+    )
+    if (selection == null) {
+        throw PresentmentCanceledException("User canceled consent prompt")
+    }
+    return selection
+}
+
+/**
+ * Authenticates the user for credentials in a [CredentialSelection] and preloads their unlock data.
+ *
+ * @param selection The [CredentialSelection] obtained from consent.
+ * @return A [KeyUnlockDataProvider] containing preloaded unlock data for the credentials in [selection].
+ */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class
+)
+suspend fun mdocPresentmentAuthenticateUser(
+    selection: CredentialSelection
+): KeyUnlockDataProvider {
+    return buildPreloadedKeyUnlockDataProvider {
+        for (match in selection.matches) {
+            if (match.credential is SecureAreaBoundCredential) {
+                val credential = match.credential
+                val keyUnlockData = credential.secureArea.unlockKey(
+                    alias = credential.alias,
+                    unlockReason = PresentmentUnlockReason(credential)
+                )
+                add(credential.secureArea, credential.alias, keyUnlockData)
+            }
+        }
+    }
+}
+
+/**
+ * Generates the ISO mdoc presentment response given a user's [CredentialSelection].
+ *
+ * @param selection The [CredentialSelection] obtained from consent.
+ * @param deviceRequest The device request.
+ * @param eReaderKey The ephemeral reader key, if available.
+ * @param sessionTranscript the session transcript.
+ * @param source the source of truth used for presentment.
+ * @param requesterAppId the appId if an app is making the request or `null`.
+ * @param requesterOrigin the origin or `null`.
+ * @param creationTime the time to use for `creationTime` when presenting credentials such as SD-JWT+KB VCs.
+ * @return a [MdocResponse] containing [DeviceResponse] and [EventPresentmentData].
+ */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class
+)
+suspend fun mdocPresentmentGenerateResponse(
+    selection: CredentialSelection,
     deviceRequest: DeviceRequest,
     eReaderKey: EcPublicKey?,
     sessionTranscript: DataItem,
     source: PresentmentSource,
-    keyAgreementPossible: List<EcCurve>,
-    requesterAppId: String?,
-    requesterOrigin: String?,
+    requesterAppId: String? = null,
+    requesterOrigin: String? = null,
     creationTime: Instant = Clock.System.now(),
-    preselectedDocuments: List<Document> = emptyList(),
-    onWaitingForUserInput: () -> Unit = {},
-    onDocumentsInFocus: (documents: List<Document>) -> Unit
 ): MdocResponse {
+    val requester = Requester(
+        requesterIdentities = deviceRequest.getRequesterIdentities(),
+        appId = requesterAppId,
+        origin = requesterOrigin,
+    )
+    val trustedRequesterIdentity = source.resolveTrust(requester)
+
     val credentialsPresented = mutableSetOf<SecureAreaBoundCredential>()
     lateinit var eventData: EventPresentmentData
 
@@ -92,38 +183,6 @@ suspend fun mdocPresentment(
         status = DeviceResponse.STATUS_OK,
         eReaderKey = eReaderKey,
     ) {
-        val iso18013Response = try {
-            deviceRequest.execute(
-                presentmentSource = source,
-                keyAgreementPossible = keyAgreementPossible,
-            )
-        } catch (e: Iso18015ResponseException) {
-            throw PresentmentCannotSatisfyRequestException("Error satisfying the request", e)
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            throw IllegalStateException("Error satisfying request", e)
-        }
-        val requester = Requester(
-            requesterIdentities = deviceRequest.getRequesterIdentities(),
-            appId = requesterAppId,
-            origin = requesterOrigin,
-        )
-        onWaitingForUserInput()
-        val trustedRequesterIdentity = source.resolveTrust(requester)
-        val selection = source.showConsentPrompt(
-            requester = requester,
-            trustedRequesterIdentity = trustedRequesterIdentity,
-            consentData = ConsentData.fromCredentialQueryResult(
-                credentialQueryResult = iso18013Response,
-                source = source
-            ),
-            preselectedDocuments = preselectedDocuments,
-            onDocumentsInFocus = onDocumentsInFocus
-        )
-        if (selection == null) {
-            throw PresentmentCanceledException("User canceled consent prompt")
-        }
-
         for (match in selection.matches) {
             match.source as CredentialMatchSourceIso18013
             val zkRequested = match.source.docRequest.docRequestInfo?.zkRequest != null
@@ -309,6 +368,88 @@ suspend fun mdocPresentment(
     return MdocResponse(
         deviceResponse = deviceResponse,
         eventData = eventData
+    )
+}
+
+/**
+ * Present ISO mdoc credentials according to ISO/IEC 18013-5:2021.
+ *
+ * If the application needs to separate obtaining consent, user authentication, and response generation
+ * (for example, arming the wallet so the user can deliver the response via an NFC tap later), it can use
+ * [mdocPresentmentObtainConsent], [mdocPresentmentAuthenticateUser], and [mdocPresentmentGenerateResponse]
+ * directly:
+ *
+ * ```kotlin
+ * // Step 1: Obtain consent from user
+ * val selection = mdocPresentmentObtainConsent(deviceRequest, source, ...)
+ *
+ * // Step 2: Perform user authentication and obtain key unlock data
+ * val keyUnlockDataProvider = mdocPresentmentAuthenticateUser(selection)
+ *
+ * // Step 3: Later (e.g. upon NFC tap), generate response using preloaded key unlock data
+ * val response = withContext(keyUnlockDataProvider) {
+ *     mdocPresentmentGenerateResponse(selection, deviceRequest, eReaderKey, sessionTranscript, source, ...)
+ * }
+ * ```
+ *
+ * @param deviceRequest The device request.
+ * @param eReaderKey The ephemeral reader key, if available.
+ * @param sessionTranscript the session transcript.
+ * @param source the source of truth used for presentment.
+ * @param keyAgreementPossible the list of curves for which key agreement is possible.
+ * @param requesterAppId the appId if an app is making the request or `null`.
+ * @param requesterOrigin the origin or `null`.
+ * @param creationTime the time to use for `creationTime` when presenting credentials such as SD-JWT+KB VCs.
+ * @param preselectedDocuments the list of documents the user may have preselected earlier (for
+ *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
+ *   if the user didn't preselect.
+ * @param onWaitingForUserInput called when waiting for input from the user (consent or authentication)
+ * @param onDocumentsInFocus called with the documents currently selected for the user, including when
+ *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
+ * @return a [MdocResponse] containing [DeviceResponse] and [EventPresentmentData].
+ * @throws PresentmentCanceledException if the user canceled in a consent prompt.
+ * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
+ */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class,
+    MdocTransportClosedException::class,
+    Iso18013PresentmentTimeoutException::class,
+    PresentmentCanceledException::class,
+    PresentmentCannotSatisfyRequestException::class
+)
+suspend fun mdocPresentment(
+    deviceRequest: DeviceRequest,
+    eReaderKey: EcPublicKey?,
+    sessionTranscript: DataItem,
+    source: PresentmentSource,
+    keyAgreementPossible: List<EcCurve>,
+    requesterAppId: String?,
+    requesterOrigin: String?,
+    creationTime: Instant = Clock.System.now(),
+    preselectedDocuments: List<Document> = emptyList(),
+    onWaitingForUserInput: () -> Unit = {},
+    onDocumentsInFocus: (documents: List<Document>) -> Unit
+): MdocResponse {
+    val selection = mdocPresentmentObtainConsent(
+        deviceRequest = deviceRequest,
+        source = source,
+        keyAgreementPossible = keyAgreementPossible,
+        requesterAppId = requesterAppId,
+        requesterOrigin = requesterOrigin,
+        preselectedDocuments = preselectedDocuments,
+        onWaitingForUserInput = onWaitingForUserInput,
+        onDocumentsInFocus = onDocumentsInFocus
+    )
+    return mdocPresentmentGenerateResponse(
+        selection = selection,
+        deviceRequest = deviceRequest,
+        eReaderKey = eReaderKey,
+        sessionTranscript = sessionTranscript,
+        source = source,
+        requesterAppId = requesterAppId,
+        requesterOrigin = requesterOrigin,
+        creationTime = creationTime
     )
 }
 

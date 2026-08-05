@@ -206,4 +206,27 @@ interface SecureArea {
      */
     @Throws(IllegalArgumentException::class, CancellationException::class)
     suspend fun getKeyInvalidated(alias: String): Boolean
+
+    /**
+     * Unlocks a key requiring user authentication.
+     *
+     * Returns `null` if user authentication is not required to unlock the key.
+     * Otherwise it performs user authentication and returns a [KeyUnlockData] object
+     * which can be stored in a [KeyUnlockDataProvider] and returned as appropriate.
+     *
+     * @param alias the alias of the key to unlock.
+     * @param unlockReason the reason for unlocking.
+     * @return a [KeyUnlockData] if user authentication was required and performed, or `null` if not required.
+     * @throws IllegalArgumentException if there is no key with the given alias.
+     * @throws KeyLockedException if user authentication was canceled or failed.
+     */
+    @Throws(
+        IllegalArgumentException::class,
+        KeyLockedException::class,
+        CancellationException::class
+    )
+    suspend fun unlockKey(
+        alias: String,
+        unlockReason: Reason = Reason.Unspecified
+    ): KeyUnlockData?
 }

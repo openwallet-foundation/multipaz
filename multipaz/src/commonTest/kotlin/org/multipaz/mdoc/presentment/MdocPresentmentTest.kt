@@ -31,6 +31,8 @@ import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.presentment.ConsentData
 import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.presentment.mdocPresentment
+import org.multipaz.presentment.mdocPresentmentGenerateResponse
+import org.multipaz.presentment.mdocPresentmentObtainConsent
 import org.multipaz.presentment.prettyPrint
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.trustmanagement.TrustMetadata
@@ -346,5 +348,54 @@ class MdocPresentmentTest {
         assertEquals("Erika", processedPayload["given_name"]?.jsonPrimitive?.content)
         assertEquals("Mustermann", processedPayload["family_name"]?.jsonPrimitive?.content)
         assertNull(processedPayload["portrait"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun testObtainConsentAndGenerateResponse() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.provisionStandardDocuments()
+
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = null
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf(
+                        "given_name" to false,
+                        "family_name" to false
+                    )
+                )
+            )
+        }
+
+        val selection = mdocPresentmentObtainConsent(
+            deviceRequest = deviceRequest,
+            source = harness.presentmentSource,
+            keyAgreementPossible = listOf(),
+            requesterAppId = null,
+            requesterOrigin = "https://verifier.example.com"
+        )
+
+        val mdocResponse = mdocPresentmentGenerateResponse(
+            selection = selection,
+            deviceRequest = deviceRequest,
+            eReaderKey = null,
+            sessionTranscript = sessionTranscript,
+            source = harness.presentmentSource,
+            requesterAppId = null,
+            requesterOrigin = "https://verifier.example.com"
+        )
+
+        val dr = mdocResponse.deviceResponse
+        dr.verify(sessionTranscript = sessionTranscript)
+        assertEquals(1, dr.documents.size)
+        assertEquals(
+            "Erika",
+            dr.documents[0].issuerNamespaces.data[DrivingLicense.MDL_NAMESPACE]!!["given_name"]!!.dataElementValue.asTstr
+        )
     }
 }
