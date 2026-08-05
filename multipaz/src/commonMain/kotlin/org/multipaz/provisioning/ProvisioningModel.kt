@@ -150,16 +150,19 @@ class ProvisioningModel(
      *
      * Note that this bypasses the model and throws an exception if something goes wrong.
      *
+     * It is guaranteed that no network I/O to the issuer will be performed unless there are credentials
+     * that actually need to be fetched (as determined by
+     * [AbstractDocumentProvisioningHandler.haveCredentialsToRefresh]).
+     *
      * @param document [Document] where credentials should be provisioned
      * @param authorizationData authorization data from a previous provisioning session (see
      *  [DocumentProvisioningHandler.AbstractDocumentMetadataHandler.updateDocumentMetadata]
      *  `authorizationData` parameter)
      * @param clientPreferences configuration parameters for OpenID4VCI client
      * @param backend interface to the wallet back-end service
-     * @return deferred [Document] value, resolved when credentials are provisioned
+     * @return number of credentials fetched
      * @throws Exception if an error occurred
      */
-    // TODO: be more specific with what exceptions are thrown
     @Throws(
         CancellationException::class,
         Exception::class
@@ -170,6 +173,9 @@ class ProvisioningModel(
         clientPreferences: OpenID4VCIClientPreferences,
         backend: OpenID4VCIBackend,
     ): Int {
+        if (!documentProvisioningHandler.haveCredentialsToRefresh(document)) {
+            return 0
+        }
         val numCredentialsFetched = CoroutineScope(createCoroutineContext(clientPreferences, backend)).async {
             val provisioningClient = Provisioning.createClientFromAuthorizationData(authorizationData)
             requestCredentials(

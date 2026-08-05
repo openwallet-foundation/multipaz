@@ -66,8 +66,8 @@ open class DocumentProvisioningHandler(
      */
     open suspend fun getDocumentProvisioningSettings(
         document: Document,
-        credentialMetadata: CredentialMetadata,
-        issuerMetadata: ProvisioningMetadata
+        credentialMetadata: CredentialMetadata?,
+        issuerMetadata: ProvisioningMetadata?
     ): DocumentProvisioningSettings = defaultDocumentProvisioningSettings
 
     override suspend fun createDocument(
@@ -245,6 +245,45 @@ open class DocumentProvisioningHandler(
             dryRun = false
         )
         return document.getPendingCredentials()
+    }
+
+    override suspend fun haveCredentialsToRefresh(document: Document): Boolean {
+        if (!document.provisioned || document.getCredentials().isEmpty()) {
+            return true
+        }
+        val pending = document.getPendingCredentials()
+        if (pending.isNotEmpty()) {
+            return true
+        }
+        val settings = getDocumentProvisioningSettings(document, null, null)
+        val now = Clock.System.now()
+        val credentials = document.getCredentials()
+        val domains = credentials.map { it.domain }.toSet()
+        for (domain in domains) {
+            val certifiedInDomain = document.getCertifiedCredentialsForDomain(domain)
+            if (certifiedInDomain.isEmpty()) {
+                continue
+            }
+            val maxUses = if (domain == settings.sdJwtKeylessDomain) {
+                settings.keylessCredentialMaxUses
+            } else {
+                settings.keyBoundCredentialMaxUses
+            }
+            val count = DocumentUtil.managedCredentialHelper(
+                document = document,
+                domain = domain,
+                createCredential = null,
+                now = now,
+                numCredentials = certifiedInDomain.size,
+                maxUsesPerCredential = maxUses,
+                minValidTime = settings.minValidTime,
+                dryRun = true
+            )
+            if (count > 0) {
+                return true
+            }
+        }
+        return false
     }
 
     /**

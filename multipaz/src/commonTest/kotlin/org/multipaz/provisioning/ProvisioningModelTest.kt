@@ -38,6 +38,10 @@ import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
 import org.multipaz.mdoc.mso.StaticAuthDataGenerator
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.prompt.PromptModel
+import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
+import org.multipaz.provisioning.openid4vci.OpenID4VCIClientPreferences
+import org.multipaz.securearea.KeyAttestation
+import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
@@ -57,7 +61,7 @@ import kotlin.time.Duration.Companion.days
 class ProvisioningModelTest {
     private lateinit var storage: Storage
     private lateinit var secureAreaRepository: SecureAreaRepository
-
+    private lateinit var secureArea: SecureArea
     private lateinit var documentStore: DocumentStore
 
     private val mockHttpEngine = MockEngine { request ->
@@ -70,7 +74,7 @@ class ProvisioningModelTest {
     @BeforeTest
     fun setup() = runTest {
         storage = EphemeralStorage()
-        val secureArea = SoftwareSecureArea.create(storage)
+        secureArea = SoftwareSecureArea.create(storage)
         secureAreaRepository = SecureAreaRepository.Builder()
             .add(secureArea)
             .build()
@@ -216,6 +220,47 @@ class ProvisioningModelTest {
         }
         // Initial provisioning failed, document must be cleaned up
         assertTrue(documentStore.listDocumentIds().isEmpty())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun refreshNoOpWhenNoCredentialsToFetch() = runTest {
+        val doc = model.launch(UnconfinedTestDispatcher(testScheduler)) {
+            TestProvisioningClient()
+        }.await()
+        assertTrue(doc.provisioned)
+
+        val handler = DocumentProvisioningHandler(
+            documentStore = documentStore,
+            secureArea = secureArea
+        )
+        // With all credentials certified and up to date, no credentials need refresh
+        assertFalse(handler.haveCredentialsToRefresh(doc))
+
+        // openID4VCIRefreshCredentials should immediately return 0 without attempting network I/O
+        // (Invalid authorizationData would throw an exception if network I/O / client creation was attempted)
+        val numRefreshed = model.openID4VCIRefreshCredentials(
+            document = doc,
+            authorizationData = ByteString(byteArrayOf(0x00)),
+            clientPreferences = OpenID4VCIClientPreferences(
+                clientId = "test",
+                redirectUrl = "https://example.com/redirect",
+                locales = listOf("en-US"),
+                signingAlgorithms = listOf(Algorithm.ES256)
+            ),
+            backend = object : OpenID4VCIBackend {
+                override suspend fun getClientId(): String = "test"
+                override suspend fun createJwtClientAssertion(authorizationServerIdentifier: String): String = ""
+                override suspend fun createJwtWalletAttestation(keyAttestation: KeyAttestation): String = ""
+                override suspend fun createJwtKeyAttestation(
+                    credentialKeyAttestations: List<CredentialKeyAttestation>,
+                    challenge: String,
+                    userAuthentication: List<String>?,
+                    keyStorage: List<String>?
+                ): String = ""
+            }
+        )
+        assertEquals(0, numRefreshed)
     }
 
     class TestProvisioningClient(

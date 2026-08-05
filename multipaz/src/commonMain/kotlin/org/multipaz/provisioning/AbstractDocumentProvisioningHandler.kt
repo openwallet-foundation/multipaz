@@ -106,4 +106,14 @@ interface AbstractDocumentProvisioningHandler {
      * @param err provisioning error
      */
     suspend fun cleanupCredentialsOnError(pendingCredentials: List<Credential>, err: Throwable)
+
+    /**
+     * Checks if there are credentials that should be fetched/refreshed for the document.
+     *
+     * This is useful for checking if network I/O should be performed during credential refresh.
+     *
+     * @param document [Document] for which credentials are being checked.
+     * @return `true` if there are credentials to refresh, `false` otherwise.
+     */
+    suspend fun haveCredentialsToRefresh(document: Document): Boolean
 }
