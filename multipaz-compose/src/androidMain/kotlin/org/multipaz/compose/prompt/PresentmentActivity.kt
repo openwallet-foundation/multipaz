@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import coil3.ImageLoader
@@ -90,8 +91,10 @@ import org.multipaz.multipaz_compose.generated.resources.presentment_activity_ho
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_info_was_shared
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_no_documents_available
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_open_wallet
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_removed_too_fast
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_something_went_wrong
 import org.multipaz.presentment.DocumentChooserData
+import org.multipaz.presentment.Iso18013PresentmentNfcDisconnectedException
 import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentCannotSatisfyRequestException
 import org.multipaz.presentment.PresentmentModel
@@ -246,8 +249,14 @@ class PresentmentActivity: FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
-        Logger.i(TAG, "in onStop(), canceling")
-        presentmentModel.setCanceledByUser()
+        val state = presentmentModel.state.value
+        val isNfcConnected = presentmentModel.isNfcConnected.value
+        if (!isNfcConnected && (state is PresentmentModel.State.WaitingForReader || state is PresentmentModel.State.Sending || state is PresentmentModel.State.WaitingForUserInput)) {
+            Logger.i(TAG, "in onStop() but waiting for NFC re-tap, preserving presentment session")
+        } else {
+            Logger.i(TAG, "in onStop(), canceling presentment")
+            presentmentModel.setCanceledByUser()
+        }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -459,51 +468,61 @@ internal fun PresentmentActivityContent(
                             documentModel = documentModel!!,
                             documentId = docIdToShow,
                             contentBelow = {
-                                when (state) {
-                                    is PresentmentModel.State.Reset -> {}
-                                    is PresentmentModel.State.Connecting -> {
-                                        ShowConnectingToReader()
-                                    }
-                                    is PresentmentModel.State.WaitingForReader -> {
-                                        // Keep showing the NFC logo while waiting for a request...
-                                        if (numRequestsServed == 0) {
+                                val isNfcConnected by presentmentModel!!.isNfcConnected.collectAsState()
+                                if (!isNfcConnected && state is PresentmentModel.State.Sending) {
+                                    ShowHoldToReader()
+                                } else {
+                                    when (state) {
+                                        is PresentmentModel.State.Reset -> {}
+                                        is PresentmentModel.State.Connecting -> {
                                             ShowConnectingToReader()
-                                        } else {
+                                        }
+                                        is PresentmentModel.State.WaitingForReader -> {
+                                            // Keep showing the NFC logo while waiting for a request...
+                                            if (numRequestsServed == 0) {
+                                                ShowConnectingToReader()
+                                            } else {
+                                                ShowWaiting()
+                                            }
+                                        }
+                                        is PresentmentModel.State.WaitingForUserInput -> {}
+                                        is PresentmentModel.State.Sending -> {
                                             ShowWaiting()
                                         }
-                                    }
-                                    is PresentmentModel.State.WaitingForUserInput -> {}
-                                    is PresentmentModel.State.Sending -> {
-                                        ShowWaiting()
-                                    }
-                                    is PresentmentModel.State.Completed -> {
-                                        if (state.error != null) {
-                                            when (state.error!!) {
-                                                is PresentmentCanceledException -> {
-                                                    if (state.error!!.message != null) {
+                                        is PresentmentModel.State.Completed -> {
+                                            if (state.error != null) {
+                                                when (state.error!!) {
+                                                    is PresentmentCanceledException -> {
+                                                        if (state.error!!.message != null) {
+                                                            ShowFailure(stringResource(
+                                                                Res.string.presentment_activity_canceled
+                                                            ))
+                                                        } else {
+                                                            startFadeOut = true
+                                                        }
+                                                    }
+                                                    is PresentmentCannotSatisfyRequestException -> {
                                                         ShowFailure(stringResource(
-                                                            Res.string.presentment_activity_canceled
+                                                            Res.string.presentment_activity_cannot_satisfy_request
                                                         ))
-                                                    } else {
-                                                        startFadeOut = true
+                                                    }
+                                                    is Iso18013PresentmentNfcDisconnectedException -> {
+                                                        ShowFailure(stringResource(
+                                                            Res.string.presentment_activity_removed_too_fast
+                                                        ))
+                                                    }
+                                                    else -> {
+                                                        ShowFailure(stringResource(
+                                                            Res.string.presentment_activity_something_went_wrong
+                                                        ))
                                                     }
                                                 }
-                                                is PresentmentCannotSatisfyRequestException -> {
-                                                    ShowFailure(stringResource(
-                                                        Res.string.presentment_activity_cannot_satisfy_request
-                                                    ))
-                                                }
-                                                else -> {
-                                                    ShowFailure(stringResource(
-                                                        Res.string.presentment_activity_something_went_wrong
-                                                    ))
-                                                }
+                                            } else {
+                                                ShowShared()
                                             }
-                                        } else {
-                                            ShowShared()
                                         }
+                                        is PresentmentModel.State.CanceledByUser -> {}
                                     }
-                                    is PresentmentModel.State.CanceledByUser -> {}
                                 }
                             }
                         )
@@ -687,7 +706,8 @@ private fun ShowLottieAnimation(
             Text(
                 text = message,
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
             )
         }
     }

@@ -62,6 +62,27 @@ data class DocRequest internal constructor(
             )
         }
 
+    /**
+     * Compares two [DocRequest] instances and checks if they are similar in structure,
+     * including signing structure (protected headers and unprotected header keys), ignoring
+     * session-transcript-dependent signatures and ephemeral differences (such as certificate
+     * chains when the reader uses single-use keys).
+     *
+     * @param otherDocRequest the other document request to compare against.
+     * @return `true` if structurally equivalent, `false` otherwise.
+     */
+    fun isStructurallyEquivalent(otherDocRequest: DocRequest): Boolean {
+        if (docType != otherDocRequest.docType) return false
+        if (nameSpaces != otherDocRequest.nameSpaces) return false
+        if (docRequestInfo != otherDocRequest.docRequestInfo) return false
+        if ((readerAuth_ != null) != (otherDocRequest.readerAuth_ != null)) return false
+        if (readerAuth_ != null && otherDocRequest.readerAuth_ != null) {
+            if (readerAuth_.protectedHeaders != otherDocRequest.readerAuth_.protectedHeaders) return false
+            if (readerAuth_.unprotectedHeaders.keys != otherDocRequest.readerAuth_.unprotectedHeaders.keys) return false
+        }
+        return true
+    }
+
     internal fun toDataItem(): DataItem {
         return buildCborMap {
             put("itemsRequest", itemsRequestBytes)
