@@ -58,6 +58,8 @@ fun pathToTab(path: String): String {
         "/events" -> "event-decode"
         "/mpzpass" -> "mpzpass-decode"
         "/mpzpass-decode" -> "mpzpass-decode"
+        "/mpzpass-create" -> "mpzpass-create"
+        "/mpzpass-creator" -> "mpzpass-create"
         else -> "cbor-decode"
     }
 }
@@ -82,6 +84,7 @@ fun tabToPath(tab: String): String {
         "ndef-parse" -> "/ndef"
         "event-decode" -> "/event"
         "mpzpass-decode" -> "/mpzpass"
+        "mpzpass-create" -> "/mpzpass-create"
         else -> "/cbor"
     }
 }
@@ -246,7 +249,8 @@ val App = FC {
                     "compress" to "Compression Tool",
                     "converter" to "Format Converter",
                     "event-decode" to "Multipaz Event Decoder",
-                    "mpzpass-decode" to "MpzPass Decoder"
+                    "mpzpass-decode" to "MpzPass Decoder",
+                    "mpzpass-create" to "MpzPass Creator"
                 ))
             )
 
@@ -379,6 +383,7 @@ val App = FC {
                 "ndef-parse" -> NdefParserComponent { key = "ndef-parse" }
                 "event-decode" -> EventDecoderComponent { key = "event-decode" }
                 "mpzpass-decode" -> MpzPassDecoderComponent { key = "mpzpass-decode" }
+                "mpzpass-create" -> MpzPassCreatorComponent { key = "mpzpass-create" }
             }
         }
 

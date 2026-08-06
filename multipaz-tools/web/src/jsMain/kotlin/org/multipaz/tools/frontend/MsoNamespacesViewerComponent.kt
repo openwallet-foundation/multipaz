@@ -38,6 +38,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Cdn
 import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.MajorType
 import org.multipaz.cbor.Tagged
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
@@ -468,7 +469,7 @@ val MsoNamespacesViewerComponent = FC {
     }
 }
 
-fun react.ChildrenBuilder.renderMsoDetails(mso: MobileSecurityObject) {
+fun react.ChildrenBuilder.renderMsoDetails(mso: MobileSecurityObject, rawMsoBytes: ByteArray? = null) {
     div {
         css {
             background = Color("#0f172a")
@@ -479,6 +480,49 @@ fun react.ChildrenBuilder.renderMsoDetails(mso: MobileSecurityObject) {
             flexDirection = FlexDirection.column
             gap = 12.px
             fontSize = 14.px
+        }
+
+        div {
+            css {
+                display = Display.flex
+                justifyContent = JustifyContent.spaceBetween
+                alignItems = AlignItems.center
+                marginBottom = 4.px
+            }
+
+            h3 {
+                css {
+                    color = Color("#38bdf8")
+                    margin = Margin(0.px, 0.px, 0.px, 0.px)
+                    fontSize = 1.1.rem
+                }
+                +"Mobile Security Object (MSO)"
+            }
+
+            button {
+                css {
+                    background = Color("#3b82f6")
+                    color = Color("#ffffff")
+                    padding = Padding(6.px, 12.px)
+                    fontSize = 12.px
+                    fontWeight = FontWeight.bold
+                    border = None.none
+                    borderRadius = 6.px
+                    cursor = Cursor.pointer
+                    hover { backgroundColor = Color("#2563eb") }
+                }
+                onClick = {
+                    val hex = try {
+                        rawMsoBytes?.toHex() ?: Cbor.encode(mso.toDataItem()).toHex()
+                    } catch (e: Throwable) {
+                        ""
+                    }
+                    if (hex.isNotEmpty()) {
+                        kotlinx.browser.window.navigator.clipboard.writeText(hex)
+                    }
+                }
+                +"📋 Copy MSO Hex"
+            }
         }
 
         div {
@@ -897,16 +941,19 @@ fun react.ChildrenBuilder.renderIssuerSignedDetails(
     }
 
     if (result.mso != null) {
-        h4 {
-            css {
-                fontSize = 1.2.rem
-                fontWeight = FontWeight.bold
-                marginTop = 24.px
-                marginBottom = 16.px
-                color = Color("#cbd5e1")
-            }
-            +"Mobile Security Object (MSO)"
+        val rawMsoBytes = try {
+            val payload = result.issuerAuth?.payload
+            if (payload != null) {
+                val decodedPayload = Cbor.decode(payload)
+                if (decodedPayload.majorType == MajorType.TAG) {
+                    decodedPayload.asTagged.asBstr
+                } else {
+                    decodedPayload.asBstr
+                }
+            } else null
+        } catch (e: Throwable) {
+            null
         }
-        renderMsoDetails(result.mso)
+        renderMsoDetails(result.mso, rawMsoBytes)
     }
 }
