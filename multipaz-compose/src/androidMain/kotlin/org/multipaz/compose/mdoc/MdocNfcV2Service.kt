@@ -295,6 +295,7 @@ abstract class MdocNfcV2Service(
                     newTransport.setExpectTransport(true)
                 }
                 hybridTransport = newTransport
+                settings.presentmentModel?.setNfcOnly(isNfcOnly)
 
                 if (isNfcOnly) {
                     serviceScope.launch {

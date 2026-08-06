@@ -27,6 +27,7 @@ class PresentmentModel {
     private var mutableDocumentsSelected = MutableStateFlow<List<Document>>(emptyList())
     private var mutableNumRequestsServed = MutableStateFlow(0)
     private var mutableIsNfcConnected = MutableStateFlow(true)
+    private var mutableIsNfcOnly = MutableStateFlow(false)
 
     /**
      * The source of truth being used for presentment.
@@ -57,6 +58,19 @@ class PresentmentModel {
      */
     fun setNfcConnected(connected: Boolean) {
         mutableIsNfcConnected.value = connected
+    }
+
+    /**
+     * Whether the active connection is NFC-only.
+     */
+    val isNfcOnly: StateFlow<Boolean>
+        get() = mutableIsNfcOnly.asStateFlow()
+
+    /**
+     * Updates whether the active connection is NFC-only.
+     */
+    fun setNfcOnly(isNfcOnly: Boolean) {
+        mutableIsNfcOnly.value = isNfcOnly
     }
 
     private var mutableShowDocumentChooser: DocumentChooserData? = null
@@ -90,6 +104,8 @@ class PresentmentModel {
         mutableDocumentsSelected.value = preselectedDocuments
         mutableNumRequestsServed.value = 0
         mutableShowDocumentChooser = showDocumentChooser
+        mutableIsNfcOnly.value = false
+        mutableIsNfcConnected.value = true
     }
 
     /**

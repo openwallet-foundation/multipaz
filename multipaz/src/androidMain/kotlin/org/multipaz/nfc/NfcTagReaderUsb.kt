@@ -22,18 +22,17 @@ private class NfcIsoTagUsb(
 
     override suspend fun transceive(command: CommandApdu): ResponseApdu {
         val commandApduBytes = command.encode()
-        //Logger.iHex(TAG, "Sending APDU", commandApduBytes)
         try {
             val responseApduBytes = driver.transceive(commandApduBytes)
-            //Logger.iHex(TAG, "Received APDU", responseApduBytes)
             return ResponseApdu.decode(responseApduBytes)
-        } catch (e: CcidException) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             throw NfcTagLostException("Tag was lost", e)
         }
     }
 
     override suspend fun close() {
-        driver.disconnect()
+        // No-op for the reader driver itself; the driver remains connected for future card insertions.
     }
 
     override suspend fun updateDialogMessage(message: String) {
@@ -101,8 +100,6 @@ internal class NfcTagReaderUsb(
 
                     override fun onCardRemoved() {
                         Logger.i(TAG, "Card removed")
-                        readJob?.cancel()
-                        readJob = null
                     }
                 }
 
