@@ -90,6 +90,7 @@ import org.multipaz.multipaz_compose.generated.resources.presentment_activity_co
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_hold_to_reader
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_info_was_shared
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_no_documents_available
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_nfc_only_tip
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_open_wallet
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_removed_too_fast
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_something_went_wrong
@@ -423,7 +424,8 @@ internal fun PresentmentActivityContent(
                                     modifier = Modifier.fillMaxHeight(),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    ShowHoldToReader()
+                                    val isNfcOnly by presentmentModel!!.isNfcOnly.collectAsState()
+                                    ShowHoldToReader(isNfcOnly = isNfcOnly)
                                     Spacer(modifier = Modifier.weight(1.0f))
                                     Row(
                                         modifier = Modifier
@@ -472,24 +474,24 @@ internal fun PresentmentActivityContent(
                                 val isNfcConnected by presentmentModel!!.isNfcConnected.collectAsState()
                                 val isNfcOnly by presentmentModel!!.isNfcOnly.collectAsState()
                                 if (isNfcOnly && !isNfcConnected && state is PresentmentModel.State.Sending) {
-                                    ShowHoldToReader()
+                                    ShowHoldToReader(isNfcOnly = isNfcOnly)
                                 } else {
                                     when (state) {
                                         is PresentmentModel.State.Reset -> {}
                                         is PresentmentModel.State.Connecting -> {
-                                            ShowConnectingToReader()
+                                            ShowConnectingToReader(isNfcOnly = isNfcOnly)
                                         }
                                         is PresentmentModel.State.WaitingForReader -> {
                                             // Keep showing the NFC logo while waiting for a request...
                                             if (numRequestsServed == 0) {
-                                                ShowConnectingToReader()
+                                                ShowConnectingToReader(isNfcOnly = isNfcOnly)
                                             } else {
-                                                ShowWaiting()
+                                                ShowWaiting(isNfcOnly = isNfcOnly)
                                             }
                                         }
                                         is PresentmentModel.State.WaitingForUserInput -> {}
                                         is PresentmentModel.State.Sending -> {
-                                            ShowWaiting()
+                                            ShowWaiting(isNfcOnly = isNfcOnly)
                                         }
                                         is PresentmentModel.State.Completed -> {
                                             if (state.error != null) {
@@ -637,16 +639,17 @@ private fun ShowFailure(message: String) {
 }
 
 @Composable
-private fun ShowWaiting() {
+private fun ShowWaiting(isNfcOnly: Boolean = false) {
     ShowLottieAnimation(
         message = null,
         animationPath = "files/waiting_animation.json",
-        repeat = true
+        repeat = true,
+        tip = if (isNfcOnly) stringResource(Res.string.presentment_activity_nfc_only_tip) else null
     )
 }
 
 @Composable
-private fun ShowHoldToReader() {
+private fun ShowHoldToReader(isNfcOnly: Boolean = false) {
     val isDarkTheme = isSystemInDarkTheme()
     ShowLottieAnimation(
         message = stringResource(Res.string.presentment_activity_hold_to_reader),
@@ -655,12 +658,13 @@ private fun ShowHoldToReader() {
         } else {
             "files/nfc_animation.json"
         },
-        repeat = true
+        repeat = true,
+        tip = if (isNfcOnly) stringResource(Res.string.presentment_activity_nfc_only_tip) else null
     )
 }
 
 @Composable
-private fun ShowConnectingToReader() {
+private fun ShowConnectingToReader(isNfcOnly: Boolean = false) {
     val isDarkTheme = isSystemInDarkTheme()
     ShowLottieAnimation(
         message = stringResource(Res.string.presentment_activity_connecting_to_reader),
@@ -669,7 +673,8 @@ private fun ShowConnectingToReader() {
         } else {
             "files/nfc_animation.json"
         },
-        repeat = true
+        repeat = true,
+        tip = if (isNfcOnly) stringResource(Res.string.presentment_activity_nfc_only_tip) else null
     )
 }
 
@@ -677,7 +682,8 @@ private fun ShowConnectingToReader() {
 private fun ShowLottieAnimation(
     message: String?,
     animationPath: String,
-    repeat: Boolean
+    repeat: Boolean,
+    tip: String? = null
 ) {
     val errorComposition by rememberLottieComposition {
         LottieCompositionSpec.JsonString(Res.readBytes(animationPath).decodeToString())
@@ -709,6 +715,16 @@ private fun ShowLottieAnimation(
                 text = message,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        if (tip != null) {
+            Spacer(modifier = Modifier.height(32.dp))
+            Text(
+                text = tip,
+                modifier = Modifier.fillMaxWidth(0.5f),
+                style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center
             )
         }

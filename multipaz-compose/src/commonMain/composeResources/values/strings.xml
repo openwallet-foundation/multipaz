@@ -18,6 +18,7 @@
     <string name="presentment_activity_open_wallet">Open %1$s</string>
     <string name="presentment_activity_app_name_default">Wallet</string>
     <string name="presentment_activity_no_documents_available">No documents available</string>
+    <string name="presentment_activity_nfc_only_tip">Hold close to the reader until all the data is transferred</string>
 
     <!-- PassphraseEntryField.kt -->
     <string name="passphrase_entry_field_pin_is_weak">PIN is weak, please choose another</string>
