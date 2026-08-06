@@ -251,7 +251,8 @@ class PresentmentActivity: FragmentActivity() {
         super.onStop()
         val state = presentmentModel.state.value
         val isNfcConnected = presentmentModel.isNfcConnected.value
-        if (!isNfcConnected && (state is PresentmentModel.State.WaitingForReader || state is PresentmentModel.State.Sending || state is PresentmentModel.State.WaitingForUserInput)) {
+        val isNfcOnly = presentmentModel.isNfcOnly.value
+        if (isNfcOnly && !isNfcConnected && (state is PresentmentModel.State.WaitingForReader || state is PresentmentModel.State.Sending || state is PresentmentModel.State.WaitingForUserInput)) {
             Logger.i(TAG, "in onStop() but waiting for NFC re-tap, preserving presentment session")
         } else {
             Logger.i(TAG, "in onStop(), canceling presentment")
@@ -469,7 +470,8 @@ internal fun PresentmentActivityContent(
                             documentId = docIdToShow,
                             contentBelow = {
                                 val isNfcConnected by presentmentModel!!.isNfcConnected.collectAsState()
-                                if (!isNfcConnected && state is PresentmentModel.State.Sending) {
+                                val isNfcOnly by presentmentModel!!.isNfcOnly.collectAsState()
+                                if (isNfcOnly && !isNfcConnected && state is PresentmentModel.State.Sending) {
                                     ShowHoldToReader()
                                 } else {
                                     when (state) {
