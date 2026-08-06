@@ -27,7 +27,10 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
+import kotlin.time.Clock
+import kotlinx.datetime.Instant
 import org.multipaz.crypto.X500Name
+import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
@@ -48,6 +51,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 
 class DeviceRequestTest {
     // Test against the test vector in Annex D of 18013-5:2021
@@ -1571,5 +1576,97 @@ class DeviceRequestTest {
         assertEquals(false, dri.useCases[1].mandatory)
         assertEquals(listOf(DocumentSet(listOf(1)), DocumentSet(listOf(2))), dri.useCases[1].documentSets)
         assertEquals(mapOf("org.iso.jtc1.sc17" to 1), dri.useCases[1].purposeHints)
+    }
+
+    @Test
+    fun testIsStructurallyEquivalent() = runTest {
+        val transcript1 = buildCborArray { add("Session1") }
+        val transcript2 = buildCborArray { add("Session2") }
+
+        val req1 = DeviceRequest.Builder(transcript1)
+            .addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)
+                )
+            )
+            .build()
+
+        val req2 = DeviceRequest.Builder(transcript2)
+            .addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)
+                )
+            )
+            .build()
+
+        val req3 = DeviceRequest.Builder(transcript1)
+            .addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false, "given_name" to false)
+                )
+            )
+            .build()
+
+        assertEquals(true, req1.isStructurallyEquivalent(req2))
+        assertEquals(true, req2.isStructurallyEquivalent(req1))
+        assertEquals(false, req1.isStructurallyEquivalent(req3))
+    }
+
+    @Test
+    fun testIsStructurallyEquivalentWithDifferentReaderAuthCerts() = runTest {
+        val transcript = buildCborArray { add("Session") }
+
+        val key1 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val key2 = Crypto.createEcPrivateKey(EcCurve.P256)
+
+        val validFrom = Clock.System.now()
+        val validUntil = Instant.fromEpochMilliseconds(
+            validFrom.toEpochMilliseconds() + 30L * 24 * 60 * 60 * 1000
+        )
+
+        val cert1 = X509Cert.Builder(
+            publicKey = key1.publicKey,
+            signingKey = AsymmetricKey.anonymous(key1, Algorithm.ES256),
+            serialNumber = ASN1Integer(1),
+            subject = X500Name.fromName("CN=Reader 1"),
+            issuer = X500Name.fromName("CN=Reader 1"),
+            validFrom = validFrom,
+            validUntil = validUntil
+        ).build()
+
+        val cert2 = X509Cert.Builder(
+            publicKey = key2.publicKey,
+            signingKey = AsymmetricKey.anonymous(key2, Algorithm.ES256),
+            serialNumber = ASN1Integer(2),
+            subject = X500Name.fromName("CN=Reader 2"),
+            issuer = X500Name.fromName("CN=Reader 2"),
+            validFrom = validFrom,
+            validUntil = validUntil
+        ).build()
+
+        val readerKey1 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(cert1)), key1)
+        val readerKey2 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(cert2)), key2)
+
+        val req1 = DeviceRequest.Builder(transcript)
+            .addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = readerKey1
+            )
+            .build()
+
+        val req2 = DeviceRequest.Builder(transcript)
+            .addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = readerKey2
+            )
+            .build()
+
+        assertTrue(req1.isStructurallyEquivalent(req2))
+        assertTrue(req2.isStructurallyEquivalent(req1))
     }
 }

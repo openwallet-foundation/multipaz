@@ -7,6 +7,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -36,6 +37,13 @@ class NfcHybridTransportMdoc(
     private val _state = MutableStateFlow<State>(State.IDLE)
     override val state: StateFlow<State> = _state.asStateFlow()
 
+    private val _isNfcConnected = MutableStateFlow(true)
+
+    /**
+     * Whether the NFC connection is currently active.
+     */
+    val isNfcConnected: StateFlow<Boolean> = _isNfcConnected.asStateFlow()
+
     private var expectTransport: Boolean = false
 
     override val role: MdocRole
@@ -60,8 +68,23 @@ class NfcHybridTransportMdoc(
      *
      * @param expectTransport `true` if it's expected that [setTransport] will be called, `false` if not.
      */
-    suspend fun setExpectTransport(expectTransport: Boolean) {
+    fun setExpectTransport(expectTransport: Boolean) {
         this.expectTransport = expectTransport
+    }
+
+    /**
+     * Whether this hybrid transport is operating in NFC-only mode without alternative transports.
+     */
+    val isNfcOnly: Boolean
+        get() = !expectTransport && transport == null
+
+    private var responsePending = false
+
+    /**
+     * Marks that a response is pending transmission for the current request.
+     */
+    fun markResponsePending() {
+        responsePending = true
     }
 
     /**
@@ -71,6 +94,11 @@ class NfcHybridTransportMdoc(
      */
     suspend fun onMessageReceivedViaNfc(message: ByteString) {
         Logger.i(TAG, "Received message over NFC of length ${message.size}")
+        _isNfcConnected.value = true
+        if (responsePending) {
+            Logger.i(TAG, "Ignoring reader message of ${message.size} bytes received on re-tap while response is pending")
+            return
+        }
         conveyMessage(message, true)
     }
 
@@ -80,13 +108,9 @@ class NfcHybridTransportMdoc(
      * @param reason the reason for the deactivation event.
      */
     suspend fun onNfcDeactivated(reason: Int) {
-        if (!expectTransport) {
-            mutex.withLock {
-                failTransport(MdocTransportException(
-                    "NFC deactivated with reason $reason and not expecting a Transport. Failing this transport"
-                ))
-            }
-        }
+        _isNfcConnected.value = false
+        // For NFC-only connections, leaving the field is expected during multi-tap presentment.
+        // We do not fail the transport so the presentment session can resume when re-tapped.
     }
 
     /**
@@ -175,6 +199,7 @@ class NfcHybridTransportMdoc(
     }
 
     override suspend fun sendMessage(message: ByteArray) {
+        responsePending = false
         mutex.withLock {
             check(_state.value == State.CONNECTED) { "Expected state CONNECTED, got ${_state.value}" }
         }
@@ -189,11 +214,19 @@ class NfcHybridTransportMdoc(
                         "NFC is disconnected, continuing on non-NFC transport")
                 nfcDisconnected = true
             } else {
-                val e = MdocTransportException("Error sending on NFC and no non-NFC transport is expected")
-                mutex.lock {
-                    failTransport(e)
+                Logger.i(TAG, "NFC disconnected while sending message. Waiting for re-tap...")
+                _isNfcConnected.value = false
+                _isNfcConnected.first { it }
+                if (sendMessageViaNfc(messageBs)) {
+                    Logger.i(TAG, "Successfully sent message over NFC after re-tap of length ${messageBs.size}")
+                    numSentViaNfc += 1
+                } else {
+                    val e = MdocTransportException("Error sending on NFC after re-tap and no non-NFC transport is expected")
+                    mutex.lock {
+                        failTransport(e)
+                    }
+                    throw e
                 }
-                throw e
             }
         }
 
@@ -236,6 +269,13 @@ class NfcHybridTransportMdoc(
         mutex.withLock {
             if (_state.value == State.CLOSED) {
                 return
+            }
+            if (_isNfcConnected.value) {
+                try {
+                    sendMessageViaNfc(ByteString())
+                } catch (e: Throwable) {
+                    // Ignore
+                }
             }
             incomingMessages.close()
             transportListenMessageJob?.cancel()

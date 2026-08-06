@@ -1,7 +1,11 @@
 package org.multipaz.presentment
 
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.multipaz.cbor.Bstr
@@ -19,6 +23,8 @@ import org.multipaz.mdoc.sessionencryption.EReaderKey
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
 import org.multipaz.mdoc.transport.MdocTransportClosedException
+import org.multipaz.mdoc.transport.NfcHybridTransportMdoc
+import org.multipaz.securearea.KeyUnlockDataProvider
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import kotlin.coroutines.cancellation.CancellationException
@@ -30,27 +36,279 @@ private const val TAG = "Iso180135Presentment"
 /**
  * Performs proximity presentment according to ISO/IEC 18013-5:2021.
  *
- * This implementation allows handling multiple requests from the reader and expects the reader
- * to close the connection.
- *
- * @param transport a [MdocTransport] in the [MdocTransport.State.CONNECTING] or [MdocTransport.State.CONNECTED] state.
- * @param eDeviceKey the ephemeral device key.
- * @param deviceEngagement the device engagement.
- * @param handover the handover.
- * @param source the source of truth used for presentment.
- * @param keyAgreementPossible the list of curves for which key agreement is possible.
- * @param insertSequenceNumbers if `true`, inserts sequence numbers in session encryption messages.
- * @param timeout the maximum time to wait for the first message from the remote reader or `null` to wait indefinitely.
- * @param timeoutSubsequentRequests the maximum time to wait for subsequent messages or `null` to wait indefinitely.
- * @param onWaitingForRequest called when waiting for a request from the remote reader.
- * @param onWaitingForUserInput called when waiting for input from the user (consent or authentication)
- * @param onDocumentsInFocus called with the documents currently selected for the user, including when
- *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
- * @param onSendingResponse called when sending a response to the remote reader.
- * @throws MdocTransportClosedException if [transport] was closed.
- * @throws Iso18013PresentmentTimeoutException if the reader didn't send a message without the given [timeout].
- * @throws PresentmentCanceledException if the user canceled in a consent prompt.
- * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
+ * @param transport the transport to use for communicating with the reader.
+ * @param engagementParams a [StateFlow] providing the current engagement parameters.
+ * @param source the source of truth for documents to present.
+ * @param keyAgreementPossible curves available for key agreement.
+ * @param insertSequenceNumbers whether sequence numbers should be inserted in session messages.
+ * @param timeout timeout for initial message.
+ * @param timeoutSubsequentRequests timeout for subsequent messages.
+ * @param onWaitingForRequest callback when waiting for request.
+ * @param onWaitingForUserInput callback when waiting for user input.
+ * @param onDocumentsInFocus callback with selected documents.
+ * @param onSendingResponse callback when sending response.
+ */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class,
+    MdocTransportClosedException::class,
+    Iso18013PresentmentTimeoutException::class,
+    PresentmentCanceledException::class,
+    PresentmentCannotSatisfyRequestException::class
+)
+suspend fun Iso18013Presentment(
+    transport: MdocTransport,
+    engagementParams: StateFlow<EngagementParams>,
+    source: PresentmentSource,
+    keyAgreementPossible: List<EcCurve>,
+    insertSequenceNumbers: Boolean = false,
+    timeout: Duration? = 15.seconds,
+    timeoutSubsequentRequests: Duration? = 30.seconds,
+    onWaitingForRequest: () -> Unit = {},
+    onWaitingForUserInput: () -> Unit = {},
+    onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
+    onSendingResponse: () -> Unit = {},
+    onDeviceRequest: (deviceRequest: DeviceRequest) -> Unit = {},
+) {
+    // Wait until state changes to CONNECTED, FAILED, or CLOSED
+    transport.state.first {
+        it == MdocTransport.State.CONNECTED ||
+                it == MdocTransport.State.FAILED ||
+                it == MdocTransport.State.CLOSED
+    }
+    if (transport.state.value != MdocTransport.State.CONNECTED) {
+        throw IllegalStateException("Expected state CONNECTED but found ${transport.state.value}")
+    }
+    val initialParams = engagementParams.value
+    Logger.dCbor(TAG, "Handover", initialParams.handover)
+    Logger.dCbor(TAG, "DeviceEngagement", initialParams.deviceEngagement)
+    var numRequestsServed = 0
+    var sendSessionTermination = true
+    var sessionEncryption: SessionEncryption? = null
+    try {
+        var activeEReaderKey: EReaderKey? = null
+        var activeDeviceRequest: DeviceRequest? = null
+        var cachedSelection: CredentialSelection? = null
+        var cachedKeyUnlockDataProvider: KeyUnlockDataProvider? = null
+        lateinit var sessionTranscript: DataItem
+        lateinit var encodedSessionTranscript: ByteArray
+        while (true) {
+            Logger.i(TAG, "Waiting for message from reader...")
+            onWaitingForRequest()
+            if (transport is NfcHybridTransportMdoc && transport.isNfcOnly && !transport.isNfcConnected.value) {
+                if (numRequestsServed > 0) {
+                    Logger.i(TAG, "NFC disconnected after response sent. Failing presentment session.")
+                    throw Iso18013PresentmentNfcDisconnectedException()
+                }
+                Logger.i(TAG, "NFC disconnected while waiting for reader message. Waiting for re-tap...")
+                transport.isNfcConnected.first { it }
+                Logger.i(TAG, "Re-tapped! Continuing presentment session...")
+            }
+            val timeoutToUse = if (numRequestsServed == 0) timeout else timeoutSubsequentRequests
+            val sessionData = try {
+                if (transport is NfcHybridTransportMdoc && transport.isNfcOnly && numRequestsServed > 0) {
+                    coroutineScope {
+                        val nfcDisconnectJob = launch {
+                            transport.isNfcConnected.first { !it }
+                            Logger.i(TAG, "NFC disconnected while waiting for reader message after response sent")
+                            throw Iso18013PresentmentNfcDisconnectedException()
+                        }
+                        try {
+                            val msg = if (timeoutToUse == null) {
+                                transport.waitForMessage()
+                            } else {
+                                withTimeout(timeoutToUse) {
+                                    transport.waitForMessage()
+                                }
+                            }
+                            nfcDisconnectJob.cancel()
+                            msg
+                        } catch (e: Exception) {
+                            nfcDisconnectJob.cancel()
+                            throw e
+                        }
+                    }
+                } else if (timeoutToUse == null) {
+                    transport.waitForMessage()
+                } else {
+                    withTimeout(timeoutToUse) {
+                        transport.waitForMessage()
+                    }
+                }
+            } catch (e: TimeoutCancellationException) {
+                throw Iso18013PresentmentTimeoutException("Timed out waiting for message from remote reader", e)
+            }
+            if (sessionData.isEmpty()) {
+                Logger.i(TAG, "Received transport-specific session termination message from reader")
+                sendSessionTermination = false
+                break
+            }
+
+            val currentParams = engagementParams.value
+            val eDeviceKeyToUse = currentParams.eDeviceKey
+            val deviceEngagementToUse = currentParams.deviceEngagement
+            val handoverToUse = currentParams.handover
+            val eReaderKeyToUse = currentParams.eReaderKey
+
+            if (sessionEncryption == null || (eReaderKeyToUse != null && eReaderKeyToUse != activeEReaderKey?.publicKey)) {
+                val currentEReaderKey = eReaderKeyToUse?.let {
+                    EReaderKey(it, Cbor.encode(it.toCoseKey().toDataItem()))
+                } ?: SessionEncryption.getEReaderKey(sessionData)
+                activeEReaderKey = currentEReaderKey
+                sessionTranscript = buildCborArray {
+                    add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(deviceEngagementToUse))))
+                    add(Tagged(Tagged.ENCODED_CBOR, Bstr(currentEReaderKey.encodedCoseKey)))
+                    add(handoverToUse)
+                }
+                Logger.dCbor(TAG, "SessionTranscript", sessionTranscript)
+                encodedSessionTranscript = Cbor.encode(sessionTranscript)
+                sessionEncryption = SessionEncryption(
+                    role = MdocRole.MDOC,
+                    eSelfKey = eDeviceKeyToUse,
+                    remotePublicKey = currentEReaderKey.publicKey,
+                    encodedSessionTranscript = encodedSessionTranscript,
+                    insertSequenceNumbers = insertSequenceNumbers
+                )
+            }
+            val (encodedDeviceRequest, status) = sessionEncryption!!.decryptMessage(sessionData)
+
+            if (status == Constants.SESSION_DATA_STATUS_SESSION_TERMINATION) {
+                Logger.i(TAG, "Received session termination message from reader")
+                sendSessionTermination = false
+                break
+            }
+
+            if (encodedDeviceRequest == null) {
+                throw IllegalStateException("No data in message from reader")
+            }
+
+            Logger.dCbor(TAG, "DeviceRequest", encodedDeviceRequest)
+            val deviceRequestCbor = Cbor.decode(encodedDeviceRequest)
+            val deviceRequest = DeviceRequest.fromDataItem(deviceRequestCbor)
+            deviceRequest.verifyReaderAuthentication(sessionTranscript)
+            onDeviceRequest(deviceRequest)
+
+            val selection: CredentialSelection
+            val keyUnlockDataProvider: KeyUnlockDataProvider
+
+            val currentActiveRequest = activeDeviceRequest
+            if (currentActiveRequest != null &&
+                deviceRequest.isStructurallyEquivalent(currentActiveRequest) &&
+                cachedSelection != null &&
+                cachedKeyUnlockDataProvider != null
+            ) {
+                Logger.i(TAG, "Reusing existing consent and key authentication for structurally equivalent DeviceRequest on re-tap")
+                selection = cachedSelection
+                keyUnlockDataProvider = cachedKeyUnlockDataProvider
+            } else {
+                activeDeviceRequest = deviceRequest
+                selection = mdocPresentmentObtainConsent(
+                    deviceRequest = deviceRequest,
+                    source = source,
+                    keyAgreementPossible = keyAgreementPossible,
+                    requesterAppId = null,
+                    requesterOrigin = null,
+                    onWaitingForUserInput = onWaitingForUserInput,
+                    onDocumentsInFocus = onDocumentsInFocus
+                )
+                keyUnlockDataProvider = mdocPresentmentAuthenticateUser(selection)
+                cachedSelection = selection
+                cachedKeyUnlockDataProvider = keyUnlockDataProvider
+            }
+
+            onSendingResponse()
+
+            if (transport is NfcHybridTransportMdoc && transport.isNfcOnly) {
+                transport.markResponsePending()
+                if (!transport.isNfcConnected.value) {
+                    Logger.i(TAG, "NFC disconnected after user consent/auth. Waiting for re-tap before generating response...")
+                    transport.isNfcConnected.first { it }
+                    Logger.i(TAG, "Re-tapped! Proceeding with response generation using latest engagement parameters.")
+                }
+            }
+
+            // Dynamic session transcript & session encryption update if engagementParams updated (e.g. re-tap)
+            val latestParams = engagementParams.value
+            if (latestParams != currentParams) {
+                val latestEDeviceKey = latestParams.eDeviceKey
+                val latestDeviceEngagement = latestParams.deviceEngagement
+                val latestHandover = latestParams.handover
+                val latestEReaderKey = latestParams.eReaderKey ?: activeEReaderKey!!.publicKey
+                val encodedCoseKeyToUse = latestParams.eReaderKey?.let { Cbor.encode(it.toCoseKey().toDataItem()) }
+                    ?: activeEReaderKey!!.encodedCoseKey
+
+                sessionTranscript = buildCborArray {
+                    add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(latestDeviceEngagement))))
+                    add(Tagged(Tagged.ENCODED_CBOR, Bstr(encodedCoseKeyToUse)))
+                    add(latestHandover)
+                }
+                sessionEncryption = SessionEncryption(
+                    role = MdocRole.MDOC,
+                    eSelfKey = latestEDeviceKey,
+                    remotePublicKey = latestEReaderKey,
+                    encodedSessionTranscript = Cbor.encode(sessionTranscript),
+                    insertSequenceNumbers = insertSequenceNumbers
+                )
+            }
+            val sessionTranscriptToUse = sessionTranscript
+            val sessionEncryptionToUse = sessionEncryption!!
+
+            val responseObject = withContext(keyUnlockDataProvider) {
+                mdocPresentmentGenerateResponse(
+                    selection = selection,
+                    deviceRequest = deviceRequest,
+                    eReaderKey = (latestParams.eReaderKey ?: activeEReaderKey!!.publicKey),
+                    sessionTranscript = sessionTranscriptToUse,
+                    source = source,
+                    requesterAppId = null,
+                    requesterOrigin = null,
+                )
+            }
+            transport.sendMessage(
+                sessionEncryptionToUse.encryptMessage(
+                    messagePlaintext = Cbor.encode(responseObject.deviceResponse.toDataItem()),
+                    statusCode = null
+                )
+            )
+            numRequestsServed += 1
+
+            source.eventLogger?.addEventAsync(
+                EventPresentmentIso18013Proximity(
+                    presentmentData = responseObject.eventData,
+                    request = deviceRequest.toDataItem(),
+                    response = responseObject.deviceResponse.toDataItem(),
+                    sessionTranscript = sessionTranscriptToUse,
+                )
+            )
+
+            Logger.i(TAG, "Response sent, keeping connection open")
+        }
+    } finally {
+        if (sendSessionTermination && (transport !is NfcHybridTransportMdoc || !transport.isNfcOnly || transport.isNfcConnected.value)) {
+            Logger.i(TAG, "Sending session-termination")
+            try {
+                transport.sendMessage(
+                    SessionEncryption.encodeStatus(
+                        statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
+                        sequenceNumber = if (insertSequenceNumbers) {
+                            sessionEncryption?.nextSequenceNumber
+                        } else {
+                            null
+                        }
+                    )
+                )
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Logger.w(TAG, "Caught error while sending session-termination", e)
+            }
+        }
+        Logger.i(TAG, "Closing transport")
+        transport.close()
+    }
+}
+
+/**
+ * Performs proximity presentment according to ISO/IEC 18013-5:2021 using individual engagement parameters.
  */
 @Throws(
     CancellationException::class,
@@ -74,140 +332,22 @@ suspend fun Iso18013Presentment(
     onWaitingForUserInput: () -> Unit = {},
     onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
     onSendingResponse: () -> Unit = {},
-) {
-    // Wait until state changes to CONNECTED, FAILED, or CLOSED
-    transport.state.first {
-        it == MdocTransport.State.CONNECTED ||
-                it == MdocTransport.State.FAILED ||
-                it == MdocTransport.State.CLOSED
-    }
-    if (transport.state.value != MdocTransport.State.CONNECTED) {
-        throw IllegalStateException("Expected state CONNECTED but found ${transport.state.value}")
-    }
-    Logger.dCbor(TAG, "Handover", handover)
-    Logger.dCbor(TAG, "DeviceEngagement", deviceEngagement)
-    var numRequestsServed = 0
-    var sendSessionTermination = true
-    var sessionEncryption: SessionEncryption? = null
-    try {
-        lateinit var eReaderKey: EReaderKey
-        lateinit var sessionTranscript: DataItem
-        lateinit var encodedSessionTranscript: ByteArray
-        while (true) {
-            Logger.i(TAG, "Waiting for message from reader...")
-            onWaitingForRequest()
-            val timeoutToUse = if (numRequestsServed == 0) timeout else timeoutSubsequentRequests
-            val sessionData = if (timeoutToUse == null) {
-                transport.waitForMessage()
-            } else {
-                try {
-                    withTimeout(timeoutToUse) {
-                        transport.waitForMessage()
-                    }
-                } catch (e: TimeoutCancellationException) {
-                    throw Iso18013PresentmentTimeoutException("Timed out waiting for message from remote reader", e)
-                }
-            }
-            if (sessionData.isEmpty()) {
-                Logger.i(TAG, "Received transport-specific session termination message from reader")
-                sendSessionTermination = false
-                break
-            }
-
-            if (sessionEncryption == null) {
-                eReaderKey = SessionEncryption.getEReaderKey(sessionData)
-                sessionTranscript = buildCborArray {
-                    add(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(deviceEngagement))))
-                    add(Tagged(Tagged.ENCODED_CBOR, Bstr(eReaderKey.encodedCoseKey)))
-                    add(handover)
-                }
-                Logger.dCbor(TAG, "SessionTranscript", sessionTranscript)
-                encodedSessionTranscript = Cbor.encode(sessionTranscript)
-                sessionEncryption = SessionEncryption(
-                    role = MdocRole.MDOC,
-                    eSelfKey = eDeviceKey,
-                    remotePublicKey = eReaderKey.publicKey,
-                    encodedSessionTranscript = encodedSessionTranscript,
-                    insertSequenceNumbers = insertSequenceNumbers
-                )
-            }
-            val (encodedDeviceRequest, status) = sessionEncryption.decryptMessage(sessionData)
-
-            if (status == Constants.SESSION_DATA_STATUS_SESSION_TERMINATION) {
-                Logger.i(TAG, "Received session termination message from reader")
-                sendSessionTermination = false
-                break
-            }
-
-            if (encodedDeviceRequest == null) {
-                throw IllegalStateException("No data in message from reader")
-            }
-
-            Logger.dCbor(TAG, "DeviceRequest", encodedDeviceRequest)
-            val deviceRequestCbor = Cbor.decode(encodedDeviceRequest)
-            val deviceRequest = DeviceRequest.fromDataItem(deviceRequestCbor)
-            deviceRequest.verifyReaderAuthentication(sessionTranscript)
-            val selection = mdocPresentmentObtainConsent(
-                deviceRequest = deviceRequest,
-                source = source,
-                keyAgreementPossible = keyAgreementPossible,
-                requesterAppId = null,
-                requesterOrigin = null,
-                onWaitingForUserInput = onWaitingForUserInput,
-                onDocumentsInFocus = onDocumentsInFocus
-            )
-            val keyUnlockDataProvider = mdocPresentmentAuthenticateUser(selection)
-            val responseObject = withContext(keyUnlockDataProvider) {
-                mdocPresentmentGenerateResponse(
-                    selection = selection,
-                    deviceRequest = deviceRequest,
-                    eReaderKey = eReaderKey.publicKey,
-                    sessionTranscript = sessionTranscript,
-                    source = source,
-                    requesterAppId = null,
-                    requesterOrigin = null,
-                )
-            }
-            onSendingResponse()
-            transport.sendMessage(
-                sessionEncryption.encryptMessage(
-                    messagePlaintext = Cbor.encode(responseObject.deviceResponse.toDataItem()),
-                    statusCode = null
-                )
-            )
-            numRequestsServed += 1
-
-            source.eventLogger?.addEventAsync(
-                EventPresentmentIso18013Proximity(
-                    presentmentData = responseObject.eventData,
-                    request = deviceRequest.toDataItem(),
-                    response = responseObject.deviceResponse.toDataItem(),
-                    sessionTranscript = sessionTranscript,
-                )
-            )
-
-            Logger.i(TAG, "Response sent, keeping connection open")
-        }
-    } finally {
-        if (sendSessionTermination) {
-            Logger.i(TAG, "Sending session-termination")
-            try {
-                transport.sendMessage(
-                    SessionEncryption.encodeStatus(
-                        statusCode = Constants.SESSION_DATA_STATUS_SESSION_TERMINATION,
-                        sequenceNumber = if (insertSequenceNumbers) {
-                            sessionEncryption?.nextSequenceNumber
-                        } else {
-                            null
-                        }
-                    )
-                )
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                Logger.w(TAG, "Caught error while sending session-termination", e)
-            }
-        }
-        Logger.i(TAG, "Closing transport")
-        transport.close()
-    }
-}
+) = Iso18013Presentment(
+    transport = transport,
+    engagementParams = MutableStateFlow(
+        EngagementParams(
+            eDeviceKey = eDeviceKey,
+            deviceEngagement = deviceEngagement,
+            handover = handover
+        )
+    ),
+    source = source,
+    keyAgreementPossible = keyAgreementPossible,
+    insertSequenceNumbers = insertSequenceNumbers,
+    timeout = timeout,
+    timeoutSubsequentRequests = timeoutSubsequentRequests,
+    onWaitingForRequest = onWaitingForRequest,
+    onWaitingForUserInput = onWaitingForUserInput,
+    onDocumentsInFocus = onDocumentsInFocus,
+    onSendingResponse = onSendingResponse,
+)

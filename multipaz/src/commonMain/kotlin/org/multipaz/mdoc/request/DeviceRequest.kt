@@ -180,6 +180,37 @@ data class DeviceRequest private constructor(
     }
 
     /**
+     * Compares two [DeviceRequest] instances and checks if they are similar in structure,
+     * including signing structure (protected headers and unprotected header keys), ignoring
+     * session-transcript-dependent signatures and ephemeral differences (such as certificate
+     * chains when the reader uses single-use keys).
+     *
+     * This is used to check if two requests from different sessions (either 18013-5 proximity
+     * or 18013-7 Annex A or C) are the same.
+     *
+     * @param otherDeviceRequest the other [DeviceRequest] to compare against.
+     * @return `true` if the requests are structurally equivalent, `false` otherwise.
+     */
+    fun isStructurallyEquivalent(otherDeviceRequest: DeviceRequest): Boolean {
+        if (version != otherDeviceRequest.version) return false
+        if (deviceRequestInfo != otherDeviceRequest.deviceRequestInfo) return false
+        if (docRequests.size != otherDeviceRequest.docRequests.size) return false
+        for (i in docRequests.indices) {
+            if (!docRequests[i].isStructurallyEquivalent(otherDeviceRequest.docRequests[i])) {
+                return false
+            }
+        }
+        if (readerAuthAll_.size != otherDeviceRequest.readerAuthAll_.size) return false
+        for (i in readerAuthAll_.indices) {
+            val auth1 = readerAuthAll_[i]
+            val auth2 = otherDeviceRequest.readerAuthAll_[i]
+            if (auth1.protectedHeaders != auth2.protectedHeaders) return false
+            if (auth1.unprotectedHeaders.keys != auth2.unprotectedHeaders.keys) return false
+        }
+        return true
+    }
+
+    /**
      * Generates CBOR compliant with the CDDL for `DeviceRequest` according to ISO 18013-5.
      *
      * @return a [DataItem].

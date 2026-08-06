@@ -4,6 +4,7 @@ import android.content.Context
 import org.multipaz.compose.mdoc.MdocNfcV2Service
 import org.multipaz.compose.prompt.PresentmentActivity
 import org.multipaz.mdoc.transport.MdocTransportOptions
+import org.multipaz.presentment.PresentmentModel
 import org.multipaz.util.Logger
 import kotlin.time.Clock
 
@@ -25,11 +26,13 @@ class TestAppMdocNfcV2Service(
         TestAppConfiguration.cryptoInit(app.settingsModel)
 
         val source = app.getPresentmentSource()
-        PresentmentActivity.presentmentModel.reset(
-            source = source,
-            // TODO: if user is currently selecting a document, pass it here
-            preselectedDocuments = emptyList()
-        )
+        if (PresentmentActivity.presentmentModel.state.value is PresentmentModel.State.Reset) {
+            PresentmentActivity.presentmentModel.reset(
+                source = source,
+                // TODO: if user is currently selecting a document, pass it here
+                preselectedDocuments = emptyList()
+            )
+        }
 
         return Settings(
             source = app.getPresentmentSource(),
