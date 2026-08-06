@@ -56,6 +56,8 @@ fun pathToTab(path: String): String {
         "/ndef" -> "ndef-parse"
         "/event" -> "event-decode"
         "/events" -> "event-decode"
+        "/mpzpass" -> "mpzpass-decode"
+        "/mpzpass-decode" -> "mpzpass-decode"
         else -> "cbor-decode"
     }
 }
@@ -79,6 +81,7 @@ fun tabToPath(tab: String): String {
         "cert-generator" -> "/cert"
         "ndef-parse" -> "/ndef"
         "event-decode" -> "/event"
+        "mpzpass-decode" -> "/mpzpass"
         else -> "/cbor"
     }
 }
@@ -242,7 +245,8 @@ val App = FC {
                 Category("utilities", "Utilities", listOf(
                     "compress" to "Compression Tool",
                     "converter" to "Format Converter",
-                    "event-decode" to "Multipaz Event Decoder"
+                    "event-decode" to "Multipaz Event Decoder",
+                    "mpzpass-decode" to "MpzPass Decoder"
                 ))
             )
 
@@ -374,6 +378,7 @@ val App = FC {
                 "cert-generator" -> CertGeneratorComponent { key = "cert-generator" }
                 "ndef-parse" -> NdefParserComponent { key = "ndef-parse" }
                 "event-decode" -> EventDecoderComponent { key = "event-decode" }
+                "mpzpass-decode" -> MpzPassDecoderComponent { key = "mpzpass-decode" }
             }
         }
 

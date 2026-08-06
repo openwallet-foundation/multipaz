@@ -345,380 +345,401 @@ val SdJwtInspectorComponent = FC {
                 css {
                     marginTop = 32.px
                 }
+                renderSdJwtDetails(sdjwt, parsedSdJwtKb, processedPayload)
+            }
+        }
+    }
+}
 
-                div {
-                    css { display = Display.flex; justifyContent = JustifyContent.spaceBetween; alignItems = AlignItems.center; marginBottom = 16.px }
+fun react.ChildrenBuilder.renderSdJwtDetails(
+    sdjwt: SdJwt,
+    parsedSdJwtKb: SdJwtKb? = null,
+    processedPayload: JsonObject? = null
+) {
+    div {
+        css { display = Display.flex; justifyContent = JustifyContent.spaceBetween; alignItems = AlignItems.center; marginBottom = 16.px }
 
-                    h3 {
-                        css {
-                            fontSize = 1.4.rem
-                            fontWeight = FontWeight.bold
-                            margin = 0.px
-                            color = Color("#f1f5f9")
-                        }
-                        +"Decoded Issuer-Signed JWT"
-                    }
+        h3 {
+            css {
+                fontSize = 1.4.rem
+                fontWeight = FontWeight.bold
+                margin = 0.px
+                color = Color("#f1f5f9")
+            }
+            +"Decoded Issuer-Signed JWT"
+        }
 
-                    if (parsedSdJwtKb != null) {
-                        span {
-                            css {
-                                background = Color("#7c3aed")
-                                color = Color("#ffffff")
-                                fontWeight = FontWeight.bold
-                                padding = Padding(6.px, 12.px)
-                                borderRadius = 6.px
-                                fontSize = 13.px
-                            }
-                            +"SD-JWT+KB (Key Binding Detected)"
-                        }
-                    } else {
-                        span {
-                            css {
-                                background = Color("#2563eb")
-                                color = Color("#ffffff")
-                                fontWeight = FontWeight.bold
-                                padding = Padding(6.px, 12.px)
-                                borderRadius = 6.px
-                                fontSize = 13.px
-                            }
-                            +"SD-JWT (Issuer Signed)"
-                        }
-                    }
+        div {
+            css { display = Display.flex; gap = 8.px; alignItems = AlignItems.center }
+
+            button {
+                css {
+                    padding = Padding(6.px, 12.px)
+                    fontSize = 13.px
+                    fontWeight = FontWeight.bold
+                    backgroundColor = Color("#3b82f6")
+                    color = Color("#ffffff")
+                    border = None.none
+                    borderRadius = 6.px
+                    cursor = Cursor.pointer
+                    hover { backgroundColor = Color("#2563eb") }
                 }
+                onClick = {
+                    kotlinx.browser.window.navigator.clipboard.writeText(sdjwt.compactSerialization)
+                }
+                +"📋 Copy Compact Serialization"
+            }
 
-                div {
+            if (parsedSdJwtKb != null) {
+                span {
                     css {
-                        display = Display.flex
-                        flexDirection = FlexDirection.column
-                        gap = 24.px
-                        marginBottom = 32.px
+                        background = Color("#7c3aed")
+                        color = Color("#ffffff")
+                        fontWeight = FontWeight.bold
+                        padding = Padding(6.px, 12.px)
+                        borderRadius = 6.px
+                        fontSize = 13.px
                     }
-
-                    // Header Card
-                    div {
-                        css {
-                            background = Color("#0f172a")
-                            border = Border(1.px, LineStyle.solid, Color("#334155"))
-                            borderRadius = 8.px
-                            padding = 20.px
-                        }
-                        h4 {
-                            css {
-                                color = Color("#cbd5e1")
-                                fontWeight = FontWeight.bold
-                                marginBottom = 12.px
-                            }
-                            +"JWT Header"
-                        }
-                        pre {
-                            css {
-                                color = Color("#60a5fa")
-                                fontSize = 13.px
-                                fontFamily = FontFamily.monospace
-                                overflowX = "auto".unsafeCast<Overflow>()
-                            }
-                            +Json { prettyPrint = true }.encodeToString(sdjwt.jwtHeader)
-                        }
-                    }
-
-                    // Body Card
-                    div {
-                        css {
-                            background = Color("#0f172a")
-                            border = Border(1.px, LineStyle.solid, Color("#334155"))
-                            borderRadius = 8.px
-                            padding = 20.px
-                        }
-                        h4 {
-                            css {
-                                color = Color("#cbd5e1")
-                                fontWeight = FontWeight.bold
-                                marginBottom = 12.px
-                            }
-                            +"Raw JWT Payload / Claims"
-                        }
-                        pre {
-                            css {
-                                color = Color("#a78bfa")
-                                fontSize = 13.px
-                                fontFamily = FontFamily.monospace
-                                overflowX = "auto".unsafeCast<Overflow>()
-                            }
-                            +Json { prettyPrint = true }.encodeToString(sdjwt.jwtBody)
-                        }
-                    }
-
-                    // Processed Payload Card (calculated via SdJwt.verify())
-                    processedPayload?.let { payload ->
-                        div {
-                            css {
-                                background = Color("#0f172a")
-                                border = Border(1.px, LineStyle.solid, Color("#059669"))
-                                borderRadius = 8.px
-                                padding = 20.px
-                            }
-                            h4 {
-                                css {
-                                    color = Color("#34d399")
-                                    fontWeight = FontWeight.bold
-                                    marginBottom = 12.px
-                                }
-                                +"Processed SD-JWT Payload"
-                            }
-                            pre {
-                                css {
-                                    color = Color("#34d399")
-                                    fontSize = 13.px
-                                    fontFamily = FontFamily.monospace
-                                    overflowX = "auto".unsafeCast<Overflow>()
-                                }
-                                +Json { prettyPrint = true }.encodeToString(payload)
-                            }
-                        }
-                    }
+                    +"SD-JWT+KB (Key Binding Detected)"
                 }
-
-                // Metadata Details
-                div {
+            } else {
+                span {
                     css {
-                        background = Color("#0f172a")
-                        border = Border(1.px, LineStyle.solid, Color("#334155"))
-                        borderRadius = 8.px
-                        padding = 20.px
-                        marginBottom = 32.px
-                        fontSize = 14.px
-                        display = Display.flex
-                        flexDirection = FlexDirection.column
-                        gap = 8.px
+                        background = Color("#2563eb")
+                        color = Color("#ffffff")
+                        fontWeight = FontWeight.bold
+                        padding = Padding(6.px, 12.px)
+                        borderRadius = 6.px
+                        fontSize = 13.px
                     }
-                    sdjwt.issuer?.let { iss ->
-                        div {
-                            span { css { color = Color("#64748b"); fontWeight = FontWeight.bold } }
-                            +"Issuer (iss / issuer): "
-                            span { css { color = Color("#f1f5f9") } }
-                            +iss
-                        }
+                    +"SD-JWT (Issuer Signed)"
+                }
+            }
+        }
+    }
+
+    div {
+        css {
+            display = Display.flex
+            flexDirection = FlexDirection.column
+            gap = 24.px
+            marginBottom = 32.px
+        }
+
+        // Header Card
+        div {
+            css {
+                background = Color("#0f172a")
+                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                borderRadius = 8.px
+                padding = 20.px
+            }
+            h4 {
+                css {
+                    color = Color("#cbd5e1")
+                    fontWeight = FontWeight.bold
+                    marginBottom = 12.px
+                }
+                +"JWT Header"
+            }
+            pre {
+                css {
+                    color = Color("#60a5fa")
+                    fontSize = 13.px
+                    fontFamily = FontFamily.monospace
+                    overflowX = "auto".unsafeCast<Overflow>()
+                }
+                +Json { prettyPrint = true }.encodeToString(sdjwt.jwtHeader)
+            }
+        }
+
+        // Body Card
+        div {
+            css {
+                background = Color("#0f172a")
+                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                borderRadius = 8.px
+                padding = 20.px
+            }
+            h4 {
+                css {
+                    color = Color("#cbd5e1")
+                    fontWeight = FontWeight.bold
+                    marginBottom = 12.px
+                }
+                +"Raw JWT Payload / Claims"
+            }
+            pre {
+                css {
+                    color = Color("#a78bfa")
+                    fontSize = 13.px
+                    fontFamily = FontFamily.monospace
+                    overflowX = "auto".unsafeCast<Overflow>()
+                }
+                +Json { prettyPrint = true }.encodeToString(sdjwt.jwtBody)
+            }
+        }
+
+        // Processed Payload Card (calculated via SdJwt.verify())
+        processedPayload?.let { payload ->
+            div {
+                css {
+                    background = Color("#0f172a")
+                    border = Border(1.px, LineStyle.solid, Color("#059669"))
+                    borderRadius = 8.px
+                    padding = 20.px
+                }
+                h4 {
+                    css {
+                        color = Color("#34d399")
+                        fontWeight = FontWeight.bold
+                        marginBottom = 12.px
                     }
-                    sdjwt.credentialType?.let { vct ->
-                        div {
-                            +"Credential Type (vct): "
-                            span { css { color = Color("#38bdf8") } }
-                            +vct
-                        }
+                    +"Processed SD-JWT Payload"
+                }
+                pre {
+                    css {
+                        color = Color("#34d399")
+                        fontSize = 13.px
+                        fontFamily = FontFamily.monospace
+                        overflowX = "auto".unsafeCast<Overflow>()
                     }
-                    sdjwt.subject?.let { sub ->
-                        div {
-                            +"Subject (sub): "
-                            span { css { color = Color("#cbd5e1") } }
-                            +sub
-                        }
-                    }
-                    sdjwt.issuedAt?.let { iat ->
-                        div {
-                            +"Issued At (iat): "
-                            span { css { color = Color("#cbd5e1") } }
-                            +iat.toString()
-                        }
-                    }
-                    sdjwt.validUntil?.let { exp ->
-                        div {
-                            +"Expiration (exp): "
-                            span { css { color = Color("#cbd5e1") } }
-                            +exp.toString()
-                        }
-                    }
+                    +Json { prettyPrint = true }.encodeToString(payload)
+                }
+            }
+        }
+    }
+
+    // Metadata Details
+    div {
+        css {
+            background = Color("#0f172a")
+            border = Border(1.px, LineStyle.solid, Color("#334155"))
+            borderRadius = 8.px
+            padding = 20.px
+            marginBottom = 32.px
+            fontSize = 14.px
+            display = Display.flex
+            flexDirection = FlexDirection.column
+            gap = 8.px
+        }
+        sdjwt.issuer?.let { iss ->
+            div {
+                span { css { color = Color("#64748b"); fontWeight = FontWeight.bold }; +"Issuer (iss / issuer): " }
+                span { css { color = Color("#f1f5f9") }; +iss }
+            }
+        }
+        sdjwt.credentialType?.let { vct ->
+            div {
+                span { css { color = Color("#64748b"); fontWeight = FontWeight.bold }; +"Credential Type (vct): " }
+                span { css { color = Color("#38bdf8") }; +vct }
+            }
+        }
+        sdjwt.subject?.let { sub ->
+            div {
+                span { css { color = Color("#64748b"); fontWeight = FontWeight.bold }; +"Subject (sub): " }
+                span { css { color = Color("#cbd5e1") }; +sub }
+            }
+        }
+        sdjwt.issuedAt?.let { iat ->
+            div {
+                span { css { color = Color("#64748b"); fontWeight = FontWeight.bold }; +"Issued At (iat): " }
+                span { css { color = Color("#cbd5e1") }; +iat.toString() }
+            }
+        }
+        sdjwt.validUntil?.let { exp ->
+            div {
+                span { css { color = Color("#64748b"); fontWeight = FontWeight.bold }; +"Expiration (exp): " }
+                span { css { color = Color("#cbd5e1") }; +exp.toString() }
+            }
+        }
+        div {
+            span { css { color = Color("#64748b"); fontWeight = FontWeight.bold }; +"Digest Algorithm (_sd_alg): " }
+            span { css { color = Color("#34d399") }; +sdjwt.digestAlg.hashAlgorithmName }
+        }
+        div {
+            span { css { color = Color("#64748b"); fontWeight = FontWeight.bold }; +"Disclosures Count: " }
+            span { css { color = Color("#a78bfa") }; +"${sdjwt.disclosures.size}" }
+        }
+    }
+
+    // KB-JWT (Key Binding JWT) Section if SD-JWT+KB
+    parsedSdJwtKb?.let { kb ->
+        div {
+            css {
+                background = Color("#0f172a")
+                border = Border(1.px, LineStyle.solid, Color("#7c3aed"))
+                borderRadius = 12.px
+                padding = 24.px
+                marginBottom = 32.px
+            }
+
+            h3 {
+                css { fontSize = 1.3.rem; color = Color("#a78bfa"); marginTop = 0.px; marginBottom = 12.px }
+                +"🔐 Key Binding JWT (KB-JWT Payload)"
+            }
+
+            p {
+                css { color = Color("#94a3b8"); fontSize = 13.px; marginBottom = 16.px }
+                +"Claims signed by the device-bound key to bind the credential to the verifier session:"
+            }
+
+            pre {
+                css {
+                    background = Color("#1e293b")
+                    border = Border(1.px, LineStyle.solid, Color("#475569"))
+                    borderRadius = 8.px
+                    color = Color("#38bdf8")
+                    fontSize = 13.px
+                    fontFamily = FontFamily.monospace
+                    padding = 14.px
+                    overflowX = "auto".unsafeCast<Overflow>()
+                    marginBottom = 16.px
+                }
+                +Json { prettyPrint = true }.encodeToString(kb.jwtBody)
+            }
+
+            div {
+                css { display = Display.flex; flexDirection = FlexDirection.column; gap = 8.px; fontSize = 13.px }
+
+                kb.jwtBody["nonce"]?.jsonPrimitive?.content?.let { nonceVal ->
                     div {
-                        +"Digest Algorithm (_sd_alg): "
-                        span { css { color = Color("#34d399") } }
-                        +sdjwt.digestAlg.hashAlgorithmName
-                    }
-                    div {
-                        +"Disclosures Count: "
-                        span { css { color = Color("#a78bfa") } }
-                        +sdjwt.disclosures.size.toString()
+                        span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Nonce: " }
+                        span { css { color = Color("#4ade80"); fontFamily = FontFamily.monospace }; +nonceVal }
                     }
                 }
 
-                // KB-JWT (Key Binding JWT) Section if SD-JWT+KB
-                parsedSdJwtKb?.let { kb ->
+                kb.jwtBody["aud"]?.jsonPrimitive?.content?.let { audVal ->
                     div {
-                        css {
-                            background = Color("#0f172a")
-                            border = Border(1.px, LineStyle.solid, Color("#7c3aed"))
-                            borderRadius = 12.px
-                            padding = 24.px
-                            marginBottom = 32.px
-                        }
-
-                        h3 {
-                            css { fontSize = 1.3.rem; color = Color("#a78bfa"); marginTop = 0.px; marginBottom = 12.px }
-                            +"🔐 Key Binding JWT (KB-JWT Payload)"
-                        }
-
-                        p {
-                            css { color = Color("#94a3b8"); fontSize = 13.px; marginBottom = 16.px }
-                            +"Claims signed by the device-bound key to bind the credential to the verifier session:"
-                        }
-
-                        pre {
-                            css {
-                                background = Color("#1e293b")
-                                border = Border(1.px, LineStyle.solid, Color("#475569"))
-                                borderRadius = 8.px
-                                color = Color("#38bdf8")
-                                fontSize = 13.px
-                                fontFamily = FontFamily.monospace
-                                padding = 14.px
-                                overflowX = "auto".unsafeCast<Overflow>()
-                                marginBottom = 16.px
-                            }
-                            +Json { prettyPrint = true }.encodeToString(kb.jwtBody)
-                        }
-
-                        div {
-                            css { display = Display.flex; flexDirection = FlexDirection.column; gap = 8.px; fontSize = 13.px }
-
-                            kb.jwtBody["nonce"]?.jsonPrimitive?.content?.let { nonceVal ->
-                                div {
-                                    span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Nonce: " }
-                                    span { css { color = Color("#4ade80"); fontFamily = FontFamily.monospace }; +nonceVal }
-                                }
-                            }
-
-                            kb.jwtBody["aud"]?.jsonPrimitive?.content?.let { audVal ->
-                                div {
-                                    span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Audience (aud): " }
-                                    span { css { color = Color("#f1f5f9") }; +audVal }
-                                }
-                            }
-
-                            kb.jwtBody["iat"]?.jsonPrimitive?.content?.let { iatVal ->
-                                div {
-                                    span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Issued At (iat): " }
-                                    span { css { color = Color("#cbd5e1") }; +iatVal }
-                                }
-                            }
-
-                            kb.jwtBody["sd_hash"]?.jsonPrimitive?.content?.let { sdHashVal ->
-                                div {
-                                    span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"SD Hash (sd_hash): " }
-                                    span { css { color = Color("#38bdf8"); fontFamily = FontFamily.monospace }; +sdHashVal }
-                                }
-                            }
-                        }
+                        span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Audience (aud): " }
+                        span { css { color = Color("#f1f5f9") }; +audVal }
                     }
                 }
 
-                // Disclosures Table
-                if (sdjwt.disclosures.isNotEmpty()) {
-                    h3 {
-                        css {
-                            fontSize = 1.4.rem
-                            fontWeight = FontWeight.bold
-                            marginBottom = 16.px
-                            color = Color("#f1f5f9")
+                kb.jwtBody["iat"]?.jsonPrimitive?.content?.let { iatVal ->
+                    div {
+                        span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Issued At (iat): " }
+                        span { css { color = Color("#cbd5e1") }; +iatVal }
+                    }
+                }
+
+                kb.jwtBody["sd_hash"]?.jsonPrimitive?.content?.let { sdHashVal ->
+                    div {
+                        span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"SD Hash (sd_hash): " }
+                        span { css { color = Color("#38bdf8"); fontFamily = FontFamily.monospace }; +sdHashVal }
+                    }
+                }
+            }
+        }
+    }
+
+    // Disclosures Table
+    if (sdjwt.disclosures.isNotEmpty()) {
+        h3 {
+            css {
+                fontSize = 1.4.rem
+                fontWeight = FontWeight.bold
+                marginBottom = 16.px
+                color = Color("#f1f5f9")
+            }
+            +"Disclosures"
+        }
+
+        table {
+            css {
+                width = 100.pct
+                borderCollapse = BorderCollapse.collapse
+                background = Color("#0f172a")
+                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                borderRadius = 8.px
+                fontSize = 14.px
+                marginBottom = 24.px
+            }
+            thead {
+                tr {
+                    th { css { textAlign = TextAlign.left; padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Index" }
+                    th { css { textAlign = TextAlign.left; padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Salt" }
+                    th { css { textAlign = TextAlign.left; padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Claim Name" }
+                    th { css { textAlign = TextAlign.left; padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Claim Value" }
+                }
+            }
+            tbody {
+                sdjwt.disclosures.forEachIndexed { index, discStr ->
+                    val decoded = try {
+                        val jsonArr = Json.decodeFromString<JsonArray>(discStr.fromBase64Url().decodeToString())
+                        if (jsonArr.size == 3) {
+                            // Standard claim: [salt, name, value]
+                            Triple(jsonArr[0].jsonPrimitive.content, jsonArr[1].jsonPrimitive.content, jsonArr[2].toString())
+                        } else if (jsonArr.size == 2) {
+                            // Array element: [salt, value]
+                            Triple(jsonArr[0].jsonPrimitive.content, "(Array Element)", jsonArr[1].toString())
+                        } else {
+                            Triple("Unknown", "Unknown", jsonArr.toString())
                         }
-                        +"Disclosures"
+                    } catch (e: Exception) {
+                        Triple("Error", "Error", "Failed to decode: " + e.message)
                     }
 
-                    table {
-                        css {
-                            width = 100.pct
-                            borderCollapse = BorderCollapse.collapse
-                            background = Color("#0f172a")
-                            border = Border(1.px, LineStyle.solid, Color("#334155"))
-                            borderRadius = 8.px
-                            fontSize = 14.px
-                            marginBottom = 24.px
-                        }
-                        thead {
-                            tr {
-                                th { css { textAlign = TextAlign.left; padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Index" }
-                                th { css { textAlign = TextAlign.left; padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Salt" }
-                                th { css { textAlign = TextAlign.left; padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Claim Name" }
-                                th { css { textAlign = TextAlign.left; padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#334155")); color = Color("#94a3b8") }; +"Claim Value" }
-                            }
-                        }
-                        tbody {
-                            sdjwt.disclosures.forEachIndexed { index, discStr ->
-                                val decoded = try {
-                                    val jsonArr = Json.decodeFromString<JsonArray>(discStr.fromBase64Url().decodeToString())
-                                    if (jsonArr.size == 3) {
-                                        // Standard claim: [salt, name, value]
-                                        Triple(jsonArr[0].jsonPrimitive.content, jsonArr[1].jsonPrimitive.content, jsonArr[2].toString())
-                                    } else if (jsonArr.size == 2) {
-                                        // Array element: [salt, value]
-                                        Triple(jsonArr[0].jsonPrimitive.content, "(Array Element)", jsonArr[1].toString())
-                                    } else {
-                                        Triple("Unknown", "Unknown", jsonArr.toString())
-                                    }
-                                } catch (e: Exception) {
-                                    Triple("Error", "Error", "Failed to decode: " + e.message)
-                                }
+                    tr {
+                        td { css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); color = Color("#64748b") }; +(index + 1).toString() }
+                        td { css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontFamily = FontFamily.monospace; fontSize = 12.px; color = Color("#cbd5e1") }; +decoded.first }
+                        td { css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontWeight = FontWeight.bold; color = Color("#38bdf8") }; +decoded.second }
+                        td {
+                            css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontFamily = FontFamily.monospace; color = Color("#34d399") }
+                            
+                            val claimName = decoded.second
+                            val claimValRaw = decoded.third
+                            val claimValueStr = claimValRaw.removeSurrounding("\"")
 
-                                tr {
-                                    td { css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); color = Color("#64748b") }; +(index + 1).toString() }
-                                    td { css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontFamily = FontFamily.monospace; fontSize = 12.px; color = Color("#cbd5e1") }; +decoded.first }
-                                    td { css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontWeight = FontWeight.bold; color = Color("#38bdf8") }; +decoded.second }
-                                    td {
-                                        css { padding = 12.px; borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b")); fontFamily = FontFamily.monospace; color = Color("#34d399") }
-                                        
-                                        val claimName = decoded.second
-                                        val claimValRaw = decoded.third
-                                        val claimValueStr = claimValRaw.removeSurrounding("\"")
-
-                                        val imgUri = if (claimName.equals("picture", ignoreCase = true) && claimValueStr.length > 500) {
-                                            if (claimValueStr.startsWith("data:image/")) {
-                                                claimValueStr
-                                            } else {
-                                                try {
-                                                    val bytes = try {
-                                                        claimValueStr.fromBase64()
-                                                    } catch (e1: Throwable) {
-                                                        try {
-                                                            claimValueStr.fromBase64Url()
-                                                        } catch (e2: Throwable) {
-                                                            null
-                                                        }
-                                                    }
-
-                                                    if (bytes != null && bytes.size >= 3 && (bytes[0].toInt() and 0xFF) == 0xFF && (bytes[1].toInt() and 0xFF) == 0xD8 && (bytes[2].toInt() and 0xFF) == 0xFF) {
-                                                        "data:image/jpeg;base64,${bytes.toBase64()}"
-                                                    } else if (bytes != null && bytes.size >= 4 && (bytes[0].toInt() and 0xFF) == 0x89 && (bytes[1].toInt() and 0xFF) == 0x50 && (bytes[2].toInt() and 0xFF) == 0x4E && (bytes[3].toInt() and 0xFF) == 0x47) {
-                                                        "data:image/png;base64,${bytes.toBase64()}"
-                                                    } else {
-                                                        null
-                                                    }
-                                                } catch (e: Throwable) {
-                                                    null
-                                                }
+                            val imgUri = if (claimName.equals("picture", ignoreCase = true) && claimValueStr.length > 500) {
+                                if (claimValueStr.startsWith("data:image/")) {
+                                    claimValueStr
+                                } else {
+                                    try {
+                                        val bytes = try {
+                                            claimValueStr.fromBase64()
+                                        } catch (e1: Throwable) {
+                                            try {
+                                                claimValueStr.fromBase64Url()
+                                            } catch (e2: Throwable) {
+                                                null
                                             }
+                                        }
+
+                                        if (bytes != null && bytes.size >= 3 && (bytes[0].toInt() and 0xFF) == 0xFF && (bytes[1].toInt() and 0xFF) == 0xD8 && (bytes[2].toInt() and 0xFF) == 0xFF) {
+                                            "data:image/jpeg;base64,${bytes.toBase64()}"
+                                        } else if (bytes != null && bytes.size >= 4 && (bytes[0].toInt() and 0xFF) == 0x89 && (bytes[1].toInt() and 0xFF) == 0x50 && (bytes[2].toInt() and 0xFF) == 0x4E && (bytes[3].toInt() and 0xFF) == 0x47) {
+                                            "data:image/png;base64,${bytes.toBase64()}"
                                         } else {
                                             null
                                         }
-
-                                        if (imgUri != null) {
-                                            img {
-                                                src = imgUri
-                                                css {
-                                                    maxWidth = 180.px
-                                                    maxHeight = 220.px
-                                                    borderRadius = 8.px
-                                                    border = Border(1.px, LineStyle.solid, Color("#334155"))
-                                                    boxShadow = BoxShadow(0.px, 2.px, 6.px, Color("rgba(0,0,0,0.3)"))
-                                                    display = Display.block
-                                                    marginBottom = 8.px
-                                                }
-                                            }
-                                            div {
-                                                css { fontSize = 11.px; color = Color("#64748b"); fontFamily = FontFamily.monospace }
-                                                +"${claimValueStr.take(64)}..."
-                                            }
-                                        } else {
-                                            +decoded.third
-                                        }
+                                    } catch (e: Throwable) {
+                                        null
                                     }
                                 }
+                            } else {
+                                null
+                            }
+
+                            if (imgUri != null) {
+                                img {
+                                    src = imgUri
+                                    css {
+                                        maxWidth = 180.px
+                                        maxHeight = 220.px
+                                        borderRadius = 8.px
+                                        border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                        boxShadow = BoxShadow(0.px, 2.px, 6.px, Color("rgba(0,0,0,0.3)"))
+                                        display = Display.block
+                                        marginBottom = 8.px
+                                    }
+                                }
+                                div {
+                                    css { fontSize = 11.px; color = Color("#64748b"); fontFamily = FontFamily.monospace }
+                                    +"${claimValueStr.take(64)}..."
+                                }
+                            } else {
+                                +decoded.third
                             }
                         }
                     }
