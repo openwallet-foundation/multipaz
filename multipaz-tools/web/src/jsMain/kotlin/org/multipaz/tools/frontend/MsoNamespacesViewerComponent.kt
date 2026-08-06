@@ -468,7 +468,7 @@ val MsoNamespacesViewerComponent = FC {
     }
 }
 
-private fun react.ChildrenBuilder.renderMsoDetails(mso: MobileSecurityObject) {
+fun react.ChildrenBuilder.renderMsoDetails(mso: MobileSecurityObject) {
     div {
         css {
             background = Color("#0f172a")
@@ -647,13 +647,49 @@ private fun react.ChildrenBuilder.renderMsoDetails(mso: MobileSecurityObject) {
     }
 }
 
-private fun react.ChildrenBuilder.renderNamespacesDetails(namespaces: IssuerNamespaces) {
+fun react.ChildrenBuilder.renderNamespacesDetails(namespaces: IssuerNamespaces) {
     if (namespaces.data.isEmpty()) {
         p {
             css { color = Color("#64748b"); fontSize = 14.px }
             +"No namespaces present."
         }
     } else {
+        div {
+            css {
+                display = Display.flex
+                justifyContent = JustifyContent.spaceBetween
+                alignItems = AlignItems.center
+                marginBottom = 16.px
+            }
+            div {
+                css { fontSize = 13.px; color = Color("#94a3b8") }
+                +"${namespaces.data.size} namespace(s)"
+            }
+            button {
+                css {
+                    padding = Padding(6.px, 12.px)
+                    fontSize = 13.px
+                    fontWeight = FontWeight.bold
+                    backgroundColor = Color("#3b82f6")
+                    color = Color("#ffffff")
+                    border = None.none
+                    borderRadius = 6.px
+                    cursor = Cursor.pointer
+                    hover { backgroundColor = Color("#2563eb") }
+                }
+                onClick = {
+                    val hex = try {
+                        Cbor.encode(namespaces.toDataItem()).toHex()
+                    } catch (e: Throwable) {
+                        ""
+                    }
+                    if (hex.isNotEmpty()) {
+                        kotlinx.browser.window.navigator.clipboard.writeText(hex)
+                    }
+                }
+                +"📋 Copy IssuerNameSpaces Hex"
+            }
+        }
         namespaces.data.forEach { (nsName, nsItems) ->
             div {
                 css {
@@ -743,7 +779,7 @@ private fun react.ChildrenBuilder.renderNamespacesDetails(namespaces: IssuerName
     }
 }
 
-private fun react.ChildrenBuilder.renderIssuerSignedDetails(
+fun react.ChildrenBuilder.renderIssuerSignedDetails(
     result: ParsedResult.IssuerSignedData,
     copiedCertIndex: Int?,
     onCopyCert: (Int, String) -> Unit
