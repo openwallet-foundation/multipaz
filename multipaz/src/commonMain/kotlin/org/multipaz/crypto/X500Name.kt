@@ -93,8 +93,8 @@ class X500Name(val components: Map<String, ASN1String>) {
                 if (pos < 0) {
                     throw IllegalArgumentException("No equal sign found in component")
                 }
-                val key = part.substring(0, pos)
-                val value = part.substring(pos + 1)
+                val key = part.substring(0, pos).trim()
+                val value = part.substring(pos + 1).trim()
                 val oidForKey = knownNames[key]
                 if (oidForKey == null) {
                     throw IllegalArgumentException("Unknown OID for $key")
