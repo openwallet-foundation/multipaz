@@ -109,6 +109,8 @@ import org.multipaz.provisioning.ProvisioningModel
 import org.multipaz.request.Requester
 import org.multipaz.request.RequesterIdentity
 import org.multipaz.request.TrustedRequesterIdentity
+import org.multipaz.revocation.CachingRevocationChecker
+import org.multipaz.revocation.RevocationChecker
 import org.multipaz.secure_area_test_app.ui.CloudSecureAreaScreen
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.cloud.CloudSecureArea
@@ -199,6 +201,8 @@ class App private constructor (val promptModel: PromptModel) {
     lateinit var softwareSecureArea: SoftwareSecureArea
     lateinit var documentStore: DocumentStore
     lateinit var documentModel: DocumentModel
+
+    lateinit var revocationChecker: RevocationChecker
 
     lateinit var iacaKey: AsymmetricKey.X509Certified
 
@@ -320,6 +324,7 @@ class App private constructor (val promptModel: PromptModel) {
                 Pair(::documentTypeRepositoryInit, "documentTypeRepositoryInit"),
                 Pair(::documentStoreInit, "documentStoreInit"),
                 Pair(::documentModelInit, "documentModelInit"),
+                Pair(::revocationCheckerInit, "revocationCheckerInit"),
                 Pair(::keyStorageInit, "keyStorageInit"),
                 Pair(::iacaInit, "iacaInit"),
                 Pair(::readerRootInit, "readerRootInit"),
@@ -402,6 +407,13 @@ class App private constructor (val promptModel: PromptModel) {
             documentStore = documentStore,
             documentTypeRepository = documentTypeRepository,
             badgeFunction = ::getBadgesForDocument
+        )
+    }
+
+    private suspend fun revocationCheckerInit() {
+        revocationChecker = CachingRevocationChecker(
+            storage = TestAppConfiguration.storage,
+            httpClient = HttpClient(TestAppConfiguration.httpClientEngineFactory)
         )
     }
 
@@ -1284,6 +1296,8 @@ class App private constructor (val promptModel: PromptModel) {
                         val destination = backStackEntry.toRoute<CredentialViewerDestination>()
                         CredentialViewerScreen(
                             documentModel = documentModel,
+                            revocationChecker = revocationChecker,
+                            issuerTrustManager = issuerTrustManager,
                             documentId = destination.documentId,
                             credentialId = destination.credentialId,
                             showToast = ::showToast,

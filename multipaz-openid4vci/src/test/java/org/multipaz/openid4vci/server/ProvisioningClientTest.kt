@@ -33,25 +33,44 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.jupiter.api.assertThrows
 import org.multipaz.asn1.OID
+import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X509Cert
+import org.multipaz.document.DocumentStore
+import org.multipaz.document.buildDocumentStore
+import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.openid4vci.credential.CredentialFactoryDigitalPaymentCredential
 import org.multipaz.openid4vci.credential.CredentialFactoryDigitalPaymentCredentialSdJwt
 import org.multipaz.openid4vci.credential.CredentialFactoryMdl
 import org.multipaz.openid4vci.credential.CredentialFactoryRegistry
 import org.multipaz.openid4vci.credential.CredentialFactoryUtopiaNaturalization
+import org.multipaz.openid4vci.request.invalidateIdentifierList
+import org.multipaz.openid4vci.request.invalidateStatusList
+import org.multipaz.openid4vci.util.CredentialId
+import org.multipaz.openid4vci.util.CredentialState
 import org.multipaz.provisioning.AuthorizationChallenge
 import org.multipaz.provisioning.AuthorizationResponse
+import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.provisioning.KeyBindingInfo
 import org.multipaz.provisioning.Provisioning
 import org.multipaz.provisioning.CredentialKeyAttestation
+import org.multipaz.provisioning.CredentialMetadata
+import org.multipaz.provisioning.Display
+import org.multipaz.provisioning.DocumentProvisioningHandler
+import org.multipaz.provisioning.KeyBindingType
+import org.multipaz.provisioning.ProvisioningMetadata
 import org.multipaz.provisioning.openid4vci.OpenID4VCI
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
 import org.multipaz.provisioning.openid4vci.OpenID4VCIBackendUtil
 import org.multipaz.provisioning.openid4vci.OpenID4VCIClientPreferences
+import org.multipaz.revocation.CachingRevocationChecker
+import org.multipaz.revocation.RevocationCheckState
+import org.multipaz.revocation.RevocationStatus
+import org.multipaz.revocation.check
+import org.multipaz.revocation.getRevocationInfo
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.KeyAttestation
@@ -62,9 +81,17 @@ import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.server.common.ServerConfiguration
 import org.multipaz.server.common.ServerEnvironment
 import org.multipaz.server.common.installServerEnvironment
+import org.multipaz.server.enrollment.ServerIdentity
+import org.multipaz.server.enrollment.getServerIdentity
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.trustmanagement.ConfigurableTrustManager
+import org.multipaz.trustmanagement.TrustEntryX509Cert
+import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.toBase64Url
+import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
+import org.multipaz.utopia.knowntypes.DigitalPaymentCredentialSdJwt
+import org.multipaz.utopia.knowntypes.UtopiaNaturalization
 import kotlin.IllegalStateException
 import kotlin.reflect.KClass
 import kotlin.reflect.cast
@@ -84,6 +111,10 @@ class ProvisioningClientTest {
 
     lateinit var credentalFactoryRegistry: CredentialFactoryRegistry
 
+    lateinit var documentStore: DocumentStore
+
+    lateinit var documentProvisioningHandler: DocumentProvisioningHandler
+
     @Before
     fun setup() = runTest {
         storage = EphemeralStorage()
@@ -92,6 +123,8 @@ class ProvisioningClientTest {
         secureAreaProvider = SecureAreaProvider<SecureArea>(Dispatchers.Default) {
             secureArea
         }
+        documentStore = buildDocumentStore(storage, secureAreaRepository) {}
+        documentProvisioningHandler = DocumentProvisioningHandler(secureArea, documentStore)
         credentalFactoryRegistry = CredentialFactoryRegistry(
             listOf(
                 CredentialFactoryMdl(),
@@ -107,6 +140,7 @@ class ProvisioningClientTest {
     fun authorizationCodeWithScope() {
         runWithAuthorizationCode(
             offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
             serverArgs = arrayOf(
                 "-param", "base_url=http://localhost",
                 "-param", "database_engine=ephemeral",
@@ -116,9 +150,24 @@ class ProvisioningClientTest {
     }
 
     @Test
+    fun authorizationCodeWithScopeWithIdentifierListRevocation() {
+        runWithAuthorizationCode(
+            offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
+            serverArgs = arrayOf(
+                "-param", "base_url=http://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true"
+            ),
+            extraTests = ::runRevocationTests
+        )
+    }
+
+    @Test
     fun authorizationCodeWithScopeNoClientAttestationChallenge() {
         runWithAuthorizationCode(
             offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
             serverArgs = arrayOf(
                 "-param", "base_url=http://localhost",
                 "-param", "database_engine=ephemeral",
@@ -132,6 +181,7 @@ class ProvisioningClientTest {
     fun authorizationCodeWithScopeWithClientAssertion() {
         runWithAuthorizationCode(
             offer = OFFER_NATURALIZATION,
+            credentialFormat = CredentialFormat.SdJwt(UtopiaNaturalization.VCT),
             serverArgs = arrayOf(
                 "-param", "base_url=http://localhost",
                 "-param", "database_engine=ephemeral",
@@ -146,6 +196,7 @@ class ProvisioningClientTest {
     fun authorizationCodeWithAuthorizationDetails() {
         runWithAuthorizationCode(
             offer = OFFER_MDL,
+            credentialFormat = CredentialFormat.Mdoc(DrivingLicense.MDL_DOCTYPE),
             serverArgs = arrayOf(
                 "-param", "base_url=http://localhost",
                 "-param", "database_engine=ephemeral",
@@ -158,6 +209,7 @@ class ProvisioningClientTest {
     fun authorizationCodeWithPaymentCredential() {
         runWithAuthorizationCode(
             offer = OFFER_PAYMENT,
+            credentialFormat = CredentialFormat.Mdoc(DigitalPaymentCredential.CARD_DOCTYPE),
             serverArgs = arrayOf(
                 "-param", "base_url=http://localhost",
                 "-param", "database_engine=ephemeral",
@@ -170,6 +222,7 @@ class ProvisioningClientTest {
     fun authorizationCodeWithPaymentCredentialSdJwt() {
         runWithAuthorizationCode(
             offer = OFFER_PAYMENT_SD_JWT,
+            credentialFormat = CredentialFormat.SdJwt(DigitalPaymentCredentialSdJwt.CARD_VCT),
             serverArgs = arrayOf(
                 "-param", "base_url=http://localhost",
                 "-param", "database_engine=ephemeral",
@@ -178,9 +231,25 @@ class ProvisioningClientTest {
         )
     }
 
+    @Test
+    fun authorizationCodeWithPaymentCredentialSdJwtWithStatusListRevocation() {
+        runWithAuthorizationCode(
+            offer = OFFER_PAYMENT_SD_JWT,
+            credentialFormat = CredentialFormat.SdJwt(DigitalPaymentCredentialSdJwt.CARD_VCT),
+            serverArgs = arrayOf(
+                "-param", "base_url=http://localhost",
+                "-param", "database_engine=ephemeral",
+                "-param", "use_scopes=true"
+            ),
+            extraTests = ::runRevocationTests
+        )
+    }
+
     fun runWithAuthorizationCode(
         offer: String,
-        serverArgs: Array<String>
+        credentialFormat: CredentialFormat,
+        serverArgs: Array<String>,
+        extraTests: suspend (httpClient: HttpClient, credential: Credential) -> Unit = { _, _ -> }
     ) = testApplication {
         val configuration = ServerConfiguration(serverArgs)
         val serverEnvironment = ServerEnvironment.create(configuration) {
@@ -248,16 +317,37 @@ class ProvisioningClientTest {
                 parameterizedRedirectUrl = location
             ))
 
-            val secureArea = secureAreaProvider.get()
+            // Our test backend does not verify key attestation, so the result can be ignored
+            provisioningClient.getKeyBindingChallenge()
 
-            provisioningClient.getKeyBindingChallenge()  // Our test backend does not verify key attestation
+            val document = documentStore.createDocument()
+            val display = Display("test")
+            val credential = documentProvisioningHandler.getPendingKeyBoundCredentials(
+                document = document,
+                credentialMetadata = CredentialMetadata(
+                    display = display,
+                    format = credentialFormat,
+                    keyBindingType = KeyBindingType.Attestation(Algorithm.ES256),
+                    maxBatchSize = 1
+                ),
+                issuerMetadata = ProvisioningMetadata("http://testul", display, mapOf()),
+                createKeySettings = CreateKeySettings()
+            ).first()
 
-            val keyInfo = secureArea.createKey(null, CreateKeySettings())
+            val credentialData = provisioningClient.obtainCredentials(KeyBindingInfo.Attestation(
+                listOf(CredentialKeyAttestation(
+                    credentialId = credential.identifier,
+                    keyAttestation = credential.getAttestation()
+                ))))
 
-            val credentials = provisioningClient.obtainCredentials(KeyBindingInfo.Attestation(
-                listOf(CredentialKeyAttestation("foo", keyInfo.attestation))))
+            Assert.assertEquals(1, credentialData.certifications.size)
 
-            Assert.assertEquals(1, credentials.certifications.size)
+            credential.certify(credentialData.certifications.first().issuerData)
+
+            withContext(serverEnvironment.await()) {
+                // Run this in server environment!
+                extraTests.invoke(httpClient, credential)
+            }
         }
     }
 
@@ -360,6 +450,134 @@ class ProvisioningClientTest {
             // Exception is thrown because key could not be found
             assertIs<IllegalArgumentException>(exception)
         }
+    }
+
+    private suspend fun runRevocationTests(
+        httpClient: HttpClient,
+        credential: Credential
+    ) {
+        runRevocationTest(
+            httpClient = httpClient,
+            credential = credential,
+            useLastModified = true,
+            useETag = false,
+            bypassCache = false,
+            preferJwt = true
+        )
+        runRevocationTest(
+            httpClient = httpClient,
+            credential = credential,
+            useLastModified = false,
+            useETag = true,
+            bypassCache = false
+        )
+        runRevocationTest(
+            httpClient = httpClient,
+            credential = credential,
+            useLastModified = false,
+            useETag = false,
+            bypassCache = true
+        )
+        /*
+            // This should fail since without conditional HTTP request cache becomes stale:
+            runRevocationTest(
+                httpClient = httpClient,
+                credential = credential,
+                useLastModified = false,
+                useETag = false,
+                bypassCache = false
+            )
+        */
+    }
+
+    private suspend fun runRevocationTest(
+        httpClient: HttpClient,
+        credential: Credential,
+        useETag: Boolean,
+        useLastModified: Boolean,
+        bypassCache: Boolean,
+        preferJwt: Boolean = false
+    ) {
+        val serverKey = getServerIdentity(ServerIdentity.CREDENTIAL_SIGNING) as AsymmetricKey.X509Certified
+        val rootCert = serverKey.certChain.certificates.last()
+        val trustManager = ConfigurableTrustManager(
+            identifier = "builtInIssuerTrustManager",
+            entries = buildList {
+                add(
+                    TrustEntryX509Cert(
+                        identifier = "test_issuer",
+                        metadata = TrustMetadata(
+                            displayName = rootCert.subject.components["CN"]?.value ?: "test",
+                        ),
+                        certificate = rootCert
+                    )
+                )
+            }
+        )
+
+        val revocationChecker = CachingRevocationChecker(
+            storage = storage,
+            httpClient = httpClient,
+            useETag = useETag,
+            useLastModified = useLastModified
+        )
+        val revocationInfo = credential.getRevocationInfo(trustManager)!!
+        val credentialId = when (val status = revocationInfo.revocationStatus) {
+            is RevocationStatus.IdentifierList ->
+                CredentialId(
+                    bucket = status.uri.substring(status.uri.lastIndexOf('/') + 1),
+                    index = CredentialState.identifierToIndex(status.id)
+                )
+            is RevocationStatus.StatusList ->
+                CredentialId(
+                    bucket = status.uri.substring(status.uri.lastIndexOf('/') + 1),
+                    index = status.idx
+                )
+            else -> throw IllegalStateException()
+        }
+
+        val result1 = revocationChecker.check(
+            credential = credential,
+            trustManager = trustManager,
+            bypassCache = bypassCache,
+            preferJwt = preferJwt
+        )
+        Assert.assertNull(result1.error)
+        Assert.assertEquals(RevocationCheckState.VALID, result1.state)
+
+        CredentialState.setCredentialStatus(
+            credentialId = credentialId,
+            status = CredentialState.Status.INVALID,
+            expiration = CredentialState.getCredentialState(credentialId)!!.expiration
+        )
+        invalidateStatusList(credentialId.bucket)
+        invalidateIdentifierList(credentialId.bucket)
+
+        val result2 = revocationChecker.check(
+            credential = credential,
+            trustManager = trustManager,
+            bypassCache = bypassCache,
+            preferJwt = preferJwt
+        )
+        Assert.assertNull(result2.error)
+        Assert.assertEquals(RevocationCheckState.INVALID, result2.state)
+
+        CredentialState.setCredentialStatus(
+            credentialId = credentialId,
+            status = CredentialState.Status.VALID,
+            expiration = CredentialState.getCredentialState(credentialId)!!.expiration
+        )
+        invalidateStatusList(credentialId.bucket)
+        invalidateIdentifierList(credentialId.bucket)
+
+        val result3 = revocationChecker.check(
+            credential = credential,
+            trustManager = trustManager,
+            bypassCache = bypassCache,
+            preferJwt = preferJwt
+        )
+        Assert.assertNull(result3.error)
+        Assert.assertEquals(RevocationCheckState.VALID, result3.state)
     }
 
     object TestBackend: OpenID4VCIBackend {
@@ -472,23 +690,7 @@ class ProvisioningClientTest {
             }            
         """.trimIndent()
 
-        private val attestationJwk = """
-            {
-                "kty": "EC",
-                "alg": "ESP256",
-                "crv": "P-256",
-                "x": "CoLFZ9sJfTqax-GarKIyw7_fX8-L446AoCTSHKJnZGs",
-                "y": "ALEJB1_YQMO_0qSFQb3urFTxRfANN8-MSeWLHYU7MVI",
-                "d": "nJXw7FqLff14yQLBEAwu70mu1gzlfOONh9UuealdsVM",
-                "x5c": [
-                    "MIIBtDCCATugAwIBAgIJAPosC/l8rotwMAoGCCqGSM49BAMCMDgxNjA0BgNVBAMTLXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjAeFw0yNTA5MzAwMjUxNDRaFw0zNTA5MjgwMjUxNDRaMDgxNjA0BgNVBAMMLXVybjp1dWlkOjRjNDY0NzJiLTdlYjItNDRiNi04NTNhLWY3ZGZlMTEzYzU3NTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAqCxWfbCX06msfhmqyiMsO/31/Pi+OOgKAk0hyiZ2RrALEJB1/YQMO/0qSFQb3urFTxRfANN8+MSeWLHYU7MVKjLjAsMB8GA1UdIwQYMBaAFPqAK5EjiQbxFAeWt//DCaWtC57aMAkGA1UdEwQCMAAwCgYIKoZIzj0EAwIDZwAwZAIwfDEviit5J188zK5qKjkzFWkPy3ljshUg650p2kNuQq7CiQvbKyVDIlCGgOhMZyy+AjBm6ehDicFMPVBEHLUEiXO4cHw7Ed6dFpPm/6GknWcADhax62KN1tIzExo6T1l06G4=",
-                    "MIIBxTCCAUugAwIBAgIJAOQTL9qcQopZMAoGCCqGSM49BAMDMDgxNjA0BgNVBAMTLXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjAeFw0yNDA5MjMyMjUxMzFaFw0zNDA5MjMyMjUxMzFaMDgxNjA0BgNVBAMTLXVybjp1dWlkOjYwZjhjMTE3LWI2OTItNGRlOC04ZjdmLTYzNmZmODUyYmFhNjB2MBAGByqGSM49AgEGBSuBBAAiA2IABN4D7fpNMAv4EtxyschbITpZ6iNH90rGapa6YEO/uhKnC6VpPt5RUrJyhbvwAs0edCPthRfIZwfwl5GSEOS0mKGCXzWdRv4GGX/Y0m7EYypox+tzfnRTmoVX3v6OxQiapKMhMB8wHQYDVR0OBBYEFPqAK5EjiQbxFAeWt//DCaWtC57aMAoGCCqGSM49BAMDA2gAMGUCMEO01fJKCy+iOTpaVp9LfO7jiXcXksn2BA22reiR9ahDRdGNCrH1E3Q2umQAssSQbQIxAIz1FTHbZPcEbA5uE5lCZlRG/DQxlZhk/rZrkPyXFhqEgfMnQ45IJ6f8Utlg+4Wiiw=="
-                ]
-            }
-           """.trimIndent()
-
         private val clientAssertionKey = AsymmetricKey.parseExplicit(clientAssertionJwk)
-        private val attestationKey = AsymmetricKey.parseExplicit(attestationJwk)
         const val CLIENT_ID = "urn:uuid:418745b8-78a3-4810-88df-7898aff3ffb4"
 
 
@@ -546,6 +748,5 @@ class ProvisioningClientTest {
             locales = listOf("en-US"),
             signingAlgorithms = listOf(Algorithm.ESP256)
         )
-
     }
 }

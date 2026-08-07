@@ -153,8 +153,17 @@ suspend fun validateJwt(
 
     val caName = checks[WebTokenCheck.TRUST]
     val key = if (caName == null) {
-        require(publicKey != null || caValidated)
-        publicKey ?: certificateChain!!.certificates.first().ecPublicKey
+        if (publicKey == null && !caValidated) {
+            throw InvalidRequestException("$jwtName: could not check signature, no public key found")
+        }
+        if (certificateChain == null || certificateChain.certificates.isEmpty()) {
+            publicKey!!
+        } else {
+            if (publicKey != null) {
+                certificateChain.certificates.last().verify(publicKey)
+            }
+            certificateChain.certificates.first().ecPublicKey
+        }
     } else {
         val issuer = body["iss"]?.jsonPrimitive?.content
         if (certificateChain != null) {

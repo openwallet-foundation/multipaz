@@ -1,12 +1,8 @@
 package org.multipaz.openid4vci.request
 
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.toHttpDate
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.response.header
 import io.ktor.server.response.respondBytes
-import io.ktor.util.date.GMTDate
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.multipaz.openid4vci.util.CredentialState
@@ -57,16 +53,15 @@ suspend fun identifierList(call: ApplicationCall, bucket: String) {
         }
     }
 
-    val creation = identifierList.creationTime.toEpochMilliseconds()
-    call.response.header(HttpHeaders.LastModified, GMTDate(creation).toHttpDate())
-    call.response.header(HttpHeaders.ETag, "W/$creation")
-    call.respondBytes(
-        bytes = identifierList.serializeAsCwt(
-            key = getServerIdentity(ServerIdentity.CREDENTIAL_SIGNING),
-            subject = BackendEnvironment.getBaseUrl() + "/identifier_list/$bucket"
-        ),
-        contentType = IDENTIFIER_LIST_CWT
-    )
+    if (!handleRevocationDataNotModified(call, identifierList)) {
+        call.respondBytes(
+            bytes = identifierList.serializeAsCwt(
+                key = getServerIdentity(ServerIdentity.CREDENTIAL_SIGNING),
+                subject = BackendEnvironment.getBaseUrl() + "/identifier_list/$bucket"
+            ),
+            contentType = IDENTIFIER_LIST_CWT
+        )
+    }
 }
 
 private val IDENTIFIER_LIST_CWT = ContentType("application", "identifierlist+cwt")
