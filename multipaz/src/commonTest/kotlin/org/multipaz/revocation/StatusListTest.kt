@@ -4,18 +4,25 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import org.multipaz.cbor.Cbor
-import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.X509Cert
+import org.multipaz.testUtilSetupCryptoProvider
 import org.multipaz.util.fromHex
 import org.multipaz.webtoken.WebTokenCheck
 import kotlin.collections.component1
 import kotlin.collections.component2
+import kotlin.io.encoding.Base64
 import kotlin.random.Random
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.fail
 import kotlin.time.Instant
 
 class StatusListTest {
+    @BeforeTest
+    fun setup() = testUtilSetupCryptoProvider()
+
     // testSpecVectorN tests use datasets from the spec (see "Test vectors for Status List encoding"
     // section in https://datatracker.ietf.org/doc/draft-ietf-oauth-status-list/)
     @Test
@@ -547,6 +554,20 @@ class StatusListTest {
     @Test
     fun roundtripCwt8() = runTest { testRoundtrip(5000, 8, false) }
 
+    @Test
+    fun testSignature() = runTest {
+        if (!Crypto.supportedCurves.contains(testIacaCert.ecPublicKey.curve)) {
+            println("Curve ${testIacaCert.ecPublicKey.curve} not supported on platform")
+            return@runTest
+        }
+        val time = Instant.parse("2026-08-07T22:11:30Z")
+        CompressedStatusList.fromCwt(
+            cwt = testCwtStatusList,
+            trustedRootCert = testIacaCert,
+            atTime = time
+        )
+    }
+
     suspend fun testRoundtrip(size: Int, bits: Int, useJwt: Boolean) {
         val map = mutableMapOf<Int, Int>()
         val statusCount = (1 shl bits)  // number of distinct status values
@@ -558,17 +579,18 @@ class StatusListTest {
         for ((index, status) in map.entries.sortedWith { (i1, _), (i2, _) -> i1 - i2 }) {
             builder.addStatus(index, status)
         }
-        val key = AsymmetricKey.ephemeral()
+        val dsKey = createTestDsKey()
+        val iacaCert = dsKey.certChain.certificates.last()
         val compressed = builder.build().compress()
         if (useJwt) {
-            val jwt = compressed.serializeAsJwt(key, "foo")
+            val jwt = compressed.serializeAsJwt(dsKey, "foo")
             val statusList =
-                StatusList.fromJwt(jwt, key.publicKey, mapOf(WebTokenCheck.SUB to "foo"))
+                StatusList.fromJwt(jwt, iacaCert, mapOf(WebTokenCheck.SUB to "foo"))
             assertStatusList(map, statusList)
         } else {
-            val cwt = compressed.serializeAsCwt(key, "foo")
+            val cwt = compressed.serializeAsCwt(dsKey, "foo")
             val statusList =
-                StatusList.fromCwt(cwt, key.publicKey, mapOf(WebTokenCheck.SUB to "foo"))
+                StatusList.fromCwt(cwt, iacaCert, mapOf(WebTokenCheck.SUB to "foo"))
             assertStatusList(map, statusList)
         }
     }
@@ -586,5 +608,48 @@ class StatusListTest {
                 assertEquals(0, statusList[index])
             }
         }
+    }
+
+    companion object {
+        val testCwtStatusList = Base64.Mime.decode("""
+            0oRZAyOjASYQeBphcHBsaWNhdGlvbi9zdGF0dXNsaXN0K2N3dBghWQL+MIIC+jCCAqGgAwIBAgIQDTtk
+            40HHu09NJhVKiQJCrDAKBggqhkjOPQQDAjB7MTUwMwYDVQQDEyxJQUNBIENlcnRpZmljYXRlIERlZmF1
+            bHQgSXNzdWVyIEJhbmdrb2sgMjAyNjELMAkGA1UEBhMCVEgxFTATBgNVBAoTDEJhbmdrb2sgMjAyNjEe
+            MBwGA1UECxMVQ2VydGlmaWNhdGUgQXV0aG9yaXR5MB4XDTI2MDYxMTExMjMwN1oXDTI5MDkxMDExMjMw
+            N1owgY0xRzBFBgNVBAMTPlJldm9jYXRpb24gTGlzdCBTaWduZXIgQ2VydGlmaWNhdGUgRGVmYXVsdCBJ
+            c3N1ZXIgQmFuZ2tvayAyMDI2MQswCQYDVQQGEwJUSDEVMBMGA1UEChMMQmFuZ2tvayAyMDI2MR4wHAYD
+            VQQLExVDZXJ0aWZpY2F0ZSBBdXRob3JpdHkwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASqXiY0Jrk+
+            CMuTzCeoLEOgCcEum28xjHf8oQoWG7j8ZGiWJT+reKfJT0FaGpOqDJD4x588Mi2UVkkDS5xpXqrgo4Hz
+            MIHwMB0GA1UdDgQWBBTEk/h+I/JPldq5gDnrMfjZYJG3zTAOBgNVHQ8BAf8EBAMCB4AwUwYDVR0fBEww
+            SjBIoEagRIZCaHR0cHM6Ly9iYW5na29rMjAyNi5tZG9jLm9ubGluZS9DZXJ0aWZpY2F0ZXMvMS9JYWNh
+            Q2VydGlmaWNhdGUuY3JsMB8GA1UdIwQYMBaAFDvS3rYOZTPLX3EicErMLO5SOs7rMEkGA1UdEgRCMECG
+            IGh0dHBzOi8vYmFuZ2tvazIwMjYubWRvYy5vbmxpbmUvgRxpYWNhQGJhbmdrb2syMDI2Lm1kb2Mub25s
+            aW5lMAoGCCqGSM49BAMCA0cAMEQCIHr2u6rnWeaNaqMoZWDlQiN2LRdykAmokCtRGy4kZHShAiBv4doJ
+            kKBPd3Q+iwsCn6HFpSpvsW0uF8Ac73ymltgJNqBZAT+jAnhnaHR0cHM6Ly9iYW5na29rMjAyNi5tZG9j
+            Lm9ubGluZS9SZXZvY2F0aW9uTGlzdHMvM0JEMkRFQjYwRTY1MzNDQjVGNzEyMjcwNEFDQzJDRUU1MjNB
+            Q0VFQi9zdGF0dXNsaXN0LmN3dAYaaml/1Rn//aNkYml0cwFjbHN0WEV42uzaMQ0AIAxFwbIxIgEpSEM6
+            wQArNNwNFfC2nzQCAMigSwAA/ykSnAwJAAAAW+FVUwIAAAivKGnUfZoOAPcsAAAA//9vYWdncmVnYXRp
+            b25fdXJpeGdodHRwczovL2Jhbmdrb2syMDI2Lm1kb2Mub25saW5lL1Jldm9jYXRpb25MaXN0cy8zQkQy
+            REVCNjBFNjUzM0NCNUY3MTIyNzA0QUNDMkNFRTUyM0FDRUVCL3N0YXR1c2xpc3QuY3d0WEDPdczqCYdy
+            IoFYpM32GiQBcfq7HzDwidSKiFQeudpxG45HYwPGaIHH48jlqahvtH9DoKVs+LtyN6Kppv3lXtkL
+        """.trimIndent())
+
+        val testIacaCert = X509Cert.fromPem("""
+            -----BEGIN CERTIFICATE-----
+            MIIC2jCCAn+gAwIBAgIQBn47HNeX5RrJwddevXOhsDAKBggqhkjOPQQDAjB7MTUwMwYDVQQDEyxJQUNBI
+            ENlcnRpZmljYXRlIERlZmF1bHQgSXNzdWVyIEJhbmdrb2sgMjAyNjELMAkGA1UEBhMCVEgxFTATBgNVBA
+            oTDEJhbmdrb2sgMjAyNjEeMBwGA1UECxMVQ2VydGlmaWNhdGUgQXV0aG9yaXR5MB4XDTI2MDYxMTExMjM
+            wN1oXDTQ2MDYxMTExMjMwN1owezE1MDMGA1UEAxMsSUFDQSBDZXJ0aWZpY2F0ZSBEZWZhdWx0IElzc3Vl
+            ciBCYW5na29rIDIwMjYxCzAJBgNVBAYTAlRIMRUwEwYDVQQKEwxCYW5na29rIDIwMjYxHjAcBgNVBAsTF
+            UNlcnRpZmljYXRlIEF1dGhvcml0eTBaMBQGByqGSM49AgEGCSskAwMCCAEBBwNCAAR7oaJvNGwl/URUWf
+            STilYwyrodGNGOsG1DvZ7tc4A1aAwwA1fZJgBSFuCLkksC+xglCO0xt2bqqW4q4PVhyVRno4HjMIHgMB0
+            GA1UdDgQWBBQ70t62DmUzy19xInBKzCzuUjrO6zAOBgNVHQ8BAf8EBAMCAQYwSQYDVR0SBEIwQIYgaHR0
+            cHM6Ly9iYW5na29rMjAyNi5tZG9jLm9ubGluZS+BHGlhY2FAYmFuZ2tvazIwMjYubWRvYy5vbmxpbmUwD
+            wYDVR0TAQH/BAUwAwEB/zBTBgNVHR8ETDBKMEigRqBEhkJodHRwczovL2Jhbmdrb2syMDI2Lm1kb2Mub2
+            5saW5lL0NlcnRpZmljYXRlcy8xL0lhY2FDZXJ0aWZpY2F0ZS5jcmwwCgYIKoZIzj0EAwIDSQAwRgIhAIB
+            uSUkaNPXgZAiwWHfksJZ6H4hJPBZgQ/lq+pJm2kt+AiEAjOZ4cr55j7aoS8GLc0m2z4qY3gHQLo7p7mfV
+            k43daP0=
+            -----END CERTIFICATE-----
+        """.trimIndent())
     }
 }

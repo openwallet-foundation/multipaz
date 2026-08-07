@@ -298,6 +298,27 @@ suspend fun basicCertificateChainValidator(
     return false  // Certificate chain is valid, but no trust is established
 }
 
+/**
+ * Creates certificate chain validator that checks if the given certificate chain can be validated
+ * using given trusted root certificate.
+ *
+ * @param trustedRootCert trusted root certificate
+ * @return validator which is appropriate for use with [validateJwt] and [validateCwt]
+ *  functions as `certificateChainValidator` parameter
+ */
+fun trustedRootCertificateChainValidator(
+    trustedRootCert: X509Cert
+): suspend (certificateChain: X509CertChain, atTime: Instant) -> Boolean =
+    { certificateChain, atTime ->
+        val combinedChain = if (certificateChain.certificates.last() == trustedRootCert) {
+            certificateChain
+        } else {
+            X509CertChain(certificateChain.certificates + trustedRootCert)
+        }
+        basicCertificateChainValidator(combinedChain, atTime)
+        true  // valid and trusted
+    }
+
 private val jtiTableSpec = StorageTableSpec(
     name = "UsedJti",
     supportPartitions = true,
