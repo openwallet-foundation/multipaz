@@ -1,6 +1,7 @@
 package org.multipaz.revocation
 
 import kotlinx.io.Buffer
+import kotlinx.io.bytestring.ByteString
 import kotlinx.io.readByteArray
 import kotlinx.serialization.json.JsonObject
 import org.multipaz.cbor.DataItem
@@ -64,7 +65,7 @@ class StatusList(
         val creationTime = Clock.System.now()
         return CompressedStatusList(
             bitsPerItem = bitsPerItem,
-            compressedStatusList = statusList.zlibDeflate(9),
+            compressedStatusList = ByteString( statusList.zlibDeflate(9)),
             creationTime = creationTime,
             expirationTime = creationTime + timeToLive
         )
@@ -205,6 +206,6 @@ class StatusList(
          * @throws IllegalArgumentException when [dataItem] does not represent status list
          */
         suspend fun fromDataItem(dataItem: DataItem, expirationTime: Instant): StatusList =
-            CompressedStatusList.fromDataItem(dataItem, expirationTime).decompress()
+            CompressedStatusList.fromStatusListClaim(dataItem, expirationTime).decompress()
     }
 }

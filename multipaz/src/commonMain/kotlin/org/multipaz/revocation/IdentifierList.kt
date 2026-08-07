@@ -2,7 +2,10 @@ package org.multipaz.revocation
 
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborMap
+import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.AsymmetricKey
@@ -30,11 +33,12 @@ import kotlin.time.Instant
  * @param [creationTime] time when this object was created
  * @param [expirationTime] time when this object expires and should be refreshed
  */
+@CborSerializable(typeId = "identifierList")
 class IdentifierList(
-    private val identifiers: Set<ByteString>,
-    val creationTime: Instant = Clock.System.now(),
-    val expirationTime: Instant = creationTime + 20.minutes
-) {
+    internal val identifiers: Set<ByteString>,
+    override val creationTime: Instant = Clock.System.now(),
+    override val expirationTime: Instant = creationTime + 20.minutes
+): RevocationData() {
     /**
      * Serializes this list as CWT.
      *
@@ -138,6 +142,32 @@ class IdentifierList(
                 atTime = atTime,
                 maxValidity = maxValidity
             )
+            return fromCwtBody(body)
+        }
+
+        /**
+         * Parses and validates CWT that holds the identifier list without validating its signature.
+         *
+         * @param cwt identifier list CWT representation
+         * @return parsed [IdentifierList]
+         * @throws IllegalArgumentException when [cwt] cannot be parsed as CWT identifier list
+         */
+        fun fromCwtNoTrust(cwt: ByteArray): IdentifierList {
+            val cbor = Cbor.decode(cwt)
+            val unwrapped = if (cbor is Tagged && cbor.tagNumber == Tagged.COSE_SIGN1) {
+                cbor.taggedItem
+            } else {
+                cbor
+            }
+            val sign1 = unwrapped.asCoseSign1
+
+            val body = Cbor.decode(sign1.payload!!) as? CborMap
+                ?: throw IllegalArgumentException("Identifier List: not a valid CWT")
+
+            return fromCwtBody(body)
+        }
+
+        private fun fromCwtBody(body: CborMap): IdentifierList {
             if (!body.hasKey(IDENTIFIER_LIST_CLAIM)) {
                 throw IllegalArgumentException("not a valid identifier list CWT")
             }

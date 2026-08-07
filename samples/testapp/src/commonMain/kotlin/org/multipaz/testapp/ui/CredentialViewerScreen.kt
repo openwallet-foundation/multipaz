@@ -34,6 +34,8 @@ import kotlinx.coroutines.launch
 import org.multipaz.compose.datetime.formattedDateTime
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import org.multipaz.revocation.RevocationChecker
+import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.util.Logger
 import org.multipaz.util.toHex
 
@@ -42,6 +44,8 @@ private const val TAG = "CredentialViewerScreen"
 @Composable
 fun CredentialViewerScreen(
     documentModel: DocumentModel,
+    revocationChecker: RevocationChecker,
+    issuerTrustManager: TrustManagerInterface,
     documentId: String,
     credentialId: String,
     showToast: (message: String) -> Unit,
@@ -96,7 +100,7 @@ fun CredentialViewerScreen(
                     }
                 )
                 KeyValuePairText("Usage Count", credentialInfo.credential.usageCount.toString())
-                RevocationStatusSection(credentialInfo.credential)
+                RevocationStatusSection(revocationChecker, issuerTrustManager, credentialInfo.credential)
                 when (credentialInfo.credential) {
                     is MdocCredential -> {
                         val issuerSigned = Cbor.decode(credentialInfo.credential.issuerProvidedData.toByteArray())

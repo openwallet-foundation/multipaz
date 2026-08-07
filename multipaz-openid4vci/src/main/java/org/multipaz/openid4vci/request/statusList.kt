@@ -2,12 +2,9 @@ package org.multipaz.openid4vci.request
 
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
-import io.ktor.http.toHttpDate
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.response.header
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
-import io.ktor.util.date.GMTDate
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.multipaz.openid4vci.util.CredentialState
@@ -73,26 +70,25 @@ suspend fun statusList(call: ApplicationCall, bucket: String) {
         }
     }
 
-    val creation = statusList.creationTime.toEpochMilliseconds()
-    call.response.header(HttpHeaders.LastModified, GMTDate(creation).toHttpDate())
-    call.response.header(HttpHeaders.ETag, "W/$creation")
-    val serverKey = getServerIdentity(ServerIdentity.CREDENTIAL_SIGNING)
-    if (useCwt) {
-        call.respondBytes(
-            bytes = statusList.serializeAsCwt(
-                key = serverKey,
-                subject = BackendEnvironment.getBaseUrl() + "/status_list/$bucket"
-            ),
-            contentType = STATUSLIST_CWT
-        )
-    } else {
-        call.respondText(
-            text = statusList.serializeAsJwt(
-                key = serverKey,
-                subject = BackendEnvironment.getBaseUrl() + "/status_list/$bucket"
-            ),
-            contentType = STATUSLIST_JWT
-        )
+    if (!handleRevocationDataNotModified(call, statusList)) {
+        val serverKey = getServerIdentity(ServerIdentity.CREDENTIAL_SIGNING)
+        if (useCwt) {
+            call.respondBytes(
+                bytes = statusList.serializeAsCwt(
+                    key = serverKey,
+                    subject = BackendEnvironment.getBaseUrl() + "/status_list/$bucket"
+                ),
+                contentType = STATUSLIST_CWT
+            )
+        } else {
+            call.respondText(
+                text = statusList.serializeAsJwt(
+                    key = serverKey,
+                    subject = BackendEnvironment.getBaseUrl() + "/status_list/$bucket"
+                ),
+                contentType = STATUSLIST_JWT
+            )
+        }
     }
 }
 
