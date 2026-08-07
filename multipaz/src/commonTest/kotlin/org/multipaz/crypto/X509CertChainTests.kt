@@ -1,11 +1,13 @@
 package org.multipaz.crypto
 
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonArray
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.testUtilSetupCryptoProvider
 import org.multipaz.util.truncateToWholeSeconds
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
@@ -460,5 +462,85 @@ class X509CertChainTests {
             ))
         )
         multipazOrgCertChain.validate(Instant.parse("2026-03-09T00:00:00Z"))
+    }
+
+    @Test
+    fun testToX5cAndFromX5c() = runTest {
+        initKeys()
+        val rootCert = buildX509Cert(
+            publicKey = rootKey.publicKey,
+            signingKey = rootKey,
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Root"),
+            issuer = X500Name.fromName("CN=Root"),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ) {
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(ca = true, pathLenConstraint = 1)
+            includeSubjectKeyIdentifier()
+            includeAuthorityKeyIdentifierAsSubjectKeyIdentifier()
+        }
+        val intermediateCert = buildX509Cert(
+            publicKey = intermediateKey.publicKey,
+            signingKey = rootKey,
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Intermediate"),
+            issuer = rootCert.subject,
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ) {
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(ca = true, pathLenConstraint = 0)
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(rootCert)
+        }
+        val leafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = intermediateKey,
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Leaf"),
+            issuer = intermediateCert.subject,
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(intermediateCert)
+        }
+
+        // 1. Single self-signed root certificate chain (size == 1)
+        val singleRootChain = X509CertChain(listOf(rootCert))
+        val singleRootX5cDefault = singleRootChain.toX5c() // excludeRoot = true by default
+        assertEquals(1, (singleRootX5cDefault as JsonArray).size)
+        assertEquals(singleRootChain, X509CertChain.fromX5c(singleRootX5cDefault))
+
+        val singleRootX5cExplicit = singleRootChain.toX5c(excludeRoot = false)
+        assertEquals(1, (singleRootX5cExplicit as JsonArray).size)
+        assertEquals(singleRootChain, X509CertChain.fromX5c(singleRootX5cExplicit))
+
+        // 2. Single non-self-signed certificate chain (size == 1)
+        val singleLeafChain = X509CertChain(listOf(leafCert))
+        val singleLeafX5c = singleLeafChain.toX5c(excludeRoot = true)
+        assertEquals(1, (singleLeafX5c as JsonArray).size)
+        assertEquals(singleLeafChain, X509CertChain.fromX5c(singleLeafX5c))
+
+        // 3. Multi-certificate chain ending in a self-signed root (size == 3)
+        val fullChain = X509CertChain(listOf(leafCert, intermediateCert, rootCert))
+        val fullChainX5cExcluded = fullChain.toX5c(excludeRoot = true) as JsonArray
+        assertEquals(2, fullChainX5cExcluded.size)
+        assertEquals(
+            X509CertChain(listOf(leafCert, intermediateCert)),
+            X509CertChain.fromX5c(fullChainX5cExcluded)
+        )
+
+        val fullChainX5cIncluded = fullChain.toX5c(excludeRoot = false) as JsonArray
+        assertEquals(3, fullChainX5cIncluded.size)
+        assertEquals(fullChain, X509CertChain.fromX5c(fullChainX5cIncluded))
+
+        // 4. Multi-certificate chain ending in a non-self-signed certificate (size == 2)
+        val partialChain = X509CertChain(listOf(leafCert, intermediateCert))
+        val partialChainX5c = partialChain.toX5c(excludeRoot = true) as JsonArray
+        assertEquals(2, partialChainX5c.size)
+        assertEquals(partialChain, X509CertChain.fromX5c(partialChainX5c))
     }
 }
