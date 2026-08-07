@@ -46,18 +46,13 @@ data class X509CertChain(
     /**
      * Encodes the certificate as JSON Array according to RFC 7515 Section 4.1.6.
      *
-     * Current draft of HAIP spec states "The X.509 certificate of the trust anchor MUST NOT be
-     * included in the x5c JOSE header of the Status List Token. The X.509 certificate signing
-     * the request MUST NOT be self-signed.". [excludeRoot] parameter helps to enforce this.
-     * Note that including trust root is always redundant, as both the key and the issuer identity
-     * must be known to the party that validates the certificate chain.
-     *
-     * @param excludeRoot if the last certificate is root (self-signed), exclude it
+     * @param excludeRoot if the certificate chain has more than one certificate and the last certificate is a root
+     *   certificate (self-signed), exclude it.
      * @return a [JsonElement].
      */
     fun toX5c(excludeRoot: Boolean = true): JsonElement {
         val last = certificates.last()
-        val certs = if (excludeRoot && last.subject == last.issuer) {
+        val certs = if (excludeRoot && certificates.size > 1 && last.subject == last.issuer) {
             certificates.subList(0, certificates.size - 1)
         } else {
             certificates
