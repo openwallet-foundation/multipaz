@@ -1,7 +1,7 @@
 package org.multipaz.rpc.backend
 
+import kotlinx.coroutines.currentCoroutineContext
 import kotlin.coroutines.CoroutineContext
-import kotlin.coroutines.coroutineContext
 import kotlin.reflect.KClass
 
 /**
@@ -30,6 +30,6 @@ interface BackendEnvironment: CoroutineContext.Element {
         }
 
         suspend fun <T: Any> getInterface(clazz: KClass<T>): T? =
-            get(coroutineContext).getInterface(clazz)
+            get(currentCoroutineContext()).getInterface(clazz)
     }
 }

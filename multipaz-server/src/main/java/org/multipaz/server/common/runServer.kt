@@ -103,7 +103,7 @@ fun Application.installServerEnvironment(
 ) {
     intercept(ApplicationCallPipeline.Plugins) {
         // Inject server environment
-        withContext(serverEnvironment.await()) {
+        withContext(serverEnvironment.await() + KtorCall(call)) {
             // Standard error handling; if this is not desired, individual handlers
             // must do their own.
             try {
