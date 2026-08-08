@@ -5,12 +5,10 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.io.readByteArray
 import kotlinx.serialization.json.JsonObject
 import org.multipaz.cbor.DataItem
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.X509Cert
 import org.multipaz.webtoken.WebTokenCheck
-import org.multipaz.webtoken.validateJwt
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.util.zlibDeflate
-import org.multipaz.webtoken.validateCwt
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -142,11 +140,8 @@ class StatusList(
         /**
          * Parses and validates JWT that holds the status list.
          *
-         * JWT signature can be validated either by passing [WebTokenCheck.TRUST] key in the [checks]
-         * map or using non-null [publicKey] (see [validateJwt]).
-         *
          * @param jwt status list JWT representation
-         * @param publicKey public key of the issuance server signing key (optional)
+         * @param trustedRootCert root certificate to check CWT signature
          * @param checks additional checks for JWT validation
          * @return parsed [StatusList]
          * @throws IllegalArgumentException when [jwt] cannot be parsed as JWT status list
@@ -154,10 +149,10 @@ class StatusList(
          */
         suspend fun fromJwt(
             jwt: String,
-            publicKey: EcPublicKey? = null,
+            trustedRootCert: X509Cert,
             checks: Map<WebTokenCheck, String> = mapOf()
         ): StatusList =
-            CompressedStatusList.fromJwt(jwt, publicKey, checks).decompress()
+            CompressedStatusList.fromJwt(jwt, trustedRootCert, checks).decompress()
 
         /**
          * Parses JSON as status list.
@@ -175,11 +170,8 @@ class StatusList(
         /**
          * Parses and validates CWT that holds the status list.
          *
-         * CWT signature can be validated either by passing [WebTokenCheck.TRUST] key in
-         * the [checks] map or using non-null [publicKey] (see [validateCwt]).
-         *
          * @param cwt status list CWT representation
-         * @param publicKey public key of the issuance server signing key (optional)
+         * @param trustedRootCert root certificate to check CWT signature
          * @param checks additional checks for JWT validation
          * @param maxValidity maximum CWT validity duration to accept
          * @return parsed [StatusList]
@@ -188,12 +180,12 @@ class StatusList(
          */
         suspend fun fromCwt(
             cwt: ByteArray,
-            publicKey: EcPublicKey? = null,
+            trustedRootCert: X509Cert,
             checks: Map<WebTokenCheck, String> = mapOf(),
             atTime: Instant = Clock.System.now(),
             maxValidity: Duration = 365.days
         ): StatusList =
-            CompressedStatusList.fromCwt(cwt, publicKey, checks, atTime, maxValidity).decompress()
+            CompressedStatusList.fromCwt(cwt, trustedRootCert, checks, atTime, maxValidity).decompress()
 
         /**
          * Parses CBOR as status list.

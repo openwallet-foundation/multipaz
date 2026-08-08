@@ -217,24 +217,24 @@ class CachingRevocationChecker(
             if (contentType != STATUSLIST_JWT) {
                 try {
                     Logger.dCbor(TAG, "Status list (CWT) for ${status.uri}", bytes)
-                    return@fetchOrGetCached Pair(
-                        first = CompressedStatusList.fromCwt(
-                            cwt = bytes,
-                            publicKey = cert?.ecPublicKey,
-                            atTime = atTime
-                        ),
-                        second = true
-                    )
-                } catch (err: InvalidRequestException) {
-                    if (onlyTrusted) {
-                        throw err
+                    return@fetchOrGetCached if (cert != null) {
+                        Pair(
+                            first = CompressedStatusList.fromCwt(
+                                cwt = bytes,
+                                trustedRootCert = cert,
+                                atTime = atTime
+                            ),
+                            second = true
+                        )
+                    } else if (onlyTrusted) {
+                        throw InvalidRequestException("Status list (CWT) could not be validated, no trusted root")
+                    } else {
+                        Logger.w(TAG, "Status list (CWT) could not be validated, attempt using it anyway")
+                        Pair(
+                            first = CompressedStatusList.fromCwtNoTrust(bytes),
+                            second = false
+                        )
                     }
-                    // Untrusted path
-                    Logger.w(TAG, "Status list (CWT) could not be validated, attempt using it anyway", err)
-                    return@fetchOrGetCached Pair(
-                        first = CompressedStatusList.fromCwtNoTrust(bytes),
-                        second = false
-                    )
                 } catch (err: IllegalArgumentException) {
                     if (contentType == STATUSLIST_CWT) {
                         throw err
@@ -244,14 +244,24 @@ class CachingRevocationChecker(
             val jwtString = bytes.decodeToString()
             Logger.d(TAG, "Status list (JWT) for ${status.uri}: $jwtString")
             try {
-                Pair(
-                    first = CompressedStatusList.fromJwt(
-                        jwt = jwtString,
-                        publicKey = cert?.ecPublicKey,
-                        atTime = atTime
-                    ),
-                    second = true
-                )
+                if (cert != null) {
+                    Pair(
+                        first = CompressedStatusList.fromJwt(
+                            jwt = jwtString,
+                            trustedRootCert = cert,
+                            atTime = atTime
+                        ),
+                        second = true
+                    )
+                } else if (onlyTrusted) {
+                    throw InvalidRequestException("Status list (JWT) could not be validated, no trusted root")
+                } else {
+                    Logger.w(TAG, "Status list (JWT) could not be validated, attempt using it anyway")
+                    Pair(
+                        first = CompressedStatusList.fromJwtNoTrust(jwtString),
+                        second = false
+                    )
+                }
             } catch (err: InvalidRequestException) {
                 if (onlyTrusted) {
                     throw err
@@ -309,20 +319,19 @@ class CachingRevocationChecker(
             bypassCache = bypassCache
         ) { bytes, _ ->
             Logger.dCbor(TAG, "Identifier list (CWT) for ${status.uri}", bytes)
-            try {
+            if (cert != null) {
                 Pair(
                     first = IdentifierList.fromCwt(
                         cwt = bytes,
-                        publicKey = cert?.ecPublicKey,
+                        trustedRootCert = cert,
                         atTime = atTime
                     ),
                     second = true
                 )
-            } catch (err: InvalidRequestException) {
-                if (onlyTrusted) {
-                    throw err
-                }
-                Logger.w(TAG, "Identifier list could not be validated, attempt using it anyway", err)
+            } else if (onlyTrusted) {
+                throw InvalidRequestException("Identifier list could not be validated, no trusted root")
+            } else {
+                Logger.w(TAG, "Identifier list could not be validated, attempt using it anyway")
                 // Trust cannot be verified
                 Pair(first = IdentifierList.fromCwtNoTrust(bytes), second = false)
             }

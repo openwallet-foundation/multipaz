@@ -25,8 +25,12 @@ interface RevocationChecker {
      *
      * @param revocationStatus The revocation status object (StatusList or IdentifierList) extracted
      *  from the presentation.
-     * @param issuerCert The top-level certificate chain of the issuer / document signer, used for
-     *  signature verification if not included in the status payload.
+     * @param issuerCert The top-level certificate chain of the issuer / document signer (e.g. AICA
+     *  certificate for ISO mdoc credentials); it is used for signature verification unless it is
+     *  included in the [revocationStatus] (uncommon); if this is `null`, and certificate in the
+     *  [revocationStatus] is `null`, [onlyTrusted] should be false, or the check will always
+     *  return [RevocationCheckState.UNKNOWN] in [RevocationCheckResult.state]
+     * @param onlyTrusted Only accept trusted revocation data (valid and correctly signed)
      * @param atTime The point in time at which to evaluate revocation status validity. Defaults
      *  to current system time.
      * @param bypassCache If true, forces downloading a fresh status/identifier list payload from

@@ -18,7 +18,7 @@ import org.multipaz.cbor.Uint
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.cbor.putCborMap
 import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.X509Cert
 import org.multipaz.webtoken.WebTokenCheck
 import org.multipaz.webtoken.buildJwt
 import org.multipaz.webtoken.validateJwt
@@ -31,6 +31,7 @@ import org.multipaz.webtoken.validateCwt
 import org.multipaz.webtoken.WebTokenClaim
 import org.multipaz.webtoken.WebTokenClaim.Companion.get
 import org.multipaz.webtoken.WebTokenClaim.Companion.put
+import org.multipaz.webtoken.trustedRootCertificateChainValidator
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -126,11 +127,8 @@ class CompressedStatusList(
         /**
          * Parses and validates JWT that holds the status list.
          *
-         * JWT signature can be validated either by passing [WebTokenCheck.TRUST] key in the [checks]
-         * map or using non-null [publicKey] (see [validateJwt]).
-         *
          * @param jwt status list JWT representation
-         * @param publicKey public key of the issuance server signing key (optional)
+         * @param trustedRootCert root certificate to check JWT signature
          * @param checks additional checks for JWT validation
          * @param atTime time instant to check for expiration
          * @param maxValidity maximum JWT validity duration to accept
@@ -140,7 +138,7 @@ class CompressedStatusList(
          */
         suspend fun fromJwt(
             jwt: String,
-            publicKey: EcPublicKey? = null,
+            trustedRootCert: X509Cert,
             checks: Map<WebTokenCheck, String> = mapOf(),
             atTime: Instant = Clock.System.now(),
             maxValidity: Duration = 365.days
@@ -152,7 +150,8 @@ class CompressedStatusList(
                     put(WebTokenCheck.TYP, "statuslist+jwt")
                     putAll(checks)
                 },
-                publicKey = publicKey,
+                publicKey = null,
+                certificateChainValidator = trustedRootCertificateChainValidator(trustedRootCert),
                 atTime = atTime,
                 maxValidity = maxValidity
             )
@@ -216,11 +215,8 @@ class CompressedStatusList(
         /**
          * Parses and validates CWT that holds the status list.
          *
-         * CWT signature can be validated either by passing [WebTokenCheck.TRUST] key in
-         * the [checks] map or using non-null [publicKey] (see [validateCwt]).
-         *
          * @param cwt status list CWT representation
-         * @param publicKey public key of the issuance server signing key (optional)
+         * @param trustedRootCert root certificate to check CWT signature
          * @param checks additional checks for CWT validation
          * @param atTime time instant to check for expiration
          * @param maxValidity maximum CWT validity duration to accept
@@ -230,7 +226,7 @@ class CompressedStatusList(
          */
         suspend fun fromCwt(
             cwt: ByteArray,
-            publicKey: EcPublicKey? = null,
+            trustedRootCert: X509Cert,
             checks: Map<WebTokenCheck, String> = mapOf(),
             atTime: Instant = Clock.System.now(),
             maxValidity: Duration = 365.days
@@ -242,7 +238,8 @@ class CompressedStatusList(
                     put(WebTokenCheck.TYP, "application/statuslist+cwt")
                     putAll(checks)
                 },
-                publicKey = publicKey,
+                publicKey = null,
+                certificateChainValidator = trustedRootCertificateChainValidator(trustedRootCert),
                 atTime = atTime,
                 maxValidity = maxValidity
             )
