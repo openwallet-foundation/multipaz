@@ -7,6 +7,7 @@ import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Url
 import io.ktor.http.parameters
+import io.ktor.server.plugins.origin
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -42,6 +43,7 @@ import org.multipaz.rpc.handler.RpcAuthInspectorSignature
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.securearea.SecureAreaRepository
+import org.multipaz.server.common.KtorCall
 import org.multipaz.server.common.baseUrl
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.server.common.enrollmentServerUrl
@@ -116,7 +118,12 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
         if (requestId != null && enrollmentsMap[identity]?.requestId != requestId) {
             throw InvalidRequestException("Enrollment was not requested")
         }
-        Logger.i(TAG, "Received enrollment for '$identity'")
+        try {
+            val call = KtorCall.getCall()
+            Logger.i(TAG, "Received enrollment for '$identity' from '${call.request.origin.remoteAddress}'")
+        } catch (_: IllegalStateException) {
+            Logger.i(TAG, "Received enrollment for '$identity'")
+        }
         val secureArea = BackendEnvironment.getInterface(SecureAreaProvider::class)!!.get()
         // Set up expiration to re-enroll ahead of the certificate expiration
         val expiration = certChain.certificates.first().validityNotAfter - MIN_VALIDITY_DURATION
