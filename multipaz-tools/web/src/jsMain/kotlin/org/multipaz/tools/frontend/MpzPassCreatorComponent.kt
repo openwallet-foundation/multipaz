@@ -111,6 +111,7 @@ val MpzPassCreatorComponent = FC {
     var uniqueId by useState(UUID.randomUUID().toString())
     var versionStr by useState("0")
     var updateUrl by useState("")
+    var userAuthenticationRequired by useState(false)
     var credentialCountStr by useState("1")
 
     // Card Art options: "auto" or "custom"
@@ -405,6 +406,7 @@ val MpzPassCreatorComponent = FC {
                     uniqueId = uniqueId.ifEmpty { UUID.randomUUID().toString() },
                     version = versionStr.toLongOrNull() ?: 0L,
                     updateUrl = updateUrl.trim().ifEmpty { null },
+                    userAuthenticationRequired = userAuthenticationRequired,
                     name = passName.ifEmpty { "Untitled Pass" },
                     typeName = passTypeName.ifEmpty { "ISO mDoc Pass" },
                     cardArt = cardArtBytes?.let { ByteString(*it) },
@@ -588,6 +590,19 @@ val MpzPassCreatorComponent = FC {
                         value = updateUrl
                         placeholder = "https://example.com/pass-update"
                         onChange = { updateUrl = it.target.value }
+                    }
+                }
+
+                div {
+                    label {
+                        css { display = Display.flex; alignItems = AlignItems.center; color = Color("#cbd5e1"); cursor = Cursor.pointer; fontSize = 13.px }
+                        input {
+                            css { marginRight = 8.px }
+                            type = "checkbox".unsafeCast<InputType>()
+                            checked = userAuthenticationRequired
+                            onChange = { userAuthenticationRequired = it.target.checked }
+                        }
+                        +"Require Platform User Authentication (userAuthenticationRequired)"
                     }
                 }
 

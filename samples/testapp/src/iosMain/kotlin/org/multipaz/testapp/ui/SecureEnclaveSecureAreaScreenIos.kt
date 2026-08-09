@@ -149,7 +149,11 @@ private suspend fun seTestUnguarded(
     val laContext = platform.LocalAuthentication.LAContext()
     laContext.localizedReason = "Authenticate to use key"
 
-    val keyUnlockData = SecureEnclaveKeyUnlockData(laContext)
+    val keyUnlockData = SecureEnclaveKeyUnlockData(
+        secureArea = secureEnclaveSecureArea,
+        alias = "testKey",
+        authenticationContext = laContext
+    )
 
     if (algorithm.isSigning) {
         val dataToSign = "data".encodeToByteArray()

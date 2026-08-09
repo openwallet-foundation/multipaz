@@ -560,6 +560,10 @@ val MpzPassDecoderComponent = FC {
                                             td { css { padding = Padding(8.px, 12.px); color = Color("#a78bfa") }; +(pass.updateUrl ?: "None") }
                                         }
                                         tr {
+                                            td { css { padding = Padding(8.px, 12.px); color = Color("#64748b"); fontWeight = FontWeight.bold }; +"User Auth Required" }
+                                            td { css { padding = Padding(8.px, 12.px); color = if (pass.userAuthenticationRequired) Color("#ef4444") else Color("#94a3b8") }; +"${pass.userAuthenticationRequired}" }
+                                        }
+                                        tr {
                                             td { css { padding = Padding(8.px, 12.px); color = Color("#64748b"); fontWeight = FontWeight.bold }; +"ISO mDoc Count" }
                                             td { css { padding = Padding(8.px, 12.px); color = Color("#38bdf8") }; +"${pass.isoMdoc.size}" }
                                         }

@@ -199,11 +199,14 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
         check(secureArea is SoftwareSecureArea) {
             "You can only export a credential if it's using a SoftwareSecureArea"
         }
-        val deviceKeyPrivate = (secureArea as SoftwareSecureArea).getPrivateKey(alias, keyUnlockData)
+        val swSecureArea = secureArea as SoftwareSecureArea
+        val keyInfo = swSecureArea.getKeyInfo(alias)
+        val deviceKeyPrivate = swSecureArea.getPrivateKey(alias, keyUnlockData)
         return MpzPass(
             name = document.displayName,
             typeName = document.typeDisplayName,
             cardArt = document.cardArt,
+            userAuthenticationRequired = keyInfo.isUserAuthenticationRequired,
             sdJwtVc = listOf(MpzPassSdJwtVc(
                 vct = vct,
                 deviceKeyPrivate = deviceKeyPrivate,

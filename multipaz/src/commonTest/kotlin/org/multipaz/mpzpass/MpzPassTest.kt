@@ -10,12 +10,61 @@ import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.securearea.CreateKeySettings
+import org.multipaz.securearea.software.SoftwareKeyUnlockData
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class MpzPassTest {
+
+    @Test
+    fun testUserAuthenticationRequiredExportImport() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val doc = harness.documentStore.createDocument(
+            displayName = "Driving license specimen",
+            typeDisplayName = "Utopia driving license",
+            cardArt = ByteString(1, 2, 3),
+        )
+        val credential = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = doc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(userAuthenticationRequired = true),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            domain = "mdoc",
+        )
+        doc.edit { provisioned = true }
+
+        val pass = credential.exportToMpzPass(
+            SoftwareKeyUnlockData(
+                secureArea = harness.softwareSecureArea,
+                alias = credential.alias,
+                userAuthenticated = true
+            )
+        )
+        assertTrue(pass.userAuthenticationRequired)
+        assertEquals(
+            pass,
+            MpzPass.fromDataItem(pass.toDataItem())
+        )
+
+        val importedDoc = harness.documentStore.importMpzPass(
+            mpzPass = pass,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless"
+        )
+        val importedCredential = importedDoc.getCredentials().first() as MdocCredential
+        val keyInfo = harness.softwareSecureArea.getKeyInfo(importedCredential.alias)
+        assertTrue(keyInfo.isUserAuthenticationRequired)
+    }
 
     @Test
     fun testIsoMdocExportImport() = runTest {
@@ -46,7 +95,12 @@ class MpzPassTest {
             MpzPass.fromDataItem(pass.toDataItem())
         )
 
-        val importedDoc = harness.documentStore.importMpzPass(pass)
+        val importedDoc = harness.documentStore.importMpzPass(
+            mpzPass = pass,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless"
+        )
         assertEquals(importedDoc.mpzPassId, pass.uniqueId)
         assertEquals(importedDoc.mpzPassVersion, pass.version)
         assertNotEquals(doc.identifier, importedDoc.identifier)
@@ -95,7 +149,12 @@ class MpzPassTest {
             MpzPass.fromDataItem(pass.toDataItem())
         )
 
-        val importedDoc = harness.documentStore.importMpzPass(pass)
+        val importedDoc = harness.documentStore.importMpzPass(
+            mpzPass = pass,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless"
+        )
         assertEquals(importedDoc.mpzPassId, pass.uniqueId)
         assertEquals(importedDoc.mpzPassVersion, pass.version)
         assertNotEquals(doc.identifier, importedDoc.identifier)
@@ -142,7 +201,12 @@ class MpzPassTest {
             MpzPass.fromDataItem(pass.toDataItem())
         )
 
-        val importedDoc = harness.documentStore.importMpzPass(pass)
+        val importedDoc = harness.documentStore.importMpzPass(
+            mpzPass = pass,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless"
+        )
         assertEquals(importedDoc.mpzPassId, pass.uniqueId)
         assertEquals(importedDoc.mpzPassVersion, pass.version)
         assertNotEquals(doc.identifier, importedDoc.identifier)
@@ -188,7 +252,12 @@ class MpzPassTest {
             MpzPass.fromDataItem(pass.toDataItem())
         )
 
-        val importedDoc = harness.documentStore.importMpzPass(pass)
+        val importedDoc = harness.documentStore.importMpzPass(
+            mpzPass = pass,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless"
+        )
         assertEquals(importedDoc.mpzPassId, pass.uniqueId)
         assertEquals(importedDoc.mpzPassVersion, pass.version)
         assertNotEquals(doc.identifier, importedDoc.identifier)
@@ -210,7 +279,12 @@ class MpzPassTest {
         val updatedPass = pass.copy(
             version = pass.version + 1
         )
-        val updatedDoc = harness.documentStore.importMpzPass(updatedPass)
+        val updatedDoc = harness.documentStore.importMpzPass(
+            mpzPass = updatedPass,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless"
+        )
         assertEquals(updatedDoc, importedDoc)
         assertEquals(updatedDoc.mpzPassId, updatedPass.uniqueId)
         assertEquals(updatedDoc.mpzPassVersion, updatedPass.version)
@@ -223,14 +297,24 @@ class MpzPassTest {
             exceptionClass = ImportMpzPassException::class,
             message = "Pass already imported at version 1 which is greater or equal to version 1"
         ) {
-            harness.documentStore.importMpzPass(updatedPassSameVersion)
+            harness.documentStore.importMpzPass(
+                mpzPass = updatedPassSameVersion,
+                isoMdocDomain = "mdoc",
+                sdJwtVcDomain = "sdjwt",
+                keylessSdJwtVcDomain = "sdjwt-keyless"
+            )
         }
         // Check older versions are rejected.
         assertFailsWith(
             exceptionClass = ImportMpzPassException::class,
             message = "Pass already imported at version 1 which is greater or equal to version 0"
         ) {
-            harness.documentStore.importMpzPass(pass)
+            harness.documentStore.importMpzPass(
+                mpzPass = pass,
+                isoMdocDomain = "mdoc",
+                sdJwtVcDomain = "sdjwt",
+                keylessSdJwtVcDomain = "sdjwt-keyless"
+            )
         }
     }
 }
