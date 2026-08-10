@@ -53,6 +53,7 @@ The following rules apply when being asked to generate a commit.
 * The commit message should detail the changes being committed, not all the prompts that led to here. This includes changes to the source that was done by others, for example the human driving the AI.
 * Commit messages must be detailed and to the point. If referring to classes or types in the project enclose it in backticks, if referring to function or method names use trailing open and close parenthesis. 
 * First line of the commit message must end in a period and be no longer than 72 characters and should avoid using type or function names. 
+* Commit messages should use line breaks and lines should not be larger than 80 characters, with exceptions to avoid breaking hyperlinks.
 * Commit messages must have a "Test:" stanza detailing how the change was tested. 
 * Commit messages have a Signed-off-by line.
 

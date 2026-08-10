@@ -30,6 +30,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -170,20 +172,27 @@ class PresentmentActivity: FragmentActivity() {
          * for when the user presses the "Open Wallet" button.
          * @param preferredService the [ComponentName]s which will be preferred over other
          * services. This is used in [onResume] to pass to [CardEmulation.setPreferredService].
+         * @param onDocumentSelected a callback invoked whenever a document is shown as selected
+         * (with non-null document ID) or when no document is selected (with null).
+         * @param documentSelectedContent optional composable content rendered below the buttons when a document is selected.
          */
         fun getPendingIntent(
             source: PresentmentSource,
             initiallySelectedDocumentId: String?,
             openWalletAppPendingIntentFn: (document: Document) -> PendingIntent,
-            preferredService: ComponentName
+            preferredService: ComponentName,
+            onDocumentSelected: ((documentId: String?) -> Unit)? = null,
+            documentSelectedContent: (@Composable (documentId: String) -> Unit)? = null
         ): PendingIntent {
             presentmentModel.reset(
                 source = source,
                 preselectedDocuments = emptyList(),
-                showDocumentChooser = DocumentChooserData(
+                showDocumentChooser = ComposeDocumentChooserData(
                     initiallySelectedDocumentId = initiallySelectedDocumentId,
                     openAppPendingIntentFn = openWalletAppPendingIntentFn,
-                    preferredService = preferredService
+                    preferredService = preferredService,
+                    onDocumentSelected = onDocumentSelected,
+                    documentSelectedContent = documentSelectedContent
                 )
             )
 
@@ -419,14 +428,21 @@ internal fun PresentmentActivityContent(
                             documentModel = documentModel!!,
                             initiallySelectedDocumentId = presentmentModel!!.showDocumentChooser!!.initiallySelectedDocumentId,
                             selectedDocIdFromCardChooser = selectedDocIdFromCardChooser,
-                            contentBelow = {
+                            onDocumentSelected = presentmentModel!!.showDocumentChooser!!.onDocumentSelected,
+                            contentBelow = { documentId ->
                                 Column(
-                                    modifier = Modifier.fillMaxHeight(),
-                                    horizontalAlignment = Alignment.CenterHorizontally
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .verticalScroll(rememberScrollState()),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     val isNfcOnly by presentmentModel!!.isNfcOnly.collectAsState()
                                     ShowHoldToReader(isNfcOnly = isNfcOnly)
-                                    Spacer(modifier = Modifier.weight(1.0f))
+                                    val customContent = (presentmentModel!!.showDocumentChooser as? ComposeDocumentChooserData)?.documentSelectedContent
+                                    if (customContent != null) {
+                                        customContent(documentId)
+                                    }
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -444,7 +460,7 @@ internal fun PresentmentActivityContent(
                                                     switchToAppOnFinishPendingIntent =
                                                         presentmentModel!!.showDocumentChooser!!.openAppPendingIntentFn(
                                                             presentmentModel!!.source.documentStore.lookupDocument(
-                                                                selectedDocIdFromCardChooser.value!!
+                                                                documentId
                                                             )!!
                                                         )
                                                     startFadeOut = true
@@ -465,6 +481,7 @@ internal fun PresentmentActivityContent(
                             }
                         )
                     } else {
+                        val docsToShow = presentmentModel!!.documentsSelected.collectAsState().value
                         val docIdToShow =
                             docsToShow.firstOrNull()?.identifier ?: selectedDocIdFromCardChooser.value
                         ShowCard(
@@ -574,7 +591,8 @@ private fun ShowCardChooser(
     documentModel: DocumentModel,
     initiallySelectedDocumentId: String?,
     selectedDocIdFromCardChooser: MutableState<String?>,
-    contentBelow: @Composable () -> Unit
+    onDocumentSelected: ((documentId: String?) -> Unit)?,
+    contentBelow: @Composable (documentId: String) -> Unit
 ) {
     val configuration = LocalConfiguration.current
     val maxCardHeight = configuration.screenHeightDp.dp / 3
@@ -586,9 +604,11 @@ private fun ShowCardChooser(
     val focusedDocument = docInfos.find { documentInfo ->
         documentInfo.document.identifier == focusedDocumentId
     }
+    val currentSelectedDocId = focusedDocument?.document?.identifier
 
-    LaunchedEffect(Unit) {
-        selectedDocIdFromCardChooser.value = focusedDocumentId
+    LaunchedEffect(currentSelectedDocId) {
+        selectedDocIdFromCardChooser.value = currentSelectedDocId
+        onDocumentSelected?.invoke(currentSelectedDocId)
     }
 
     VerticalCardList(
@@ -598,7 +618,7 @@ private fun ShowCardChooser(
         allowCardReordering = false,
         showStackWhileFocused = true,
         cardMaxHeight = maxCardHeight,
-        showCardInfo = { cardInfo -> contentBelow() },
+        showCardInfo = { cardInfo -> contentBelow(cardInfo.identifier) },
         emptyContent = {
             Text(stringResource(
                 Res.string.presentment_activity_no_documents_available
@@ -607,15 +627,12 @@ private fun ShowCardChooser(
         onCardFocused = { cardInfo ->
             val documentInfo = cardInfo as DocumentInfo
             focusedDocumentId = documentInfo.document.identifier
-            selectedDocIdFromCardChooser.value = documentInfo.document.identifier
         },
         onCardFocusedTapped = { _ ->
             focusedDocumentId = null
-            selectedDocIdFromCardChooser.value = null
         },
         onCardFocusedStackTapped = {
             focusedDocumentId = null
-            selectedDocIdFromCardChooser.value = null
         }
     )
 }
