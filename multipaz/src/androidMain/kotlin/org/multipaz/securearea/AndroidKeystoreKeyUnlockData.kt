@@ -19,8 +19,8 @@ import java.security.spec.InvalidKeySpecException
  * @param alias the alias of the key to unlock.
  */
 class AndroidKeystoreKeyUnlockData(
-    val secureArea: AndroidKeystoreSecureArea,
-    val alias: String
+    override val secureArea: AndroidKeystoreSecureArea,
+    override val alias: String
 ): KeyUnlockData {
     internal var signature: Signature? = null
     private var cryptoObjectForSigning: BiometricPrompt.CryptoObject? = null

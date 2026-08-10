@@ -28,6 +28,7 @@ import org.multipaz.util.inflate
  * bits of entropy and should only contain alphanumeric characters, hyphens, and underscores.
  * @property version the version of the pass.
  * @property updateUrl Optional URL which can be used to check for an update.
+ * @property userAuthenticationRequired whether platform user authentication is required to present the pass.
  * @property name The display name of the credential (e.g., "Erika's Driving License").
  * @property typeName The display type of the credential (e.g., "Utopia Driving License").
  * @property cardArt The card art for the pass as a PNG ByteString.
@@ -39,6 +40,7 @@ data class MpzPass(
     val uniqueId: String = UUID.randomUUID().toString(),
     val version: Long = 0L,
     val updateUrl: String? = null,
+    val userAuthenticationRequired: Boolean = false,
     val name: String? = null,
     val typeName: String? = null,
     val cardArt: ByteString? = null,
@@ -68,6 +70,9 @@ data class MpzPass(
             put("uniqueId", uniqueId)
             put("version", version)
             updateUrl?.let { put("updateUrl", it) }
+            if (userAuthenticationRequired) {
+                put("userAuthenticationRequired", true)
+            }
             putCborMap("credential") {
                 if (isoMdoc.isNotEmpty()) {
                     putCborArray("isoMdoc") {
@@ -115,6 +120,7 @@ data class MpzPass(
             val uniqueId = credentialData["uniqueId"].asTstr
             val version = credentialData["version"].asNumber
             val updateUrl = credentialData.getOrNull("updateUrl")?.asTstr
+            val userAuthenticationRequired = credentialData.getOrNull("userAuthenticationRequired")?.asBoolean ?: false
 
             val display = credentialData["display"]
             val name = display.getOrNull("name")?.asTstr
@@ -133,6 +139,7 @@ data class MpzPass(
                 uniqueId = uniqueId,
                 version = version,
                 updateUrl = updateUrl,
+                userAuthenticationRequired = userAuthenticationRequired,
                 name = name,
                 typeName = typeName,
                 cardArt = cardArt,

@@ -48,17 +48,25 @@ CredentialDataBytes = bstr .cbor CredentialData
 ; secret which can be used to check for updates. A pass also has a version field which is a
 ; monotonically increasing number starting at 0 and represents the version of the pass.
 ;
-; The issuer may also include a URL to update for the wallet to check for updates. The
-; wallet can use a HTTP POST to check for update with the body `update <uniqueId> <version>`.
-; If HTTP status code 204 is returned it means no update is available and if HTTP status
-; code 200 is returned, the bytes of the updated pass will be included in the HTTP response.
+; The issuer may also include a URL in `updateUrl` for the wallet to check for updates. The
+; wallet can issue an HTTP GET request to `updateUrl` with an `If-None-Match: "<version>"`
+; header set to the current version. If no update is available, the server responds with
+; HTTP status code 304 (Not Modified). If an update is available, the server responds with
+; HTTP status code 200 (OK) containing the bytes of the updated pass in the response body.
+;
+; The issuer may also indicate that user authentication using the platform (e.g. passcode
+; or biometrics) must be performed in order to present the pass by setting
+; `userAuthenticationRequired` to `true`.
 ;
 CredentialData = {
   "uniqueId": tstr,          ; Unique identifier for the pass, containing only alphanumerical
                              ; and underscore and hyphen characters and contains at least 128
                              ; bit of entropy.
   "version": uint,           ; Version of the pass, monotonically increasing starting at 0.
-  ? "updateUrl": tstr        ; If set, an URL where the wallet can download updates.
+  ? "updateUrl": tstr,       ; If set, an URL where the wallet can download updates.
+  ? "userAuthenticationRequired": bool,  ; If set and true, user authentication using the platform
+                                         ; (e.g. passcode or biometrics) must be performed in
+                                         ; order to present the pass.
   "display": Display,
   "credential": Credential,
 }

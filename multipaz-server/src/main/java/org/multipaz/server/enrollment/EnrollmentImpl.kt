@@ -357,12 +357,18 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
             identity: ServerIdentity,
             configuration: Configuration
         ): Boolean {
+            if (cert == null) {
+                return false
+            }
+            if (identity == ServerIdentity.KEY_ATTESTATION || identity == ServerIdentity.CLOUD_SECURE_AREA_BINDING) {
+                val basicConstraints = cert.basicConstraints
+                if (basicConstraints == null || !basicConstraints.first || !cert.keyUsage.contains(X509KeyUsage.KEY_CERT_SIGN)) {
+                    Logger.w(TAG, "Certificate for $identity is invalid CA")
+                    return false
+                }
+            }
             if (identity != ServerIdentity.VERIFIER) {
                 return true
-            }
-            if (cert == null) {
-                Logger.w(TAG, "Reader key must have certificate chain")
-                return false
             }
             // check that the certificate satisfies the requirements
             if (!cert.keyUsage.contains(X509KeyUsage.DIGITAL_SIGNATURE)) {

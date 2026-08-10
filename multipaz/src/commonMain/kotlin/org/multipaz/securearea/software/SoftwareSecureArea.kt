@@ -87,6 +87,13 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
             // If user passed in a generic SecureArea.CreateKeySettings, honor them.
             val builder = SoftwareCreateKeySettings.Builder()
                 .setAlgorithm(createKeySettings.algorithm)
+                .setUserAuthenticationRequired(
+                    required = createKeySettings.userAuthenticationRequired,
+                    types = setOf(
+                        SoftwareUserAuthType.PASSCODE,
+                        SoftwareUserAuthType.BIOMETRIC,
+                    )
+                )
             if (createKeySettings.validFrom != null && createKeySettings.validUntil != null) {
                 builder.setValidityPeriod(
                     validFrom = createKeySettings.validFrom,
@@ -115,7 +122,9 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
                     encryptedPrivateKey = ByteString(encryptedPrivateKey),
                     encryptedPrivateKeyIv = ByteString(iv),
                     encodedPublicKey = ByteString(encodedPublicKey),
-                    passphraseConstraints = settings.passphraseConstraints
+                    passphraseConstraints = settings.passphraseConstraints,
+                    userAuthenticationRequired = if (settings.userAuthenticationRequired) true else null,
+                    userAuthenticationTypes = if (settings.userAuthenticationRequired) settings.userAuthenticationTypes else null
                 )
             } else {
                 KeyMetadata(
@@ -125,7 +134,9 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
                     encryptedPrivateKey = null,
                     encryptedPrivateKeyIv = null,
                     encodedPublicKey = ByteString(encodedPublicKey),
-                    passphraseConstraints = null
+                    passphraseConstraints = null,
+                    userAuthenticationRequired = if (settings.userAuthenticationRequired) true else null,
+                    userAuthenticationTypes = if (settings.userAuthenticationRequired) settings.userAuthenticationTypes else null
                 )
             }
             val newAlias = storageTable.insert(
@@ -166,14 +177,22 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         alias: String,
         keyUnlockData: KeyUnlockData?
     ): KeyData {
-        var passphrase: String? = null
-        if (keyUnlockData != null) {
-            val unlockData = keyUnlockData as SoftwareKeyUnlockData
-            passphrase = unlockData.passphrase
-        }
         val data = storageTable.get(alias)
             ?: throw IllegalArgumentException("No key with given alias")
         val keyMetadata = KeyMetadata.fromCbor(data.toByteArray())
+
+        var passphrase: String? = null
+        var userAuthenticated = false
+        if (keyUnlockData != null) {
+            val unlockData = keyUnlockData as SoftwareKeyUnlockData
+            passphrase = unlockData.passphrase
+            userAuthenticated = unlockData.userAuthenticated
+        }
+
+        if (keyMetadata.userAuthenticationRequired == true && !userAuthenticated) {
+            throw KeyLockedException("User authentication required")
+        }
+
         val privateKey = if (keyMetadata.passphraseRequired) {
             if (passphrase == null) {
                 throw KeyLockedException("No passphrase provided")
@@ -286,7 +305,9 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
             KeyAttestation(publicKey, null),
             keyMetadata.algorithm,
             keyMetadata.passphraseRequired,
-            keyMetadata.passphraseConstraints
+            keyMetadata.passphraseConstraints,
+            keyMetadata.userAuthenticationRequired ?: false,
+            keyMetadata.userAuthenticationTypes ?: emptySet()
         )
     }
 
@@ -298,19 +319,20 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
     override suspend fun unlockKey(
         alias: String,
         unlockReason: Reason
-    ): KeyUnlockData? {
+    ): List<KeyUnlockData> {
         val keyInfo = getKeyInfo(alias)
-        if (!keyInfo.isPassphraseProtected) {
-            return null
+        if (!keyInfo.isPassphraseProtected && !keyInfo.isUserAuthenticationRequired) {
+            return emptyList()
         }
         val unlockDataProvider = currentCoroutineContext()[KeyUnlockDataProvider.Key]
             ?: DefaultKeyUnlockDataProvider
-        return unlockDataProvider.getKeyUnlockData(
+        val unlockData = unlockDataProvider.getKeyUnlockData(
             secureArea = this,
             alias = alias,
             algorithm = keyInfo.algorithm,
             unlockReason = unlockReason
         )
+        return listOf(unlockData)
     }
 
     object DefaultKeyUnlockDataProvider: KeyUnlockDataProvider {
@@ -322,34 +344,60 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         ): KeyUnlockData {
             secureArea as SoftwareSecureArea
             val keyInfo = secureArea.getKeyInfo(alias)
-            val constraints = keyInfo.passphraseConstraints ?: PassphraseConstraints.NONE
-            val promptModel = try {
-                PromptModel.get()
-            } catch (_: PromptModelNotAvailableException) {
-                throw KeyLockedException("Key is locked and PromptModel is not available to unlock interactively")
-            }
-            val passphrase = try {
-                promptModel.requestPassphrase(
-                    reason = unlockReason,
-                    passphraseConstraints = constraints,
-                    passphraseEvaluator = { enteredPassphrase: String ->
-                        try {
-                            secureArea.loadKey(alias, SoftwareKeyUnlockData(enteredPassphrase))
-                            PassphraseEvaluation.OK
-                        } catch (e: Exception) {
-                            if (e is CancellationException) throw e
-                            PassphraseEvaluation.TryAgain
+
+            var passphrase: String? = null
+            if (keyInfo.isPassphraseProtected) {
+                val constraints = keyInfo.passphraseConstraints ?: PassphraseConstraints.NONE
+                val promptModel = try {
+                    PromptModel.get()
+                } catch (_: PromptModelNotAvailableException) {
+                    throw KeyLockedException("Key is locked and PromptModel is not available to unlock interactively")
+                }
+                passphrase = try {
+                    promptModel.requestPassphrase(
+                        reason = unlockReason,
+                        passphraseConstraints = constraints,
+                        passphraseEvaluator = { enteredPassphrase: String ->
+                            try {
+                                secureArea.loadKey(
+                                    alias,
+                                    SoftwareKeyUnlockData(
+                                        secureArea,
+                                        alias,
+                                        passphrase = enteredPassphrase,
+                                        userAuthenticated = true
+                                    )
+                                )
+                                PassphraseEvaluation.OK
+                            } catch (e: Exception) {
+                                if (e is CancellationException) throw e
+                                PassphraseEvaluation.TryAgain
+                            }
                         }
-                    }
-                )
-            } catch (_: PromptDismissedException) {
-                throw KeyLockedException("User canceled passphrase prompt")
+                    )
+                } catch (_: PromptDismissedException) {
+                    throw KeyLockedException("User canceled passphrase prompt")
+                }
             }
-            return SoftwareKeyUnlockData(passphrase)
+
+            var userAuthenticated = false
+            if (keyInfo.isUserAuthenticationRequired) {
+                if (!softwareSecureAreaPerformUserAuth(alias, keyInfo.userAuthenticationTypes, unlockReason)) {
+                    throw KeyLockedException("User canceled authentication")
+                }
+                userAuthenticated = true
+            }
+
+            return SoftwareKeyUnlockData(
+                secureArea = secureArea,
+                alias = alias,
+                passphrase = passphrase,
+                userAuthenticated = userAuthenticated
+            )
         }
     }
 
-    @CborSerializable(schemaHash = "6ifPnbV5Efd5Yf9NLMh4wXHWIVySzLaTeJqnGxrPuzI")
+    @CborSerializable(schemaHash = "ynX90AswRRwe9nBZrFU1xWMrHvyDlMNcujDfkodkw58")
     internal data class KeyMetadata(
         val algorithm: Algorithm,
         val passphraseRequired: Boolean,
@@ -357,7 +405,9 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         val encryptedPrivateKey: ByteString?,
         val encryptedPrivateKeyIv: ByteString?,
         val encodedPublicKey: ByteString,  // store as encoded CoseKey
-        val passphraseConstraints: PassphraseConstraints?
+        val passphraseConstraints: PassphraseConstraints?,
+        val userAuthenticationRequired: Boolean? = null,
+        val userAuthenticationTypes: Set<SoftwareUserAuthType>? = null
     ) {
         companion object
     }

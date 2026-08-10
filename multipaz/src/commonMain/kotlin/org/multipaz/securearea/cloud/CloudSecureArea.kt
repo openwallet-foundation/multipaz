@@ -14,6 +14,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.buildByteString
@@ -86,6 +87,8 @@ import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.PromptModelNotAvailableException
 import org.multipaz.securearea.KeyUnlockDataProvider
+import org.multipaz.securearea.PreloadedKeyUnlockDataProvider
+import org.multipaz.securearea.buildPreloadedKeyUnlockDataProvider
 import org.multipaz.prompt.Reason
 import kotlin.random.Random
 import kotlin.time.Duration
@@ -925,19 +928,26 @@ open class CloudSecureArea protected constructor(
     override suspend fun unlockKey(
         alias: String,
         unlockReason: Reason
-    ): KeyUnlockData? {
+    ): List<KeyUnlockData> {
+        val list = mutableListOf<KeyUnlockData>()
         val keyInfo = getKeyInfo(alias)
-        if (!keyInfo.isPassphraseRequired) {
-            return null
+        if (keyInfo.isPassphraseRequired) {
+            val unlockDataProvider = currentCoroutineContext()[KeyUnlockDataProvider.Key]
+                ?: DefaultKeyUnlockDataProvider
+            val cloudUnlockData = unlockDataProvider.getKeyUnlockData(
+                secureArea = this,
+                alias = alias,
+                algorithm = keyInfo.algorithm,
+                unlockReason = unlockReason
+            )
+            list.add(cloudUnlockData)
         }
-        val unlockDataProvider = currentCoroutineContext()[KeyUnlockDataProvider.Key]
-            ?: DefaultKeyUnlockDataProvider
-        return unlockDataProvider.getKeyUnlockData(
-            secureArea = this,
-            alias = alias,
-            algorithm = keyInfo.algorithm,
+        val platformUnlockDataList = platformSecureArea.unlockKey(
+            alias = getLocalKeyAlias(alias),
             unlockReason = unlockReason
         )
+        list.addAll(platformUnlockDataList)
+        return list
     }
 
     private suspend fun saveKeyMetadata(

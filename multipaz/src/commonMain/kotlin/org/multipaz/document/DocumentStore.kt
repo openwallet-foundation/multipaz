@@ -39,6 +39,7 @@ import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
+import org.multipaz.securearea.software.SoftwareUserAuthType
 import org.multipaz.storage.NoRecordStorageException
 import org.multipaz.tags.Tags
 import kotlin.coroutines.cancellation.CancellationException
@@ -295,9 +296,9 @@ class DocumentStore private constructor(
     @Throws(IllegalStateException::class, ImportMpzPassException::class, CancellationException::class)
     suspend fun importMpzPass(
         mpzPass: MpzPass,
-        isoMdocDomain: String = "mdoc",
-        sdJwtVcDomain: String = "sdjwtvc",
-        keylessSdJwtVcDomain: String = "sdjwtvc_keyless"
+        isoMdocDomain: String,
+        sdJwtVcDomain: String,
+        keylessSdJwtVcDomain: String
     ): Document {
         val softwareSecureArea = secureAreaRepository.getImplementation(SoftwareSecureArea.IDENTIFIER)
             ?: throw IllegalStateException(
@@ -332,11 +333,17 @@ class DocumentStore private constructor(
 
         try {
             mpzPass.isoMdoc.forEach { isoMdoc ->
+                val createKeySettingsBuilder = SoftwareCreateKeySettings.Builder()
+                    .setPrivateKey(isoMdoc.deviceKeyPrivate)
+                if (mpzPass.userAuthenticationRequired) {
+                    createKeySettingsBuilder.setUserAuthenticationRequired(
+                        true,
+                        setOf(SoftwareUserAuthType.PASSCODE, SoftwareUserAuthType.BIOMETRIC)
+                    )
+                }
                 val importedKeyInfo = softwareSecureArea.createKey(
                     alias = null,
-                    createKeySettings = SoftwareCreateKeySettings.Builder()
-                        .setPrivateKey(isoMdoc.deviceKeyPrivate)
-                        .build()
+                    createKeySettings = createKeySettingsBuilder.build()
                 )
                 val credential = MdocCredential.createForExistingAlias(
                     document = document,
@@ -358,11 +365,17 @@ class DocumentStore private constructor(
 
             mpzPass.sdJwtVc.forEach { sdJwtVc ->
                 val credential = if (sdJwtVc.deviceKeyPrivate != null) {
+                    val createKeySettingsBuilder = SoftwareCreateKeySettings.Builder()
+                        .setPrivateKey(sdJwtVc.deviceKeyPrivate)
+                    if (mpzPass.userAuthenticationRequired) {
+                        createKeySettingsBuilder.setUserAuthenticationRequired(
+                            true,
+                            setOf(SoftwareUserAuthType.PASSCODE, SoftwareUserAuthType.BIOMETRIC)
+                        )
+                    }
                     val importedKeyInfo = softwareSecureArea.createKey(
                         alias = null,
-                        createKeySettings = SoftwareCreateKeySettings.Builder()
-                            .setPrivateKey(sdJwtVc.deviceKeyPrivate)
-                            .build()
+                        createKeySettings = createKeySettingsBuilder.build()
                     )
                     KeyBoundSdJwtVcCredential.createForExistingAlias(
                         document = document,

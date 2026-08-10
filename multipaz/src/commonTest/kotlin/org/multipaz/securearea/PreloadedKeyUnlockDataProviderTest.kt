@@ -12,6 +12,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class PreloadedKeyUnlockDataProviderTest {
 
@@ -34,15 +35,15 @@ class PreloadedKeyUnlockDataProviderTest {
         )
         sa.createKey("unlockedKey", CreateKeySettings())
 
-        val unlockData1 = SoftwareKeyUnlockData("pass1")
-        val unlockData2 = SoftwareKeyUnlockData("pass2")
-        val nullUnlockData = sa.unlockKey("unlockedKey")
-        assertNull(nullUnlockData)
+        val unlockData1 = SoftwareKeyUnlockData(sa, "key1", "pass1")
+        val unlockData2 = SoftwareKeyUnlockData(sa, "key2", "pass2")
+        val nullUnlockDataList = sa.unlockKey("unlockedKey")
+        assertTrue(nullUnlockDataList.isEmpty())
 
         val preloadedProvider = buildPreloadedKeyUnlockDataProvider {
             add(sa, "key1", unlockData1)
             add(sa, "key2", unlockData2)
-            add(sa, "unlockedKey", nullUnlockData)
+            add(sa, "unlockedKey", nullUnlockDataList)
         }
 
         withContext(preloadedProvider) {
@@ -97,7 +98,7 @@ class PreloadedKeyUnlockDataProviderTest {
                 alias: String,
                 algorithm: Algorithm,
                 unlockReason: Reason
-            ): KeyUnlockData = SoftwareKeyUnlockData("pass1")
+            ): KeyUnlockData = SoftwareKeyUnlockData(secureArea as SoftwareSecureArea, alias, "pass1")
         }
 
         val preloadedProvider = PreloadedKeyUnlockDataProvider.Builder()

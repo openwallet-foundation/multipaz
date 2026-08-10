@@ -5,11 +5,12 @@ import org.multipaz.securearea.KeyUnlockData
 /**
  * A class to provide information used for unlocking a Cloud Secure Area key.
  *
+ * @param secureArea the [CloudSecureArea] containing the key.
  * @param alias the alias of the key to unlock.
  */
 class CloudKeyUnlockData(
-    private val cloudSecureArea: CloudSecureArea,
-    private val alias: String
+    override val secureArea: CloudSecureArea,
+    override val alias: String
 ) : KeyUnlockData {
 
     /**

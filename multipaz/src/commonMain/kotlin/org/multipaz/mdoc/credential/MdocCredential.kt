@@ -310,13 +310,16 @@ class MdocCredential : SecureAreaBoundCredential {
         check(secureArea is SoftwareSecureArea) {
             "You can only export a credential if it's using a SoftwareSecureArea"
         }
-        val deviceKeyPrivate = (secureArea as SoftwareSecureArea).getPrivateKey(alias, keyUnlockData)
+        val swSecureArea = secureArea as SoftwareSecureArea
+        val keyInfo = swSecureArea.getKeyInfo(alias)
+        val deviceKeyPrivate = swSecureArea.getPrivateKey(alias, keyUnlockData)
         val issuerNamespaces = IssuerNamespaces.fromDataItem(issuerSigned["nameSpaces"])
         val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1
         return MpzPass(
             name = document.displayName,
             typeName = document.typeDisplayName,
             cardArt = document.cardArt,
+            userAuthenticationRequired = keyInfo.isUserAuthenticationRequired,
             isoMdoc = listOf(MpzPassIsoMdoc(
                 docType = docType,
                 deviceKeyPrivate = deviceKeyPrivate,

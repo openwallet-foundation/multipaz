@@ -210,13 +210,13 @@ interface SecureArea {
     /**
      * Unlocks a key requiring user authentication.
      *
-     * Returns `null` if user authentication is not required to unlock the key.
-     * Otherwise it performs user authentication and returns a [KeyUnlockData] object
+     * Returns an empty list if user authentication is not required to unlock the key.
+     * Otherwise, it performs user authentication and returns a list of [KeyUnlockData] objects
      * which can be stored in a [KeyUnlockDataProvider] and returned as appropriate.
      *
      * @param alias the alias of the key to unlock.
      * @param unlockReason the reason for unlocking.
-     * @return a [KeyUnlockData] if user authentication was required and performed, or `null` if not required.
+     * @return a list of [KeyUnlockData] objects if user authentication was required and performed, or empty list if not required.
      * @throws IllegalArgumentException if there is no key with the given alias.
      * @throws KeyLockedException if user authentication was canceled or failed.
      */
@@ -228,5 +228,5 @@ interface SecureArea {
     suspend fun unlockKey(
         alias: String,
         unlockReason: Reason = Reason.Unspecified
-    ): KeyUnlockData?
+    ): List<KeyUnlockData>
 }

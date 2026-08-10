@@ -21,6 +21,7 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareKeyUnlockData
 import org.multipaz.securearea.software.SoftwareSecureArea
+import org.multipaz.securearea.software.SoftwareUserAuthType
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -113,18 +114,23 @@ class SoftwareSecureAreaTest {
     fun testEcKeyWithGenericCreateKeySettings() = runTest {
         val storage = EphemeralStorage()
         val ks = SoftwareSecureArea.create(storage)
-        val challenge = byteArrayOf(1, 2, 3)
         ks.createKey("testKey", CreateKeySettings())
         val keyInfo = ks.getKeyInfo("testKey")
         assertNotNull(keyInfo)
         assertEquals(Algorithm.ESP256, keyInfo.algorithm)
         assertEquals(EcCurve.P256, keyInfo.publicKey.curve)
         assertFalse(keyInfo.isPassphraseProtected)
+        assertFalse(keyInfo.isUserAuthenticationRequired)
         assertNull(keyInfo.passphraseConstraints)
 
-        // TODO: Check challenge.
-        //val cert = keyInfo.attestation.certificates[0].javaX509Certificate
-        //assertContentEquals(challenge, getChallenge(cert))
+        ks.createKey("userAuthKey", CreateKeySettings(userAuthenticationRequired = true))
+        val userAuthKeyInfo = ks.getKeyInfo("userAuthKey")
+        assertNotNull(userAuthKeyInfo)
+        assertTrue(userAuthKeyInfo.isUserAuthenticationRequired)
+        assertEquals(
+            setOf(SoftwareUserAuthType.PASSCODE, SoftwareUserAuthType.BIOMETRIC),
+            userAuthKeyInfo.userAuthenticationTypes
+        )
     }
 
     @Test
@@ -237,7 +243,7 @@ class SoftwareSecureAreaTest {
 
         // Try with the wrong passphrase. This should fail.
         try {
-            withContext(MockKeyUnlockDataProvider(SoftwareKeyUnlockData("wrongPassphrase"))) {
+            withContext(MockKeyUnlockDataProvider("wrongPassphrase")) {
                 ks.sign("testKey", dataToSign)
             }
             fail()
@@ -247,7 +253,7 @@ class SoftwareSecureAreaTest {
 
         // ... and with the right passphrase. This should work.
         val signature = try {
-            withContext(MockKeyUnlockDataProvider(SoftwareKeyUnlockData(passphrase))) {
+            withContext(MockKeyUnlockDataProvider(passphrase)) {
                 ks.sign(
                     "testKey",
                     dataToSign,
@@ -406,11 +412,11 @@ class SoftwareSecureAreaTest {
         val storage = EphemeralStorage()
         val sa = SoftwareSecureArea.create(storage)
 
-        // Key without passphrase requirement -> unlockKey returns null
+        // Key without passphrase requirement -> unlockKey returns empty list
         sa.createKey("unlockedKey", CreateKeySettings())
-        assertNull(sa.unlockKey("unlockedKey"))
+        assertTrue(sa.unlockKey("unlockedKey").isEmpty())
 
-        // Key with passphrase requirement -> unlockKey returns SoftwareKeyUnlockData when provider is present
+        // Key with passphrase requirement -> unlockKey returns list containing SoftwareKeyUnlockData when provider is present
         sa.createKey(
             "lockedKey",
             SoftwareCreateKeySettings.Builder()
@@ -418,23 +424,151 @@ class SoftwareSecureAreaTest {
                 .build()
         )
 
-        val unlockData = SoftwareKeyUnlockData("correctPassword")
-        withContext(MockKeyUnlockDataProvider(unlockData)) {
-            val result = sa.unlockKey("lockedKey")
-            assertNotNull(result)
+        withContext(MockKeyUnlockDataProvider(passphrase = "correctPassword")) {
+            val resultList = sa.unlockKey("lockedKey")
+            assertEquals(1, resultList.size)
+            val result = resultList.first()
             assertTrue(result is SoftwareKeyUnlockData)
             assertEquals("correctPassword", (result as SoftwareKeyUnlockData).passphrase)
         }
     }
 
+    @Test
+    fun testEcKeySigningWithUserAuthenticationRequired() = runTest {
+        val storage = EphemeralStorage()
+        val ks = SoftwareSecureArea.create(storage)
+        ks.createKey(
+            "testKey",
+            SoftwareCreateKeySettings.Builder()
+                .setUserAuthenticationRequired(true, setOf(SoftwareUserAuthType.PASSCODE, SoftwareUserAuthType.BIOMETRIC))
+                .build()
+        )
+        val keyInfo = ks.getKeyInfo("testKey")
+        assertNotNull(keyInfo)
+        assertEquals(Algorithm.ESP256, keyInfo.algorithm)
+        assertTrue(keyInfo.isUserAuthenticationRequired)
+        assertEquals(setOf(SoftwareUserAuthType.PASSCODE, SoftwareUserAuthType.BIOMETRIC), keyInfo.userAuthenticationTypes)
+        val dataToSign = byteArrayOf(4, 5, 6)
+
+        // Try without unlocking. This should fail.
+        try {
+            ks.sign("testKey", dataToSign)
+            fail("Should fail when user authentication is required and not provided")
+        } catch (e: KeyLockedException) {
+            // Expected path.
+        }
+
+        // Try with userAuthenticated = false. This should fail.
+        try {
+            withContext(MockKeyUnlockDataProvider(userAuthenticated = false)) {
+                ks.sign("testKey", dataToSign)
+            }
+            fail("Should fail when userAuthenticated is false")
+        } catch (e: KeyLockedException) {
+            // Expected path.
+        }
+
+        // Try with userAuthenticated = true. This should succeed.
+        val signature = try {
+            withContext(MockKeyUnlockDataProvider(userAuthenticated = true)) {
+                ks.sign("testKey", dataToSign)
+            }
+        } catch (e: KeyLockedException) {
+            throw AssertionError(e)
+        }
+
+        Crypto.checkSignature(
+            keyInfo.publicKey,
+            dataToSign,
+            Algorithm.ES256,
+            signature
+        )
+    }
+
+    @Test
+    fun testEcKeySigningWithUserAuthenticationAndPassphrase() = runTest {
+        val storage = EphemeralStorage()
+        val ks = SoftwareSecureArea.create(storage)
+        val passphrase = "pass"
+        ks.createKey(
+            "testKey",
+            SoftwareCreateKeySettings.Builder()
+                .setPassphraseRequired(true, passphrase, null)
+                .setUserAuthenticationRequired(true, setOf(SoftwareUserAuthType.BIOMETRIC))
+                .build()
+        )
+        val keyInfo = ks.getKeyInfo("testKey")
+        assertTrue(keyInfo.isPassphraseProtected)
+        assertTrue(keyInfo.isUserAuthenticationRequired)
+        assertEquals(setOf(SoftwareUserAuthType.BIOMETRIC), keyInfo.userAuthenticationTypes)
+        val dataToSign = byteArrayOf(4, 5, 6)
+
+        // Wrong passphrase, userAuthenticated = true -> fails
+        try {
+            withContext(MockKeyUnlockDataProvider(passphrase = "wrong", userAuthenticated = true)) {
+                ks.sign("testKey", dataToSign)
+            }
+            fail("Should fail with wrong passphrase")
+        } catch (e: KeyLockedException) {
+            // Expected.
+        }
+
+        // Correct passphrase, userAuthenticated = false -> fails
+        try {
+            withContext(MockKeyUnlockDataProvider(passphrase = passphrase, userAuthenticated = false)) {
+                ks.sign("testKey", dataToSign)
+            }
+            fail("Should fail when userAuthenticated is false")
+        } catch (e: KeyLockedException) {
+            // Expected.
+        }
+
+        // Correct passphrase, userAuthenticated = true -> succeeds
+        val signature = withContext(MockKeyUnlockDataProvider(passphrase = passphrase, userAuthenticated = true)) {
+            ks.sign("testKey", dataToSign)
+        }
+        Crypto.checkSignature(
+            keyInfo.publicKey,
+            dataToSign,
+            Algorithm.ES256,
+            signature
+        )
+    }
+
+    @Test
+    fun testUnlockKeyWithUserAuthentication() = runTest {
+        val storage = EphemeralStorage()
+        val sa = SoftwareSecureArea.create(storage)
+        sa.createKey(
+            "userAuthKey",
+            SoftwareCreateKeySettings.Builder()
+                .setUserAuthenticationRequired(true, setOf(SoftwareUserAuthType.PASSCODE))
+                .build()
+        )
+
+        withContext(MockKeyUnlockDataProvider(userAuthenticated = true)) {
+            val resultList = sa.unlockKey("userAuthKey")
+            assertEquals(1, resultList.size)
+            val result = resultList.first()
+            assertTrue(result is SoftwareKeyUnlockData)
+            assertTrue((result as SoftwareKeyUnlockData).userAuthenticated)
+        }
+    }
+
     private class MockKeyUnlockDataProvider(
-        val keyUnlockData: KeyUnlockData
+        val passphrase: String? = null,
+        val userAuthenticated: Boolean = false
     ): KeyUnlockDataProvider {
         override suspend fun getKeyUnlockData(
             secureArea: SecureArea,
             alias: String,
             algorithm: Algorithm,
             unlockReason: Reason
-        ): KeyUnlockData = keyUnlockData
+        ): KeyUnlockData = SoftwareKeyUnlockData(
+            secureArea = secureArea as SoftwareSecureArea,
+            alias = alias,
+            passphrase = passphrase,
+            userAuthenticated = userAuthenticated
+        )
     }
 }

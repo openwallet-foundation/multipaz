@@ -28,6 +28,7 @@ import org.multipaz.securearea.cloud.CloudSecureAreaServer
 import org.multipaz.securearea.cloud.SimplePassphraseFailureEnforcer
 import org.multipaz.server.request.certificateAuthority
 import org.multipaz.server.request.push
+import org.multipaz.util.Logger
 import java.security.Security
 import kotlin.time.Duration.Companion.seconds
 
@@ -35,7 +36,9 @@ import kotlin.time.Duration.Companion.seconds
  * Defines server endpoints for HTTP GET and POST.
  */
 fun Application.configureRouting(serverEnvironment: Deferred<ServerEnvironment>) {
-    Security.addProvider(BouncyCastleProvider())
+    Logger.i(TAG, "Forcing BouncyCastle to the top of the list")
+    Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
+    Security.insertProviderAt(BouncyCastleProvider(), 1)
     val keyMaterial = lazy {
         KeyMaterial.create(serverEnvironment)
     }

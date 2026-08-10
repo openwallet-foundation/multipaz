@@ -100,21 +100,25 @@ func getPresentmentSource() async -> PresentmentSource {
         documentTypeRepository: documentTypeRepository,
         zkSystemRepository: zkSystemRepository,
         resolveTrustFn: { requester in
-            if let certChain = requester.certChain {
+            for requesterIdentity in requester.requesterIdentities {
+                let certChain = requesterIdentity.certChain
                 let result = try! await readerTrustManager.verify(
                     chain: certChain.certificates,
                     atTime: KotlinClockCompanion().getSystem().now()
                 )
-                if result.isTrusted {
-                    return result.trustPoints.first?.metadata
+                if result.isTrusted && result.trustPoints.first != nil {
+                    return TrustedRequesterIdentity(
+                        identity: requesterIdentity,
+                        trustMetadata: result.trustPoints.first!.metadata
+                    )
                 }
             }
             return nil
         },
-        showConsentPromptFn: { requester, trustMetadata, consentData, preselectedDocuments, onDocumentsInFocus in
+        showConsentPromptFn: { requester, trustedRequesterIdentity, consentData, preselectedDocuments, onDocumentsInFocus in
             try! await promptModelSilentConsent(
                 requester: requester,
-                trustMetadata: trustMetadata,
+                trustedRequesterIdentity: trustedRequesterIdentity,
                 consentData: consentData,
                 preselectedDocuments: preselectedDocuments,
                 onDocumentsInFocus: { documents in onDocumentsInFocus(documents) }
@@ -123,8 +127,8 @@ func getPresentmentSource() async -> PresentmentSource {
         preferSignatureToKeyAgreement: false,
         domainsMdocSignature: [TestAppUtils.shared.CREDENTIAL_DOMAIN_MDOC_USER_AUTH],
         domainsMdocKeyAgreement: [TestAppUtils.shared.CREDENTIAL_DOMAIN_MDOC_MAC_USER_AUTH],
-        domainsKeylessSdJwt: [],
-        domainsKeyBoundSdJwt: []
+        domainsKeylessSdJwt: [TestAppUtils.shared.CREDENTIAL_DOMAIN_SDJWT_KEYLESS],
+        domainsKeyBoundSdJwt: [TestAppUtils.shared.CREDENTIAL_DOMAIN_SDJWT_USER_AUTH]
     )
 }
 

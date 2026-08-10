@@ -43,9 +43,38 @@ class PreloadedKeyUnlockDataProvider private constructor(
         private val map = mutableMapOf<Pair<String, String>, KeyUnlockData>()
 
         /**
+         * Adds a preloaded [KeyUnlockData].
+         *
+         * If [keyUnlockData] is `null` (e.g. when user authentication is not required),
+         * this method is a no-op.
+         *
+         * @param keyUnlockData the preloaded unlock data, or `null`.
+         * @return this builder.
+         */
+        fun add(keyUnlockData: KeyUnlockData?): Builder {
+            if (keyUnlockData != null) {
+                map[Pair(keyUnlockData.secureArea.identifier, keyUnlockData.alias)] = keyUnlockData
+            }
+            return this
+        }
+
+        /**
+         * Adds a list of preloaded [KeyUnlockData] items.
+         *
+         * @param keyUnlockDataList the list of preloaded unlock data items.
+         * @return this builder.
+         */
+        fun add(keyUnlockDataList: List<KeyUnlockData>): Builder {
+            for (keyUnlockData in keyUnlockDataList) {
+                add(keyUnlockData)
+            }
+            return this
+        }
+
+        /**
          * Adds a preloaded [KeyUnlockData] for a specific key in a [SecureArea].
          *
-         * If [keyUnlockData] is `null` (e.g. returned by [SecureArea.unlockKey] when user authentication is not required),
+         * If [keyUnlockData] is `null` (e.g. when user authentication is not required),
          * this method is a no-op.
          *
          * @param secureArea the Secure Area containing the key.
@@ -56,6 +85,21 @@ class PreloadedKeyUnlockDataProvider private constructor(
         fun add(secureArea: SecureArea, alias: String, keyUnlockData: KeyUnlockData?): Builder {
             if (keyUnlockData != null) {
                 map[Pair(secureArea.identifier, alias)] = keyUnlockData
+            }
+            return this
+        }
+
+        /**
+         * Adds a list of preloaded [KeyUnlockData] items for a specific key in a [SecureArea].
+         *
+         * @param secureArea the Secure Area containing the key.
+         * @param alias the alias of the key.
+         * @param keyUnlockDataList the list of preloaded unlock data items.
+         * @return this builder.
+         */
+        fun add(secureArea: SecureArea, alias: String, keyUnlockDataList: List<KeyUnlockData>): Builder {
+            for (keyUnlockData in keyUnlockDataList) {
+                add(keyUnlockData)
             }
             return this
         }

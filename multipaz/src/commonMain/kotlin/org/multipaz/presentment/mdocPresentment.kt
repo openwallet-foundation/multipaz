@@ -131,11 +131,11 @@ suspend fun mdocPresentmentAuthenticateUser(
         for (match in selection.matches) {
             if (match.credential is SecureAreaBoundCredential) {
                 val credential = match.credential
-                val keyUnlockData = credential.secureArea.unlockKey(
+                val keyUnlockDataList = credential.secureArea.unlockKey(
                     alias = credential.alias,
                     unlockReason = PresentmentUnlockReason(credential)
                 )
-                add(credential.secureArea, credential.alias, keyUnlockData)
+                add(keyUnlockDataList)
             }
         }
     }
