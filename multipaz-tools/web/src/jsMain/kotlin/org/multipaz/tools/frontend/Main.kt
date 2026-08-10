@@ -50,7 +50,9 @@ fun pathToTab(path: String): String {
         "/converter" -> "converter"
         "/x509" -> "x509"
         "/asn1" -> "asn1"
-        "/cert-converter" -> "cert-converter"
+        "/cert-converter" -> "x509"
+        "/key-decoder" -> "key-decoder"
+        "/keyDecoder" -> "key-decoder"
         "/keygen" -> "key-generator"
         "/cert" -> "cert-generator"
         "/ndef" -> "ndef-parse"
@@ -78,7 +80,7 @@ fun tabToPath(tab: String): String {
         "converter" -> "/converter"
         "x509" -> "/x509"
         "asn1" -> "/asn1"
-        "cert-converter" -> "/cert-converter"
+        "key-decoder" -> "/key-decoder"
         "key-generator" -> "/keygen"
         "cert-generator" -> "/cert"
         "ndef-parse" -> "/ndef"
@@ -240,9 +242,9 @@ val App = FC {
                     "sd-jwt-inspect" to "SD-JWT Parser"
                 )),
                 Category("certs", "Certificates & Keys", listOf(
-                    "x509" to "Certificate Parser",
-                    "cert-converter" to "Certificate Converter",
-                    "cert-generator" to "Certificate Generator",
+                    "x509" to "X.509 Certificate Decoder",
+                    "cert-generator" to "X.509 Certificate Generator",
+                    "key-decoder" to "Key Decoder",
                     "key-generator" to "Key Generator"
                 )),
                 Category("utilities", "Utilities", listOf(
@@ -377,7 +379,7 @@ val App = FC {
                 "converter" -> ConverterComponent { key = "converter" }
                 "x509" -> X509ParserComponent { key = "x509" }
                 "asn1" -> Asn1DecoderComponent { key = "asn1" }
-                "cert-converter" -> CertConverterComponent { key = "cert-converter" }
+                "key-decoder" -> KeyDecoderComponent { key = "key-decoder" }
                 "key-generator" -> KeyGeneratorComponent { key = "key-generator" }
                 "cert-generator" -> CertGeneratorComponent { key = "cert-generator" }
                 "ndef-parse" -> NdefParserComponent { key = "ndef-parse" }

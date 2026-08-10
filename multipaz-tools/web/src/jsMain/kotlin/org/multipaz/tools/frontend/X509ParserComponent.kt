@@ -18,10 +18,12 @@ import react.useEffectOnce
 import js.typedarrays.Int8Array
 import js.typedarrays.toByteArray
 import org.multipaz.util.toHex
+import org.multipaz.util.toBase64
 import web.file.File
 import web.file.FileReader
 import web.html.InputType
 import web.cssom.*
+import kotlinx.browser.window
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
@@ -98,7 +100,7 @@ val X509ParserComponent = FC {
                 margin = Margin(0.px, 0.px, 16.px, 0.px)
                 color = Color("#f8fafc")
             }
-            +"Certificate Parser"
+            +"X.509 Certificate Decoder"
         }
 
         if (parsedCert != null || parseError.isNotEmpty()) {
@@ -605,6 +607,91 @@ val X509ParserComponent = FC {
                                             }
                                             +displayValue
                                         }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Card 5: Encoded Representations (Four Forms)
+                    div {
+                        css {
+                            background = Color("#0f172a")
+                            border = Border(1.px, LineStyle.solid, Color("#334155"))
+                            borderRadius = 12.px
+                            padding = 24.px
+                            display = Display.flex
+                            flexDirection = FlexDirection.column
+                            gap = 16.px
+                        }
+
+                        h3 {
+                            css {
+                                margin = 0.px
+                                fontSize = 1.3.rem
+                                color = Color("#f1f5f9")
+                                borderBottom = Border(1.px, LineStyle.solid, Color("#1e293b"))
+                                paddingBottom = 12.px
+                            }
+                            +"Encoded Certificate Representations"
+                        }
+
+                        val certPemOutput = cert.toPem()
+                        val certHexOutput = cert.encoded.toByteArray().toHex()
+                        val certBase64Output = cert.encoded.toByteArray().toBase64()
+
+                        div {
+                            css {
+                                display = Display.grid
+                                gridTemplateColumns = "repeat(auto-fit, minmax(280px, 1fr))".unsafeCast<GridTemplateColumns>()
+                                gap = 20.px
+                            }
+
+                            listOf(
+                                "PEM format" to certPemOutput,
+                                "Hex format (DER)" to certHexOutput,
+                                "Base64 format (DER)" to certBase64Output
+                            ).forEach { (title, outputVal) ->
+                                div {
+                                    css {
+                                        background = Color("#1e293b")
+                                        border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                        borderRadius = 10.px
+                                        padding = 16.px
+                                        display = Display.flex
+                                        flexDirection = FlexDirection.column
+                                        gap = 8.px
+                                    }
+                                    div {
+                                        css { display = Display.flex; justifyContent = JustifyContent.spaceBetween; alignItems = AlignItems.center }
+                                        span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold; fontSize = 13.px }; +title }
+                                        button {
+                                            css {
+                                                background = Color("#0f172a")
+                                                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                                color = Color("#60a5fa")
+                                                padding = Padding(4.px, 8.px)
+                                                borderRadius = 6.px
+                                                cursor = Cursor.pointer
+                                                fontSize = 11.px
+                                                fontWeight = FontWeight.bold
+                                                hover { background = Color("#334155") }
+                                            }
+                                            onClick = {
+                                                window.navigator.asDynamic().clipboard.writeText(outputVal)
+                                            }
+                                            +"Copy"
+                                        }
+                                    }
+                                    textarea {
+                                        css {
+                                            width = 100.pct; height = 120.px; background = Color("#0f172a")
+                                            border = Border(1.px, LineStyle.solid, Color("#334155")); borderRadius = 6.px
+                                            color = Color("#38bdf8"); fontFamily = FontFamily.monospace; padding = 8.px; fontSize = 11.px
+                                            resize = "none".unsafeCast<Resize>()
+                                        }
+                                        readOnly = true
+                                        value = outputVal
                                     }
                                 }
                             }
