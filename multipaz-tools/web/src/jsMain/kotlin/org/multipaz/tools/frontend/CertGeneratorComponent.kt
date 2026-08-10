@@ -125,7 +125,7 @@ val CertGeneratorComponent = FC {
                 margin = Margin(0.px, 0.px, 16.px, 0.px)
                 color = Color("#f8fafc")
             }
-            +"Certificate Generator"
+            +"X.509 Certificate Generator"
         }
 
         p {
