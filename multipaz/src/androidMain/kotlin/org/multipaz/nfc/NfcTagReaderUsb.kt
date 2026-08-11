@@ -54,6 +54,18 @@ internal class NfcTagReaderUsb(
     override val dialogNeverShown: Boolean
         get() = true
 
+    /**
+     * Scans for an NFC tag using the USB CCID reader and executes [tagInteractionFunc].
+     *
+     * @param message Optional message to show during scanning.
+     * @param tagInteractionFunc The interaction function to execute when a tag is detected.
+     * @param options Options for NFC scanning.
+     * @param context The coroutine context for execution.
+     * @return The result of [tagInteractionFunc].
+     * @throws NfcTagLostException if the tag is lost during transaction.
+     * @throws IOException if a USB or CCID communication error occurs.
+     * @throws SecurityException if USB permission is denied.
+     */
     override suspend fun <T : Any> scan(
         message: String?,
         tagInteractionFunc: suspend (NfcIsoTag) -> T?,
@@ -111,6 +123,7 @@ internal class NfcTagReaderUsb(
                         listener.onCardInserted()
                     }
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Logger.w(TAG, "Failed to query initial card status", e)
                 }
 
@@ -122,10 +135,10 @@ internal class NfcTagReaderUsb(
             return result
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            driver.disconnect()
             throw e
         } finally {
             driver.setListener(null)
+            driver.disconnect()
         }
     }
 }
