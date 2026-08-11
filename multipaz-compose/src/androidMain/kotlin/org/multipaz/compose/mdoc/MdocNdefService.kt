@@ -383,6 +383,7 @@ abstract class MdocNdefService(
         }
 
         try {
+            val preselectedDocuments = settings.presentmentModel?.documentsSelected?.value ?: emptyList()
             settings.presentmentModel?.setConnecting()
             Iso18013Presentment(
                 transport = transport,
@@ -391,6 +392,7 @@ abstract class MdocNdefService(
                 handover = handover,
                 source = settings.source,
                 keyAgreementPossible = listOf(eDeviceKey.curve),
+                preselectedDocuments = preselectedDocuments,
                 onWaitingForRequest = { settings.presentmentModel?.setWaitingForReader() },
                 onWaitingForUserInput = { settings.presentmentModel?.setWaitingForUserInput() },
                 onDocumentsInFocus = { documents ->

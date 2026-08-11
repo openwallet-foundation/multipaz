@@ -54,9 +54,8 @@ private const val TAG = "mdocPresentment"
  * @param keyAgreementPossible the list of curves for which key agreement is possible.
  * @param requesterAppId the appId if an app is making the request or `null`.
  * @param requesterOrigin the origin or `null`.
- * @param preselectedDocuments the list of documents the user may have preselected earlier (for
- *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
- *   if the user didn't preselect.
+ * @param preselectedDocuments the list of documents the user may have preselected earlier or the
+ *   empty list if the user didn't preselect.
  * @param onWaitingForUserInput called when waiting for input from the user (consent or authentication)
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.

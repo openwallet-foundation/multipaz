@@ -18,6 +18,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,9 +28,12 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,11 +58,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.fragment.app.FragmentActivity
 import coil3.ImageLoader
 import coil3.network.ktor3.KtorNetworkFetcherFactory
@@ -78,6 +86,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.branding.Branding
+import org.multipaz.compose.cards.CardBadges
+import org.multipaz.compose.cards.CardView
 import org.multipaz.compose.cards.VerticalCardList
 import org.multipaz.compose.document.DocumentInfo
 import org.multipaz.compose.document.DocumentModel
@@ -489,11 +499,14 @@ internal fun PresentmentActivityContent(
                         )
                     } else {
                         val docsToShow = presentmentModel!!.documentsSelected.collectAsState().value
-                        val docIdToShow =
-                            docsToShow.firstOrNull()?.identifier ?: selectedDocIdFromCardChooser.value
+                        val docIdsToShow = if (docsToShow.isNotEmpty()) {
+                            docsToShow.map { it.identifier }.distinct()
+                        } else {
+                            listOfNotNull(selectedDocIdFromCardChooser.value)
+                        }
                         ShowCard(
                             documentModel = documentModel!!,
-                            documentId = docIdToShow,
+                            documentIds = docIdsToShow,
                             contentBelow = {
                                 val isNfcConnected by presentmentModel!!.isNfcConnected.collectAsState()
                                 val isNfcOnly by presentmentModel!!.isNfcOnly.collectAsState()
@@ -561,29 +574,83 @@ internal fun PresentmentActivityContent(
     }
 }
 
+private const val STACKED_CARD_SCALE_PERCENT = 85
+
 @Composable
 private fun ShowCard(
     documentModel: DocumentModel,
-    documentId: String?,
+    documentIds: List<String>,
     contentBelow: @Composable () -> Unit
 ) {
     val configuration = LocalConfiguration.current
     val maxCardHeight = configuration.screenHeightDp.dp / 3
 
     val docInfos by documentModel.documentInfos.collectAsState()
-    val documentInfo = docInfos.find { it.document.identifier == documentId }
-    if (documentInfo != null) {
-        VerticalCardList(
-            cardInfos = docInfos,
-            focusedCard = documentInfo,
-            unfocusedVisiblePercent = 25,
-            allowCardReordering = false,
-            showStackWhileFocused = false,
-            cardMaxHeight = maxCardHeight,
-            showCardInfo = { cardInfo ->
+    val matchingDocInfos = remember(docInfos, documentIds) {
+        documentIds.mapNotNull { id -> docInfos.find { it.document.identifier == id } }.distinctBy { it.document.identifier }
+    }
+
+    if (matchingDocInfos.isNotEmpty()) {
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            val density = LocalDensity.current
+            val maxWidthDp = maxWidth
+            var cardWidthDp = maxWidthDp - 32.dp
+            var cardHeightDp = cardWidthDp / 1.586f
+            if (cardHeightDp > maxCardHeight) {
+                cardHeightDp = maxCardHeight
+                cardWidthDp = cardHeightDp * 1.586f
+            }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(24.dp))
+                Box(
+                    modifier = Modifier
+                        .width(cardWidthDp)
+                        .height(cardHeightDp),
+                    contentAlignment = Alignment.TopStart
+                ) {
+                    if (matchingDocInfos.size == 1) {
+                        val documentInfo = matchingDocInfos.first()
+                        CardView(
+                            cardInfo = documentInfo,
+                            modifier = Modifier.fillMaxSize(),
+                            shape = RoundedCornerShape(24.dp),
+                            elevation = 12.dp
+                        )
+                    } else {
+                        val cardCount = matchingDocInfos.size
+                        val scale = STACKED_CARD_SCALE_PERCENT / 100f
+                        val cardW = cardWidthDp * scale
+                        val cardH = cardHeightDp * scale
+                        val maxXOffset = cardWidthDp * (1.0f - scale)
+                        val maxYOffset = cardHeightDp * (1.0f - scale)
+
+                        matchingDocInfos.forEachIndexed { index, documentInfo ->
+                            val offsetX = maxXOffset * (index.toFloat() / (cardCount - 1))
+                            val offsetY = maxYOffset * (index.toFloat() / (cardCount - 1))
+                            CardView(
+                                cardInfo = documentInfo,
+                                modifier = Modifier
+                                    .offset(x = offsetX, y = offsetY)
+                                    .width(cardW)
+                                    .height(cardH)
+                                    .zIndex(index.toFloat()),
+                                shape = RoundedCornerShape((24 * scale).dp),
+                                elevation = 12.dp
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
                 contentBelow()
             }
-        )
+        }
     } else {
         Column(
             modifier = Modifier.fillMaxSize()
