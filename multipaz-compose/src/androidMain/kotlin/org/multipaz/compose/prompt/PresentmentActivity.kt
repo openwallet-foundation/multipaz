@@ -40,6 +40,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
@@ -268,6 +269,12 @@ class PresentmentActivity: FragmentActivity() {
             Logger.i(TAG, "in onStop(), canceling presentment")
             presentmentModel.setCanceledByUser()
         }
+        presentmentModel.showDocumentChooser?.onDocumentSelected?.invoke(null)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        presentmentModel.showDocumentChooser?.onDocumentSelected?.invoke(null)
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -605,6 +612,12 @@ private fun ShowCardChooser(
         documentInfo.document.identifier == focusedDocumentId
     }
     val currentSelectedDocId = focusedDocument?.document?.identifier
+
+    DisposableEffect(Unit) {
+        onDispose {
+            onDocumentSelected?.invoke(null)
+        }
+    }
 
     LaunchedEffect(currentSelectedDocId) {
         selectedDocIdFromCardChooser.value = currentSelectedDocId
