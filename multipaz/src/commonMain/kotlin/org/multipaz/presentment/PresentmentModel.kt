@@ -4,13 +4,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.multipaz.document.Document
-import org.multipaz.document.DocumentBadge
+import org.multipaz.presentment.PresentmentModel.State.CanceledByUser
+import org.multipaz.presentment.PresentmentModel.State.Completed
+import org.multipaz.presentment.PresentmentModel.State.Reset
 
 /**
  * A model which can be used to drive UI for presentment.
  *
  * This model is designed to be shared by a _mechanism_ (the code communicating with a credential
- * reader) and the _UI layer_ (which displays UI to the user). Typically the mechanism will also
+ * reader) and the _UI layer_ (which displays UI to the user). Typically, the mechanism will also
  * include a [PromptModel] bound to the UI so things like consent prompts and authentication dialogs
  * are displayed in the UI.
  */
@@ -22,6 +24,18 @@ class PresentmentModel {
      * The current state of the model.
      */
     val state: StateFlow<State> = mutableState.asStateFlow()
+
+    /**
+     * Whether the presentment model is currently active.
+     *
+     * A presentment model is considered active when it's not in [State.Reset], [State.Completed],
+     * or [State.CanceledByUser].
+     */
+    val isActive: Boolean
+        get() = when(state.value) {
+            is Reset, is Completed, CanceledByUser -> false
+            else -> true
+        }
 
     private var mutableSource: PresentmentSource? = null
     private var mutableDocumentsSelected = MutableStateFlow<List<Document>>(emptyList())

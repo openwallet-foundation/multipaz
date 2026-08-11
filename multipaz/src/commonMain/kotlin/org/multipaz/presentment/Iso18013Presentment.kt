@@ -40,6 +40,8 @@ private const val TAG = "Iso180135Presentment"
  * @param engagementParams a [StateFlow] providing the current engagement parameters.
  * @param source the source of truth for documents to present.
  * @param keyAgreementPossible curves available for key agreement.
+ * @param preselectedDocuments the list of documents the user may have preselected earlier or the
+ *   empty list if the user didn't preselect.
  * @param insertSequenceNumbers whether sequence numbers should be inserted in session messages.
  * @param timeout timeout for initial message.
  * @param timeoutSubsequentRequests timeout for subsequent messages.
@@ -61,6 +63,7 @@ suspend fun Iso18013Presentment(
     engagementParams: StateFlow<EngagementParams>,
     source: PresentmentSource,
     keyAgreementPossible: List<EcCurve>,
+    preselectedDocuments: List<Document> = emptyList(),
     insertSequenceNumbers: Boolean = false,
     timeout: Duration? = 15.seconds,
     timeoutSubsequentRequests: Duration? = 30.seconds,
@@ -208,6 +211,7 @@ suspend fun Iso18013Presentment(
                     keyAgreementPossible = keyAgreementPossible,
                     requesterAppId = null,
                     requesterOrigin = null,
+                    preselectedDocuments = preselectedDocuments,
                     onWaitingForUserInput = onWaitingForUserInput,
                     onDocumentsInFocus = onDocumentsInFocus
                 )
@@ -309,6 +313,22 @@ suspend fun Iso18013Presentment(
 
 /**
  * Performs proximity presentment according to ISO/IEC 18013-5:2021 using individual engagement parameters.
+ *
+ * @param transport the transport to use for communicating with the reader.
+ * @param eDeviceKey the ephemeral device key generated for engagement.
+ * @param deviceEngagement the encoded DeviceEngagement structure.
+ * @param handover the handover structure.
+ * @param source the source of truth for documents to present.
+ * @param keyAgreementPossible curves available for key agreement.
+ * @param preselectedDocuments the list of documents the user may have preselected earlier or the
+ *   empty list if the user didn't preselect.
+ * @param insertSequenceNumbers whether sequence numbers should be inserted in session messages.
+ * @param timeout timeout for initial message.
+ * @param timeoutSubsequentRequests timeout for subsequent messages.
+ * @param onWaitingForRequest callback when waiting for request.
+ * @param onWaitingForUserInput callback when waiting for user input.
+ * @param onDocumentsInFocus callback with selected documents.
+ * @param onSendingResponse callback when sending response.
  */
 @Throws(
     CancellationException::class,
@@ -325,6 +345,7 @@ suspend fun Iso18013Presentment(
     handover: DataItem,
     source: PresentmentSource,
     keyAgreementPossible: List<EcCurve>,
+    preselectedDocuments: List<Document> = emptyList(),
     insertSequenceNumbers: Boolean = false,
     timeout: Duration? = 15.seconds,
     timeoutSubsequentRequests: Duration? = 30.seconds,
@@ -343,6 +364,7 @@ suspend fun Iso18013Presentment(
     ),
     source = source,
     keyAgreementPossible = keyAgreementPossible,
+    preselectedDocuments = preselectedDocuments,
     insertSequenceNumbers = insertSequenceNumbers,
     timeout = timeout,
     timeoutSubsequentRequests = timeoutSubsequentRequests,

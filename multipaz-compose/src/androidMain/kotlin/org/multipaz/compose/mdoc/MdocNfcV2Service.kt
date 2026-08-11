@@ -445,12 +445,14 @@ abstract class MdocNfcV2Service(
         }
 
         try {
+            val preselectedDocuments = settings.presentmentModel?.documentsSelected?.value ?: emptyList()
             settings.presentmentModel?.setConnecting()
             Iso18013Presentment(
                 transport = transport,
                 engagementParams = engagementParamsFlow,
                 source = settings.source,
                 keyAgreementPossible = listOf(eDeviceKey.curve),
+                preselectedDocuments = preselectedDocuments,
                 insertSequenceNumbers = true,
                 onWaitingForRequest = { settings.presentmentModel?.setWaitingForReader() },
                 onWaitingForUserInput = { settings.presentmentModel?.setWaitingForUserInput() },

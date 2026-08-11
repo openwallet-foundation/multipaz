@@ -30,7 +30,7 @@ class TestAppMdocNdefService(
         TestAppConfiguration.cryptoInit(app.settingsModel)
 
         val source = app.getPresentmentSource()
-        if (PresentmentActivity.presentmentModel.state.value is PresentmentModel.State.Reset) {
+        if (!PresentmentActivity.presentmentModel.isActive) {
             PresentmentActivity.presentmentModel.reset(
                 source = source,
                 // TODO: if user is currently selecting a document, pass it here
