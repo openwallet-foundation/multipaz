@@ -28,6 +28,7 @@ import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.openid4vci.credential.CredentialFactoryRegistry
 import org.multipaz.openid4vci.customization.NonceManager
 import org.multipaz.rpc.backend.BackendEnvironment
+import org.multipaz.util.Logger
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.SimpleCipher
 import org.multipaz.server.common.getBaseUrl
@@ -36,12 +37,15 @@ import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import org.multipaz.webtoken.validateJwt
 import org.multipaz.rpc.backend.Configuration
+
 import org.multipaz.server.common.ServerException
 import org.multipaz.server.common.baseUrl
 import org.multipaz.server.enrollment.ServerIdentity
 import org.multipaz.server.enrollment.validateServerIdentityCertificateChain
 import kotlin.time.Duration
 import kotlin.time.Instant
+
+private const val TAG = "auth"
 
 const val OAUTH_REQUEST_URI_PREFIX = "urn:ietf:params:oauth:request_uri:"
 const val MULTIPAZ_PRE_AUTHORIZE_URI = "https://pre-authorize.multipaz.org/"
@@ -174,6 +178,7 @@ suspend fun validateClientAttestation(
 ): EcPublicKey? {
     val clientAttestationJwt = request.headers["OAuth-Client-Attestation"]
         ?: return null
+    Logger.dJwt(TAG, "Received OAuth-Client-Attestation JWT", clientAttestationJwt)
 
     val configuration = BackendEnvironment.getInterface(Configuration::class)!!
     val requireIssuerMatch =
@@ -218,6 +223,7 @@ suspend fun validateClientAttestationPoP(
 ) {
     val popJwt = request.headers["OAuth-Client-Attestation-PoP"]
         ?: throw InvalidRequestException("OAuth-Client-Attestation-PoP header required")
+    Logger.dJwt(TAG, "Received OAuth-Client-Attestation-PoP JWT", popJwt)
 
     val configuration = BackendEnvironment.getInterface(Configuration::class)!!
     val baseUrl = configuration.baseUrl
@@ -385,6 +391,7 @@ suspend fun validateClientAssertion(parameters: Parameters, clientId: String): B
         return false
     }
     val clientAssertionJwt = parameters["client_assertion"] ?: return false
+    Logger.dJwt(TAG, "Received Client Assertion JWT", clientAssertionJwt)
     validateClientAssertionJwt(clientAssertionJwt, clientId)
     return true
 }
@@ -398,6 +405,7 @@ private suspend fun validateDPoPJwt(
     initial: Boolean,
 ) {
     val dpop = request.headers["DPoP"] ?: throw InvalidRequestException("DPoP header required")
+    Logger.dJwt(TAG, "Received DPoP JWT", dpop)
     val baseUrl = BackendEnvironment.getBaseUrl()
     val nonceManager = NonceManager.get()
     val nonceValidator: suspend (String) -> Unit = if (isResourceServer) {
