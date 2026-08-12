@@ -1,8 +1,6 @@
 package org.multipaz.mdoc.request
 
-import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseNumberLabel
@@ -102,8 +100,8 @@ data class DocRequest internal constructor(
         documentTypeRepository: DocumentTypeRepository
     ): List<TransactionData<*>> = buildList {
         for (transactionType in documentTypeRepository.transactionTypes) {
-            docRequestInfo?.otherInfo[transactionType.mdocRequestInfoKeyName]?.let { data ->
-                add(transactionType.parseCbor(ByteString((data as Tagged).taggedItem.asBstr)))
+            docRequestInfo?.transactions?.data[transactionType.mdocRequestInfoIdentifier]?.let { data ->
+                add(transactionType.parseCbor(data))
             }
         }
     }

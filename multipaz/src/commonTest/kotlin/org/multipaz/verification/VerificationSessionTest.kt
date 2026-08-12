@@ -66,7 +66,11 @@ class VerificationSessionTest {
 
     private suspend fun setup() {
         harness.initialize()
-        harness.provisionStandardDocuments()
+        harness.provisionStandardDocuments(
+            keyAuthorizedNamespaces = listOf(
+                PingTransaction.mdocResponseNamespace
+            )
+        )
 
         val readerPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val readerCert = MdocUtil.generateReaderCertificate(
@@ -151,7 +155,7 @@ class VerificationSessionTest {
                 "expected a Ping transaction response"
             )
             assertEquals("string data", pingResponse["string"]!!.asTstr)
-            assertEquals(32, pingResponse["transaction_data_hash"]!!.asBstr.size)
+            assertEquals(32, pingResponse["transactionDataHash"]!!.asBstr.size)
         }
     }
 
@@ -218,8 +222,8 @@ class VerificationSessionTest {
             "expected a Ping transaction response"
         )
         assertEquals(expectedPingString, pingResponse["string"]!!.asTstr)
-        assertEquals(32, pingResponse["transaction_data_hash"]!!.asBstr.size)
-        assertEquals(expectedDocRequestId, pingResponse["doc_request_id"]?.asNumber)
+        assertEquals(32, pingResponse["transactionDataHash"]!!.asBstr.size)
+        assertEquals(expectedDocRequestId, pingResponse["docRequestId"]?.asNumber)
     }
 
     @Test

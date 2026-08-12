@@ -14,6 +14,7 @@ import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
@@ -24,6 +25,7 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.truncateToWholeSeconds
+import org.multipaz.utopia.knowntypes.PingTransaction
 import kotlin.math.max
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
@@ -97,7 +99,11 @@ class CredentialFactoryDigitalPaymentCredential : CredentialFactory {
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = authenticationKey!!,
-            revocationStatus = revocationStatus
+            revocationStatus = revocationStatus,
+            deviceKeyAuthorizedNamespaces = listOf(
+                PaymentTransaction.mdocResponseNamespace,
+                PingTransaction.mdocResponseNamespace
+            )
         )
         val taggedEncodedMso = Cbor.encode(
             Tagged(

@@ -8,6 +8,7 @@ import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNamingStrategy
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
@@ -22,11 +23,13 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.Simple
+import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Uint
 import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
+import org.multipaz.cbor.toDataItem
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
@@ -78,17 +81,20 @@ class DigitalCredentialsPresentmentTest {
         override fun serializeCbor(
             payload: Boolean,
             hashAlgorithms: List<Algorithm>?
-        ): ByteString = ByteString(
-            Cbor.encode(buildCborMap {
-                put("succeed", payload)
-                coseHashAlgorithms(hashAlgorithms)?.let { algs ->
-                    putCborArray("transactionDataHashesAlg") {
-                        for (alg in algs) {
-                            add(alg)
+        ): DataItem = Tagged(
+            tagNumber = Tagged.ENCODED_CBOR,
+            taggedItem = Cbor.encode(
+                item = buildCborMap {
+                    put("succeed", payload)
+                    coseHashAlgorithms(hashAlgorithms)?.let { algs ->
+                        putCborArray("transactionDataHashesAlg") {
+                            for (alg in algs) {
+                                add(alg)
+                            }
                         }
                     }
                 }
-            })
+            ).toDataItem()
         )
 
         override fun serializeJson(
@@ -115,11 +121,11 @@ class DigitalCredentialsPresentmentTest {
             )
         }
 
-        override fun parseCbor(serialized: ByteString): TransactionData<Boolean> {
-            val data = Cbor.decode(serialized.toByteArray())
+        override fun parseCbor(serialized: DataItem): TransactionData<Boolean> {
+            val data = serialized.asTaggedEncodedCbor
             return TransactionData(
                 type = this,
-                serialized = serialized,
+                serialized = ByteString(serialized.asTagged.asBstr),
                 hashAlgorithms = if (data.hasKey("transactionDataHashesAlg")) {
                     parseCoseHashAlgorithms(
                         data["transactionDataHashesAlg"].asArray.map {
@@ -136,7 +142,7 @@ class DigitalCredentialsPresentmentTest {
             transactionData: TransactionData<Boolean>,
             credential: Credential
         ): Boolean {
-            return transactionData.payload
+            return transactionData.payload && super.isApplicable(transactionData, credential)
         }
 
         companion object {
@@ -154,18 +160,25 @@ class DigitalCredentialsPresentmentTest {
         kbJwtResponseClaimName = "kb_foo",
         mdocResponseNamespace = "FooNS"
     ) {
-
         override suspend fun isApplicable(
             transactionData: TransactionData<Boolean>,
             credential: Credential
         ): Boolean {
-            return transactionData.payload
+            return transactionData.payload && super.isApplicable(transactionData, credential)
+        }
+
+        override suspend fun applyJson(
+            transactionData: TransactionData<Boolean>,
+            credential: Credential
+        ): JsonElement = buildJsonObject {
+            put("result", 42)
         }
 
         override suspend fun applyCbor(
             transactionData: TransactionData<Boolean>,
             credential: Credential
         ): Map<String, DataItem> = buildMap {
+            putAll(super.applyCbor(transactionData, credential))
             put("result", Uint(42UL))
         }
     }
@@ -174,10 +187,18 @@ class DigitalCredentialsPresentmentTest {
         displayName = "Bar",
         identifier = "bar"
     ) {
+        override suspend fun applyJson(
+            transactionData: TransactionData<Boolean>,
+            credential: Credential
+        ): JsonElement = buildJsonObject {
+            put("result", 57)
+        }
+
         override suspend fun applyCbor(
             transactionData: TransactionData<Boolean>,
             credential: Credential
         ): Map<String, DataItem> = buildMap {
+            putAll(super.applyCbor(transactionData, credential))
             put("result", Uint(57UL))
         }
     }
@@ -186,12 +207,7 @@ class DigitalCredentialsPresentmentTest {
     private object BuzTransactionType: BooleanTransaction(
         displayName = "Buz",
         identifier = "buz",
-    ) {
-        override suspend fun isApplicable(
-            transactionData: TransactionData<Boolean>,
-            credential: Credential
-        ): Boolean = true
-    }
+    )
 
     companion object {
         private const val TAG = "DigitalCredentialsPresentmentTest"
@@ -209,7 +225,13 @@ class DigitalCredentialsPresentmentTest {
 
     private suspend fun setup() {
         documentStoreTestHarness.initialize()
-        documentStoreTestHarness.provisionStandardDocuments()
+        documentStoreTestHarness.provisionStandardDocuments(
+            keyAuthorizedNamespaces = listOf(
+                FooTransactionType.mdocResponseNamespace,
+                BarTransactionType.mdocResponseNamespace,
+                BuzTransactionType.mdocResponseNamespace
+            )
+        )
         documentStoreTestHarness.documentTypeRepository.addTransactionType(FooTransactionType)
         documentStoreTestHarness.documentTypeRepository.addTransactionType(BarTransactionType)
     }
@@ -600,11 +622,11 @@ class DigitalCredentialsPresentmentTest {
                           portrait: 5318 bytes
                       DeviceNamespaces:
                         FooNS:
-                          transaction_data_hash: 32 bytes
+                          transactionDataHash: 32 bytes
                           result: 42
                         bar:
-                          transaction_data_hash_alg: -43
-                          transaction_data_hash: 48 bytes
+                          transactionDataHashAlg: -43
+                          transactionDataHash: 48 bytes
                           result: 57
                 """.trimIndent().trim(),
         )

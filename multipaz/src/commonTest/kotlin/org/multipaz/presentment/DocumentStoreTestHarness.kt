@@ -237,7 +237,9 @@ class DocumentStoreTestHarness {
         isInitialized = true
     }
 
-    suspend fun provisionStandardDocuments() {
+    suspend fun provisionStandardDocuments(
+        keyAuthorizedNamespaces: List<String> = listOf()
+    ) {
         initialize()
         provisionTestDocuments(
             documentStore = documentStore,
@@ -245,13 +247,15 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
     }
 
     suspend fun provisionMdoc(
         displayName: String,
         docType: String,
-        data: Map<String, List<Pair<String, DataItem>>>
+        data: Map<String, List<Pair<String, DataItem>>>,
+        keyAuthorizedNamespaces: List<String> = listOf()
     ): Document {
         initialize()
         val document = documentStore.createDocument(
@@ -274,6 +278,7 @@ class DocumentStoreTestHarness {
             validFrom = validFrom,
             validUntil = validUntil,
             dsKey = dsKey,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
         return document
     }
@@ -310,6 +315,7 @@ class DocumentStoreTestHarness {
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
+        keyAuthorizedNamespaces: List<String>
     ) {
         docMdl = provisionDocument(
             documentStore = documentStore,
@@ -321,6 +327,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
         docEuPid = provisionDocument(
             documentStore = documentStore,
@@ -338,6 +345,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
         docEuPid2 = provisionDocument(
             documentStore = documentStore,
@@ -355,6 +363,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
         docPhotoId = provisionDocument(
             documentStore = documentStore,
@@ -370,6 +379,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
         docPhotoId2 = provisionDocument(
             documentStore = documentStore,
@@ -385,6 +395,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
     }
 
@@ -398,6 +409,7 @@ class DocumentStoreTestHarness {
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
+        keyAuthorizedNamespaces: List<String>
     ): Document {
         val document = documentStore.createDocument(
             displayName = displayName
@@ -412,6 +424,7 @@ class DocumentStoreTestHarness {
                 validFrom = validFrom,
                 validUntil = validUntil,
                 dsKey = dsKey,
+                keyAuthorizedNamespaces = keyAuthorizedNamespaces
             )
         }
 
@@ -438,6 +451,7 @@ class DocumentStoreTestHarness {
         validFrom: Instant,
         validUntil: Instant,
         dsKey: AsymmetricKey.X509Certified,
+        keyAuthorizedNamespaces: List<String> 
     ) {
         val issuerNamespaces = buildIssuerNamespaces {
             for ((nsName, ns) in documentType.mdocDocumentType?.namespaces!!) {
@@ -466,6 +480,7 @@ class DocumentStoreTestHarness {
             validFrom = validFrom,
             validUntil = validUntil,
             dsKey = dsKey,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
     }
 
@@ -477,6 +492,7 @@ class DocumentStoreTestHarness {
         validFrom: Instant,
         validUntil: Instant,
         dsKey: AsymmetricKey.X509Certified,
+        keyAuthorizedNamespaces: List<String>
     ) {
         // Create authentication keys...
         val mdocCredential = MdocCredential.create(
@@ -499,6 +515,7 @@ class DocumentStoreTestHarness {
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = mdocCredential.getAttestation().publicKey,
+            deviceKeyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
         val taggedEncodedMso = Cbor.encode(Tagged(
             Tagged.ENCODED_CBOR,

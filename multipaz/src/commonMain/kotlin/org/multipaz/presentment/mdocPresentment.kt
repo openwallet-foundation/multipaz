@@ -1,6 +1,5 @@
 package org.multipaz.presentment
 
-import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.decodeToString
 import org.multipaz.cbor.Bstr
@@ -458,22 +457,12 @@ internal suspend fun computeTransactionResponse(
 ): DeviceNamespaces {
     val transactionResponseMap = match.transactionData.associate { transaction ->
         Pair(transaction.type.mdocResponseNamespace, buildMap {
-            val alg = transaction.hashAlgorithms?.first()
-            alg?.let {
-                put("transaction_data_hash_alg", it.coseAlgorithmIdentifier!!.toDataItem())
-            }
-            put("transaction_data_hash",
-                transaction.computeHash(alg ?: Algorithm.SHA256).toByteArray().toDataItem())
+            putAll(transaction.applyCbor(match.credential))
             (match.source as? CredentialMatchSourceIso18013)?.let { source ->
                 // This is generally not available anywhere is the ISO 18013 response,
                 // but it is needed to verify the transaction, so we keep it in the
                 // transaction response.
-                put("doc_request_id", source.docRequest.docRequestId.toDataItem())
-            }
-            transaction.applyCbor(match.credential)?.let { extra ->
-                for ((key, value) in extra) {
-                    put(key, value)
-                }
+                put("docRequestId", source.docRequest.docRequestId.toDataItem())
             }
         })
     }

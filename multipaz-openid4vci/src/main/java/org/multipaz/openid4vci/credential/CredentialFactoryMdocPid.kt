@@ -34,6 +34,7 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.Logger
+import org.multipaz.utopia.knowntypes.PingTransaction
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
@@ -175,7 +176,10 @@ class CredentialFactoryMdocPid : CredentialFactory {
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = authenticationKey!!,
-            revocationStatus = revocationStatus
+            revocationStatus = revocationStatus,
+            deviceKeyAuthorizedNamespaces = listOf(
+                PingTransaction.mdocResponseNamespace
+            )
         )
         val taggedEncodedMso = Cbor.encode(Tagged(
             Tagged.ENCODED_CBOR,

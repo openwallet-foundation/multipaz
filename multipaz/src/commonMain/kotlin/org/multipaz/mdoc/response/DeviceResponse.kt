@@ -231,13 +231,13 @@ data class DeviceResponse internal constructor(
         val data = doc.deviceNamespaces.data
         for (transactionType in documentTypeRepository.transactionTypes) {
             val transactionResponse = data[transactionType.mdocResponseNamespace] ?: continue
-            val transactionDocRequestId = transactionResponse["doc_request_id"] as? Uint
+            val transactionDocRequestId = transactionResponse["docRequestId"] as? Uint
                 ?: throw IllegalStateException(
-                    "'doc_request_id' is missing or invalid for transaction '${transactionType.identifier}'")
+                    "'docRequestId' is missing or invalid for transaction '${transactionType.identifier}'")
             if (docRequestId == null) {
                 docRequestId = transactionDocRequestId.value
             } else if(docRequestId != transactionDocRequestId.value) {
-                throw IllegalStateException("inconsistent 'doc_request_id' values")
+                throw IllegalStateException("inconsistent 'docRequestId' values")
             }
         }
         return docRequestId?.toInt() ?: -1

@@ -243,15 +243,7 @@ class MdocDocument(
             for (transaction in transactionData) {
                 val response = deviceNamespaces.data[transaction.type.mdocResponseNamespace]
                     ?: throw IllegalStateException("No transaction response for '${transaction.type.identifier}'")
-                val hashAlg = response["transaction_data_hash_alg"]?.let {
-                    Algorithm.fromCoseAlgorithmIdentifier(it.asNumber.toInt())
-                }
-                val hash = response["transaction_data_hash"] as? Bstr
-                    ?: throw IllegalStateException("Invalid response for transaction '${transaction.type.identifier}'")
-                val expectedHash = transaction.computeHash(hashAlg ?: Algorithm.SHA256)
-                if (ByteString(hash.asBstr) != expectedHash) {
-                    throw IllegalStateException("Transaction hash failed to verify for '${transaction.type.identifier}'")
-                }
+                transaction.verifyCborResponse(response)
                 put(transaction.type.identifier, response)
             }
         }

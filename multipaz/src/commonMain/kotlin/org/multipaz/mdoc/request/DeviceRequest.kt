@@ -1,6 +1,5 @@
 package org.multipaz.mdoc.request
 
-import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
@@ -845,22 +844,15 @@ data class DeviceRequest private constructor(
         requestInfo: DocRequestInfo?,
         documentTypeRepository: DocumentTypeRepository?
     ): List<TransactionData<*>> {
-        if (requestInfo == null || documentTypeRepository == null) {
+        if (requestInfo == null || documentTypeRepository == null || requestInfo.transactions == null) {
             return emptyList()
         }
-        val list = mutableListOf<TransactionData<*>>()
-        for (knownType in documentTypeRepository.transactionTypes) {
-            if (!requestInfo.otherInfo.containsKey(knownType.mdocRequestInfoKeyName)) {
-                continue
-            }
-            val transactionCbor = requestInfo.otherInfo[knownType.mdocRequestInfoKeyName]!!
-            if (transactionCbor !is Tagged || transactionCbor.tagNumber != Tagged.ENCODED_CBOR
-                || transactionCbor.taggedItem !is Bstr) {
-                throw IllegalArgumentException("Incorrectly encoded transaction data '${knownType.identifier}'")
-            }
-            list.add(knownType.parseCbor(ByteString(transactionCbor.taggedItem.asBstr)))
+        return requestInfo.transactions.data.map { (type, data) ->
+            val knownType = documentTypeRepository.transactionTypes.find {
+                it.mdocRequestInfoIdentifier == type
+            } ?: throw IllegalArgumentException("Unknown transaction type: '$type'")
+            knownType.parseCbor(data)
         }
-        return list.toList()
     }
 
     /**
@@ -1120,7 +1112,7 @@ inline fun buildDeviceRequestFromDcql(
     sessionTranscript: DataItem,
     dcql: JsonObject,
     otherInfo: Map<String, DataItem> = emptyMap(),
-    docRequestOtherInfo: Map<String, Map<String, DataItem>> = emptyMap(),
+    transactions: Map<String, TransactionsInfo> = emptyMap(),
     builderAction: DeviceRequest.Builder.() -> Unit = {}
 ): DeviceRequest {
     val dcqlQuery = DcqlQuery.fromJson(dcql)
@@ -1129,7 +1121,7 @@ inline fun buildDeviceRequestFromDcql(
         sessionTranscript = sessionTranscript,
         deviceRequestInfo = deviceRequestInfo,
     )
-    deviceRequestAddQueries(dcqlQuery, docRequestOtherInfo, builder)
+    deviceRequestAddQueries(dcqlQuery, transactions, builder)
     builder.builderAction()
     return builder.build()
 }
@@ -1152,14 +1144,14 @@ inline fun buildDeviceRequestFromDcql(
     sessionTranscript: DataItem,
     dcqlString: String,
     otherInfo: Map<String, DataItem> = emptyMap(),
-    docRequestOtherInfo: Map<String, Map<String, DataItem>> = emptyMap(),
+    transactions: Map<String, TransactionsInfo> = emptyMap(),
     builderAction: DeviceRequest.Builder.() -> Unit = {}
 ): DeviceRequest {
     return buildDeviceRequestFromDcql(
         sessionTranscript = sessionTranscript,
         dcql = Json.decodeFromString<JsonObject>(dcqlString),
         otherInfo = otherInfo,
-        docRequestOtherInfo = docRequestOtherInfo,
+        transactions = transactions,
         builderAction = builderAction
     )
 }
@@ -1214,7 +1206,7 @@ internal fun deviceRequestCalcDeviceRequestInfo(
 @PublishedApi
 internal fun deviceRequestAddQueries(
     dcqlQuery: DcqlQuery,
-    docRequestOtherInfo: Map<String, Map<String, DataItem>>,
+    transactions: Map<String, TransactionsInfo>,
     builder: DeviceRequest.Builder
 ) {
     for (credQuery in dcqlQuery.credentialQueries) {
@@ -1390,17 +1382,16 @@ internal fun deviceRequestAddQueries(
             null
         }
 
-        val otherInfo = docRequestOtherInfo[credQuery.id]
-
+        val docTransactions = transactions[credQuery.id]
         val docRequestInfo = if (alternativeDataElements.isNotEmpty()
-            || zkRequest != null || otherInfo != null || credQuery.format == "dc+sd-jwt"
+            || zkRequest != null || docTransactions != null || credQuery.format == "dc+sd-jwt"
             || dataElementIdentifierMapping.isNotEmpty()) {
             DocRequestInfo(
                 alternativeDataElements = alternativeDataElements,
                 zkRequest = zkRequest,
                 docFormat = if (credQuery.format == "dc+sd-jwt") "sd-jwt+kb" else null,
                 dataElementIdentifierMapping = dataElementIdentifierMapping,
-                otherInfo = otherInfo ?: emptyMap()
+                transactions = docTransactions
             )
         } else {
             null
