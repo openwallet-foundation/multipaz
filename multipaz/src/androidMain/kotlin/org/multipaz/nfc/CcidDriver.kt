@@ -6,6 +6,7 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
+import kotlinx.coroutines.CancellationException
 import org.multipaz.util.Logger
 import org.multipaz.util.toHex
 import kotlin.math.min
@@ -48,7 +49,7 @@ internal class CcidDriver(
      * operations can be performed. It requests permission to access the USB device,
      * opens a connection, and starts listening for card events.
      *
-     * @throws IOException if the connection to the device fails.
+     * @throws IOException if the connection to the device fails or interface cannot be claimed.
      * @throws SecurityException if permission to access the device is denied.
      */
     fun connect() {
@@ -60,15 +61,25 @@ internal class CcidDriver(
         connection = conn
 
         val iface = findCcidInterface(device, conn)
-            ?: throw IOException("CCID interface not found")
+            ?: run {
+                conn.close()
+                connection = null
+                throw IOException("CCID interface not found")
+            }
         usbInterface = iface
 
         findEndpoints(iface)
-        conn.claimInterface(iface, true)
+        if (!conn.claimInterface(iface, true)) {
+            conn.close()
+            connection = null
+            usbInterface = null
+            throw IOException("Could not claim CCID interface id=${iface.id}")
+        }
         isConnected = true
         Logger.i(TAG, "Connected to CCID device ${device.deviceName} (interface id=${iface.id}), maxCommandLength=$maxCommandLength")
         startInterruptListener()
     }
+
     /**
      * Disconnects from the CCID reader. This method should be called when the
      * application is finished with the device. It releases all resources and closes
@@ -77,9 +88,26 @@ internal class CcidDriver(
     fun disconnect() {
         isConnected = false
         isCardPoweredOn = false
-        connection?.releaseInterface(usbInterface)
-        connection?.close()
+        val iface = usbInterface
+        val conn = connection
+        usbInterface = null
         connection = null
+        if (conn != null && iface != null) {
+            try {
+                conn.releaseInterface(iface)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Logger.w(TAG, "Error releasing USB interface", e)
+            }
+        }
+        if (conn != null) {
+            try {
+                conn.close()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Logger.w(TAG, "Error closing USB connection", e)
+            }
+        }
     }
 
     /**
@@ -242,7 +270,12 @@ internal class CcidDriver(
 
     val supportsCcidChaining: Boolean
         get() {
-            val raw = try { connection?.rawDescriptors } catch (_: Throwable) { null }
+            val raw = try {
+                connection?.rawDescriptors
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                null
+            }
             val ifaceId = usbInterface?.id ?: 0
             if (raw != null) {
                 val ccidDesc = getCcidDescriptorForInterface(raw, ifaceId)
@@ -261,7 +294,12 @@ internal class CcidDriver(
 
     val maxCcidDataLength: Int
         get() {
-            val raw = try { connection?.rawDescriptors } catch (_: Throwable) { null }
+            val raw = try {
+                connection?.rawDescriptors
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                null
+            }
             val ifaceId = usbInterface?.id ?: 0
             if (raw != null) {
                 val ccidDesc = getCcidDescriptorForInterface(raw, ifaceId)
@@ -348,9 +386,17 @@ internal class CcidDriver(
         Thread {
             val buffer = ByteArray(endpoint.maxPacketSize)
             while (isConnected) {
-                val bytesRead = connection?.bulkTransfer(endpoint, buffer, buffer.size, 0)
-                if (bytesRead != null && bytesRead > 0) {
+                val conn = connection ?: break
+                val bytesRead = try {
+                    conn.bulkTransfer(endpoint, buffer, buffer.size, 500)
+                } catch (e: Exception) {
+                    -1
+                }
+                if (bytesRead > 0) {
                     handleInterrupt(buffer)
+                } else if (bytesRead < 0) {
+                    if (!isConnected) break
+                    try { Thread.sleep(50) } catch (_: InterruptedException) {}
                 }
             }
         }.start()
@@ -373,7 +419,12 @@ internal class CcidDriver(
     }
 
     private fun findCcidInterface(device: UsbDevice, connection: UsbDeviceConnection?): UsbInterface? {
-        val iface = try { device.getInterface(interfaceIndex) } catch (_: Throwable) { null }
+        val iface = try {
+            device.getInterface(interfaceIndex)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            null
+        }
         if (iface != null) {
             Logger.i(TAG, "Using specified USB interface id=${iface.id} for device ${device.deviceName}")
             return iface

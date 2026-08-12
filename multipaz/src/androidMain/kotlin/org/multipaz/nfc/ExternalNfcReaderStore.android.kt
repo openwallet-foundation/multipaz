@@ -6,6 +6,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
+import kotlinx.coroutines.CancellationException
 import org.multipaz.context.applicationContext
 import org.multipaz.util.Logger
 
@@ -69,9 +70,21 @@ suspend fun ExternalNfcReaderStore.handleUsbDeviceAttached(device: UsbDevice): E
     val usbManager = applicationContext.getSystemService(Context.USB_SERVICE) as UsbManager
     val connection: UsbDeviceConnection? = try {
         if (usbManager.hasPermission(device)) usbManager.openDevice(device) else null
-    } catch (_: Throwable) { null }
-    val rawDescriptors = try { connection?.rawDescriptors } catch (_: Throwable) { null }
-    try { connection?.close() } catch (_: Throwable) {}
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        null
+    }
+    val rawDescriptors = try {
+        connection?.rawDescriptors
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        null
+    }
+    try {
+        connection?.close()
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+    }
 
     val candidateNfcInterfaces = ccidInterfaces.filter { !isDefinitelyNotNfc(it, rawDescriptors) }
     val targetInterfaces = when {
@@ -90,7 +103,12 @@ suspend fun ExternalNfcReaderStore.handleUsbDeviceAttached(device: UsbDevice): E
         val ifaceIndex = iface.id
 
         val nameSuffix = if (targetInterfaces.size > 1) {
-            val ifaceName = try { iface.name?.trim() ?: "" } catch (_: Throwable) { "" }
+            val ifaceName = try {
+                iface.name?.trim() ?: ""
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                ""
+            }
             if (ifaceName.isNotEmpty()) " ($ifaceName)" else " (Interface ${iface.id})"
         } else ""
         val displayName = "$deviceDisplayName$nameSuffix"
@@ -113,7 +131,12 @@ suspend fun ExternalNfcReaderStore.handleUsbDeviceAttached(device: UsbDevice): E
 }
 
 private fun isDefinitelyNotNfc(iface: UsbInterface, rawDescriptors: ByteArray?): Boolean {
-    val ifaceName = try { iface.name?.lowercase()?.trim() ?: "" } catch (_: Throwable) { "" }
+    val ifaceName = try {
+        iface.name?.lowercase()?.trim() ?: ""
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        ""
+    }
     if (ifaceName.contains("sam") || ifaceName.contains("sim")) {
         return true
     }
