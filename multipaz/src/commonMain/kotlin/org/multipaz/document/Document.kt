@@ -150,6 +150,11 @@ class Document internal constructor(
     val authorizationData: ByteString? get() = data.authorizationData
 
     /**
+     * Application-specific data.
+     */
+    val appData: ByteString? get() = data.appData
+
+    /**
      * The unique identifier if this document is imported from a [org.multipaz.mpzpass.MpzPass].
      */
     val mpzPassId: String? get() = data.mpzPassId
@@ -177,6 +182,7 @@ class Document internal constructor(
                     cardArt = data.cardArt,
                     issuerLogo = data.issuerLogo,
                     authorizationData = data.authorizationData,
+                    appData = data.appData,
                     mpzPassId = data.mpzPassId,
                     mpzPassVersion = data.mpzPassVersion,
                     metadata = data.metadata,
@@ -440,6 +446,7 @@ class Document internal constructor(
                 cardArt = data.cardArt,
                 issuerLogo = data.issuerLogo,
                 authorizationData = data.authorizationData,
+                appData = data.appData,
                 mpzPassId = data.mpzPassId,
                 mpzPassVersion = data.mpzPassVersion,
                 metadata = metadata,
@@ -461,6 +468,7 @@ class Document internal constructor(
                 cardArt = editor.cardArt,
                 issuerLogo = editor.issuerLogo,
                 authorizationData = editor.authorizationData,
+                appData = editor.appData,
                 mpzPassId = editor.mpzPassId,
                 mpzPassVersion = editor.mpzPassVersion,
                 metadata = editor.metadata?.serialize(),
@@ -491,6 +499,7 @@ class Document internal constructor(
      * @property cardArt An image that represents this document to the user in the UI.
      * @property issuerLogo An image that represents the issuer of the document in the UI.
      * @property authorizationData Saved authorization data to refresh credentials, possibly without requiring user to re-authorize.
+     * @property appData Application-specific data.
      * @property mpzPassId The unique identifier if this document is imported from a [org.multipaz.mpzpass.MpzPass].
      * @property mpzPassVersion The version if this document is imported from a [org.multipaz.mpzpass.MpzPass].
      * @property metadata A [AbstractDocumentMetadata] for storing application-specific data.
@@ -504,6 +513,7 @@ class Document internal constructor(
         var cardArt: ByteString?,
         var issuerLogo: ByteString?,
         var authorizationData: ByteString?,
+        var appData: ByteString?,
         var mpzPassId: String?,
         var mpzPassVersion: Long?,
         var metadata: AbstractDocumentMetadata?,

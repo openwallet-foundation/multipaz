@@ -20,6 +20,7 @@ internal data class DocumentData(
     val cardArt: ByteString? = null,
     val issuerLogo: ByteString? = null,
     val authorizationData: ByteString? = null,
+    val appData: ByteString? = null,
     val mpzPassId: String? = null,
     val mpzPassVersion: Long? = null,
     val metadata: ByteString? = null,  // serialized AbstractDocumentMetadata

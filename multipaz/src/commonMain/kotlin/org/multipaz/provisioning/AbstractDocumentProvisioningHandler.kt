@@ -21,12 +21,14 @@ interface AbstractDocumentProvisioningHandler {
      * @param issuerMetadata information about the credential issuer
      * @param documentAuthorizationData data that can be used to provision additional credentials
      *  (e.g. for credential refresh)
+     * @param appData optional application-specific data to store with the document
      * @return new [Document] to hold the provisioned credentials.
      */
     suspend fun createDocument(
         credentialMetadata: CredentialMetadata,
         issuerMetadata: ProvisioningMetadata,
-        documentAuthorizationData: ByteString?
+        documentAuthorizationData: ByteString?,
+        appData: ByteString? = null
     ): Document
 
     /**

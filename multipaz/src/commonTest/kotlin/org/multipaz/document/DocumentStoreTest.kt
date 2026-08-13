@@ -198,6 +198,62 @@ class DocumentStoreTest {
         )
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun testAppData() = runTest {
+        val documentStore = buildDocumentStore(
+            storage = storage,
+            secureAreaRepository = secureAreaRepository
+        ) {
+            addCredentialImplementation(TestCredential.CREDENTIAL_TYPE) { document ->
+                TestCredential(document)
+            }
+        }
+
+        val testData1 = ByteString(1, 2, 3)
+        val testData2 = ByteString(4, 5, 6, 7)
+
+        val doc1 = documentStore.createDocument()
+        assertNull(doc1.appData)
+
+        val doc2 = documentStore.createDocument(appData = testData1)
+        assertEquals(testData1, doc2.appData)
+
+        doc2.edit {
+            appData = testData2
+        }
+        assertEquals(testData2, doc2.appData)
+
+        // Check persistence
+        runCurrent()
+        val documentStore2 = buildDocumentStore(
+            storage = storage,
+            secureAreaRepository = secureAreaRepository
+        ) {
+            addCredentialImplementation(TestCredential.CREDENTIAL_TYPE) { document ->
+                TestCredential(document)
+            }
+        }
+        assertNull(documentStore2.lookupDocument(doc1.identifier)!!.appData)
+        assertEquals(testData2, documentStore2.lookupDocument(doc2.identifier)!!.appData)
+
+        val doc2Reloaded = documentStore2.lookupDocument(doc2.identifier)!!
+        doc2Reloaded.edit {
+            appData = null
+        }
+        assertNull(doc2Reloaded.appData)
+
+        val documentStore3 = buildDocumentStore(
+            storage = storage,
+            secureAreaRepository = secureAreaRepository
+        ) {
+            addCredentialImplementation(TestCredential.CREDENTIAL_TYPE) { document ->
+                TestCredential(document)
+            }
+        }
+        assertNull(documentStore3.lookupDocument(doc2.identifier)!!.appData)
+    }
+
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test

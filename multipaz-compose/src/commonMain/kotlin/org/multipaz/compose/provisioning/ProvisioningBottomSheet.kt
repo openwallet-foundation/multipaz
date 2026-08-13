@@ -120,6 +120,7 @@ fun ProvisioningBottomSheet(
     backend: Deferred<OpenID4VCIBackend>,
     onFinishedProvisioning: (document: Document?, isNewlyIssued: Boolean) -> Unit = { _, _ -> },
     issuerUrl: String? = null,
+    appData: ByteString? = null,
 ) {
     val provisioningState = provisioningModel.state.collectAsState().value
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -155,6 +156,7 @@ fun ProvisioningBottomSheet(
                 issuerMetadata = issuerMetadata,
                 clientPreferences = clientPreferences,
                 backend = backend,
+                appData = appData,
             )
         }
     }
@@ -218,6 +220,7 @@ private fun ProvisioningBottomSheetBody(
     issuerMetadata: MutableState<ProvisioningMetadata?>,
     clientPreferences: Deferred<OpenID4VCIClientPreferences>,
     backend: Deferred<OpenID4VCIBackend>,
+    appData: ByteString?,
 ) {
     val clientPreferencesHolder = remember { mutableStateOf<OpenID4VCIClientPreferences?>(null) }
     val backendHolder = remember { mutableStateOf<OpenID4VCIBackend?>(null) }
@@ -304,6 +307,7 @@ private fun ProvisioningBottomSheetBody(
             issuerMetadata = issuerMetadata.value,
             clientPreferences = preferences,
             backend = be,
+            appData = appData,
        )
     }
 }
@@ -319,6 +323,7 @@ private fun ProvisioningBottomSheetContent(
     issuerMetadata: ProvisioningMetadata?,
     clientPreferences: OpenID4VCIClientPreferences?,
     backend: OpenID4VCIBackend?,
+    appData: ByteString?,
 ) {
     val coroutineScope = rememberCoroutineScope()
     val credentialIdState = remember { mutableStateOf<String?>(null) }
@@ -366,7 +371,8 @@ private fun ProvisioningBottomSheetContent(
                             issuerUrl = issuerUrl!!,
                             credentialId = credentialId,
                             clientPreferences = clientPreferences!!,
-                            backend = backend!!
+                            backend = backend!!,
+                            appData = appData,
                         )
                     }
                 }
