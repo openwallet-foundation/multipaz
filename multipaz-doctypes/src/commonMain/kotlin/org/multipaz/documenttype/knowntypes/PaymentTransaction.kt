@@ -8,7 +8,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.annotation.CborSerializable
+import org.multipaz.cbor.toDataItem
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.documenttype.CannedTransactionData
@@ -219,12 +221,14 @@ object PaymentTransaction: TransactionType<PaymentTransaction.Payload>(
     override fun serializeCbor(
         payload: Payload,
         hashAlgorithms: List<Algorithm>?
-    ): ByteString = ByteString(
-        CborData(
-            transactionDataHashesAlg = coseHashAlgorithms(hashAlgorithms),
-            payload = payload
-        ).toCbor()
-    )
+    ): DataItem =
+        Tagged(
+            tagNumber = Tagged.ENCODED_CBOR,
+            taggedItem = CborData(
+                transactionDataHashesAlg = coseHashAlgorithms(hashAlgorithms),
+                payload = payload
+            ).toCbor().toDataItem()
+        )
 
     override fun serializeJson(
         payload: Payload,
@@ -249,11 +253,11 @@ object PaymentTransaction: TransactionType<PaymentTransaction.Payload>(
         )
     }
 
-    override fun parseCbor(serialized: ByteString): TransactionData<Payload> {
-        val data = CborData.fromCbor(serialized.toByteArray())
+    override fun parseCbor(serialized: DataItem): TransactionData<Payload> {
+        val data = CborData.fromDataItem(serialized.asTaggedEncodedCbor)
         return TransactionData(
             type = this,
-            serialized = serialized,
+            serialized = ByteString(serialized.asTagged.asBstr),
             hashAlgorithms = parseCoseHashAlgorithms(data.transactionDataHashesAlg),
             payload = data.payload,
         )
@@ -265,13 +269,7 @@ object PaymentTransaction: TransactionType<PaymentTransaction.Payload>(
     ): Boolean {
         return credential is MdocCredential
                 && credential.docType == "org.multipaz.payment.sca.1"
-    }
-
-    override suspend fun applyCbor(
-        transactionData: TransactionData<Payload>,
-        credential: Credential
-    ): Map<String, DataItem> {
-        return buildMap {}
+                && super.isApplicable(transactionData, credential)
     }
 
     /** Sample transaction data for this transaction type */

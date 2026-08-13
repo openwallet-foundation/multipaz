@@ -1,6 +1,7 @@
 package org.multipaz.presentment
 
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.DataItem
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
@@ -78,6 +79,16 @@ class TransactionData<PayloadT: Any>(
      * @return new [TransactionData] object that holds the same payload and hash algorithm, but
      *  its [TransactionData.serialized] is formatted for use in ISO ISO/IEC 18013 protocols.
      */
-    fun convertToCbor(): TransactionData<PayloadT> =
-        type.parseCbor(type.serializeCbor(payload, hashAlgorithms))
+    fun convertToCbor(): DataItem = type.serializeCbor(payload, hashAlgorithms)
+
+    /**
+     * Verify transaction response for mdoc presentment.
+     *
+     * @see TransactionType.verifyCborResponse
+     *
+     * @param transactionResponse key-value-map for values returned in the presentation
+     * @throws IllegalStateException if response does not pass verification
+     */
+    suspend fun verifyCborResponse(transactionResponse: Map<String, DataItem>) =
+        type.verifyCborResponse(this, transactionResponse)
 }

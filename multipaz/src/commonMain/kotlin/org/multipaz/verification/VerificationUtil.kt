@@ -41,6 +41,7 @@ import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.request.DeviceRequestInfo
 import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.DocumentSet
+import org.multipaz.mdoc.request.TransactionsInfo
 import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequest
@@ -101,7 +102,8 @@ object VerificationUtil {
      * @param zkSystemSpecs if non-empty, request a ZK proof using these systems.
      * @param jsonTransactionData JSON-formatted transaction data, *before* base64url encoding,
      *   see OpenID4VP 1.0 section 8.4.
-     * @param docRequestOtherInfo transaction data encoded for use in requestInfo` map in ISO 18013-7.
+     * @param cborTransactionData CBOR-formatted transaction data
+     * @param docRequestOtherInfo additional data to add to `requestInfo` map in ISO 18013-7.
      * @return a [JsonObject] with the request.
      */
     @Throws(CancellationException::class)
@@ -115,6 +117,7 @@ object VerificationUtil {
         verifierIdentities: List<VerifierIdentity>,
         zkSystemSpecs: List<ZkSystemSpec>,
         jsonTransactionData: List<String> = emptyList(),
+        cborTransactionData: TransactionsInfo? = null,
         docRequestOtherInfo: Map<String, DataItem> = emptyMap()
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
@@ -130,6 +133,7 @@ object VerificationUtil {
                 verifierIdentities = verifierIdentities,
                 zkSystemSpecs = zkSystemSpecs,
                 jsonTransactionData = jsonTransactionData,
+                cborTransactionData = cborTransactionData,
                 docRequestOtherInfo = docRequestOtherInfo
             )
         }
@@ -168,7 +172,7 @@ object VerificationUtil {
      *  for unsigned request
      * @param jsonTransactionData JSON-formatted transaction data, *before* base64url encoding,
      *   see OpenID4VP 1.0 section 8.4.
-     * @param docRequestOtherInfo transaction data encoded for use in requestInfo map in ISO 18013-7.
+     * @param cborTransactionData transaction data encoded for use in requestInfo map in ISO 18013-5.
      * @param state optional state parameter defined in OpenID4VP and ISO 18013-7 that is then
      *   included in the presentation
      * @throws IllegalArgumentException if [dcql] contains features not supported by [DeviceRequest], for
@@ -184,7 +188,7 @@ object VerificationUtil {
         responseEncryptionKey: EcPublicKey?,
         verifierIdentities: List<VerifierIdentity>,
         jsonTransactionData: List<String> = emptyList(),
-        docRequestOtherInfo: Map<String, Map<String, DataItem>> = emptyMap(),
+        cborTransactionData: Map<String, TransactionsInfo> = emptyMap(),
         state: String? = null
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
@@ -196,7 +200,7 @@ object VerificationUtil {
                 responseEncryptionKey = responseEncryptionKey,
                 verifierIdentities = verifierIdentities,
                 jsonTransactionData = jsonTransactionData,
-                docRequestOtherInfo = docRequestOtherInfo,
+                cborTransactionData = cborTransactionData,
                 state = state
             )
         }
@@ -213,7 +217,7 @@ object VerificationUtil {
         responseEncryptionKey: EcPublicKey?,
         verifierIdentities: List<VerifierIdentity>,
         jsonTransactionData: List<String>,
-        docRequestOtherInfo: Map<String, Map<String, DataItem>>,
+        cborTransactionData: Map<String, TransactionsInfo>,
         state: String?
     ): JsonObject = buildJsonObject {
         put("protocol", exchangeProtocol)
@@ -271,7 +275,7 @@ object VerificationUtil {
                     buildDeviceRequestFromDcql(
                         sessionTranscript = sessionTranscript,
                         dcql = dcql,
-                        docRequestOtherInfo = docRequestOtherInfo,
+                        transactions = cborTransactionData,
                         // TODO: sign individual requests with readerAuthenticationKey
                     ) {
                         verifierIdentities.forEach { readerIdentity ->
@@ -305,6 +309,7 @@ object VerificationUtil {
         verifierIdentities: List<VerifierIdentity>,
         zkSystemSpecs: List<ZkSystemSpec>,
         jsonTransactionData: List<String>,
+        cborTransactionData: TransactionsInfo?,
         docRequestOtherInfo: Map<String, DataItem>
     ): JsonObject = buildJsonObject {
         put("protocol", exchangeProtocol)
@@ -395,6 +400,7 @@ object VerificationUtil {
                             zkRequest = zkRequest,
                             docFormat = docFormat,
                             dataElementIdentifierMapping = dataElementIdentifierMapping,
+                            transactions = cborTransactionData,
                             otherInfo = docRequestOtherInfo
                         )
                     )
@@ -441,6 +447,9 @@ object VerificationUtil {
      *   if this is `null` for such protocols
      * @param verifierIdentities a list of verifier identities used to sign the request; empty list
      *  for unsigned request
+     * @param jsonTransactionData JSON-formatted transaction data, *before* base64url encoding,
+     *   see OpenID4VP 1.0 section 8.4.
+     * @param cborTransactionData transaction data encoded for use in requestInfo map in ISO 18013-5.
      * @return a [JsonObject] with the request.
      */
     @Throws(CancellationException::class)
@@ -452,7 +461,8 @@ object VerificationUtil {
         origin: String,
         responseEncryptionKey: EcPublicKey?,
         verifierIdentities: List<VerifierIdentity>,
-        jsonTransactionData: List<String> = emptyList()
+        jsonTransactionData: List<String> = emptyList(),
+        cborTransactionData: TransactionsInfo? = null
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
             buildJsonObject {
@@ -488,8 +498,9 @@ object VerificationUtil {
                                 responseEncryptionKey = responseEncryptionKey,
                                 verifierIdentities = verifierIdentities,
                                 zkSystemSpecs = emptyList(),
-                                docRequestOtherInfo = emptyMap(), // TODO: implement transactions
-                                jsonTransactionData = emptyList()
+                                cborTransactionData = cborTransactionData,
+                                jsonTransactionData = jsonTransactionData,
+                                docRequestOtherInfo = emptyMap()
                             )["data"] as JsonObject
                         )
                     }
@@ -1176,20 +1187,18 @@ object VerificationUtil {
         val dcqlJson = Json.parseToJsonElement(dcql).jsonObject
         val nonceStr = nonce.toByteArray().toBase64Url()
 
-        val docRequestOtherInfo = if (transactionData.isNullOrEmpty()) {
+        val docRequestTransactions = if (transactionData.isNullOrEmpty()) {
             null
         } else {
             lazy {
                 documentTypeRepository!!.parseJsonTransactions(transactionData.map {
                     it.encodeToByteArray().toBase64Url()
                 }).mapValues { (_, transactionData) ->
-                    transactionData.associate { data ->
-                        val converted = data.convertToCbor()
-                        converted.type.mdocRequestInfoKeyName to Tagged(
-                            tagNumber = Tagged.ENCODED_CBOR,
-                            taggedItem = Bstr(converted.serialized.toByteArray())
-                        )
-                    }
+                    TransactionsInfo(
+                        data = transactionData.associate { data ->
+                            data.type.mdocRequestInfoIdentifier to data.convertToCbor()
+                        }
+                    )
                 }
             }
         }
@@ -1202,7 +1211,7 @@ object VerificationUtil {
         ): String = OpenID4VP.generateRequest(
             version = version,
             dcqlQuery = dcqlJson,
-            jsonTransactionData =transactionData ?: emptyList(),
+            jsonTransactionData = transactionData ?: emptyList(),
             nonce = nonceStr,
             state = state,
             origin = origin
@@ -1218,7 +1227,7 @@ object VerificationUtil {
         ): DataItem = buildDeviceRequestFromDcql(
             sessionTranscript = sessionTranscript,
             dcql = dcqlJson,
-            docRequestOtherInfo = docRequestOtherInfo?.value ?: emptyMap(),
+            transactions = docRequestTransactions?.value ?: emptyMap()
         ) {
             verifierIdentities.forEach { addReaderAuthAll(it.key) }
         }.toDataItem()

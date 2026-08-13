@@ -36,6 +36,7 @@ import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.Logger
 import org.multipaz.util.truncateToWholeSeconds
+import org.multipaz.utopia.knowntypes.PingTransaction
 import kotlin.time.Duration.Companion.days
 
 /**
@@ -235,7 +236,10 @@ class CredentialFactoryMdl : CredentialFactory {
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = authenticationKey!!,
-            revocationStatus = revocationStatus
+            revocationStatus = revocationStatus,
+            deviceKeyAuthorizedNamespaces = listOf(
+                PingTransaction.mdocResponseNamespace
+            )
         )
         val taggedEncodedMso = Cbor.encode(Tagged(
             Tagged.ENCODED_CBOR,

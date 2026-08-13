@@ -5,8 +5,12 @@ import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNamingStrategy
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.cbor.toDataItem
 import org.multipaz.credential.Credential
@@ -24,7 +28,7 @@ import org.multipaz.util.toBase64Url
 object PingTransaction: TransactionType<PingTransaction.Payload>(
     displayName = "Ping",
     identifier = "org.multipaz.transaction.ping",
-    mdocRequestInfoKeyName = "org.multipaz.transaction.ping.mdoc_request",
+    mdocRequestInfoIdentifier = "org.multipaz.transaction.ping.mdoc_identifier",
     mdocResponseNamespace = "org.multipaz.transaction.ping.mdoc_response",
     kbJwtResponseClaimName = "org.multipaz.transaction.ping.response"
 ) {
@@ -54,12 +58,13 @@ object PingTransaction: TransactionType<PingTransaction.Payload>(
     override fun serializeCbor(
         payload: Payload,
         hashAlgorithms: List<Algorithm>?
-    ): ByteString = ByteString(
-        data = CborData(
+    ): DataItem = Tagged(
+        tagNumber = Tagged.ENCODED_CBOR,
+        taggedItem = CborData(
             transactionDataHashesAlg = coseHashAlgorithms(hashAlgorithms),
             string = payload.string,
             blob = payload.blob
-        ).toCbor()
+        ).toCbor().toDataItem()
     )
 
     override fun serializeJson(
@@ -90,11 +95,11 @@ object PingTransaction: TransactionType<PingTransaction.Payload>(
         )
     }
 
-    override fun parseCbor(serialized: ByteString): TransactionData<Payload> {
-        val data = CborData.fromCbor(serialized.toByteArray())
+    override fun parseCbor(serialized: DataItem): TransactionData<Payload> {
+        val data = CborData.fromDataItem(serialized.asTaggedEncodedCbor)
         return TransactionData(
             type = this,
-            serialized = serialized,
+            serialized = ByteString(serialized.asTagged.asBstr),
             hashAlgorithms = parseCoseHashAlgorithms(data.transactionDataHashesAlg),
             payload = Payload(
                 string = data.string,
@@ -109,7 +114,20 @@ object PingTransaction: TransactionType<PingTransaction.Payload>(
     ): Boolean {
         // For the sake of testing, refuse UtopiaNaturalization
         return !(credential is KeyBoundSdJwtVcCredential
-                && credential.vct == UtopiaNaturalization.VCT)
+                    && credential.vct == UtopiaNaturalization.VCT)
+                && super.isApplicable(transactionData, credential)
+    }
+
+    override suspend fun applyJson(
+        transactionData: TransactionData<Payload>,
+        credential: Credential
+    ): JsonElement = buildJsonObject {
+        transactionData.payload.string?.let {
+            put("string", it)
+        }
+        transactionData.payload.blob?.let {
+            put("blob", it.toByteArray().toBase64Url())
+        }
     }
 
     override suspend fun applyCbor(
@@ -117,6 +135,7 @@ object PingTransaction: TransactionType<PingTransaction.Payload>(
         credential: Credential
     ): Map<String, DataItem> {
         return buildMap {
+            putAll(super.applyCbor(transactionData, credential))
             transactionData.payload.string?.let {
                 put("string", it.toDataItem())
             }
