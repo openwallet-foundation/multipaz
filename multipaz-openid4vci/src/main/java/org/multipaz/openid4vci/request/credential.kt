@@ -93,6 +93,7 @@ suspend fun credential(call: ApplicationCall) {
 
     val requestString = call.receiveText()
     val json = Json.parseToJsonElement(requestString) as JsonObject
+    Logger.dJson(TAG, "Received credential request", json)
 
     val credentialConfigurationId = (json["credential_configuration_id"] as? JsonPrimitive)?.content
     val credentialIdentifier = (json["credential_identifier"] as? JsonPrimitive)?.content
@@ -159,15 +160,17 @@ suspend fun credential(call: ApplicationCall) {
         ))
         // Do not extend session expiration
         IssuanceState.updateIssuanceState(id, state, expiration = null)
-        call.respondText(
-            text = buildJsonObject {
-                addDisplay(locale, display)
-                putJsonArray("credentials") {
-                    addJsonObject {
-                        put("credential", minted.credential)
-                    }
+        val response = buildJsonObject {
+            addDisplay(locale, display)
+            putJsonArray("credentials") {
+                addJsonObject {
+                    put("credential", minted.credential)
                 }
-            }.toString(),
+            }
+        }
+        Logger.dJson(TAG, "Sending credential response", response)
+        call.respondText(
+            text = response.toString(),
             contentType = ContentType.Application.Json
         )
         return
@@ -202,6 +205,8 @@ suspend fun credential(call: ApplicationCall) {
     val authenticationKeysAndIds = when (proofType) {
         "attestation" -> {
             proofs.flatMap { proof ->
+                val jwtStr = proof.jsonPrimitive.content
+                Logger.dJwt(TAG, "Received Key Attestation JWT", jwtStr)
                 val body = try {
                     validateJwt(
                         jwt = proof.jsonPrimitive.content,
@@ -277,6 +282,7 @@ suspend fun credential(call: ApplicationCall) {
             var expectedNonce: String? = null
             proofs.map { proof ->
                 val jwt = proof.jsonPrimitive.content
+                Logger.dJwt(TAG, "Received Proof of Possession JWT", jwt)
                 val parts = jwt.split(".")
                 if (parts.size != 3) {
                     throw InvalidRequestException("invalid value for 'proof.jwt' parameter")
@@ -357,6 +363,7 @@ suspend fun credential(call: ApplicationCall) {
                 }
             }
         }
+    Logger.dJson(TAG, "Sending credential response", result)
     call.respondText(
         text = Json.encodeToString(result),
         contentType = ContentType.Application.Json

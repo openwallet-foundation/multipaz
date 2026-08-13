@@ -28,12 +28,14 @@ internal data class AuthorizationConfiguration(
 
             // Fetch issuer metadata
             val metadataUrl = wellKnown(url, "oauth-authorization-server", dropTrailingSlash = true)
+            Logger.d(TAG, "Fetching authorization server metadata from $metadataUrl")
             val metadataRequest = httpClient.get(metadataUrl) {}
             if (metadataRequest.status != HttpStatusCode.OK) {
                 throw IllegalStateException("Invalid issuer, no $metadataUrl")
             }
             val metadataText = metadataRequest.readRawBytes().decodeToString()
             val metadata = Json.parseToJsonElement(metadataText).jsonObject
+            Logger.dJson(TAG, "Received authorization server metadata", metadata)
             val identifier = metadata.stringOrNull("issuer") ?: url
             val challengeEndpoint = metadata.stringOrNull("challenge_endpoint")
             val authorizationEndpoint = metadata.string("authorization_endpoint")

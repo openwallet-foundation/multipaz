@@ -12,6 +12,10 @@ import org.multipaz.rpc.backend.getTable
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.storage.StorageTableSpec
 
+import org.multipaz.util.Logger
+
+private const val TAG = "nonce"
+
 /**
  * Endpoint to obtain fresh `c_nonce` (challenge for device binding key attestation).
  */
@@ -22,10 +26,12 @@ suspend fun nonce(call: ApplicationCall) {
     nonces.clientAttestationNonce?.let {
         call.response.header("OAuth-Client-Attestation-Challenge", it)
     }
+    val responseJson = buildJsonObject {
+        put("c_nonce", nonces.credentialNonce!!)
+    }
+    Logger.dJson(TAG, "Sending nonce response", responseJson)
     call.respondText(
-        text = buildJsonObject {
-            put("c_nonce", nonces.credentialNonce!!)
-        }.toString(),
+        text = responseJson.toString(),
         contentType = ContentType.Application.Json
     )
 }

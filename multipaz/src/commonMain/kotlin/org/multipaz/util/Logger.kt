@@ -343,6 +343,65 @@ object Logger {
     fun eJson(tag: String, message: String, json: JsonElement) {
         json(Level.ERROR, tag, message, json)
     }
+
+    private fun jwt(level: Level, tag: String, message: String, jwtString: String) {
+        if (jwtString.contains('~')) {
+            val sdParts = jwtString.split('~')
+            val mainJwt = sdParts.first()
+            jwt(level, tag, "$message (SD-JWT issuer JWT)", mainJwt)
+            if (sdParts.size > 1 && sdParts.last().count { it == '.' } == 2) {
+                val kbJwt = sdParts.last()
+                jwt(level, tag, "$message (SD-JWT key binding JWT)", kbJwt)
+            }
+            return
+        }
+
+        try {
+            val parts = jwtString.split('.')
+            if (parts.size == 3 || parts.size == 5) {
+                val header = Json.parseToJsonElement(parts[0].fromBase64Url().decodeToString())
+                json(level, tag, "$message (header)", header)
+                if (parts.size == 3) {
+                    val payload = Json.parseToJsonElement(parts[1].fromBase64Url().decodeToString())
+                    json(level, tag, "$message (payload)", payload)
+                }
+                return
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+        }
+        printLine(level, tag, "$message: $jwtString", null)
+    }
+
+    /**
+     * Prints a debug log message pretty-printing the decoded header and payload of a JWT string.
+     */
+    fun dJwt(tag: String, message: String, jwtString: String) {
+        if (isDebugEnabled) {
+            jwt(Level.DEBUG, tag, message, jwtString)
+        }
+    }
+
+    /**
+     * Prints an info log message pretty-printing the decoded header and payload of a JWT string.
+     */
+    fun iJwt(tag: String, message: String, jwtString: String) {
+        jwt(Level.INFO, tag, message, jwtString)
+    }
+
+    /**
+     * Prints a warning log message pretty-printing the decoded header and payload of a JWT string.
+     */
+    fun wJwt(tag: String, message: String, jwtString: String) {
+        jwt(Level.WARNING, tag, message, jwtString)
+    }
+
+    /**
+     * Prints an error log message pretty-printing the decoded header and payload of a JWT string.
+     */
+    fun eJwt(tag: String, message: String, jwtString: String) {
+        jwt(Level.ERROR, tag, message, jwtString)
+    }
 }
 
 // Low-level platform-specific printer
