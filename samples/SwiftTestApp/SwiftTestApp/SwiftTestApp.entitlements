@@ -16,7 +16,7 @@
 	</array>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.org.multipaz.SwiftTestApp</string>
+		<string>$(SWIFT_TESTAPP_APP_GROUP_ID)</string>
 	</array>
 </dict>
 </plist>

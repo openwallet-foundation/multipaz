@@ -22,6 +22,7 @@ import org.multipaz.document.DocumentBadge
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ios.IosStorage
+import platform.Foundation.NSBundle
 import platform.Foundation.NSFileManager
 import platform.darwin.freeifaddrs
 import platform.darwin.getifaddrs
@@ -50,7 +51,8 @@ actual object TestAppConfiguration {
     )
     actual val storage: Storage = IosStorage(
         storageFileUrl = NSFileManager.defaultManager.containerURLForSecurityApplicationGroupIdentifier(
-            groupIdentifier = "group.org.multipaz.testapp.sharedgroup"
+            groupIdentifier = NSBundle.mainBundle.objectForInfoDictionaryKey("AppGroupID") as? String
+                ?: error("Missing AppGroupID in Info.plist")
         )!!.URLByAppendingPathComponent("storageNoBackup.db")!!,
         excludeFromBackup = true
     )
