@@ -341,9 +341,110 @@ class ProvisioningModelTest {
         assertEquals(0, numRefreshed)
     }
 
-    class TestProvisioningClient(
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun retryAfterFailureWithNewChallenge() = runTest {
+        var failFirst = true
+        val client = TestProvisioningClient(
+            obtainCredentialsHook = {
+                if (failFirst) {
+                    failFirst = false
+                    throw IllegalStateException("Simulated network error")
+                }
+                true
+            }
+        )
+        // First attempt fails during initial provisioning
+        try {
+            model.launch(UnconfinedTestDispatcher(testScheduler)) {
+                client
+            }.await()
+            fail("Expected exception")
+        } catch (e: IllegalStateException) {
+            assertEquals("Simulated network error", e.message)
+        }
+
+        // Verify document was deleted on error
+        assertEquals(0, documentStore.listDocuments().size)
+
+        // Second attempt succeeds
+        val doc = model.launch(UnconfinedTestDispatcher(testScheduler)) {
+            client
+        }.await()
+        assertTrue(doc.provisioned)
+        assertEquals(2, doc.getCredentials().size)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun refreshRetryAfterFailureWithNewChallenge() = runTest {
+        var currentChallenge = "challenge_1"
+        var failRefresh = false
+        val attestedPublicKeys = mutableListOf<List<EcPublicKey>>()
+
+        val client = object : TestProvisioningClient(
+            keyBindingChallengeHook = { currentChallenge }
+        ) {
+            override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials {
+                if (keyInfo is KeyBindingInfo.Attestation) {
+                    attestedPublicKeys.add(keyInfo.attestations.map { it.keyAttestation.publicKey })
+                }
+                if (failRefresh) {
+                    failRefresh = false
+                    throw IllegalStateException("Simulated network failure on refresh")
+                }
+                return super.obtainCredentials(keyInfo)
+            }
+        }
+
+        // 1. Initial provisioning succeeds
+        val doc = model.launch(UnconfinedTestDispatcher(testScheduler)) {
+            client
+        }.await()
+        assertTrue(doc.provisioned)
+        assertEquals(2, doc.getCertifiedCredentials().size)
+        assertEquals(0, doc.getPendingCredentials().size)
+
+        // Mark existing credentials as used so they require replacement during refresh
+        for (cred in doc.getCertifiedCredentials()) {
+            cred.increaseUsageCount()
+        }
+
+        // 2. Refresh fails midway
+        currentChallenge = "challenge_2"
+        failRefresh = true
+        try {
+            model.launch(UnconfinedTestDispatcher(testScheduler), doc) {
+                client
+            }.await()
+            fail("Expected refresh to fail")
+        } catch (e: IllegalStateException) {
+            assertEquals("Simulated network failure on refresh", e.message)
+        }
+
+        // Verify pending credentials were cleaned up on failure
+        assertEquals(0, doc.getPendingCredentials().size)
+        val failedAttemptKeys = attestedPublicKeys.last()
+
+        // 3. Retry refresh with a new challenge
+        currentChallenge = "challenge_3"
+        val docAfterRetry = model.launch(UnconfinedTestDispatcher(testScheduler), doc) {
+            client
+        }.await()
+        assertTrue(docAfterRetry.provisioned)
+        assertEquals(0, docAfterRetry.getPendingCredentials().size)
+        val retryAttemptKeys = attestedPublicKeys.last()
+
+        // Verify that retry attempt generated fresh keys and did NOT reuse the keys from the failed attempt
+        for (key in retryAttemptKeys) {
+            assertFalse(failedAttemptKeys.contains(key))
+        }
+    }
+
+    open class TestProvisioningClient(
         val obtainCredentialsHook: suspend () -> Boolean = { true },
-        val authorizationChallenges: List<AuthorizationChallenge> = listOf()
+        val authorizationChallenges: List<AuthorizationChallenge> = listOf(),
+        val keyBindingChallengeHook: suspend () -> String = { "test_challenge" }
     ) : ProvisioningClient {
         companion object {
             const val DOCTYPE = "http://doctype.example.org"
@@ -380,7 +481,7 @@ class ProvisioningModelTest {
         override suspend fun getAuthorizationData(): ByteString =
             ByteString("foobar_auth".encodeToByteArray())
 
-        override suspend fun getKeyBindingChallenge(): String = "test_challenge"
+        override suspend fun getKeyBindingChallenge(): String = keyBindingChallengeHook()
 
         override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials {
             when (keyInfo) {
