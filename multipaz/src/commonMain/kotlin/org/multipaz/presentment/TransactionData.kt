@@ -7,6 +7,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.document.Document
 import org.multipaz.documenttype.TransactionType
+import org.multipaz.documenttype.TransactionUserInput
 
 /**
  * An object that holds transaction data.
@@ -59,9 +60,13 @@ class TransactionData<PayloadT: Any>(
      * See [TransactionType.applyJson]
      *
      * @param credential credential being presented
+     * @param userInput additional data specified by the user
      * @return transaction-specific data that should be added to the presentment.
      */
-    suspend fun applyJson(credential: Credential) = type.applyJson(this, credential)
+    suspend fun applyJson(
+        credential: Credential,
+        userInput: TransactionUserInput?
+    ) = type.applyJson(this, credential, userInput)
 
     /**
      * Applies transaction in the context of ISO ISO/IEC 18013 presentment.
@@ -69,9 +74,13 @@ class TransactionData<PayloadT: Any>(
      * See [TransactionType.applyCbor]
      *
      * @param credential credential being presented
+     * @param userInput additional data specified by the user
      * @return transaction-specific data that should be added to the presentment.
      */
-    suspend fun applyCbor(credential: Credential) = type.applyCbor(this, credential)
+    suspend fun applyCbor(
+        credential: Credential,
+        userInput: TransactionUserInput?
+    ) = type.applyCbor(this, credential, userInput)
 
     /**
      * Creates equivalent transaction data for use in ISO ISO/IEC 18013 protocols.

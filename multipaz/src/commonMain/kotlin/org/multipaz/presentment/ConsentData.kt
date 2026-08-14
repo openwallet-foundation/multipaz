@@ -1,6 +1,7 @@
 package org.multipaz.presentment
 
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.request.Iso18013RequesterIdentity
 import org.multipaz.request.Requester
 import org.multipaz.trustmanagement.TrustMetadata
@@ -27,10 +28,13 @@ data class ConsentData private constructor(
      * Calculates a [CredentialSelection] from a list of selections.
      *
      * @param selections the solution selected for each use-case or -1 if not selecting an optional use-case.
+     * @param transactionUserInput additional user input for transactions, indexed by the transaction
+     *  type identifier
      * @return a [CredentialSelection].
      */
     fun toCredentialSelection(
-        selections: List<Int>
+        selections: List<Int>,
+        transactionUserInput: Map<String, TransactionUserInput>
     ): CredentialSelection {
         require(selections.size == useCases.size) {
             "Expected selectionPerUseCase length to be that of useCases"
@@ -50,7 +54,7 @@ data class ConsentData private constructor(
                 }
             }
         }
-        return CredentialSelection(matches)
+        return CredentialSelection(matches, transactionUserInput)
     }
 
     companion object {

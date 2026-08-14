@@ -2,6 +2,7 @@ package org.multipaz.documenttype
 
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.buildJsonObject
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.toDataItem
@@ -131,13 +132,16 @@ abstract class TransactionType<PayloadT: Any>(
      *
      * @param transactionData transaction data
      * @param credential credential being presented
+     * @param userInput additional data specified by the user
      * @return transaction-specific data that should be added to the presentment (in `deviceSigned`
      *  namespace map using [mdocResponseNamespace]), `null` if no extra data should be added.
      */
     open suspend fun applyCbor(
         transactionData: TransactionData<PayloadT>,
-        credential: Credential
+        credential: Credential,
+        userInput: TransactionUserInput?
     ): Map<String, DataItem> = buildMap {
+        userInput?.applyCbor(transactionData, credential)?.let { putAll(it) }
         val alg = transactionData.hashAlgorithms?.first()?.also {
             put("transactionDataHashAlg", it.coseAlgorithmIdentifier!!.toDataItem())
         }
@@ -152,13 +156,21 @@ abstract class TransactionType<PayloadT: Any>(
      *
      * @param transactionData transaction data
      * @param credential credential being presented
+     * @param userInput additional data specified by the user
      * @return transaction-specific data that should be added to the presentment (in key-binding
      *  JWT body using [kbJwtResponseClaimName]), `null` if no extra data should be added.
      */
     open suspend fun applyJson(
         transactionData: TransactionData<PayloadT>,
-        credential: Credential
-    ): JsonElement? = null
+        credential: Credential,
+        userInput: TransactionUserInput?
+    ): JsonElement? = userInput?.applyJson(transactionData, credential)?.let { claims ->
+        buildJsonObject {
+            for ((name, value) in claims) {
+                put(name, value)
+            }
+        }
+    }
 
     /**
      * Verify transaction response for mdoc presentment.

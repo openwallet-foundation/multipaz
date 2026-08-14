@@ -41,6 +41,7 @@ import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
 import org.multipaz.documenttype.TransactionType
+import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.OpenID4VP
@@ -169,16 +170,20 @@ class DigitalCredentialsPresentmentTest {
 
         override suspend fun applyJson(
             transactionData: TransactionData<Boolean>,
-            credential: Credential
+            credential: Credential,
+            userInput: TransactionUserInput?
         ): JsonElement = buildJsonObject {
+            check(userInput == null)
             put("result", 42)
         }
 
         override suspend fun applyCbor(
             transactionData: TransactionData<Boolean>,
-            credential: Credential
+            credential: Credential,
+            userInput: TransactionUserInput?
         ): Map<String, DataItem> = buildMap {
-            putAll(super.applyCbor(transactionData, credential))
+            check(userInput == null)
+            putAll(super.applyCbor(transactionData, credential, userInput))
             put("result", Uint(42UL))
         }
     }
@@ -189,16 +194,20 @@ class DigitalCredentialsPresentmentTest {
     ) {
         override suspend fun applyJson(
             transactionData: TransactionData<Boolean>,
-            credential: Credential
+            credential: Credential,
+            userInput: TransactionUserInput?
         ): JsonElement = buildJsonObject {
+            check(userInput == null)
             put("result", 57)
         }
 
         override suspend fun applyCbor(
             transactionData: TransactionData<Boolean>,
-            credential: Credential
+            credential: Credential,
+            userInput: TransactionUserInput?
         ): Map<String, DataItem> = buildMap {
-            putAll(super.applyCbor(transactionData, credential))
+            check(userInput == null)
+            putAll(super.applyCbor(transactionData, credential, userInput))
             put("result", Uint(57UL))
         }
     }
@@ -318,7 +327,6 @@ class DigitalCredentialsPresentmentTest {
 
         val shownConsentPrompts = mutableListOf<ShownConsentPrompt>()
 
-        val dismissable = MutableStateFlow<Boolean>(true)
         val dcResponseObject = digitalCredentialsPresentment(
             protocol = protocol,
             data = request,

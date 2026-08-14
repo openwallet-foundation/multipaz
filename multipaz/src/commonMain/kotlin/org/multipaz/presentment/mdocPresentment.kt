@@ -15,6 +15,7 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.document.Document
+import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.eventlogger.EventPresentmentData
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
@@ -233,7 +234,7 @@ suspend fun mdocPresentmentGenerateResponse(
                         eReaderKey = eReaderKey,
                         credential = match.credential,
                         requestedClaims = match.claims.keys.toList() as List<MdocRequestedClaim>,
-                        deviceNamespaces = computeTransactionResponse(match),
+                        deviceNamespaces = computeTransactionResponse(match, selection.transactionUserInput),
                         errors = mapOf()
                     )
 
@@ -315,7 +316,8 @@ suspend fun mdocPresentmentGenerateResponse(
                     val transactionResponse = processTransactions(
                         credential = match.credential,
                         transactionData = match.transactionData,
-                        docRequestId = match.source.docRequest.docRequestId
+                        docRequestId = match.source.docRequest.docRequestId,
+                        transactionUserInput = selection.transactionUserInput
                     )
                     val sdJwtKb = filteredSdJwtVc.present(
                         signingKey = AsymmetricKey.AnonymousSecureAreaBased(
@@ -452,11 +454,15 @@ suspend fun mdocPresentment(
 }
 
 internal suspend fun computeTransactionResponse(
-    match: CredentialPresentmentSetOptionMemberMatch
+    match: CredentialPresentmentSetOptionMemberMatch,
+    transactionUserInput: Map<String, TransactionUserInput>
 ): DeviceNamespaces {
     val transactionResponseMap = match.transactionData.associate { transaction ->
         Pair(transaction.type.mdocResponseNamespace, buildMap {
-            putAll(transaction.applyCbor(match.credential))
+            putAll(transaction.applyCbor(
+                credential = match.credential,
+                userInput = transactionUserInput[transaction.type.identifier]
+            ))
             (match.source as? CredentialMatchSourceIso18013)?.let { source ->
                 // This is generally not available anywhere is the ISO 18013 response,
                 // but it is needed to verify the transaction, so we keep it in the

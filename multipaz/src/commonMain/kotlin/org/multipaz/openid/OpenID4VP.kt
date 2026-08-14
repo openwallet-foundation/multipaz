@@ -33,6 +33,7 @@ import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.document.Document
+import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.eventlogger.EventPresentmentData
 import org.multipaz.webtoken.buildJwt
 import org.multipaz.mdoc.credential.MdocCredential
@@ -517,6 +518,7 @@ object OpenID4VP {
                     reReaderPublicKey = reReaderPublicKey,
                     responseUri = responseUri,
                     requestIsForZk = requestIsForZk,
+                    transactionUserInput = selection.transactionUserInput
                 )
             } else if (match.source.credentialQuery.vctValues != null) {
                 openID4VPSdJwt(
@@ -526,6 +528,7 @@ object OpenID4VP {
                     clientId = clientId,
                     nonce = nonce,
                     responseMode = responseMode,
+                    transactionUserInput = selection.transactionUserInput
                 )
             } else {
                 throw IllegalArgumentException("Expected ISO mdoc or IETF SD-JWT, got neither")
@@ -610,6 +613,7 @@ object OpenID4VP {
         reReaderPublicKey: EcPublicKey?,
         responseUri: String?,
         requestIsForZk: Boolean,
+        transactionUserInput: Map<String, TransactionUserInput>,
         onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
     ): String {
         match.source as CredentialMatchSourceOpenID4VP
@@ -715,7 +719,7 @@ object OpenID4VP {
             sessionTranscript = Cbor.decode(encodedSessionTranscript),
             credential = mdocCredential,
             requestedClaims = match.source.credentialQuery.claims as List<MdocRequestedClaim>,
-            deviceNamespaces = computeTransactionResponse(match)
+            deviceNamespaces = computeTransactionResponse(match, transactionUserInput)
         )
         val deviceResponse = buildDeviceResponse(
             sessionTranscript = Cbor.decode(encodedSessionTranscript),
@@ -750,11 +754,12 @@ object OpenID4VP {
     suspend fun processTransactions(
         credential: SdJwtVcCredential,
         transactionData: List<TransactionData<*>>,
+        transactionUserInput: Map<String, TransactionUserInput>,
         docRequestId: Int? = null
     ): Map<String, JsonElement> {
         val transactionResponse = mutableMapOf<String, JsonElement>()
         for (data in transactionData) {
-            val response = data.applyJson(credential as Credential)
+            val response = data.applyJson(credential as Credential, transactionUserInput[data.type.identifier])
             if (response != null || docRequestId != null) {
                 transactionResponse[data.type.kbJwtResponseClaimName] = if (docRequestId == null) {
                     response!!
@@ -796,6 +801,7 @@ object OpenID4VP {
         clientId: String,
         nonce: String,
         responseMode: ResponseMode,
+        transactionUserInput: Map<String, TransactionUserInput>
     ): String {
         match.source as CredentialMatchSourceOpenID4VP
         val sdjwtVcCredential = match.credential as SdJwtVcCredential
@@ -807,7 +813,7 @@ object OpenID4VP {
 
         (sdjwtVcCredential as Credential).increaseUsageCount()
 
-        val transactionResponse = processTransactions(sdjwtVcCredential, match.transactionData)
+        val transactionResponse = processTransactions(sdjwtVcCredential, match.transactionData, transactionUserInput)
 
         return if (sdjwtVcCredential is SecureAreaBoundCredential) {
             filteredSdJwt.present(
