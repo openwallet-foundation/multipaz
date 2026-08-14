@@ -24,7 +24,9 @@ import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.util.Logger
 import org.multipaz.util.truncateToWholeSeconds
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
+import org.multipaz.verification.Iso18013PresentmentRecord
 import org.multipaz.verification.MdocVerifiedPresentation
+import org.multipaz.verification.OpenID4VPPresentmentRecord
 import kotlin.math.roundToLong
 import kotlin.random.Random
 import kotlin.time.Clock
@@ -101,7 +103,10 @@ class PaymentProcessorImpl: PaymentProcessor, RpcAuthInspector by rpcAuth {
             ?: throw InvalidRequestException("Transaction '$transactionId' is invalid or expired")
         val draft = PaymentData.fromCbor(data.toByteArray())
 
-        presentmentRecord.verifyNonce(draft.nonce)
+        if (requiresNonceVerification(presentmentRecord)) {
+            presentmentRecord.verifyNonce(draft.nonce)
+        }
+
         if ((amount * 100).roundToLong() != (draft.amount * 100).roundToLong() || currency != draft.currency) {
             throw InvalidRequestException("Inconsistent transaction amount or currency")
         }
@@ -167,4 +172,27 @@ class PaymentProcessorImpl: PaymentProcessor, RpcAuthInspector by rpcAuth {
 
         private val transactionLock = Mutex()
     }
+}
+
+/**
+ * Whether [record]'s verifier nonce must be checked before committing a payment.
+ *
+ * Nonce verification binds a presentment to a specific verifier challenge. It applies to DC-API /
+ * OpenID4VP flows, which carry the nonce out of band — in `encryptionInfo` + `origin` for ISO
+ * 18013-5 over the Digital Credentials API, or in the VP request for OpenID4VP. ISO 18013-5
+ * *proximity* presentations (NFC/BLE/QR) carry neither, so there is no verifier nonce to fold into
+ * the session transcript; the equivalent anti-replay guarantee comes from the transport instead: a
+ * fresh ephemeral reader key per session yields a unique `SessionTranscript`, so a captured
+ * `DeviceResponse` fails device-signature verification if replayed, and the single-use,
+ * server-minted `transactionId` in the device-signed `transaction_data` binds the presentment to
+ * exactly one pending transaction.
+ *
+ * Fails closed: only a proximity [Iso18013PresentmentRecord] (both `encryptionInfo` and `origin`
+ * absent) skips the check; [OpenID4VPPresentmentRecord] and DC-API ISO always verify. Because
+ * [PresentmentRecord] is sealed and this `when` is exhaustive, adding a new subtype is a compile
+ * error here — forcing an explicit nonce-handling decision rather than silently defaulting.
+ */
+internal fun requiresNonceVerification(record: PresentmentRecord): Boolean = when (record) {
+    is Iso18013PresentmentRecord -> record.encryptionInfo != null || record.origin != null
+    is OpenID4VPPresentmentRecord -> true
 }
