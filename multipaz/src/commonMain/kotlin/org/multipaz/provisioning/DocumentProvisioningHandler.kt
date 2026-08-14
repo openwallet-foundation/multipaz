@@ -149,8 +149,9 @@ open class DocumentProvisioningHandler(
         pendingCredentials: List<Credential>,
         err: Throwable
     ) {
-        // Since we're using DocumentUtil.managedCredentialHelper() there is no need to clean up
-        // these pending credentials as they'll be reused the next time
+        for (credential in pendingCredentials) {
+            documentStore.lookupDocument(credential.document.identifier)?.deleteCredential(credential.identifier)
+        }
     }
 
     override suspend fun getPendingKeyBoundCredentials(
