@@ -6,7 +6,9 @@ import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNamingStrategy
+import kotlinx.serialization.json.JsonPrimitive
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.annotation.CborSerializable
@@ -15,9 +17,11 @@ import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.documenttype.CannedTransactionData
 import org.multipaz.documenttype.TransactionType
+import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.presentment.TransactionData
 import org.multipaz.util.fromBase64Url
+import kotlin.math.ceil
 import kotlin.time.Instant
 
 /**
@@ -86,6 +90,7 @@ object PaymentTransaction: TransactionType<PaymentTransaction.Payload>(
      * @property amountEstimated Flag indicating if the amount is an estimate rather than the final total (mapped to `amount_estimated`).
      * @property amountEarmarked Flag indicating if the funds are reserved/earmarked for this transaction (mapped to `amount_earmarked`).
      * @property sctInst Flag indicating if the transaction uses SEPA Instant Credit Transfer (mapped to `sct_inst`).
+     * @property tipRequested (extension, not defined in the spec) Flag indicating that a tip can additionally be added by the payee.
      * @property recurrence Optional [Recurrence] configuration specifying payment intervals for standing/recurring orders.
      * @property mitOptions Optional Merchant Initiated Transaction options ([MitOptions]).
      */
@@ -102,6 +107,7 @@ object PaymentTransaction: TransactionType<PaymentTransaction.Payload>(
         val amountEstimated: Boolean? = null,
         val amountEarmarked: Boolean? = null,
         val sctInst: Boolean? = null,
+        val tipRequested: Boolean? = null,
         val recurrence: Recurrence? = null,
         val mitOptions: MitOptions? = null
     ) {
@@ -186,6 +192,33 @@ object PaymentTransaction: TransactionType<PaymentTransaction.Payload>(
         val apr: Double?
     ) {
         companion object
+    }
+
+    /**
+     * Optional user input for payment transaction processing.
+     *
+     * @property tipPercent amount of tip in the currency specified in [Payload.currency]
+     */
+    data class UserInput(
+        val tipPercent: Double
+    ): TransactionUserInput() {
+        override fun applyCbor(
+            transactionData: TransactionData<*>,
+            credential: Credential
+        ): Map<String, DataItem> = buildMap {
+            val payload = transactionData.payload as Payload
+            val amount = ceil(payload.amount * tipPercent) / 100.0
+            put("tipAmount", amount.toDataItem())
+        }
+
+        override fun applyJson(
+            transactionData: TransactionData<*>,
+            credential: Credential
+        ): Map<String, JsonElement> = buildMap {
+            val payload = transactionData.payload as Payload
+            val amount = ceil(payload.amount * tipPercent) / 100.0
+            put("tip_amount", JsonPrimitive(amount))
+        }
     }
 
     /**
@@ -279,6 +312,7 @@ object PaymentTransaction: TransactionType<PaymentTransaction.Payload>(
             transactionId = "3AD99006-6E0D-4D07-AE75-5DAEF0FE21D9",
             amount = 123.25,
             currency = "USD",
+            tipRequested = true,
             payee = Payee(
                 id = "01234",
                 name = "Linux Foundation"

@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +28,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -35,12 +37,17 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -88,6 +95,8 @@ import org.multipaz.compose.text.fromMarkdown
 import org.multipaz.credential.Credential
 import org.multipaz.document.Document
 import org.multipaz.documenttype.Icon
+import org.multipaz.documenttype.TransactionUserInput
+import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.multipaz_compose.generated.resources.Res
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_button_cancel
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_button_more
@@ -113,7 +122,6 @@ import org.multipaz.multipaz_compose.generated.resources.credential_presentment_
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_share_with_known_requester_and_unknown_enc_target
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_share_with_unknown_requester
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_share_with_unknown_requester_and_unknown_enc_target
-import org.multipaz.multipaz_compose.generated.resources.credential_presentment_transaction_data
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_verifier_icon_description
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_warning_verifier_not_in_trust_list
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_warning_verifier_not_in_trust_list_anonymous
@@ -124,11 +132,14 @@ import org.multipaz.presentment.CredentialMatchSourceOpenID4VP
 import org.multipaz.presentment.CredentialSelection
 import org.multipaz.presentment.ConsentData
 import org.multipaz.presentment.ConsentUseCase
+import org.multipaz.presentment.TransactionData
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.Logger
+import org.multipaz.util.toBase64Url
+import org.multipaz.utopia.knowntypes.PingTransaction
 import kotlin.math.min
 
 private val PAGER_INDICATOR_HEIGHT = 30.dp
@@ -202,11 +213,16 @@ fun Consent(
     }
 
     var selections by remember(initialSelections) { mutableStateOf(initialSelections) }
+    var transactionUserInput by remember {
+        mutableStateOf(emptyMap<String, TransactionUserInput>())
+    }
     var activeUseCaseIndex by remember { mutableStateOf(0) }
     var isFlipped by remember { mutableStateOf(false) }
 
+    // TODO: it seems that we do not need to worry about transactionUserInput here; if we actually
+    //  do, we should add it BOTH as key to remember and as a parameter to toCredentialSelection
     val currentSelection = remember(selections, consentData) {
-        consentData.toCredentialSelection(selections)
+        consentData.toCredentialSelection(selections, emptyMap())
     }
     val currentDocumentsInFocus = remember(currentSelection) {
         currentSelection.matches.map { it.credential.document }
@@ -269,10 +285,14 @@ fun Consent(
                             imageLoader = imageLoader,
                             consentData = consentData,
                             selections = selections,
+                            transactionUserInput = transactionUserInput,
                             onSelectionChanged = { index, value ->
                                 val newList = selections.toMutableList()
                                 newList[index] = value
                                 selections = newList
+                            },
+                            onTransactionUserInputChanged = { type, userInput ->
+                                transactionUserInput = transactionUserInput.plus(type to userInput)
                             },
                             onShowRequesterInfo = {
                                 navController.navigate("showRequesterInfo")
@@ -429,7 +449,9 @@ private fun ConsentPage(
     imageLoader: ImageLoader?,
     consentData: ConsentData,
     selections: List<Int>,
+    transactionUserInput: Map<String, TransactionUserInput>,
     onSelectionChanged: (Int, Int) -> Unit,
+    onTransactionUserInputChanged: (String, TransactionUserInput) -> Unit,
     onShowRequesterInfo: () -> Unit,
     onNavigateToPickSolution: (Int) -> Unit,
     onConfirm: (selection: CredentialSelection) -> Unit,
@@ -489,11 +511,13 @@ private fun ConsentPage(
                             selectionIndex = selections[index],
                             requester = requester,
                             requesterDisplayData = requesterDisplayData,
+                            transactionUserInput = transactionUserInput,
                             trustMetadata = trustMetadata,
                             appInfo = appInfo,
                             onSelectionChanged = { value ->
                                 onSelectionChanged(index, value)
                             },
+                            onTransactionUserInputChanged = onTransactionUserInputChanged,
                             onNavigateToPickSolution = {
                                 onNavigateToPickSolution(index)
                             }
@@ -532,7 +556,7 @@ private fun ConsentPage(
 
         ButtonSection(
             onConfirm = {
-                onConfirm(consentData.toCredentialSelection(selections))
+                onConfirm(consentData.toCredentialSelection(selections, transactionUserInput))
             },
             onCancel = onCancel,
             scrollState = scrollState
@@ -547,9 +571,11 @@ private fun UseCaseViewer(
     selectionIndex: Int,
     requester: Requester,
     requesterDisplayData: RequesterDisplayData,
+    transactionUserInput: Map<String, TransactionUserInput>,
     trustMetadata: TrustMetadata?,
     appInfo: ApplicationInfo?,
     onSelectionChanged: (Int) -> Unit,
+    onTransactionUserInputChanged: (String, TransactionUserInput) -> Unit,
     onNavigateToPickSolution: () -> Unit
 ) {
     val isSelected = selectionIndex >= 0
@@ -621,24 +647,25 @@ private fun UseCaseViewer(
                             if (credential.match.transactionData.isNotEmpty()) {
                                 Column(
                                     modifier = Modifier
-                                        .background(MaterialTheme.colorScheme.error)
+                                        .padding(8.dp)
+                                        .border(
+                                            width = 2.dp,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
                                         .padding(8.dp)
                                         .fillMaxWidth()
                                 ) {
-                                    Text(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        text = stringResource(Res.string.credential_presentment_transaction_data),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onError,
-                                        fontWeight = FontWeight.Bold
-                                    )
                                     for (data in credential.match.transactionData) {
-                                        Text(
-                                            modifier = Modifier.fillMaxWidth().padding(12.dp, 0.dp, 0.dp, 0.dp),
-                                            text = "\u2022 ${data.type.displayName}",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onError,
-                                            fontWeight = FontWeight.Bold
+                                        DisplayTransactionData(
+                                            transactionData = data,
+                                            userInput = transactionUserInput[data.type.identifier],
+                                            onUserInputChanged = { userInput ->
+                                                onTransactionUserInputChanged.invoke(
+                                                    data.type.identifier,
+                                                    userInput
+                                                )
+                                            }
                                         )
                                     }
                                 }
@@ -667,6 +694,88 @@ private fun UseCaseViewer(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DisplayTransactionData(
+    transactionData: TransactionData<*>,
+    userInput: TransactionUserInput?,
+    onUserInputChanged: (userInput: TransactionUserInput) -> Unit
+) {
+    when (val type = transactionData.type) {
+        PingTransaction -> {
+            val payload = transactionData.payload as PingTransaction.Payload
+            Text("Test \"ping\" transaction")
+            payload.string?.let { Text("String value: '$it'") }
+            payload.blob?.let { Text("Blob value: '${it.toByteArray().toBase64Url()}") }
+        }
+
+        PaymentTransaction -> {
+            val payload = transactionData.payload as PaymentTransaction.Payload
+            val tipPercent = (userInput as? PaymentTransaction.UserInput)?.tipPercent ?: 0.0
+            Text("Payment transaction")
+            Text("Amount: ${payload.amount} ${payload.currency}")
+            if (payload.tipRequested == true) {
+                Row {
+                    // 2. Track the expanded state and the currently selected item
+                    var isExpanded by remember { mutableStateOf(false) }
+                    var selectedOption by remember { mutableStateOf(
+                        if (tipPercent == 0.0) {
+                            tipOptions.first()
+                        } else {
+                            "$tipPercent%"
+                        }
+                    ) }
+
+                    ExposedDropdownMenuBox(
+                        expanded = isExpanded,
+                        onExpandedChange = { isExpanded = !isExpanded },
+                    ) {
+                        OutlinedTextField(
+                            value = selectedOption,
+                            onValueChange = {},
+                            readOnly = true, // Prevents keyboard from appearing
+                            label = { Text("Add tip") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isExpanded) },
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                            modifier = Modifier
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth()
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = isExpanded,
+                            onDismissRequest = { isExpanded = false }
+                        ) {
+                            tipOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(text = option) },
+                                    onClick = {
+                                        selectedOption = option // Update selection truth
+                                        val percent = if (option.endsWith("%")) {
+                                            option.take(option.lastIndex).toDouble()
+                                        } else {
+                                            0.0
+                                        }
+                                        onUserInputChanged(PaymentTransaction.UserInput(percent))
+                                        isExpanded = false      // Close menu
+                                    },
+                                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        else -> {
+            Text("Unknown transaction type '${type.displayName}'")
+        }
+    }
+}
+
+private val tipOptions = listOf("No tip", "10%", "15%", "20%", "25%")
 
 @Composable
 private fun calcSharedWithText(

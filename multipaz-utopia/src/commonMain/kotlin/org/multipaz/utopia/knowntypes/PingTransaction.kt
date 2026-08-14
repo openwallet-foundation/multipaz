@@ -17,10 +17,14 @@ import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.documenttype.CannedTransactionData
 import org.multipaz.documenttype.TransactionType
+import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.presentment.TransactionData
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import kotlin.collections.component1
+import kotlin.collections.component2
+import kotlin.collections.iterator
 
 /**
  * Transaction type that round-trips some data through the presentment process for testing.
@@ -120,8 +124,16 @@ object PingTransaction: TransactionType<PingTransaction.Payload>(
 
     override suspend fun applyJson(
         transactionData: TransactionData<Payload>,
-        credential: Credential
+        credential: Credential,
+        userInput: TransactionUserInput?
     ): JsonElement = buildJsonObject {
+        userInput?.applyJson(transactionData, credential)?.let { claims ->
+            buildJsonObject {
+                for ((name, value) in claims) {
+                    put(name, value)
+                }
+            }
+        }
         transactionData.payload.string?.let {
             put("string", it)
         }
@@ -132,10 +144,11 @@ object PingTransaction: TransactionType<PingTransaction.Payload>(
 
     override suspend fun applyCbor(
         transactionData: TransactionData<Payload>,
-        credential: Credential
+        credential: Credential,
+        userInput: TransactionUserInput?
     ): Map<String, DataItem> {
         return buildMap {
-            putAll(super.applyCbor(transactionData, credential))
+            putAll(super.applyCbor(transactionData, credential, userInput))
             transactionData.payload.string?.let {
                 put("string", it.toDataItem())
             }

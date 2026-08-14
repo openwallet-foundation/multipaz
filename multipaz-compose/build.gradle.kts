@@ -106,6 +106,8 @@ kotlin {
 
                 implementation(project(":multipaz"))
                 implementation(project(":multipaz-dcapi"))
+                implementation(project(":multipaz-doctypes"))
+                implementation(project(":multipaz-utopia"))
                 implementation(libs.kotlinx.datetime)
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.kotlinx.io.core)
