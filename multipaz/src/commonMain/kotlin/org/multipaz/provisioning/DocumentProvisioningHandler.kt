@@ -45,13 +45,39 @@ private const val TAG = "DocumentProvisioningHandler"
  *  provided if [DocumentStore] uses an [AbstractDocumentMetadata] factory (see
  *  [DocumentStore.Builder.setDocumentMetadataFactory]).
  * @param defaultDocumentProvisioningSettings the default [DocumentProvisioningSettings] to use.
+ * @param selectSecureArea optional lambda to select [SecureArea] and customize [CreateKeySettings]
+ *  based on `appData` and suggested key settings.
  */
 open class DocumentProvisioningHandler(
     val secureArea: SecureArea,
     val documentStore: DocumentStore,
     val metadataHandler: AbstractDocumentMetadataHandler? = null,
-    val defaultDocumentProvisioningSettings: DocumentProvisioningSettings = DocumentProvisioningSettings()
+    val defaultDocumentProvisioningSettings: DocumentProvisioningSettings = DocumentProvisioningSettings(),
+    val selectSecureArea: (suspend (
+        appData: ByteString?,
+        suggestedCreateKeySettings: CreateKeySettings
+    ) -> Pair<SecureArea, CreateKeySettings>)? = null
 ): AbstractDocumentProvisioningHandler {
+
+    /**
+     * Function to select [SecureArea] and customize [CreateKeySettings] for a document.
+     *
+     * The default implementation invokes [selectSecureArea] lambda if provided, or returns
+     * `Pair(this.secureArea, suggestedCreateKeySettings)`.
+     *
+     * Applications can override this method or pass a [selectSecureArea] lambda to the constructor.
+     *
+     * @param document the [Document] that credentials are being created for.
+     * @param suggestedCreateKeySettings suggested settings for creating the key.
+     * @return the [SecureArea] to use and the [CreateKeySettings] to use for key creation.
+     */
+    open suspend fun selectSecureArea(
+        document: Document,
+        suggestedCreateKeySettings: CreateKeySettings
+    ): Pair<SecureArea, CreateKeySettings> {
+        return selectSecureArea?.invoke(document.appData, suggestedCreateKeySettings)
+            ?: Pair(secureArea, suggestedCreateKeySettings)
+    }
 
     /**
      * Function to select which [DocumentProvisioningSettings] to use when provisioning.
@@ -73,7 +99,8 @@ open class DocumentProvisioningHandler(
     override suspend fun createDocument(
         credentialMetadata: CredentialMetadata,
         issuerMetadata: ProvisioningMetadata,
-        documentAuthorizationData: ByteString?
+        documentAuthorizationData: ByteString?,
+        appData: ByteString?
     ): Document =
         documentStore.createDocument(
             displayName = credentialMetadata.display.text,
@@ -81,6 +108,7 @@ open class DocumentProvisioningHandler(
             cardArt = credentialMetadata.display.logo,
             issuerLogo = issuerMetadata.display.logo,
             authorizationData = documentAuthorizationData,
+            appData = appData,
             metadata = metadataHandler?.initializeDocumentMetadata(
                 credentialDisplay = credentialMetadata.display,
                 issuerDisplay = issuerMetadata.display,
@@ -178,6 +206,10 @@ open class DocumentProvisioningHandler(
             validFrom = null,
             validUntil = null
         )
+        val (selectedSecureArea, finalCreateKeySettings) = selectSecureArea(
+            document = document,
+            suggestedCreateKeySettings = cks
+        )
         val domain = when (format) {
             is CredentialFormat.Mdoc -> if (userAuth) settings.mdocUserAuthDomain else settings.mdocNoUserAuthDomain
             is CredentialFormat.SdJwt -> if (userAuth) settings.sdJwtUserAuthDomain else settings.sdJwtNoUserAuthDomain
@@ -192,9 +224,9 @@ open class DocumentProvisioningHandler(
                             document = document,
                             asReplacementForIdentifier = credentialIdentifierToReplace,
                             domain = domain,
-                            secureArea = secureArea,
+                            secureArea = selectedSecureArea,
                             docType = format.docType,
-                            createKeySettings = cks
+                            createKeySettings = finalCreateKeySettings
                         )
                     }
 
@@ -203,9 +235,9 @@ open class DocumentProvisioningHandler(
                             document = document,
                             asReplacementForIdentifier = credentialIdentifierToReplace,
                             domain = domain,
-                            secureArea = secureArea,
+                            secureArea = selectedSecureArea,
                             vct = format.vct,
-                            createKeySettings = cks
+                            createKeySettings = finalCreateKeySettings
                         )
                     }
                 }

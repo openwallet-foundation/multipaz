@@ -135,6 +135,10 @@ class DocumentStore private constructor(
      * @param issuerLogo An image that represents the issuer of the document in the UI,
      *  e.g. passport office logo. PNG format is expected, transparency is supported and square
      *  aspect ratio is preferred.
+     * @param authorizationData Saved authorization data to refresh credentials, possibly without requiring
+     *  user to re-authorize.
+     * @param appData Application-specific data.
+     * @param created The time the document was created.
      * @param metadata initial value for [Document.metadata]
      * @return A newly created document.
      */
@@ -144,6 +148,7 @@ class DocumentStore private constructor(
         cardArt: ByteString? = null,
         issuerLogo: ByteString? = null,
         authorizationData: ByteString? = null,
+        appData: ByteString? = null,
         created: Instant = Clock.System.now(),
         metadata: AbstractDocumentMetadata? = null
     ): Document {
@@ -156,6 +161,7 @@ class DocumentStore private constructor(
             cardArt = cardArt,
             issuerLogo = issuerLogo,
             authorizationData = authorizationData,
+            appData = appData,
             metadata = metadata?.serialize()
         )
         // NB: insertion in the storage is when the document is actually added, it may be

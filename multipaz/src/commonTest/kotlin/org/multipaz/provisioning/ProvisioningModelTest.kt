@@ -51,6 +51,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -100,6 +101,7 @@ class ProvisioningModelTest {
             TestProvisioningClient()
         }.await()
         assertTrue(doc.provisioned)
+        assertNull(doc.appData)
         assertEquals("Document Title", doc.displayName)
         assertEquals("Test Document", doc.typeDisplayName)
         val credentials = doc.getCredentials()
@@ -107,6 +109,82 @@ class ProvisioningModelTest {
         val credential = credentials.first() as MdocCredential
         assertTrue(credential.isCertified)
         assertEquals(TestProvisioningClient.DOCTYPE, credential.docType)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun basicWithAppData() = runTest {
+        val expectedAppData = ByteString(10, 20, 30, 40)
+        val doc = model.launch(
+            coroutineContext = UnconfinedTestDispatcher(testScheduler),
+            appData = expectedAppData
+        ) {
+            TestProvisioningClient()
+        }.await()
+        assertTrue(doc.provisioned)
+        assertEquals(expectedAppData, doc.appData)
+        assertEquals("Document Title", doc.displayName)
+        assertEquals("Test Document", doc.typeDisplayName)
+
+        // Verify it was persisted in DocumentStore
+        val docFromStore = documentStore.lookupDocument(doc.identifier)!!
+        assertEquals(expectedAppData, docFromStore.appData)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun basicWithCustomSecureAreaSelection() = runTest {
+        val alternateSecureArea = object : SecureArea by secureArea {
+            override val identifier: String get() = "AlternateSecureArea"
+            override val displayName: String get() = "Alternate Secure Area"
+        }
+        val customRepo = SecureAreaRepository.Builder()
+            .add(secureArea)
+            .add(alternateSecureArea)
+            .build()
+        val customDocStore = buildDocumentStore(
+            storage = storage,
+            secureAreaRepository = customRepo
+        ) {}
+        val customHandler = DocumentProvisioningHandler(
+            documentStore = customDocStore,
+            secureArea = secureArea,
+            selectSecureArea = { appData, suggestedSettings ->
+                if (appData == ByteString(0x01)) {
+                    Pair(alternateSecureArea, suggestedSettings)
+                } else {
+                    Pair(secureArea, suggestedSettings)
+                }
+            }
+        )
+        val customModel = ProvisioningModel(
+            documentProvisioningHandler = customHandler,
+            httpClient = HttpClient(mockHttpEngine),
+            promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build(),
+            authorizationSecureArea = secureArea
+        )
+
+        // Provision with appData = 0x01 -> should use alternateSecureArea
+        val docWithAlternate = customModel.launch(
+            coroutineContext = UnconfinedTestDispatcher(testScheduler),
+            appData = ByteString(0x01)
+        ) {
+            TestProvisioningClient()
+        }.await()
+        assertEquals(ByteString(0x01), docWithAlternate.appData)
+        val cred1 = docWithAlternate.getCredentials().first() as MdocCredential
+        assertEquals(alternateSecureArea.identifier, cred1.secureArea.identifier)
+
+        // Provision with appData = null -> should use default secureArea
+        val docWithDefault = customModel.launch(
+            coroutineContext = UnconfinedTestDispatcher(testScheduler),
+            appData = null
+        ) {
+            TestProvisioningClient()
+        }.await()
+        assertNull(docWithDefault.appData)
+        val cred2 = docWithDefault.getCredentials().first() as MdocCredential
+        assertEquals(secureArea.identifier, cred2.secureArea.identifier)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
