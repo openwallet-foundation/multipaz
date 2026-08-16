@@ -177,6 +177,13 @@ kotlin {
             }
         }
 
+        val androidUnitTest by getting {
+            dependencies {
+                implementation(libs.bouncy.castle.bcprov)
+                implementation(libs.bouncy.castle.bcpkix)
+            }
+        }
+
         val jvmTest by getting {
             dependencies {
                 implementation(libs.hsqldb)

@@ -11,6 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 class ASN1Tests {
@@ -651,6 +652,60 @@ A01EUDAKBggqhkjOPQQDAgNIADBFAiEAnX3+E4E5dQ+5G1rmStJTW79ZAiDTabyL
             """.trimIndent(),
             ASN1.print(certificate!!).trim()
         )
+    }
+
+    @Test
+    fun testASN1IntegerFromRandom() {
+        // Test invalid numBits
+        assertFailsWith<IllegalArgumentException> {
+            ASN1Integer.fromRandom(0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            ASN1Integer.fromRandom(-8)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            ASN1Integer.fromRandom(7)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            ASN1Integer.fromRandom(15)
+        }
+
+        // Test with different bit sizes and ensure all generated numbers are positive
+        for (numBits in listOf(8, 16, 24, 32, 64, 128, 160, 256)) {
+            val numBytes = numBits / 8
+            var sawPrependedZero = false
+            var sawNoPrependedZero = false
+            for (i in 0 until 500) {
+                val asn1Integer = ASN1Integer.fromRandom(numBits)
+                // MSB of first byte must be 0 for a positive integer in two's complement DER
+                assertTrue((asn1Integer.value[0].toInt() and 0x80) == 0, "MSB must be 0 for positive integer")
+
+                // If leading byte is 0x00, second byte must have MSB=1 to satisfy X.690 8.3.2
+                if (asn1Integer.value.size > 1 && asn1Integer.value[0] == 0.toByte()) {
+                    sawPrependedZero = true
+                    assertTrue(asn1Integer.value.size <= numBytes + 1)
+                    assertTrue(
+                        (asn1Integer.value[1].toInt() and 0x80) != 0,
+                        "When leading byte is 0x00, bit 8 of second byte must be 1"
+                    )
+                } else {
+                    sawNoPrependedZero = true
+                    assertTrue(asn1Integer.value.size <= numBytes)
+                    assertTrue(asn1Integer.value[0].toInt() != 0)
+                }
+
+                if (asn1Integer.value.size <= 8) {
+                    assertTrue(asn1Integer.toLong() > 0, "toLong() must be positive")
+                }
+
+                // Encode and decode roundtrip
+                val encoded = ASN1.encode(asn1Integer)
+                val decoded = ASN1.decode(encoded) as ASN1Integer
+                assertEquals(asn1Integer, decoded)
+            }
+            assertTrue(sawPrependedZero, "Expected to encounter cases with prepended 0x00 for numBits=$numBits")
+            assertTrue(sawNoPrependedZero, "Expected to encounter cases without prepended 0x00 for numBits=$numBits")
+        }
     }
 }
 

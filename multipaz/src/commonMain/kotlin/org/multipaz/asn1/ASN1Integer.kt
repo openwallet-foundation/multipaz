@@ -46,11 +46,15 @@ class ASN1Integer(
         }
 
         /**
-         * Generates a [ASN1Integer] with [numBits] bits of random
+         * Generates a positive [ASN1Integer] with [numBits] bits of random.
+         *
+         * The generated integer is guaranteed to be positive (greater than zero)
+         * and conform to DER encoding rules (e.g. for use as X.509 certificate serial numbers
+         * per RFC 5280 section 4.1.2.2).
          *
          * @param numBits number of bits of random, must be positive and divisible by 8.
-         * @param random the [Random] to used for randomness.
-         * @return a [ASN1Integer]
+         * @param random the [Random] to use for randomness.
+         * @return a positive [ASN1Integer]
          */
         fun fromRandom(
             numBits: Int,
@@ -59,19 +63,32 @@ class ASN1Integer(
             require(numBits >= 8 && numBits.and(0x07) == 0) {
                 "numBits must be positive and a multiple of 8"
             }
-            // First byte is to satisfy 8.3.2 of https://www.itu.int/ITU-T/studygroups/com17/languages/X.690-0207.pdf
-            // which states:
-            //
-            //     8.3.2 If the contents octets of an integer value encoding consist of more than one octet, then
-            //     the bits of the first octet and bit 8 of the second octet:
-            //
-            //       a) shall not all be ones; and
-            //       b) shall not all be zero.
-            //
-            //    NOTE – These rules ensure that an integer value is always encoded in the smallest possible
-            //    number of octets.
-            //
-            return ASN1Integer(byteArrayOf(random.nextInt(1, 255).toByte()) + random.nextBytes(numBits/8 - 1))
+            var bytes: ByteArray
+            do {
+                bytes = random.nextBytes(numBits / 8)
+            } while (bytes.all { it == 0.toByte() })
+
+            // Strip redundant leading 0x00 bytes according to ITU-T X.690 8.3.2
+            var firstNonZeroIndex = 0
+            while (firstNonZeroIndex < bytes.size - 1 &&
+                bytes[firstNonZeroIndex] == 0.toByte() &&
+                (bytes[firstNonZeroIndex + 1].toInt() and 0x80) == 0
+            ) {
+                firstNonZeroIndex++
+            }
+            val trimmed = if (firstNonZeroIndex > 0) {
+                bytes.sliceArray(firstNonZeroIndex until bytes.size)
+            } else {
+                bytes
+            }
+
+            // If the leading bit is 1, prepend 0x00 so it is positive in two's-complement DER
+            val derBytes = if ((trimmed[0].toInt() and 0x80) != 0) {
+                byteArrayOf(0x00) + trimmed
+            } else {
+                trimmed
+            }
+            return ASN1Integer(derBytes)
         }
     }
 }
