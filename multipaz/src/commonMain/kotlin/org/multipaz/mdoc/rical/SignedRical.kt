@@ -49,17 +49,11 @@ data class SignedRical(
                         addCborMap {
                             put("certificate", certInfo.certificate.encoded.toByteArray())
                             put("isTrustAnchor", certInfo.isTrustAnchor)
-                            put(
-                                "serialNumber", Tagged(
-                                    Tagged.UNSIGNED_BIGNUM,
-                                    Bstr(certInfo.certificate.serialNumber.value)
-                                )
-                            )
-                            put("ski", certInfo.certificate.subjectKeyIdentifier!!)
                             put("serialNumber", Tagged(
-                                tagNumber = Tagged.UNSIGNED_BIGNUM,
-                                taggedItem = Bstr(certInfo.serialNumber.toByteArray())
+                                Tagged.UNSIGNED_BIGNUM,
+                                Bstr(certInfo.certificate.serialNumber.value)
                             ))
+                            put("ski", certInfo.certificate.subjectKeyIdentifier!!)
                             certInfo.type?.let { put("type", it) }
                             certInfo.name?.let { put("name", it) }
                             if (certInfo.extensions.isNotEmpty()) {
@@ -185,7 +179,6 @@ data class SignedRical(
                 val extensionsInCertInfo = certInfo.getOrNull("extensions")?.let {
                     it.asMap.entries.associate { (extName, extValue) -> Pair(extName.asTstr, extValue) }
                 } ?: emptyMap()
-                val serialNumberTaggedItem = certInfo["serialNumber"] as Tagged
                 val trustConstraints = mutableListOf<RicalTrustConstraint>()
                 if (certInfo.hasKey("trustConstraints")) {
                     for (trustConstraint in (certInfo["trustConstraints"] as CborArray).items) {
@@ -201,10 +194,8 @@ data class SignedRical(
                         )
                     }
                 }
-                require(serialNumberTaggedItem.tagNumber == Tagged.UNSIGNED_BIGNUM)
                 certificateInfos.add(RicalCertificateInfo(
                     certificate = certificate,
-                    serialNumber = ByteString(serialNumberTaggedItem.taggedItem.asBstr),
                     isTrustAnchor = isTrustAnchor,
                     ski = ski,
                     type = certInfo.getOrNull("type")?.asTstr,
