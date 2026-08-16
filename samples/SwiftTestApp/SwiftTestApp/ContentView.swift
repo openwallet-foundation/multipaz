@@ -102,7 +102,8 @@ struct ContentView: View {
                     viewModel.provisioningModel.launchOpenID4VCIProvisioning(
                         offerUri: url.absoluteString,
                         clientPreferences: viewModel.provisioningSupport.getOpenID4VCIClientPreferences(),
-                        backend: viewModel.provisioningSupport.getOpenID4VCIBackend()
+                        backend: viewModel.provisioningSupport.getOpenID4VCIBackend(),
+                        appData: nil
                     )
                 }
             } else {

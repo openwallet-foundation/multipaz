@@ -543,4 +543,94 @@ class X509CertChainTests {
         assertEquals(2, partialChainX5c.size)
         assertEquals(partialChain, X509CertChain.fromX5c(partialChainX5c))
     }
+
+    @Test
+    fun testToCoseX5Chain() = runTest {
+        initKeys()
+        val rootCert = buildX509Cert(
+            publicKey = rootKey.publicKey,
+            signingKey = rootKey,
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Root"),
+            issuer = X500Name.fromName("CN=Root"),
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ) {
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(ca = true, pathLenConstraint = 1)
+            includeSubjectKeyIdentifier()
+            includeAuthorityKeyIdentifierAsSubjectKeyIdentifier()
+        }
+        val intermediateCert = buildX509Cert(
+            publicKey = intermediateKey.publicKey,
+            signingKey = rootKey,
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Intermediate"),
+            issuer = rootCert.subject,
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ) {
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(ca = true, pathLenConstraint = 0)
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(rootCert)
+        }
+        val leafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = intermediateKey,
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Leaf"),
+            issuer = intermediateCert.subject,
+            validFrom = validFrom,
+            validUntil = validUntil,
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(intermediateCert)
+        }
+
+        // 1. Single self-signed root certificate chain (size == 1)
+        val singleRootChain = X509CertChain(listOf(rootCert))
+        val singleRootCoseDefault = singleRootChain.toCoseX5Chain() // excludeRoot = true by default
+        assertEquals(rootCert.toDataItem(), singleRootCoseDefault)
+        assertEquals(singleRootChain, X509CertChain.fromDataItem(singleRootCoseDefault))
+
+        val singleRootCoseExplicit = singleRootChain.toCoseX5Chain(excludeRoot = false)
+        assertEquals(rootCert.toDataItem(), singleRootCoseExplicit)
+        assertEquals(singleRootChain, X509CertChain.fromDataItem(singleRootCoseExplicit))
+
+        // 2. Single non-self-signed certificate chain (size == 1)
+        val singleLeafChain = X509CertChain(listOf(leafCert))
+        val singleLeafCose = singleLeafChain.toCoseX5Chain(excludeRoot = true)
+        assertEquals(leafCert.toDataItem(), singleLeafCose)
+        assertEquals(singleLeafChain, X509CertChain.fromDataItem(singleLeafCose))
+
+        // 3. Two-certificate chain ending in a self-signed root (size == 2) -> when root excluded, becomes single cert (Bstr)
+        val twoCertChain = X509CertChain(listOf(leafCert, rootCert))
+        val twoCertCoseExcluded = twoCertChain.toCoseX5Chain(excludeRoot = true)
+        assertEquals(leafCert.toDataItem(), twoCertCoseExcluded)
+        assertEquals(X509CertChain(listOf(leafCert)), X509CertChain.fromDataItem(twoCertCoseExcluded))
+
+        val twoCertCoseIncluded = twoCertChain.toCoseX5Chain(excludeRoot = false)
+        assertEquals(2, (twoCertCoseIncluded as org.multipaz.cbor.CborArray).items.size)
+        assertEquals(twoCertChain, X509CertChain.fromDataItem(twoCertCoseIncluded))
+
+        // 4. Multi-certificate chain ending in a self-signed root (size == 3) -> when root excluded, becomes array of 2
+        val fullChain = X509CertChain(listOf(leafCert, intermediateCert, rootCert))
+        val fullChainCoseExcluded = fullChain.toCoseX5Chain(excludeRoot = true)
+        assertEquals(2, (fullChainCoseExcluded as org.multipaz.cbor.CborArray).items.size)
+        assertEquals(
+            X509CertChain(listOf(leafCert, intermediateCert)),
+            X509CertChain.fromDataItem(fullChainCoseExcluded)
+        )
+
+        val fullChainCoseIncluded = fullChain.toCoseX5Chain(excludeRoot = false)
+        assertEquals(3, (fullChainCoseIncluded as org.multipaz.cbor.CborArray).items.size)
+        assertEquals(fullChain, X509CertChain.fromDataItem(fullChainCoseIncluded))
+
+        // 5. Multi-certificate chain ending in a non-self-signed certificate (size == 2)
+        val partialChain = X509CertChain(listOf(leafCert, intermediateCert))
+        val partialChainCose = partialChain.toCoseX5Chain(excludeRoot = true)
+        assertEquals(2, (partialChainCose as org.multipaz.cbor.CborArray).items.size)
+        assertEquals(partialChain, X509CertChain.fromDataItem(partialChainCose))
+    }
 }

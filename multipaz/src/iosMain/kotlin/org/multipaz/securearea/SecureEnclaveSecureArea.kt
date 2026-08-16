@@ -168,15 +168,20 @@ class SecureEnclaveSecureArea private constructor(
         val (keyBlob, keyInfo) = loadKey(alias)
         check(keyInfo.algorithm.isSigning)
         val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
+            ?: SecureEnclaveDefaultKeyUnlockDataProvider
         // TODO: implement default KeyUnlockDataProvider by converting
         //  OperationReason to OperationReason.HumanReadable using PromptModel
         //  and the creating LAContext with title/subtitle from OperationReason.HumanReadable
-        val unlockData = unlockDataProvider?.getKeyUnlockData(
-            secureArea = this,
-            alias = alias,
-            algorithm = getKeyInfo(alias).algorithm,
-            unlockReason = unlockReason
-        )
+        val unlockData = if (keyInfo.isUserAuthenticationRequired) {
+            unlockDataProvider.getKeyUnlockData(
+                secureArea = this,
+                alias = alias,
+                algorithm = getKeyInfo(alias).algorithm,
+                unlockReason = unlockReason
+            )
+        } else {
+            null
+        }
         check(unlockData is SecureEnclaveKeyUnlockData?)
         return Crypto.secureEnclaveEcSign(keyBlob, dataToSign, unlockData)
     }
@@ -190,20 +195,25 @@ class SecureEnclaveSecureArea private constructor(
         check(otherKey.curve == EcCurve.P256)
         check(keyInfo.algorithm.isKeyAgreement)
         val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
+            ?: SecureEnclaveDefaultKeyUnlockDataProvider
         // TODO: implement default KeyUnlockDataProvider by converting
         //  OperationReason to OperationReason.HumanReadable using PromptModel
         //  and the creating LAContext with title/subtitle from OperationReason.HumanReadable
-        val unlockData = unlockDataProvider?.getKeyUnlockData(
-            secureArea = this,
-            alias = alias,
-            algorithm = getKeyInfo(alias).algorithm,
-            unlockReason = unlockReason
-        )
+        val unlockData = if (keyInfo.isUserAuthenticationRequired) {
+            unlockDataProvider.getKeyUnlockData(
+                secureArea = this,
+                alias = alias,
+                algorithm = getKeyInfo(alias).algorithm,
+                unlockReason = unlockReason
+            )
+        } else {
+            null
+        }
         check(unlockData is SecureEnclaveKeyUnlockData?)
         return Crypto.secureEnclaveEcKeyAgreement(keyBlob, otherKey, unlockData)
     }
 
-    override suspend fun getKeyInfo(alias: String): KeyInfo {
+    override suspend fun getKeyInfo(alias: String): SecureEnclaveKeyInfo {
         val (_, keyInfo) = loadKey(alias)
         return keyInfo
     }
@@ -216,8 +226,18 @@ class SecureEnclaveSecureArea private constructor(
         alias: String,
         unlockReason: Reason
     ): List<KeyUnlockData> {
-        // Biometric prompts are automatically shown by iOS when using Secure Enclave keys,
-        // so explicit pre-unlock authentication is not required.
-        return emptyList()
+        val keyInfo = getKeyInfo(alias)
+        if (!keyInfo.isUserAuthenticationRequired) {
+            return emptyList()
+        }
+        val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
+            ?: SecureEnclaveDefaultKeyUnlockDataProvider
+        val unlockData = unlockDataProvider.getKeyUnlockData(
+            secureArea = this,
+            alias = alias,
+            algorithm = keyInfo.algorithm,
+            unlockReason = unlockReason
+        )
+        return listOf(unlockData)
     }
 }

@@ -467,7 +467,7 @@ class DocumentType private constructor(
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                dsKey.certChain.toDataItem()
+                dsKey.certChain.toCoseX5Chain()
             )
         )
         val encodedIssuerAuth = Cbor.encode(

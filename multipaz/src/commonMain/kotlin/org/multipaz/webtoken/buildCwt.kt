@@ -100,7 +100,7 @@ private fun AsymmetricKey.addProtectedHeaders(
     when (this) {
         is AsymmetricKey.X509CertifiedSecureAreaBased,
         is AsymmetricKey.X509CertifiedExplicit -> {
-            protectedHeader[Cose.COSE_LABEL_X5CHAIN.toCoseLabel] = certChain.toDataItem()
+            protectedHeader[Cose.COSE_LABEL_X5CHAIN.toCoseLabel] = certChain.toCoseX5Chain(excludeRoot = true)
         }
         is AsymmetricKey.NamedExplicit,
         is AsymmetricKey.NamedSecureAreaBased -> {

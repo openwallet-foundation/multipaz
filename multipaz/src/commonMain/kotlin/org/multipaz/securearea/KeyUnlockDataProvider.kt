@@ -37,6 +37,7 @@ interface KeyUnlockDataProvider : CoroutineContext.Element {
      * @param alias locked key's alias
      * @param algorithm the algorithm to use for the key,
      * @param unlockReason conveys the reason for the operation (e.g. credential presentment)
+     * @return a [KeyUnlockData].
      */
     suspend fun getKeyUnlockData(
         secureArea: SecureArea,

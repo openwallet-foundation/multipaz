@@ -207,7 +207,8 @@ class ViewModel {
                     sdJwtUserAuthDomain: "sdjwt_user_auth",
                     sdJwtNoUserAuthDomain: "sdjwt_no_user_auth",
                     sdJwtKeylessDomain: "sdjwt_keyless"
-                )
+                ),
+                selectSecureArea: nil
             ),
             httpClient: HttpClient(engineFactory: Darwin()) { config in
                 config.followRedirects = false
@@ -310,6 +311,7 @@ class ViewModel {
             cardArt: UIImage(named: cardArtResourceName)!.pngData()!.toByteString(),
             issuerLogo: nil,
             authorizationData: nil,
+            appData: nil,
             created: now.toKotlinInstant(),
             metadata: nil
         )

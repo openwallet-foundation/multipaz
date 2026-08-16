@@ -126,7 +126,7 @@ class CredentialFactoryAgeVerification : CredentialFactory {
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                signingKey.certChain.toDataItem()
+                signingKey.certChain.toCoseX5Chain()
             )
         )
         val encodedIssuerAuth = Cbor.encode(

@@ -545,7 +545,7 @@ private struct ConsentMain: View {
                         if (!isAtBottom) {
                             scrollDown()
                         } else {
-                            onConfirm(consentData.toCredentialSelection(selections: selections.map { KotlinInt(int: Int32($0)) }))
+                            onConfirm(consentData.toCredentialSelection(selections: selections.map { KotlinInt(int: Int32($0)) }, transactionUserInput: [:]))
                         }
                     }) {
                         Text(buttonText)

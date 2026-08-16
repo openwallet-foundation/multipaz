@@ -41,16 +41,11 @@ class IdentifierListTest {
             18([ # COSE_Sign1
               /protected/ << {
                 16: "application/identifierlist+cwt",
-                /x5chain/ 33: [
-                  # Subject DN: C=US,CN=DS test key
-                  # Issuer DN: C=US,CN=IACA test key
-                  cert'''${"\n" + dsCert.toPem().trimEnd().prependIndent("                    ")}
-                  ''',
-                  # Subject DN: C=US,CN=IACA test key
-                  # Issuer DN: C=US,CN=IACA test key
-                  cert'''${"\n" + iacaCert.toPem().trimEnd().prependIndent("                    ")}
-                  '''
-                ],
+                /x5chain/ 33:
+                # Subject DN: C=US,CN=DS test key
+                # Issuer DN: C=US,CN=IACA test key
+                cert'''${"\n" + dsCert.toPem().trimEnd().prependIndent("                  ")}
+                ''',
                 /alg/ 1: -9 # ESP256: ECDSA using P-256 curve and SHA-256
               } >>,
               /unprotected/ {},
