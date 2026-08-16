@@ -71,6 +71,7 @@ final class MdocPresentmentViewModel: ObservableObject {
                     handover: Simple.companion.NULL,
                     source: source,
                     keyAgreementPossible: [eDeviceKeyCurve],
+                    preselectedDocuments: [],
                     insertSequenceNumbers: false,
                     timeout: KotlinDurationCompanion.shared.fromSeconds(seconds: 15),
                     timeoutSubsequentRequests: KotlinDurationCompanion.shared.fromSeconds(seconds: 30),

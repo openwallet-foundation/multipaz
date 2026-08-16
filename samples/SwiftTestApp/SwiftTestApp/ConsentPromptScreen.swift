@@ -180,6 +180,7 @@ private func calcRequestData(
         cardArt: mdlCardArt.toByteString(),
         issuerLogo: nil,
         authorizationData: nil,
+        appData: nil,
         created: now.toKotlinInstant(),
         metadata: nil
     )
@@ -216,6 +217,7 @@ private func calcRequestData(
         cardArt: photoIdCardArt.toByteString(),
         issuerLogo: nil,
         authorizationData: nil,
+        appData: nil,
         created: now.toKotlinInstant(),
         metadata: nil
     )
@@ -252,6 +254,7 @@ private func calcRequestData(
         cardArt: photoIdCardArt.toByteString(),
         issuerLogo: nil,
         authorizationData: nil,
+        appData: nil,
         created: now.toKotlinInstant(),
         metadata: nil
     )
@@ -288,6 +291,7 @@ private func calcRequestData(
         cardArt: boardingPassCardArt.toByteString(),
         issuerLogo: nil,
         authorizationData: nil,
+        appData: nil,
         created: now.toKotlinInstant(),
         metadata: nil
     )
@@ -855,6 +859,7 @@ private func calcRequestData(
                 ),
                 docFormat: nil,
                 dataElementIdentifierMapping: [:],
+                transactions: nil,
                 otherInfo: [:])
         )
         drBuilder.setDeviceRequestInfo(
@@ -1129,6 +1134,7 @@ extension DocumentStore {
             cardArt: nil,
             issuerLogo: nil,
             authorizationData: nil,
+            appData: nil,
             created: Date.now.toKotlinInstant(),
             metadata: nil
         )

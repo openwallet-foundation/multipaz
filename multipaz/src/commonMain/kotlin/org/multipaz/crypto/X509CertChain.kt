@@ -44,7 +44,7 @@ data class X509CertChain(
     }
 
     /**
-     * Encodes the certificate as JSON Array according to RFC 7515 Section 4.1.6.
+     * Encodes the certificate chain as JSON Array according to RFC 7515 Section 4.1.6.
      *
      * @param excludeRoot if the certificate chain has more than one certificate and the last certificate is a root
      *   certificate (self-signed), exclude it.
@@ -63,6 +63,35 @@ data class X509CertChain(
                 JsonPrimitive( Base64.encode(certificate.encoded.toByteArray()))
             }
         ) as JsonElement
+    }
+
+    /**
+     * Encodes the certificate chain as CBOR for use in COSE 'x5chain' header parameter (label 33)
+     * according to RFC 9360 Section 2.
+     *
+     * If [excludeRoot] is true, the certificate chain has more than one certificate, and the last
+     * certificate is a root certificate (self-signed), it is excluded.
+     *
+     * If the resulting chain has only one certificate, a [Bstr] containing the DER-encoded certificate
+     * is returned. Otherwise, a [CborArray] of [Bstr]s containing each DER-encoded certificate is returned.
+     *
+     * @param excludeRoot whether to exclude a self-signed root certificate if the chain has more than one certificate.
+     * @return a [DataItem] representing the COSE 'x5chain'.
+     */
+    fun toCoseX5Chain(excludeRoot: Boolean = true): DataItem {
+        val last = certificates.last()
+        val certs = if (excludeRoot && certificates.size > 1 && last.subject == last.issuer) {
+            certificates.subList(0, certificates.size - 1)
+        } else {
+            certificates
+        }
+        return if (certs.size == 1) {
+            certs[0].toDataItem()
+        } else {
+            buildCborArray {
+                certs.forEach { certificate -> add(certificate.toDataItem()) }
+            }
+        }
     }
 
     /**

@@ -353,7 +353,7 @@ val MpzPassCreatorComponent = FC {
                     Cose.COSE_LABEL_ALG.toCoseLabel to Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
                 )
                 val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
-                    Cose.COSE_LABEL_X5CHAIN.toCoseLabel to dsCertifiedKey.certChain.toDataItem()
+                    Cose.COSE_LABEL_X5CHAIN.toCoseLabel to dsCertifiedKey.certChain.toCoseX5Chain()
                 )
                 val now = Clock.System.now().truncateToWholeSeconds()
 

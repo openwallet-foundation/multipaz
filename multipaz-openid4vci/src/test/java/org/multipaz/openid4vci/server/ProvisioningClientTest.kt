@@ -42,6 +42,7 @@ import org.multipaz.crypto.X509Cert
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.knowntypes.DrivingLicense
+import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.openid4vci.credential.CredentialFactoryDigitalPaymentCredential
 import org.multipaz.openid4vci.credential.CredentialFactoryDigitalPaymentCredentialSdJwt
 import org.multipaz.openid4vci.credential.CredentialFactoryMdl
@@ -343,6 +344,10 @@ class ProvisioningClientTest {
             Assert.assertEquals(1, credentialData.certifications.size)
 
             credential.certify(credentialData.certifications.first().issuerData)
+            if (credential is MdocCredential) {
+                // Assert that the IACA root certificate is excluded from x5chain
+                Assert.assertEquals(1, credential.issuerCertChain.certificates.size)
+            }
 
             withContext(serverEnvironment.await()) {
                 // Run this in server environment!
