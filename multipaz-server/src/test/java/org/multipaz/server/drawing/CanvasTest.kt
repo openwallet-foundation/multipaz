@@ -34,4 +34,20 @@ class CanvasTest {
         assertEquals(16, canvas.width)
         assertEquals(16, canvas.height)
     }
+
+    @Test
+    fun testToJpegAndToDataUrl() {
+        val canvas = Canvas.createBlank(810, 510)
+        val jpegBytes = canvas.toJpeg()
+        assertNotNull(jpegBytes)
+        org.junit.Assert.assertTrue(jpegBytes.isNotEmpty())
+
+        val dataUrl = canvas.toDataUrl()
+        org.junit.Assert.assertTrue(dataUrl.startsWith("data:image/jpeg;base64,"))
+
+        val decoded = Canvas.createBlank(16, 16)
+        decoded.drawImage(ByteString(jpegBytes), buildJsonObject {})
+        assertEquals(16, decoded.width)
+        assertEquals(16, decoded.height)
+    }
 }

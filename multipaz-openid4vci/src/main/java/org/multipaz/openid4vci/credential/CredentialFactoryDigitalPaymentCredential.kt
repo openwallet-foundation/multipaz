@@ -56,7 +56,7 @@ class CredentialFactoryDigitalPaymentCredential : CredentialFactory {
         get() = "Payment card"
 
     override val logo: String
-        get() = "card_payment_sca_v2.png"
+        get() = "card_payment_sca_v2.jpg"
 
     override suspend fun mint(
         systemOfRecordData: DataItem,

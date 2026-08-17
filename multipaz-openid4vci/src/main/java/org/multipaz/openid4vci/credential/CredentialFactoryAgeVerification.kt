@@ -52,7 +52,7 @@ class CredentialFactoryAgeVerification : CredentialFactory {
         get() = "Age verification"
 
     override val logo: String
-        get() = "card-age-verification.png"
+        get() = "card-age-verification.jpg"
 
     override suspend fun mint(
         systemOfRecordData: DataItem,

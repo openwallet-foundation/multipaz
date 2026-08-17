@@ -62,7 +62,7 @@ class CredentialFactoryMdl : CredentialFactory {
         get() = "Driver license"
 
     override val logo: String
-        get() = "card-mdl.png"
+        get() = "card-mdl.jpg"
 
     override suspend fun mint(
         systemOfRecordData: DataItem,

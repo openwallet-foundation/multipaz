@@ -39,7 +39,7 @@ class CredentialFactoryUtopiaMovieTicket : CredentialFactory {
         get() = "Movie ticket"
 
     override val logo: String
-        get() = "movie_ticket.png"
+        get() = "movie_ticket.jpg"
 
     override suspend fun mint(
         systemOfRecordData: DataItem,

@@ -63,7 +63,7 @@ class CredentialFactorySdjwtPid : CredentialFactory {
         get() = "Personal ID"
 
     override val logo: String
-        get() = "card-pid.png"
+        get() = "card-pid.jpg"
 
     override suspend fun mint(
         systemOfRecordData: DataItem,

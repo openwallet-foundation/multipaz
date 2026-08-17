@@ -56,7 +56,7 @@ class CredentialFactoryUtopiaLoyalty : CredentialFactory {
         get() = "Wholesale card"
 
     override val logo: String
-        get() = "card_utopia_wholesale.png"
+        get() = "card_utopia_wholesale.jpg"
 
     override suspend fun mint(
         systemOfRecordData: DataItem,
