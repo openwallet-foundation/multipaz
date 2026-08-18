@@ -7,7 +7,7 @@
   "credential_mdl": {
     "title": "{core.given_name}'s driver license",
     "card_art": {
-      "blank": "blank_mdl.png",
+      "blank": "blank_mdl.jpg",
       "content": [
         {
           "op": "text",
@@ -63,7 +63,7 @@
   "credential_pid": {
     "title": "{core.given_name}'s PID",
     "card_art": {
-      "blank": "blank_pid.png",
+      "blank": "blank_pid.jpg",
       "content": [
         {
           "op": "text",
@@ -140,7 +140,7 @@
   "credential_naturalization": {
     "title": "{core.given_name}'s naturalization",
     "card_art": {
-      "blank": "blank_naturalization.png",
+      "blank": "blank_naturalization.jpg",
       "content": [
         {
           "op": "text",
@@ -172,7 +172,7 @@
   "credential_payment": {
     "title": "{given_name}'s {instance_title}",
     "card_art": {
-      "blank": "card_payment_sca.png",
+      "blank": "card_payment_sca.jpg",
       "content": [
         {
           "op": "text",

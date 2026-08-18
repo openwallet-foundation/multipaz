@@ -39,7 +39,9 @@ import java.awt.image.BufferedImage
 import java.awt.image.PixelGrabber
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import javax.imageio.IIOImage
 import javax.imageio.ImageIO
+import javax.imageio.ImageWriteParam
 import kotlin.collections.List
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -322,10 +324,36 @@ class Canvas private constructor(val bufferedImage: BufferedImage) {
     }
 
     /**
-     * Returns data url that represents the canvas content.
+     * Returns JPEG image that represents the canvas content.
+     *
+     * @param quality compression quality between 0.0 and 1.0 (default 0.85).
+     */
+    fun toJpeg(quality: Float = 0.85f): ByteArray {
+        val rgbImage = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+        val g = rgbImage.createGraphics()
+        g.drawImage(bufferedImage, 0, 0, Color.WHITE, null)
+        g.dispose()
+
+        val writer = ImageIO.getImageWritersByFormatName("JPEG").next()
+        val param = writer.defaultWriteParam
+        if (param.canWriteCompressed()) {
+            param.compressionMode = ImageWriteParam.MODE_EXPLICIT
+            param.compressionQuality = quality
+        }
+        val stream = ByteArrayOutputStream()
+        ImageIO.createImageOutputStream(stream).use { ios ->
+            writer.output = ios
+            writer.write(null, IIOImage(rgbImage, null, null), param)
+        }
+        writer.dispose()
+        return stream.toByteArray()
+    }
+
+    /**
+     * Returns data url that represents the canvas content as a JPEG image.
      */
     fun toDataUrl(): String {
-        return "data:image/png;base64," + toPng().encodeBase64()
+        return "data:image/jpeg;base64," + toJpeg().encodeBase64()
     }
 
     companion object {
