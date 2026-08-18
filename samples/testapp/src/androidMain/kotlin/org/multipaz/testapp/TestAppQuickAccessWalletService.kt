@@ -53,7 +53,7 @@ class TestAppQuickAccessWalletService: QuickAccessWalletService() {
         }
         return TestAppConfiguration.getPendingIntentForLaunchingQuickAccessWallet(
             source = app.getPresentmentSource(),
-            initiallySelectedDocumentId = app.settingsModel.currentlyFocusedDocumentId.value
+            initiallySelectedDocumentId = null
         )
     }
 

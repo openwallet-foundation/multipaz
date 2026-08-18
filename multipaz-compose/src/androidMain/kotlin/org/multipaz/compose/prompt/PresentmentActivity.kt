@@ -441,11 +441,15 @@ internal fun PresentmentActivityContent(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     if (state is PresentmentModel.State.Reset && presentmentModel!!.showDocumentChooser != null) {
+                        val isNfcOnly by presentmentModel!!.isNfcOnly.collectAsState()
                         ShowCardChooser(
                             documentModel = documentModel!!,
                             initiallySelectedDocumentId = presentmentModel!!.showDocumentChooser!!.initiallySelectedDocumentId,
                             selectedDocIdFromCardChooser = selectedDocIdFromCardChooser,
                             onDocumentSelected = presentmentModel!!.showDocumentChooser!!.onDocumentSelected,
+                            topContent = {
+                                ShowHoldToReader(isNfcOnly = isNfcOnly)
+                            },
                             contentBelow = { documentId ->
                                 Column(
                                     modifier = Modifier
@@ -666,6 +670,7 @@ private fun ShowCardChooser(
     initiallySelectedDocumentId: String?,
     selectedDocIdFromCardChooser: MutableState<String?>,
     onDocumentSelected: ((documentId: String?) -> Unit)?,
+    topContent: @Composable () -> Unit = {},
     contentBelow: @Composable (documentId: String) -> Unit
 ) {
     val configuration = LocalConfiguration.current
@@ -673,7 +678,7 @@ private fun ShowCardChooser(
 
     val docInfos by documentModel.documentInfos.collectAsState()
     var focusedDocumentId by rememberSaveable { mutableStateOf<String?>(
-        initiallySelectedDocumentId ?: docInfos.firstOrNull()?.document?.identifier
+        initiallySelectedDocumentId
     )}
     val focusedDocument = docInfos.find { documentInfo ->
         documentInfo.document.identifier == focusedDocumentId
@@ -698,6 +703,7 @@ private fun ShowCardChooser(
         allowCardReordering = false,
         showStackWhileFocused = true,
         cardMaxHeight = maxCardHeight,
+        topContent = topContent,
         showCardInfo = { cardInfo -> contentBelow(cardInfo.identifier) },
         emptyContent = {
             Text(stringResource(

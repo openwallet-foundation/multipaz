@@ -1189,7 +1189,7 @@ class App private constructor (val promptModel: PromptModel) {
                                     try {
                                         TestAppConfiguration.launchQuickAccessWallet(
                                             source = getPresentmentSource(),
-                                            initiallySelectedDocumentId = settingsModel.currentlyFocusedDocumentId.value
+                                            initiallySelectedDocumentId = null
                                         )
                                     } catch (e: Exception) {
                                         if (e is CancellationException) throw e

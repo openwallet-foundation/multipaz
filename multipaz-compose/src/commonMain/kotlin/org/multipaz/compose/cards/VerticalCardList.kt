@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -52,6 +53,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.yield
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -113,6 +115,17 @@ class VerticalCardListState(
      * This should typically be set to true only when navigating directly between two list states.
      */
     var animateListTransitions by mutableStateOf(false)
+
+    /**
+     * Whether the top content composable should be shown when no card is focused.
+     */
+    var showTopContent by mutableStateOf(true)
+
+    /**
+     * The measured height of the top content in pixels.
+     */
+    var topContentHeightPx by mutableFloatStateOf(0f)
+        internal set
 }
 
 /**
@@ -170,6 +183,10 @@ fun rememberVerticalCardListState(
  * screen real estate for the detail view. Defaults to true.
  * @param cardMaxHeight An optional max height constraint for the cards. Useful for foldables and wide screens.
  * @param state The state object to be used to control or observe the list's state.
+ * @param showTopContent Whether the [topContent] composable should be shown when no card is focused.
+ * Defaults to true.
+ * @param topContent A composable slot displayed at the top of the list when no card is focused.
+ * When a card is focused or [showTopContent] becomes false, this content animates away.
  * @param showCardInfo A composable slot that renders the detailed content below the focused card.
  * It is horizontally centered by default.
  * @param emptyContent A composable slot displayed inside a dashed placeholder card when the
@@ -192,6 +209,8 @@ fun VerticalCardList(
     showStackWhileFocused: Boolean = true,
     cardMaxHeight: Dp = Dp.Unspecified,
     state: VerticalCardListState = rememberVerticalCardListState(),
+    showTopContent: Boolean = state.showTopContent,
+    topContent: @Composable () -> Unit = {},
     showCardInfo: @Composable (CardInfo) -> Unit = {},
     emptyContent: @Composable () -> Unit = { },
     onCardReordered: (cardInfo: CardInfo, newPosition: Int) -> Unit = { _, _ -> },
@@ -290,24 +309,39 @@ fun VerticalCardList(
                 }
             }
 
-            Box(
+            Column(
                 modifier = Modifier
-                    .padding(top = 24.dp)
-                    .width(with(density) { cardWidthPx.toDp() })
-                    .height(with(density) { cardHeightPx.toDp() })
-                    .drawBehind {
-                        drawRoundRect(
-                            color = Color.Gray,
-                            style = Stroke(
-                                width = 3.dp.toPx(),
-                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 30f), 0f)
-                            ),
-                            cornerRadius = CornerRadius(24.dp.toPx(), 24.dp.toPx())
-                        )
-                    },
-                contentAlignment = Alignment.Center
+                    .fillMaxSize()
+                    .padding(top = 24.dp, start = 16.dp, end = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                emptyContent()
+                AnimatedVisibility(
+                    visible = showTopContent,
+                    enter = fadeIn(tween(400)),
+                    exit = fadeOut(tween(400))
+                ) {
+                    topContent()
+                }
+
+                Box(
+                    modifier = Modifier
+                        .width(with(density) { cardWidthPx.toDp() })
+                        .height(with(density) { cardHeightPx.toDp() })
+                        .drawBehind {
+                            drawRoundRect(
+                                color = Color.Gray,
+                                style = Stroke(
+                                    width = 3.dp.toPx(),
+                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 30f), 0f)
+                                ),
+                                cornerRadius = CornerRadius(24.dp.toPx(), 24.dp.toPx())
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    emptyContent()
+                }
             }
         }
         return
@@ -338,6 +372,16 @@ fun VerticalCardList(
         // Determine X offset to keep the card centered if its width shrank due to max height
         val cardXOffsetPx = (maxWidthPx - cardWidthPx) / 2f
 
+        val isTopContentEffectivelyVisible = showTopContent && !isAnyFocused
+        val topContentProgress by animateFloatAsState(
+            targetValue = if (isTopContentEffectivelyVisible) 1f else 0f,
+            animationSpec = tween(400),
+            label = "topContentProgress"
+        )
+        val topContentSpacingPx = if (state.topContentHeightPx > 0f) spacingPx else 0f
+        val effectiveTopContentHeightPx = (state.topContentHeightPx + topContentSpacingPx) * topContentProgress
+        val listTopOffsetPx = paddingTopPx + effectiveTopContentHeightPx
+
         // --- List Math ---
         val listStepPx = if (unfocusedVisiblePercent == 100) {
             cardHeightPx + spacingPx
@@ -345,7 +389,7 @@ fun VerticalCardList(
             cardHeightPx * (unfocusedVisiblePercent / 100f)
         }
 
-        val totalHeightPx = paddingTopPx + (max(0, state.displayOrderIdentifiers.size - 1) * listStepPx) + cardHeightPx + paddingTopPx
+        val totalHeightPx = listTopOffsetPx + (max(0, state.displayOrderIdentifiers.size - 1) * listStepPx) + cardHeightPx + paddingTopPx
         val totalHeightDp = with(density) { totalHeightPx.toDp() }
 
         // --- Stack Math ---
@@ -376,6 +420,31 @@ fun VerticalCardList(
                     .fillMaxWidth()
                     .height(totalHeightDp)
             )
+
+            // Top Content (shown when no card is focused and showTopContent is true)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .offset {
+                        IntOffset(
+                            x = 0,
+                            y = (paddingTopPx - (1f - topContentProgress) * state.topContentHeightPx).roundToInt()
+                        )
+                    }
+                    .graphicsLayer {
+                        alpha = topContentProgress
+                    }
+                    .onSizeChanged { size ->
+                        if (size.height > 0) {
+                            state.topContentHeightPx = size.height.toFloat()
+                        }
+                    }
+            ) {
+                if (topContentProgress > 0f || state.topContentHeightPx == 0f) {
+                    topContent()
+                }
+            }
 
             AnimatedVisibility(
                 visible = isAnyFocused,
@@ -438,7 +507,7 @@ fun VerticalCardList(
                         }
                     } else {
                         // In list mode, the dragged card directly tracks the finger ignoring layout positioning
-                        targetY = if (isDragged) state.dragCurrentY else paddingTopPx + index * listStepPx
+                        targetY = if (isDragged) state.dragCurrentY else listTopOffsetPx + index * listStepPx
                         targetScale = if (isDragged) 1.05f else 1f
                         targetElevation = if (isDragged) 24f else 12f
                         targetZIndex = if (isDragged) 100f else index.toFloat()
@@ -476,7 +545,7 @@ fun VerticalCardList(
                                         onDragStart = { _ ->
                                             state.draggedCardIdentifier = cardInfo.identifier
                                             val currentIndex = state.displayOrderIdentifiers.indexOf(cardInfo.identifier)
-                                            state.dragCurrentY = paddingTopPx + currentIndex * listStepPx
+                                            state.dragCurrentY = listTopOffsetPx + currentIndex * listStepPx
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         },
                                         onDrag = { change, dragAmount ->
@@ -484,7 +553,7 @@ fun VerticalCardList(
                                             state.dragCurrentY += dragAmount.y
 
                                             // Calculate what index the card *should* be at based on physical height
-                                            val newIndex = ((state.dragCurrentY - paddingTopPx) / listStepPx)
+                                            val newIndex = ((state.dragCurrentY - listTopOffsetPx) / listStepPx)
                                                 .roundToInt()
                                                 .coerceIn(0, state.displayOrderIdentifiers.lastIndex)
 
