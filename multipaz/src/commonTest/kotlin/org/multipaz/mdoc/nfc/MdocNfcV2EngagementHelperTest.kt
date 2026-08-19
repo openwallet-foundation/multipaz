@@ -22,6 +22,7 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfcV2
+import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransport
@@ -36,7 +37,9 @@ import org.multipaz.util.fromHex
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlin.time.Duration
@@ -325,6 +328,374 @@ class MdocNfcV2EngagementHelperTest {
             tag.transcript.toString().trim()
         )
          */
+    }
+
+    @Test
+    fun testWithBleOmitUuidCentralClientMode() = runTest {
+        val eDeviceKey = getEDeviceKey()
+        val eReaderKey = getEReaderKey()
+
+        val bleUuid = UUID(10UL, 20UL)
+        val readerMethods = listOf(
+            MdocConnectionMethodBle(
+                supportsPeripheralServerMode = false,
+                supportsCentralClientMode = true,
+                peripheralServerModeUuid = null,
+                centralClientModeUuid = bleUuid,
+                peripheralServerModePsm = 192,
+                peripheralServerModeMacAddress = null
+            )
+        )
+
+        // The mdoc selects BLE Central Client Mode, but omits the UUID from DeviceEngagement
+        val mdocBleMethodWithoutUuid = MdocConnectionMethodBle(
+            supportsPeripheralServerMode = false,
+            supportsCentralClientMode = true,
+            peripheralServerModeUuid = null,
+            centralClientModeUuid = null,
+            peripheralServerModePsm = 192,
+            peripheralServerModeMacAddress = null
+        )
+
+        lateinit var mdocReaderTransport: NfcHybridTransportMdocReader
+        lateinit var mdocTransport: NfcHybridTransportMdoc
+
+        var handoverComplete = false
+        val engagementHelper = MdocNfcV2EngagementHelper(
+            eDeviceKey = eDeviceKey.publicKey,
+            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover ->
+                handoverComplete = true
+            },
+            onMessageReceived = { message ->
+                mdocTransport.onMessageReceivedViaNfc(message)
+            },
+            onError = { error ->
+                fail("onError should not be called with $error")
+            },
+            negotiatedHandoverPicker = { connectionMethods ->
+                assertEquals(2, connectionMethods.size)
+                assertTrue(connectionMethods.first() is MdocConnectionMethodNfcV2)
+                assertEquals(readerMethods.first(), connectionMethods[1])
+                // Pick the BLE method without UUID
+                mdocBleMethodWithoutUuid
+            },
+        )
+
+        val tag = LoopbackIsoTag(engagementHelper)
+        val handoverResult = mdocReaderNfcHandover(
+            tag = tag,
+            negotiatedHandoverConnectionMethods = readerMethods,
+            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+        )
+        assertNotNull(handoverResult)
+        assertEquals(MdocHandoverType.V2_HANDOVER, handoverResult.type)
+        assertEquals(1, handoverResult.connectionMethods.size)
+
+        // Verify that the reader supplemented the UUID from readerMethods
+        val supplementedMethod = handoverResult.connectionMethods[0] as MdocConnectionMethodBle
+        assertNull(supplementedMethod.peripheralServerModeUuid)
+        assertEquals(bleUuid, supplementedMethod.centralClientModeUuid)
+        assertEquals(192, supplementedMethod.peripheralServerModePsm)
+
+        // Verify that raw DeviceEngagement received from the mdoc had no UUID
+        val deFromMdoc = DeviceEngagement.fromDataItem(
+            Cbor.decode(handoverResult.encodedDeviceEngagement.toByteArray())
+        )
+        assertEquals(1, deFromMdoc.connectionMethods.size)
+        val deBleMethod = deFromMdoc.connectionMethods[0] as MdocConnectionMethodBle
+        assertNull(deBleMethod.centralClientModeUuid)
+        assertNull(deBleMethod.peripheralServerModeUuid)
+
+        assertTrue(handoverComplete)
+
+        val mdocToReader = Channel<ByteString>(Channel.UNLIMITED)
+        val readerToMdoc = Channel<ByteString>(Channel.UNLIMITED)
+
+        val bleMdocReaderTransport = LoopbackTransport(
+            role = MdocRole.MDOC_READER,
+            connectionMethod = supplementedMethod,
+            incomingMessages = mdocToReader,
+            outgoingMessages = readerToMdoc
+        )
+
+        val bleMdocTransport = LoopbackTransport(
+            role = MdocRole.MDOC,
+            connectionMethod = supplementedMethod,
+            incomingMessages = readerToMdoc,
+            outgoingMessages = mdocToReader
+        )
+
+        mdocReaderTransport = NfcHybridTransportMdocReader(
+            nfcTag = tag,
+            negotiatedTransport = bleMdocReaderTransport
+        )
+        mdocReaderTransport.open(eReaderKey.publicKey)
+
+        mdocTransport = NfcHybridTransportMdoc(
+            sendMessageViaNfc = { message ->
+                engagementHelper.sendMessage(message)
+                true
+            }
+        )
+        mdocTransport.open(eDeviceKey.publicKey)
+        mdocTransport.setTransport(bleMdocTransport)
+
+        val request = Cbor.encode(buildCborMap {
+            put("data", Bstr(byteArrayOf(10, 20, 30)))
+        })
+        mdocReaderTransport.sendMessage(request)
+        assertContentEquals(request, mdocTransport.waitForMessage())
+
+        val response = Cbor.encode(buildCborMap {
+            put("data", Bstr(byteArrayOf(10, 20, 30, 40)))
+        })
+        mdocTransport.sendMessage(response)
+        assertContentEquals(response, mdocReaderTransport.waitForMessage())
+    }
+
+    @Test
+    fun testWithBleOmitUuidPeripheralServerMode() = runTest {
+        val eDeviceKey = getEDeviceKey()
+        val eReaderKey = getEReaderKey()
+
+        val bleUuid = UUID(30UL, 40UL)
+        val readerMethods = listOf(
+            MdocConnectionMethodBle(
+                supportsPeripheralServerMode = true,
+                supportsCentralClientMode = false,
+                peripheralServerModeUuid = bleUuid,
+                centralClientModeUuid = null,
+                peripheralServerModePsm = null,
+                peripheralServerModeMacAddress = null
+            )
+        )
+
+        // The mdoc selects BLE Peripheral Server Mode, but omits the UUID from DeviceEngagement
+        val mdocBleMethodWithoutUuid = MdocConnectionMethodBle(
+            supportsPeripheralServerMode = true,
+            supportsCentralClientMode = false,
+            peripheralServerModeUuid = null,
+            centralClientModeUuid = null,
+            peripheralServerModePsm = null,
+            peripheralServerModeMacAddress = null
+        )
+
+        lateinit var mdocReaderTransport: NfcHybridTransportMdocReader
+        lateinit var mdocTransport: NfcHybridTransportMdoc
+
+        var handoverComplete = false
+        val engagementHelper = MdocNfcV2EngagementHelper(
+            eDeviceKey = eDeviceKey.publicKey,
+            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover ->
+                handoverComplete = true
+            },
+            onMessageReceived = { message ->
+                mdocTransport.onMessageReceivedViaNfc(message)
+            },
+            onError = { error ->
+                fail("onError should not be called with $error")
+            },
+            negotiatedHandoverPicker = { connectionMethods ->
+                assertEquals(2, connectionMethods.size)
+                assertTrue(connectionMethods.first() is MdocConnectionMethodNfcV2)
+                assertEquals(readerMethods.first(), connectionMethods[1])
+                mdocBleMethodWithoutUuid
+            },
+        )
+
+        val tag = LoopbackIsoTag(engagementHelper)
+        val handoverResult = mdocReaderNfcHandover(
+            tag = tag,
+            negotiatedHandoverConnectionMethods = readerMethods,
+            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+        )
+        assertNotNull(handoverResult)
+        assertEquals(MdocHandoverType.V2_HANDOVER, handoverResult.type)
+        assertEquals(1, handoverResult.connectionMethods.size)
+
+        // Verify that the reader supplemented the UUID from readerMethods
+        val supplementedMethod = handoverResult.connectionMethods[0] as MdocConnectionMethodBle
+        assertEquals(bleUuid, supplementedMethod.peripheralServerModeUuid)
+        assertNull(supplementedMethod.centralClientModeUuid)
+
+        // Verify that raw DeviceEngagement received from the mdoc had no UUID
+        val deFromMdoc = DeviceEngagement.fromDataItem(
+            Cbor.decode(handoverResult.encodedDeviceEngagement.toByteArray())
+        )
+        val deBleMethod = deFromMdoc.connectionMethods[0] as MdocConnectionMethodBle
+        assertNull(deBleMethod.peripheralServerModeUuid)
+        assertNull(deBleMethod.centralClientModeUuid)
+
+        assertTrue(handoverComplete)
+
+        val mdocToReader = Channel<ByteString>(Channel.UNLIMITED)
+        val readerToMdoc = Channel<ByteString>(Channel.UNLIMITED)
+
+        val bleMdocReaderTransport = LoopbackTransport(
+            role = MdocRole.MDOC_READER,
+            connectionMethod = supplementedMethod,
+            incomingMessages = mdocToReader,
+            outgoingMessages = readerToMdoc
+        )
+
+        val bleMdocTransport = LoopbackTransport(
+            role = MdocRole.MDOC,
+            connectionMethod = supplementedMethod,
+            incomingMessages = readerToMdoc,
+            outgoingMessages = mdocToReader
+        )
+
+        mdocReaderTransport = NfcHybridTransportMdocReader(
+            nfcTag = tag,
+            negotiatedTransport = bleMdocReaderTransport
+        )
+        mdocReaderTransport.open(eReaderKey.publicKey)
+
+        mdocTransport = NfcHybridTransportMdoc(
+            sendMessageViaNfc = { message ->
+                engagementHelper.sendMessage(message)
+                true
+            }
+        )
+        mdocTransport.open(eDeviceKey.publicKey)
+        mdocTransport.setTransport(bleMdocTransport)
+
+        val request = Cbor.encode(buildCborMap {
+            put("data", Bstr(byteArrayOf(5, 6, 7)))
+        })
+        mdocReaderTransport.sendMessage(request)
+        assertContentEquals(request, mdocTransport.waitForMessage())
+
+        val response = Cbor.encode(buildCborMap {
+            put("data", Bstr(byteArrayOf(5, 6, 7, 8)))
+        })
+        mdocTransport.sendMessage(response)
+        assertContentEquals(response, mdocReaderTransport.waitForMessage())
+    }
+
+    @Test
+    fun testWithBleOmitUuidBothModes() = runTest {
+        val eDeviceKey = getEDeviceKey()
+
+        val bleUuid = UUID(50UL, 60UL)
+        val readerMethods = listOf(
+            MdocConnectionMethodBle(
+                supportsPeripheralServerMode = true,
+                supportsCentralClientMode = true,
+                peripheralServerModeUuid = bleUuid,
+                centralClientModeUuid = bleUuid,
+                peripheralServerModePsm = 192,
+                peripheralServerModeMacAddress = null
+            )
+        )
+
+        // The mdoc returns BLE with both modes supported and no UUID in DeviceEngagement
+        val mdocBleMethodWithoutUuid = MdocConnectionMethodBle(
+            supportsPeripheralServerMode = true,
+            supportsCentralClientMode = true,
+            peripheralServerModeUuid = null,
+            centralClientModeUuid = null,
+            peripheralServerModePsm = 192,
+            peripheralServerModeMacAddress = null
+        )
+
+        val engagementHelper = MdocNfcV2EngagementHelper(
+            eDeviceKey = eDeviceKey.publicKey,
+            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover -> },
+            onMessageReceived = {},
+            onError = { error ->
+                fail("onError should not be called with $error")
+            },
+            negotiatedHandoverPicker = { connectionMethods ->
+                mdocBleMethodWithoutUuid
+            },
+        )
+
+        val tag = LoopbackIsoTag(engagementHelper)
+        val handoverResult = mdocReaderNfcHandover(
+            tag = tag,
+            negotiatedHandoverConnectionMethods = readerMethods,
+            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+        )
+        assertNotNull(handoverResult)
+        assertEquals(MdocHandoverType.V2_HANDOVER, handoverResult.type)
+
+        // Disambiguation for MDOC_READER splits the combined BLE into central client and peripheral server modes
+        assertEquals(2, handoverResult.connectionMethods.size)
+
+        val centralClientMethod = handoverResult.connectionMethods[0] as MdocConnectionMethodBle
+        assertTrue(centralClientMethod.supportsCentralClientMode)
+        assertFalse(centralClientMethod.supportsPeripheralServerMode)
+        assertEquals(bleUuid, centralClientMethod.centralClientModeUuid)
+        assertNull(centralClientMethod.peripheralServerModeUuid)
+        assertNull(centralClientMethod.peripheralServerModePsm) // PSM is on peripheral server mode for reader
+
+        val peripheralServerMethod = handoverResult.connectionMethods[1] as MdocConnectionMethodBle
+        assertFalse(peripheralServerMethod.supportsCentralClientMode)
+        assertTrue(peripheralServerMethod.supportsPeripheralServerMode)
+        assertNull(peripheralServerMethod.centralClientModeUuid)
+        assertEquals(bleUuid, peripheralServerMethod.peripheralServerModeUuid)
+        assertEquals(192, peripheralServerMethod.peripheralServerModePsm)
+
+        // Verify that raw DeviceEngagement had no UUIDs
+        val deFromMdoc = DeviceEngagement.fromDataItem(
+            Cbor.decode(handoverResult.encodedDeviceEngagement.toByteArray())
+        )
+        assertEquals(1, deFromMdoc.connectionMethods.size)
+        val deBleMethod = deFromMdoc.connectionMethods[0] as MdocConnectionMethodBle
+        assertNull(deBleMethod.centralClientModeUuid)
+        assertNull(deBleMethod.peripheralServerModeUuid)
+    }
+
+    @Test
+    fun testWithBleMdocProvidesOwnUuid() = runTest {
+        val eDeviceKey = getEDeviceKey()
+
+        val readerUuid = UUID(100UL, 101UL)
+        val mdocUuid = UUID(200UL, 201UL)
+        val readerMethods = listOf(
+            MdocConnectionMethodBle(
+                supportsPeripheralServerMode = true,
+                supportsCentralClientMode = false,
+                peripheralServerModeUuid = readerUuid,
+                centralClientModeUuid = null,
+            )
+        )
+
+        // The mdoc provides its own UUID in DeviceEngagement
+        val mdocBleMethodWithUuid = MdocConnectionMethodBle(
+            supportsPeripheralServerMode = true,
+            supportsCentralClientMode = false,
+            peripheralServerModeUuid = mdocUuid,
+            centralClientModeUuid = null,
+        )
+
+        val engagementHelper = MdocNfcV2EngagementHelper(
+            eDeviceKey = eDeviceKey.publicKey,
+            onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover -> },
+            onMessageReceived = {},
+            onError = { error ->
+                fail("onError should not be called with $error")
+            },
+            negotiatedHandoverPicker = { connectionMethods ->
+                mdocBleMethodWithUuid
+            },
+        )
+
+        val tag = LoopbackIsoTag(engagementHelper)
+        val handoverResult = mdocReaderNfcHandover(
+            tag = tag,
+            negotiatedHandoverConnectionMethods = readerMethods,
+            options = MdocReaderNfcHandoverOptions(useNfcV2 = true)
+        )
+        assertNotNull(handoverResult)
+        assertEquals(MdocHandoverType.V2_HANDOVER, handoverResult.type)
+        assertEquals(1, handoverResult.connectionMethods.size)
+
+        // Verify that mdoc's UUID is kept and not overwritten by readerUuid
+        val cm = handoverResult.connectionMethods[0] as MdocConnectionMethodBle
+        assertEquals(mdocUuid, cm.peripheralServerModeUuid)
+        assertNull(cm.centralClientModeUuid)
     }
 }
 
