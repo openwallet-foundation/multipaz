@@ -865,7 +865,7 @@ class DeviceRequestTest {
                     )
                 ),
                 docRequestInfo = DocRequestInfo(
-                    docFormat = "sd-jwt+kb",
+                    docFormat = "dc+sd-jwt",
                     dataElementIdentifierMapping = mapOf(
                         "sdjwtvc_given_name" to buildJsonArray { add("given_name") },
                         "sdjwtvc_family_name" to buildJsonArray { add("family_name") },
@@ -895,7 +895,7 @@ class DeviceRequestTest {
                           }
                         },
                         "requestInfo": {
-                          "docFormat": "sd-jwt+kb",
+                          "docFormat": "dc+sd-jwt",
                           "dataElementIdentifierMapping": {
                             "sdjwtvc_given_name": ["given_name"],
                             "sdjwtvc_family_name": ["family_name"],

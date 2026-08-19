@@ -81,7 +81,7 @@ class DeviceRequestDcqlConversionsTest {
                           }
                         },
                         "requestInfo": {
-                          "docFormat": "sd-jwt+kb",
+                          "docFormat": "dc+sd-jwt",
                           "dataElementIdentifierMapping": {
                             "sdjwtkb_given_name": ["given_name"],
                             "sdjwtkb_address_street_address": ["address", "street_address"]

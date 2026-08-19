@@ -250,7 +250,7 @@ class MdocPresentmentTest {
                     )
                 ),
                 docRequestInfo = DocRequestInfo(
-                    docFormat = "sd-jwt+kb",
+                    docFormat = "dc+sd-jwt",
                     dataElementIdentifierMapping = mapOf(
                         "sdjwtvc_given_name" to buildJsonArray { add("given_name") },
                         "sdjwtvc_family_name" to buildJsonArray { add("family_name") },
@@ -286,7 +286,7 @@ class MdocPresentmentTest {
         assertEquals(0, dr.documents.size)
 
         assertEquals(1, dr.otherDocuments.size)
-        assertEquals("sd-jwt+kb", dr.otherDocuments[0].docFormat)
+        assertEquals("dc+sd-jwt", dr.otherDocuments[0].docFormat)
         val decompressedData = dr.otherDocuments[0].data.toByteArray().zlibInflate()
         val sdJwtKb = SdJwtKb.fromCompactSerialization(decompressedData.decodeToString())
         val sessionTranscriptBytes = Tagged(

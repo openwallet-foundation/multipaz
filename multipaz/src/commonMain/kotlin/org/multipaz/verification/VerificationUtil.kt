@@ -491,7 +491,7 @@ object VerificationUtil {
                                 exchangeProtocol = exchangeProtocol,
                                 docType = docType,
                                 claims = mdocClaims,
-                                docFormat = "sd-jwt+kb",
+                                docFormat = "dc+sd-jwt",
                                 dataElementIdentifierMapping = mapping,
                                 nonce = nonce,
                                 origin = origin,
@@ -1106,7 +1106,7 @@ object VerificationUtil {
         }
 
         for (document in deviceResponse.otherDocuments) {
-            if (document.docFormat != "sd-jwt+kb") {
+            if (document.docFormat != "dc+sd-jwt") {
                 Logger.w(TAG, "Unknown docFormat ${document.docFormat}")
                 continue
             }

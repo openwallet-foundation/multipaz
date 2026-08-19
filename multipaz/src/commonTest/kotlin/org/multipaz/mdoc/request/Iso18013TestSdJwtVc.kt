@@ -80,7 +80,7 @@ class Iso18013TestSdJwtVc {
                         )
                     ),
                     docRequestInfo = DocRequestInfo(
-                        docFormat = "sd-jwt+kb",
+                        docFormat = "dc+sd-jwt",
                         dataElementIdentifierMapping = mapOf(
                             "sdjwtvc_given_name" to buildJsonArray { add("given_name") },
                             "sdjwtvc_resident_address" to buildJsonArray { add("address"); add("formatted") },
@@ -103,7 +103,7 @@ class Iso18013TestSdJwtVc {
                         )
                     ),
                     docRequestInfo = DocRequestInfo(
-                        docFormat = "sd-jwt+kb",
+                        docFormat = "dc+sd-jwt",
                         dataElementIdentifierMapping = mapOf(
                             "sdjwtvc_given_name" to buildJsonArray { add("given_name") },
                             "sdjwtvc_resident_address" to buildJsonArray { add("address"); add("formatted") },

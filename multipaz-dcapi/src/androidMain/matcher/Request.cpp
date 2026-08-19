@@ -341,7 +341,7 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
         std::string mdocDocType = "";
         std::vector<std::string> vctValues;
 
-        if (docFormat == "sd-jwt+kb") {
+        if (docFormat == "dc+sd-jwt") {
             format = "dc+sd-jwt";
             vctValues.push_back(docType);
         } else {
