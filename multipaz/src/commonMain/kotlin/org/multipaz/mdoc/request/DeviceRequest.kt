@@ -649,7 +649,7 @@ data class DeviceRequest private constructor(
                         it is MdocCredential && it.docType == docRequest.docType
                     }
                 }
-                "sd-jwt+kb" -> {
+                "dc+sd-jwt" -> {
                     document.getCertifiedCredentials().find {
                         it is KeyBoundSdJwtVcCredential && it.vct == docRequest.docType
                     }
@@ -926,7 +926,7 @@ private fun JsonArrayBuilder.addDcqlCredentialRequest(docRequest: DocRequest, cr
             } else {
                 put("format", "mso_mdoc")
             }
-        } else if (docFormat == "sd-jwt+kb") {
+        } else if (docFormat == "dc+sd-jwt") {
             put("format", "dc+sd-jwt")
         }
         when (docFormat) {
@@ -948,7 +948,7 @@ private fun JsonArrayBuilder.addDcqlCredentialRequest(docRequest: DocRequest, cr
                     }
                 }
             }
-            "sd-jwt+kb" -> {
+            "dc+sd-jwt" -> {
                 putJsonObject("meta") {
                     putJsonArray("vct_values") {
                         add(docRequest.docType)
@@ -1389,7 +1389,7 @@ internal fun deviceRequestAddQueries(
             DocRequestInfo(
                 alternativeDataElements = alternativeDataElements,
                 zkRequest = zkRequest,
-                docFormat = if (credQuery.format == "dc+sd-jwt") "sd-jwt+kb" else null,
+                docFormat = if (credQuery.format == "dc+sd-jwt") "dc+sd-jwt" else null,
                 dataElementIdentifierMapping = dataElementIdentifierMapping,
                 transactions = docTransactions
             )

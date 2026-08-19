@@ -337,7 +337,7 @@ suspend fun mdocPresentmentGenerateResponse(
                         }
                     }
                     val otherDocument = OtherDocument(
-                        docFormat = "sd-jwt+kb",
+                        docFormat = "dc+sd-jwt",
                         data = ByteString(sdJwtKb.compactSerialization.encodeToByteArray().zlibDeflate())
                     )
                     match.source.docRequest.docRequestInfo?.docResponseEncryption?.let { encryptionParameters ->

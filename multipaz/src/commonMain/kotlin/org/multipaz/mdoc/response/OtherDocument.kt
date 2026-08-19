@@ -21,7 +21,7 @@ private const val TAG = "OtherDocument"
 /**
  * A document in a [DeviceResponse] which isn't an ISO mdoc.
  *
- * @property docFormat the format of the document, e.g. "sd-jwt+kb".
+ * @property docFormat the format of the document, e.g. "dc+sd-jwt".
  * @property data the compressed data of the document, using the DEFLATE algorithm according
  * to [RFC 1951](https://www.ietf.org/rfc/rfc1951.txt).
  */
@@ -46,7 +46,7 @@ data class OtherDocument(
         atTime: Instant,
     ) {
         when (docFormat) {
-            "sd-jwt+kb" -> verifySdJwtVc(
+            "dc+sd-jwt" -> verifySdJwtVc(
                 sessionTranscript = sessionTranscript,
                 eReaderKey = eReaderKey,
                 transactionData = transactionData,

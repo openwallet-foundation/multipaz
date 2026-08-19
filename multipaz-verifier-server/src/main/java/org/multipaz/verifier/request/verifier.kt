@@ -1630,7 +1630,7 @@ private suspend fun handleGetDataMdoc(
         }
         for (otherDocument in deviceResponse.otherDocuments) {
             lines.add(ResultLine("OtherDocument", otherDocument.docFormat))
-            if (otherDocument.docFormat == "sd-jwt+kb") {
+            if (otherDocument.docFormat == "dc+sd-jwt") {
                 val compactSerialization = otherDocument.data.toByteArray().zlibInflate().decodeToString()
                 handleGetDataAppendSdJwt(
                     compactSerialization = compactSerialization,
@@ -2425,7 +2425,7 @@ private suspend fun AnnexACalcRequest(
                     docType = request.jsonRequest!!.vct,
                     nameSpaces = mapOf("_" to claimsToRequest),
                     docRequestInfo = DocRequestInfo(
-                        docFormat = "sd-jwt+kb",
+                        docFormat = "dc+sd-jwt",
                         dataElementIdentifierMapping = mapping
                     ),
                     readerKey = readerAuthKey

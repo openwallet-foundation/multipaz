@@ -76,7 +76,7 @@ data class DeviceResponse internal constructor(
      *    response and matches the hash of the source transaction data
      *
      * The following checks are performed for each [OtherDocument] instance in [otherDocuments]:
-     *  - For document format `sd-jwt+kb`:
+     *  - For document format `dc+sd-jwt`:
      *    - The SD-JWT+KB is constructed from decompressing [OtherDocument.data]
      *    - Verification is done with [org.multipaz.sdjwt.SdJwtKb.verify] using the issuer signing key
      *      from the leaf certificate in the [org.multipaz.sdjwt.SdJwt.x5c], the nonce derived from
@@ -247,7 +247,7 @@ data class DeviceResponse internal constructor(
         documentTypeRepository: DocumentTypeRepository?,
         doc: OtherDocument
     ): Int {
-        if (documentTypeRepository == null || doc.docFormat != "sd-jwt+kb") {
+        if (documentTypeRepository == null || doc.docFormat != "dc+sd-jwt") {
             return -1
         }
         var docRequestId: Int? = null

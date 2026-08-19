@@ -309,7 +309,7 @@ val Iso180137VerifierComponent: FC<Props> = FC {
                 docType = jsonReq.vct,
                 namespaces = mutableListOf(nsUi),
                 docRequestInfoEnabled = true,
-                docFormat = "sd-jwt+kb",
+                docFormat = "dc+sd-jwt",
                 dataElementIdentifierMapping = mappingsUi,
                 selectedSharedKeyId = readerKeys.firstOrNull()?.id ?: ""
             )

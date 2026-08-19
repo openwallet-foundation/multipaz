@@ -1096,7 +1096,7 @@ class DeviceResponseTest {
             ) {
                 addOtherDocument(
                     OtherDocument(
-                        docFormat = "sd-jwt+kb",
+                        docFormat = "dc+sd-jwt",
                         data = ByteString(compactSerialization.encodeToByteArray().zlibDeflate())
                     )
                 )
@@ -1135,7 +1135,7 @@ class DeviceResponseTest {
         assertEquals(0, encDocs.zkDocuments.size)
         assertEquals(1, encDocs.otherDocuments.size)
 
-        assertEquals("sd-jwt+kb", encDocs.otherDocuments[0].docFormat)
+        assertEquals("dc+sd-jwt", encDocs.otherDocuments[0].docFormat)
         val sdJwtKbCompactSerialization = encDocs.otherDocuments[0].data.toByteArray().zlibInflate().decodeToString()
         val processedPayload = SdJwtKb.fromCompactSerialization(sdJwtKbCompactSerialization)
             .verify(
