@@ -25,7 +25,8 @@ internal actual fun defaultMdocTransportFactoryCreateTransport(
                             options,
                             BleCentralManagerIos(),
                             connectionMethod.centralClientModeUuid!!,
-                            connectionMethod.peripheralServerModePsm
+                            connectionMethod.peripheralServerModePsm,
+                            connectionMethod.channelSoundingAvailable
                         )
                     }
                     MdocRole.MDOC_READER -> {
@@ -33,7 +34,8 @@ internal actual fun defaultMdocTransportFactoryCreateTransport(
                             role,
                             options,
                             BlePeripheralManagerIos(),
-                            connectionMethod.centralClientModeUuid!!
+                            connectionMethod.centralClientModeUuid!!,
+                            connectionMethod.channelSoundingAvailable
                         )
                     }
                 }
@@ -44,7 +46,8 @@ internal actual fun defaultMdocTransportFactoryCreateTransport(
                             role,
                             options,
                             BlePeripheralManagerIos(),
-                            connectionMethod.peripheralServerModeUuid!!
+                            connectionMethod.peripheralServerModeUuid!!,
+                            connectionMethod.channelSoundingAvailable
                         )
                     }
                     MdocRole.MDOC_READER -> {
@@ -54,6 +57,7 @@ internal actual fun defaultMdocTransportFactoryCreateTransport(
                             BleCentralManagerIos(),
                             connectionMethod.peripheralServerModeUuid!!,
                             connectionMethod.peripheralServerModePsm,
+                            connectionMethod.channelSoundingAvailable
                         )
                     }
                 }

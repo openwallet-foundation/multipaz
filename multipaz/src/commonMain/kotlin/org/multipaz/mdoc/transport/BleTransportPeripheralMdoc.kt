@@ -29,7 +29,8 @@ internal class BleTransportPeripheralMdoc(
     override val role: MdocRole,
     private val options: MdocTransportOptions,
     private val peripheralManager: BlePeripheralManager,
-    private val uuid: UUID
+    private val uuid: UUID,
+    private val channelSoundingAvailable: Boolean = false
 ) : MdocTransport() {
     companion object {
         private const val TAG = "BleTransportPeripheralMdoc"
@@ -39,6 +40,8 @@ internal class BleTransportPeripheralMdoc(
     private val mutex = Mutex()
     @Volatile
     private var currentJob: Job? = null
+    @Volatile
+    private var channelSoundingJob: Job? = null
 
     private val _state = MutableStateFlow<State>(State.IDLE)
     override val state: StateFlow<State> = _state.asStateFlow()
@@ -51,7 +54,8 @@ internal class BleTransportPeripheralMdoc(
                 peripheralServerModeUuid = uuid,
                 centralClientModeUuid = null,
                 peripheralServerModePsm = if (options.bleUseL2CAPInEngagement) peripheralManager.l2capPsm else null,
-                peripheralServerModeMacAddress = null
+                peripheralServerModeMacAddress = null,
+                channelSoundingAvailable = channelSoundingAvailable
             )
         }
 
@@ -138,6 +142,14 @@ internal class BleTransportPeripheralMdoc(
                 // to go into State.CONNECTING...
                 peripheralManager.waitForStateCharacteristicWriteOrL2CAPClient()
                 mutex.withLock { _state.value = State.CONNECTED }
+                if (channelSoundingAvailable) {
+                    val peerAddress = peripheralManager.peerBluetoothAddress
+                    if (peerAddress != null) {
+                        channelSoundingJob = transportScope.launch {
+                            startBluetoothChannelSounding(peerAddress, asInitiator = false)
+                        }
+                    }
+                }
             }
         } catch (error: Exception) {
             val unwrapped = error.unwrapCancellationException()
@@ -207,12 +219,14 @@ internal class BleTransportPeripheralMdoc(
             return
         }
         Logger.w(TAG, "Failing transport with error", error)
+        channelSoundingJob?.cancel()
         peripheralManager.close()
         _state.value = State.FAILED
     }
 
     private fun closeWithoutDelay() {
         check(mutex.isLocked) { "closeWithoutDelay called without holding lock" }
+        channelSoundingJob?.cancel()
         peripheralManager.close()
         _state.value = State.CLOSED
     }

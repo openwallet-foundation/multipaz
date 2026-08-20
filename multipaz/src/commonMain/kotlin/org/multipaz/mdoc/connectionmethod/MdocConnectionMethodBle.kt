@@ -36,7 +36,8 @@ data class MdocConnectionMethodBle(
     val peripheralServerModeUuid: UUID?,
     val centralClientModeUuid: UUID?,
     val peripheralServerModePsm: Int? = null,
-    val peripheralServerModeMacAddress: ByteString? = null
+    val peripheralServerModeMacAddress: ByteString? = null,
+    val channelSoundingAvailable: Boolean = false
 ): MdocConnectionMethod() {
     init {
         require(peripheralServerModeMacAddress == null || peripheralServerModeMacAddress.size == 6) {
@@ -104,6 +105,9 @@ data class MdocConnectionMethodBle(
                             peripheralServerModeMacAddress!!.toByteArray()
                         )
                     }
+                    if (channelSoundingAvailable) {
+                        put(OPTION_KEY_CHANNEL_SOUNDING_AVAILABLE, true)
+                    }
                 }
             }
         )
@@ -129,6 +133,7 @@ data class MdocConnectionMethodBle(
         private const val OPTION_KEY_CENTRAL_CLIENT_MODE_UUID = 11L
         private const val OPTION_KEY_PERIPHERAL_SERVER_MODE_BLE_DEVICE_ADDRESS = 20L
         private const val OPTION_KEY_PERIPHERAL_SERVER_MODE_PSM = 21L // NOTE: as per drafts of 18013-5 Second Edition
+        private const val OPTION_KEY_CHANNEL_SOUNDING_AVAILABLE = 42L // NOTE: Not yet allocated
 
         internal fun fromDeviceEngagement(encodedDeviceRetrievalMethod: ByteArray): MdocConnectionMethodBle? {
             val array = Cbor.decode(encodedDeviceRetrievalMethod)
@@ -150,7 +155,8 @@ data class MdocConnectionMethodBle(
                 },
                 peripheralServerModePsm = map.getOrNull(OPTION_KEY_PERIPHERAL_SERVER_MODE_PSM)?.asNumber?.toInt(),
                 peripheralServerModeMacAddress =
-                    map.getOrNull(OPTION_KEY_PERIPHERAL_SERVER_MODE_BLE_DEVICE_ADDRESS)?.asBstr?.let { ByteString(it) }
+                    map.getOrNull(OPTION_KEY_PERIPHERAL_SERVER_MODE_BLE_DEVICE_ADDRESS)?.asBstr?.let { ByteString(it) },
+                channelSoundingAvailable = map.getOrNull(OPTION_KEY_CHANNEL_SOUNDING_AVAILABLE)?.asBoolean ?: false
             )
             return cm
         }
@@ -391,3 +397,14 @@ data class MdocConnectionMethodBle(
         return Pair(record, acRecord)
     }
 }
+
+/**
+ * Checks whether Bluetooth Channel Sounding (CS) is supported and available on the device.
+ *
+ * Channel Sounding (defined in Bluetooth Core Specification 6.0) enables high-accuracy distance
+ * measurement and ranging between Bluetooth Low Energy devices.
+ *
+ * @return `true` if Channel Sounding is supported, enabled, and ready to use; `false` otherwise.
+ */
+expect suspend fun MdocConnectionMethodBle.Companion.isChannelSoundingAvailable(): Boolean
+

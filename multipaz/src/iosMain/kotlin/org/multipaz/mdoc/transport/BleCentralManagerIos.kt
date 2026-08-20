@@ -600,6 +600,9 @@ internal class BleCentralManagerIos : BleCentralManager {
     override val usingL2cap: Boolean
         get() = (l2capChannel != null)
 
+    override val peerBluetoothAddress: String?
+        get() = null
+
     private var l2capChannel: CBL2CAPChannel? = null
     private var l2capSink: Sink? = null
     private var l2capSource: Source? = null

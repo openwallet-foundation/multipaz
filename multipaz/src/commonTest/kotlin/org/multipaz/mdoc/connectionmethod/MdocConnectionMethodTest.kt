@@ -21,6 +21,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.UUID
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -175,6 +176,44 @@ class MdocConnectionMethodTest {
         val ndefRecord = cm.toNdefRecord(listOf(), MdocRole.MDOC, false).first
         val decodedNfc = MdocConnectionMethodBle.fromNdefRecord(ndefRecord, MdocRole.MDOC, null)!!
         assertEquals(cm, decodedNfc)
+    }
+
+    @Test
+    fun testConnectionMethodBleChannelSounding() {
+        val uuid = UUID(0U, 1U)
+        val cm = MdocConnectionMethodBle(
+            supportsPeripheralServerMode = true,
+            supportsCentralClientMode = false,
+            peripheralServerModeUuid = uuid,
+            centralClientModeUuid = null,
+            channelSoundingAvailable = true
+        )
+        val decoded = MdocConnectionMethod.fromDeviceEngagement(cm.toDeviceEngagement()) as MdocConnectionMethodBle?
+        assertNotNull(decoded)
+        assertTrue(decoded.supportsPeripheralServerMode)
+        assertFalse(decoded.supportsCentralClientMode)
+        assertEquals(uuid, decoded.peripheralServerModeUuid)
+        assertNull(decoded.centralClientModeUuid)
+        assertTrue(decoded.channelSoundingAvailable)
+        assertEquals(
+            """[
+  2,
+  1,
+  {
+    0: true,
+    1: false,
+    10: h'00000000000000000000000000000001',
+    42: true
+  }
+]""", Cbor.toDiagnostics(cm.toDeviceEngagement(), setOf(DiagnosticOption.PRETTY_PRINT))
+        )
+    }
+
+    @Test
+    fun testIsChannelSoundingAvailable() = runTest {
+        // Just verify isChannelSoundingAvailable() can be called without error
+        val available = MdocConnectionMethodBle.isChannelSoundingAvailable()
+        assertFalse(available)
     }
 
     @Test

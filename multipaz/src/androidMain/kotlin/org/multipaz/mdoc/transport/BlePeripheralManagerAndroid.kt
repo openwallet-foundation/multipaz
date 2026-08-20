@@ -602,6 +602,9 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
     override val usingL2cap: Boolean
         get() = (l2capSocket != null)
 
+    override val peerBluetoothAddress: String?
+        get() = device?.address
+
     override val l2capPsm: Int?
         get() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

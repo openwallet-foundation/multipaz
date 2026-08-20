@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,10 +32,12 @@ import org.multipaz.compose.qrcode.generateQrCode
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodNfc
+import org.multipaz.mdoc.connectionmethod.isChannelSoundingAvailable
 import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.prompt.PromptModel
 import org.multipaz.testapp.TestAppSettingsModel
+import org.multipaz.util.Logger
 import org.multipaz.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
@@ -52,6 +55,12 @@ fun IsoMdocProximitySharingScreen(
     val blePermissionState = rememberBluetoothPermissionState()
     val bleEnabledState = rememberBluetoothEnabledState()
     var disablePlatformImplementation by remember { mutableStateOf(false) }
+    var channelSoundingAvailable by remember { mutableStateOf(false) }
+
+    LaunchedEffect(true) {
+        channelSoundingAvailable = MdocConnectionMethodBle.isChannelSoundingAvailable()
+        Logger.i(TAG, "Bluetooth Channel Sounding available: $channelSoundingAvailable")
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(5.dp),
@@ -88,6 +97,12 @@ fun IsoMdocProximitySharingScreen(
                     disablePlatformImplementation = newValue
                 }
             )
+            Text(
+                text = "Bluetooth Channel Sounding: ${if (channelSoundingAvailable) "Available" else "Not available"}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
             MdocProximityQrPresentment(
                 modifier = Modifier,
                 source = presentmentSource,
@@ -103,6 +118,7 @@ fun IsoMdocProximitySharingScreen(
                                     supportsCentralClientMode = true,
                                     peripheralServerModeUuid = null,
                                     centralClientModeUuid = bleUuid,
+                                    channelSoundingAvailable = channelSoundingAvailable
                                 )
                             )
                         }
@@ -113,6 +129,7 @@ fun IsoMdocProximitySharingScreen(
                                     supportsCentralClientMode = false,
                                     peripheralServerModeUuid = bleUuid,
                                     centralClientModeUuid = null,
+                                    channelSoundingAvailable = channelSoundingAvailable
                                 )
                             )
                         }

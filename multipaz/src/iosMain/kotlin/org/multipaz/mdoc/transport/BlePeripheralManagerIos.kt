@@ -488,6 +488,9 @@ internal class BlePeripheralManagerIos: BlePeripheralManager {
     override val usingL2cap: Boolean
         get() = (l2capChannel != null)
 
+    override val peerBluetoothAddress: String?
+        get() = null
+
     private suspend fun l2capReadChannel() {
         try {
             while (true) {

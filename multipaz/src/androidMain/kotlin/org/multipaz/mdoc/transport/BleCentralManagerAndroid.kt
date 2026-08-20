@@ -751,6 +751,9 @@ internal class BleCentralManagerAndroid : BleCentralManager {
     override val usingL2cap: Boolean
         get() = (l2capSocket != null)
 
+    override val peerBluetoothAddress: String?
+        get() = device?.address
+
     private var l2capSocket: BluetoothSocket? = null
 
     override suspend fun connectL2cap(psm: Int) {

@@ -23,17 +23,27 @@ private class AccompanistBluetoothPermissionState(
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 actual fun rememberBluetoothPermissionState(): PermissionState {
+    val permissions = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA -> {
+            listOf(
+                Manifest.permission.BLUETOOTH_ADVERTISE,
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.RANGING
+            )
+        }
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            listOf(
+                Manifest.permission.BLUETOOTH_ADVERTISE,
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT
+            )
+        }
+        else -> {
+            listOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
     return AccompanistBluetoothPermissionState(
-        rememberMultiplePermissionsState(
-            if (Build.VERSION.SDK_INT >= 31) {
-                listOf(
-                    Manifest.permission.BLUETOOTH_ADVERTISE,
-                    Manifest.permission.BLUETOOTH_SCAN,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                )
-            } else {
-                listOf(Manifest.permission.ACCESS_FINE_LOCATION)
-            }
-        )
+        rememberMultiplePermissionsState(permissions)
     )
 }
