@@ -179,6 +179,8 @@ kotlin {
                 implementation(libs.ktor.serialization.kotlinx.json)
                 implementation(libs.coil.compose)
                 implementation(libs.coil.ktor3)
+                implementation(libs.haze)
+                implementation(libs.haze.materials)
             }
         }
     }
