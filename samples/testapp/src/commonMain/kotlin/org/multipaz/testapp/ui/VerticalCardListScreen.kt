@@ -35,11 +35,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeProgressive
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
+import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.multipaz.compose.cards.VerticalCardList
@@ -59,7 +68,11 @@ private data class VisibilityOption(
     val visibilityPercentage: Int
 )
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
+@OptIn(
+    ExperimentalComposeUiApi::class,
+    ExperimentalMaterial3Api::class,
+    ExperimentalHazeMaterialsApi::class
+)
 @Composable
 fun VerticalCardListScreen(
     documentStore: DocumentStore,
@@ -74,10 +87,26 @@ fun VerticalCardListScreen(
     onBackPressed: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val hazeState = remember { HazeState() }
 
     Scaffold(
         topBar = {
             TopAppBar(
+                modifier = Modifier.hazeEffect(
+                    state = hazeState,
+                    style = HazeStyle(
+                        backgroundColor = Color.Transparent,
+                        tints = listOf(
+                            HazeTint(MaterialTheme.colorScheme.primaryContainer)
+                        ),
+                        blurRadius = 24.dp
+                    )
+                ) {
+                    progressive = HazeProgressive.verticalGradient(
+                        startIntensity = 1f,
+                        endIntensity = 0.5f
+                    )
+                },
                 title = {
                     val text = if (focusedDocumentId != null) {
                         "Vertical Card List (doc focused)"
@@ -86,7 +115,8 @@ fun VerticalCardListScreen(
                     }
                     Text(text = text)},
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent
                 ),
                 navigationIcon = {
                     IconButton(onClick = {
@@ -119,10 +149,11 @@ fun VerticalCardListScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .hazeSource(hazeState)
                 .padding(
-                    top = innerPadding.calculateTopPadding(),
                     start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
                     end = innerPadding.calculateEndPadding(LocalLayoutDirection.current)
+                    // Omitting top padding so the card list extends up under the TopAppBar
                     // Omitting the bottom padding since we want to draw under the navigation bar
                 ),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -142,6 +173,7 @@ fun VerticalCardListScreen(
                 allowCardReordering = true,
                 showStackWhileFocused = true,
                 cardMaxHeight = maxCardHeight,
+                paddingTop = innerPadding.calculateTopPadding() + 16.dp,
                 state = state,
                 topContent = {
                     Card(

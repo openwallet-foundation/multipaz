@@ -119,7 +119,10 @@ internal actual fun WebViewRender(
                     "renderResource(\"/${WebViewRenderingContext.escape(asset!!)}\", \"$cssStr\")"
                 }
                 if (client.loaded) {
-                    webView.evaluateJavascript(command) {}
+                    if (command != client.lastCommand) {
+                        client.lastCommand = command
+                        webView.evaluateJavascript(command) {}
+                    }
                 } else {
                     client.deferredCommand = command
                 }
@@ -136,10 +139,12 @@ internal class ClientImpl(
 
     var loaded = false
     var deferredCommand = ""
+    var lastCommand: String? = null
 
     override fun onPageFinished(webView: WebView, url: String) {
         webView.evaluateJavascript(WebViewRenderingContext.renderResourceScript) {}
         if (deferredCommand.isNotEmpty()) {
+            lastCommand = deferredCommand
             webView.evaluateJavascript(deferredCommand) {}
             deferredCommand = ""
         }

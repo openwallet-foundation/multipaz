@@ -182,6 +182,8 @@ fun rememberVerticalCardListState(
  * of the screen when a card is focused. If false, unfocused cards fade away entirely to maximize
  * screen real estate for the detail view. Defaults to true.
  * @param cardMaxHeight An optional max height constraint for the cards. Useful for foldables and wide screens.
+ * @param paddingTop The top padding for the card list. Defaults to 16.dp.
+ * @param paddingBottom The bottom padding for the card list. Defaults to 16.dp.
  * @param state The state object to be used to control or observe the list's state.
  * @param showTopContent Whether the [topContent] composable should be shown when no card is focused.
  * Defaults to true.
@@ -208,6 +210,8 @@ fun VerticalCardList(
     allowCardReordering: Boolean = true,
     showStackWhileFocused: Boolean = true,
     cardMaxHeight: Dp = Dp.Unspecified,
+    paddingTop: Dp = 16.dp,
+    paddingBottom: Dp = 16.dp,
     state: VerticalCardListState = rememberVerticalCardListState(),
     showTopContent: Boolean = state.showTopContent,
     topContent: @Composable () -> Unit = {},
@@ -272,22 +276,6 @@ fun VerticalCardList(
     val isAnyFocused = internalFocusedCardIdentifier != null
     val focusedIndex = state.displayOrderIdentifiers.indexOf(internalFocusedCardIdentifier).coerceAtLeast(0)
 
-    // A nested scroll connection to intercept and consume the overscroll effect cleanly
-    val overscrollConsumer = remember {
-        object : NestedScrollConnection {
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource
-            ): Offset = available // Silently consume all leftover scroll at the edges
-
-            override suspend fun onPostFling(
-                consumed: Velocity,
-                available: Velocity
-            ): Velocity = available
-        }
-    }
-
     if (cardInfos.isEmpty()) {
         BoxWithConstraints(
             modifier = modifier.fillMaxSize(),
@@ -312,7 +300,7 @@ fun VerticalCardList(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 24.dp, start = 16.dp, end = 16.dp),
+                    .padding(top = paddingTop, start = 16.dp, end = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -354,7 +342,8 @@ fun VerticalCardList(
         val maxHeightPx = constraints.maxHeight.toFloat()
 
         val paddingHorizontalPx = with(density) { 16.dp.toPx() }
-        val paddingTopPx = with(density) { 24.dp.toPx() }
+        val paddingTopPx = with(density) { paddingTop.toPx() }
+        val paddingBottomPx = with(density) { paddingBottom.toPx() }
         val spacingPx = with(density) { 16.dp.toPx() }
 
         var cardWidthPx = maxWidthPx - 2 * paddingHorizontalPx
@@ -389,7 +378,7 @@ fun VerticalCardList(
             cardHeightPx * (unfocusedVisiblePercent / 100f)
         }
 
-        val totalHeightPx = listTopOffsetPx + (max(0, state.displayOrderIdentifiers.size - 1) * listStepPx) + cardHeightPx + paddingTopPx
+        val totalHeightPx = listTopOffsetPx + (max(0, state.displayOrderIdentifiers.size - 1) * listStepPx) + cardHeightPx + paddingBottomPx
         val totalHeightDp = with(density) { totalHeightPx.toDp() }
 
         // --- Stack Math ---
@@ -412,7 +401,6 @@ fun VerticalCardList(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(overscrollConsumer)
                 .verticalScroll(state.scrollState, enabled = !isAnyFocused)
         ) {
             Spacer(
@@ -478,7 +466,7 @@ fun VerticalCardList(
                     val isDragged = cardInfo.identifier == state.draggedCardIdentifier
                     val viewportTop = state.scrollState.value.toFloat()
 
-                    val targetY: Float
+                    val targetRelativeY: Float
                     val targetScale: Float
                     val targetElevation: Float
                     val targetZIndex: Float
@@ -486,7 +474,7 @@ fun VerticalCardList(
 
                     if (isAnyFocused) {
                         if (isFocused) {
-                            targetY = viewportTop + paddingTopPx
+                            targetRelativeY = (viewportTop + paddingTopPx) - listTopOffsetPx
                             targetScale = 1.025f
                             targetElevation = 24f
                             targetZIndex = 100f
@@ -498,7 +486,8 @@ fun VerticalCardList(
 
                             val frontCardY = viewportTop + maxHeightPx - frontCardVisibleHeightPx
 
-                            targetY = frontCardY - (clampedDistanceToFront * stackOffsetPx)
+                            val absoluteY = frontCardY - (clampedDistanceToFront * stackOffsetPx)
+                            targetRelativeY = absoluteY - listTopOffsetPx
                             targetScale = max(0.6f, 0.95f - (clampedDistanceToFront * 0.025f))
                             targetElevation = 12f
                             targetZIndex = stackIndex.toFloat()
@@ -507,7 +496,7 @@ fun VerticalCardList(
                         }
                     } else {
                         // In list mode, the dragged card directly tracks the finger ignoring layout positioning
-                        targetY = if (isDragged) state.dragCurrentY else listTopOffsetPx + index * listStepPx
+                        targetRelativeY = if (isDragged) state.dragCurrentY - listTopOffsetPx else index * listStepPx
                         targetScale = if (isDragged) 1.05f else 1f
                         targetElevation = if (isDragged) 24f else 12f
                         targetZIndex = if (isDragged) 100f else index.toFloat()
@@ -515,7 +504,7 @@ fun VerticalCardList(
                     }
 
                     // We skip animation for the dragged item so it tracks 1:1 with the finger without lag
-                    val animatedY by animateFloatAsState(targetY, tween(if (isDragged) 0 else 400), label = "y")
+                    val animatedRelativeY by animateFloatAsState(targetRelativeY, tween(if (isDragged) 0 else 400), label = "y")
                     val animatedScale by animateFloatAsState(targetScale, tween(400), label = "scale")
                     val animatedElevation by animateFloatAsState(targetElevation, tween(400), label = "elevation")
                     val animatedAlpha by animateFloatAsState(targetAlpha, tween(400), label = "alpha")
@@ -528,7 +517,7 @@ fun VerticalCardList(
                             .offset {
                                 IntOffset(
                                     x = cardXOffsetPx.roundToInt(),
-                                    y = animatedY.roundToInt()
+                                    y = (listTopOffsetPx + animatedRelativeY).roundToInt()
                                 )
                             }
                             .graphicsLayer {

@@ -54,6 +54,7 @@ process-phoenix = "3.0.0"
 coil = "3.3.0"
 compottie = "2.0.2"
 detekt = "1.23.8"
+haze = "1.7.0"
 # Kotlin/JS wrappers; require `./gradlew kotlinUpgradeYarnLock` after version changes
 # this is how npm works, that will update kotlin-js-store/yarn.lock (part of the repo)
 kotlin-wrappers = "2025.12.1"
@@ -154,6 +155,8 @@ kotlin-wrappers-react-dom = { module = "org.jetbrains.kotlin-wrappers:kotlin-rea
 kotlin-wrappers-emotion-react-js = { module = "org.jetbrains.kotlin-wrappers:kotlin-emotion-react-js", version.ref="kotlin-wrappers-em" }
 skie-annotations = { module = "co.touchlab.skie:configuration-annotations", version.ref = "skie" }
 compottie = { module = "io.github.alexzhirkevich:compottie", version.ref="compottie" }
+haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+haze-materials = { module = "dev.chrisbanes.haze:haze-materials", version.ref = "haze" }
 # Build Logic
 gradlePlugin-kotlin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 android-tools-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }

@@ -65,6 +65,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.fragment.app.FragmentActivity
@@ -433,9 +434,9 @@ internal fun PresentmentActivityContent(
                         .fillMaxHeight()
                         .widthIn(max = 600.dp) // Limits width for foldable/tablet support
                         .padding(
-                            top = innerPadding.calculateTopPadding(),
                             start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
                             end = innerPadding.calculateEndPadding(LocalLayoutDirection.current)
+                            // Omitting top padding so the card list extends up under the status bar
                             // Omitting the bottom padding since we want to draw under the navigation bar
                         ),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -447,9 +448,7 @@ internal fun PresentmentActivityContent(
                             initiallySelectedDocumentId = presentmentModel!!.showDocumentChooser!!.initiallySelectedDocumentId,
                             selectedDocIdFromCardChooser = selectedDocIdFromCardChooser,
                             onDocumentSelected = presentmentModel!!.showDocumentChooser!!.onDocumentSelected,
-                            topContent = {
-                                ShowHoldToReader(isNfcOnly = isNfcOnly)
-                            },
+                            paddingTop = innerPadding.calculateTopPadding() + 16.dp,
                             contentBelow = { documentId ->
                                 Column(
                                     modifier = Modifier
@@ -511,6 +510,7 @@ internal fun PresentmentActivityContent(
                         ShowCard(
                             documentModel = documentModel!!,
                             documentIds = docIdsToShow,
+                            paddingTop = innerPadding.calculateTopPadding() + 16.dp,
                             contentBelow = {
                                 val isNfcConnected by presentmentModel!!.isNfcConnected.collectAsState()
                                 val isNfcOnly by presentmentModel!!.isNfcOnly.collectAsState()
@@ -584,6 +584,7 @@ private const val STACKED_CARD_SCALE_PERCENT = 85
 private fun ShowCard(
     documentModel: DocumentModel,
     documentIds: List<String>,
+    paddingTop: Dp = 16.dp,
     contentBelow: @Composable () -> Unit
 ) {
     val configuration = LocalConfiguration.current
@@ -612,7 +613,7 @@ private fun ShowCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(paddingTop))
                 Box(
                     modifier = Modifier
                         .width(cardWidthDp)
@@ -670,7 +671,7 @@ private fun ShowCardChooser(
     initiallySelectedDocumentId: String?,
     selectedDocIdFromCardChooser: MutableState<String?>,
     onDocumentSelected: ((documentId: String?) -> Unit)?,
-    topContent: @Composable () -> Unit = {},
+    paddingTop: Dp = 16.dp,
     contentBelow: @Composable (documentId: String) -> Unit
 ) {
     val configuration = LocalConfiguration.current
@@ -703,7 +704,7 @@ private fun ShowCardChooser(
         allowCardReordering = false,
         showStackWhileFocused = true,
         cardMaxHeight = maxCardHeight,
-        topContent = topContent,
+        paddingTop = paddingTop,
         showCardInfo = { cardInfo -> contentBelow(cardInfo.identifier) },
         emptyContent = {
             Text(stringResource(
