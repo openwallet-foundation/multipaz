@@ -94,9 +94,11 @@ public class DocumentModel {
             DocumentModelStorageData()
         }
 
+        var initialDocumentInfos: [DocumentInfo] = []
         for document in try await documentStore.listDocuments(sort: true) {
-            await _documentInfos.append(try getDocumentInfo(document))
+            initialDocumentInfos.append(try await getDocumentInfo(document))
         }
+        self._documentInfos = initialDocumentInfos
         Task {
             for await event in documentStore.eventFlow {
                 if event is DocumentAdded {
