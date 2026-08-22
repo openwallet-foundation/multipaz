@@ -22,6 +22,9 @@ public class VerticalCardListState {
     /// The identifier of the card currently focused, if any.
     public var internalFocusedCardIdentifier: String? = nil
     
+    /// The identifier of the last focused card, used to preserve animations across navigation.
+    public var lastFocusedCardIdentifier: String? = nil
+    
     /// Whether to animate spatial transitions (like sliding cards) when entering this screen.
     /// This should typically be set to true only when navigating directly between two list states.
     public var animateListTransitions: Bool = true
@@ -42,6 +45,7 @@ public class VerticalCardListState {
         if internalFocusedCardIdentifier != nil {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                 self.internalFocusedCardIdentifier = nil
+                self.lastFocusedCardIdentifier = nil
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                 completion()
@@ -319,9 +323,15 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
             ? cardInfos
             : state.displayOrderIdentifiers.compactMap { id in cardInfos.first { $0.identifier == id } }
         self._displayOrder = State(initialValue: initialDisplayOrder)
+        if state.displayOrderIdentifiers.isEmpty && !cardInfos.isEmpty {
+            state.displayOrderIdentifiers = cardInfos.map { $0.identifier }
+        }
         
-        if !animateListTransitions {
+        if animateListTransitions {
+            state.internalFocusedCardIdentifier = state.lastFocusedCardIdentifier
+        } else {
             state.internalFocusedCardIdentifier = focusedCard?.identifier
+            state.lastFocusedCardIdentifier = focusedCard?.identifier
         }
     }
     
@@ -341,9 +351,12 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
             let maxWidth = proxy.size.width
             let maxHeight = proxy.size.height
             
-            let paddingHorizontal: CGFloat = 16
-            let paddingTop: CGFloat = 24
-            let spacing: CGFloat = 16
+            if maxWidth <= 0 || maxHeight <= 0 {
+                Color.clear
+            } else {
+                let paddingHorizontal: CGFloat = 16
+                let paddingTop: CGFloat = 24
+                let spacing: CGFloat = 16
             
             let cardWidth = max(0, maxWidth - 2 * paddingHorizontal)
             let cardHeight = max(0, cardWidth / 1.586)
@@ -368,6 +381,7 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
             let internalFocusedCard = focusedCard == nil ? nil : cardInfos.first {
                 $0.identifier == state.internalFocusedCardIdentifier
             }
+            let canAnimate = animateListTransitions && (focusedCard != nil || state.lastFocusedCardIdentifier != nil)
             
             if displayOrder.isEmpty && cardInfos.isEmpty {
                 VStack {
@@ -400,7 +414,7 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
                                         showCardInfo(focused)
                                     }
                                     .frame(maxWidth: .infinity, alignment: .top)
-                                    .padding(.top, paddingTop + cardHeight * 1.05 + 24)
+                                    .padding(.top, paddingTop + cardHeight * 1.025 + 24)
                                     .padding(.bottom, 24)
                                     .frame(width: maxWidth, height: detailHeight, alignment: .top)
                                     .offset(y: state.scrollOffset)
@@ -490,10 +504,11 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
                                         )
                                         .offset(x: paddingHorizontal, y: cardState.y)
                                         .zIndex(cardState.zIndex)
-                                        .animation(isDragged ? .interactiveSpring() : (animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil), value: cardState.y)
-                                        .animation(animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.scale)
-                                        .animation(animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.elevation)
-                                        .animation(animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.alpha)
+                                        .transition(.identity)
+                                        .animation(isDragged ? .interactiveSpring() : (canAnimate ? .spring(response: 0.4, dampingFraction: 0.8) : nil), value: cardState.y)
+                                        .animation(canAnimate ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.scale)
+                                        .animation(canAnimate ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.elevation)
+                                        .animation(canAnimate ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.alpha)
                                 }
                             }
                             .frame(width: maxWidth, height: totalHeight, alignment: .topLeading)
@@ -503,20 +518,22 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
                     }
                 }
             }
+            }
         }
         .onAppear {
             syncDisplayOrder()
             
-            if animateListTransitions {
-                if state.internalFocusedCardIdentifier != focusedCard?.identifier {
-                    DispatchQueue.main.async {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            state.internalFocusedCardIdentifier = focusedCard?.identifier
-                        }
+            if animateListTransitions && state.lastFocusedCardIdentifier != focusedCard?.identifier {
+                state.internalFocusedCardIdentifier = state.lastFocusedCardIdentifier
+                DispatchQueue.main.async {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        state.internalFocusedCardIdentifier = focusedCard?.identifier
+                        state.lastFocusedCardIdentifier = focusedCard?.identifier
                     }
                 }
             } else {
                 state.internalFocusedCardIdentifier = focusedCard?.identifier
+                state.lastFocusedCardIdentifier = focusedCard?.identifier
             }
         }
         .onChange(of: cardInfos.map { $0.identifier }) { _, _ in
@@ -525,16 +542,16 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
              }
         }
         .onChange(of: focusedCard?.identifier) { _, newId in
-            if animateListTransitions {
-                if state.internalFocusedCardIdentifier != newId {
-                    DispatchQueue.main.async {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            state.internalFocusedCardIdentifier = newId
-                        }
+            if animateListTransitions && state.lastFocusedCardIdentifier != newId {
+                DispatchQueue.main.async {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        state.internalFocusedCardIdentifier = newId
+                        state.lastFocusedCardIdentifier = newId
                     }
                 }
             } else {
                 state.internalFocusedCardIdentifier = newId
+                state.lastFocusedCardIdentifier = newId
             }
         }
         .onChange(of: state.dragJustEnded) { _, newValue in
@@ -562,7 +579,7 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
         
         if isAnyFocused {
             if isFocused {
-                return CardState(y: state.scrollOffset + paddingTop, scale: 1.05, elevation: 24, zIndex: 100, alpha: 1.0)
+                return CardState(y: state.scrollOffset + paddingTop, scale: 1.025, elevation: 24, zIndex: 100, alpha: 1.0)
             } else {
                 let stackIndex = index < focusedIndex ? index : index - 1
                 let distanceToFront = maxStackIndex - stackIndex
