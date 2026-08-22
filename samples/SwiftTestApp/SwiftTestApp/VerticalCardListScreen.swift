@@ -86,18 +86,33 @@ struct VerticalCardListScreen: View {
         .navigationTitle(focusedDocument != nil ? "Vertical Card List (doc focused)" : "Vertical Card List")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: 6) {
-                    Text("Top Composable")
-                        .font(.caption)
-                    Toggle("", isOn: Binding(
-                        get: { viewModel.verticalCardListState.showTopContent },
-                        set: { newValue in
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                viewModel.verticalCardListState.showTopContent = newValue
+                HStack(spacing: 12) {
+                    HStack(spacing: 6) {
+                        Text("Top Composable")
+                            .font(.caption)
+                        Toggle("", isOn: Binding(
+                            get: { viewModel.verticalCardListState.showTopContent },
+                            set: { newValue in
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    viewModel.verticalCardListState.showTopContent = newValue
+                                }
                             }
-                        }
-                    ))
-                    .labelsHidden()
+                        ))
+                        .labelsHidden()
+                    }
+                    HStack(spacing: 6) {
+                        Text("Placeholder")
+                            .font(.caption)
+                        Toggle("", isOn: Binding(
+                            get: { viewModel.verticalCardListState.showPlaceholderWhenEmpty },
+                            set: { newValue in
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    viewModel.verticalCardListState.showPlaceholderWhenEmpty = newValue
+                                }
+                            }
+                        ))
+                        .labelsHidden()
+                    }
                 }
             }
         }
