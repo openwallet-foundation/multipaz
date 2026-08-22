@@ -4,9 +4,11 @@ import Multipaz
 struct VerticalCardListScreen: View {
     @Environment(ViewModel.self) private var viewModel
 
-    let focusedDocumentId: String?
+    @State private var focusedDocumentId: String?
 
-    @Environment(\.dismiss) private var dismiss
+    init(focusedDocumentId: String? = nil) {
+        self._focusedDocumentId = State(initialValue: focusedDocumentId)
+    }
     
     var body: some View {
         let focusedDocument = viewModel.documentModel.documentInfos.first {
@@ -19,7 +21,23 @@ struct VerticalCardListScreen: View {
                 unfocusedVisiblePercent: 25, // Show a bit more of the overlapping cards
                 allowCardReordering: true,
                 showStackWhileFocused: true,
+                paddingTop: 16,
+                paddingBottom: 16,
                 state: viewModel.verticalCardListState,
+                topContent: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Top Composable Demo")
+                            .font(.headline)
+                            .bold()
+                        Text("This composable appears above cards when no card is focused and is hidden when a card is focused.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(uiColor: .secondarySystemGroupedBackground))
+                    .cornerRadius(12)
+                },
                 showCardInfo: { cardInfo in
                     let docInfo = cardInfo as! DocumentInfo
                     VStack {
@@ -55,21 +73,34 @@ struct VerticalCardListScreen: View {
                     }
                 },
                 onCardFocused: { cardInfo in
-                    viewModel.push(.verticalCardListScreen(focusedDocumentId: cardInfo.identifier))
+                    focusedDocumentId = cardInfo.identifier
                 },
                 onCardFocusedTapped: { _ in
-                    viewModel.verticalCardListState.unfocus {
-                        viewModel.popWithoutAnimation()
-                    }
+                    focusedDocumentId = nil
                 },
                 onCardFocusedStackTapped: { _ in
-                    viewModel.verticalCardListState.unfocus {
-                        viewModel.popWithoutAnimation()
-                    }
+                    focusedDocumentId = nil
                 }
             )
         }
-        .navigationTitle(focusedDocument != nil ? "Document Focused" : "Vertical Card List")
+        .navigationTitle(focusedDocument != nil ? "Vertical Card List (doc focused)" : "Vertical Card List")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                HStack(spacing: 6) {
+                    Text("Top Composable")
+                        .font(.caption)
+                    Toggle("", isOn: Binding(
+                        get: { viewModel.verticalCardListState.showTopContent },
+                        set: { newValue in
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                viewModel.verticalCardListState.showTopContent = newValue
+                            }
+                        }
+                    ))
+                    .labelsHidden()
+                }
+            }
+        }
     }
 }
 

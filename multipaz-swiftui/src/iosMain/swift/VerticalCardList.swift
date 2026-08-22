@@ -29,6 +29,12 @@ public class VerticalCardListState {
     /// This should typically be set to true only when navigating directly between two list states.
     public var animateListTransitions: Bool = true
     
+    /// Whether the top content view should be shown when no card is focused.
+    public var showTopContent: Bool = true
+    
+    /// The measured height of the top content view.
+    public var topContentHeight: CGFloat = 0
+    
     /// The current scroll offset, normalized against the initial content offset.
     public var scrollOffset: CGFloat = 0
     
@@ -52,6 +58,16 @@ public class VerticalCardListState {
             }
         } else {
             completion()
+        }
+    }
+}
+
+private struct TopContentHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        let next = nextValue()
+        if next > 0 {
+            value = next
         }
     }
 }
@@ -225,7 +241,7 @@ extension UIView {
 /// to the top of the viewport. A dynamic content section (`showCardInfo`) fades in immediately
 /// below it. By default, the remaining unfocused cards animate into a 3D overlapping stack at the
 /// bottom of the screen.
-public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View {
+public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedContent: View>: View {
     /// The list of `CardInfo` objects to display.
     public var cardInfos: [CardInfo]
     
@@ -242,11 +258,26 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
     /// If `true`, unfocused cards will collapse into a 3D stack at the bottom of the screen.
     public var showStackWhileFocused: Bool
     
+    /// An optional max height constraint for the cards.
+    public var cardMaxHeight: CGFloat?
+    
+    /// The top padding for the card list. Defaults to 16.
+    public var paddingTop: CGFloat
+    
+    /// The bottom padding for the card list. Defaults to 16.
+    public var paddingBottom: CGFloat
+    
     /// The state object used to control or observe the list's state.
     public var state: VerticalCardListState
     
+    /// Whether the top content should be shown when no card is focused. When nil, uses state.showTopContent.
+    public var showTopContent: Bool?
+    
     /// Whether to animate transitions when entering or navigating between list states.
     public var animateListTransitions: Bool
+    
+    /// Slot displayed at the top of the list when no card is focused.
+    @ViewBuilder public var topContent: () -> TopContent
     
     /// Renders the detailed content below the focused card.
     @ViewBuilder public var showCardInfo: (CardInfo) -> SelectedContent
@@ -271,8 +302,7 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
     @State private var startDragY: CGFloat = 0
     @State private var isDragging: Bool = false
     @State private var lastDragEndTime: Date = .distantPast
-    
-
+    @State private var isInitialized: Bool = false
     
     /// Initializes a `VerticalCardList` view.
     ///
@@ -282,8 +312,13 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
     ///   - unfocusedVisiblePercent: Percent of card visible when unfocused (0 to 100).
     ///   - allowCardReordering: Whether to allow dragging to reorder cards.
     ///   - showStackWhileFocused: Whether to show the collapsed 3D card stack at the bottom of the screen.
+    ///   - cardMaxHeight: An optional max height constraint for the cards.
+    ///   - paddingTop: The top padding for the card list.
+    ///   - paddingBottom: The bottom padding for the card list.
     ///   - state: The list state tracker object.
+    ///   - showTopContent: Whether the top content should be shown when no card is focused.
     ///   - animateListTransitions: Whether to animate view list transitions.
+    ///   - topContent: Closure rendering slot at the top of the list when no card is focused.
     ///   - showCardInfo: Closure rendering detailed info view for a card.
     ///   - emptyContent: Closure rendering layout when the card list is empty.
     ///   - onCardReordered: Callback triggered on card reordering completion.
@@ -296,8 +331,13 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
         unfocusedVisiblePercent: Int = 25,
         allowCardReordering: Bool = true,
         showStackWhileFocused: Bool = true,
+        cardMaxHeight: CGFloat? = nil,
+        paddingTop: CGFloat = 16,
+        paddingBottom: CGFloat = 16,
         state: VerticalCardListState = VerticalCardListState(),
+        showTopContent: Bool? = nil,
         animateListTransitions: Bool = true,
+        @ViewBuilder topContent: @escaping () -> TopContent = { EmptyView() },
         @ViewBuilder showCardInfo: @escaping (CardInfo) -> SelectedContent = { _ in EmptyView() },
         @ViewBuilder emptyContent: @escaping () -> EmptyContent = { EmptyView() },
         onCardReordered: @escaping (CardInfo, Int) -> Void = { _, _ in },
@@ -310,8 +350,13 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
         self.unfocusedVisiblePercent = unfocusedVisiblePercent
         self.allowCardReordering = allowCardReordering
         self.showStackWhileFocused = showStackWhileFocused
+        self.cardMaxHeight = cardMaxHeight
+        self.paddingTop = paddingTop
+        self.paddingBottom = paddingBottom
         self.state = state
+        self.showTopContent = showTopContent
         self.animateListTransitions = animateListTransitions
+        self.topContent = topContent
         self.showCardInfo = showCardInfo
         self.emptyContent = emptyContent
         self.onCardReordered = onCardReordered
@@ -346,178 +391,329 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
         }
     }
     
+    private struct CardListLayout {
+        let maxWidth: CGFloat
+        let maxHeight: CGFloat
+        let cardWidth: CGFloat
+        let cardHeight: CGFloat
+        let cardXOffset: CGFloat
+        let listTopOffset: CGFloat
+        let listStep: CGFloat
+        let totalHeight: CGFloat
+        let maxStackIndex: Int
+        let maxVisibleCardsInStack: Int
+        let frontCardVisibleHeight: CGFloat
+        let stackOffset: CGFloat
+        let detailBottomPadding: CGFloat
+        let isTopContentEffectivelyVisible: Bool
+        let internalFocusedCard: CardInfo?
+    }
+    
+    private func computeLayout(maxWidth: CGFloat, maxHeight: CGFloat) -> CardListLayout {
+        let paddingHorizontal: CGFloat = 16
+        let spacing: CGFloat = 16
+        
+        var cardWidth: CGFloat = max(0, maxWidth - 2 * paddingHorizontal)
+        var cardHeight: CGFloat = max(0, cardWidth / 1.586)
+        
+        if let maxAllowedCardHeight = cardMaxHeight, cardHeight > maxAllowedCardHeight {
+            cardHeight = maxAllowedCardHeight
+            cardWidth = cardHeight * 1.586
+        }
+        
+        let cardXOffset: CGFloat = (maxWidth - cardWidth) / 2
+        
+        let effectiveShowTopContent: Bool = showTopContent ?? state.showTopContent
+        let isAnyFocused: Bool = state.internalFocusedCardIdentifier != nil
+        let isTopContentEffectivelyVisible: Bool = effectiveShowTopContent && !isAnyFocused
+        
+        let topContentSpacing: CGFloat = state.topContentHeight > 0 ? spacing : 0
+        let effectiveTopContentHeight: CGFloat = isTopContentEffectivelyVisible ? (state.topContentHeight + topContentSpacing) : 0
+        let listTopOffset: CGFloat = paddingTop + effectiveTopContentHeight
+        
+        let listStep: CGFloat = max(0, unfocusedVisiblePercent == 100
+            ? cardHeight + spacing
+            : cardHeight * (CGFloat(unfocusedVisiblePercent) / 100.0))
+        
+        let totalHeight: CGFloat = max(0, listTopOffset + CGFloat(max(0, displayOrder.count - 1)) * listStep + cardHeight + paddingBottom)
+        
+        let maxStackIndex: Int = max(0, displayOrder.count - 2)
+        let maxVisibleCardsInStack: Int = 5
+        let maxVisibleStackOffsets: Int = min(maxStackIndex, maxVisibleCardsInStack - 1)
+        
+        let stackOffset: CGFloat = 14
+        let frontCardVisibleHeight: CGFloat = cardHeight * 0.25
+        
+        let detailBottomPadding: CGFloat = max(0, showStackWhileFocused
+            ? frontCardVisibleHeight + CGFloat(maxVisibleStackOffsets) * stackOffset + 16
+            : 16)
+        
+        let internalFocusedCard: CardInfo? = cardInfos.first {
+            $0.identifier == state.internalFocusedCardIdentifier
+        }
+        
+        return CardListLayout(
+            maxWidth: maxWidth,
+            maxHeight: maxHeight,
+            cardWidth: cardWidth,
+            cardHeight: cardHeight,
+            cardXOffset: cardXOffset,
+            listTopOffset: listTopOffset,
+            listStep: listStep,
+            totalHeight: totalHeight,
+            maxStackIndex: maxStackIndex,
+            maxVisibleCardsInStack: maxVisibleCardsInStack,
+            frontCardVisibleHeight: frontCardVisibleHeight,
+            stackOffset: stackOffset,
+            detailBottomPadding: detailBottomPadding,
+            isTopContentEffectivelyVisible: isTopContentEffectivelyVisible,
+            internalFocusedCard: internalFocusedCard
+        )
+    }
+
+    @ViewBuilder
+    private func emptyView(
+        cardWidth: CGFloat,
+        cardHeight: CGFloat,
+        paddingTop: CGFloat,
+        paddingHorizontal: CGFloat,
+        isTopContentEffectivelyVisible: Bool
+    ) -> some View {
+        VStack(spacing: 16) {
+            if isTopContentEffectivelyVisible {
+                topContent()
+                    .frame(width: cardWidth)
+                    .transition(.opacity)
+            }
+            ZStack {
+                RoundedRectangle(cornerRadius: 24)
+                    .strokeBorder(Color.gray, style: StrokeStyle(lineWidth: 3, dash: [30, 30]))
+                emptyContent()
+            }
+            .frame(width: cardWidth, height: cardHeight)
+            Spacer()
+        }
+        .padding(.top, paddingTop)
+        .padding(.horizontal, paddingHorizontal)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .animation(isInitialized && animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: isTopContentEffectivelyVisible)
+    }
+
+    @ViewBuilder
+    private func topContentView(
+        maxWidth: CGFloat,
+        paddingHorizontal: CGFloat,
+        paddingTop: CGFloat,
+        isTopContentEffectivelyVisible: Bool
+    ) -> some View {
+        if state.topContentHeight > 0 || isTopContentEffectivelyVisible {
+            topContent()
+                .frame(width: maxWidth - 2 * paddingHorizontal)
+                .background(
+                    GeometryReader { topGeo in
+                        Color.clear.preference(
+                            key: TopContentHeightPreferenceKey.self,
+                            value: topGeo.size.height
+                        )
+                    }
+                )
+                .offset(x: paddingHorizontal, y: isTopContentEffectivelyVisible ? paddingTop : (paddingTop - state.topContentHeight))
+                .opacity(isTopContentEffectivelyVisible ? 1.0 : 0.0)
+                .animation(isInitialized && animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: isTopContentEffectivelyVisible)
+                .zIndex(1)
+        }
+    }
+
+    @ViewBuilder
+    private func focusedDetailView(
+        focused: CardInfo,
+        maxWidth: CGFloat,
+        maxHeight: CGFloat,
+        paddingTop: CGFloat,
+        cardHeight: CGFloat,
+        detailBottomPadding: CGFloat
+    ) -> some View {
+        let detailHeight = max(0, maxHeight - detailBottomPadding)
+        VStack {
+            showCardInfo(focused)
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
+        .padding(.top, paddingTop + cardHeight * 1.05 + 24)
+        .padding(.bottom, 24)
+        .frame(width: maxWidth, height: detailHeight, alignment: .top)
+        .offset(y: state.scrollOffset)
+        .transition(.opacity)
+        .zIndex(50)
+    }
+
+    @ViewBuilder
+    private func cardItemView(
+        cardInfo: CardInfo,
+        index: Int,
+        layout: CardListLayout
+    ) -> some View {
+        let cardState = calculateCardState(
+            index: index, cardInfo: cardInfo, maxHeight: layout.maxHeight, paddingTop: paddingTop,
+            listTopOffset: layout.listTopOffset,
+            listStep: layout.listStep, maxStackIndex: layout.maxStackIndex, maxVisibleCardsInStack: layout.maxVisibleCardsInStack,
+            frontCardVisibleHeight: layout.frontCardVisibleHeight, stackOffset: layout.stackOffset
+        )
+        let isDragged = cardInfo.identifier == state.draggedCardIdentifier
+        
+        ZStack(alignment: .topTrailing) {
+            Image(uiImage: cardInfo.cardArt)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: layout.cardWidth, height: layout.cardHeight)
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+            
+            CardBadgesView(badges: cardInfo.badges)
+        }
+        .contentShape(Rectangle())
+        .shadow(color: Color.black.opacity(0.15), radius: cardState.elevation, x: 0, y: cardState.elevation / 2)
+        .scaleEffect(cardState.scale)
+        .opacity(cardState.alpha)
+        .overlay(
+            CardInteractionView(
+                allowReordering: state.internalFocusedCardIdentifier == nil && allowCardReordering,
+                onTap: {
+                    guard !isDragging && !state.dragJustEnded && state.draggedCardIdentifier == nil && Date().timeIntervalSince(lastDragEndTime) > 0.3 else { return }
+                    if let focused = layout.internalFocusedCard {
+                        if cardInfo.identifier == focused.identifier {
+                            onCardFocusedTapped(focused)
+                        } else {
+                            onCardFocusedStackTapped(focused)
+                        }
+                    } else {
+                        onCardFocused(cardInfo)
+                    }
+                },
+                onLongPressStart: {
+                    let generator = UIImpactFeedbackGenerator(style: .heavy)
+                    generator.impactOccurred()
+                    withAnimation(.snappy) {
+                        isDragging = true
+                        state.draggedCardIdentifier = cardInfo.identifier
+                    }
+                    startDragY = layout.listTopOffset + CGFloat(index) * layout.listStep
+                    state.dragCurrentY = startDragY
+                },
+                onDragChanged: { translationY in
+                    guard isDragging, state.draggedCardIdentifier == cardInfo.identifier else { return }
+                    
+                    state.dragCurrentY = startDragY + translationY
+                    let newIndexRaw = Int(round((state.dragCurrentY - layout.listTopOffset) / layout.listStep))
+                    let newIndex = min(max(newIndexRaw, 0), displayOrder.count - 1)
+
+                    if index != newIndex {
+                        withAnimation(.snappy) {
+                            let item = displayOrder.remove(at: index)
+                            displayOrder.insert(item, at: newIndex)
+                        }
+                        let generator = UIImpactFeedbackGenerator(style: .light)
+                        generator.impactOccurred()
+                    }
+                },
+                onDragEnded: {
+                    guard isDragging, state.draggedCardIdentifier == cardInfo.identifier else { return }
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                    onCardReordered(cardInfo, index)
+                    
+                    state.displayOrderIdentifiers = displayOrder.map { $0.identifier }
+                    state.dragJustEnded = true
+                    state.draggedCardIdentifier = nil
+                    
+                    withAnimation(.snappy) {
+                        isDragging = false
+                        lastDragEndTime = Date()
+                    }
+                }
+            )
+        )
+        .offset(x: layout.cardXOffset, y: cardState.y)
+        .zIndex(cardState.zIndex)
+        .transition(.identity)
+        .animation(isDragged ? .interactiveSpring() : (isInitialized && animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil), value: cardState.y)
+        .animation(isInitialized && animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.scale)
+        .animation(isInitialized && animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.elevation)
+        .animation(isInitialized && animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.alpha)
+    }
+
+    @ViewBuilder
+    private func listView(layout: CardListLayout) -> some View {
+        ZStack(alignment: .topLeading) {
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    ZStack(alignment: .topLeading) {
+                        ScrollViewObserver(state: state)
+                        
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .frame(maxWidth: .infinity)
+                            .frame(height: layout.totalHeight)
+                            .id("TopSpacer")
+                        
+                        topContentView(
+                            maxWidth: layout.maxWidth,
+                            paddingHorizontal: 16,
+                            paddingTop: paddingTop,
+                            isTopContentEffectivelyVisible: layout.isTopContentEffectivelyVisible
+                        )
+                        
+                        if let focused = layout.internalFocusedCard {
+                            focusedDetailView(
+                                focused: focused,
+                                maxWidth: layout.maxWidth,
+                                maxHeight: layout.maxHeight,
+                                paddingTop: paddingTop,
+                                cardHeight: layout.cardHeight,
+                                detailBottomPadding: layout.detailBottomPadding
+                            )
+                        }
+                        
+                        ForEach(Array(displayOrder.enumerated()), id: \.element.identifier) { index, cardInfo in
+                            cardItemView(
+                                cardInfo: cardInfo,
+                                index: index,
+                                layout: layout
+                            )
+                        }
+                    }
+                    .frame(width: layout.maxWidth, height: layout.totalHeight, alignment: .topLeading)
+                }
+                .coordinateSpace(name: "CardListSpace")
+                .scrollDisabled(state.internalFocusedCardIdentifier != nil || isDragging)
+            }
+        }
+    }
+    
     public var body: some View {
         GeometryReader { proxy in
-            let maxWidth = proxy.size.width
-            let maxHeight = proxy.size.height
-            
-            if maxWidth <= 0 || maxHeight <= 0 {
+            if proxy.size.width <= 0 || proxy.size.height <= 0 {
                 Color.clear
             } else {
-                let paddingHorizontal: CGFloat = 16
-                let paddingTop: CGFloat = 24
-                let spacing: CGFloat = 16
-            
-            let cardWidth = max(0, maxWidth - 2 * paddingHorizontal)
-            let cardHeight = max(0, cardWidth / 1.586)
-            
-            let listStep: CGFloat = max(0, unfocusedVisiblePercent == 100
-                ? cardHeight + spacing
-                : cardHeight * (CGFloat(unfocusedVisiblePercent) / 100.0))
-            
-            let totalHeight = max(0, paddingTop + CGFloat(max(0, displayOrder.count - 1)) * listStep + cardHeight + paddingTop)
-            
-            let maxStackIndex = max(0, displayOrder.count - 2)
-            let maxVisibleCardsInStack = 5
-            let maxVisibleStackOffsets = min(maxStackIndex, maxVisibleCardsInStack - 1)
-            
-            let stackOffset: CGFloat = 14
-            let frontCardVisibleHeight = cardHeight * 0.25
-            
-            let detailBottomPadding: CGFloat = max(0, showStackWhileFocused
-                ? frontCardVisibleHeight + CGFloat(maxVisibleStackOffsets) * stackOffset + 16
-                : 16)
-            
-            let internalFocusedCard = focusedCard == nil ? nil : cardInfos.first {
-                $0.identifier == state.internalFocusedCardIdentifier
-            }
-            let canAnimate = animateListTransitions && (focusedCard != nil || state.lastFocusedCardIdentifier != nil)
-            
-            if displayOrder.isEmpty && cardInfos.isEmpty {
-                VStack {
-                    Spacer().frame(height: paddingTop)
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 24)
-                            .strokeBorder(Color.gray, style: StrokeStyle(lineWidth: 3, dash: [30, 30]))
-                        emptyContent()
-                    }
-                    .frame(width: cardWidth, height: cardHeight)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, alignment: .top)
-            } else {
-                ZStack(alignment: .topLeading) {
-                    ScrollViewReader { scrollProxy in
-                        ScrollView {
-                            ZStack(alignment: .topLeading) {
-                                ScrollViewObserver(state: state)
-                                
-                                Color.clear
-                                    .contentShape(Rectangle())
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: totalHeight)
-                                    .id("TopSpacer")
-                                
-                                if let focused = internalFocusedCard {
-                                    let detailHeight = max(0, maxHeight - detailBottomPadding)
-                                    VStack {
-                                        showCardInfo(focused)
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .top)
-                                    .padding(.top, paddingTop + cardHeight * 1.025 + 24)
-                                    .padding(.bottom, 24)
-                                    .frame(width: maxWidth, height: detailHeight, alignment: .top)
-                                    .offset(y: state.scrollOffset)
-                                    .transition(.opacity)
-                                    .zIndex(50)
-                                }
-                                
-                                ForEach(displayOrder, id: \.identifier) { cardInfo in
-                                    let index = displayOrder.firstIndex(where: { $0.identifier == cardInfo.identifier }) ?? 0
-                                    let cardState = calculateCardState(
-                                        index: index, cardInfo: cardInfo, maxHeight: maxHeight, paddingTop: paddingTop,
-                                        listStep: listStep, maxStackIndex: maxStackIndex, maxVisibleCardsInStack: maxVisibleCardsInStack,
-                                        frontCardVisibleHeight: frontCardVisibleHeight, stackOffset: stackOffset
-                                    )
-                                    let isDragged = cardInfo.identifier == state.draggedCardIdentifier
-                                    
-                                    ZStack(alignment: .topTrailing) {
-                                        Image(uiImage: cardInfo.cardArt)
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fill)
-                                            .frame(width: cardWidth, height: cardHeight)
-                                            .clipShape(RoundedRectangle(cornerRadius: 24))
-                                        
-                                        CardBadgesView(badges: cardInfo.badges)
-                                    }
-                                    .contentShape(Rectangle())
-                                    .shadow(color: Color.black.opacity(0.15), radius: cardState.elevation, x: 0, y: cardState.elevation / 2)
-                                        .scaleEffect(cardState.scale)
-                                        .opacity(cardState.alpha)
-                                        .overlay(
-                                            CardInteractionView(
-                                                allowReordering: state.internalFocusedCardIdentifier == nil && allowCardReordering,
-                                                onTap: {
-                                                    guard !isDragging && !state.dragJustEnded && state.draggedCardIdentifier == nil && Date().timeIntervalSince(lastDragEndTime) > 0.3 else { return }
-                                                    if let focused = internalFocusedCard {
-                                                        if cardInfo.identifier == focused.identifier {
-                                                            onCardFocusedTapped(focused)
-                                                        } else {
-                                                            onCardFocusedStackTapped(focused)
-                                                        }
-                                                    } else {
-                                                        onCardFocused(cardInfo)
-                                                    }
-                                                },
-                                                onLongPressStart: {
-                                                    let generator = UIImpactFeedbackGenerator(style: .heavy)
-                                                    generator.impactOccurred()
-                                                    withAnimation(.snappy) {
-                                                        isDragging = true
-                                                        state.draggedCardIdentifier = cardInfo.identifier
-                                                    }
-                                                    startDragY = paddingTop + CGFloat(index) * listStep
-                                                    state.dragCurrentY = startDragY
-                                                },
-                                                onDragChanged: { translationY in
-                                                    guard isDragging, state.draggedCardIdentifier == cardInfo.identifier else { return }
-                                                    
-                                                    state.dragCurrentY = startDragY + translationY
-                                                    let newIndexRaw = Int(round((state.dragCurrentY - paddingTop) / listStep))
-                                                    let newIndex = min(max(newIndexRaw, 0), displayOrder.count - 1)
-                                
-                                                    if index != newIndex {
-                                                        withAnimation(.snappy) {
-                                                            let item = displayOrder.remove(at: index)
-                                                            displayOrder.insert(item, at: newIndex)
-                                                        }
-                                                        let generator = UIImpactFeedbackGenerator(style: .light)
-                                                        generator.impactOccurred()
-                                                    }
-                                                },
-                                                onDragEnded: {
-                                                    guard isDragging, state.draggedCardIdentifier == cardInfo.identifier else { return }
-                                                    let generator = UIImpactFeedbackGenerator(style: .medium)
-                                                    generator.impactOccurred()
-                                                    onCardReordered(cardInfo, index)
-                                                    
-                                                    state.displayOrderIdentifiers = displayOrder.map { $0.identifier }
-                                                    state.dragJustEnded = true
-                                                    state.draggedCardIdentifier = nil
-                                                    
-                                                    withAnimation(.snappy) {
-                                                        isDragging = false
-                                                        lastDragEndTime = Date()
-                                                    }
-                                                }
-                                            )
-                                        )
-                                        .offset(x: paddingHorizontal, y: cardState.y)
-                                        .zIndex(cardState.zIndex)
-                                        .transition(.identity)
-                                        .animation(isDragged ? .interactiveSpring() : (canAnimate ? .spring(response: 0.4, dampingFraction: 0.8) : nil), value: cardState.y)
-                                        .animation(canAnimate ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.scale)
-                                        .animation(canAnimate ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.elevation)
-                                        .animation(canAnimate ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.alpha)
-                                }
-                            }
-                            .frame(width: maxWidth, height: totalHeight, alignment: .topLeading)
-                        }
-                        .coordinateSpace(name: "CardListSpace")
-                        .scrollDisabled((focusedCard != nil && state.internalFocusedCardIdentifier != nil) || isDragging)
-                    }
+                let layout = computeLayout(maxWidth: proxy.size.width, maxHeight: proxy.size.height)
+                if displayOrder.isEmpty && cardInfos.isEmpty {
+                    emptyView(
+                        cardWidth: layout.cardWidth,
+                        cardHeight: layout.cardHeight,
+                        paddingTop: paddingTop,
+                        paddingHorizontal: 16,
+                        isTopContentEffectivelyVisible: layout.isTopContentEffectivelyVisible
+                    )
+                } else {
+                    listView(layout: layout)
                 }
             }
+        }
+        .onPreferenceChange(TopContentHeightPreferenceKey.self) { newHeight in
+            if newHeight > 0 && abs(state.topContentHeight - newHeight) > 0.5 {
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    state.topContentHeight = newHeight
+                }
             }
         }
         .onAppear {
@@ -530,10 +726,14 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
                         state.internalFocusedCardIdentifier = focusedCard?.identifier
                         state.lastFocusedCardIdentifier = focusedCard?.identifier
                     }
+                    isInitialized = true
                 }
             } else {
                 state.internalFocusedCardIdentifier = focusedCard?.identifier
                 state.lastFocusedCardIdentifier = focusedCard?.identifier
+                DispatchQueue.main.async {
+                    isInitialized = true
+                }
             }
         }
         .onChange(of: cardInfos.map { $0.identifier }) { _, _ in
@@ -571,11 +771,11 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
         var alpha: Double
     }
     
-    private func calculateCardState(index: Int, cardInfo: CardInfo, maxHeight: CGFloat, paddingTop: CGFloat, listStep: CGFloat, maxStackIndex: Int, maxVisibleCardsInStack: Int, frontCardVisibleHeight: CGFloat, stackOffset: CGFloat) -> CardState {
+    private func calculateCardState(index: Int, cardInfo: CardInfo, maxHeight: CGFloat, paddingTop: CGFloat, listTopOffset: CGFloat, listStep: CGFloat, maxStackIndex: Int, maxVisibleCardsInStack: Int, frontCardVisibleHeight: CGFloat, stackOffset: CGFloat) -> CardState {
         let isFocused = cardInfo.identifier == state.internalFocusedCardIdentifier
         let isDragged = cardInfo.identifier == state.draggedCardIdentifier
-        let isAnyFocused = focusedCard != nil && state.internalFocusedCardIdentifier != nil
-        let focusedIndex = focusedCard == nil ? 0 : (displayOrder.firstIndex(where: { $0.identifier == state.internalFocusedCardIdentifier }) ?? 0)
+        let isAnyFocused = state.internalFocusedCardIdentifier != nil
+        let focusedIndex = displayOrder.firstIndex(where: { $0.identifier == state.internalFocusedCardIdentifier }) ?? 0
         
         if isAnyFocused {
             if isFocused {
@@ -590,8 +790,51 @@ public struct VerticalCardList<EmptyContent: View, SelectedContent: View>: View 
                 return CardState(y: targetY, scale: targetScale, elevation: 12, zIndex: Double(stackIndex), alpha: (!showStackWhileFocused || distanceToFront >= maxVisibleCardsInStack) ? 0.0 : 1.0)
             }
         } else {
-            let targetY = isDragged ? state.dragCurrentY : (paddingTop + CGFloat(index) * listStep)
+            let targetY = isDragged ? state.dragCurrentY : (listTopOffset + CGFloat(index) * listStep)
             return CardState(y: targetY, scale: isDragged ? 1.05 : 1.0, elevation: isDragged ? 24 : 12, zIndex: isDragged ? 100 : Double(index), alpha: 1.0)
         }
+    }
+}
+
+extension VerticalCardList where TopContent == EmptyView {
+    public init(
+        cardInfos: [CardInfo],
+        focusedCard: CardInfo?,
+        unfocusedVisiblePercent: Int = 25,
+        allowCardReordering: Bool = true,
+        showStackWhileFocused: Bool = true,
+        cardMaxHeight: CGFloat? = nil,
+        paddingTop: CGFloat = 16,
+        paddingBottom: CGFloat = 16,
+        state: VerticalCardListState = VerticalCardListState(),
+        showTopContent: Bool? = nil,
+        animateListTransitions: Bool = true,
+        @ViewBuilder showCardInfo: @escaping (CardInfo) -> SelectedContent = { _ in EmptyView() },
+        @ViewBuilder emptyContent: @escaping () -> EmptyContent = { EmptyView() },
+        onCardReordered: @escaping (CardInfo, Int) -> Void = { _, _ in },
+        onCardFocused: @escaping (CardInfo) -> Void = { _ in },
+        onCardFocusedTapped: @escaping (CardInfo) -> Void = { _ in },
+        onCardFocusedStackTapped: @escaping (CardInfo) -> Void = { _ in }
+    ) {
+        self.init(
+            cardInfos: cardInfos,
+            focusedCard: focusedCard,
+            unfocusedVisiblePercent: unfocusedVisiblePercent,
+            allowCardReordering: allowCardReordering,
+            showStackWhileFocused: showStackWhileFocused,
+            cardMaxHeight: cardMaxHeight,
+            paddingTop: paddingTop,
+            paddingBottom: paddingBottom,
+            state: state,
+            showTopContent: showTopContent,
+            animateListTransitions: animateListTransitions,
+            topContent: { EmptyView() },
+            showCardInfo: showCardInfo,
+            emptyContent: emptyContent,
+            onCardReordered: onCardReordered,
+            onCardFocused: onCardFocused,
+            onCardFocusedTapped: onCardFocusedTapped,
+            onCardFocusedStackTapped: onCardFocusedStackTapped
+        )
     }
 }
