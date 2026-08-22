@@ -32,6 +32,9 @@ public class VerticalCardListState {
     /// Whether the top content view should be shown when no card is focused.
     public var showTopContent: Bool = true
     
+    /// Whether to show a dashed placeholder card when the card list is empty.
+    public var showPlaceholderWhenEmpty: Bool = true
+    
     /// The measured height of the top content view.
     public var topContentHeight: CGFloat = 0
     
@@ -273,6 +276,9 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
     /// Whether the top content should be shown when no card is focused. When nil, uses state.showTopContent.
     public var showTopContent: Bool?
     
+    /// Whether to show a dashed placeholder card when the card list is empty. When nil, uses state.showPlaceholderWhenEmpty.
+    public var showPlaceholderWhenEmpty: Bool?
+    
     /// Whether to animate transitions when entering or navigating between list states.
     public var animateListTransitions: Bool
     
@@ -317,6 +323,7 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
     ///   - paddingBottom: The bottom padding for the card list.
     ///   - state: The list state tracker object.
     ///   - showTopContent: Whether the top content should be shown when no card is focused.
+    ///   - showPlaceholderWhenEmpty: Whether to show a dashed placeholder card when the card list is empty.
     ///   - animateListTransitions: Whether to animate view list transitions.
     ///   - topContent: Closure rendering slot at the top of the list when no card is focused.
     ///   - showCardInfo: Closure rendering detailed info view for a card.
@@ -336,6 +343,7 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         paddingBottom: CGFloat = 16,
         state: VerticalCardListState = VerticalCardListState(),
         showTopContent: Bool? = nil,
+        showPlaceholderWhenEmpty: Bool? = nil,
         animateListTransitions: Bool = true,
         @ViewBuilder topContent: @escaping () -> TopContent = { EmptyView() },
         @ViewBuilder showCardInfo: @escaping (CardInfo) -> SelectedContent = { _ in EmptyView() },
@@ -355,6 +363,7 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         self.paddingBottom = paddingBottom
         self.state = state
         self.showTopContent = showTopContent
+        self.showPlaceholderWhenEmpty = showPlaceholderWhenEmpty
         self.animateListTransitions = animateListTransitions
         self.topContent = topContent
         self.showCardInfo = showCardInfo
@@ -485,12 +494,14 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                     .frame(width: cardWidth)
                     .transition(.opacity)
             }
-            ZStack {
-                RoundedRectangle(cornerRadius: 24)
-                    .strokeBorder(Color.gray, style: StrokeStyle(lineWidth: 3, dash: [30, 30]))
-                emptyContent()
+            if showPlaceholderWhenEmpty ?? state.showPlaceholderWhenEmpty {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 24)
+                        .strokeBorder(Color.gray, style: StrokeStyle(lineWidth: 3, dash: [30, 30]))
+                    emptyContent()
+                }
+                .frame(width: cardWidth, height: cardHeight)
             }
-            .frame(width: cardWidth, height: cardHeight)
             Spacer()
         }
         .padding(.top, paddingTop)
@@ -808,6 +819,7 @@ extension VerticalCardList where TopContent == EmptyView {
         paddingBottom: CGFloat = 16,
         state: VerticalCardListState = VerticalCardListState(),
         showTopContent: Bool? = nil,
+        showPlaceholderWhenEmpty: Bool? = nil,
         animateListTransitions: Bool = true,
         @ViewBuilder showCardInfo: @escaping (CardInfo) -> SelectedContent = { _ in EmptyView() },
         @ViewBuilder emptyContent: @escaping () -> EmptyContent = { EmptyView() },
@@ -827,6 +839,7 @@ extension VerticalCardList where TopContent == EmptyView {
             paddingBottom: paddingBottom,
             state: state,
             showTopContent: showTopContent,
+            showPlaceholderWhenEmpty: showPlaceholderWhenEmpty,
             animateListTransitions: animateListTransitions,
             topContent: { EmptyView() },
             showCardInfo: showCardInfo,

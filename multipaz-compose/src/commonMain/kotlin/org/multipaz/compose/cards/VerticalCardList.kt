@@ -122,6 +122,11 @@ class VerticalCardListState(
     var showTopContent by mutableStateOf(true)
 
     /**
+     * Whether to show a dashed placeholder card when the card list is empty.
+     */
+    var showPlaceholderWhenEmpty by mutableStateOf(true)
+
+    /**
      * The measured height of the top content in pixels.
      */
     var topContentHeightPx by mutableFloatStateOf(0f)
@@ -187,6 +192,8 @@ fun rememberVerticalCardListState(
  * @param state The state object to be used to control or observe the list's state.
  * @param showTopContent Whether the [topContent] composable should be shown when no card is focused.
  * Defaults to true.
+ * @param showPlaceholderWhenEmpty Whether to show a dashed placeholder card when the card list is empty.
+ * Defaults to true.
  * @param topContent A composable slot displayed at the top of the list when no card is focused.
  * When a card is focused or [showTopContent] becomes false, this content animates away.
  * @param showCardInfo A composable slot that renders the detailed content below the focused card.
@@ -214,6 +221,7 @@ fun VerticalCardList(
     paddingBottom: Dp = 16.dp,
     state: VerticalCardListState = rememberVerticalCardListState(),
     showTopContent: Boolean = state.showTopContent,
+    showPlaceholderWhenEmpty: Boolean = state.showPlaceholderWhenEmpty,
     topContent: @Composable () -> Unit = {},
     showCardInfo: @Composable (CardInfo) -> Unit = {},
     emptyContent: @Composable () -> Unit = { },
@@ -312,23 +320,25 @@ fun VerticalCardList(
                     topContent()
                 }
 
-                Box(
-                    modifier = Modifier
-                        .width(with(density) { cardWidthPx.toDp() })
-                        .height(with(density) { cardHeightPx.toDp() })
-                        .drawBehind {
-                            drawRoundRect(
-                                color = Color.Gray,
-                                style = Stroke(
-                                    width = 3.dp.toPx(),
-                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 30f), 0f)
-                                ),
-                                cornerRadius = CornerRadius(24.dp.toPx(), 24.dp.toPx())
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    emptyContent()
+                if (showPlaceholderWhenEmpty) {
+                    Box(
+                        modifier = Modifier
+                            .width(with(density) { cardWidthPx.toDp() })
+                            .height(with(density) { cardHeightPx.toDp() })
+                            .drawBehind {
+                                drawRoundRect(
+                                    color = Color.Gray,
+                                    style = Stroke(
+                                        width = 3.dp.toPx(),
+                                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 30f), 0f)
+                                    ),
+                                    cornerRadius = CornerRadius(24.dp.toPx(), 24.dp.toPx())
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        emptyContent()
+                    }
                 }
             }
         }

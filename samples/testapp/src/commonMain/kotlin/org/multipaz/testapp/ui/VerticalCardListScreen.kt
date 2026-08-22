@@ -131,16 +131,29 @@ fun VerticalCardListScreen(
                 actions = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(end = 8.dp)
+                        modifier = Modifier.padding(end = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = "Top Composable",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Checkbox(
-                            checked = state.showTopContent,
-                            onCheckedChange = { state.showTopContent = it }
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Top Composable",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Checkbox(
+                                checked = state.showTopContent,
+                                onCheckedChange = { state.showTopContent = it }
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Placeholder",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Checkbox(
+                                checked = state.showPlaceholderWhenEmpty,
+                                onCheckedChange = { state.showPlaceholderWhenEmpty = it }
+                            )
+                        }
                     }
                 }
             )
