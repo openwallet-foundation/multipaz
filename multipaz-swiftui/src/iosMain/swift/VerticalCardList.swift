@@ -373,13 +373,11 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         self.onCardFocusedTapped = onCardFocusedTapped
         self.onCardFocusedStackTapped = onCardFocusedStackTapped
         
-        let initialDisplayOrder = state.displayOrderIdentifiers.isEmpty
-            ? cardInfos
-            : state.displayOrderIdentifiers.compactMap { id in cardInfos.first { $0.identifier == id } }
-        self._displayOrder = State(initialValue: initialDisplayOrder)
         if state.displayOrderIdentifiers.isEmpty && !cardInfos.isEmpty {
             state.displayOrderIdentifiers = cardInfos.map { $0.identifier }
         }
+        
+        self._displayOrder = State(initialValue: [])
         
         if animateListTransitions {
             state.internalFocusedCardIdentifier = state.lastFocusedCardIdentifier
@@ -389,15 +387,20 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         }
     }
     
-    private func syncDisplayOrder() {
-        let currentCardIdentifiers = cardInfos.map { $0.identifier }
-        if state.draggedCardIdentifier == nil && state.displayOrderIdentifiers != currentCardIdentifiers {
-            state.displayOrderIdentifiers = currentCardIdentifiers
+    private var effectiveDisplayOrder: [CardInfo] {
+        if state.draggedCardIdentifier != nil {
+            return displayOrder
         }
-        
-        displayOrder = state.displayOrderIdentifiers.compactMap { id in
-            cardInfos.first { $0.identifier == id }
+        let orderIds = state.displayOrderIdentifiers.isEmpty ? cardInfos.map { $0.identifier } : state.displayOrderIdentifiers
+        var remainingCards = cardInfos
+        var result: [CardInfo] = []
+        for id in orderIds {
+            if let idx = remainingCards.firstIndex(where: { $0.identifier == id }) {
+                result.append(remainingCards.remove(at: idx))
+            }
         }
+        result.append(contentsOf: remainingCards)
+        return result
     }
     
     private struct CardListLayout {
@@ -416,6 +419,7 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         let detailBottomPadding: CGFloat
         let isTopContentEffectivelyVisible: Bool
         let internalFocusedCard: CardInfo?
+        let canAnimate: Bool
     }
     
     private func computeLayout(maxWidth: CGFloat, maxHeight: CGFloat) -> CardListLayout {
@@ -433,7 +437,7 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         let cardXOffset: CGFloat = (maxWidth - cardWidth) / 2
         
         let effectiveShowTopContent: Bool = showTopContent ?? state.showTopContent
-        let isAnyFocused: Bool = state.internalFocusedCardIdentifier != nil
+        let isAnyFocused: Bool = focusedCard != nil && state.internalFocusedCardIdentifier != nil
         let isTopContentEffectivelyVisible: Bool = effectiveShowTopContent && !isAnyFocused
         
         let topContentSpacing: CGFloat = state.topContentHeight > 0 ? spacing : 0
@@ -444,9 +448,10 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
             ? cardHeight + spacing
             : cardHeight * (CGFloat(unfocusedVisiblePercent) / 100.0))
         
-        let totalHeight: CGFloat = max(0, listTopOffset + CGFloat(max(0, displayOrder.count - 1)) * listStep + cardHeight + paddingBottom)
+        let currentDisplayOrder = effectiveDisplayOrder
+        let totalHeight: CGFloat = max(0, listTopOffset + CGFloat(max(0, currentDisplayOrder.count - 1)) * listStep + cardHeight + paddingBottom)
         
-        let maxStackIndex: Int = max(0, displayOrder.count - 2)
+        let maxStackIndex: Int = max(0, currentDisplayOrder.count - 2)
         let maxVisibleCardsInStack: Int = 5
         let maxVisibleStackOffsets: Int = min(maxStackIndex, maxVisibleCardsInStack - 1)
         
@@ -457,9 +462,11 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
             ? frontCardVisibleHeight + CGFloat(maxVisibleStackOffsets) * stackOffset + 16
             : 16)
         
-        let internalFocusedCard: CardInfo? = cardInfos.first {
+        let internalFocusedCard: CardInfo? = (focusedCard == nil) ? nil : cardInfos.first {
             $0.identifier == state.internalFocusedCardIdentifier
         }
+        
+        let canAnimate: Bool = animateListTransitions && (focusedCard != nil || state.lastFocusedCardIdentifier != nil)
         
         return CardListLayout(
             maxWidth: maxWidth,
@@ -476,7 +483,8 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
             stackOffset: stackOffset,
             detailBottomPadding: detailBottomPadding,
             isTopContentEffectivelyVisible: isTopContentEffectivelyVisible,
-            internalFocusedCard: internalFocusedCard
+            internalFocusedCard: internalFocusedCard,
+            canAnimate: canAnimate
         )
     }
 
@@ -486,7 +494,8 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         cardHeight: CGFloat,
         paddingTop: CGFloat,
         paddingHorizontal: CGFloat,
-        isTopContentEffectivelyVisible: Bool
+        isTopContentEffectivelyVisible: Bool,
+        canAnimate: Bool
     ) -> some View {
         VStack(spacing: 16) {
             if isTopContentEffectivelyVisible {
@@ -507,7 +516,7 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         .padding(.top, paddingTop)
         .padding(.horizontal, paddingHorizontal)
         .frame(maxWidth: .infinity, alignment: .top)
-        .animation(isInitialized && animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: isTopContentEffectivelyVisible)
+        .animation(canAnimate ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: isTopContentEffectivelyVisible)
     }
 
     @ViewBuilder
@@ -515,7 +524,8 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         maxWidth: CGFloat,
         paddingHorizontal: CGFloat,
         paddingTop: CGFloat,
-        isTopContentEffectivelyVisible: Bool
+        isTopContentEffectivelyVisible: Bool,
+        canAnimate: Bool
     ) -> some View {
         if state.topContentHeight > 0 || isTopContentEffectivelyVisible {
             topContent()
@@ -530,7 +540,7 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                 )
                 .offset(x: paddingHorizontal, y: isTopContentEffectivelyVisible ? paddingTop : (paddingTop - state.topContentHeight))
                 .opacity(isTopContentEffectivelyVisible ? 1.0 : 0.0)
-                .animation(isInitialized && animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: isTopContentEffectivelyVisible)
+                .animation(canAnimate ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: isTopContentEffectivelyVisible)
                 .zIndex(1)
         }
     }
@@ -549,7 +559,7 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
             showCardInfo(focused)
         }
         .frame(maxWidth: .infinity, alignment: .top)
-        .padding(.top, paddingTop + cardHeight * 1.05 + 24)
+        .padding(.top, paddingTop + cardHeight * 1.025 + 24)
         .padding(.bottom, 24)
         .frame(width: maxWidth, height: detailHeight, alignment: .top)
         .offset(y: state.scrollOffset)
@@ -602,6 +612,7 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                 onLongPressStart: {
                     let generator = UIImpactFeedbackGenerator(style: .heavy)
                     generator.impactOccurred()
+                    displayOrder = effectiveDisplayOrder
                     withAnimation(.snappy) {
                         isDragging = true
                         state.draggedCardIdentifier = cardInfo.identifier
@@ -645,10 +656,10 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         .offset(x: layout.cardXOffset, y: cardState.y)
         .zIndex(cardState.zIndex)
         .transition(.identity)
-        .animation(isDragged ? .interactiveSpring() : (isInitialized && animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil), value: cardState.y)
-        .animation(isInitialized && animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.scale)
-        .animation(isInitialized && animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.elevation)
-        .animation(isInitialized && animateListTransitions ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.alpha)
+        .animation(isDragged ? .interactiveSpring() : (layout.canAnimate ? .spring(response: 0.4, dampingFraction: 0.8) : nil), value: cardState.y)
+        .animation(layout.canAnimate ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.scale)
+        .animation(layout.canAnimate ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.elevation)
+        .animation(layout.canAnimate ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: cardState.alpha)
     }
 
     @ViewBuilder
@@ -669,7 +680,8 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                             maxWidth: layout.maxWidth,
                             paddingHorizontal: 16,
                             paddingTop: paddingTop,
-                            isTopContentEffectivelyVisible: layout.isTopContentEffectivelyVisible
+                            isTopContentEffectivelyVisible: layout.isTopContentEffectivelyVisible,
+                            canAnimate: layout.canAnimate
                         )
                         
                         if let focused = layout.internalFocusedCard {
@@ -683,7 +695,7 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                             )
                         }
                         
-                        ForEach(Array(displayOrder.enumerated()), id: \.element.identifier) { index, cardInfo in
+                        ForEach(Array(effectiveDisplayOrder.enumerated()), id: \.element.identifier) { index, cardInfo in
                             cardItemView(
                                 cardInfo: cardInfo,
                                 index: index,
@@ -694,7 +706,7 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                     .frame(width: layout.maxWidth, height: layout.totalHeight, alignment: .topLeading)
                 }
                 .coordinateSpace(name: "CardListSpace")
-                .scrollDisabled(state.internalFocusedCardIdentifier != nil || isDragging)
+                .scrollDisabled((focusedCard != nil && state.internalFocusedCardIdentifier != nil) || isDragging)
             }
         }
     }
@@ -705,13 +717,14 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                 Color.clear
             } else {
                 let layout = computeLayout(maxWidth: proxy.size.width, maxHeight: proxy.size.height)
-                if displayOrder.isEmpty && cardInfos.isEmpty {
+                if effectiveDisplayOrder.isEmpty && cardInfos.isEmpty {
                     emptyView(
                         cardWidth: layout.cardWidth,
                         cardHeight: layout.cardHeight,
                         paddingTop: paddingTop,
                         paddingHorizontal: 16,
-                        isTopContentEffectivelyVisible: layout.isTopContentEffectivelyVisible
+                        isTopContentEffectivelyVisible: layout.isTopContentEffectivelyVisible,
+                        canAnimate: layout.canAnimate
                     )
                 } else {
                     listView(layout: layout)
@@ -728,8 +741,6 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
             }
         }
         .onAppear {
-            syncDisplayOrder()
-            
             if animateListTransitions && state.lastFocusedCardIdentifier != focusedCard?.identifier {
                 state.internalFocusedCardIdentifier = state.lastFocusedCardIdentifier
                 DispatchQueue.main.async {
@@ -746,11 +757,6 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                     isInitialized = true
                 }
             }
-        }
-        .onChange(of: cardInfos.map { $0.identifier }) { _, _ in
-             if !isDragging {
-                 syncDisplayOrder()
-             }
         }
         .onChange(of: focusedCard?.identifier) { _, newId in
             if animateListTransitions && state.lastFocusedCardIdentifier != newId {
@@ -785,8 +791,8 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
     private func calculateCardState(index: Int, cardInfo: CardInfo, maxHeight: CGFloat, paddingTop: CGFloat, listTopOffset: CGFloat, listStep: CGFloat, maxStackIndex: Int, maxVisibleCardsInStack: Int, frontCardVisibleHeight: CGFloat, stackOffset: CGFloat) -> CardState {
         let isFocused = cardInfo.identifier == state.internalFocusedCardIdentifier
         let isDragged = cardInfo.identifier == state.draggedCardIdentifier
-        let isAnyFocused = state.internalFocusedCardIdentifier != nil
-        let focusedIndex = displayOrder.firstIndex(where: { $0.identifier == state.internalFocusedCardIdentifier }) ?? 0
+        let isAnyFocused = focusedCard != nil && state.internalFocusedCardIdentifier != nil
+        let focusedIndex = focusedCard == nil ? 0 : (effectiveDisplayOrder.firstIndex(where: { $0.identifier == state.internalFocusedCardIdentifier }) ?? 0)
         
         if isAnyFocused {
             if isFocused {
