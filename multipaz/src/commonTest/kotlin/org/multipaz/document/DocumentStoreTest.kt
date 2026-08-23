@@ -200,6 +200,46 @@ class DocumentStoreTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
+    fun testIosTags() = runTest {
+        val documentStore = buildDocumentStore(
+            storage = storage,
+            secureAreaRepository = secureAreaRepository
+        ) {
+            addCredentialImplementation(TestCredential.CREDENTIAL_TYPE) { document ->
+                TestCredential(document)
+            }
+        }
+
+        // Test DocumentStore iOS mdoc doctypes tag
+        assertNull(documentStore.getIosMdocDoctypes())
+        documentStore.setIosMdocDoctypes(listOf("org.iso.18013.5.1.mDL", "eu.europa.ec.eudi.pid.1"))
+        assertEquals(
+            listOf("org.iso.18013.5.1.mDL", "eu.europa.ec.eudi.pid.1"),
+            documentStore.getIosMdocDoctypes()
+        )
+
+        // Check persistence across reload
+        runCurrent()
+        val documentStore2 = buildDocumentStore(
+            storage = storage,
+            secureAreaRepository = secureAreaRepository
+        ) {
+            addCredentialImplementation(TestCredential.CREDENTIAL_TYPE) { document ->
+                TestCredential(document)
+            }
+        }
+        assertEquals(
+            listOf("org.iso.18013.5.1.mDL", "eu.europa.ec.eudi.pid.1"),
+            documentStore2.getIosMdocDoctypes()
+        )
+
+        // Test clearing tags
+        documentStore2.setIosMdocDoctypes(null)
+        assertNull(documentStore2.getIosMdocDoctypes())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
     fun testAppData() = runTest {
         val documentStore = buildDocumentStore(
             storage = storage,

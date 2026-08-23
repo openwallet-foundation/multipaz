@@ -7,6 +7,7 @@
 		<string>applinks:apps.multipaz.org</string>
 		<string>webcredentials:apps.multipaz.org</string>
 	</array>
+	<!-- Keep in sync with samples/testapp/src/commonMain/kotlin/org/multipaz/testapp/App.kt -->
 	<key>com.apple.developer.identity-document-services.document-provider.mobile-document-types</key>
 	<array>
 		<string>eu.europa.ec.av.1</string>

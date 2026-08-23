@@ -90,6 +90,7 @@ import org.multipaz.document.DocumentBadge
 import org.multipaz.document.DocumentBadgeColor
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
+import org.multipaz.document.setIosMdocDoctypes
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.addKnownTypes
 import org.multipaz.eventlogger.SimpleEventLogger
@@ -818,6 +819,15 @@ class App private constructor (val promptModel: PromptModel) {
     private suspend fun digitalCredentialsInit() {
         digitalCredentials = DigitalCredentials.getDefault()
         if (digitalCredentials.registerAvailable) {
+            // Keep in sync with samples/testapp/iosApp/TestApp/TestApp.entitlements
+            documentStore.setIosMdocDoctypes(
+                listOf(
+                    "eu.europa.ec.av.1",
+                    "eu.europa.ec.eudi.pid.1",
+                    "org.iso.18013.5.1.mDL",
+                    "org.iso.23220.photoid.1",
+                )
+            )
             try {
                 digitalCredentials.register(
                     documentStore = documentStore,
@@ -885,7 +895,8 @@ class App private constructor (val promptModel: PromptModel) {
             digitalCredentials.register(
                 documentStore = documentStore,
                 documentTypeRepository = documentTypeRepository,
-                selectedProtocols = settingsModel.dcApiProtocols.value
+                selectedProtocols = settingsModel.dcApiProtocols.value,
+                forceRegistration = true
             )
         } catch (e: Exception) {
             if (e is CancellationException) throw e

@@ -157,6 +157,18 @@ class Tags(
      */
     fun getByteString(key: String): ByteString? = getRawDataItem(key)?.asBstr?.let { ByteString(it) }
 
+    /**
+     * Convenience function to get a list of strings.
+     *
+     * @param key the name of the key to get.
+     * @returns the list of strings or `null` if not found.
+     */
+    fun getStringList(key: String): List<String>? {
+        val item = getRawDataItem(key) ?: return null
+        val array = try { item.asArray } catch (_: Exception) { return null }
+        return array.map { it.asTstr }
+    }
+
 
     // --- EDITING ---
 
@@ -286,5 +298,13 @@ class Tags(
          * @param value the value to set.
          */
         fun setByteString(key: String, value: ByteString) = set(key, value)
+
+        /**
+         * Convenience function to set a list of strings.
+         *
+         * @param key the name of the key to set.
+         * @param value the list of strings to set.
+         */
+        fun setStringList(key: String, value: List<String>) = setList(key, value)
     }
 }

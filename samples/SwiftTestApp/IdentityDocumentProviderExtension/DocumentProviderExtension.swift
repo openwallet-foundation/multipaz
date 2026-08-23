@@ -103,7 +103,8 @@ struct DocumentProviderExtension: IdentityDocumentProvider {
                 try await dcApi.register(
                     documentStore: source.documentStore,
                     documentTypeRepository: source.documentTypeRepository,
-                    selectedProtocols: dcApi.supportedProtocols
+                    selectedProtocols: dcApi.supportedProtocols,
+                    forceRegistration: true
                 )
             } catch {
                 print("Error registering with DigitalCredentials API: \(error)")

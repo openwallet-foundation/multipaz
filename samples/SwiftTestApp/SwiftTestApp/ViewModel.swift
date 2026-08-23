@@ -225,11 +225,19 @@ class ViewModel {
         
         let dcApi = try! await DigitalCredentialsCompanion.shared.getDefault()
         if dcApi.registerAvailable {
+            // Keep in sync with samples/SwiftTestApp/SwiftTestApp/SwiftTestApp.entitlements
+            try! await documentStore.setIosMdocDoctypes(value: [
+                "eu.europa.ec.av.1",
+                "eu.europa.ec.eudi.pid.1",
+                "org.iso.18013.5.1.mDL",
+                "org.iso.23220.photoid.1",
+            ])
             do {
                 try await dcApi.register(
                     documentStore: documentStore,
                     documentTypeRepository: documentTypeRepository,
-                    selectedProtocols: dcApi.supportedProtocols
+                    selectedProtocols: dcApi.supportedProtocols,
+                    forceRegistration: false
                 )
             } catch {
                 print("Error registering with DigitalCredentials API: \(error)")
@@ -240,7 +248,8 @@ class ViewModel {
                         try await dcApi.register(
                             documentStore: documentStore,
                             documentTypeRepository: documentTypeRepository,
-                            selectedProtocols: dcApi.supportedProtocols
+                            selectedProtocols: dcApi.supportedProtocols,
+                            forceRegistration: false
                         )
                     } catch {
                         print("Error updating DC registration: \(error)")

@@ -236,7 +236,6 @@ class DocumentStore private constructor(
      */
     suspend fun deleteDocument(identifier: String) {
         lookupDocument(identifier)?.let { document ->
-            emitOnDocumentDeleted(identifier)
             lock.withLock {
                 document.deleteDocument()
                 documentCache.remove(identifier)
@@ -249,10 +248,11 @@ class DocumentStore private constructor(
                 )
             }
             document.metadata?.cleanup(secureAreaRepository, storage)
+            emitOnDocumentDeleted(identifier)
         }
     }
 
-    private val _eventFlow = MutableSharedFlow<DocumentEvent>()
+    private val _eventFlow = MutableSharedFlow<DocumentEvent>(extraBufferCapacity = 64)
 
     /**
      * A [SharedFlow] which can be used to listen for when credentials are added and removed
