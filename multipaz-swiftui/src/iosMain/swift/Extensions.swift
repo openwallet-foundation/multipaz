@@ -41,4 +41,7 @@ extension CredentialMetadata: @unchecked Sendable {}
 extension ProvisioningMetadata: @unchecked Sendable {}
 extension DocumentBadge: @unchecked Sendable {}
 extension ConsentData: @unchecked Sendable {}
+extension CreateKeySettings: @unchecked Sendable {}
+extension SelectedSecureArea: @unchecked Sendable {}
+extension ByteString: @unchecked Sendable {}
 

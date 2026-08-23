@@ -189,7 +189,7 @@ class ViewModel {
             )
         
         self.provisioningModel = ProvisioningModel(
-            documentProvisioningHandler: DocumentProvisioningHandler(
+            documentProvisioningHandler: DocumentProvisioningHandler.companion.create(
                 secureArea: secureArea,
                 documentStore: documentStore,
                 metadataHandler: nil,
@@ -208,7 +208,13 @@ class ViewModel {
                     sdJwtNoUserAuthDomain: "sdjwt_no_user_auth",
                     sdJwtKeylessDomain: "sdjwt_keyless"
                 ),
-                selectSecureArea: nil
+                selectSecureAreaFn: { appData, suggestedCreateKeySettings in
+                    print("in selectSecureAreaFn: appData=\(String(describing: appData)), algorithm=\(suggestedCreateKeySettings.algorithm)")
+                    return SelectedSecureArea(
+                        secureArea: self.secureArea,
+                        createKeySettings: suggestedCreateKeySettings
+                    )
+                }
             ),
             httpClient: HttpClient(engineFactory: Darwin()) { config in
                 config.followRedirects = false

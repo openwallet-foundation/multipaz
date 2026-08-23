@@ -43,6 +43,7 @@
 		7B04AE982FCDDD1700DAEA40 /* DocumentExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE5F2FCDDD1700DAEA40 /* DocumentExt.swift */; };
 		7B04AE992FCDDD1700DAEA40 /* FloatingItemCenteredText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE632FCDDD1700DAEA40 /* FloatingItemCenteredText.swift */; };
 		7B04AE9A2FCDDD1700DAEA40 /* FloatingItemHeadingAndDate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE662FCDDD1700DAEA40 /* FloatingItemHeadingAndDate.swift */; };
+		7B04AEBA2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AEBC2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift */; };
 		7B04AE9B2FCDDD1700DAEA40 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE622FCDDD1700DAEA40 /* Extensions.swift */; };
 		7B04AE9C2FCDDD1700DAEA40 /* CardBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE592FCDDD1700DAEA40 /* CardBadge.swift */; };
 		7B04AE9D2FCDDD1700DAEA40 /* RequestAuthorizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE732FCDDD1700DAEA40 /* RequestAuthorizationView.swift */; };
@@ -74,6 +75,7 @@
 		7B04AEB72FCDDD1700DAEA40 /* TagsExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE762FCDDD1700DAEA40 /* TagsExt.swift */; };
 		7B04AEB82FCDDD1700DAEA40 /* DocumentExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE5F2FCDDD1700DAEA40 /* DocumentExt.swift */; };
 		7B04AEB92FCDDD1700DAEA40 /* FloatingItemCenteredText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE632FCDDD1700DAEA40 /* FloatingItemCenteredText.swift */; };
+		7B04AEBB2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AEBC2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -137,6 +139,7 @@
 		7B04AE762FCDDD1700DAEA40 /* TagsExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsExt.swift; sourceTree = "<group>"; };
 		7B04AE772FCDDD1700DAEA40 /* VerticalCardList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerticalCardList.swift; sourceTree = "<group>"; };
 		7B04AE782FCDDD1700DAEA40 /* X509CertViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = X509CertViewer.swift; sourceTree = "<group>"; };
+		7B04AEBC2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentProvisioningHandlerExt.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -257,6 +260,7 @@
 				7B04AE762FCDDD1700DAEA40 /* TagsExt.swift */,
 				7B04AE772FCDDD1700DAEA40 /* VerticalCardList.swift */,
 				7B04AE782FCDDD1700DAEA40 /* X509CertViewer.swift */,
+				7B04AEBC2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift */,
 			);
 			name = swift;
 			path = ../../multipaz-swiftui/src/iosMain/swift;
@@ -450,6 +454,7 @@
 				7B04AEB72FCDDD1700DAEA40 /* TagsExt.swift in Sources */,
 				7B04AEB82FCDDD1700DAEA40 /* DocumentExt.swift in Sources */,
 				7B04AEB92FCDDD1700DAEA40 /* FloatingItemCenteredText.swift in Sources */,
+				7B04AEBB2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -489,6 +494,7 @@
 				7B04AE972FCDDD1700DAEA40 /* TagsExt.swift in Sources */,
 				7B04AE982FCDDD1700DAEA40 /* DocumentExt.swift in Sources */,
 				7B04AE992FCDDD1700DAEA40 /* FloatingItemCenteredText.swift in Sources */,
+				7B04AEBA2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

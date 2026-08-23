@@ -21,6 +21,17 @@ import kotlin.time.Instant
 private const val TAG = "DocumentProvisioningHandler"
 
 /**
+ * Result of selecting a [SecureArea] and customizing [CreateKeySettings] for credential creation.
+ *
+ * @property secureArea the selected [SecureArea].
+ * @property createKeySettings the customized [CreateKeySettings].
+ */
+data class SelectedSecureArea(
+    val secureArea: SecureArea,
+    val createKeySettings: CreateKeySettings
+)
+
+/**
  * Implementation of [AbstractDocumentMetadataHandler] suitable for most uses.
  *
  * This implementation uses [DocumentUtil.managedCredentialHelper] with per-document settings
@@ -56,27 +67,27 @@ open class DocumentProvisioningHandler(
     val selectSecureArea: (suspend (
         appData: ByteString?,
         suggestedCreateKeySettings: CreateKeySettings
-    ) -> Pair<SecureArea, CreateKeySettings>)? = null
+    ) -> SelectedSecureArea)? = null
 ): AbstractDocumentProvisioningHandler {
 
     /**
      * Function to select [SecureArea] and customize [CreateKeySettings] for a document.
      *
      * The default implementation invokes [selectSecureArea] lambda if provided, or returns
-     * `Pair(this.secureArea, suggestedCreateKeySettings)`.
+     * `SelectedSecureArea(this.secureArea, suggestedCreateKeySettings)`.
      *
      * Applications can override this method or pass a [selectSecureArea] lambda to the constructor.
      *
      * @param document the [Document] that credentials are being created for.
      * @param suggestedCreateKeySettings suggested settings for creating the key.
-     * @return the [SecureArea] to use and the [CreateKeySettings] to use for key creation.
+     * @return the [SelectedSecureArea] specifying the [SecureArea] and [CreateKeySettings] to use for key creation.
      */
     open suspend fun selectSecureArea(
         document: Document,
         suggestedCreateKeySettings: CreateKeySettings
-    ): Pair<SecureArea, CreateKeySettings> {
+    ): SelectedSecureArea {
         return selectSecureArea?.invoke(document.appData, suggestedCreateKeySettings)
-            ?: Pair(secureArea, suggestedCreateKeySettings)
+            ?: SelectedSecureArea(secureArea, suggestedCreateKeySettings)
     }
 
     /**

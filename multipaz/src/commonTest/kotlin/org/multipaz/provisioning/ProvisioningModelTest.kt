@@ -151,9 +151,9 @@ class ProvisioningModelTest {
             secureArea = secureArea,
             selectSecureArea = { appData, suggestedSettings ->
                 if (appData == ByteString(0x01)) {
-                    Pair(alternateSecureArea, suggestedSettings)
+                    SelectedSecureArea(alternateSecureArea, suggestedSettings)
                 } else {
-                    Pair(secureArea, suggestedSettings)
+                    SelectedSecureArea(secureArea, suggestedSettings)
                 }
             }
         )
