@@ -119,5 +119,18 @@ class TagsTest {
         assertNull(tags.get<String>("non_existent"))
         assertNull(tags.get<Int>("non_existent"))
         assertNull(tags.getList<String>("non_existent"))
+        assertNull(tags.getRawDataItem("non_existent"))
+    }
+
+    @Test
+    fun testRawDataItem() = runTest {
+        val tags = Tags(null)
+        tags.edit {
+            set("str", "hello")
+            set("num", 42)
+        }
+        assertEquals("hello", tags.getRawDataItem("str")?.asTstr)
+        assertEquals(42L, tags.getRawDataItem("num")?.asNumber)
+        assertNull(tags.getRawDataItem("missing"))
     }
 }

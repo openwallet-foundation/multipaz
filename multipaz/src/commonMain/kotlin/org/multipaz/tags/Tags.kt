@@ -63,12 +63,12 @@ class Tags(
     fun hasKey(key: String): Boolean = _tags.containsKey(key)
 
     /**
-     * Internal helper accessed by the inline functions below.
+     * Retrieves the raw [DataItem] for the given [key].
      *
-     * @PublishedApi makes this visible to the inlined code of the caller.
+     * @param key the name of the key to get.
+     * @return the raw [DataItem] or `null` if not found.
      */
-    @PublishedApi
-    internal fun getRawDataItem(key: String): DataItem? = _tags[key]
+    fun getRawDataItem(key: String): DataItem? = _tags[key]
 
     /**
      * Retrieves a scalar value for the given [key].
