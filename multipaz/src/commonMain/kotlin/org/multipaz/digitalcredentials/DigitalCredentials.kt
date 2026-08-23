@@ -41,6 +41,8 @@ interface DigitalCredentials {
      * @param documentStore the [DocumentStore] to export credentials from.
      * @param documentTypeRepository a [DocumentTypeRepository].
      * @param selectedProtocols the set of selected W3C protocols, must be a subset of [supportedProtocols].
+     * @param forceRegistration if true, forces registration with the platform even if no changes
+     *   are detected locally since the previous registration. Defaults to false.
      * @throws IllegalArgumentException if [selectedProtocols] isn't a subset of [supportedProtocols]
      * @throws IllegalStateException if an error occurs during registration.
      * @throws NotImplementedError if not implemented by the platform (e.g. if [registerAvailable] is `false`).
@@ -49,7 +51,8 @@ interface DigitalCredentials {
     suspend fun register(
         documentStore: DocumentStore,
         documentTypeRepository: DocumentTypeRepository,
-        selectedProtocols: Set<String> = supportedProtocols
+        selectedProtocols: Set<String> = supportedProtocols,
+        forceRegistration: Boolean = false
     )
 
     /**

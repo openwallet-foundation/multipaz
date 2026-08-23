@@ -90,7 +90,8 @@ private fun getDataElementDisplayName(
 private suspend fun updateCredmanUnlocked(
     documentStore: DocumentStore,
     documentTypeRepository: DocumentTypeRepository,
-    selectedProtocols: Set<String>
+    selectedProtocols: Set<String>,
+    forceRegistration: Boolean
 ) {
     val startTime = Clock.System.now()
     val appInfo = applicationContext.applicationInfo
@@ -130,7 +131,7 @@ private suspend fun updateCredmanUnlocked(
     val lastCredDbSha256 = documentStore.getTags().get<ByteString>(CREDMAN_DB_SHA256_KEY)
     val credDbNotChanged = lastCredDbSha256 != null && credDbSha256 == lastCredDbSha256
 
-    if (matcherNotChanged && credDbNotChanged) {
+    if (!forceRegistration && matcherNotChanged && credDbNotChanged) {
         Logger.i(TAG, "No change in Credman database or matcher since last registration")
         return
     }
@@ -144,6 +145,16 @@ private suspend fun updateCredmanUnlocked(
             set(CREDMAN_DB_SHA256_KEY, credDbSha256)
         }
     }
+
+    val documents = documentStore.listDocuments(sort = true)
+    for (document in documents) {
+        val hasCredential = document.getCertifiedCredentials().any { it is MdocCredential || it is SdJwtVcCredential }
+        if (hasCredential) {
+            val displayName = document.androidCredmanTitle ?: document.displayName ?: document.typeDisplayName ?: "Unnamed Document"
+            Logger.i(TAG, "Registering document with docId ${document.identifier} ('$displayName') with CredMan")
+        }
+    }
+
     val client = IdentityCredentialManager.getClient(applicationContext)
     client.registerCredentials(
         RegistrationRequest(
@@ -416,7 +427,8 @@ private val registerLock = Mutex()
 internal actual suspend fun defaultRegister(
     documentStore: DocumentStore,
     documentTypeRepository: DocumentTypeRepository,
-    selectedProtocols: Set<String>
+    selectedProtocols: Set<String>,
+    forceRegistration: Boolean
 ) {
     require(supportedProtocols.containsAll(selectedProtocols)) {
         "The selected protocols is not a subset of supported protocols"
@@ -425,7 +437,8 @@ internal actual suspend fun defaultRegister(
         updateCredmanUnlocked(
             documentStore = documentStore,
             documentTypeRepository = documentTypeRepository,
-            selectedProtocols = selectedProtocols
+            selectedProtocols = selectedProtocols,
+            forceRegistration = forceRegistration
         )
     }
 }

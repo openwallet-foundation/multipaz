@@ -15,6 +15,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
 import org.multipaz.SwiftBridge
 import org.multipaz.document.DocumentStore
+import org.multipaz.document.getIosMdocDoctypes
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.storage.StorageTableSpec
@@ -23,6 +24,7 @@ import org.multipaz.util.toKotlinError
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
+import kotlin.time.Clock
 
 private const val TAG = "DigitalCredentials"
 
@@ -52,7 +54,8 @@ private val registerLock = Mutex()
 internal actual suspend fun defaultRegister(
     documentStore: DocumentStore,
     documentTypeRepository: DocumentTypeRepository,
-    selectedProtocols: Set<String>
+    selectedProtocols: Set<String>,
+    forceRegistration: Boolean
 ) {
     require(supportedProtocols.containsAll(selectedProtocols)) {
         "The selected protocols is not a subset of supported protocols"
@@ -61,7 +64,8 @@ internal actual suspend fun defaultRegister(
         updateOsCredentialManagerUnlocked(
             documentStore = documentStore,
             documentTypeRepository = documentTypeRepository,
-            selectedProtocols = selectedProtocols
+            selectedProtocols = selectedProtocols,
+            forceRegistration = forceRegistration
         )
     }
 }
@@ -86,49 +90,66 @@ private suspend fun getAuthorizationState(): DigitalCredentialsAuthorizationStat
 private suspend fun updateOsCredentialManagerUnlocked(
     documentStore: DocumentStore,
     documentTypeRepository: DocumentTypeRepository,
-    selectedProtocols: Set<String>
+    selectedProtocols: Set<String>,
+    forceRegistration: Boolean
 ) {
-    Logger.i(TAG, "Updating OS Credential Manager")
+    Logger.i(TAG, "Updating OS Credential Manager (forceRegistration=$forceRegistration)")
+
+    val iosMdocDoctypes = documentStore.getIosMdocDoctypes()?.toSet()
+    if (iosMdocDoctypes == null) {
+        Logger.w(
+            TAG,
+            "documentStore.getIosMdocDoctypes() is not set. All ISO mdoc credentials will be registered. " +
+            "Please use documentStore.setIosMdocDoctypes() to configure the doctypes declared in your iOS manifest."
+        )
+    }
+
+    // First figure out which documents we want to be registered...
+    val docIdsWant = mutableSetOf<String>()
+    if (selectedProtocols.contains("org-iso-mdoc")) {
+        val documents = documentStore.listDocuments()
+        for (document in documents) {
+            val mdocCredential = document.getCertifiedCredentials().find { it is MdocCredential } as MdocCredential?
+            if (mdocCredential != null) {
+                if (iosMdocDoctypes == null || iosMdocDoctypes.contains(mdocCredential.docType)) {
+                    docIdsWant.add(document.identifier)
+                }
+            }
+        }
+    }
 
     val authorizationState = getAuthorizationState()
-    mutableAuthorizationState.value = getAuthorizationState()
+    mutableAuthorizationState.value = authorizationState
 
     if (authorizationState == DigitalCredentialsAuthorizationState.NOT_AUTHORIZED) {
         Logger.w(TAG, "Status is notAuthorized, not updating OS Credential Manager")
         return
     }
 
-    // First figure out which documents we want to be registered...
-    val docIdsWant = mutableSetOf<String>()
-    val documents = documentStore.listDocuments()
-    for (document in documents) {
-        val mdocCredential = document.getCertifiedCredentials().find { it is MdocCredential } as MdocCredential?
-        if (mdocCredential != null) {
-            docIdsWant.add(document.identifier)
-        }
-    }
-    if (!selectedProtocols.contains("org-iso-mdoc")) {
-        docIdsWant.clear()
-    }
-
-    // ... and which ones we already registered...
-    val docIdsHave = if (authorizationState == DigitalCredentialsAuthorizationState.AUTHORIZED) {
-        suspendCoroutine<Set<String>> { continuation ->
-            SwiftBridge.docRegGetAll { docIds, error ->
-                if (error != null) {
-                    continuation.resumeWithException(
-                        IllegalStateException("Error getting registered document ids", error.toKotlinError())
-                    )
-                } else {
-                    continuation.resume((docIds as List<String>).toSet())
-                }
+    val timeStart = Clock.System.now()
+    val docIdsHave = suspendCoroutine<Set<String>> { continuation ->
+        SwiftBridge.docRegGetAll { docIds, error ->
+            if (error != null) {
+                continuation.resumeWithException(
+                    IllegalStateException("Error getting registered document ids", error.toKotlinError())
+                )
+            } else {
+                continuation.resume((docIds as List<String>).toSet())
             }
         }
-    } else emptySet()
+    }
+    val timeEnd = Clock.System.now()
+    val durationMs = (timeEnd - timeStart).inWholeMilliseconds
+    Logger.i(TAG, "Fetched ${docIdsHave.size} OS registrations in $durationMs ms")
 
     // ... and then calculate what we need to register and unregister
-    val docIdsToRegister = docIdsWant.minus(docIdsHave)
+    val docIdsToRegister = if (forceRegistration) docIdsWant else docIdsWant.minus(docIdsHave)
     val docIdsToUnregister = docIdsHave.minus(docIdsWant)
+
+    if (docIdsToRegister.isEmpty() && docIdsToUnregister.isEmpty()) {
+        Logger.i(TAG, "No changes to iOS Digital Credentials registrations")
+        return
+    }
 
     for (docId in docIdsToRegister) {
         val document = documentStore.lookupDocument(docId)
@@ -136,9 +157,10 @@ private suspend fun updateOsCredentialManagerUnlocked(
             Logger.w(TAG, "Error finding document for documentId $docId")
             continue
         }
+        val displayName = document.displayName ?: document.typeDisplayName ?: "Unnamed Document"
         val mdocCredential = document.getCertifiedCredentials().find { it is MdocCredential } as MdocCredential?
         if (mdocCredential != null) {
-            val success = suspendCoroutine<Boolean> { continuation ->
+            suspendCoroutine<Unit> { continuation ->
                 SwiftBridge.docRegAdd(
                     document.identifier,
                     mdocCredential.docType
@@ -149,7 +171,7 @@ private suspend fun updateOsCredentialManagerUnlocked(
                             error.code.toInt() == 2) {
                             Logger.w(TAG, "Ignoring registration error .noAuth for credential " +
                                     "with docType ${mdocCredential.docType} - did you add it to the entitlement file?")
-                            continuation.resume(true)
+                            continuation.resume(Unit)
                         } else {
                             continuation.resumeWithException(
                                 IllegalStateException("Credential registration failed", error.toKotlinError())
@@ -157,10 +179,10 @@ private suspend fun updateOsCredentialManagerUnlocked(
                         }
                     } else {
                         Logger.i(
-                            TAG, "Registered document with docId ${document.identifier}" +
+                            TAG, "Registered document with docId ${document.identifier} ('$displayName')" +
                                     " and docType ${mdocCredential.docType}"
                         )
-                        continuation.resume(true)
+                        continuation.resume(Unit)
                     }
                 }
             }
@@ -168,7 +190,9 @@ private suspend fun updateOsCredentialManagerUnlocked(
     }
 
     for (docId in docIdsToUnregister) {
-        val success = suspendCoroutine<Boolean> { continuation ->
+        val document = documentStore.lookupDocument(docId)
+        val displayName = document?.displayName ?: document?.typeDisplayName ?: "Unnamed Document"
+        suspendCoroutine<Unit> { continuation ->
             SwiftBridge.docRegRemove(
                 docId
             ) { success, error ->
@@ -178,8 +202,8 @@ private suspend fun updateOsCredentialManagerUnlocked(
                         IllegalStateException("Credential registration failed", error.toKotlinError())
                     )
                 } else {
-                    Logger.i(TAG, "Unregistered document with docId $docId")
-                    continuation.resume(true)
+                    Logger.i(TAG, "Unregistered document with docId $docId ('$displayName')")
+                    continuation.resume(Unit)
                 }
             }
         }

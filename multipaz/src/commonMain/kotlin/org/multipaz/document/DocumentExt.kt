@@ -68,7 +68,7 @@ suspend fun Document.setAndroidCredmanBitmap(value: ByteString?) {
  * The exchange protocols for a document in Android Credential Manager or `null` if not configured.
  */
 val Document.androidCredmanExchangeProtocols: List<String>?
-    get() = tags.getList<String>(TAG_ANDROID_CREDMAN_EXCHANGE_PROTOCOLS)
+    get() = tags.getStringList(TAG_ANDROID_CREDMAN_EXCHANGE_PROTOCOLS)
 
 /**
  * Sets exchange protocols for a document in Android Credential Manager.
@@ -78,7 +78,8 @@ val Document.androidCredmanExchangeProtocols: List<String>?
 suspend fun Document.setAndroidCredmanExchangeProtocols(value: List<String>?) {
     edit {
         value?.let {
-            tags.setList(TAG_ANDROID_CREDMAN_EXCHANGE_PROTOCOLS, value)
+            tags.setStringList(TAG_ANDROID_CREDMAN_EXCHANGE_PROTOCOLS, value)
         } ?: tags.remove(TAG_ANDROID_CREDMAN_EXCHANGE_PROTOCOLS)
     }
 }
+
