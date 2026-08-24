@@ -64,6 +64,16 @@ struct DocumentScreen: View {
                     VStack {
                         Button(
                             action: {
+                                viewModel.path.append(Destination.verticalCardListScreen(
+                                    focusedDocumentId: documentInfo.document.identifier
+                                ))
+                            }
+                        ) {
+                            Text("Open in Vertical Card List")
+                        }.buttonStyle(.borderedProminent).buttonBorderShape(.capsule)
+
+                        Button(
+                            action: {
                                 Task {
                                     let authorizationData = documentInfo.document.authorizationData
                                     if authorizationData == nil {

@@ -12,6 +12,6 @@ enum Destination: Hashable {
     case iso18013ProximityPresentmentScreen
     case certificateViewerScreen(certificates: [X509Cert])
     case certificateExamplesScreen
-    case verticalCardListScreen(focusedDocumentId: String?)
+    case verticalCardListScreen(focusedDocumentId: String?, animateListTransitions: Bool = false)
     case floatingItemListScreen
 }

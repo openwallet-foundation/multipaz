@@ -27,7 +27,8 @@ struct ContentView: View {
                 case .aboutScreen: AboutScreen()
                 case .documentStoreScreen: DocumentStoreScreen()
                 case .documentScreen(let documentId): DocumentScreen(documentId: documentId)
-                case .verticalCardListScreen(let focusedDocumentId): VerticalCardListScreen(focusedDocumentId: focusedDocumentId)
+                case .verticalCardListScreen(let focusedDocumentId, let animateListTransitions):
+                    VerticalCardListScreen(focusedDocumentId: focusedDocumentId, animateListTransitions: animateListTransitions)
                 case .credentialScreen(documentId: let documentId, credentialId: let credentialId):
                     CredentialScreen(documentId: documentId, credentialId: credentialId)
                 case .claimsScreen(documentId: let documentId, credentialId: let credentialId):

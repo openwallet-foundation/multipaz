@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.navigation.NavController
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -1747,8 +1748,7 @@ class App private constructor (val promptModel: PromptModel) {
                     }
                 ) { backStackEntry ->
                     val destination = backStackEntry.toRoute<VerticalCardListDestination>()
-                    val overrideAnim = backStackEntry.savedStateHandle.get<Boolean>("animateListTransitions")
-                    verticalCardListState.animateListTransitions = overrideAnim ?: destination.animateListTransitions
+                    val isPreviousScreenCardList = navController.previousBackStackEntry?.destination?.hasRoute<VerticalCardListDestination>() == true
 
                     // Note: VerticalCardListScreen has its own AppBar
                     VerticalCardListScreen(
@@ -1756,15 +1756,13 @@ class App private constructor (val promptModel: PromptModel) {
                         documentModel = documentModel,
                         settingsModel = settingsModel,
                         focusedDocumentId = destination.focusedDocumentId,
+                        animateListTransitions = destination.animateListTransitions,
+                        isPreviousScreenCardList = isPreviousScreenCardList,
                         state = verticalCardListState,
                         onDocumentFocused = { documentId ->
                             navController.navigate(VerticalCardListDestination(documentId, animateListTransitions = true))
                         },
-                        onDocumentUnfocused = {
-                            val previousEntry = navController.previousBackStackEntry
-                            if (previousEntry?.destination?.route?.contains("VerticalCardListDestination") == true) {
-                                previousEntry.savedStateHandle["animateListTransitions"] = true
-                            }
+                        onNavigateBack = {
                             navController.navigateUp()
                         },
                         onViewDocument = { documentId ->
@@ -1788,9 +1786,6 @@ class App private constructor (val promptModel: PromptModel) {
                                     animateListTransitions = false
                                 ))
                             }
-                        },
-                        onBackPressed = {
-                            navController.navigateUp()
                         }
                     )
                 }
