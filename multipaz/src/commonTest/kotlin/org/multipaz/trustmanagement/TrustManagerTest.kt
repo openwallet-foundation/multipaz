@@ -9,7 +9,10 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.asn1.ASN1OctetString
+import org.multipaz.asn1.OID
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.X500Name
@@ -32,6 +35,7 @@ import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.toHex
 import org.multipaz.util.truncateToWholeSeconds
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -1192,5 +1196,121 @@ class TrustManagerTest {
         assertEquals(3, numEvents)
 
         job.cancel()
+    }
+
+    @Test
+    fun readerCertificateWithoutSki() = runTestWithSetup {
+        val key = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val cert = buildX509Cert(
+            publicKey = key.publicKey,
+            signingKey = AsymmetricKey.anonymous(key, key.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=No SKI Reader"),
+            issuer = X500Name.fromName("CN=No SKI Reader Root"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+        assertNull(cert.subjectKeyIdentifier)
+        assertNull(cert.authorityKeyIdentifier)
+
+        val trustManager = TrustManager(EphemeralStorage())
+        val result = trustManager.verify(listOf(cert))
+        assertFalse(result.isTrusted)
+        assertEquals("No trusted root certificate could not be found", result.error?.message)
+    }
+
+    @Test
+    fun readerCertificateWithSpoofedSkiRejected() = runTestWithSetup {
+        val trustedKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val trustedCert = buildX509Cert(
+            publicKey = trustedKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(trustedKey, trustedKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Trusted Reader"),
+            issuer = X500Name.fromName("CN=Trusted Reader"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        val trustManager = TrustManager(EphemeralStorage())
+        trustManager.addX509Cert(trustedCert, TrustMetadata())
+
+        // Attacker creates a separate key pair but copies the trusted certificate's SKI
+        val attackerKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val attackerCert = buildX509Cert(
+            publicKey = attackerKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(attackerKey, attackerKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=Attacker Reader"),
+            issuer = X500Name.fromName("CN=Attacker Reader"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            addExtension(
+                OID.X509_EXTENSION_SUBJECT_KEY_IDENTIFIER.oid,
+                false,
+                ASN1.encode(ASN1OctetString(trustedCert.subjectKeyIdentifier!!))
+            )
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        assertContentEquals(trustedCert.subjectKeyIdentifier, attackerCert.subjectKeyIdentifier)
+        assertNotEquals(trustedCert.ecPublicKey, attackerCert.ecPublicKey)
+
+        val result = trustManager.verify(listOf(attackerCert))
+        assertFalse(result.isTrusted)
+        assertEquals("No trusted root certificate could not be found", result.error?.message)
+    }
+
+    @Test
+    fun readerCertificateWithDifferentCertForSameKey() = runTestWithSetup {
+        val key = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val certInStore = buildX509Cert(
+            publicKey = key.publicKey,
+            signingKey = AsymmetricKey.anonymous(key, key.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Reader In Store"),
+            issuer = X500Name.fromName("CN=Reader In Store"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        val trustManager = TrustManager(EphemeralStorage())
+        trustManager.addX509Cert(certInStore, TrustMetadata())
+
+        // A different certificate (different serial number, subject name, validity) with the SAME public key
+        val presentedCert = buildX509Cert(
+            publicKey = key.publicKey,
+            signingKey = AsymmetricKey.anonymous(key, key.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=Presented Reader"),
+            issuer = X500Name.fromName("CN=Presented Reader"),
+            validFrom = now - 2.hours,
+            validUntil = now + 2.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        assertNotEquals(certInStore, presentedCert)
+        assertEquals(certInStore.ecPublicKey, presentedCert.ecPublicKey)
+        assertContentEquals(certInStore.subjectKeyIdentifier, presentedCert.subjectKeyIdentifier)
+
+        val result = trustManager.verify(listOf(presentedCert))
+        assertTrue(result.isTrusted)
+        assertNull(result.error)
+        assertEquals(1, result.trustPoints.size)
+        assertEquals(certInStore, result.trustPoints[0].certificate)
     }
 }

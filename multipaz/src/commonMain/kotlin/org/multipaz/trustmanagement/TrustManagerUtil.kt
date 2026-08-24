@@ -133,14 +133,29 @@ internal object TrustManagerUtil {
             // just submits a certificate for the key that their reader will be using.
             //
             if (chain.size == 1) {
-                val trustPoint = skiToTrustPoint[chain[0].subjectKeyIdentifier!!.toHex()]
-                if (trustPoint != null) {
-                    return TrustResult(
-                        isTrusted = true,
-                        trustChain = X509CertChain(chain),
-                        listOf(trustPoint),
-                        error = null
-                    )
+                val cert = chain[0]
+                val trustPoint = cert.subjectKeyIdentifier?.toHex()?.let { skiToTrustPoint[it] }
+                if (trustPoint != null && cert.ecPublicKey == trustPoint.certificate.ecPublicKey) {
+                    try {
+                        checkValidity(cert, atTime)
+                        if (isSelfSigned(cert)) {
+                            verifySignature(cert, cert)
+                        }
+                        return TrustResult(
+                            isTrusted = true,
+                            trustChain = X509CertChain(chain),
+                            trustPoints = listOf(trustPoint),
+                            error = null
+                        )
+                    } catch (validationException: Exception) {
+                        if (validationException is CancellationException) throw validationException
+                        return TrustResult(
+                            isTrusted = false,
+                            trustChain = X509CertChain(chain),
+                            trustPoints = listOf(trustPoint),
+                            error = validationException
+                        )
+                    }
                 }
             }
             // no CA certificate could be found.
@@ -158,14 +173,14 @@ internal object TrustManagerUtil {
         val result = mutableListOf<TrustPoint>()
 
         // only an exception if not a single CA certificate is found
-        var caCertificate: TrustPoint? = findCaCertificate(chain, skiToTrustPoint)
+        var caCertificate: TrustPoint = findCaCertificate(chain, skiToTrustPoint)
             ?: throw IllegalStateException("No trusted root certificate could not be found")
-        result.add(caCertificate!!)
-        while (caCertificate != null && !isSelfSigned(caCertificate.certificate)) {
-            caCertificate = findCaCertificate(listOf(caCertificate.certificate), skiToTrustPoint)
-            if (caCertificate != null) {
-                result.add(caCertificate)
-            }
+        result.add(caCertificate)
+        while (!isSelfSigned(caCertificate.certificate)) {
+            val nextCaCertificate = findCaCertificate(listOf(caCertificate.certificate), skiToTrustPoint)
+                ?: break
+            result.add(nextCaCertificate)
+            caCertificate = nextCaCertificate
         }
         return result
     }
@@ -178,9 +193,9 @@ internal object TrustManagerUtil {
         skiToTrustPoint: Map<String, TrustPoint>
     ): TrustPoint? {
         chain.forEach { cert ->
-            cert.authorityKeyIdentifier?.toHex().let {
-                if (skiToTrustPoint.containsKey(it)) {
-                    return skiToTrustPoint[it]
+            cert.authorityKeyIdentifier?.toHex()?.let { aki ->
+                if (skiToTrustPoint.containsKey(aki)) {
+                    return skiToTrustPoint[aki]
                 }
             }
         }
