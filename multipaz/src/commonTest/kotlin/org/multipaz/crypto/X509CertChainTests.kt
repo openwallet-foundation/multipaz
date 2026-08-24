@@ -11,6 +11,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -632,5 +633,133 @@ class X509CertChainTests {
         val partialChainCose = partialChain.toCoseX5Chain(excludeRoot = true)
         assertEquals(2, (partialChainCose as org.multipaz.cbor.CborArray).items.size)
         assertEquals(partialChain, X509CertChain.fromDataItem(partialChainCose))
+    }
+
+    @Test
+    fun testValidateCaValidity() = runTest {
+        initKeys()
+        val now = Clock.System.now().truncateToWholeSeconds()
+
+        // Root expired in the past
+        val expiredRootCert = buildX509Cert(
+            publicKey = rootKey.publicKey,
+            signingKey = rootKey,
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Root"),
+            issuer = X500Name.fromName("CN=Root"),
+            validFrom = now - 10.hours,
+            validUntil = now - 5.hours,
+        ) {
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(ca = true, pathLenConstraint = 0)
+            includeSubjectKeyIdentifier()
+        }
+
+        // Leaf is currently valid
+        val leafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = rootKey,
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Leaf"),
+            issuer = expiredRootCert.subject,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours,
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(expiredRootCert)
+        }
+
+        val chain = X509CertChain(listOf(leafCert, expiredRootCert))
+
+        // When validateCaValidity = true (default), validation fails due to expired CA
+        assertFailsWith<X509CertChainValidationException.Expired> {
+            chain.validate(validateAt = now, validateCaValidity = true)
+        }
+
+        // When validateCaValidity = false, validation succeeds
+        chain.validate(validateAt = now, validateCaValidity = false)
+    }
+
+    @Test
+    fun testValidateValidityFalseBypassesLeafValidity() = runTest {
+        initKeys()
+        val now = Clock.System.now().truncateToWholeSeconds()
+
+        // Leaf is expired
+        val expiredLeafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = rootKey,
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Leaf"),
+            issuer = X500Name.fromName("CN=Root"),
+            validFrom = now - 10.hours,
+            validUntil = now - 5.hours,
+        ) {
+            includeSubjectKeyIdentifier()
+        }
+
+        val validRootCert = buildX509Cert(
+            publicKey = rootKey.publicKey,
+            signingKey = rootKey,
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Root"),
+            issuer = X500Name.fromName("CN=Root"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours,
+        ) {
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(ca = true, pathLenConstraint = 0)
+            includeSubjectKeyIdentifier()
+        }
+
+        val chain = X509CertChain(listOf(expiredLeafCert, validRootCert))
+
+        // When validateValidity = true, validation fails due to expired leaf
+        assertFailsWith<X509CertChainValidationException.Expired> {
+            chain.validate(validateAt = now, validateValidity = true)
+        }
+
+        // When validateValidity = false, validation succeeds
+        chain.validate(validateAt = now, validateValidity = false)
+    }
+
+    @Test
+    fun testValidateCaValidityFalseStillChecksLeafValidity() = runTest {
+        initKeys()
+        val now = Clock.System.now().truncateToWholeSeconds()
+
+        // Leaf is expired
+        val expiredLeafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = rootKey,
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Leaf"),
+            issuer = X500Name.fromName("CN=Root"),
+            validFrom = now - 10.hours,
+            validUntil = now - 5.hours,
+        ) {
+            includeSubjectKeyIdentifier()
+        }
+
+        val validRootCert = buildX509Cert(
+            publicKey = rootKey.publicKey,
+            signingKey = rootKey,
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Root"),
+            issuer = X500Name.fromName("CN=Root"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours,
+        ) {
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(ca = true, pathLenConstraint = 0)
+            includeSubjectKeyIdentifier()
+        }
+
+        val chain = X509CertChain(listOf(expiredLeafCert, validRootCert))
+
+        // Even when validateCaValidity = false, leaf expiration must still throw Expired
+        assertFailsWith<X509CertChainValidationException.Expired> {
+            chain.validate(validateAt = now, validateCaValidity = false)
+        }
     }
 }

@@ -54,33 +54,13 @@ internal object TrustManagerUtil {
         // NOTE does not check if it is valid within the validity period of
         // the issuing CA
         check(atTime >= certificate.validityNotBefore) {
-            "Certificate is not yet valid ($atTime < ${certificate.validityNotBefore}"
+            "Certificate is not yet valid ($atTime < ${certificate.validityNotBefore})"
         }
         check(atTime <= certificate.validityNotAfter) {
             "Certificate is no longer valid ($atTime > ${certificate.validityNotAfter})"
         }
     }
 
-    /**
-     * Check that the key usage is to sign certificates.
-     */
-    fun checkKeyUsageCaCertificate(caCertificate: X509Cert) {
-        check(caCertificate.keyUsage.contains(X509KeyUsage.KEY_CERT_SIGN)) {
-            "CA certificate doesn't have the key usage to sign certificates"
-        }
-    }
-
-    /**
-     * Check that the issuer in [certificate] is equal to the subject in
-     * [caCertificate].
-     */
-    fun checkCaIsIssuer(certificate: X509Cert, caCertificate: X509Cert) {
-        val issuerName = certificate.issuer.name
-        val nameCA = caCertificate.subject.name
-        if (issuerName != nameCA) {
-            throw IllegalStateException("CA certificate '$nameCA' isn't the issuer of the certificate before it. It should be '$issuerName'")
-        }
-    }
 
     /**
      * Verify the signature of the [certificate] with the public key of the
@@ -100,14 +80,15 @@ internal object TrustManagerUtil {
     internal suspend fun verifyX509TrustChain(
         chain: List<X509Cert>,
         atTime: Instant,
-        skiToTrustPoint: Map<String, TrustPoint>
+        skiToTrustPoint: Map<String, TrustPoint>,
+        validateCaValidity: Boolean = true
     ): TrustResult {
         // TODO: add support for customValidators similar to PKIXCertPathChecker
         try {
             val trustPoints = getAllTrustPointsForX509Cert(chain, skiToTrustPoint)
             val completeChain = chain.plus(trustPoints.map { it.certificate })
             try {
-                validateCertificationTrustPath(completeChain, atTime)
+                validateCertificationTrustPath(completeChain, atTime, validateCaValidity)
                 return TrustResult(
                     isTrusted = true,
                     trustPoints = trustPoints,
@@ -171,14 +152,23 @@ internal object TrustManagerUtil {
         skiToTrustPoint: Map<String, TrustPoint>
     ): List<TrustPoint> {
         val result = mutableListOf<TrustPoint>()
+        val visitedSkis = mutableSetOf<String>()
 
         // only an exception if not a single CA certificate is found
-        var caCertificate: TrustPoint = findCaCertificate(chain, skiToTrustPoint)
+        var caCertificate: TrustPoint = findCaCertificate(listOf(chain.last()), skiToTrustPoint)
+            ?: findCaCertificate(chain, skiToTrustPoint)
             ?: throw IllegalStateException("No trusted root certificate could not be found")
+        caCertificate.certificate.subjectKeyIdentifier?.toHex()?.let { visitedSkis.add(it) }
         result.add(caCertificate)
-        while (!isSelfSigned(caCertificate.certificate)) {
+
+        val maxPathDepth = 32
+        while (!isSelfSigned(caCertificate.certificate) && result.size < maxPathDepth) {
             val nextCaCertificate = findCaCertificate(listOf(caCertificate.certificate), skiToTrustPoint)
                 ?: break
+            val nextSki = nextCaCertificate.certificate.subjectKeyIdentifier?.toHex()
+            if (nextSki != null && !visitedSkis.add(nextSki)) {
+                break
+            }
             result.add(nextCaCertificate)
             caCertificate = nextCaCertificate
         }
@@ -207,26 +197,22 @@ internal object TrustManagerUtil {
      */
     private suspend fun validateCertificationTrustPath(
         certificationTrustPath: List<X509Cert>,
-        atTime: Instant
+        atTime: Instant,
+        validateCaValidity: Boolean = true
     ) {
-        val certIterator = certificationTrustPath.iterator()
-        val leafCertificate = certIterator.next()
+        val leafCertificate = certificationTrustPath.first()
         checkKeyUsageDocumentSigner(leafCertificate)
-        checkValidity(leafCertificate, atTime)
 
-        var previousCertificate = leafCertificate
-        var caCertificate: X509Cert? = null
-        while (certIterator.hasNext()) {
-            caCertificate = certIterator.next()
-            checkKeyUsageCaCertificate(caCertificate)
-            checkCaIsIssuer(previousCertificate, caCertificate)
-            verifySignature(previousCertificate, caCertificate)
-            previousCertificate = caCertificate
-        }
-        if (caCertificate != null && isSelfSigned(caCertificate)) {
-            // check the signature of the self signed root certificate
-            verifySignature(caCertificate, caCertificate)
+        val certChain = X509CertChain(certificationTrustPath)
+        certChain.validate(
+            validateAt = atTime,
+            requireBasicConstraints = false,
+            validateCaValidity = validateCaValidity
+        )
+
+        val rootCertificate = certificationTrustPath.last()
+        if (isSelfSigned(rootCertificate)) {
+            verifySignature(rootCertificate, rootCertificate)
         }
     }
-
 }

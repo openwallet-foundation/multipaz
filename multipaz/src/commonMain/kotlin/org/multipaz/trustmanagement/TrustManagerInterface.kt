@@ -38,10 +38,12 @@ interface TrustManagerInterface {
      *
      * @param chain the certificate chain without the self-signed root certificate.
      * @param atTime the point in time to check validity for.
+     * @param validateCaValidity whether to validate validity intervals for CA certificates in the chain.
      * @return a [TrustResult] instance with the verdict.
      */
     suspend fun verify(
         chain: List<X509Cert>,
         atTime: Instant = Clock.System.now(),
+        validateCaValidity: Boolean = true
     ): TrustResult
 }

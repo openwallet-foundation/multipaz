@@ -110,11 +110,15 @@ data class X509CertChain(
      *
      * @param validateAt time of the validation
      * @param requireBasicConstraints if non-leaf certificates must use basic constrains extension
+     * @param validateValidity if validityNotBefore / validityNotAfter should be checked for the leaf certificate
+     * @param validateCaValidity if validityNotBefore / validityNotAfter should be checked for non-leaf CA certificates
      * @throws [X509CertChainValidationException] if validation fails.
      */
     suspend fun validate(
         validateAt: Instant = Clock.System.now(),
-        requireBasicConstraints: Boolean = true
+        requireBasicConstraints: Boolean = true,
+        validateValidity: Boolean = true,
+        validateCaValidity: Boolean = true
     ) {
         if (!Crypto.validateCertChainSignatures(this)) {
             throw X509CertChainValidationException.Signature()
@@ -148,11 +152,18 @@ data class X509CertChain(
                 }
             }
             previous = certificate
-            if (certificate.validityNotAfter < validateAt) {
-                throw X509CertChainValidationException.Expired(certificate.validityNotAfter)
+            val shouldCheckValidity = if (index == 0) {
+                validateValidity
+            } else {
+                validateValidity && validateCaValidity
             }
-            if (certificate.validityNotBefore > validateAt) {
-                throw X509CertChainValidationException.NotYetValid(certificate.validityNotBefore)
+            if (shouldCheckValidity) {
+                if (certificate.validityNotAfter < validateAt) {
+                    throw X509CertChainValidationException.Expired(certificate.validityNotAfter)
+                }
+                if (certificate.validityNotBefore > validateAt) {
+                    throw X509CertChainValidationException.NotYetValid(certificate.validityNotBefore)
+                }
             }
         }
     }

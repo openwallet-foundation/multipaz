@@ -47,10 +47,11 @@ class VicalTrustManager(
 
     override suspend fun verify(
         chain: List<X509Cert>,
-        atTime: Instant
+        atTime: Instant,
+        validateCaValidity: Boolean
     ): TrustResult {
         // TODO: Need a way to return list of doctypes in TrustResult...
-        return TrustManagerUtil.verifyX509TrustChain(chain, atTime, skiToTrustPoint)
+        return TrustManagerUtil.verifyX509TrustChain(chain, atTime, skiToTrustPoint, validateCaValidity)
     }
 
     companion object {
