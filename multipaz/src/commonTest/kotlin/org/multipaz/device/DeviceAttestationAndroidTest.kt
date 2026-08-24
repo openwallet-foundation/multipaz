@@ -40,6 +40,31 @@ class DeviceAttestationAndroidTest {
     }
 
     @Test
+    fun testValidationPixel7aWithExpiredIntermediateCa() = runTest {
+        val deviceAttestation = DeviceAttestation.fromCbor(ATTESTATION_PIXEL7A)
+        // Droid CA3 in ATTESTATION_PIXEL7A expired on 2025-03-24T23:27:35Z.
+        // Because validateCaValidity = false by default in validateAndroidKeyAttestation,
+        // validating at a future time (e.g. 2026-06-01) succeeds.
+        deviceAttestation.validate(
+            DeviceAttestationValidationData(
+                attestationChallenge = ATTESTATION_CHALLENGE_PIXEL7A.encodeToByteString(),
+                softwareAccepted = false,
+                softwareSecrets = setOf(),
+                iosReleaseBuild = false,
+                iosAppIdentifiers = setOf(),
+                androidGmsAttestation = true,
+                androidVerifiedBootGreen = true,
+                androidRequiredKeyMintSecurityLevel = AndroidKeystoreSecurityLevel.TRUSTED_ENVIRONMENT,
+                androidAppSignatureCertificateDigests = setOf(
+                    ByteString("VEpxrWMf2GFLy2_HHTuN7xlW5fy6mKhVAmRADo4aLh0".fromBase64Url())
+                ),
+                androidAppPackageNames = setOf("org.multipaz_credential.wallet"),
+            ),
+            validateAt = Instant.parse("2026-06-01T00:00:00Z")
+        )
+    }
+
+    @Test
     fun testAttestationEmulatorPixel3a() = runTest {
         val deviceAttestation = DeviceAttestation.fromCbor(ATTESTATION_EMULATOR_PIXEL3A)
         deviceAttestation.validate(

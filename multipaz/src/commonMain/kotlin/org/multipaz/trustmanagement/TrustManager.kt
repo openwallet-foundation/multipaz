@@ -553,18 +553,20 @@ class TrustManager(
      *
      * @param chain The certificate chain to verify.
      * @param atTime The exact time to use for validity and expiration checks.
+     * @param validateCaValidity whether to validate validity intervals for CA certificates in the chain.
      * @return A [TrustResult] containing the verification status, the resolved chain,
      * and any associated error if verification failed.
      */
     override suspend fun verify(
         chain: List<X509Cert>,
         atTime: Instant,
+        validateCaValidity: Boolean
     ): TrustResult {
         ensureInitialized()
         return stateLock.withLock {
             // VICAL trust managers get first dibs...
             vicalTrustManagers.forEach { (_, trustManager) ->
-                val ret = trustManager.verify(chain, atTime)
+                val ret = trustManager.verify(chain, atTime, validateCaValidity)
                 if (ret.isTrusted) {
                     // Make sure we return the right TrustManager instance, not the VicalTrustManager
                     return@withLock ret.copy(
@@ -578,7 +580,7 @@ class TrustManager(
             }
             // Then RICAL..
             ricalTrustManagers.forEach { (_, trustManager) ->
-                val ret = trustManager.verify(chain, atTime)
+                val ret = trustManager.verify(chain, atTime, validateCaValidity)
                 if (ret.isTrusted) {
                     // Make sure we return the right TrustManager instance, not the RicalTrustManager
                     return@withLock ret.copy(
@@ -591,7 +593,7 @@ class TrustManager(
                 }
             }
             // Finally certificates...
-            TrustManagerUtil.verifyX509TrustChain(chain, atTime, skiToTrustPoint)
+            TrustManagerUtil.verifyX509TrustChain(chain, atTime, skiToTrustPoint, validateCaValidity)
         }
     }
 

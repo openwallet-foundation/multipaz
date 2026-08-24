@@ -47,9 +47,10 @@ class RicalTrustManager(
 
     override suspend fun verify(
         chain: List<X509Cert>,
-        atTime: Instant
+        atTime: Instant,
+        validateCaValidity: Boolean
     ): TrustResult {
-        return TrustManagerUtil.verifyX509TrustChain(chain, atTime, skiToTrustPoint)
+        return TrustManagerUtil.verifyX509TrustChain(chain, atTime, skiToTrustPoint, validateCaValidity)
     }
 
     companion object {

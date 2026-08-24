@@ -120,25 +120,26 @@ class ConfigurableTrustManager(
     override suspend fun verify(
         chain: List<X509Cert>,
         atTime: Instant,
+        validateCaValidity: Boolean
     ): TrustResult {
         ensureInitialized()
         return stateLock.withLock {
             // VICAL trust managers get first dibs...
             vicalTrustManagers.forEach { trustManager ->
-                val ret = trustManager.verify(chain, atTime)
+                val ret = trustManager.verify(chain, atTime, validateCaValidity)
                 if (ret.isTrusted) {
                     return@withLock ret
                 }
             }
             // Then RICAL..
             ricalTrustManagers.forEach { trustManager ->
-                val ret = trustManager.verify(chain, atTime)
+                val ret = trustManager.verify(chain, atTime, validateCaValidity)
                 if (ret.isTrusted) {
                     return@withLock ret
                 }
             }
             // Finally certificates...
-            TrustManagerUtil.verifyX509TrustChain(chain, atTime, skiToTrustPoint)
+            TrustManagerUtil.verifyX509TrustChain(chain, atTime, skiToTrustPoint, validateCaValidity)
         }
     }
 

@@ -27,10 +27,11 @@ class CompositeTrustManager(
 
     override suspend fun verify(
         chain: List<X509Cert>,
-        atTime: Instant
+        atTime: Instant,
+        validateCaValidity: Boolean
     ): TrustResult {
         trustManagers.forEach { trustManager ->
-            val ret = trustManager.verify(chain, atTime)
+            val ret = trustManager.verify(chain, atTime, validateCaValidity)
             if (ret.isTrusted) {
                 return ret
             }
