@@ -12,6 +12,8 @@ class ViewModel {
 
     let verticalCardListState = VerticalCardListState()
 
+    /// Pushes a destination onto the navigation stack without iOS's default horizontal slide animation.
+    /// Used for in-place transitions (such as focusing a card in `VerticalCardListScreen`).
     func push(_ destination: Destination) {
         if path.last != destination {
             var transaction = Transaction()
@@ -22,6 +24,8 @@ class ViewModel {
         }
     }
 
+    /// Pops the top destination off the navigation stack without iOS's default horizontal slide-to-right animation.
+    /// Used after in-place animations (such as card unfocus) have already completed visually.
     func popWithoutAnimation() {
         if !path.isEmpty {
             var transaction = Transaction()

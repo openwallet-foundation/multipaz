@@ -26,6 +26,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -79,15 +82,40 @@ fun VerticalCardListScreen(
     documentModel: DocumentModel,
     settingsModel: TestAppSettingsModel,
     focusedDocumentId: String?,
+    animateListTransitions: Boolean = false,
+    isPreviousScreenCardList: Boolean = false,
     state: VerticalCardListState = rememberVerticalCardListState(),
     onDocumentFocused: (documentId: String) -> Unit,
-    onDocumentUnfocused: () -> Unit,
+    onNavigateBack: () -> Unit,
     onViewDocument: (documentId: String) -> Unit,
-    onFocusDocumentFollowing: (documentId: String) -> Unit,
-    onBackPressed: () -> Unit
+    onFocusDocumentFollowing: (documentId: String) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val hazeState = remember { HazeState() }
+    var isUnfocusing by remember { mutableStateOf(false) }
+
+    val handleBack: () -> Unit = {
+        if (!isUnfocusing) {
+            if (isPreviousScreenCardList) {
+                isUnfocusing = true
+                coroutineScope.launch {
+                    state.unfocus()
+                    onNavigateBack()
+                }
+            } else {
+                onNavigateBack()
+            }
+        }
+    }
+
+    val navState = rememberNavigationEventState(NavigationEventInfo.None)
+    NavigationBackHandler(
+        state = navState,
+        isBackEnabled = focusedDocumentId != null,
+        onBackCompleted = {
+            handleBack()
+        }
+    )
 
     Scaffold(
         topBar = {
@@ -107,20 +135,18 @@ fun VerticalCardListScreen(
                         endIntensity = 0.5f
                     )
                 },
-                title = {
-                    val text = if (focusedDocumentId != null) {
-                        "Vertical Card List (doc focused)"
-                    } else {
-                        "Vertical Card List"
-                    }
-                    Text(text = text)},
+                title = { Text(text = "Vertical Card List") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     scrolledContainerColor = Color.Transparent
                 ),
                 navigationIcon = {
                     IconButton(onClick = {
-                        onBackPressed()
+                        if (focusedDocumentId != null) {
+                            handleBack()
+                        } else {
+                            onNavigateBack()
+                        }
                     }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -187,6 +213,7 @@ fun VerticalCardListScreen(
                 showStackWhileFocused = true,
                 cardMaxHeight = maxCardHeight,
                 paddingTop = innerPadding.calculateTopPadding() + 16.dp,
+                animateListTransitions = animateListTransitions,
                 state = state,
                 topContent = {
                     Card(
@@ -239,10 +266,10 @@ fun VerticalCardListScreen(
                     onDocumentFocused(documentInfo.document.identifier)
                 },
                 onCardFocusedTapped = {
-                    onDocumentUnfocused()
+                    handleBack()
                 },
                 onCardFocusedStackTapped = {
-                    onDocumentUnfocused()
+                    handleBack()
                 },
                 onCardReordered = { cardInfo, newIndex ->
                     val documentInfo = cardInfo as DocumentInfo

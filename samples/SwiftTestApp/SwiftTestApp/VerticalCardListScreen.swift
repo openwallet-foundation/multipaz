@@ -4,16 +4,40 @@ import Multipaz
 struct VerticalCardListScreen: View {
     @Environment(ViewModel.self) private var viewModel
 
-    @State private var focusedDocumentId: String?
+    let focusedDocumentId: String?
+    let animateListTransitions: Bool
 
-    init(focusedDocumentId: String? = nil) {
-        self._focusedDocumentId = State(initialValue: focusedDocumentId)
+    init(focusedDocumentId: String? = nil, animateListTransitions: Bool = false) {
+        self.focusedDocumentId = focusedDocumentId
+        self.animateListTransitions = animateListTransitions
     }
-    
-    var body: some View {
-        let focusedDocument = viewModel.documentModel.documentInfos.first {
+
+    private var focusedDocument: DocumentInfo? {
+        viewModel.documentModel.documentInfos.first {
             $0.document.identifier == focusedDocumentId
         }
+    }
+
+    private var isPreviousScreenCardList: Bool {
+        if viewModel.path.count >= 2 {
+            if case .verticalCardListScreen = viewModel.path[viewModel.path.count - 2] {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func handleBack() {
+        if isPreviousScreenCardList {
+            viewModel.verticalCardListState.unfocus {
+                viewModel.popWithoutAnimation()
+            }
+        } else {
+            viewModel.path.removeLast()
+        }
+    }
+
+    var body: some View {
         VStack {
             VerticalCardList(
                 cardInfos: viewModel.documentModel.documentInfos,
@@ -24,12 +48,13 @@ struct VerticalCardListScreen: View {
                 paddingTop: 16,
                 paddingBottom: 16,
                 state: viewModel.verticalCardListState,
+                animateListTransitions: animateListTransitions,
                 topContent: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Top Composable Demo")
+                        Text("Top Content Demo")
                             .font(.headline)
                             .bold()
-                        Text("This composable appears above cards when no card is focused and is hidden when a card is focused.")
+                        Text("This content appears above cards when no card is focused and is hidden when a card is focused.")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
@@ -44,7 +69,7 @@ struct VerticalCardListScreen: View {
                         Text("\(docInfo.document.displayName ?? "Document") is focused")
                         Spacer()
                         Button(action: {
-                            viewModel.path.append(Destination.documentScreen(documentId: docInfo.document.identifier))
+                            viewModel.push(.documentScreen(documentId: docInfo.document.identifier))
                         }) {
                             Text("More info")
                                 .cornerRadius(12)
@@ -73,48 +98,162 @@ struct VerticalCardListScreen: View {
                     }
                 },
                 onCardFocused: { cardInfo in
-                    focusedDocumentId = cardInfo.identifier
+                    viewModel.push(.verticalCardListScreen(
+                        focusedDocumentId: cardInfo.identifier,
+                        animateListTransitions: true
+                    ))
                 },
                 onCardFocusedTapped: { _ in
-                    focusedDocumentId = nil
+                    handleBack()
                 },
                 onCardFocusedStackTapped: { _ in
-                    focusedDocumentId = nil
+                    handleBack()
                 }
             )
         }
-        .navigationTitle(focusedDocument != nil ? "Vertical Card List (doc focused)" : "Vertical Card List")
+        .id(focusedDocumentId ?? "root")
+        .navigationBarBackButtonHidden(focusedDocumentId != nil)
+        .navigationTitle("Vertical Card List")
         .toolbar {
+            if focusedDocumentId != nil {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: {
+                        handleBack()
+                    }) {
+                        Image(systemName: "chevron.backward")
+                    }
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: 12) {
-                    HStack(spacing: 6) {
-                        Text("Top Composable")
-                            .font(.caption)
+                HStack(spacing: 8) {
+                    HStack(spacing: 4) {
+                        Text("Top Content")
+                            .font(.caption2)
+                            .lineLimit(1)
+                            .fixedSize()
                         Toggle("", isOn: Binding(
                             get: { viewModel.verticalCardListState.showTopContent },
                             set: { newValue in
-                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                withAnimation(.easeInOut(duration: 0.38)) {
                                     viewModel.verticalCardListState.showTopContent = newValue
                                 }
                             }
                         ))
                         .labelsHidden()
+                        .controlSize(.small)
                     }
-                    HStack(spacing: 6) {
+                    HStack(spacing: 4) {
                         Text("Placeholder")
-                            .font(.caption)
+                            .font(.caption2)
+                            .lineLimit(1)
+                            .fixedSize()
                         Toggle("", isOn: Binding(
                             get: { viewModel.verticalCardListState.showPlaceholderWhenEmpty },
                             set: { newValue in
-                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                withAnimation(.easeInOut(duration: 0.38)) {
                                     viewModel.verticalCardListState.showPlaceholderWhenEmpty = newValue
                                 }
                             }
                         ))
                         .labelsHidden()
+                        .controlSize(.small)
                     }
                 }
             }
+        }
+        .background {
+            ScreenEdgeSwipeGesture(isEnabled: focusedDocumentId != nil) {
+                handleBack()
+            }
+        }
+    }
+}
+
+private struct ScreenEdgeSwipeGesture: UIViewRepresentable {
+    let isEnabled: Bool
+    let action: () -> Void
+
+    func makeUIView(context: Context) -> GestureView {
+        let view = GestureView()
+        view.coordinator = context.coordinator
+        return view
+    }
+
+    func updateUIView(_ uiView: GestureView, context: Context) {
+        context.coordinator.action = action
+        context.coordinator.isEnabled = isEnabled
+        uiView.updateGesture()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(isEnabled: isEnabled, action: action)
+    }
+
+    class GestureView: UIView {
+        var coordinator: Coordinator?
+        private var panGesture: UIPanGestureRecognizer?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            updateGesture()
+        }
+
+        func updateGesture() {
+            guard let window = self.window, let coordinator = coordinator else { return }
+            if panGesture == nil {
+                let gesture = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.handlePan(_:)))
+                gesture.delegate = coordinator
+                window.addGestureRecognizer(gesture)
+                panGesture = gesture
+            }
+            panGesture?.isEnabled = coordinator.isEnabled
+        }
+
+        override func willMove(toWindow newWindow: UIWindow?) {
+            super.willMove(toWindow: newWindow)
+            if newWindow == nil, let gesture = panGesture, let window = self.window {
+                window.removeGestureRecognizer(gesture)
+                panGesture = nil
+            }
+        }
+    }
+
+    class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var isEnabled: Bool
+        var action: () -> Void
+        private var isTriggered = false
+
+        init(isEnabled: Bool, action: @escaping () -> Void) {
+            self.isEnabled = isEnabled
+            self.action = action
+        }
+
+        @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
+            guard isEnabled else { return }
+            let translation = recognizer.translation(in: recognizer.view)
+            let velocity = recognizer.velocity(in: recognizer.view)
+
+            switch recognizer.state {
+            case .changed:
+                if !isTriggered && translation.x > 30 && velocity.x > 80 && abs(translation.x) > abs(translation.y) * 1.2 {
+                    isTriggered = true
+                    action()
+                }
+            case .ended, .cancelled, .failed:
+                isTriggered = false
+            default:
+                break
+            }
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            return true
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard isEnabled, let pan = gestureRecognizer as? UIPanGestureRecognizer, let view = pan.view else { return false }
+            let velocity = pan.velocity(in: view)
+            return velocity.x > 0 && abs(velocity.x) > abs(velocity.y) * 1.2
         }
     }
 }
@@ -122,15 +261,15 @@ struct VerticalCardListScreen: View {
 // A sample detail view to inject into the `showDocumentInfo` slot
 struct DocumentDetailCard: View {
     let docInfo: DocumentInfo
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(docInfo.document.displayName ?? "Unknown Document")
                 .font(.title2)
                 .bold()
-            
+
             Divider()
-            
+
             if docInfo.credentialInfos.isEmpty {
                 Text("No credentials found on this document.")
                     .foregroundColor(.secondary)
@@ -156,7 +295,7 @@ struct DocumentDetailCard: View {
                     .padding(.vertical, 4)
                 }
             }
-            
+
             Button(action: {
                 // Handle action
             }) {
