@@ -90,7 +90,7 @@ struct PassphrasePromptDialog: View {
                                 return "Wrong \(kfType), try again, \(remaining) attempt left"
                             }
                         }
-                        assertionFailure("Shouldn't get here, evaluation: \(evaluation)")
+                        assertionFailure("Shouldn't get here, evaluation: \(String(describing: evaluation))")
                         return nil
                     },
                     onSuccess: { enteredPassphrase in
