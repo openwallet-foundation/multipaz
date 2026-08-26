@@ -11,24 +11,6 @@
 
 using namespace std;
 
-std::string base64UrlDecode(const std::string& data) {
-    size_t len = data.size();
-    std::string s = data;
-    if (data[len - 1] == '=') {
-        // already have padding
-    } else {
-        size_t rem = len & 3;
-        if (rem == 2) {
-            s = s + "==";
-        } else if (rem == 3) {
-            s = s + "=";
-        } else {
-            // no padding needed
-        }
-    }
-    return from_base64(s);
-}
-
 // Helper struct for generating permutations
 struct PermutationResult {
     std::vector<std::string> claimIds;
