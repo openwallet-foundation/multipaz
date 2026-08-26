@@ -6,6 +6,8 @@ import Combine
 
 @MainActor
 final class RequestAuthorizationViewModel: ObservableObject {
+    private static let TAG = "RequestAuthorizationView"
+
     @Published var isLoading: Bool = true
 
     var source: PresentmentSource!
@@ -24,6 +26,24 @@ final class RequestAuthorizationViewModel: ObservableObject {
                 source = await getPresentmentSource()
             }
             let calcDuration = try! await clock.measure {
+                var requesterIdentities: [RequesterIdentity] = []
+                for auth in requestContext.request.requestAuthentications {
+                    let certChain = auth.authenticationCertificateChain.map { secCert in
+                        X509Cert(encoded: ByteString(bytes: (SecCertificateCopyData(secCert) as Data).toByteArray()))
+                    }
+                    requesterIdentities.append(
+                        Iso18013RequesterIdentity(certChain: X509CertChain(certificates: certChain))
+                    )
+                }
+                requester = Requester(
+                    requesterIdentities: requesterIdentities,
+                    appId: nil,
+                    origin: requestContext.requestingWebsiteOrigin?.getOrigin()
+                )
+                if !requesterIdentities.isEmpty {
+                    trustedRequesterIdentity = try! await source.resolveTrust(requester: requester)
+                }
+
                 let request = Iso18013Request(
                     presentmentRequests: requestContext.request.presentmentRequests.map { presentmentRequest in
                         Iso18013PresentmentRequest(
@@ -45,36 +65,18 @@ final class RequestAuthorizationViewModel: ObservableObject {
                 )
                 let credentialQueryResult = try await request.getCredentialQueryResult(
                     source: source,
-                    keyAgreementPossible: []
+                    keyAgreementPossible: [],
+                    requesterIdentities: requesterIdentities
                 )
                 consentData = try await ConsentData.companion.fromCredentialQueryResult(
                     credentialQueryResult: credentialQueryResult,
                     source: source
                 )
-                requester = Requester(
-                    requesterIdentities: [],
-                    appId: nil,
-                    origin: requestContext.requestingWebsiteOrigin?.getOrigin()
-                )
-
-                // TODO: consider all authentications...
-                if let auth = requestContext.request.requestAuthentications.first {
-                    let certChain = auth.authenticationCertificateChain.map { secCert in
-                        X509Cert(encoded: ByteString(bytes: (SecCertificateCopyData(secCert) as Data).toByteArray()))
-                    }
-                    let requesterIdentities = [
-                        Iso18013RequesterIdentity(certChain: X509CertChain(certificates: certChain))
-                    ]
-                    requester = Requester(
-                        requesterIdentities: requesterIdentities,
-                        appId: nil,
-                        origin: requestContext.requestingWebsiteOrigin?.getOrigin()
-                    )
-                    trustedRequesterIdentity = try! await source.resolveTrust(requester: requester)
-                }
             }
-            print("Prepared PresentmentSource in \(sourceDuration.toMilliseconds()) msec")
-            print("Calculated request and trustMetadata in \(calcDuration.toMilliseconds()) msec")
+            Logger.shared.d(
+                tag: Self.TAG,
+                msg: "Prepared source in \(sourceDuration.toMilliseconds()) ms, request in \(calcDuration.toMilliseconds()) ms (identities=\(requester.requesterIdentities.count), trusted='\(trustedRequesterIdentity?.trustMetadata.displayName ?? "nil")')"
+            )
             self.isLoading = false
         }
     }

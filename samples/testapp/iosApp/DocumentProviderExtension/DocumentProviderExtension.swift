@@ -12,6 +12,51 @@ import IdentityDocumentServicesUI
 @preconcurrency import Multipaz
 import SwiftUI
 
+fileprivate let TAG = "DocumentProviderExtension"
+
+private class ExtensionLogPrinter: NSObject, LoggerLogPrinter {
+    private let maxChunkLength = 800
+
+    func print(level: LoggerLogPrinterLevel, tag: String, msg: String, throwable: KotlinThrowable?) {
+        let levelStr: String
+        switch level {
+        case .debug: levelStr = "DEBUG"
+        case .info: levelStr = "INFO"
+        case .warning: levelStr = "WARNING"
+        case .error: levelStr = "ERROR"
+        default: levelStr = level.name
+        }
+
+        var fullMsg = msg
+        if let throwable = throwable {
+            fullMsg += "\nEXCEPTION: \(throwable)"
+        }
+
+        let lines = fullMsg.components(separatedBy: "\n")
+        for line in lines {
+            if line.count <= maxChunkLength {
+                NSLog("Multipaz: [%@] [%@] %@", levelStr, tag, line)
+            } else {
+                var remaining = line[...]
+                while !remaining.isEmpty {
+                    let chunk = remaining.prefix(maxChunkLength)
+                    NSLog("Multipaz: [%@] [%@] %@", levelStr, tag, String(chunk))
+                    remaining = remaining.dropFirst(maxChunkLength)
+                }
+            }
+        }
+    }
+}
+
+private var isLoggingSetup = false
+
+private func initializeLogging() {
+    guard !isLoggingSetup else { return }
+    isLoggingSetup = true
+    Logger.shared.logPrinter = ExtensionLogPrinter()
+    Logger.shared.d(tag: TAG, msg: "Initialized logging")
+}
+
 func getPresentmentSource() async -> PresentmentSource {
     let storage = TestAppConfiguration.shared.storage
     let secureArea = try! await Platform.shared.getSecureArea(storage: storage)
@@ -107,12 +152,16 @@ func getPresentmentSource() async -> PresentmentSource {
                     atTime: KotlinClockCompanion().getSystem().now(),
                     validateCaValidity: true
                 )
-                if result.isTrusted && result.trustPoints.first != nil {
+                if result.isTrusted, let trustPoint = result.trustPoints.first {
+                    Logger.shared.d(tag: TAG, msg: "resolveTrust: Matched '\(trustPoint.metadata.displayName)'")
                     return TrustedRequesterIdentity(
                         identity: requesterIdentity,
-                        trustMetadata: result.trustPoints.first!.metadata
+                        trustMetadata: trustPoint.metadata
                     )
                 }
+            }
+            if !requester.requesterIdentities.isEmpty {
+                Logger.shared.d(tag: TAG, msg: "resolveTrust: No matching trust point for \(requester.requesterIdentities.count) identities")
             }
             return nil
         },
@@ -141,6 +190,7 @@ struct DocumentProviderExtension: IdentityDocumentProvider {
             RequestAuthorizationView(
                 requestContext: context,
                 getPresentmentSource: {
+                    initializeLogging()
                     return await getPresentmentSource()
                 }
             )
@@ -148,7 +198,8 @@ struct DocumentProviderExtension: IdentityDocumentProvider {
     }
 
     func performRegistrationUpdates() async {
-        print("in performRegistrationUpdates")
+        initializeLogging()
+        Logger.shared.d(tag: TAG, msg: "in performRegistrationUpdates")
         let source = await getPresentmentSource()
         do {
             let dcApi = try await DigitalCredentialsCompanion.shared.getDefault()
@@ -158,9 +209,9 @@ struct DocumentProviderExtension: IdentityDocumentProvider {
                 selectedProtocols: dcApi.supportedProtocols,
                 forceRegistration: false
             )
-            print("Successfully registered credentials")
+            Logger.shared.d(tag: TAG, msg: "Successfully registered credentials")
         } catch {
-            print("Error registering credentials: \(error)")
+            Logger.shared.e(tag: TAG, msg: "Error registering credentials: \(error)")
         }
         
     }

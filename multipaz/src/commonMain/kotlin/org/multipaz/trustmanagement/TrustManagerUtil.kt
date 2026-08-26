@@ -86,7 +86,14 @@ internal object TrustManagerUtil {
         // TODO: add support for customValidators similar to PKIXCertPathChecker
         try {
             val trustPoints = getAllTrustPointsForX509Cert(chain, skiToTrustPoint)
-            val completeChain = chain.plus(trustPoints.map { it.certificate })
+            val completeChain = buildList {
+                addAll(chain)
+                for (tp in trustPoints) {
+                    if (!contains(tp.certificate)) {
+                        add(tp.certificate)
+                    }
+                }
+            }
             try {
                 validateCertificationTrustPath(completeChain, atTime, validateCaValidity)
                 return TrustResult(

@@ -888,7 +888,8 @@ private func calcRequestData(
     
     let iso18013Response = try! await deviceRequest!.execute(
         presentmentSource: source,
-        keyAgreementPossible: []
+        keyAgreementPossible: [],
+        requesterIdentities: requester.requesterIdentities
     )
     let consentData = try! await ConsentData.companion.fromCredentialQueryResult(
         credentialQueryResult: iso18013Response,
