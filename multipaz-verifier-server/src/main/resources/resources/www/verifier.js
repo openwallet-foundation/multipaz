@@ -982,6 +982,7 @@ async function requestDocumentRawDcql() {
 
 async function requestDocument(format, docType, requestId, rawDcql, multiDocumentRequestId) {
     console.log('requestDocument, format=' + format + ' docType=' + docType + ' requestId=' + requestId + ' protocol=' + selectedProtocol)
+    var issuerIdentifiers = document.getElementById("issuer-identifiers-input")?.value || ""
     if (selectedProtocol === 'uri_scheme_openid4vp_29') {
         if (document.getElementById("scheme-input").value === "") {
             alert("You must specify a non-empty scheme")
@@ -1002,7 +1003,8 @@ async function requestDocument(format, docType, requestId, rawDcql, multiDocumen
                 host: location.host,
                 scheme: document.getElementById("scheme-input").value,
                 signRequest: true, // OpenID4VP 1.0 w/ URI scheme requires signed request
-                encryptResponse: encryptResponse
+                encryptResponse: encryptResponse,
+                issuerIdentifiers: issuerIdentifiers
             }
         )
         window.location = response.uri
@@ -1018,6 +1020,7 @@ async function requestDocument(format, docType, requestId, rawDcql, multiDocumen
                 protocol: selectedProtocol,
                 origin: location.origin,
                 host: location.host,
+                issuerIdentifiers: issuerIdentifiers
             }
         )
         window.location = response.uri
@@ -1050,7 +1053,8 @@ async function requestDocument(format, docType, requestId, rawDcql, multiDocumen
                     origin: location.origin,
                     host: location.host,
                     signRequest: signRequest,
-                    encryptResponse: encryptResponse
+                    encryptResponse: encryptResponse,
+                    issuerIdentifiers: issuerIdentifiers
                 }
             )
             console.log(response)

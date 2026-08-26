@@ -1,9 +1,11 @@
 package org.multipaz.testapp.ui
 
 import kotlinx.coroutines.CancellationException
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -17,6 +19,7 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import org.multipaz.cbor.DataItem
 import org.multipaz.compose.rememberUiBoundCoroutineScope
 import org.multipaz.crypto.Crypto
@@ -28,6 +31,7 @@ import org.multipaz.documenttype.SingleDocumentCannedRequest
 import org.multipaz.testapp.App
 import org.multipaz.testapp.TestAppUtils
 import org.multipaz.util.Logger
+import org.multipaz.util.fromHexByteString
 import org.multipaz.util.toBase64Url
 import org.multipaz.testapp.ShowResponseMetadata
 import org.multipaz.testapp.TestAppConfiguration
@@ -41,6 +45,14 @@ import kotlin.random.Random
 import kotlin.time.Clock
 
 private const val TAG = "AppToAppReadingScreen"
+
+private fun parseIssuerIdentifiers(input: String?): List<ByteString> {
+    if (input.isNullOrBlank()) return emptyList()
+    return input.split(",")
+        .map { it.filterNot { c -> c.isWhitespace() } }
+        .filter { it.isNotEmpty() }
+        .map { it.fromHexByteString() }
+}
 
 private data class RequestEntry(
     val displayName: String,
@@ -156,7 +168,7 @@ private enum class CredentialFormat(
 }
 
 private var lastRequest: Int = 0
-private var lastProtocol: Int = 0
+private var lastProtocol: Int = 4
 private var lastFormat: Int = 0
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalCoroutinesApi::class)
@@ -201,6 +213,7 @@ fun DcRequestScreen(
     val formatOptions = CredentialFormat.entries
     val formatDropdownExpanded = remember { mutableStateOf(false) }
     val formatSelected = remember { mutableStateOf(formatOptions[lastFormat]) }
+    val issuerIdentifiers = remember { mutableStateOf(app.settingsModel.dcRequestIssuerIdentifiers.value) }
     val coroutineScope = rememberUiBoundCoroutineScope { app.promptModel }
 
     LazyColumn(
@@ -237,6 +250,17 @@ fun DcRequestScreen(
             )
         }
         item {
+            OutlinedTextField(
+                value = issuerIdentifiers.value,
+                onValueChange = {
+                    issuerIdentifiers.value = it
+                    app.settingsModel.dcRequestIssuerIdentifiers.value = it
+                },
+                label = { Text("Issuer Identifiers (hex, comma separated)") },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
+        }
+        item {
             TextButton(
                 onClick = {
                     coroutineScope.launch {
@@ -246,6 +270,7 @@ fun DcRequestScreen(
                                 request = requestSelected.value.request,
                                 protocol = protocolSelected.value,
                                 format = formatSelected.value,
+                                issuerIdentifiers = parseIssuerIdentifiers(issuerIdentifiers.value),
                                 showResponse = showResponse
                             )
                         } catch (error: Exception) {
@@ -266,6 +291,7 @@ private suspend fun doDcRequestFlow(
     request: DocumentCannedRequest,
     protocol: RequestProtocol,
     format: CredentialFormat,
+    issuerIdentifiers: List<ByteString> = emptyList(),
     showResponse: (
         vpToken: JsonObject?,
         deviceResponse: DataItem?,
@@ -325,9 +351,18 @@ private suspend fun doDcRequestFlow(
         }
     }
 
+    val dcqlToUse = if (issuerIdentifiers.isNotEmpty()) {
+        VerificationUtil.injectIssuerIdentifiersIntoDcql(
+            Json.parseToJsonElement(requestDefinition.dcql).jsonObject,
+            issuerIdentifiers
+        ).toString()
+    } else {
+        requestDefinition.dcql
+    }
+
     val session = VerificationUtil.generateVerificationSessionForDcql(
         requestTypes = protocol.requestTypes,
-        dcql = requestDefinition.dcql,
+        dcql = dcqlToUse,
         transactionData = requestDefinition.transactionData,
         nonce = nonce,
         origin = origin,

@@ -11,6 +11,7 @@ import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -104,6 +105,7 @@ object VerificationUtil {
      *   see OpenID4VP 1.0 section 8.4.
      * @param cborTransactionData CBOR-formatted transaction data
      * @param docRequestOtherInfo additional data to add to `requestInfo` map in ISO 18013-7.
+     * @param issuerIdentifiers optional list of issuer Authority Key Identifiers to match against.
      * @return a [JsonObject] with the request.
      */
     @Throws(CancellationException::class)
@@ -118,7 +120,8 @@ object VerificationUtil {
         zkSystemSpecs: List<ZkSystemSpec>,
         jsonTransactionData: List<String> = emptyList(),
         cborTransactionData: TransactionsInfo? = null,
-        docRequestOtherInfo: Map<String, DataItem> = emptyMap()
+        docRequestOtherInfo: Map<String, DataItem> = emptyMap(),
+        issuerIdentifiers: List<ByteString> = emptyList()
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
             generateSingleRequest(
@@ -134,7 +137,8 @@ object VerificationUtil {
                 zkSystemSpecs = zkSystemSpecs,
                 jsonTransactionData = jsonTransactionData,
                 cborTransactionData = cborTransactionData,
-                docRequestOtherInfo = docRequestOtherInfo
+                docRequestOtherInfo = docRequestOtherInfo,
+                issuerIdentifiers = issuerIdentifiers
             )
         }
         return buildJsonObject {
@@ -310,7 +314,8 @@ object VerificationUtil {
         zkSystemSpecs: List<ZkSystemSpec>,
         jsonTransactionData: List<String>,
         cborTransactionData: TransactionsInfo?,
-        docRequestOtherInfo: Map<String, DataItem>
+        docRequestOtherInfo: Map<String, DataItem>,
+        issuerIdentifiers: List<ByteString> = emptyList()
     ): JsonObject = buildJsonObject {
         put("protocol", exchangeProtocol)
         when (exchangeProtocol) {
@@ -332,7 +337,7 @@ object VerificationUtil {
                         verifierIdentities = verifierIdentities,
                         responseMode = OpenID4VP.ResponseMode.DC_API,
                         responseUri = null,
-                        dcqlQuery = calcDcqlMdoc(docType, claims, zkSystemSpecs),
+                        dcqlQuery = calcDcqlMdoc(docType, claims, zkSystemSpecs, issuerIdentifiers),
                         jsonTransactionData = jsonTransactionData
                     )
                 )
@@ -401,7 +406,8 @@ object VerificationUtil {
                             docFormat = docFormat,
                             dataElementIdentifierMapping = dataElementIdentifierMapping,
                             transactions = cborTransactionData,
-                            otherInfo = docRequestOtherInfo
+                            otherInfo = docRequestOtherInfo,
+                            issuerIdentifiers = issuerIdentifiers
                         )
                     )
                     verifierIdentities.forEach { readerIdentity ->
@@ -450,6 +456,7 @@ object VerificationUtil {
      * @param jsonTransactionData JSON-formatted transaction data, *before* base64url encoding,
      *   see OpenID4VP 1.0 section 8.4.
      * @param cborTransactionData transaction data encoded for use in requestInfo map in ISO 18013-5.
+     * @param issuerIdentifiers optional list of issuer Authority Key Identifiers to match against.
      * @return a [JsonObject] with the request.
      */
     @Throws(CancellationException::class)
@@ -462,7 +469,8 @@ object VerificationUtil {
         responseEncryptionKey: EcPublicKey?,
         verifierIdentities: List<VerifierIdentity>,
         jsonTransactionData: List<String> = emptyList(),
-        cborTransactionData: TransactionsInfo? = null
+        cborTransactionData: TransactionsInfo? = null,
+        issuerIdentifiers: List<ByteString> = emptyList()
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
             buildJsonObject {
@@ -500,7 +508,8 @@ object VerificationUtil {
                                 zkSystemSpecs = emptyList(),
                                 cborTransactionData = cborTransactionData,
                                 jsonTransactionData = jsonTransactionData,
-                                docRequestOtherInfo = emptyMap()
+                                docRequestOtherInfo = emptyMap(),
+                                issuerIdentifiers = issuerIdentifiers
                             )["data"] as JsonObject
                         )
                     }
@@ -522,7 +531,7 @@ object VerificationUtil {
                                 verifierIdentities = verifierIdentities,
                                 responseMode = OpenID4VP.ResponseMode.DC_API,
                                 responseUri = null,
-                                dcqlQuery = calcDcqlSdJwt(vct, claims),
+                                dcqlQuery = calcDcqlSdJwt(vct, claims, issuerIdentifiers),
                                 jsonTransactionData = jsonTransactionData
                             )
                         )
@@ -539,7 +548,8 @@ object VerificationUtil {
     private fun calcDcqlMdoc(
         docType: String,
         claims: List<MdocRequestedClaim>,
-        zkSystemSpecs: List<ZkSystemSpec>
+        zkSystemSpecs: List<ZkSystemSpec>,
+        issuerIdentifiers: List<ByteString> = emptyList()
     ) = buildJsonObject {
         putJsonArray("credentials") {
             addJsonObject {
@@ -565,6 +575,18 @@ object VerificationUtil {
                         }
                     }
                 }
+                if (issuerIdentifiers.isNotEmpty()) {
+                    putJsonArray("trusted_authorities") {
+                        addJsonObject {
+                            put("type", "aki")
+                            putJsonArray("values") {
+                                issuerIdentifiers.forEach { aki ->
+                                    add(JsonPrimitive(aki.toByteArray().toBase64Url()))
+                                }
+                            }
+                        }
+                    }
+                }
                 putJsonArray("claims") {
                     for (claim in claims) {
                         addJsonObject {
@@ -582,7 +604,8 @@ object VerificationUtil {
 
     private fun calcDcqlSdJwt(
         vct: List<String>,
-        claims: List<JsonRequestedClaim>
+        claims: List<JsonRequestedClaim>,
+        issuerIdentifiers: List<ByteString> = emptyList()
     ) = buildJsonObject {
         putJsonArray("credentials") {
             addJsonObject {
@@ -598,6 +621,18 @@ object VerificationUtil {
                         }
                     )
                 }
+                if (issuerIdentifiers.isNotEmpty()) {
+                    putJsonArray("trusted_authorities") {
+                        addJsonObject {
+                            put("type", "aki")
+                            putJsonArray("values") {
+                                issuerIdentifiers.forEach { aki ->
+                                    add(JsonPrimitive(aki.toByteArray().toBase64Url()))
+                                }
+                            }
+                        }
+                    }
+                }
                 putJsonArray("claims") {
                     for (claim in claims) {
                         addJsonObject {
@@ -608,6 +643,55 @@ object VerificationUtil {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * Injects `trusted_authorities` with the provided [issuerIdentifiers] into each credential in [dcql]
+     * that does not already have `trusted_authorities`.
+     *
+     * @param dcql the DCQL query object to inject issuer identifiers into.
+     * @param issuerIdentifiers the list of Authority Key Identifiers to inject.
+     * @return the updated DCQL query object with `trusted_authorities` included.
+     */
+    fun injectIssuerIdentifiersIntoDcql(
+        dcql: JsonObject,
+        issuerIdentifiers: List<ByteString>
+    ): JsonObject {
+        if (issuerIdentifiers.isEmpty()) return dcql
+        val credentialsArray = dcql["credentials"]?.jsonArray ?: return dcql
+        val newCredentials = buildJsonArray {
+            for (cred in credentialsArray) {
+                val credObj = cred.jsonObject
+                if (credObj.containsKey("trusted_authorities")) {
+                    add(credObj)
+                } else {
+                    addJsonObject {
+                        for ((k, v) in credObj) {
+                            put(k, v)
+                        }
+                        putJsonArray("trusted_authorities") {
+                            addJsonObject {
+                                put("type", "aki")
+                                putJsonArray("values") {
+                                    issuerIdentifiers.forEach { aki ->
+                                        add(JsonPrimitive(aki.toByteArray().toBase64Url()))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return buildJsonObject {
+            for ((k, v) in dcql) {
+                if (k == "credentials") {
+                    put("credentials", newCredentials)
+                } else {
+                    put(k, v)
                 }
             }
         }

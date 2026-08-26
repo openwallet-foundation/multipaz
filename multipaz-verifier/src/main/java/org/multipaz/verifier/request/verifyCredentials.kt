@@ -50,6 +50,7 @@ import org.multipaz.trustmanagement.TrustManagerInterface
 import org.multipaz.util.Logger
 import org.multipaz.verification.PresentmentRecord
 import org.multipaz.util.fromBase64Url
+import org.multipaz.util.fromHexByteString
 import org.multipaz.util.toBase64Url
 import org.multipaz.verification.DcqlProcessedResponse
 import org.multipaz.verification.JsonVerifiedPresentation
@@ -83,6 +84,23 @@ suspend fun makeRequest(call: ApplicationCall) {
     val request = expandedRequest ?: rawRequest
     val dcqlQuery = (request["dcql"] as? JsonObject)?.toString()
         ?: throw InvalidRequestException("'dcql' is missing or invalid")
+    val issuerIdentifiersStr = (request["issuer_identifiers"] as? JsonPrimitive)?.content
+    val issuerIdentifiers = if (!issuerIdentifiersStr.isNullOrBlank()) {
+        issuerIdentifiersStr.split(",")
+            .map { it.filterNot { c -> c.isWhitespace() } }
+            .filter { it.isNotEmpty() }
+            .map { it.fromHexByteString() }
+    } else {
+        emptyList()
+    }
+    val dcqlQueryToUse = if (issuerIdentifiers.isNotEmpty()) {
+        VerificationUtil.injectIssuerIdentifiersIntoDcql(
+            Json.parseToJsonElement(dcqlQuery).jsonObject,
+            issuerIdentifiers
+        ).toString()
+    } else {
+        dcqlQuery
+    }
     val requestTypes = (request["protocols"] as? JsonArray)?.map {
         when (val protocol = it.jsonPrimitive.content) {
             "org-iso-mdoc" -> VerificationSession.RequestType.DC_ISO_18013
@@ -107,7 +125,7 @@ suspend fun makeRequest(call: ApplicationCall) {
     val transactions = transactionData?.map { it.toString() }
     val verificationSession = VerificationUtil.generateVerificationSessionForDcql(
         requestTypes = requestTypes,
-        dcql = dcqlQuery,
+        dcql = dcqlQueryToUse,
         transactionData = transactions,
         nonce = ByteString(nonce?.fromBase64Url() ?: Random.nextBytes(15)),
         origin = BackendEnvironment.getDomain(),
@@ -117,7 +135,7 @@ suspend fun makeRequest(call: ApplicationCall) {
         encryptResponse = encrypt,
         state = encodedSessionId
     )
-    Session.updateSession(sessionId, Session(dcqlQuery, transactions, verificationSession))
+    Session.updateSession(sessionId, Session(dcqlQueryToUse, transactions, verificationSession))
     call.respondText(
         contentType = ContentType.Application.Json,
         text = buildJsonObject {

@@ -59,6 +59,10 @@ async function run() {
         protocols.push("openid4vp-v1")
     }
     const req = { dcql: query, protocols: protocols };
+    const issuerIdentifiers = document.getElementById("issuer_identifiers")?.value;
+    if (issuerIdentifiers && issuerIdentifiers.trim().length > 0) {
+        req["issuer_identifiers"] = issuerIdentifiers.trim();
+    }
     const transactionDataPresent = document.getElementById("transaction_data_present");
     const transactionDataText = document.getElementById("transaction_data").value;
     if (transactionDataPresent.checked && transactionDataText.trim().length !== 0) {

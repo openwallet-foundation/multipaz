@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import multipazproject.samples.testapp.generated.resources.Res
 import multipazproject.samples.testapp.generated.resources.av18_card_art
@@ -125,6 +126,7 @@ object TestAppUtils {
         eReaderKey: EcPrivateKey,
         handover: DataItem,
         signRequest: Boolean = true,
+        issuerIdentifiers: List<ByteString> = emptyList(),
     ): VerificationSession {
         val requestDefinition = when (request) {
             is SingleDocumentCannedRequest -> if (requestSdJwtVc) {
@@ -147,9 +149,17 @@ object TestAppUtils {
                     } ?: emptyList()
                 )
         }
+        val dcqlToUse = if (issuerIdentifiers.isNotEmpty()) {
+            VerificationUtil.injectIssuerIdentifiersIntoDcql(
+                Json.parseToJsonElement(requestDefinition.dcql).jsonObject,
+                issuerIdentifiers
+            ).toString()
+        } else {
+            requestDefinition.dcql
+        }
         return VerificationUtil.generateVerificationSessionForDcql(
             requestTypes = setOf(VerificationSession.RequestType.ISO_18013_PROXIMITY),
-            dcql = requestDefinition.dcql,
+            dcql = dcqlToUse,
             transactionData = requestDefinition.transactionData,
             verifierIdentities = buildList {
                 if (signRequest) {

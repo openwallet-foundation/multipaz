@@ -172,9 +172,11 @@ class TestAppSettingsModel private constructor(
         bind(readerAutomaticallySelectTransport, "readerAutomaticallySelectTransport", false)
         bind(readerAllowMultipleRequests, "readerAllowMultipleRequests", false)
         bind(readerLastSelectedRequestId, "readerLastSelectedRequestId", null)
+        bind(readerIssuerIdentifiers, "readerIssuerIdentifiers", "")
 
         bind(cloudSecureAreaUrl, "cloudSecureAreaUrl", CSA_URL_DEFAULT)
         bind(dcApiProtocols, "dcApiProtocols", digitalCredentials.supportedProtocols)
+        bind(dcRequestIssuerIdentifiers, "dcRequestIssuerIdentifiers", "")
 
         bind(cryptoPreferBouncyCastle, "cryptoForceBouncyCastle", false)
 
@@ -214,9 +216,11 @@ class TestAppSettingsModel private constructor(
     val readerAutomaticallySelectTransport = MutableStateFlow<Boolean>(false)
     val readerAllowMultipleRequests = MutableStateFlow<Boolean>(false)
     val readerLastSelectedRequestId = MutableStateFlow<String?>(null)
+    val readerIssuerIdentifiers = MutableStateFlow<String>("")
 
     val cloudSecureAreaUrl = MutableStateFlow<String>(CSA_URL_DEFAULT)
     val dcApiProtocols = MutableStateFlow<Set<String>>(emptySet())
+    val dcRequestIssuerIdentifiers = MutableStateFlow<String>("")
 
     val cryptoPreferBouncyCastle = MutableStateFlow<Boolean>(false)
 
