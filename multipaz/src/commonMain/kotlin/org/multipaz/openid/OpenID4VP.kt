@@ -442,7 +442,8 @@ object OpenID4VP {
         val dcqlResponse = try {
             dcqlQuery.execute(
                 presentmentSource = source,
-                transactionDataMap = transactionDataMap
+                transactionDataMap = transactionDataMap,
+                requesterIdentities = requesterIdentities,
             )
         } catch (e: DcqlCredentialQueryException) {
             throw PresentmentCannotSatisfyRequestException("Unable to satisfy the request", e)

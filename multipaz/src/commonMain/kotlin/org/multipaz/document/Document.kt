@@ -165,6 +165,15 @@ class Document internal constructor(
     val mpzPassVersion: Long? get() = data.mpzPassVersion
 
     /**
+     * A list of reader identifiers for reader authentication.
+     *
+     * If non-empty, the document is only accessible to readers using reader authentication
+     * and where a certificate in the x5chain for the request contains an AuthorityKeyIdentifier
+     * in this list.
+     */
+    val readerIdentifiers: List<ByteString> get() = data.readerIdentifiers ?: emptyList()
+
+    /**
      * A [Tags] for storing application-specific data.
      *
      * Applications must use collision-resistant keys when using the [Tags] instance.
@@ -185,6 +194,7 @@ class Document internal constructor(
                     appData = data.appData,
                     mpzPassId = data.mpzPassId,
                     mpzPassVersion = data.mpzPassVersion,
+                    readerIdentifiers = data.readerIdentifiers,
                     metadata = data.metadata,
                     tagsData = if (newData.asMap.isEmpty()) {
                         null
@@ -449,6 +459,7 @@ class Document internal constructor(
                 appData = data.appData,
                 mpzPassId = data.mpzPassId,
                 mpzPassVersion = data.mpzPassVersion,
+                readerIdentifiers = data.readerIdentifiers ?: emptyList(),
                 metadata = metadata,
                 tags = Tags.Editor(this@Document.tags._tags)
             )
@@ -471,6 +482,7 @@ class Document internal constructor(
                 appData = editor.appData,
                 mpzPassId = editor.mpzPassId,
                 mpzPassVersion = editor.mpzPassVersion,
+                readerIdentifiers = editor.readerIdentifiers.ifEmpty { null },
                 metadata = editor.metadata?.serialize(),
                 tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) }
             )
@@ -502,6 +514,7 @@ class Document internal constructor(
      * @property appData Application-specific data.
      * @property mpzPassId The unique identifier if this document is imported from a [org.multipaz.mpzpass.MpzPass].
      * @property mpzPassVersion The version if this document is imported from a [org.multipaz.mpzpass.MpzPass].
+     * @property readerIdentifiers A list of reader identifiers for reader authentication.
      * @property metadata A [AbstractDocumentMetadata] for storing application-specific data.
      * @property tags A [Tags] for storing application-specific data.
      */
@@ -516,6 +529,7 @@ class Document internal constructor(
         var appData: ByteString?,
         var mpzPassId: String?,
         var mpzPassVersion: Long?,
+        var readerIdentifiers: List<ByteString> = emptyList(),
         var metadata: AbstractDocumentMetadata?,
         val tags: Tags.Editor
     )

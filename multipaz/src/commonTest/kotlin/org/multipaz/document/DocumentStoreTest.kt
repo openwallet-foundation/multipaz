@@ -710,17 +710,21 @@ class DocumentStoreTest {
         )
         assertFalse(document.provisioned)
         assertEquals("init", document.displayName)
+        assertEquals(emptyList(), document.readerIdentifiers)
         document.edit { provisioned = true }
         assertTrue(document.provisioned)
+        val testReaderIds = listOf(ByteString(1, 2, 3), ByteString(4, 5, 6))
         document.edit {
             displayName = "foo"
             typeDisplayName = "bar"
             cardArt = ByteString(1, 2, 3)
             tags.set("com.example.foo", "bar")
             tags.set("com.example.bar", 42L)
+            readerIdentifiers = testReaderIds
         }
         assertEquals("foo", document.displayName)
         assertEquals(ByteString(1, 2, 3), document.cardArt)
+        assertEquals(testReaderIds, document.readerIdentifiers)
         assertEquals("bar", document.tags.get("com.example.foo"))
         assertEquals(42L, document.tags.get("com.example.bar"))
 
@@ -737,6 +741,7 @@ class DocumentStoreTest {
         assertTrue(document2.provisioned)
         assertEquals("foo", document2.displayName)
         assertEquals(ByteString(1, 2, 3), document2.cardArt)
+        assertEquals(testReaderIds, document2.readerIdentifiers)
         assertEquals("bar", document2.tags.get("com.example.foo"))
         assertEquals(42L, document2.tags.get("com.example.bar"))
         assertEquals(setOf("com.example.foo", "com.example.bar"), document2.tags.keys)
@@ -744,6 +749,15 @@ class DocumentStoreTest {
             tags.remove("com.example.bar")
         }
         assertEquals(setOf("com.example.foo"), document2.tags.keys)
+
+        val documentWithReaderIds = documentStore.createDocument(
+            displayName = "readerAuthDoc",
+            readerIdentifiers = testReaderIds
+        )
+        assertEquals(testReaderIds, documentWithReaderIds.readerIdentifiers)
+        val loadedDoc = documentStore2.lookupDocument(documentWithReaderIds.identifier)
+        assertNotNull(loadedDoc)
+        assertEquals(testReaderIds, loadedDoc.readerIdentifiers)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

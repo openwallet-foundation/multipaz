@@ -29,6 +29,7 @@ import org.multipaz.presentment.TransactionData
 import org.multipaz.request.JsonRequestedClaim
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
+import org.multipaz.request.RequesterIdentity
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
@@ -118,7 +119,8 @@ data class DcqlQuery(
     suspend fun execute(
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve> = emptyList(),
-        transactionDataMap: Map<String, List<TransactionData<*>>> = emptyMap()
+        transactionDataMap: Map<String, List<TransactionData<*>>> = emptyMap(),
+        requesterIdentities: List<RequesterIdentity> = emptyList(),
     ): CredentialQueryResult {
         val credentialQueryIdToResponse = mutableMapOf<String, QueryResponse>()
         for (credentialQuery in credentialQueries) {
@@ -157,9 +159,30 @@ data class DcqlQuery(
                 keyAgreementPossible
             }
 
+            // Filter candidate credentials by readerIdentifiers
+            val credsSatisfyingReader = credsSatisfyingMeta.filter { cred ->
+                val readerIdentifiers = cred.document.readerIdentifiers
+                if (readerIdentifiers.isEmpty()) {
+                    true
+                } else {
+                    if (requesterIdentities.isEmpty()) {
+                        false
+                    } else {
+                        val requiredReaderIdentifiers = readerIdentifiers.toSet()
+                        requesterIdentities.any { requesterIdentity ->
+                            requesterIdentity.certChain.certificates.any { cert ->
+                                cert.authorityKeyIdentifier?.let { aki ->
+                                    requiredReaderIdentifiers.contains(ByteString(aki))
+                                } ?: false
+                            }
+                        }
+                    }
+                }
+            }
+
             // Filter candidate credentials by issuerIdentifiers (trusted_authorities)
             val credsSatisfyingIssuer = if (credentialQuery.issuerIdentifiers.isNotEmpty()) {
-                credsSatisfyingMeta.filter { cred ->
+                credsSatisfyingReader.filter { cred ->
                     val credIssuerCertChain = when (cred) {
                         is MdocCredential -> cred.issuerCertChain
                         is SdJwtVcCredential -> cred.getIssuerCertChain()
@@ -168,14 +191,16 @@ data class DcqlQuery(
                     if (credIssuerCertChain == null) {
                         false
                     } else {
-                        val credAkis = credIssuerCertChain.certificates.mapNotNull { it.authorityKeyIdentifier }
-                        credentialQuery.issuerIdentifiers.any { reqAki ->
-                            credAkis.any { credAki -> credAki.contentEquals(reqAki.toByteArray()) }
+                        val requiredIssuerIdentifiers = credentialQuery.issuerIdentifiers.toSet()
+                        credIssuerCertChain.certificates.any { cert ->
+                            cert.authorityKeyIdentifier?.let { aki ->
+                                requiredIssuerIdentifiers.contains(ByteString(aki))
+                            } ?: false
                         }
                     }
                 }
             } else {
-                credsSatisfyingMeta
+                credsSatisfyingReader
             }
 
             val matches = mutableListOf<QueryResponseMatch>()
