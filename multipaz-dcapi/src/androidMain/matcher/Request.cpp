@@ -147,6 +147,7 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
         cppbor::Array* altDataElementsArray = nullptr;
         std::string docFormat = "mso_mdoc";
         std::map<std::string, std::vector<std::string>> dataElementIdentifierMapping;
+        std::vector<std::vector<uint8_t>> issuerIdentifiers;
 
         const auto& requestInfoItem = itemsRequestMap->get("requestInfo");
         if (requestInfoItem) {
@@ -158,6 +159,17 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
                 const auto& docFormatItem = riMap->get("docFormat");
                 if (docFormatItem && docFormatItem->asTstr()) {
                     docFormat = docFormatItem->asTstr()->value();
+                }
+
+                const auto& issuerIdentifiersItem = riMap->get("issuerIdentifiers");
+                if (issuerIdentifiersItem && issuerIdentifiersItem->asArray()) {
+                    auto arr = issuerIdentifiersItem->asArray();
+                    for (size_t k = 0; k < arr->size(); ++k) {
+                        const auto& elem = arr->get(k);
+                        if (elem && elem->asBstr()) {
+                            issuerIdentifiers.push_back(elem->asBstr()->value());
+                        }
+                    }
                 }
 
                 const auto& deimItem = riMap->get("dataElementIdentifierMapping");
@@ -353,6 +365,7 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
                 format,
                 mdocDocType,
                 vctValues,
+                issuerIdentifiers,
                 dcqlClaims,
                 claimSets
         ));

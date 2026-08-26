@@ -28,8 +28,13 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
+import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.DataItem
+import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
+import org.multipaz.mdoc.request.DeviceRequest
+import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.calculateCredentialDatabase
@@ -41,6 +46,8 @@ import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
 import org.multipaz.verification.VerifierIdentity
 import kotlin.random.Random
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 
 // Tests for the matcher in multipaz-models/src/androidMain/matcher ...
 class MatcherTest {
@@ -136,9 +143,8 @@ class MatcherTest {
     }
 
     suspend fun testMatcherIso18013(
-        signRequest: Boolean,
         harnessInitializer: suspend (harness: DocumentStoreTestHarness) -> Unit,
-        dcql: String,
+        deviceRequestBuilder: suspend (harness: DocumentStoreTestHarness, sessionTranscript: DataItem) -> DeviceRequest,
     ): String {
         val encryptionKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val harness = DocumentStoreTestHarness()
@@ -146,26 +152,6 @@ class MatcherTest {
         harnessInitializer(harness)
 
         val nonce = Random.nextBytes(16).toBase64Url()
-        val readerAuthKey = if (signRequest) {
-            val key = Crypto.createEcPrivateKey(EcCurve.P256)
-            val readerRootCert = harness.readerRootKey.certChain.certificates.first()
-            val cert = MdocUtil.generateReaderCertificate(
-                readerRootKey = harness.readerRootKey,
-                readerKey = key.publicKey,
-                subject = X500Name.fromName("CN=Multipaz Reader Cert Single-Use key"),
-                dnsName = "localhost",
-                serial = ASN1Integer.fromRandom(128),
-                validFrom = readerRootCert.validityNotBefore,
-                validUntil = readerRootCert.validityNotAfter
-            )
-            AsymmetricKey.X509CertifiedExplicit(
-                privateKey = key,
-                certChain = X509CertChain(listOf(cert) + harness.readerRootKey.certChain.certificates)
-            )
-        } else {
-            null
-        }
-
         val encryptionInfo = buildCborArray {
             add("dcapi")
             addCborMap {
@@ -188,14 +174,7 @@ class MatcherTest {
             }
         }
 
-        val deviceRequest = buildDeviceRequestFromDcql(
-            sessionTranscript = sessionTranscript,
-            dcqlString = dcql,
-        ) {
-            if (readerAuthKey != null) {
-                addReaderAuthAll(readerAuthKey)
-            }
-        }
+        val deviceRequest = deviceRequestBuilder(harness, sessionTranscript)
         val base64DeviceRequest = Cbor.encode(deviceRequest.toDataItem()).toBase64Url()
         Logger.iCbor(TAG, "deviceRequest", deviceRequest.toDataItem())
 
@@ -226,6 +205,43 @@ class MatcherTest {
             result = result.replace(docId, "__${doc.displayName!!}__")
         }
         return result
+    }
+
+    suspend fun testMatcherIso18013(
+        signRequest: Boolean,
+        harnessInitializer: suspend (harness: DocumentStoreTestHarness) -> Unit,
+        dcql: String,
+    ): String {
+        return testMatcherIso18013(harnessInitializer) { harness, sessionTranscript ->
+            val readerAuthKey = if (signRequest) {
+                val key = Crypto.createEcPrivateKey(EcCurve.P256)
+                val readerRootCert = harness.readerRootKey.certChain.certificates.first()
+                val cert = MdocUtil.generateReaderCertificate(
+                    readerRootKey = harness.readerRootKey,
+                    readerKey = key.publicKey,
+                    subject = X500Name.fromName("CN=Multipaz Reader Cert Single-Use key"),
+                    dnsName = "localhost",
+                    serial = ASN1Integer.fromRandom(128),
+                    validFrom = readerRootCert.validityNotBefore,
+                    validUntil = readerRootCert.validityNotAfter
+                )
+                AsymmetricKey.X509CertifiedExplicit(
+                    privateKey = key,
+                    certChain = X509CertChain(listOf(cert) + harness.readerRootKey.certChain.certificates)
+                )
+            } else {
+                null
+            }
+
+            buildDeviceRequestFromDcql(
+                sessionTranscript = sessionTranscript,
+                dcqlString = dcql,
+            ) {
+                if (readerAuthKey != null) {
+                    addReaderAuthAll(readerAuthKey)
+                }
+            }
+        }
     }
 
     @Test
@@ -2491,5 +2507,378 @@ class MatcherTest {
             """.trimIndent().trim() + "\n",
             matcherResult
         )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_mDL_issuerIdentifier_matching() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                val iacaSki = harness.iacaCert.subjectKeyIdentifier!!
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                                "family_name" to false
+                            )
+                        ),
+                        docRequestInfo = DocRequestInfo(
+                            issuerIdentifiers = listOf(ByteString(iacaSki))
+                        )
+                    )
+                    .build()
+            }
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __mDL__
+                    Given names: Erika
+                    Family name: Mustermann
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_mDL_issuerIdentifier_nonMatching() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                                "family_name" to false
+                            )
+                        ),
+                        docRequestInfo = DocRequestInfo(
+                            issuerIdentifiers = listOf(ByteString(byteArrayOf(1, 2, 3, 4, 5)))
+                        )
+                    )
+                    .build()
+            }
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_Iso18013_multipleIssuers_mDL() = runTest {
+        val iacaKey1 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val iacaCert1 = MdocUtil.generateIacaCertificate(
+            iacaKey = AsymmetricKey.anonymous(iacaKey1),
+            subject = X500Name.fromName("CN=Issuer 1"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = Clock.System.now(),
+            validUntil = Clock.System.now() + 365.days,
+            issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
+            crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
+        )
+        val dsKey1 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val dsCert1 = MdocUtil.generateDsCertificate(
+            iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert1)), iacaKey1),
+            dsKey = dsKey1.publicKey,
+            subject = X500Name.fromName("CN=DS 1"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = Clock.System.now(),
+            validUntil = Clock.System.now() + 365.days
+        )
+        val certifiedDsKey1 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert1)), dsKey1)
+
+        val iacaKey2 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val iacaCert2 = MdocUtil.generateIacaCertificate(
+            iacaKey = AsymmetricKey.anonymous(iacaKey2),
+            subject = X500Name.fromName("CN=Issuer 2"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = Clock.System.now(),
+            validUntil = Clock.System.now() + 365.days,
+            issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
+            crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
+        )
+        val dsKey2 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val dsCert2 = MdocUtil.generateDsCertificate(
+            iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert2)), iacaKey2),
+            dsKey = dsKey2.publicKey,
+            subject = X500Name.fromName("CN=DS 2"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = Clock.System.now(),
+            validUntil = Clock.System.now() + 365.days
+        )
+        val certifiedDsKey2 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert2)), dsKey2)
+
+        val initializer: suspend (DocumentStoreTestHarness) -> Unit = { harness ->
+            harness.initialize()
+            // Provision doc 1 with dsKey1
+            harness.dsKey = certifiedDsKey1
+            harness.provisionMdoc(
+                displayName = "mDL-Issuer1",
+                docType = DrivingLicense.MDL_DOCTYPE,
+                data = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
+                        "given_name" to "Erika".toDataItem(),
+                        "family_name" to "Mustermann".toDataItem()
+                    )
+                )
+            )
+            // Provision doc 2 with dsKey2
+            harness.dsKey = certifiedDsKey2
+            harness.provisionMdoc(
+                displayName = "mDL-Issuer2",
+                docType = DrivingLicense.MDL_DOCTYPE,
+                data = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
+                        "given_name" to "Max".toDataItem(),
+                        "family_name" to "Mustermann".toDataItem()
+                    )
+                )
+            )
+        }
+
+        val ski1 = ByteString(iacaCert1.subjectKeyIdentifier!!)
+        val ski2 = ByteString(iacaCert2.subjectKeyIdentifier!!)
+
+        // 1. Query for Issuer 1 only
+        val result1 = testMatcherIso18013(
+            harnessInitializer = initializer,
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                                "family_name" to false
+                            )
+                        ),
+                        docRequestInfo = DocRequestInfo(issuerIdentifiers = listOf(ski1))
+                    )
+                    .build()
+            }
+        )
+        Assert.assertTrue(result1.contains("__mDL-Issuer1__"))
+        Assert.assertFalse(result1.contains("__mDL-Issuer2__"))
+
+        // 2. Query for Issuer 2 only
+        val result2 = testMatcherIso18013(
+            harnessInitializer = initializer,
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                                "family_name" to false
+                            )
+                        ),
+                        docRequestInfo = DocRequestInfo(issuerIdentifiers = listOf(ski2))
+                    )
+                    .build()
+            }
+        )
+        Assert.assertFalse(result2.contains("__mDL-Issuer1__"))
+        Assert.assertTrue(result2.contains("__mDL-Issuer2__"))
+
+        // 3. Query for both issuers
+        val resultBoth = testMatcherIso18013(
+            harnessInitializer = initializer,
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                                "family_name" to false
+                            )
+                        ),
+                        docRequestInfo = DocRequestInfo(issuerIdentifiers = listOf(ski1, ski2))
+                    )
+                    .build()
+            }
+        )
+        Assert.assertTrue(resultBoth.contains("__mDL-Issuer1__"))
+        Assert.assertTrue(resultBoth.contains("__mDL-Issuer2__"))
+    }
+
+    @Test
+    fun testMatcher_Iso18013_intermediateCA_matching() = runTest {
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val rootCert = MdocUtil.generateIacaCertificate(
+            iacaKey = AsymmetricKey.anonymous(rootKey),
+            subject = X500Name.fromName("CN=Root CA"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = Clock.System.now(),
+            validUntil = Clock.System.now() + 365.days,
+            issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
+            crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
+        )
+        val intermediateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediateCert = MdocUtil.generateIacaCertificate(
+            iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(rootCert)), rootKey),
+            subject = X500Name.fromName("CN=Intermediate CA"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = Clock.System.now(),
+            validUntil = Clock.System.now() + 365.days,
+            issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
+            crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
+        )
+        val dsKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val dsCert = MdocUtil.generateDsCertificate(
+            iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(intermediateCert, rootCert)), intermediateKey),
+            dsKey = dsKey.publicKey,
+            subject = X500Name.fromName("CN=DS Key"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = Clock.System.now(),
+            validUntil = Clock.System.now() + 365.days
+        )
+        val fullChainDsKey = AsymmetricKey.X509CertifiedExplicit(
+            X509CertChain(listOf(dsCert, intermediateCert, rootCert)),
+            dsKey
+        )
+
+        val initializer: suspend (DocumentStoreTestHarness) -> Unit = { harness ->
+            harness.initialize()
+            harness.dsKey = fullChainDsKey
+            harness.provisionMdoc(
+                displayName = "mDL-3Tier",
+                docType = DrivingLicense.MDL_DOCTYPE,
+                data = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
+                        "given_name" to "Erika".toDataItem(),
+                        "family_name" to "Mustermann".toDataItem()
+                    )
+                )
+            )
+        }
+
+        val rootSki = ByteString(rootCert.subjectKeyIdentifier!!)
+        val intermediateSki = ByteString(intermediateCert.subjectKeyIdentifier!!)
+        val unrelatedSki = ByteString(byteArrayOf(9, 9, 9, 9))
+
+        // Match against intermediate SKI (which is AKI on DS cert)
+        val resultIntermediate = testMatcherIso18013(
+            harnessInitializer = initializer,
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                                "family_name" to false
+                            )
+                        ),
+                        docRequestInfo = DocRequestInfo(issuerIdentifiers = listOf(intermediateSki))
+                    )
+                    .build()
+            }
+        )
+        Assert.assertTrue(resultIntermediate.contains("__mDL-3Tier__"))
+
+        // Match against root SKI (which is AKI on Intermediate cert)
+        val resultRoot = testMatcherIso18013(
+            harnessInitializer = initializer,
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                                "family_name" to false
+                            )
+                        ),
+                        docRequestInfo = DocRequestInfo(issuerIdentifiers = listOf(rootSki))
+                    )
+                    .build()
+            }
+        )
+        Assert.assertTrue(resultRoot.contains("__mDL-3Tier__"))
+
+        // Non-match with unrelated SKI
+        val resultUnrelated = testMatcherIso18013(
+            harnessInitializer = initializer,
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                                "family_name" to false
+                            )
+                        ),
+                        docRequestInfo = DocRequestInfo(issuerIdentifiers = listOf(unrelatedSki))
+                    )
+                    .build()
+            }
+        )
+        Assert.assertEquals("", resultUnrelated)
+    }
+
+    @Test
+    fun testMatcher_Iso18013_sdjwt_issuerIdentifier_matching() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                val iacaSki = harness.iacaCert.subjectKeyIdentifier!!
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = EUPersonalID.EUPID_VCT,
+                        nameSpaces = mapOf(
+                            "_" to mapOf(
+                                "sdjwtkb_given_name" to false,
+                                "sdjwtkb_sex" to false
+                            )
+                        ),
+                        docRequestInfo = DocRequestInfo(
+                            docFormat = "dc+sd-jwt",
+                            dataElementIdentifierMapping = mapOf(
+                                "sdjwtkb_given_name" to Json.decodeFromString("""["given_name"]"""),
+                                "sdjwtkb_sex" to Json.decodeFromString("""["sex"]""")
+                            ),
+                            issuerIdentifiers = listOf(ByteString(iacaSki))
+                        )
+                    )
+                    .build()
+            }
+        )
+        Assert.assertTrue(matcherResult.contains("__EU PID__"))
+    }
+
+    @Test
+    fun testMatcher_Iso18013_sdjwt_issuerIdentifier_nonMatching() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = EUPersonalID.EUPID_VCT,
+                        nameSpaces = mapOf(
+                            "_" to mapOf(
+                                "sdjwtkb_given_name" to false,
+                                "sdjwtkb_sex" to false
+                            )
+                        ),
+                        docRequestInfo = DocRequestInfo(
+                            docFormat = "dc+sd-jwt",
+                            dataElementIdentifierMapping = mapOf(
+                                "sdjwtkb_given_name" to Json.decodeFromString("""["given_name"]"""),
+                                "sdjwtkb_sex" to Json.decodeFromString("""["sex"]""")
+                            ),
+                            issuerIdentifiers = listOf(ByteString(byteArrayOf(1, 2, 3, 4)))
+                        )
+                    )
+                    .build()
+            }
+        )
+        Assert.assertEquals("", matcherResult)
     }
 }

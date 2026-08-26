@@ -29,6 +29,9 @@ struct Credential {
     // This is the set of protocols the credential can be exported on.
     std::vector<std::string> protocols;
 
+    // Issuer identifiers (AuthorityKeyIdentifiers)
+    std::vector<std::vector<uint8_t>> issuerIdentifiers;
+
     // Maps from claimName to Claim.
     std::map<std::string, Claim> claims;
 

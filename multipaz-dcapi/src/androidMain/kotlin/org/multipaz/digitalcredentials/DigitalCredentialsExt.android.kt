@@ -237,6 +237,9 @@ private suspend fun exportMdocCredential(
             "Error reading claims: '${credential.document.identifier}.${credential.identifier}'", err)
         emptyList()
     }
+    val issuerIdentifiers = credential.issuerCertChain.certificates.mapNotNull {
+        it.authorityKeyIdentifier
+    }
     return buildCborMap {
         put("title", displayName)
         put("subtitle", displayNameSub)
@@ -249,6 +252,11 @@ private suspend fun exportMdocCredential(
         putCborMap("mdoc") {
             put("documentId", document.identifier)
             put("docType", credential.docType)
+            if (issuerIdentifiers.isNotEmpty()) {
+                putCborArray("issuerIdentifiers") {
+                    issuerIdentifiers.forEach { add(it) }
+                }
+            }
             putCborMap("namespaces") {
                 for ((namespace, claimsInNamespace) in claims.organizeByNamespace()) {
                     putCborMap(namespace) {
@@ -305,6 +313,9 @@ private suspend fun exportSdJwtVcCredential(
             "Error reading claims: '${cred.document.identifier}.${credential.identifier}'", err)
         emptyList()
     }
+    val issuerIdentifiers = credential.getIssuerCertChain()?.certificates?.mapNotNull {
+        it.authorityKeyIdentifier
+    } ?: emptyList()
     return buildCborMap {
         put("title", displayName)
         put("subtitle", displayNameSub)
@@ -317,6 +328,11 @@ private suspend fun exportSdJwtVcCredential(
         putCborMap("sdjwt") {
             put("documentId", document.identifier)
             put("vct", credential.vct)
+            if (issuerIdentifiers.isNotEmpty()) {
+                putCborArray("issuerIdentifiers") {
+                    issuerIdentifiers.forEach { add(it) }
+                }
+            }
             putCborMap("claims") {
                 for (claim in claims) {
                     val claimName = claim.claimPath[0].jsonPrimitive.content
