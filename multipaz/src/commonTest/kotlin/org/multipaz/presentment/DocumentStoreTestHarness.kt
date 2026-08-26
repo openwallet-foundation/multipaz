@@ -260,12 +260,14 @@ class DocumentStoreTestHarness {
         docType: String,
         data: Map<String, List<Pair<String, DataItem>>>,
         keyAuthorizedNamespaces: List<String> = listOf(),
-        dsKey: AsymmetricKey.X509Certified? = null
+        dsKey: AsymmetricKey.X509Certified? = null,
+        readerIdentifiers: List<ByteString> = emptyList(),
     ): Document {
         initialize()
         val effectiveDsKey = dsKey ?: this.dsKey
         val document = documentStore.createDocument(
-            displayName = displayName
+            displayName = displayName,
+            readerIdentifiers = readerIdentifiers,
         )
         val issuerNamespaces = buildIssuerNamespaces {
             for ((nsName, listOfClaims) in data) {
@@ -293,12 +295,14 @@ class DocumentStoreTestHarness {
         displayName: String,
         vct: String,
         data: List<Pair<String, JsonElement>>,
-        dsKey: AsymmetricKey.X509Certified? = null
+        dsKey: AsymmetricKey.X509Certified? = null,
+        readerIdentifiers: List<ByteString> = emptyList(),
     ): Document {
         initialize()
         val effectiveDsKey = dsKey ?: this.dsKey
         val document = documentStore.createDocument(
-            displayName = displayName
+            displayName = displayName,
+            readerIdentifiers = readerIdentifiers,
         )
         val identityAttributes = buildJsonObject {
             for ((claimName, claimValue) in data) {

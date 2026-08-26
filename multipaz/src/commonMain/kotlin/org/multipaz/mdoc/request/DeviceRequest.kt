@@ -36,6 +36,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.SignatureVerificationException
+import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.response.Iso18015ResponseException
@@ -700,6 +701,25 @@ data class DeviceRequest private constructor(
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve>,
     ): DocRequestMatch? {
+        val readerIdentifiers = cred.document.readerIdentifiers
+        if (readerIdentifiers.isNotEmpty()) {
+            val readerCertChains = getReaderCertChains(docRequest)
+            if (readerCertChains.isEmpty()) {
+                return null
+            }
+            val requiredReaderIdentifiers = readerIdentifiers.toSet()
+            val matchFound = readerCertChains.any { certChain ->
+                certChain.certificates.any { cert ->
+                    cert.authorityKeyIdentifier?.let { aki ->
+                        requiredReaderIdentifiers.contains(ByteString(aki))
+                    } ?: false
+                }
+            }
+            if (!matchFound) {
+                return null
+            }
+        }
+
         val issuerIdentifiers = docRequest.docRequestInfo?.issuerIdentifiers
         if (!issuerIdentifiers.isNullOrEmpty()) {
             val certChain = when (cred) {
@@ -876,6 +896,17 @@ data class DeviceRequest private constructor(
                 it.mdocRequestInfoIdentifier == type
             } ?: throw IllegalArgumentException("Unknown transaction type: '$type'")
             knownType.parseCbor(data)
+        }
+    }
+
+    private fun getReaderCertChains(docRequest: DocRequest): List<X509CertChain> = buildList {
+        docRequest.readerAuthCertChain?.let { add(it) }
+        readerAuthAll_.forEach { coseSign1 ->
+            val certChain = (coseSign1.protectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
+                ?: coseSign1.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel])?.asX509CertChain
+            if (certChain != null) {
+                add(certChain)
+            }
         }
     }
 

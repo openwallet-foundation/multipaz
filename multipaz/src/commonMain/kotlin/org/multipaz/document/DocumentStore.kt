@@ -139,6 +139,7 @@ class DocumentStore private constructor(
      *  user to re-authorize.
      * @param appData Application-specific data.
      * @param created The time the document was created.
+     * @param readerIdentifiers A list of reader identifiers for reader authentication.
      * @param metadata initial value for [Document.metadata]
      * @return A newly created document.
      */
@@ -150,7 +151,8 @@ class DocumentStore private constructor(
         authorizationData: ByteString? = null,
         appData: ByteString? = null,
         created: Instant = Clock.System.now(),
-        metadata: AbstractDocumentMetadata? = null
+        readerIdentifiers: List<ByteString> = emptyList(),
+        metadata: AbstractDocumentMetadata? = null,
     ): Document {
         val table = storage.getTable(documentTableSpec)
         val data = DocumentData(
@@ -162,6 +164,7 @@ class DocumentStore private constructor(
             issuerLogo = issuerLogo,
             authorizationData = authorizationData,
             appData = appData,
+            readerIdentifiers = readerIdentifiers.ifEmpty { null },
             metadata = metadata?.serialize()
         )
         // NB: insertion in the storage is when the document is actually added, it may be
