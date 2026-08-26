@@ -13,6 +13,7 @@ import kotlinx.serialization.json.putJsonObject
 import org.junit.Assert
 import org.junit.Test
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.asn1.OID
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tstr
@@ -28,6 +29,8 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.X509KeyUsage
+import org.multipaz.crypto.buildX509Cert
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.DataItem
 import org.multipaz.documenttype.knowntypes.DrivingLicense
@@ -73,13 +76,15 @@ class MatcherTest {
         encryptionKey: EcPrivateKey?,
         harnessInitializer: suspend (harness: DocumentStoreTestHarness) -> Unit,
         dcql: String,
+        readerAuthKeyProvider: ((harness: DocumentStoreTestHarness) -> AsymmetricKey.X509Certified?)? = null,
     ): String {
         return testMatcherDcql(
             version = version,
             signRequest = signRequest,
             encryptionKey = encryptionKey,
             harnessInitializer = harnessInitializer,
-            dcqlProvider = { dcql }
+            dcqlProvider = { dcql },
+            readerAuthKeyProvider = readerAuthKeyProvider
         )
     }
 
@@ -89,6 +94,7 @@ class MatcherTest {
         encryptionKey: EcPrivateKey?,
         harnessInitializer: suspend (harness: DocumentStoreTestHarness) -> Unit,
         dcqlProvider: (harness: DocumentStoreTestHarness) -> String,
+        readerAuthKeyProvider: ((harness: DocumentStoreTestHarness) -> AsymmetricKey.X509Certified?)? = null,
     ): String {
         val harness = DocumentStoreTestHarness()
         harness.initialize()
@@ -96,7 +102,9 @@ class MatcherTest {
 
         val dcql = dcqlProvider(harness)
         val nonce = Random.nextBytes(16).toBase64Url()
-        val readerAuthKey = if (signRequest) {
+        val readerAuthKey = if (readerAuthKeyProvider != null) {
+            readerAuthKeyProvider(harness)
+        } else if (signRequest) {
             val key = Crypto.createEcPrivateKey(EcCurve.P256)
             val readerRootCert = harness.readerRootKey.certChain.certificates.first()
             val cert = MdocUtil.generateReaderCertificate(
@@ -228,9 +236,12 @@ class MatcherTest {
         signRequest: Boolean,
         harnessInitializer: suspend (harness: DocumentStoreTestHarness) -> Unit,
         dcql: String,
+        readerAuthKeyProvider: ((harness: DocumentStoreTestHarness) -> AsymmetricKey.X509Certified?)? = null,
     ): String {
         return testMatcherIso18013(harnessInitializer) { harness, sessionTranscript ->
-            val readerAuthKey = if (signRequest) {
+            val readerAuthKey = if (readerAuthKeyProvider != null) {
+                readerAuthKeyProvider(harness)
+            } else if (signRequest) {
                 val key = Crypto.createEcPrivateKey(EcCurve.P256)
                 val readerRootCert = harness.readerRootKey.certChain.certificates.first()
                 val cert = MdocUtil.generateReaderCertificate(
@@ -3358,5 +3369,566 @@ class MatcherTest {
                 """.trimIndent().trim()
         )
         Assert.assertEquals("", matcherResult)
+    }
+
+    private suspend fun create3TierReaderKey(
+        harness: DocumentStoreTestHarness
+    ): Triple<ByteString, ByteString, AsymmetricKey.X509Certified> {
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val rootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = AsymmetricKey.anonymous(rootKey),
+            subject = X500Name.fromName("C=US,CN=3-Tier Reader Root"),
+            serial = ASN1Integer(10),
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            crlUrl = "https://example.com/reader/root/crl"
+        )
+
+        val intermediateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediateCert = buildX509Cert(
+            publicKey = intermediateKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(11),
+            subject = X500Name.fromName("C=US,CN=3-Tier Reader Intermediate CA"),
+            issuer = rootCert.subject,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(rootCert)
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN, X509KeyUsage.CRL_SIGN))
+            setBasicConstraints(true, 0)
+            addExtension(
+                OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid,
+                false,
+                rootCert.getExtensionValue(OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid)!!
+            )
+        }
+
+        val readerPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediateX509Key = AsymmetricKey.X509CertifiedExplicit(
+            X509CertChain(listOf(intermediateCert, rootCert)),
+            intermediateKey
+        )
+        val readerCert = MdocUtil.generateReaderCertificate(
+            readerRootKey = intermediateX509Key,
+            readerKey = readerPrivateKey.publicKey,
+            subject = X500Name.fromName("C=US,CN=3-Tier Reader DS"),
+            dnsName = "localhost",
+            serial = ASN1Integer(12),
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil
+        )
+        val readerKey = AsymmetricKey.X509CertifiedExplicit(
+            X509CertChain(listOf(readerCert, intermediateCert, rootCert)),
+            readerPrivateKey
+        )
+        val skiRoot = ByteString(rootCert.subjectKeyIdentifier!!)
+        val skiIntermediate = ByteString(intermediateCert.subjectKeyIdentifier!!)
+        return Triple(skiRoot, skiIntermediate, readerKey)
+    }
+
+    private val mdlDcqlString = """
+        {
+          "credentials": [
+            {
+              "id": "mdl",
+              "format": "mso_mdoc",
+              "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+              "claims": [ {"path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"]} ]
+            }
+          ]
+        }
+    """.trimIndent().trim()
+
+    private val pidDcqlString = """
+        {
+          "credentials": [
+            {
+              "id": "pid",
+              "format": "dc+sd-jwt",
+              "meta": { "vct_values": ["${EUPersonalID.EUPID_VCT}"] },
+              "claims": [ {"path": ["given_name"]} ]
+            }
+          ]
+        }
+    """.trimIndent().trim()
+
+    @Test
+    fun testMatcher_OpenID4VP_mdoc_readerIdentifiers_matching() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                val readerAki = ByteString(harness.readerRootKey.certChain.certificates.first().subjectKeyIdentifier!!)
+                harness.provisionMdoc(
+                    displayName = "Driving License",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = listOf(readerAki),
+                )
+            },
+            dcql = mdlDcqlString
+        )
+        Assert.assertTrue(matcherResult.contains("__Driving License__"))
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_mdoc_readerIdentifiers_nonMatching() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionMdoc(
+                    displayName = "Driving License",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = listOf(ByteString(byteArrayOf(9, 9, 9, 9))),
+                )
+            },
+            dcql = mdlDcqlString
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_mdoc_readerIdentifiers_unsignedBlocked() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = false,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                val readerAki = ByteString(harness.readerRootKey.certChain.certificates.first().subjectKeyIdentifier!!)
+                harness.provisionMdoc(
+                    displayName = "Driving License",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = listOf(readerAki),
+                )
+            },
+            dcql = mdlDcqlString
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_mdoc_readerIdentifiers_unsignedAllowed_whenEmpty() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = false,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionMdoc(
+                    displayName = "Driving License",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = emptyList<ByteString>(),
+                )
+            },
+            dcql = mdlDcqlString
+        )
+        Assert.assertTrue(matcherResult.contains("__Driving License__"))
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_sdjwt_readerIdentifiers_matching() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                val readerAki = ByteString(harness.readerRootKey.certChain.certificates.first().subjectKeyIdentifier!!)
+                harness.provisionSdJwtVc(
+                    displayName = "EU PID",
+                    vct = EUPersonalID.EUPID_VCT,
+                    data = listOf(
+                        "given_name" to JsonPrimitive("Erika"),
+                    ),
+                    readerIdentifiers = listOf(readerAki),
+                )
+            },
+            dcql = pidDcqlString
+        )
+        Assert.assertTrue(matcherResult.contains("__EU PID__"))
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_sdjwt_readerIdentifiers_nonMatching() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionSdJwtVc(
+                    displayName = "EU PID",
+                    vct = EUPersonalID.EUPID_VCT,
+                    data = listOf(
+                        "given_name" to JsonPrimitive("Erika"),
+                    ),
+                    readerIdentifiers = listOf(ByteString(byteArrayOf(9, 9, 9, 9))),
+                )
+            },
+            dcql = pidDcqlString
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_sdjwt_readerIdentifiers_unsignedBlocked() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = false,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                val readerAki = ByteString(harness.readerRootKey.certChain.certificates.first().subjectKeyIdentifier!!)
+                harness.provisionSdJwtVc(
+                    displayName = "EU PID",
+                    vct = EUPersonalID.EUPID_VCT,
+                    data = listOf(
+                        "given_name" to JsonPrimitive("Erika"),
+                    ),
+                    readerIdentifiers = listOf(readerAki),
+                )
+            },
+            dcql = pidDcqlString
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_3Tier_readerIdentifiers() = runTest {
+        lateinit var readerKeyTriple: Triple<ByteString, ByteString, AsymmetricKey.X509Certified>
+
+        // 1. Match intermediate SKI
+        val resultIntermediate = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                readerKeyTriple = create3TierReaderKey(harness)
+                harness.provisionMdoc(
+                    displayName = "mDL-3Tier",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = listOf(readerKeyTriple.second),
+                )
+            },
+            dcql = mdlDcqlString,
+            readerAuthKeyProvider = { readerKeyTriple.third }
+        )
+        Assert.assertTrue(resultIntermediate.contains("__mDL-3Tier__"))
+
+        // 2. Match root SKI
+        val resultRoot = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                readerKeyTriple = create3TierReaderKey(harness)
+                harness.provisionMdoc(
+                    displayName = "mDL-3Tier",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = listOf(readerKeyTriple.first),
+                )
+            },
+            dcql = mdlDcqlString,
+            readerAuthKeyProvider = { readerKeyTriple.third }
+        )
+        Assert.assertTrue(resultRoot.contains("__mDL-3Tier__"))
+
+        // 3. Non-matching unrelated SKI
+        val resultUnrelated = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                readerKeyTriple = create3TierReaderKey(harness)
+                harness.provisionMdoc(
+                    displayName = "mDL-3Tier",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = listOf(ByteString(byteArrayOf(9, 9, 9, 9))),
+                )
+            },
+            dcql = mdlDcqlString,
+            readerAuthKeyProvider = { readerKeyTriple.third }
+        )
+        Assert.assertEquals("", resultUnrelated)
+    }
+
+    @Test
+    fun testMatcher_Iso18013_mdoc_readerIdentifiers_matching() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                val readerAki = ByteString(harness.readerRootKey.certChain.certificates.first().subjectKeyIdentifier!!)
+                harness.provisionMdoc(
+                    displayName = "Driving License",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = listOf(readerAki),
+                )
+            },
+            dcql = mdlDcqlString
+        )
+        Assert.assertTrue(matcherResult.contains("__Driving License__"))
+    }
+
+    @Test
+    fun testMatcher_Iso18013_mdoc_readerIdentifiers_nonMatching() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionMdoc(
+                    displayName = "Driving License",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = listOf(ByteString(byteArrayOf(9, 9, 9, 9))),
+                )
+            },
+            dcql = mdlDcqlString
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_Iso18013_mdoc_readerIdentifiers_unsignedBlocked() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = false,
+            harnessInitializer = { harness ->
+                val readerAki = ByteString(harness.readerRootKey.certChain.certificates.first().subjectKeyIdentifier!!)
+                harness.provisionMdoc(
+                    displayName = "Driving License",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = listOf(readerAki),
+                )
+            },
+            dcql = mdlDcqlString
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_Iso18013_mdoc_readerIdentifiers_unsignedAllowed_whenEmpty() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = false,
+            harnessInitializer = { harness ->
+                harness.provisionMdoc(
+                    displayName = "Driving License",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = emptyList<ByteString>(),
+                )
+            },
+            dcql = mdlDcqlString
+        )
+        Assert.assertTrue(matcherResult.contains("__Driving License__"))
+    }
+
+    @Test
+    fun testMatcher_Iso18013_sdjwt_readerIdentifiers_matching() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                val readerAki = ByteString(harness.readerRootKey.certChain.certificates.first().subjectKeyIdentifier!!)
+                harness.provisionSdJwtVc(
+                    displayName = "EU PID",
+                    vct = EUPersonalID.EUPID_VCT,
+                    data = listOf(
+                        "given_name" to JsonPrimitive("Erika"),
+                    ),
+                    readerIdentifiers = listOf(readerAki),
+                )
+            },
+            dcql = pidDcqlString
+        )
+        Assert.assertTrue(matcherResult.contains("__EU PID__"))
+    }
+
+    @Test
+    fun testMatcher_Iso18013_sdjwt_readerIdentifiers_nonMatching() = runTest {
+        val matcherResult = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                harness.provisionSdJwtVc(
+                    displayName = "EU PID",
+                    vct = EUPersonalID.EUPID_VCT,
+                    data = listOf(
+                        "given_name" to JsonPrimitive("Erika"),
+                    ),
+                    readerIdentifiers = listOf(ByteString(byteArrayOf(9, 9, 9, 9))),
+                )
+            },
+            dcql = pidDcqlString
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_Iso18013_3Tier_readerIdentifiers() = runTest {
+        lateinit var readerKeyTriple: Triple<ByteString, ByteString, AsymmetricKey.X509Certified>
+
+        // 1. Match intermediate SKI
+        val resultIntermediate = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                readerKeyTriple = create3TierReaderKey(harness)
+                harness.provisionMdoc(
+                    displayName = "mDL-3Tier",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = listOf(readerKeyTriple.second),
+                )
+            },
+            dcql = mdlDcqlString,
+            readerAuthKeyProvider = { readerKeyTriple.third }
+        )
+        Assert.assertTrue(resultIntermediate.contains("__mDL-3Tier__"))
+
+        // 2. Match root SKI
+        val resultRoot = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                readerKeyTriple = create3TierReaderKey(harness)
+                harness.provisionMdoc(
+                    displayName = "mDL-3Tier",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = listOf(readerKeyTriple.first),
+                )
+            },
+            dcql = mdlDcqlString,
+            readerAuthKeyProvider = { readerKeyTriple.third }
+        )
+        Assert.assertTrue(resultRoot.contains("__mDL-3Tier__"))
+
+        // 3. Non-matching unrelated SKI
+        val resultUnrelated = testMatcherIso18013(
+            signRequest = true,
+            harnessInitializer = { harness ->
+                readerKeyTriple = create3TierReaderKey(harness)
+                harness.provisionMdoc(
+                    displayName = "mDL-3Tier",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    readerIdentifiers = listOf(ByteString(byteArrayOf(9, 9, 9, 9))),
+                )
+            },
+            dcql = mdlDcqlString,
+            readerAuthKeyProvider = { readerKeyTriple.third }
+        )
+        Assert.assertEquals("", resultUnrelated)
+    }
+
+    @Test
+    fun testMatcher_MultiDocument_readerIdentifiers_discrimination() = runTest {
+        val aki1 = ByteString(byteArrayOf(1, 1, 1, 1))
+        val aki2 = ByteString(byteArrayOf(2, 2, 2, 2))
+
+        val initializer: suspend (DocumentStoreTestHarness) -> Unit = { harness ->
+            val readerAki = ByteString(harness.readerRootKey.certChain.certificates.first().subjectKeyIdentifier!!)
+            harness.provisionMdoc(
+                displayName = "mDL-Matching",
+                docType = DrivingLicense.MDL_DOCTYPE,
+                data = mapOf(DrivingLicense.MDL_NAMESPACE to listOf("given_name" to Tstr("Erika"))),
+                readerIdentifiers = listOf(readerAki),
+            )
+            harness.provisionMdoc(
+                displayName = "mDL-OtherReader",
+                docType = DrivingLicense.MDL_DOCTYPE,
+                data = mapOf(DrivingLicense.MDL_NAMESPACE to listOf("given_name" to Tstr("Erika"))),
+                readerIdentifiers = listOf(aki2),
+            )
+            harness.provisionMdoc(
+                displayName = "mDL-Public",
+                docType = DrivingLicense.MDL_DOCTYPE,
+                data = mapOf(DrivingLicense.MDL_NAMESPACE to listOf("given_name" to Tstr("Erika"))),
+                readerIdentifiers = emptyList(),
+            )
+        }
+
+        // 1. Signed request matching mDL-Matching -> returns mDL-Matching and mDL-Public, not mDL-OtherReader
+        val signedResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = initializer,
+            dcql = mdlDcqlString
+        )
+        Assert.assertTrue(signedResult.contains("__mDL-Matching__"))
+        Assert.assertTrue(signedResult.contains("__mDL-Public__"))
+        Assert.assertFalse(signedResult.contains("__mDL-OtherReader__"))
+
+        // 2. Unsigned request -> returns only mDL-Public
+        val unsignedResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = false,
+            encryptionKey = null,
+            harnessInitializer = initializer,
+            dcql = mdlDcqlString
+        )
+        Assert.assertFalse(unsignedResult.contains("__mDL-Matching__"))
+        Assert.assertTrue(unsignedResult.contains("__mDL-Public__"))
+        Assert.assertFalse(unsignedResult.contains("__mDL-OtherReader__"))
     }
 }

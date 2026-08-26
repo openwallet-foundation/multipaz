@@ -114,12 +114,14 @@ DcqlQuery DcqlQuery::parse(cJSON* dcqlQuery) {
             }
         }
 
+        std::vector<std::vector<uint8_t>> readerAuthAkis;
         dcqlCredentialQueries.push_back(DcqlCredentialQuery(
                 id,
                 format,
                 mdocDocType,
                 vctValues,
                 issuerIdentifiers,
+                readerAuthAkis,
                 requestedClaims,
                 claimSets
         ));
@@ -240,6 +242,24 @@ std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDat
                 }
             } else if (query.format == "dc+sd-jwt") {
                 if (std::find(query.vctValues.begin(), query.vctValues.end(), cred.vcVct) == query.vctValues.end()) {
+                    continue;
+                }
+            }
+            if (!cred.readerIdentifiers.empty()) {
+                if (query.readerAuthAkis.empty()) {
+                    continue;
+                }
+                bool matchesReader = false;
+                for (const auto& requiredAki : cred.readerIdentifiers) {
+                    for (const auto& reqAki : query.readerAuthAkis) {
+                        if (requiredAki == reqAki) {
+                            matchesReader = true;
+                            break;
+                        }
+                    }
+                    if (matchesReader) break;
+                }
+                if (!matchesReader) {
                     continue;
                 }
             }
