@@ -1,26 +1,25 @@
 package org.multipaz.digitalcredentials
 
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.toByteString
+import kotlinx.io.bytestring.toNSData
 import kotlinx.serialization.json.JsonObject
+import org.multipaz.DocRegInfo
 import org.multipaz.SwiftBridge
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.getIosMdocDoctypes
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
-import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.Logger
+import org.multipaz.util.toByteArray
 import org.multipaz.util.toKotlinError
+import org.multipaz.util.toNSData
+import platform.Foundation.NSData
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
@@ -127,24 +126,71 @@ private suspend fun updateOsCredentialManagerUnlocked(
     }
 
     val timeStart = Clock.System.now()
-    val docIdsHave = suspendCoroutine<Set<String>> { continuation ->
-        SwiftBridge.docRegGetAll { docIds, error ->
+    val registrationsHave = suspendCoroutine<List<DocRegInfo>> { continuation ->
+        SwiftBridge.docRegGetAll { registrations, error ->
             if (error != null) {
                 continuation.resumeWithException(
-                    IllegalStateException("Error getting registered document ids", error.toKotlinError())
+                    IllegalStateException("Error getting registered documents", error.toKotlinError())
                 )
             } else {
-                continuation.resume((docIds as List<String>).toSet())
+                continuation.resume((registrations as List<DocRegInfo>?) ?: emptyList())
             }
         }
     }
     val timeEnd = Clock.System.now()
     val durationMs = (timeEnd - timeStart).inWholeMilliseconds
-    Logger.i(TAG, "Fetched ${docIdsHave.size} OS registrations in $durationMs ms")
+    Logger.i(TAG, "Fetched ${registrationsHave.size} OS registrations in $durationMs ms")
+
+    val regHaveByDocId = registrationsHave.associateBy { it.documentIdentifier() }
 
     // ... and then calculate what we need to register and unregister
-    val docIdsToRegister = if (forceRegistration) docIdsWant else docIdsWant.minus(docIdsHave)
-    val docIdsToUnregister = docIdsHave.minus(docIdsWant)
+    val docIdsToRegister = mutableSetOf<String>()
+    for (docId in docIdsWant) {
+        if (forceRegistration) {
+            docIdsToRegister.add(docId)
+            continue
+        }
+        val reg = regHaveByDocId[docId]
+        if (reg == null) {
+            docIdsToRegister.add(docId)
+            continue
+        }
+        val document = documentStore.lookupDocument(docId)
+        if (document == null) {
+            docIdsToRegister.add(docId)
+            continue
+        }
+        val mdocCredential = document.getCertifiedCredentials().find { it is MdocCredential } as MdocCredential?
+        if (mdocCredential == null) {
+            docIdsToRegister.add(docId)
+            continue
+        }
+        if (reg.documentType() != mdocCredential.docType) {
+            docIdsToRegister.add(docId)
+            continue
+        }
+        val registeredReaderAkis = (reg.supportedAuthorityKeyIdentifiers() as List<NSData>)
+            .map { ByteString(it.toByteArray()) }
+            .toSet()
+        val wantedReaderAkis = document.readerIdentifiers.toSet()
+        if (registeredReaderAkis != wantedReaderAkis) {
+            docIdsToRegister.add(docId)
+            continue
+        }
+        val registeredIssuerAkis = (reg.supportedIssuerAuthorityKeyIdentifiers() as List<NSData>)
+            .map { ByteString(it.toByteArray()) }
+            .toSet()
+        val wantedIssuerAkis = mdocCredential.issuerCertChain.certificates
+            .mapNotNull { it.authorityKeyIdentifier?.let { aki -> ByteString(aki) } }
+            .toSet()
+        if (registeredIssuerAkis.isNotEmpty() && registeredIssuerAkis != wantedIssuerAkis) {
+            docIdsToRegister.add(docId)
+            continue
+        }
+    }
+
+    val docIdsHaveSet = regHaveByDocId.keys
+    val docIdsToUnregister = docIdsHaveSet.minus(docIdsWant)
 
     if (docIdsToRegister.isEmpty() && docIdsToUnregister.isEmpty()) {
         Logger.i(TAG, "No changes to iOS Digital Credentials registrations")
@@ -160,10 +206,15 @@ private suspend fun updateOsCredentialManagerUnlocked(
         val displayName = document.displayName ?: document.typeDisplayName ?: "Unnamed Document"
         val mdocCredential = document.getCertifiedCredentials().find { it is MdocCredential } as MdocCredential?
         if (mdocCredential != null) {
+            val issuerIdentifiers = mdocCredential.issuerCertChain.certificates
+                .mapNotNull { it.authorityKeyIdentifier }
             suspendCoroutine<Unit> { continuation ->
                 SwiftBridge.docRegAdd(
                     document.identifier,
-                    mdocCredential.docType
+                    mdocCredential.docType,
+                    document.readerIdentifiers.map { it.toNSData() },
+                    issuerIdentifiers.map { it.toNSData() },
+                    null
                 ) { success, error ->
                     // Matching on the error like this is a little bit of a hack but it does work...
                     if (error != null) {

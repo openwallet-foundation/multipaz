@@ -332,6 +332,7 @@ class ViewModel {
             authorizationData: nil,
             appData: nil,
             created: now.toKotlinInstant(),
+            readerIdentifiers: [],
             metadata: nil
         )
         let _ = try! await documentType.createMdocCredentialWithSampleData(
@@ -373,7 +374,8 @@ class ViewModel {
                     let certChain = requesterIdentity.certChain
                     let result = try! await self.readerTrustManager.verify(
                         chain: certChain.certificates,
-                        atTime: KotlinClockCompanion().getSystem().now()
+                        atTime: KotlinClockCompanion().getSystem().now(),
+                        validateCaValidity: true
                     )
                     if result.isTrusted && result.trustPoints.first != nil {
                         return TrustedRequesterIdentity(
