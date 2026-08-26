@@ -38,6 +38,7 @@ struct VerticalCardListScreen: View {
     }
 
     var body: some View {
+        @Bindable var listState = viewModel.verticalCardListState
         VStack {
             VerticalCardList(
                 cardInfos: viewModel.documentModel.documentInfos,
@@ -47,7 +48,7 @@ struct VerticalCardListScreen: View {
                 showStackWhileFocused: true,
                 paddingTop: 16,
                 paddingBottom: 16,
-                state: viewModel.verticalCardListState,
+                state: listState,
                 animateListTransitions: animateListTransitions,
                 topContent: {
                     VStack(alignment: .leading, spacing: 4) {
@@ -125,45 +126,55 @@ struct VerticalCardListScreen: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: 8) {
-                    HStack(spacing: 4) {
-                        Text("Top Content")
-                            .font(.caption2)
-                            .lineLimit(1)
-                            .fixedSize()
-                        Toggle("", isOn: Binding(
-                            get: { viewModel.verticalCardListState.showTopContent },
-                            set: { newValue in
-                                withAnimation(.easeInOut(duration: 0.38)) {
-                                    viewModel.verticalCardListState.showTopContent = newValue
-                                }
-                            }
-                        ))
-                        .labelsHidden()
-                        .controlSize(.small)
-                    }
-                    HStack(spacing: 4) {
-                        Text("Placeholder")
-                            .font(.caption2)
-                            .lineLimit(1)
-                            .fixedSize()
-                        Toggle("", isOn: Binding(
-                            get: { viewModel.verticalCardListState.showPlaceholderWhenEmpty },
-                            set: { newValue in
-                                withAnimation(.easeInOut(duration: 0.38)) {
-                                    viewModel.verticalCardListState.showPlaceholderWhenEmpty = newValue
-                                }
-                            }
-                        ))
-                        .labelsHidden()
-                        .controlSize(.small)
-                    }
-                }
+                TopBarTogglesView(state: viewModel.verticalCardListState)
             }
         }
         .background {
             ScreenEdgeSwipeGesture(isEnabled: focusedDocumentId != nil) {
                 handleBack()
+            }
+        }
+    }
+}
+
+private struct TopBarTogglesView: View {
+    @Bindable var state: VerticalCardListState
+
+    var body: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 4) {
+                Text("Top Content")
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .fixedSize()
+                Toggle("", isOn: Binding(
+                    get: { state.showTopContent },
+                    set: { newValue in
+                        withAnimation(.easeInOut(duration: 0.38)) {
+                            state.showTopContent = newValue
+                        }
+                    }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .controlSize(.small)
+            }
+            HStack(spacing: 4) {
+                Text("Placeholder")
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .fixedSize()
+                Toggle("", isOn: Binding(
+                    get: { state.showPlaceholderWhenEmpty },
+                    set: { newValue in
+                        withAnimation(.easeInOut(duration: 0.38)) {
+                            state.showPlaceholderWhenEmpty = newValue
+                        }
+                    }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .controlSize(.small)
             }
         }
     }
