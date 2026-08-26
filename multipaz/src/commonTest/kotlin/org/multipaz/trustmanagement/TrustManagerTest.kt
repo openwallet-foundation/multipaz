@@ -247,6 +247,20 @@ class TrustManagerTest {
     }
 
     @Test
+    fun happyFlowWithChainAlreadyContainingRoot() = runTestWithSetup {
+        val trustManager = TrustManager(EphemeralStorage())
+
+        trustManager.addX509Cert(caCertificate, TrustMetadata())
+
+        trustManager.verify(listOf(dsCertificate, intermediateCertificate, caCertificate)).let {
+            assertEquals(null, it.error)
+            assertTrue(it.isTrusted)
+            assertEquals(3, it.trustChain!!.certificates.size)
+            assertEquals(caCertificate, it.trustChain.certificates.last())
+        }
+    }
+
+    @Test
     fun trustPointNotCaCert() = runTestWithSetup {
         val trustManager = TrustManager(EphemeralStorage())
 

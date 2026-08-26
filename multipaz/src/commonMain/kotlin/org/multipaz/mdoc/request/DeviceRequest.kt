@@ -537,6 +537,7 @@ data class DeviceRequest private constructor(
      * @param presentmentSource the [PresentmentSource] to use as a source of truth for presentment.
      * @param keyAgreementPossible if non-empty, a credential using Key Agreement may be returned provided
      *   its private key is using one of the given curves.
+     * @param requesterIdentities additional identities of the requester used for matching reader identifiers, if any.
      * @return the resulting [CredentialQueryResult] if the query was successful.
      * @throws [Iso18015ResponseException] if it's not possible satisfy the query.
      */
@@ -544,6 +545,7 @@ data class DeviceRequest private constructor(
     suspend fun execute(
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve> = emptyList(),
+        requesterIdentities: List<RequesterIdentity> = emptyList(),
     ): CredentialQueryResult {
         // First find all matches for all DocRequests
         val docRequestResults = docRequests.map { docRequest ->
@@ -551,6 +553,7 @@ data class DeviceRequest private constructor(
                 docRequest = docRequest,
                 presentmentSource = presentmentSource,
                 keyAgreementPossible = keyAgreementPossible,
+                requesterIdentities = requesterIdentities,
             )
         }
 
@@ -641,6 +644,7 @@ data class DeviceRequest private constructor(
         docRequest: DocRequest,
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve>,
+        requesterIdentities: List<RequesterIdentity>,
     ): DocRequestResult {
         // Find credentials matching the requested DocType
         val candidates = mutableListOf<Credential>()
@@ -680,6 +684,7 @@ data class DeviceRequest private constructor(
                 docRequest = docRequest,
                 presentmentSource = presentmentSource,
                 keyAgreementPossible = effectiveKeyAgreementPossible,
+                requesterIdentities = requesterIdentities,
             )
             if (bestMatch != null) {
                 matches.add(bestMatch)
@@ -700,10 +705,11 @@ data class DeviceRequest private constructor(
         docRequest: DocRequest,
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve>,
+        requesterIdentities: List<RequesterIdentity>,
     ): DocRequestMatch? {
         val readerIdentifiers = cred.document.readerIdentifiers
         if (readerIdentifiers.isNotEmpty()) {
-            val readerCertChains = getReaderCertChains(docRequest)
+            val readerCertChains = getReaderCertChains(docRequest, requesterIdentities)
             if (readerCertChains.isEmpty()) {
                 return null
             }
@@ -899,7 +905,10 @@ data class DeviceRequest private constructor(
         }
     }
 
-    private fun getReaderCertChains(docRequest: DocRequest): List<X509CertChain> = buildList {
+    private fun getReaderCertChains(
+        docRequest: DocRequest,
+        requesterIdentities: List<RequesterIdentity>
+    ): List<X509CertChain> = buildList {
         docRequest.readerAuthCertChain?.let { add(it) }
         readerAuthAll_.forEach { coseSign1 ->
             val certChain = (coseSign1.protectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
@@ -908,6 +917,7 @@ data class DeviceRequest private constructor(
                 add(certChain)
             }
         }
+        requesterIdentities.forEach { add(it.certChain) }
     }
 
     /**
