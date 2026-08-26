@@ -84,6 +84,10 @@ function makeLauncher(request) {
             }
         }
         request.encrypt = document.getElementById("encrypt-response").checked
+        const issuerIdentifiers = document.getElementById("issuer-identifiers-input")?.value;
+        if (issuerIdentifiers && issuerIdentifiers.trim().length > 0) {
+            request.issuer_identifiers = issuerIdentifiers.trim();
+        }
         const response = await multipazVerifyCredentials(request);
         for (let label in response) {
             renderContent(result, label, response[label], 0);
