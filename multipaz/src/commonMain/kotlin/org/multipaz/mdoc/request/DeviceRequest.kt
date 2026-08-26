@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.request
 
+import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
@@ -55,6 +56,7 @@ import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.RequesterIdentity
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.util.Logger
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -697,6 +699,27 @@ data class DeviceRequest private constructor(
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve>,
     ): DocRequestMatch? {
+        val issuerIdentifiers = docRequest.docRequestInfo?.issuerIdentifiers
+        if (!issuerIdentifiers.isNullOrEmpty()) {
+            val certChain = when (cred) {
+                is MdocCredential -> cred.issuerCertChain
+                is SdJwtVcCredential -> cred.getIssuerCertChain()
+                else -> null
+            }
+            if (certChain == null) {
+                return null
+            }
+            val requiredIssuerIdentifiers = issuerIdentifiers.toSet()
+            val matchFound = certChain.certificates.any { cert ->
+                cert.authorityKeyIdentifier?.let { aki ->
+                    requiredIssuerIdentifiers.contains(ByteString(aki))
+                } ?: false
+            }
+            if (!matchFound) {
+                return null
+            }
+        }
+
         val claimsInCredential = cred.getClaims(documentTypeRepository = presentmentSource.documentTypeRepository)
 
         // 1. Build Logical Requirements

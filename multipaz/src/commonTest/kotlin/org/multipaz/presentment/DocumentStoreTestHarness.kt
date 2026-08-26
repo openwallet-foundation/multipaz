@@ -31,6 +31,7 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
+import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
@@ -97,6 +98,8 @@ class DocumentStoreTestHarness {
     lateinit var validFrom: Instant
     lateinit var validUntil: Instant
 
+    lateinit var iacaCert: X509Cert
+    lateinit var iacaKey: AsymmetricKey.X509Certified
     lateinit var dsKey: AsymmetricKey.X509Certified
     lateinit var readerRootKey: AsymmetricKey.X509Certified
 
@@ -197,7 +200,7 @@ class DocumentStoreTestHarness {
             iacaKeyPub
         )
 
-        val iacaCert = MdocUtil.generateIacaCertificate(
+        iacaCert = MdocUtil.generateIacaCertificate(
             iacaKey = AsymmetricKey.anonymous(iacaKey),
             subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST IACA"),
             serial = ASN1Integer.fromRandom(numBits = 128),
@@ -206,10 +209,11 @@ class DocumentStoreTestHarness {
             issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
             crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
         )
+        this.iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaKey)
 
         val dsPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val dsCert = MdocUtil.generateDsCertificate(
-            iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaKey),
+            iacaKey = this.iacaKey,
             dsKey = dsPrivateKey.publicKey,
             subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST DS"),
             serial = ASN1Integer.fromRandom(numBits = 128),
@@ -255,9 +259,11 @@ class DocumentStoreTestHarness {
         displayName: String,
         docType: String,
         data: Map<String, List<Pair<String, DataItem>>>,
-        keyAuthorizedNamespaces: List<String> = listOf()
+        keyAuthorizedNamespaces: List<String> = listOf(),
+        dsKey: AsymmetricKey.X509Certified? = null
     ): Document {
         initialize()
+        val effectiveDsKey = dsKey ?: this.dsKey
         val document = documentStore.createDocument(
             displayName = displayName
         )
@@ -277,7 +283,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
-            dsKey = dsKey,
+            dsKey = effectiveDsKey,
             keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
         return document
@@ -286,9 +292,11 @@ class DocumentStoreTestHarness {
     suspend fun provisionSdJwtVc(
         displayName: String,
         vct: String,
-        data: List<Pair<String, JsonElement>>
+        data: List<Pair<String, JsonElement>>,
+        dsKey: AsymmetricKey.X509Certified? = null
     ): Document {
         initialize()
+        val effectiveDsKey = dsKey ?: this.dsKey
         val document = documentStore.createDocument(
             displayName = displayName
         )
@@ -304,7 +312,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
-            dsKey = dsKey,
+            dsKey = effectiveDsKey,
         )
         return document
     }
