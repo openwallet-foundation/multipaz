@@ -33,13 +33,24 @@ public class VerticalCardListState {
     public var animateListTransitions: Bool = true
 
     /// Whether the top content view should be shown when no card is focused.
-    public var showTopContent: Bool = true
+    public var showTopContent: Bool = true {
+        didSet {
+            model.showTopContent = showTopContent
+        }
+    }
 
     /// Whether to show a dashed placeholder card when the card list is empty.
-    public var showPlaceholderWhenEmpty: Bool = true
+    public var showPlaceholderWhenEmpty: Bool = true {
+        didSet {
+            model.showPlaceholderWhenEmpty = showPlaceholderWhenEmpty
+        }
+    }
 
     /// The measured height of the top content view.
     public var topContentHeight: CGFloat = 0
+
+    /// The computed total scrollable content height of the card list.
+    public var totalHeight: CGFloat = 0
 
     /// The current scroll offset, normalized against the initial content offset.
     public var scrollOffset: CGFloat = 0
@@ -150,27 +161,17 @@ private struct CardInteractionView: UIViewRepresentable {
 private struct ScrollViewObserver: UIViewRepresentable {
     var state: VerticalCardListState
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+    func makeUIView(context: Context) -> ObserverView {
+        let view = ObserverView()
         view.backgroundColor = .clear
-        DispatchQueue.main.async {
-            if let scrollView = view.findAncestorScrollView() {
-                context.coordinator.setup(scrollView)
-            }
-        }
+        view.coordinator = context.coordinator
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
+    func updateUIView(_ uiView: ObserverView, context: Context) {
+        uiView.coordinator = context.coordinator
         if let scrollView = uiView.findAncestorScrollView() {
-            if state.isScrollOffsetInitialized {
-                let targetContentOffset = state.scrollOffset + state.initialContentOffset
-                if abs(scrollView.contentOffset.y - targetContentOffset) > 1 {
-                    context.coordinator.isUpdatingOffset = true
-                    scrollView.contentOffset.y = targetContentOffset
-                    context.coordinator.isUpdatingOffset = false
-                }
-            }
+            context.coordinator.syncScrollOffset(scrollView)
         }
     }
 
@@ -178,9 +179,27 @@ private struct ScrollViewObserver: UIViewRepresentable {
         Coordinator(self)
     }
 
+    class ObserverView: UIView {
+        weak var coordinator: Coordinator?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window != nil, let scrollView = findAncestorScrollView() {
+                coordinator?.setup(scrollView)
+            }
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            if let scrollView = findAncestorScrollView() {
+                coordinator?.syncScrollOffset(scrollView)
+            }
+        }
+    }
+
     class Coordinator: NSObject {
         var parent: ScrollViewObserver
-        var scrollView: UIScrollView?
+        weak var scrollView: UIScrollView?
         var observation: NSKeyValueObservation?
         var isUpdatingOffset = false
 
@@ -188,25 +207,46 @@ private struct ScrollViewObserver: UIViewRepresentable {
             self.parent = parent
         }
 
+        func syncScrollOffset(_ scrollView: UIScrollView) {
+            guard !isUpdatingOffset else { return }
+            guard !scrollView.isDragging && !scrollView.isDecelerating && !scrollView.isTracking else { return }
+            let topInset = scrollView.adjustedContentInset.top
+            guard topInset > 0 || scrollView.window == nil else { return }
+
+            let visibleHeight = scrollView.bounds.height - topInset - scrollView.adjustedContentInset.bottom
+            let totalHeight = parent.state.totalHeight
+            let maxRelativeOffset = (visibleHeight > 0 && totalHeight > 0)
+                ? max(0, totalHeight - visibleHeight)
+                : CGFloat.greatestFiniteMagnitude
+
+            var clampedScrollOffset = parent.state.scrollOffset
+            if parent.state.internalFocusedCardIdentifier == nil && clampedScrollOffset > maxRelativeOffset {
+                clampedScrollOffset = maxRelativeOffset
+                parent.state.scrollOffset = clampedScrollOffset
+                parent.state.model.scrollOffset = Double(clampedScrollOffset)
+            }
+
+            let baseOffset = -topInset
+            let targetOffset = baseOffset + clampedScrollOffset
+            if abs(scrollView.contentOffset.y - targetOffset) > 0.5 {
+                isUpdatingOffset = true
+                scrollView.contentOffset.y = targetOffset
+                isUpdatingOffset = false
+            }
+        }
+
         func setup(_ scrollView: UIScrollView) {
             self.scrollView = scrollView
-            if !parent.state.isScrollOffsetInitialized {
-                parent.state.initialContentOffset = scrollView.contentOffset.y
-                parent.state.scrollOffset = 0
-                parent.state.isScrollOffsetInitialized = true
-            } else {
-                let targetContentOffset = parent.state.scrollOffset + parent.state.initialContentOffset
-                if abs(scrollView.contentOffset.y - targetContentOffset) > 1 {
-                    isUpdatingOffset = true
-                    scrollView.contentOffset.y = targetContentOffset
-                    isUpdatingOffset = false
-                }
-            }
+            syncScrollOffset(scrollView)
+            parent.state.isScrollOffsetInitialized = true
+
             observation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] scrollView, _ in
                 guard let self = self else { return }
                 guard !self.isUpdatingOffset else { return }
-                let newY = scrollView.contentOffset.y
-                let newRelativeOffset = newY - self.parent.state.initialContentOffset
+                guard scrollView.isDragging || scrollView.isDecelerating || scrollView.isTracking else { return }
+                let topInset = scrollView.adjustedContentInset.top
+                guard topInset > 0 else { return }
+                let newRelativeOffset = max(0, scrollView.contentOffset.y + topInset)
                 if abs(self.parent.state.scrollOffset - newRelativeOffset) > 0.5 {
                     self.parent.state.scrollOffset = newRelativeOffset
                     self.parent.state.model.scrollOffset = Double(newRelativeOffset)
@@ -257,7 +297,6 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
     public var onCardFocusedTapped: (CardInfo) -> Void
     public var onCardFocusedStackTapped: (CardInfo) -> Void
 
-    @State private var displayOrder: [CardInfo]
     @State private var startDragY: CGFloat = 0
     @State private var isDragging: Bool = false
     @State private var lastDragEndTime: Date = .distantPast
@@ -307,14 +346,9 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
             state.displayOrderIdentifiers = cardInfos.map { $0.identifier }
             state.model.displayOrderIdentifiers = state.displayOrderIdentifiers
         }
-
-        self._displayOrder = State(initialValue: [])
     }
 
     private var effectiveDisplayOrder: [CardInfo] {
-        if state.draggedCardIdentifier != nil {
-            return displayOrder
-        }
         let orderIds = state.displayOrderIdentifiers.isEmpty ? cardInfos.map { $0.identifier } : state.displayOrderIdentifiers
         var remainingCards = cardInfos
         var result: [CardInfo] = []
@@ -389,7 +423,6 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         .padding(.top, paddingTop)
         .padding(.horizontal, paddingHorizontal)
         .frame(maxWidth: .infinity, alignment: .top)
-        .animation(canAnimate ? .easeInOut(duration: 0.38) : nil, value: isTopContentEffectivelyVisible)
     }
 
     @ViewBuilder
@@ -400,7 +433,8 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         isTopContentEffectivelyVisible: Bool,
         canAnimate: Bool
     ) -> some View {
-        if state.topContentHeight > 0 || isTopContentEffectivelyVisible {
+        let shouldRender = (showTopContent ?? state.showTopContent) || state.topContentHeight > 0 || isTopContentEffectivelyVisible
+        if shouldRender {
             topContent()
                 .frame(width: maxWidth - 2 * paddingHorizontal)
                 .background(
@@ -413,7 +447,6 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                 )
                 .offset(x: paddingHorizontal, y: isTopContentEffectivelyVisible ? paddingTop : (paddingTop - state.topContentHeight))
                 .opacity(isTopContentEffectivelyVisible ? 1.0 : 0.0)
-                .animation(canAnimate ? .easeInOut(duration: 0.38) : nil, value: isTopContentEffectivelyVisible)
                 .zIndex(1)
         }
     }
@@ -508,19 +541,19 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                 onLongPressStart: {
                     let generator = UIImpactFeedbackGenerator(style: .heavy)
                     generator.impactOccurred()
-                    displayOrder = effectiveDisplayOrder
-                    state.model.displayOrderIdentifiers = displayOrder.map { $0.identifier }
+                    if state.displayOrderIdentifiers.isEmpty {
+                        state.displayOrderIdentifiers = cardInfos.map { $0.identifier }
+                    }
+                    state.model.displayOrderIdentifiers = state.displayOrderIdentifiers
                     if state.model.startDrag(
                         cardIdentifier: cardInfo.identifier,
                         layout: layout,
                         cards: cardLayoutItems,
                         params: layoutParams
                     ) {
-                        withAnimation(.snappy) {
-                            isDragging = true
-                            state.draggedCardIdentifier = cardInfo.identifier
-                            state.dragCurrentY = CGFloat(state.model.dragCurrentY)
-                        }
+                        isDragging = true
+                        state.draggedCardIdentifier = cardInfo.identifier
+                        state.dragCurrentY = CGFloat(state.model.dragCurrentY)
                         startDragY = CGFloat(state.model.dragCurrentY)
                     }
                 },
@@ -536,9 +569,8 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                     state.dragCurrentY = CGFloat(state.model.dragCurrentY)
 
                     if updateResult.reordered {
-                        withAnimation(.snappy) {
+                        withAnimation(.easeInOut(duration: 0.38)) {
                             state.displayOrderIdentifiers = state.model.displayOrderIdentifiers
-                            displayOrder = effectiveDisplayOrder
                         }
                         let generator = UIImpactFeedbackGenerator(style: .light)
                         generator.impactOccurred()
@@ -553,11 +585,8 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                     state.displayOrderIdentifiers = state.model.displayOrderIdentifiers
                     state.dragJustEnded = true
                     state.draggedCardIdentifier = nil
-
-                    withAnimation(.snappy) {
-                        isDragging = false
-                        lastDragEndTime = Date()
-                    }
+                    isDragging = false
+                    lastDragEndTime = Date()
 
                     if let endResult = endResult, let finalCard = cardInfos.first(where: { $0.identifier == endResult.cardIdentifier }) {
                         onCardReordered(finalCard, Int(endResult.newIndex))
@@ -568,10 +597,6 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         .offset(x: CGFloat(cardDim.xOffset), y: CGFloat(visualState.y))
         .zIndex(Double(visualState.zIndex))
         .transition(.identity)
-        .animation(isDragged ? .interactiveSpring() : (canAnimate ? .easeInOut(duration: 0.38) : nil), value: visualState.y)
-        .animation(canAnimate ? .easeInOut(duration: 0.38) : nil, value: visualState.scale)
-        .animation(canAnimate ? .easeInOut(duration: 0.38) : nil, value: visualState.elevation)
-        .animation(canAnimate ? .easeInOut(duration: 0.38) : nil, value: visualState.alpha)
     }
 
     @ViewBuilder
@@ -671,24 +696,49 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                     isAnyFocused: isAnyFocused
                 )
 
-                if currentDisplayOrder.isEmpty && cardInfos.isEmpty {
-                    emptyView(
-                        cardWidth: CGFloat(layout.defaultCardDimensions.width),
-                        cardHeight: CGFloat(layout.defaultCardDimensions.height),
-                        paddingTop: paddingTop,
-                        paddingHorizontal: 16,
-                        isTopContentEffectivelyVisible: isTopContentEffectivelyVisible,
-                        canAnimate: canAnimate
-                    )
-                } else {
-                    listView(
-                        layout: layout,
-                        layoutParams: layoutParams,
-                        cardLayoutItems: cardLayoutItems,
-                        isAnyFocused: isAnyFocused,
-                        internalFocusedCard: internalFocusedCard,
-                        canAnimate: canAnimate
-                    )
+                ZStack {
+                    // Always measure topContent unconditionally in the background
+                    Color.clear
+                        .frame(width: proxy.size.width - 32)
+                        .overlay(
+                            topContent()
+                                .frame(width: proxy.size.width - 32)
+                                .background(
+                                    GeometryReader { topGeo in
+                                        Color.clear.preference(
+                                            key: TopContentHeightPreferenceKey.self,
+                                            value: topGeo.size.height
+                                        )
+                                    }
+                                )
+                                .hidden()
+                        )
+
+                    if currentDisplayOrder.isEmpty && cardInfos.isEmpty {
+                        emptyView(
+                            cardWidth: CGFloat(layout.defaultCardDimensions.width),
+                            cardHeight: CGFloat(layout.defaultCardDimensions.height),
+                            paddingTop: paddingTop,
+                            paddingHorizontal: 16,
+                            isTopContentEffectivelyVisible: isTopContentEffectivelyVisible,
+                            canAnimate: canAnimate
+                        )
+                    } else {
+                        listView(
+                            layout: layout,
+                            layoutParams: layoutParams,
+                            cardLayoutItems: cardLayoutItems,
+                            isAnyFocused: isAnyFocused,
+                            internalFocusedCard: internalFocusedCard,
+                            canAnimate: canAnimate
+                        )
+                    }
+                }
+                .onAppear {
+                    state.totalHeight = CGFloat(layout.totalHeight)
+                }
+                .onChange(of: layout.totalHeight) { _, newHeight in
+                    state.totalHeight = CGFloat(newHeight)
                 }
             }
         }
@@ -732,6 +782,10 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                 state.lastFocusedCardIdentifier = newId
                 state.model.lastFocusedCardIdentifier = newId
             }
+        }
+        .onChange(of: cardInfos.map { $0.identifier }) { _, newIds in
+            state.model.syncCards(incomingIdentifiers: newIds)
+            state.displayOrderIdentifiers = state.model.displayOrderIdentifiers
         }
         .onChange(of: state.dragJustEnded) { _, newValue in
             if newValue {
