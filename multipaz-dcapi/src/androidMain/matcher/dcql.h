@@ -44,6 +44,7 @@ struct DcqlCredentialQuery {
     std::vector<std::string> vctValues;
 
     std::vector<std::vector<uint8_t>> issuerIdentifiers;
+    std::vector<std::vector<uint8_t>> readerAuthAkis;
 
     std::vector<DcqlRequestedClaim> requestedClaims;
     std::vector<DcqlClaimSet> claimSets;

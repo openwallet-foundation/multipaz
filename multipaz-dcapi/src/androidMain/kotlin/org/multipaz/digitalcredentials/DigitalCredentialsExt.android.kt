@@ -257,6 +257,11 @@ private suspend fun exportMdocCredential(
                     issuerIdentifiers.forEach { add(it) }
                 }
             }
+            if (document.readerIdentifiers.isNotEmpty()) {
+                putCborArray("readerIdentifiers") {
+                    document.readerIdentifiers.forEach { add(it.toByteArray()) }
+                }
+            }
             putCborMap("namespaces") {
                 for ((namespace, claimsInNamespace) in claims.organizeByNamespace()) {
                     putCborMap(namespace) {
@@ -331,6 +336,11 @@ private suspend fun exportSdJwtVcCredential(
             if (issuerIdentifiers.isNotEmpty()) {
                 putCborArray("issuerIdentifiers") {
                     issuerIdentifiers.forEach { add(it) }
+                }
+            }
+            if (document.readerIdentifiers.isNotEmpty()) {
+                putCborArray("readerIdentifiers") {
+                    document.readerIdentifiers.forEach { add(it.toByteArray()) }
                 }
             }
             putCborMap("claims") {

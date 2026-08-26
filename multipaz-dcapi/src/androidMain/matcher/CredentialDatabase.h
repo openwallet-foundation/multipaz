@@ -32,6 +32,9 @@ struct Credential {
     // Issuer identifiers (AuthorityKeyIdentifiers)
     std::vector<std::vector<uint8_t>> issuerIdentifiers;
 
+    // Reader identifiers (AuthorityKeyIdentifiers)
+    std::vector<std::vector<uint8_t>> readerIdentifiers;
+
     // Maps from claimName to Claim.
     std::map<std::string, Claim> claims;
 

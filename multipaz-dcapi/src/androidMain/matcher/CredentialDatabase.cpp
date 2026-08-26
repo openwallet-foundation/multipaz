@@ -37,6 +37,7 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
         std::string vcVct = "";
         std::vector<std::string> docProtocols = topProtocols;
         std::vector<std::vector<uint8_t>> issuerIdentifiers;
+        std::vector<std::vector<uint8_t>> readerIdentifiers;
         std::map resultingClaims = std::map<std::string, Claim>();
 
         auto& docProtocolsPtr = cred->get("protocols");
@@ -62,6 +63,16 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
                 for (auto it = arr->begin(); it != arr->end(); ++it) {
                     if ((*it)->asBstr() != nullptr) {
                         issuerIdentifiers.push_back((*it)->asBstr()->value());
+                    }
+                }
+            }
+
+            const auto& readerIdentifiersPtr = mdoc->get("readerIdentifiers");
+            if (readerIdentifiersPtr != nullptr && readerIdentifiersPtr->asArray() != nullptr) {
+                auto arr = readerIdentifiersPtr->asArray();
+                for (auto it = arr->begin(); it != arr->end(); ++it) {
+                    if ((*it)->asBstr() != nullptr) {
+                        readerIdentifiers.push_back((*it)->asBstr()->value());
                     }
                 }
             }
@@ -100,6 +111,16 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
                 }
             }
 
+            const auto& readerIdentifiersPtr = sdjwt->get("readerIdentifiers");
+            if (readerIdentifiersPtr != nullptr && readerIdentifiersPtr->asArray() != nullptr) {
+                auto arr = readerIdentifiersPtr->asArray();
+                for (auto it = arr->begin(); it != arr->end(); ++it) {
+                    if ((*it)->asBstr() != nullptr) {
+                        readerIdentifiers.push_back((*it)->asBstr()->value());
+                    }
+                }
+            }
+
             auto claims = sdjwt->get("claims")->asMap();
             for (auto j = claims->begin(); j != claims->end(); ++j) {
                 auto claimName = j->first->asTstr()->value();
@@ -120,6 +141,7 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
                 vcVct,
                 docProtocols,
                 issuerIdentifiers,
+                readerIdentifiers,
                 resultingClaims
             )
         );

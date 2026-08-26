@@ -256,11 +256,15 @@ class DocumentStoreTestHarness(
     suspend fun provisionMdoc(
         displayName: String,
         docType: String,
-        data: Map<String, List<Pair<String, DataItem>>>
+        data: Map<String, List<Pair<String, DataItem>>>,
+        dsKey: AsymmetricKey.X509Certified? = null,
+        readerIdentifiers: List<ByteString> = emptyList(),
     ): Document {
         initialize()
+        val effectiveDsKey = dsKey ?: this.dsKey
         val document = documentStore.createDocument(
-            displayName = displayName
+            displayName = displayName,
+            readerIdentifiers = readerIdentifiers,
         )
         val issuerNamespaces = buildIssuerNamespaces {
             for ((nsName, listOfClaims) in data) {
@@ -278,7 +282,7 @@ class DocumentStoreTestHarness(
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
-            dsKey = dsKey,
+            dsKey = effectiveDsKey,
         )
         return document
     }
@@ -286,11 +290,15 @@ class DocumentStoreTestHarness(
     suspend fun provisionSdJwtVc(
         displayName: String,
         vct: String,
-        data: List<Pair<String, JsonElement>>
+        data: List<Pair<String, JsonElement>>,
+        dsKey: AsymmetricKey.X509Certified? = null,
+        readerIdentifiers: List<ByteString> = emptyList(),
     ): Document {
         initialize()
+        val effectiveDsKey = dsKey ?: this.dsKey
         val document = documentStore.createDocument(
-            displayName = displayName
+            displayName = displayName,
+            readerIdentifiers = readerIdentifiers,
         )
         val identityAttributes = buildJsonObject {
             for ((claimName, claimValue) in data) {
@@ -304,7 +312,7 @@ class DocumentStoreTestHarness(
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
-            dsKey = dsKey,
+            dsKey = effectiveDsKey,
         )
         return document
     }
