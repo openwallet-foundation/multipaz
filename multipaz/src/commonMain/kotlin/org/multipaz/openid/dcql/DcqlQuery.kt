@@ -1,5 +1,6 @@
 package org.multipaz.openid.dcql
 
+import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
@@ -11,6 +12,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonArray
+import kotlinx.serialization.json.addJsonObject
 import org.multipaz.claim.Claim
 import org.multipaz.claim.findMatchingClaim
 import org.multipaz.credential.Credential
@@ -29,6 +31,8 @@ import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.util.Logger
+import org.multipaz.util.fromBase64Url
+import org.multipaz.util.toBase64Url
 import kotlin.coroutines.cancellation.CancellationException
 
 private data class QueryResponse(
@@ -153,9 +157,30 @@ data class DcqlQuery(
                 keyAgreementPossible
             }
 
+            // Filter candidate credentials by issuerIdentifiers (trusted_authorities)
+            val credsSatisfyingIssuer = if (credentialQuery.issuerIdentifiers.isNotEmpty()) {
+                credsSatisfyingMeta.filter { cred ->
+                    val credIssuerCertChain = when (cred) {
+                        is MdocCredential -> cred.issuerCertChain
+                        is SdJwtVcCredential -> cred.getIssuerCertChain()
+                        else -> null
+                    }
+                    if (credIssuerCertChain == null) {
+                        false
+                    } else {
+                        val credAkis = credIssuerCertChain.certificates.mapNotNull { it.authorityKeyIdentifier }
+                        credentialQuery.issuerIdentifiers.any { reqAki ->
+                            credAkis.any { credAki -> credAki.contentEquals(reqAki.toByteArray()) }
+                        }
+                    }
+                }
+            } else {
+                credsSatisfyingMeta
+            }
+
             val matches = mutableListOf<QueryResponseMatch>()
             // We sort on displayName b/c otherwise it's sorted on Document.identifier which can be unpredictable
-            for (cred in credsSatisfyingMeta.sortedBy { it.document.displayName }) {
+            for (cred in credsSatisfyingIssuer.sortedBy { it.document.displayName }) {
                 val claimsInCredential = try {
                     cred.getClaims(documentTypeRepository = presentmentSource.documentTypeRepository)
                 } catch (err: IllegalStateException) {
@@ -453,10 +478,26 @@ data class DcqlQuery(
                     }
                 }
 
+                val trustedAuthorities = c["trusted_authorities"]?.jsonArray
+                val issuerIdentifiers = mutableListOf<ByteString>()
+                if (trustedAuthorities != null) {
+                    for (taElem in trustedAuthorities) {
+                        val ta = taElem.jsonObject
+                        val type = ta["type"]?.jsonPrimitive?.content
+                        if (type == "aki") {
+                            val values = ta["values"]?.jsonArray
+                            if (values != null) {
+                                for (v in values) {
+                                    issuerIdentifiers.add(ByteString(v.jsonPrimitive.content.fromBase64Url()))
+                                }
+                            }
+                        }
+                    }
+                }
+
                 /*
                  * TODO: add support for
                  * - multiple
-                 * - trusted_authorities
                  * - require_cryptographic_holder_binding
                  */
                 dcqlCredentialQueries.add(
@@ -466,6 +507,7 @@ data class DcqlQuery(
                         meta = meta,
                         mdocDocType = mdocDocType,
                         vctValues = vctValues,
+                        issuerIdentifiers = issuerIdentifiers,
                         claims = dcqlClaims,
                         claimSets = dcqlClaimSets,
                         claimIdToClaim = dcqlClaimIdToClaim
@@ -511,6 +553,18 @@ private fun DcqlCredentialQuery.toJson(): JsonObject = buildJsonObject {
     put("id", id)
     put("format", format)
     put("meta", meta)
+    if (issuerIdentifiers.isNotEmpty()) {
+        putJsonArray("trusted_authorities") {
+            addJsonObject {
+                put("type", "aki")
+                putJsonArray("values") {
+                    issuerIdentifiers.forEach {
+                        add(it.toByteArray().toBase64Url())
+                    }
+                }
+            }
+        }
+    }
     putJsonArray("claims") {
         claims.forEach { claim ->
             add(claim.toJson())

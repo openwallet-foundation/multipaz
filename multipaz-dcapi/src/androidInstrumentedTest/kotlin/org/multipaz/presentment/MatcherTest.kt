@@ -74,10 +74,27 @@ class MatcherTest {
         harnessInitializer: suspend (harness: DocumentStoreTestHarness) -> Unit,
         dcql: String,
     ): String {
+        return testMatcherDcql(
+            version = version,
+            signRequest = signRequest,
+            encryptionKey = encryptionKey,
+            harnessInitializer = harnessInitializer,
+            dcqlProvider = { dcql }
+        )
+    }
+
+    suspend fun testMatcherDcql(
+        version: OpenID4VP.Version,
+        signRequest: Boolean,
+        encryptionKey: EcPrivateKey?,
+        harnessInitializer: suspend (harness: DocumentStoreTestHarness) -> Unit,
+        dcqlProvider: (harness: DocumentStoreTestHarness) -> String,
+    ): String {
         val harness = DocumentStoreTestHarness()
         harness.initialize()
         harnessInitializer(harness)
 
+        val dcql = dcqlProvider(harness)
         val nonce = Random.nextBytes(16).toBase64Url()
         val readerAuthKey = if (signRequest) {
             val key = Crypto.createEcPrivateKey(EcCurve.P256)
@@ -2878,6 +2895,467 @@ class MatcherTest {
                     )
                     .build()
             }
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_mDL_trustedAuthorities_matching() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionStandardDocuments()
+            },
+            dcqlProvider = { harness ->
+                val iacaSkiBase64Url = harness.iacaCert.subjectKeyIdentifier!!.toBase64Url()
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "org.iso.18013.5.1.mDL"
+                          },
+                          "trusted_authorities": [
+                            {
+                              "type": "aki",
+                              "values": [
+                                "$iacaSkiBase64Url"
+                              ]
+                            }
+                          ],
+                          "claims": [
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "given_name"
+                              ]
+                            },
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "family_name"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim()
+            }
+        )
+        Assert.assertTrue(matcherResult.contains("__mDL__"))
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_mDL_trustedAuthorities_nonMatching() = runTest {
+        val wrongSkiBase64Url = byteArrayOf(1, 2, 3, 4, 5).toBase64Url()
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionStandardDocuments()
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "org.iso.18013.5.1.mDL"
+                          },
+                          "trusted_authorities": [
+                            {
+                              "type": "aki",
+                              "values": [
+                                "$wrongSkiBase64Url"
+                              ]
+                            }
+                          ],
+                          "claims": [
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "given_name"
+                              ]
+                            },
+                            {
+                              "path": [
+                                "org.iso.18013.5.1",
+                                "family_name"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim()
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_multipleIssuers_mDL() = runTest {
+        val iacaKey1 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val iacaCert1 = MdocUtil.generateIacaCertificate(
+            iacaKey = AsymmetricKey.anonymous(iacaKey1),
+            subject = X500Name.fromName("CN=Issuer 1"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = Clock.System.now(),
+            validUntil = Clock.System.now() + 365.days,
+            issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
+            crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
+        )
+        val dsKey1 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val dsCert1 = MdocUtil.generateDsCertificate(
+            iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert1)), iacaKey1),
+            dsKey = dsKey1.publicKey,
+            subject = X500Name.fromName("CN=DS 1"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = Clock.System.now(),
+            validUntil = Clock.System.now() + 365.days
+        )
+        val certifiedDsKey1 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert1)), dsKey1)
+
+        val iacaKey2 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val iacaCert2 = MdocUtil.generateIacaCertificate(
+            iacaKey = AsymmetricKey.anonymous(iacaKey2),
+            subject = X500Name.fromName("CN=Issuer 2"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = Clock.System.now(),
+            validUntil = Clock.System.now() + 365.days,
+            issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
+            crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
+        )
+        val dsKey2 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val dsCert2 = MdocUtil.generateDsCertificate(
+            iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert2)), iacaKey2),
+            dsKey = dsKey2.publicKey,
+            subject = X500Name.fromName("CN=DS 2"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = Clock.System.now(),
+            validUntil = Clock.System.now() + 365.days
+        )
+        val certifiedDsKey2 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert2)), dsKey2)
+
+        val initializer: suspend (DocumentStoreTestHarness) -> Unit = { harness ->
+            harness.dsKey = certifiedDsKey1
+            harness.provisionMdoc(
+                displayName = "mDL-Issuer1",
+                docType = DrivingLicense.MDL_DOCTYPE,
+                data = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
+                        "given_name" to "Erika".toDataItem(),
+                        "family_name" to "Mustermann".toDataItem()
+                    )
+                )
+            )
+            harness.dsKey = certifiedDsKey2
+            harness.provisionMdoc(
+                displayName = "mDL-Issuer2",
+                docType = DrivingLicense.MDL_DOCTYPE,
+                data = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
+                        "given_name" to "Max".toDataItem(),
+                        "family_name" to "Mustermann".toDataItem()
+                    )
+                )
+            )
+        }
+
+        val ski1 = iacaCert1.subjectKeyIdentifier!!.toBase64Url()
+        val ski2 = iacaCert2.subjectKeyIdentifier!!.toBase64Url()
+
+        // 1. Query for Issuer 1 only
+        val result1 = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = initializer,
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "trusted_authorities": [ { "type": "aki", "values": ["$ski1"] } ],
+                          "claims": [ {"path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"]} ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim()
+        )
+        Assert.assertTrue(result1.contains("__mDL-Issuer1__"))
+        Assert.assertFalse(result1.contains("__mDL-Issuer2__"))
+
+        // 2. Query for Issuer 2 only
+        val result2 = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = initializer,
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "trusted_authorities": [ { "type": "aki", "values": ["$ski2"] } ],
+                          "claims": [ {"path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"]} ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim()
+        )
+        Assert.assertFalse(result2.contains("__mDL-Issuer1__"))
+        Assert.assertTrue(result2.contains("__mDL-Issuer2__"))
+
+        // 3. Query for both issuers
+        val resultBoth = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = initializer,
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "trusted_authorities": [ { "type": "aki", "values": ["$ski1", "$ski2"] } ],
+                          "claims": [ {"path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"]} ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim()
+        )
+        Assert.assertTrue(resultBoth.contains("__mDL-Issuer1__"))
+        Assert.assertTrue(resultBoth.contains("__mDL-Issuer2__"))
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_intermediateCA_matching() = runTest {
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val rootCert = MdocUtil.generateIacaCertificate(
+            iacaKey = AsymmetricKey.anonymous(rootKey),
+            subject = X500Name.fromName("CN=Root CA"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = Clock.System.now(),
+            validUntil = Clock.System.now() + 365.days,
+            issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
+            crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
+        )
+        val intermediateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediateCert = MdocUtil.generateIacaCertificate(
+            iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(rootCert)), rootKey),
+            subject = X500Name.fromName("CN=Intermediate CA"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = Clock.System.now(),
+            validUntil = Clock.System.now() + 365.days,
+            issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
+            crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
+        )
+        val dsKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val dsCert = MdocUtil.generateDsCertificate(
+            iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(intermediateCert, rootCert)), intermediateKey),
+            dsKey = dsKey.publicKey,
+            subject = X500Name.fromName("CN=DS Key"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = Clock.System.now(),
+            validUntil = Clock.System.now() + 365.days
+        )
+        val fullChainDsKey = AsymmetricKey.X509CertifiedExplicit(
+            X509CertChain(listOf(dsCert, intermediateCert, rootCert)),
+            dsKey
+        )
+
+        val initializer: suspend (DocumentStoreTestHarness) -> Unit = { harness ->
+            harness.dsKey = fullChainDsKey
+            harness.provisionMdoc(
+                displayName = "mDL-3Tier",
+                docType = DrivingLicense.MDL_DOCTYPE,
+                data = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to listOf(
+                        "given_name" to "Erika".toDataItem(),
+                        "family_name" to "Mustermann".toDataItem()
+                    )
+                )
+            )
+        }
+
+        val rootSki = rootCert.subjectKeyIdentifier!!.toBase64Url()
+        val intermediateSki = intermediateCert.subjectKeyIdentifier!!.toBase64Url()
+        val unrelatedSki = byteArrayOf(9, 9, 9, 9).toBase64Url()
+
+        // Match intermediate SKI
+        val resultIntermediate = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = initializer,
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "trusted_authorities": [ { "type": "aki", "values": ["$intermediateSki"] } ],
+                          "claims": [ {"path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"]} ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim()
+        )
+        Assert.assertTrue(resultIntermediate.contains("__mDL-3Tier__"))
+
+        // Match root SKI
+        val resultRoot = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = initializer,
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "trusted_authorities": [ { "type": "aki", "values": ["$rootSki"] } ],
+                          "claims": [ {"path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"]} ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim()
+        )
+        Assert.assertTrue(resultRoot.contains("__mDL-3Tier__"))
+
+        // Non-match with unrelated SKI
+        val resultUnrelated = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = initializer,
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "mdl",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "${DrivingLicense.MDL_DOCTYPE}" },
+                          "trusted_authorities": [ { "type": "aki", "values": ["$unrelatedSki"] } ],
+                          "claims": [ {"path": ["${DrivingLicense.MDL_NAMESPACE}", "given_name"]} ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim()
+        )
+        Assert.assertEquals("", resultUnrelated)
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_sdjwt_trustedAuthorities_matching() = runTest {
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionStandardDocuments()
+            },
+            dcqlProvider = { harness ->
+                val iacaSkiBase64Url = harness.iacaCert.subjectKeyIdentifier!!.toBase64Url()
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "meta": {
+                            "vct_values": [
+                              "urn:eudi:pid:1"
+                            ]
+                          },
+                          "trusted_authorities": [
+                            {
+                              "type": "aki",
+                              "values": [
+                                "$iacaSkiBase64Url"
+                              ]
+                            }
+                          ],
+                          "claims": [
+                            {
+                              "path": [
+                                "given_name"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim()
+            }
+        )
+        Assert.assertTrue(matcherResult.contains("__EU PID__"))
+    }
+
+    @Test
+    fun testMatcher_OpenID4VP_sdjwt_trustedAuthorities_nonMatching() = runTest {
+        val wrongSkiBase64Url = byteArrayOf(1, 2, 3, 4, 5).toBase64Url()
+        val matcherResult = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = true,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionStandardDocuments()
+            },
+            dcql =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "meta": {
+                            "vct_values": [
+                              "urn:eudi:pid:1"
+                            ]
+                          },
+                          "trusted_authorities": [
+                            {
+                              "type": "aki",
+                              "values": [
+                                "$wrongSkiBase64Url"
+                              ]
+                            }
+                          ],
+                          "claims": [
+                            {
+                              "path": [
+                                "given_name"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent().trim()
         )
         Assert.assertEquals("", matcherResult)
     }

@@ -1,5 +1,6 @@
 package org.multipaz.mdoc.request
 
+import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import org.multipaz.cbor.Cbor
@@ -837,6 +838,128 @@ class DeviceRequestDcqlConversionsTest {
                           "path": [
                             "org.iso.23220.1",
                             "age_over_18"
+                          ],
+                          "intent_to_retain": false
+                        }
+                      ]
+                    }
+                  ],
+                  "credential_sets": [
+                    {
+                      "required": true,
+                      "options": [
+                        [
+                          "cred0"
+                        ]
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent(),
+            prettyJson.encodeToString(deviceRequest.toDcql())
+        )
+    }
+
+    @Test
+    fun singleMdlWithIssuerIdentifiers() {
+        val deviceRequest = buildDeviceRequestFromDcql(
+            sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+            dcqlString =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "my_credential",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "org.iso.18013.5.1.mDL"
+                          },
+                          "trusted_authorities": [
+                            {
+                              "type": "aki",
+                              "values": [
+                                "AQIDBA=="
+                              ]
+                            }
+                          ],
+                          "claims": [
+                            {"path": ["org.iso.18013.5.1", "given_name"]},
+                            {"path": ["org.iso.18013.5.1", "resident_address"]}
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent()
+        )
+        assertEquals(
+            """
+                {
+                  "version": "1.1",
+                  "docRequests": [
+                    {
+                      "itemsRequest": 24(<< {
+                        "docType": "org.iso.18013.5.1.mDL",
+                        "nameSpaces": {
+                          "org.iso.18013.5.1": {
+                            "given_name": false,
+                            "resident_address": false
+                          }
+                        },
+                        "requestInfo": {
+                          "issuerIdentifiers": [h'01020304']
+                        }
+                      } >>)
+                    }
+                  ],
+                  "deviceRequestInfo": 24(<< {
+                    "useCases": [
+                      {
+                        "mandatory": true,
+                        "documentSets": [
+                          [0]
+                        ]
+                      }
+                    ]
+                  } >>)
+                }
+            """.trimIndent(),
+            Cbor.toDiagnostics(
+                item = deviceRequest.toDataItem(),
+                options = setOf(DiagnosticOption.PRETTY_PRINT)
+            )
+        )
+        assertEquals(
+            """
+                {
+                  "credentials": [
+                    {
+                      "id": "cred0",
+                      "format": "mso_mdoc",
+                      "meta": {
+                        "doctype_value": "org.iso.18013.5.1.mDL"
+                      },
+                      "trusted_authorities": [
+                        {
+                          "type": "aki",
+                          "values": [
+                            "AQIDBA"
+                          ]
+                        }
+                      ],
+                      "claims": [
+                        {
+                          "id": "claim0",
+                          "path": [
+                            "org.iso.18013.5.1",
+                            "given_name"
+                          ],
+                          "intent_to_retain": false
+                        },
+                        {
+                          "id": "claim1",
+                          "path": [
+                            "org.iso.18013.5.1",
+                            "resident_address"
                           ],
                           "intent_to_retain": false
                         }

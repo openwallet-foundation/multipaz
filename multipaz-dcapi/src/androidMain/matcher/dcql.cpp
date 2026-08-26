@@ -2,6 +2,7 @@
 #include "dcql.h"
 #include "logger.h"
 #include "paths.h"
+#include "base64.h"
 
 extern "C" {
 #include "credentialmanager.h"
@@ -89,12 +90,36 @@ DcqlQuery DcqlQuery::parse(cJSON* dcqlQuery) {
             claimSets.push_back(DcqlClaimSet(claimIdentifiers));
         }
 
+        std::vector<std::vector<uint8_t>> issuerIdentifiers;
+        cJSON* trustedAuthorities = cJSON_GetObjectItem(credential, "trusted_authorities");
+        if (trustedAuthorities != nullptr && cJSON_IsArray(trustedAuthorities)) {
+            cJSON* ta;
+            cJSON_ArrayForEach(ta, trustedAuthorities) {
+                cJSON* type = cJSON_GetObjectItem(ta, "type");
+                if (type != nullptr && cJSON_IsString(type)) {
+                    std::string typeStr = cJSON_GetStringValue(type);
+                    if (typeStr == "aki") {
+                        cJSON* values = cJSON_GetObjectItem(ta, "values");
+                        if (values != nullptr && cJSON_IsArray(values)) {
+                            cJSON* val;
+                            cJSON_ArrayForEach(val, values) {
+                                if (cJSON_IsString(val)) {
+                                    std::string decoded = base64UrlDecode(cJSON_GetStringValue(val));
+                                    issuerIdentifiers.push_back(std::vector<uint8_t>(decoded.begin(), decoded.end()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         dcqlCredentialQueries.push_back(DcqlCredentialQuery(
                 id,
                 format,
                 mdocDocType,
                 vctValues,
-                {},
+                issuerIdentifiers,
                 requestedClaims,
                 claimSets
         ));

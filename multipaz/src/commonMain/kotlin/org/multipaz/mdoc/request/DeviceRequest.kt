@@ -58,6 +58,7 @@ import org.multipaz.request.RequesterIdentity
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.util.Logger
+import org.multipaz.util.toBase64Url
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -983,6 +984,19 @@ private fun JsonArrayBuilder.addDcqlCredentialRequest(docRequest: DocRequest, cr
             }
         }
 
+        if (!docRequest.docRequestInfo?.issuerIdentifiers.isNullOrEmpty()) {
+            putJsonArray("trusted_authorities") {
+                addJsonObject {
+                    put("type", "aki")
+                    putJsonArray("values") {
+                        docRequest.docRequestInfo.issuerIdentifiers.forEach { aki ->
+                            add(aki.toByteArray().toBase64Url())
+                        }
+                    }
+                }
+            }
+        }
+
         // Registry: Track unique claims to ensure every claim (base or alternative)
         // - gets a unique ID and is only listed once in the 'claims' array.
         // - Map Key: "namespace/elementName" -> Map Value: Claim ID (e.g. "claim0")
@@ -1408,13 +1422,15 @@ internal fun deviceRequestAddQueries(
         val docTransactions = transactions[credQuery.id]
         val docRequestInfo = if (alternativeDataElements.isNotEmpty()
             || zkRequest != null || docTransactions != null || credQuery.format == "dc+sd-jwt"
-            || dataElementIdentifierMapping.isNotEmpty()) {
+            || dataElementIdentifierMapping.isNotEmpty()
+            || credQuery.issuerIdentifiers.isNotEmpty()) {
             DocRequestInfo(
                 alternativeDataElements = alternativeDataElements,
                 zkRequest = zkRequest,
                 docFormat = if (credQuery.format == "dc+sd-jwt") "dc+sd-jwt" else null,
                 dataElementIdentifierMapping = dataElementIdentifierMapping,
-                transactions = docTransactions
+                transactions = docTransactions,
+                issuerIdentifiers = credQuery.issuerIdentifiers
             )
         } else {
             null
