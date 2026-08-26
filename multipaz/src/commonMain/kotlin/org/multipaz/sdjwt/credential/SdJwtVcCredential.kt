@@ -5,7 +5,7 @@ import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import org.multipaz.claim.JsonClaim
-import org.multipaz.credential.Credential
+import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.sdjwt.SdJwt
 import kotlin.time.Clock
@@ -33,6 +33,14 @@ interface SdJwtVcCredential {
      * disclosures: `<header>.<body>.<signature>~<Disclosure 1>~<Disclosure 2>~...~<Disclosure N>~`
      */
     val issuerProvidedData: ByteString
+
+    /**
+     * The X.509 certificate chain for the issuer signature from the SD-JWT VC header (`x5c`), if present.
+     */
+    suspend fun getIssuerCertChain(): X509CertChain? {
+        val sdJwt = SdJwt.fromCompactSerialization(issuerProvidedData.decodeToString())
+        return sdJwt.x5c
+    }
 
     suspend fun getClaimsImpl(
         documentTypeRepository: DocumentTypeRepository?

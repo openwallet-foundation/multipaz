@@ -65,9 +65,8 @@ class MdocDocument(
      * Convenience property for accessing the X.509 certificate chain for the issuer signature from [issuerAuth].
      */
     val issuerCertChain: X509CertChain by lazy {
-        issuerAuth.unprotectedHeaders[
-            CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)
-        ]!!.asX509CertChain
+        (issuerAuth.protectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
+            ?: issuerAuth.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel])!!.asX509CertChain
     }
 
     /**
@@ -126,10 +125,7 @@ class MdocDocument(
         atTime: Instant,
     ) {
         // First check the issuer signature..
-        val issuerAuthorityCertChain =
-            issuerAuth.unprotectedHeaders[
-                CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)
-            ]!!.asX509CertChain
+        val issuerAuthorityCertChain = issuerCertChain
         val signatureAlgorithm = Algorithm.fromCoseAlgorithmIdentifier(
             issuerAuth.protectedHeaders[
                 CoseNumberLabel(Cose.COSE_LABEL_ALG)
