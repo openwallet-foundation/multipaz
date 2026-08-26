@@ -94,6 +94,7 @@ DcqlQuery DcqlQuery::parse(cJSON* dcqlQuery) {
                 format,
                 mdocDocType,
                 vctValues,
+                {},
                 requestedClaims,
                 claimSets
         ));
@@ -209,14 +210,30 @@ std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDat
                 continue;
             }
             if (query.format == "mso_mdoc" || query.format == "mso_mdoc_zk") {
-                if (cred.mdocDocType == query.mdocDocType) {
-                    credsSatifyingMeta.push_back(&cred);
+                if (cred.mdocDocType != query.mdocDocType) {
+                    continue;
                 }
             } else if (query.format == "dc+sd-jwt") {
-                if (std::find(query.vctValues.begin(), query.vctValues.end(), cred.vcVct) != query.vctValues.end()) {
-                    credsSatifyingMeta.push_back(&cred);
+                if (std::find(query.vctValues.begin(), query.vctValues.end(), cred.vcVct) == query.vctValues.end()) {
+                    continue;
                 }
             }
+            if (!query.issuerIdentifiers.empty()) {
+                bool matchesIssuer = false;
+                for (const auto& requestedId : query.issuerIdentifiers) {
+                    for (const auto& credId : cred.issuerIdentifiers) {
+                        if (credId == requestedId) {
+                            matchesIssuer = true;
+                            break;
+                        }
+                    }
+                    if (matchesIssuer) break;
+                }
+                if (!matchesIssuer) {
+                    continue;
+                }
+            }
+            credsSatifyingMeta.push_back(&cred);
         }
 
         std::vector<DcqlResponseCredentialSetOptionMemberMatch> matches;

@@ -36,6 +36,7 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
         std::string mdocDoctype = "";
         std::string vcVct = "";
         std::vector<std::string> docProtocols = topProtocols;
+        std::vector<std::vector<uint8_t>> issuerIdentifiers;
         std::map resultingClaims = std::map<std::string, Claim>();
 
         auto& docProtocolsPtr = cred->get("protocols");
@@ -54,6 +55,16 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
             auto mdoc = mdocPtr->asMap();
             documentId = mdoc->get("documentId")->asTstr()->value();
             mdocDoctype = mdoc->get("docType")->asTstr()->value();
+
+            const auto& issuerIdentifiersPtr = mdoc->get("issuerIdentifiers");
+            if (issuerIdentifiersPtr != nullptr && issuerIdentifiersPtr->asArray() != nullptr) {
+                auto arr = issuerIdentifiersPtr->asArray();
+                for (auto it = arr->begin(); it != arr->end(); ++it) {
+                    if ((*it)->asBstr() != nullptr) {
+                        issuerIdentifiers.push_back((*it)->asBstr()->value());
+                    }
+                }
+            }
 
             auto namespaces = mdoc->get("namespaces")->asMap();
             for (auto j = namespaces->begin(); j != namespaces->end(); ++j) {
@@ -79,6 +90,16 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
             documentId = sdjwt->get("documentId")->asTstr()->value();
             vcVct = sdjwt->get("vct")->asTstr()->value();
 
+            const auto& issuerIdentifiersPtr = sdjwt->get("issuerIdentifiers");
+            if (issuerIdentifiersPtr != nullptr && issuerIdentifiersPtr->asArray() != nullptr) {
+                auto arr = issuerIdentifiersPtr->asArray();
+                for (auto it = arr->begin(); it != arr->end(); ++it) {
+                    if ((*it)->asBstr() != nullptr) {
+                        issuerIdentifiers.push_back((*it)->asBstr()->value());
+                    }
+                }
+            }
+
             auto claims = sdjwt->get("claims")->asMap();
             for (auto j = claims->begin(); j != claims->end(); ++j) {
                 auto claimName = j->first->asTstr()->value();
@@ -98,6 +119,7 @@ CredentialDatabase::CredentialDatabase(const uint8_t* encodedDatabase, size_t en
                 mdocDoctype,
                 vcVct,
                 docProtocols,
+                issuerIdentifiers,
                 resultingClaims
             )
         );
