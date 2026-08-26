@@ -182,6 +182,7 @@ private func calcRequestData(
         authorizationData: nil,
         appData: nil,
         created: now.toKotlinInstant(),
+        readerIdentifiers: [],
         metadata: nil
     )
     let _ = try! await DrivingLicense.shared.getDocumentType(
@@ -219,6 +220,7 @@ private func calcRequestData(
         authorizationData: nil,
         appData: nil,
         created: now.toKotlinInstant(),
+        readerIdentifiers: [],
         metadata: nil
     )
     let _ = try! await PhotoID.shared.getDocumentType(
@@ -256,6 +258,7 @@ private func calcRequestData(
         authorizationData: nil,
         appData: nil,
         created: now.toKotlinInstant(),
+        readerIdentifiers: [],
         metadata: nil
     )
     let _ = try! await PhotoID.shared.getDocumentType(
@@ -293,6 +296,7 @@ private func calcRequestData(
         authorizationData: nil,
         appData: nil,
         created: now.toKotlinInstant(),
+        readerIdentifiers: [],
         metadata: nil
     )
     let _ = try! await UtopiaBoardingPass.shared.getDocumentType(
@@ -781,7 +785,8 @@ private func calcRequestData(
         let credentialQueryResult = try! await query.execute(
             presentmentSource: source,
             keyAgreementPossible: [],
-            transactionDataMap: [:]
+            transactionDataMap: [:],
+            requesterIdentities: requester.requesterIdentities
         )
         
         let consentData = try! await ConsentData.companion.fromCredentialQueryResult(
@@ -1136,6 +1141,7 @@ extension DocumentStore {
             authorizationData: nil,
             appData: nil,
             created: Date.now.toKotlinInstant(),
+            readerIdentifiers: [],
             metadata: nil
         )
         

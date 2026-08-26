@@ -52,7 +52,8 @@ func getPresentmentSource() async -> PresentmentSource {
                 let certChain = requesterIdentity.certChain
                 let result = try! await readerTrustManager.verify(
                     chain: certChain.certificates,
-                    atTime: KotlinClockCompanion().getSystem().now()
+                    atTime: KotlinClockCompanion().getSystem().now(),
+                    validateCaValidity: true
                 )
                 if result.isTrusted && result.trustPoints.first != nil {
                     return TrustedRequesterIdentity(
