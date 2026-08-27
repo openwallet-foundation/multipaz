@@ -29,6 +29,7 @@ import org.multipaz.util.inflate
  * @property version the version of the pass.
  * @property updateUrl Optional URL which can be used to check for an update.
  * @property userAuthenticationRequired whether platform user authentication is required to present the pass.
+ * @property readerIdentifiers A list of reader identifiers for reader authentication.
  * @property name The display name of the credential (e.g., "Erika's Driving License").
  * @property typeName The display type of the credential (e.g., "Utopia Driving License").
  * @property cardArt The card art for the pass as a PNG ByteString.
@@ -41,6 +42,7 @@ data class MpzPass(
     val version: Long = 0L,
     val updateUrl: String? = null,
     val userAuthenticationRequired: Boolean = false,
+    val readerIdentifiers: List<ByteString> = emptyList(),
     val name: String? = null,
     val typeName: String? = null,
     val cardArt: ByteString? = null,
@@ -72,6 +74,11 @@ data class MpzPass(
             updateUrl?.let { put("updateUrl", it) }
             if (userAuthenticationRequired) {
                 put("userAuthenticationRequired", true)
+            }
+            if (readerIdentifiers.isNotEmpty()) {
+                putCborArray("readerIdentifiers") {
+                    readerIdentifiers.forEach { add(it.toByteArray()) }
+                }
             }
             putCborMap("credential") {
                 if (isoMdoc.isNotEmpty()) {
@@ -121,6 +128,9 @@ data class MpzPass(
             val version = credentialData["version"].asNumber
             val updateUrl = credentialData.getOrNull("updateUrl")?.asTstr
             val userAuthenticationRequired = credentialData.getOrNull("userAuthenticationRequired")?.asBoolean ?: false
+            val readerIdentifiers = credentialData.getOrNull("readerIdentifiers")?.asArray?.map {
+                ByteString(it.asBstr)
+            } ?: emptyList()
 
             val display = credentialData["display"]
             val name = display.getOrNull("name")?.asTstr
@@ -140,6 +150,7 @@ data class MpzPass(
                 version = version,
                 updateUrl = updateUrl,
                 userAuthenticationRequired = userAuthenticationRequired,
+                readerIdentifiers = readerIdentifiers,
                 name = name,
                 typeName = typeName,
                 cardArt = cardArt,

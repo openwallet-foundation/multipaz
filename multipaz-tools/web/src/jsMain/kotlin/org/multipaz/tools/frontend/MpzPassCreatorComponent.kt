@@ -112,6 +112,9 @@ val MpzPassCreatorComponent = FC {
     var versionStr by useState("0")
     var updateUrl by useState("")
     var userAuthenticationRequired by useState(false)
+    var readerIdentifiers by useState<List<String>>(emptyList())
+    var customAkiInput by useState("")
+    var customAkiError by useState("")
     var credentialCountStr by useState("1")
 
     // Card Art options: "auto" or "custom"
@@ -402,11 +405,20 @@ val MpzPassCreatorComponent = FC {
                 }
 
                 // 6. Assemble MpzPass
+                val readerIdByteStrings = readerIdentifiers.mapNotNull { hex ->
+                    try {
+                        ByteString(hex.fromHex())
+                    } catch (e: Throwable) {
+                        null
+                    }
+                }
+
                 val mpzPass = MpzPass(
                     uniqueId = uniqueId.ifEmpty { UUID.randomUUID().toString() },
                     version = versionStr.toLongOrNull() ?: 0L,
                     updateUrl = updateUrl.trim().ifEmpty { null },
                     userAuthenticationRequired = userAuthenticationRequired,
+                    readerIdentifiers = readerIdByteStrings,
                     name = passName.ifEmpty { "Untitled Pass" },
                     typeName = passTypeName.ifEmpty { "ISO mDoc Pass" },
                     cardArt = cardArtBytes?.let { ByteString(*it) },
@@ -627,7 +639,198 @@ val MpzPassCreatorComponent = FC {
             }
         }
 
-        // Section 2: Card Art Settings
+        // Section 2: Reader Authentication & Identifiers (readerIdentifiers)
+        div {
+            css {
+                background = Color("#0f172a")
+                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                borderRadius = 12.px
+                padding = 24.px
+                marginBottom = 24.px
+            }
+
+            h3 {
+                css { fontSize = 1.2.rem; color = Color("#38bdf8"); marginTop = 0.px; marginBottom = 16.px }
+                +"🔍 Reader Authentication & Identifiers (readerIdentifiers, optional)"
+            }
+
+            p {
+                css { color = Color("#94a3b8"); fontSize = 13.px; marginTop = 0.px; marginBottom = 16.px }
+                +"If configured, the pass is only accessible to readers using reader authentication where a certificate in the x5chain contains an Authority Key Identifier (AKI) in this list."
+            }
+
+            // Configured AKIs list
+            if (readerIdentifiers.isNotEmpty()) {
+                div {
+                    css { display = Display.flex; flexDirection = FlexDirection.column; gap = 8.px; marginBottom = 16.px }
+                    readerIdentifiers.forEach { akiHex ->
+                        val known = KNOWN_READERS.find { it.akiHex.equals(akiHex, ignoreCase = true) }
+                        div {
+                            css {
+                                display = Display.flex
+                                justifyContent = JustifyContent.spaceBetween
+                                alignItems = AlignItems.center
+                                background = Color("#1e293b")
+                                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                borderRadius = 8.px
+                                padding = Padding(8.px, 12.px)
+                            }
+                            div {
+                                if (known != null) {
+                                    div {
+                                        css { fontWeight = FontWeight.bold; color = Color("#f1f5f9"); fontSize = 13.px }
+                                        +known.name
+                                    }
+                                }
+                                div {
+                                    css { color = Color("#38bdf8"); fontFamily = "monospace".unsafeCast<FontFamily>(); fontSize = 12.px }
+                                    +akiHex
+                                }
+                            }
+                            button {
+                                css {
+                                    background = Color("#7f1d1d")
+                                    color = Color("#fca5a5")
+                                    border = None.none
+                                    padding = Padding(4.px, 8.px)
+                                    borderRadius = 6.px
+                                    cursor = Cursor.pointer
+                                    fontSize = 12.px
+                                    hover { background = Color("#991b1b") }
+                                }
+                                onClick = {
+                                    readerIdentifiers = readerIdentifiers.filter { it != akiHex }
+                                }
+                                +"✕ Remove"
+                            }
+                        }
+                    }
+                    button {
+                        css {
+                            alignSelf = AlignSelf.flexStart
+                            background = Color("transparent")
+                            color = Color("#f87171")
+                            border = None.none
+                            padding = Padding(4.px, 8.px)
+                            cursor = Cursor.pointer
+                            fontSize = 12.px
+                            textDecoration = TextDecoration.underline
+                        }
+                        onClick = { readerIdentifiers = emptyList() }
+                        +"Clear All Reader Identifiers"
+                    }
+                }
+            } else {
+                p {
+                    css { color = Color("#64748b"); fontStyle = FontStyle.italic; fontSize = 13.px; marginBottom = 16.px }
+                    +"No reader identifiers configured. Pass will be accessible to all readers without restriction."
+                }
+            }
+
+            // Quick add known readers
+            div {
+                css { marginBottom = 16.px }
+                div {
+                    css { color = Color("#cbd5e1"); fontSize = 13.px; fontWeight = FontWeight.bold; marginBottom = 8.px }
+                    +"Quick Add Known Readers:"
+                }
+                div {
+                    css { display = Display.flex; flexWrap = FlexWrap.wrap; gap = 8.px }
+                    KNOWN_READERS.forEach { known ->
+                        val isAdded = readerIdentifiers.any { it.equals(known.akiHex, ignoreCase = true) }
+                        button {
+                            css {
+                                background = if (isAdded) Color("#334155") else Color("#1e293b")
+                                color = if (isAdded) Color("#64748b") else Color("#38bdf8")
+                                border = Border(1.px, LineStyle.solid, if (isAdded) Color("#475569") else Color("#2563eb"))
+                                borderRadius = 6.px
+                                padding = Padding(6.px, 12.px)
+                                fontSize = 12.px
+                                cursor = if (isAdded) Cursor.default else Cursor.pointer
+                                if (!isAdded) {
+                                    hover { background = Color("#2563eb"); color = Color("#ffffff") }
+                                }
+                            }
+                            disabled = isAdded
+                            onClick = {
+                                if (!isAdded) {
+                                    readerIdentifiers = readerIdentifiers + known.akiHex
+                                }
+                            }
+                            +("${if (isAdded) "✓ " else "+ "}${known.name}")
+                        }
+                    }
+                }
+            }
+
+            // Add custom AKI hex
+            div {
+                div {
+                    css { color = Color("#cbd5e1"); fontSize = 13.px; fontWeight = FontWeight.bold; marginBottom = 8.px }
+                    +"Add Custom Reader AKI (Hex):"
+                }
+                div {
+                    css { display = Display.flex; gap = 8.px }
+                    input {
+                        css {
+                            flexGrow = number(1.0)
+                            padding = 10.px
+                            borderRadius = 6.px
+                            border = Border(1.px, LineStyle.solid, if (customAkiError.isNotEmpty()) Color("#ef4444") else Color("#475569"))
+                            background = Color("#1e293b")
+                            color = Color("#f8fafc")
+                            fontFamily = "monospace".unsafeCast<FontFamily>()
+                            fontSize = 13.px
+                        }
+                        value = customAkiInput
+                        placeholder = "e.g. b18439852f4a6eeabfea62adbc51d081f7488729"
+                        onChange = {
+                            customAkiInput = it.target.value
+                            customAkiError = ""
+                        }
+                    }
+                    button {
+                        css {
+                            background = Color("#2563eb")
+                            color = Color("#ffffff")
+                            border = None.none
+                            padding = Padding(10.px, 18.px)
+                            borderRadius = 6.px
+                            cursor = Cursor.pointer
+                            fontWeight = FontWeight.bold
+                            fontSize = 13.px
+                            hover { background = Color("#1d4ed8") }
+                        }
+                        onClick = {
+                            val trimmed = customAkiInput.trim().lowercase()
+                            if (trimmed.isEmpty()) {
+                                customAkiError = "AKI hex cannot be empty"
+                            } else if (readerIdentifiers.any { it.equals(trimmed, ignoreCase = true) }) {
+                                customAkiError = "AKI is already added"
+                            } else {
+                                try {
+                                    trimmed.fromHex()
+                                    readerIdentifiers = readerIdentifiers + trimmed
+                                    customAkiInput = ""
+                                    customAkiError = ""
+                                } catch (e: Throwable) {
+                                    customAkiError = "Invalid hex string"
+                                }
+                            }
+                        }
+                        +"+ Add AKI"
+                    }
+                }
+                if (customAkiError.isNotEmpty()) {
+                    div {
+                        css { color = Color("#f87171"); fontSize = 12.px; marginTop = 4.px }
+                        +customAkiError
+                    }
+                }
+            }
+        }
+
+        // Section 3: Card Art Settings
         div {
             css {
                 background = Color("#0f172a")

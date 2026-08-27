@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.Cdn
 import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.cbor.DataItem
@@ -23,6 +24,7 @@ import org.multipaz.mpzpass.MpzPassIsoMdoc
 import org.multipaz.mpzpass.MpzPassSdJwtVc
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.SdJwtKb
+import org.multipaz.util.inflate
 import org.multipaz.util.toBase64
 import org.multipaz.util.toHex
 import react.ChildrenBuilder
@@ -206,11 +208,13 @@ val MpzPassDecoderComponent = FC {
     var rawInput by useState("")
     var parsedPass by useState<MpzPass?>(null)
     var parsedDataItem by useState<DataItem?>(null)
+    var decompressedDataItem by useState<DataItem?>(null)
     var parsedSdJwtItems by useState<List<ParsedSdJwtVcItem>>(emptyList())
     var parseError by useState("")
     var isLoading by useState(false)
     var activeTab by useState("overview")
-    var copyCdnStatus by useState("")
+    var copyTopLevelCdnStatus by useState("")
+    var copyDecompressedCdnStatus by useState("")
     var rawInputSize by useState(0)
     var copiedCertIndex by useState<Int?>(null)
 
@@ -223,7 +227,18 @@ val MpzPassDecoderComponent = FC {
             try {
                 val dataItem = Cbor.decode(bytes)
                 val pass = MpzPass.fromDataItem(dataItem)
+                val decompressed = try {
+                    if (dataItem is CborArray && dataItem.items.size >= 2) {
+                        val decompressedBytes = dataItem[1].asBstr.inflate()
+                        Cbor.decode(decompressedBytes)
+                    } else {
+                        null
+                    }
+                } catch (e: Throwable) {
+                    null
+                }
                 parsedDataItem = dataItem
+                decompressedDataItem = decompressed
                 parsedPass = pass
                 activeTab = "overview"
 
@@ -255,6 +270,7 @@ val MpzPassDecoderComponent = FC {
                 parseError = "Error decoding MpzPass: " + (e.message ?: e.toString())
                 parsedPass = null
                 parsedDataItem = null
+                decompressedDataItem = null
                 parsedSdJwtItems = emptyList()
             } finally {
                 isLoading = false
@@ -272,6 +288,7 @@ val MpzPassDecoderComponent = FC {
             parseError = "Could not decode input as Hex, Base64Url, or Base64 binary: ${e.message}"
             parsedPass = null
             parsedDataItem = null
+            decompressedDataItem = null
             parsedSdJwtItems = emptyList()
         }
     }
@@ -564,6 +581,29 @@ val MpzPassDecoderComponent = FC {
                                             td { css { padding = Padding(8.px, 12.px); color = if (pass.userAuthenticationRequired) Color("#ef4444") else Color("#94a3b8") }; +"${pass.userAuthenticationRequired}" }
                                         }
                                         tr {
+                                            td { css { padding = Padding(8.px, 12.px); color = Color("#64748b"); fontWeight = FontWeight.bold }; +"Reader Identifiers" }
+                                            td {
+                                                css { padding = Padding(8.px, 12.px) }
+                                                if (pass.readerIdentifiers.isEmpty()) {
+                                                    span { css { color = Color("#94a3b8") }; +"None (accessible to all readers)" }
+                                                } else {
+                                                    div {
+                                                        css { display = Display.flex; flexDirection = FlexDirection.column; gap = 4.px }
+                                                        pass.readerIdentifiers.forEach { aki ->
+                                                            val hex = aki.toHex()
+                                                            val known = KNOWN_READERS.find { it.akiHex.equals(hex, ignoreCase = true) }
+                                                            div {
+                                                                if (known != null) {
+                                                                    span { css { color = Color("#38bdf8"); fontWeight = FontWeight.bold; marginRight = 6.px }; +"${known.name}: " }
+                                                                }
+                                                                code { css { color = Color("#a78bfa"); fontSize = 12.px }; +hex }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        tr {
                                             td { css { padding = Padding(8.px, 12.px); color = Color("#64748b"); fontWeight = FontWeight.bold }; +"ISO mDoc Count" }
                                             td { css { padding = Padding(8.px, 12.px); color = Color("#38bdf8") }; +"${pass.isoMdoc.size}" }
                                         }
@@ -618,47 +658,111 @@ val MpzPassDecoderComponent = FC {
                     // Tab 4: CBOR / CDN
                     if (activeTab == "cborCdn") {
                         div {
-                            css { display = Display.flex; flexDirection = FlexDirection.column; gap = 16.px }
+                            css { display = Display.flex; flexDirection = FlexDirection.column; gap = 32.px }
 
+                            // Section 1: Decompressed Credential Data CBOR
                             div {
-                                css { display = Display.flex; justifyContent = JustifyContent.spaceBetween; alignItems = AlignItems.center }
-                                label {
-                                    css { fontWeight = FontWeight.bold; color = Color("#cbd5e1") }
-                                    +"Top-Level Pass CBOR Structure (Concise Diagnostic Notation):"
+                                css { display = Display.flex; flexDirection = FlexDirection.column; gap = 12.px }
+
+                                div {
+                                    css { display = Display.flex; justifyContent = JustifyContent.spaceBetween; alignItems = AlignItems.center }
+                                    div {
+                                        label {
+                                            css { fontWeight = FontWeight.bold; color = Color("#cbd5e1"); fontSize = 1.1.rem }
+                                            +"Decompressed Credential Data (CredentialData):"
+                                        }
+                                        p {
+                                            css { color = Color("#94a3b8"); fontSize = 12.px; margin = Margin(4.px, 0.px, 0.px, 0.px) }
+                                            +"Decoded from the DEFLATE-decompressed payload bytes."
+                                        }
+                                    }
+                                    decompressedDataItem?.let { item ->
+                                        button {
+                                            css {
+                                                padding = Padding(6.px, 12.px)
+                                                fontSize = 13.px
+                                                fontWeight = FontWeight.bold
+                                                backgroundColor = Color("#3b82f6")
+                                                color = Color("#ffffff")
+                                                border = None.none
+                                                borderRadius = 6.px
+                                                cursor = Cursor.pointer
+                                                hover { backgroundColor = Color("#2563eb") }
+                                            }
+                                            onClick = {
+                                                val cdnText = Cdn.encode(item, CdnGeneratorOptions(prettyPrint = true))
+                                                window.navigator.clipboard.writeText(cdnText)
+                                                copyDecompressedCdnStatus = "Copied!"
+                                                window.setTimeout({ copyDecompressedCdnStatus = "" }, 2000)
+                                            }
+                                            +(copyDecompressedCdnStatus.ifEmpty { "📋 Copy Decompressed CDN" })
+                                        }
+                                    }
                                 }
-                                parsedDataItem?.let { item ->
-                                    button {
-                                        css {
-                                            padding = Padding(6.px, 12.px)
-                                            fontSize = 13.px
-                                            fontWeight = FontWeight.bold
-                                            backgroundColor = Color("#3b82f6")
-                                            color = Color("#ffffff")
-                                            border = None.none
-                                            borderRadius = 6.px
-                                            cursor = Cursor.pointer
-                                            hover { backgroundColor = Color("#2563eb") }
-                                        }
-                                        onClick = {
-                                            val cdnText = Cdn.encode(item, CdnGeneratorOptions(prettyPrint = true))
-                                            window.navigator.clipboard.writeText(cdnText)
-                                            copyCdnStatus = "Copied!"
-                                            window.setTimeout({ copyCdnStatus = "" }, 2000)
-                                        }
-                                        +(copyCdnStatus.ifEmpty { "📋 Copy CDN" })
+
+                                decompressedDataItem?.let { item ->
+                                    val cdnText = try {
+                                        Cdn.encode(item, CdnGeneratorOptions(prettyPrint = true))
+                                    } catch (e: Throwable) {
+                                        "Error generating CDN representation: ${e.message}"
+                                    }
+                                    CborDiagnosticViewer {
+                                        diagText = cdnText
+                                        maxHeight = 600.px
                                     }
                                 }
                             }
 
-                            parsedDataItem?.let { item ->
-                                val cdnText = try {
-                                    Cdn.encode(item, CdnGeneratorOptions(prettyPrint = true))
-                                } catch (e: Throwable) {
-                                    "Error generating CDN representation: ${e.message}"
+                            // Section 2: Top-Level Container CBOR
+                            div {
+                                css { display = Display.flex; flexDirection = FlexDirection.column; gap = 12.px }
+
+                                div {
+                                    css { display = Display.flex; justifyContent = JustifyContent.spaceBetween; alignItems = AlignItems.center }
+                                    div {
+                                        label {
+                                            css { fontWeight = FontWeight.bold; color = Color("#cbd5e1"); fontSize = 1.1.rem }
+                                            +"Top-Level Pass Container (MpzPass):"
+                                        }
+                                        p {
+                                            css { color = Color("#94a3b8"); fontSize = 12.px; margin = Margin(4.px, 0.px, 0.px, 0.px) }
+                                            +"Outer container containing the compressed credential data."
+                                        }
+                                    }
+                                    parsedDataItem?.let { item ->
+                                        button {
+                                            css {
+                                                padding = Padding(6.px, 12.px)
+                                                fontSize = 13.px
+                                                fontWeight = FontWeight.bold
+                                                backgroundColor = Color("#3b82f6")
+                                                color = Color("#ffffff")
+                                                border = None.none
+                                                borderRadius = 6.px
+                                                cursor = Cursor.pointer
+                                                hover { backgroundColor = Color("#2563eb") }
+                                            }
+                                            onClick = {
+                                                val cdnText = Cdn.encode(item, CdnGeneratorOptions(prettyPrint = true))
+                                                window.navigator.clipboard.writeText(cdnText)
+                                                copyTopLevelCdnStatus = "Copied!"
+                                                window.setTimeout({ copyTopLevelCdnStatus = "" }, 2000)
+                                            }
+                                            +(copyTopLevelCdnStatus.ifEmpty { "📋 Copy Container CDN" })
+                                        }
+                                    }
                                 }
-                                CborDiagnosticViewer {
-                                    diagText = cdnText
-                                    maxHeight = 600.px
+
+                                parsedDataItem?.let { item ->
+                                    val cdnText = try {
+                                        Cdn.encode(item, CdnGeneratorOptions(prettyPrint = true))
+                                    } catch (e: Throwable) {
+                                        "Error generating CDN representation: ${e.message}"
+                                    }
+                                    CborDiagnosticViewer {
+                                        diagText = cdnText
+                                        maxHeight = 400.px
+                                    }
                                 }
                             }
                         }

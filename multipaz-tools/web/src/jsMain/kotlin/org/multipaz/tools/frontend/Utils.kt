@@ -193,3 +193,16 @@ fun updateUrlHashPayload(payload: String) {
         }
     }
 }
+
+data class KnownReader(
+    val name: String,
+    val akiHex: String,
+)
+
+val KNOWN_READERS = listOf(
+    KnownReader("verifier.multipaz.org", "b18439852f4a6eeabfea62adbc51d081f7488729"),
+    KnownReader("ws.davidz25.net", "d53943bafe90446382c7256c895e0a7d44f4caf3"),
+    KnownReader("Multipaz Wallet", "cfa4af87907312962e4d7a17646acc1c45719b21"),
+    KnownReader("Multipaz Wallet Dev", "9bcfdafd2059978e21869c7dd28aaf7481ebabc5"),
+)
+

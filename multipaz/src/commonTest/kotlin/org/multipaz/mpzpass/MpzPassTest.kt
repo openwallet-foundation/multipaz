@@ -317,4 +317,187 @@ class MpzPassTest {
             )
         }
     }
+
+    @Test
+    fun testReaderIdentifiersExportImportIsoMdoc() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val readerIds = listOf(ByteString(0x11, 0x22, 0x33), ByteString(0x44, 0x55, 0x66))
+        val doc = harness.documentStore.createDocument(
+            displayName = "Driving license specimen",
+            typeDisplayName = "Utopia driving license",
+            cardArt = ByteString(1, 2, 3),
+            readerIdentifiers = readerIds,
+        )
+        val credential = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = doc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            domain = "mdoc",
+        )
+        doc.edit { provisioned = true }
+
+        val pass = credential.exportToMpzPass()
+        assertEquals(readerIds, pass.readerIdentifiers)
+        assertEquals(
+            pass,
+            MpzPass.fromDataItem(pass.toDataItem())
+        )
+
+        val importedDoc = harness.documentStore.importMpzPass(
+            mpzPass = pass,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless"
+        )
+        assertEquals(readerIds, importedDoc.readerIdentifiers)
+    }
+
+    @Test
+    fun testReaderIdentifiersExportImportKeyBoundSdJwt() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val readerIds = listOf(ByteString(0xaa.toByte(), 0xbb.toByte(), 0xcc.toByte()))
+        val doc = harness.documentStore.createDocument(
+            displayName = "EU PID specimen",
+            typeDisplayName = "EU PID",
+            cardArt = ByteString(1, 2, 3),
+            readerIdentifiers = readerIds,
+        )
+        val credential = EUPersonalID.getDocumentType().createKeyBoundSdJwtVcCredentialWithSampleData(
+            document = doc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            domain = "sdjwt",
+        )
+        doc.edit { provisioned = true }
+
+        val pass = credential.exportToMpzPass()
+        assertEquals(readerIds, pass.readerIdentifiers)
+        assertEquals(
+            pass,
+            MpzPass.fromDataItem(pass.toDataItem())
+        )
+
+        val importedDoc = harness.documentStore.importMpzPass(
+            mpzPass = pass,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless"
+        )
+        assertEquals(readerIds, importedDoc.readerIdentifiers)
+    }
+
+    @Test
+    fun testReaderIdentifiersExportImportKeylessSdJwt() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val readerIds = listOf(ByteString(0x12, 0x34))
+        val doc = harness.documentStore.createDocument(
+            displayName = "Back to Utopia",
+            typeDisplayName = "Utopia movie ticket",
+            cardArt = ByteString(1, 2, 3),
+            readerIdentifiers = readerIds,
+        )
+        val credential = UtopiaMovieTicket.getDocumentType().createKeylessSdJwtVcCredentialWithSampleData(
+            document = doc,
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            domain = "sdjwt",
+        )
+        doc.edit { provisioned = true }
+
+        val pass = credential.exportToMpzPass()
+        assertEquals(readerIds, pass.readerIdentifiers)
+        assertEquals(
+            pass,
+            MpzPass.fromDataItem(pass.toDataItem())
+        )
+
+        val importedDoc = harness.documentStore.importMpzPass(
+            mpzPass = pass,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless"
+        )
+        assertEquals(readerIds, importedDoc.readerIdentifiers)
+    }
+
+    @Test
+    fun testPassUpdateWithReaderIdentifiers() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val readerIdsV0 = listOf(ByteString(0x01, 0x02))
+        val doc = harness.documentStore.createDocument(
+            displayName = "Driving license specimen",
+            typeDisplayName = "Utopia driving license",
+            cardArt = ByteString(1, 2, 3),
+            readerIdentifiers = readerIdsV0,
+        )
+        val credential = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = doc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            domain = "mdoc",
+        )
+        doc.edit { provisioned = true }
+
+        val passV0 = credential.exportToMpzPass()
+        val importedDoc = harness.documentStore.importMpzPass(
+            mpzPass = passV0,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless"
+        )
+        assertEquals(readerIdsV0, importedDoc.readerIdentifiers)
+
+        // Update pass to version 1 with different reader identifiers
+        val readerIdsV1 = listOf(ByteString(0x03, 0x04), ByteString(0x05, 0x06))
+        val passV1 = passV0.copy(
+            version = 1,
+            readerIdentifiers = readerIdsV1
+        )
+        val updatedDoc1 = harness.documentStore.importMpzPass(
+            mpzPass = passV1,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless"
+        )
+        assertEquals(updatedDoc1, importedDoc)
+        assertEquals(readerIdsV1, updatedDoc1.readerIdentifiers)
+
+        // Update pass to version 2 with empty reader identifiers
+        val passV2 = passV1.copy(
+            version = 2,
+            readerIdentifiers = emptyList()
+        )
+        val updatedDoc2 = harness.documentStore.importMpzPass(
+            mpzPass = passV2,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless"
+        )
+        assertEquals(updatedDoc2, importedDoc)
+        assertEquals(emptyList(), updatedDoc2.readerIdentifiers)
+    }
 }
