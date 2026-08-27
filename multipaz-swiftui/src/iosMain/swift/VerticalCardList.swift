@@ -367,6 +367,8 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         isTopContentEffectivelyVisible: Bool
     ) -> CardListLayoutParameters {
         let maxH: KotlinDouble? = cardMaxHeight != nil ? KotlinDouble(double: Double(cardMaxHeight!)) : nil
+        let topHeight = (TopContent.self == EmptyView.self) ? 0.0 : Double(state.topContentHeight)
+        let isTopVisible = (TopContent.self == EmptyView.self) ? false : (showTopContent ?? state.showTopContent)
         return CardListLayoutParameters(
             viewportWidth: Double(maxWidth),
             viewportHeight: Double(maxHeight),
@@ -376,8 +378,8 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
             paddingHorizontal: 16.0,
             unfocusedVisiblePercent: Int32(unfocusedVisiblePercent),
             showStackWhileFocused: showStackWhileFocused,
-            topContentHeight: Double(state.topContentHeight),
-            isTopContentVisible: showTopContent ?? state.showTopContent,
+            topContentHeight: topHeight,
+            isTopContentVisible: isTopVisible,
             topContentProgress: isTopContentEffectivelyVisible ? 1.0 : 0.0,
             scrollOffset: Double(state.scrollOffset),
             stackOffset: 14.0,
@@ -405,7 +407,7 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         canAnimate: Bool
     ) -> some View {
         VStack(spacing: 16) {
-            if isTopContentEffectivelyVisible {
+            if TopContent.self != EmptyView.self && isTopContentEffectivelyVisible {
                 topContent()
                     .frame(width: cardWidth)
                     .transition(.opacity)
@@ -433,21 +435,23 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         isTopContentEffectivelyVisible: Bool,
         canAnimate: Bool
     ) -> some View {
-        let shouldRender = (showTopContent ?? state.showTopContent) || state.topContentHeight > 0 || isTopContentEffectivelyVisible
-        if shouldRender {
-            topContent()
-                .frame(width: maxWidth - 2 * paddingHorizontal)
-                .background(
-                    GeometryReader { topGeo in
-                        Color.clear.preference(
-                            key: TopContentHeightPreferenceKey.self,
-                            value: topGeo.size.height
-                        )
-                    }
-                )
-                .offset(x: paddingHorizontal, y: isTopContentEffectivelyVisible ? paddingTop : (paddingTop - state.topContentHeight))
-                .opacity(isTopContentEffectivelyVisible ? 1.0 : 0.0)
-                .zIndex(1)
+        if TopContent.self != EmptyView.self {
+            let shouldRender = (showTopContent ?? state.showTopContent) || state.topContentHeight > 0 || isTopContentEffectivelyVisible
+            if shouldRender {
+                topContent()
+                    .frame(width: maxWidth - 2 * paddingHorizontal)
+                    .background(
+                        GeometryReader { topGeo in
+                            Color.clear.preference(
+                                key: TopContentHeightPreferenceKey.self,
+                                value: topGeo.size.height
+                            )
+                        }
+                    )
+                    .offset(x: paddingHorizontal, y: isTopContentEffectivelyVisible ? paddingTop : (paddingTop - state.topContentHeight))
+                    .opacity(isTopContentEffectivelyVisible ? 1.0 : 0.0)
+                    .zIndex(1)
+            }
         }
     }
 
@@ -679,7 +683,11 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                 let internalFocusedCard: CardInfo? = (focusedCard == nil) ? nil : cardInfos.first {
                     $0.identifier == effectiveFocusedCardIdentifier
                 }
-                let effectiveShowTopContent = showTopContent ?? state.showTopContent
+                let effectiveShowTopContent = if TopContent.self == EmptyView.self {
+                    false
+                } else {
+                    showTopContent ?? state.showTopContent
+                }
                 let isTopContentEffectivelyVisible = effectiveShowTopContent && !isAnyFocused
                 let canAnimate = animateListTransitions
 
@@ -697,10 +705,9 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                 )
 
                 ZStack {
-                    // Always measure topContent unconditionally in the background
-                    Color.clear
-                        .frame(width: proxy.size.width - 32)
-                        .overlay(
+                    // Always measure topContent unconditionally in the background if top content is provided
+                    if TopContent.self != EmptyView.self {
+                        VStack(spacing: 0) {
                             topContent()
                                 .frame(width: proxy.size.width - 32)
                                 .background(
@@ -711,8 +718,11 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                                         )
                                     }
                                 )
-                                .hidden()
-                        )
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .hidden()
+                    }
 
                     if currentDisplayOrder.isEmpty && cardInfos.isEmpty {
                         emptyView(
