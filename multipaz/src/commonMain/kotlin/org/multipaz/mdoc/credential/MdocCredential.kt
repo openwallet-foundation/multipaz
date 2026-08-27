@@ -320,6 +320,7 @@ class MdocCredential : SecureAreaBoundCredential {
             typeName = document.typeDisplayName,
             cardArt = document.cardArt,
             userAuthenticationRequired = keyInfo.isUserAuthenticationRequired,
+            readerIdentifiers = document.readerIdentifiers,
             isoMdoc = listOf(MpzPassIsoMdoc(
                 docType = docType,
                 deviceKeyPrivate = deviceKeyPrivate,

@@ -207,6 +207,7 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
             typeName = document.typeDisplayName,
             cardArt = document.cardArt,
             userAuthenticationRequired = keyInfo.isUserAuthenticationRequired,
+            readerIdentifiers = document.readerIdentifiers,
             sdJwtVc = listOf(MpzPassSdJwtVc(
                 vct = vct,
                 deviceKeyPrivate = deviceKeyPrivate,

@@ -284,13 +284,14 @@ class DocumentStore private constructor(
     /**
      * Imports a [MpzPass] into a [DocumentStore].
      *
-     * The returned document will have the [Document.provisioned] flag set to `true` and
+     * The returned document will have the [Document.provisioned] flag set to `true`,
      * [Document.mpzPassId] and [Document.mpzPassVersion] will be set to [MpzPass.uniqueId]
-     * and [MpzPass.version]
+     * and [MpzPass.version], and [Document.readerIdentifiers] will be set to [MpzPass.readerIdentifiers].
      *
      * If the pass had been previously imported at an earlier version, the same [Document] will
-     * be returned and the credentials and [Document.mpzPassVersion] will be updated. If the pass
-     * is already import at the same or later version, [ImportMpzPassException] will be thrown.
+     * be returned and the credentials, display metadata, reader identifiers, and [Document.mpzPassVersion]
+     * will be updated. If the pass is already import at the same or later version,
+     * [ImportMpzPassException] will be thrown.
      *
      * @param mpzPass The [MpzPass] to import.
      * @param isoMdocDomain The domain string to use when creating ISO mdoc credentials.
@@ -333,6 +334,7 @@ class DocumentStore private constructor(
                     displayName = mpzPass.name,
                     typeDisplayName = mpzPass.typeName,
                     cardArt = mpzPass.cardArt,
+                    readerIdentifiers = mpzPass.readerIdentifiers,
                 )
             }
         } catch (e: Exception) {
@@ -410,8 +412,12 @@ class DocumentStore private constructor(
 
             document.edit {
                 provisioned = true
+                displayName = mpzPass.name
+                typeDisplayName = mpzPass.typeName
+                cardArt = mpzPass.cardArt
                 mpzPassId = mpzPass.uniqueId
                 mpzPassVersion = mpzPass.version
+                readerIdentifiers = mpzPass.readerIdentifiers
             }
             return document
         } catch (e: Exception) {

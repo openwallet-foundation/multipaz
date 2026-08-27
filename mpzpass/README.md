@@ -22,6 +22,45 @@ is inherently unsuitable. In those high-assurance scenarios, issuers must levera
 a robust provisioning protocol like [OpenID4VCI](https://github.com/openid/OpenID4VCI) to ensure secure delivery and
 hardware-backed device-binding at the time of issuance.
 
+## Pass Updates
+
+A pass may support lifecycle updates (e.g., renewed validity periods, status
+changes, or updated display metadata) by including an `updateUrl` field in
+the pass payload.
+
+Each pass defines:
+* `uniqueId`: A globally unique identifier assigned by the issuer with at least
+  128 bits of entropy.
+* `version`: A monotonically increasing integer starting at `0`.
+
+To check for an update, the wallet issues an HTTP `GET` request to `updateUrl`
+with an `If-None-Match: "<version>"` header set to the currently installed pass
+version.
+* If no update is available, the server returns HTTP `304` (Not Modified).
+* If an update is available, the server returns HTTP `200` (OK) with the
+  response body containing the updated `.mpzpass` file. The new pass must
+  contain the same `uniqueId` and a strictly higher `version` number.
+
+Upon receiving an update, the wallet replaces the previous credentials, key
+material, and display metadata with the contents of the updated pass.
+
+## Reader Identifiers
+
+To restrict presentation of a pass to authorized relying parties, issuers may
+specify `readerIdentifiers`.
+
+When `readerIdentifiers` is present, the wallet ensures the pass is only
+disclosed to readers using reader authentication:
+* During presentment (e.g., ISO/IEC 18013-5 or OpenID4VP), the reader provides
+  its X.509 certificate chain.
+* The wallet extracts the Authority Key Identifier (AKI) extension (OID
+  `2.5.29.35`) from the certificates in the reader's certificate chain.
+* The pass is only matched and presented if at least one AKI in the reader's
+  certificate chain matches one of the byte strings in `readerIdentifiers`.
+
+If `readerIdentifiers` is omitted or empty, the pass is accessible to any
+requesting reader (subject to platform user authentication and holder consent).
+
 ## Data format
 
 The data is encoded in [CBOR](https://datatracker.ietf.org/doc/html/rfc8949) conforming to the following [CDDL](https://datatracker.ietf.org/doc/html/rfc8610):
@@ -58,6 +97,9 @@ CredentialDataBytes = bstr .cbor CredentialData
 ; or biometrics) must be performed in order to present the pass by setting
 ; `userAuthenticationRequired` to `true`.
 ;
+; Presentation of a pass can be restricted to a subset of known readers by setting
+; `readerIdentifiers`.
+;
 CredentialData = {
   "uniqueId": tstr,          ; Unique identifier for the pass, containing only alphanumerical
                              ; and underscore and hyphen characters and contains at least 128
@@ -67,9 +109,15 @@ CredentialData = {
   ? "userAuthenticationRequired": bool,  ; If set and true, user authentication using the platform
                                          ; (e.g. passcode or biometrics) must be performed in
                                          ; order to present the pass.
+  ? "readerIdentifiers": ReaderIdentifiers  ; If set, restrict access to certain readers.
   "display": Display,
   "credential": Credential,
 }
+
+; The pass is only accessible to readers using reader authentication and where a certificate
+; in the x5chain for the request contains an AuthorityKeyIdentifier in this list.
+;
+ReaderIdentifiers = [+ bstr ]
 
 ; Display data.
 ;
@@ -86,10 +134,13 @@ Display = {
 ;
 ; To protect the holder's privacy and prevent RP collusion, multiple credentials may be
 ; included for a single format, allowing the wallet to rotate between credentials and/or
-; implement policy decisions such as single-use. If multiple credentials are included,
-; they must all include the same data except for key material and slight variances in
-; the validity period necessary to avoid RPs being able to correlate credentials from the
-; same batch.
+; implement policy decisions such as single-use.
+;
+; When multiple credentials are included, they must contain identical data except for:
+; * Key material
+; * Minor variances in validity periods
+; * Imperceptible noise in image assets (e.g., portrait photos)
+; This ensures Relying Parties (RPs) cannot correlate credentials originating from the same batch.
 ;
 Credential = {
   ? "isoMdoc": [+ IsoMdocCredential],
