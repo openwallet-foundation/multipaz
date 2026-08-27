@@ -40,6 +40,7 @@ import org.multipaz.util.inflate
  * @property updateUrl Optional URL which can be used to check for an update.
  * @property userAuthenticationRequired whether platform user authentication is required to present the pass.
  * @property readerIdentifiers A list of reader identifiers for reader authentication.
+ * @property shareable whether the pass can be shared/forwarded to others.
  * @property name The display name of the credential (e.g., "Erika's Driving License").
  * @property typeName The display type of the credential (e.g., "Utopia Driving License").
  * @property cardArt The card art for the pass as a PNG ByteString.
@@ -54,6 +55,7 @@ data class MpzPass(
     val updateUrl: String? = null,
     val userAuthenticationRequired: Boolean = false,
     val readerIdentifiers: List<ByteString> = emptyList(),
+    val shareable: Boolean = false,
     val name: String? = null,
     val typeName: String? = null,
     val cardArt: ByteString? = null,
@@ -106,6 +108,9 @@ data class MpzPass(
                 putCborArray("readerIdentifiers") {
                     readerIdentifiers.forEach { add(it.toByteArray()) }
                 }
+            }
+            if (shareable) {
+                put("shareable", true)
             }
             putCborMap("credential") {
                 if (isoMdoc.isNotEmpty()) {
@@ -213,6 +218,7 @@ data class MpzPass(
             val readerIdentifiers = credentialData.getOrNull("readerIdentifiers")?.asArray?.map {
                 ByteString(it.asBstr)
             } ?: emptyList()
+            val shareable = credentialData.getOrNull("shareable")?.asBoolean ?: false
 
             val display = credentialData["display"]
             val name = display.getOrNull("name")?.asTstr
@@ -233,6 +239,7 @@ data class MpzPass(
                 updateUrl = updateUrl,
                 userAuthenticationRequired = userAuthenticationRequired,
                 readerIdentifiers = readerIdentifiers,
+                shareable = shareable,
                 name = name,
                 typeName = typeName,
                 cardArt = cardArt,

@@ -61,6 +61,18 @@ disclosed to readers using reader authentication:
 If `readerIdentifiers` is omitted or empty, the pass is accessible to any
 requesting reader (subject to platform user authentication and holder consent).
 
+## Pass Sharing
+
+An issuer may indicate whether the pass can be shared or forwarded by the holder
+to other users by specifying the `shareable` field.
+
+If `shareable` is present and set to `true`, the pass is considered shareable and
+a wallet application may provide a button or option to share the raw `.mpzpass`
+file with others (e.g., via messaging apps, Quick Share, or email).
+
+If `shareable` is absent or set to `false`, the pass is assumed to not be
+shareable and wallets should not offer sharing functionality for the pass.
+
 ## Pass Signatures
 
 To ensure the integrity of the pass container and provide cryptographic proof of
@@ -128,6 +140,9 @@ CredentialDataBytes = bstr .cbor CredentialData
 ; Presentation of a pass can be restricted to a subset of known readers by setting
 ; `readerIdentifiers`.
 ;
+; The issuer may also indicate whether the pass is shareable by setting `shareable`
+; to `true`.
+;
 CredentialData = {
   "uniqueId": tstr,          ; Unique identifier for the pass, containing only alphanumerical
                              ; and underscore and hyphen characters and contains at least 128
@@ -137,7 +152,8 @@ CredentialData = {
   ? "userAuthenticationRequired": bool,  ; If set and true, user authentication using the platform
                                          ; (e.g. passcode or biometrics) must be performed in
                                          ; order to present the pass.
-  ? "readerIdentifiers": ReaderIdentifiers  ; If set, restrict access to certain readers.
+  ? "readerIdentifiers": ReaderIdentifiers, ; If set, restrict access to certain readers.
+  ? "shareable": bool,       ; If set and true, the pass may be shared with others.
   "display": Display,
   "credential": Credential,
 }
