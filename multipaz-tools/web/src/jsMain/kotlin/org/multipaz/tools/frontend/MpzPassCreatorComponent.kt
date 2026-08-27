@@ -12,6 +12,7 @@ import kotlinx.browser.document
 import kotlinx.browser.window
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -128,6 +129,11 @@ val MpzPassCreatorComponent = FC {
     var customIacaPrivateKeyPem by useState("")
     var customDsCertPem by useState("")
     var customDsPrivateKeyPem by useState("")
+
+    // Pass Signature options: "auto", "custom", or "none"
+    var passSignatureMode by useState("auto")
+    var customPassCertPem by useState("")
+    var customPassPrivateKeyPem by useState("")
 
     // ISO mDoc options
     var docType by useState("org.iso.18013.5.1.mDL")
@@ -404,7 +410,33 @@ val MpzPassCreatorComponent = FC {
                     generateCanvasCardArt(passName, passTypeName)
                 }
 
-                // 6. Assemble MpzPass
+                // 6. Pass Envelope Signature
+                var passSigningKey: AsymmetricKey? = null
+                var passIssuerCertChain: X509CertChain? = null
+                if (passSignatureMode != "none") {
+                    if (passSignatureMode == "auto") {
+                        val passIssuerKey = Crypto.createEcPrivateKey(EcCurve.P256)
+                        val now = Clock.System.now().truncateToWholeSeconds()
+                        val cert = X509Cert.Builder(
+                            publicKey = passIssuerKey.publicKey,
+                            signingKey = AsymmetricKey.anonymous(passIssuerKey),
+                            serialNumber = ASN1Integer.fromRandom(128),
+                            subject = X500Name.fromName("CN=$passName Issuer,O=Multipaz,C=US"),
+                            issuer = X500Name.fromName("CN=$passName Issuer,O=Multipaz,C=US"),
+                            validFrom = now,
+                            validUntil = now + 365.days
+                        ).build()
+                        passSigningKey = AsymmetricKey.anonymous(passIssuerKey)
+                        passIssuerCertChain = X509CertChain(listOf(cert))
+                    } else {
+                        val passCert = X509Cert.fromPem(customPassCertPem.trim())
+                        val passPrivKey = EcPrivateKey.fromPem(customPassPrivateKeyPem.trim(), passCert.ecPublicKey)
+                        passSigningKey = AsymmetricKey.anonymous(passPrivKey)
+                        passIssuerCertChain = X509CertChain(listOf(passCert))
+                    }
+                }
+
+                // 7. Assemble MpzPass
                 val readerIdByteStrings = readerIdentifiers.mapNotNull { hex ->
                     try {
                         ByteString(hex.fromHex())
@@ -426,7 +458,10 @@ val MpzPassCreatorComponent = FC {
                     sdJwtVc = emptyList()
                 )
 
-                val passDataItem = mpzPass.toDataItem()
+                val passDataItem = mpzPass.toDataItem(
+                    signingKey = passSigningKey,
+                    issuerCertificateChain = passIssuerCertChain
+                )
                 val passBytes = Cbor.encode(passDataItem)
                 createdPassBytes = passBytes
 
@@ -1058,7 +1093,112 @@ val MpzPassCreatorComponent = FC {
             }
         }
 
-        // Section 4: ISO mDoc Credential Configuration
+        // Section: Pass Container Signature
+        div {
+            css {
+                background = Color("#0f172a")
+                border = Border(1.px, LineStyle.solid, Color("#334155"))
+                borderRadius = 12.px
+                padding = 24.px
+                marginBottom = 24.px
+            }
+
+            h3 {
+                css { fontSize = 1.2.rem; color = Color("#38bdf8"); marginTop = 0.px; marginBottom = 16.px }
+                +"🔏 Pass Container Signature (#6.18 COSE_Sign1)"
+            }
+
+            p {
+                css { color = Color("#94a3b8"); fontSize = 13.px; marginTop = 0.px; marginBottom = 16.px }
+                +"Digitally signs the pass container using COSE_Sign1 to ensure envelope integrity (display metadata, update URL, reader identifiers) and authenticate the issuer via X.509 certificate chain."
+            }
+
+            div {
+                css { display = Display.flex; gap = 16.px; marginBottom = 16.px }
+
+                label {
+                    css { cursor = Cursor.pointer; color = Color("#f1f5f9"); fontSize = 14.px }
+                    input {
+                        type = "radio".unsafeCast<InputType>()
+                        name = "passSignatureMode"
+                        checked = passSignatureMode == "auto"
+                        onChange = { passSignatureMode = "auto" }
+                        css { marginRight = 8.px }
+                    }
+                    +"Auto-generate Pass Issuer Key & Certificate"
+                }
+
+                label {
+                    css { cursor = Cursor.pointer; color = Color("#f1f5f9"); fontSize = 14.px }
+                    input {
+                        type = "radio".unsafeCast<InputType>()
+                        name = "passSignatureMode"
+                        checked = passSignatureMode == "custom"
+                        onChange = { passSignatureMode = "custom" }
+                        css { marginRight = 8.px }
+                    }
+                    +"Custom Signing Key & Certificate (PEM)"
+                }
+
+                label {
+                    css { cursor = Cursor.pointer; color = Color("#f1f5f9"); fontSize = 14.px }
+                    input {
+                        type = "radio".unsafeCast<InputType>()
+                        name = "passSignatureMode"
+                        checked = passSignatureMode == "none"
+                        onChange = { passSignatureMode = "none" }
+                        css { marginRight = 8.px }
+                    }
+                    +"Unsigned Pass"
+                }
+            }
+
+            if (passSignatureMode == "custom") {
+                div {
+                    css { display = Display.flex; flexDirection = FlexDirection.column; gap = 12.px; marginTop = 12.px }
+
+                    div {
+                        label { css { display = Display.block; color = Color("#cbd5e1"); marginBottom = 6.px; fontSize = 13.px }; +"Pass Issuer Certificate (PEM):" }
+                        textarea {
+                            css {
+                                width = 100.pct
+                                height = 100.px
+                                background = Color("#1e293b")
+                                border = Border(1.px, LineStyle.solid, Color("#475569"))
+                                borderRadius = 6.px
+                                color = Color("#f8fafc")
+                                fontFamily = "monospace".unsafeCast<FontFamily>()
+                                fontSize = 11.px
+                            }
+                            value = customPassCertPem
+                            placeholder = "-----BEGIN CERTIFICATE-----\n..."
+                            onChange = { customPassCertPem = it.target.value }
+                        }
+                    }
+
+                    div {
+                        label { css { display = Display.block; color = Color("#cbd5e1"); marginBottom = 6.px; fontSize = 13.px }; +"Pass Issuer Private Key (PEM):" }
+                        textarea {
+                            css {
+                                width = 100.pct
+                                height = 100.px
+                                background = Color("#1e293b")
+                                border = Border(1.px, LineStyle.solid, Color("#475569"))
+                                borderRadius = 6.px
+                                color = Color("#f8fafc")
+                                fontFamily = "monospace".unsafeCast<FontFamily>()
+                                fontSize = 11.px
+                            }
+                            value = customPassPrivateKeyPem
+                            placeholder = "-----BEGIN PRIVATE KEY-----\n..."
+                            onChange = { customPassPrivateKeyPem = it.target.value }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section 5: ISO mDoc Credential Configuration
         div {
             css {
                 background = Color("#0f172a")
