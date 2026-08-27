@@ -2,13 +2,23 @@ package org.multipaz.mpzpass
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
+import org.multipaz.cbor.toDataItem
+import org.multipaz.cose.Cose
+import org.multipaz.cose.CoseNumberLabel
+import org.multipaz.cose.CoseSign1
+import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.SignatureVerificationException
+import org.multipaz.crypto.X509CertChain
 import org.multipaz.util.Logger
 import org.multipaz.util.UUID
 import org.multipaz.util.deflate
@@ -35,6 +45,7 @@ import org.multipaz.util.inflate
  * @property cardArt The card art for the pass as a PNG ByteString.
  * @property isoMdoc The ISO mDoc credentials in the payload.
  * @property sdJwtVc The SD-JWT VC credentials in the payload.
+ * @property issuerCertificateChain The X.509 certificate chain of the pass issuer, if the pass is signed.
  * @throws IllegalArgumentException if both [isoMdoc] and [sdJwtVc] are empty.
  */
 data class MpzPass(
@@ -47,8 +58,13 @@ data class MpzPass(
     val typeName: String? = null,
     val cardArt: ByteString? = null,
     val isoMdoc: List<MpzPassIsoMdoc> = emptyList(),
-    val sdJwtVc: List<MpzPassSdJwtVc> = emptyList()
+    val sdJwtVc: List<MpzPassSdJwtVc> = emptyList(),
+    val issuerCertificateChain: X509CertChain? = null
 ) {
+    /**
+     * Whether this pass is signed with an issuer certificate chain.
+     */
+    val isSigned: Boolean get() = issuerCertificateChain != null
 
     init {
         if (isoMdoc.isEmpty() && sdJwtVc.isEmpty()) {
@@ -59,14 +75,25 @@ data class MpzPass(
     /**
      * Serializes and compresses this [MpzPass] into a [DataItem].
      *
-     * The credential data payload is encoded to CBOR and then compressed using the DEFLATE algorithm.
+     * If [signingKey] and [issuerCertificateChain] are provided, the compressed credential data payload
+     * is signed using `COSE_Sign1` according to RFC 9052 and wrapped as `#6.18(COSE_Sign1)`.
      *
+     * @param signingKey Optional key used to sign the pass.
+     * @param issuerCertificateChain Optional X.509 certificate chain for the pass issuer.
      * @param compressionLevel The DEFLATE compression level to use (0-9). Defaults to 5.
      * @return A [DataItem].
-     * @throws IllegalArgumentException if the compression level is out of range.
+     * @throws IllegalArgumentException if only one of [signingKey] or [issuerCertificateChain] is provided,
+     * or if the compression level is out of range.
      */
     @Throws(IllegalArgumentException::class, CancellationException::class)
-    suspend fun toDataItem(compressionLevel: Int = 5) = buildCborArray {
+    suspend fun toDataItem(
+        signingKey: AsymmetricKey? = null,
+        issuerCertificateChain: X509CertChain? = null,
+        compressionLevel: Int = 5
+    ) = buildCborArray {
+        require((signingKey == null && issuerCertificateChain == null) || (signingKey != null && issuerCertificateChain != null)) {
+            "Both signingKey and issuerCertificateChain must be provided together or both null"
+        }
         add("MpzPass")
         val credentialData = buildCborMap {
             put("uniqueId", uniqueId)
@@ -100,7 +127,23 @@ data class MpzPass(
         }
         val credentialDataBytes = Cbor.encode(credentialData)
         val compressedCredentialDataBytes = credentialDataBytes.deflate(compressionLevel)
-        add(compressedCredentialDataBytes)
+        if (signingKey != null && issuerCertificateChain != null) {
+            val cose = Cose.coseSign1Sign(
+                signingKey = signingKey,
+                message = compressedCredentialDataBytes,
+                includeMessageInPayload = true,
+                protectedHeaders = mapOf(
+                    CoseNumberLabel(Cose.COSE_LABEL_ALG) to
+                        signingKey.algorithm.coseAlgorithmIdentifier!!.toDataItem(),
+                    CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN) to
+                        issuerCertificateChain.toDataItem()
+                ),
+                unprotectedHeaders = emptyMap()
+            )
+            add(Tagged(Tagged.COSE_SIGN1, cose.toDataItem()))
+        } else {
+            add(compressedCredentialDataBytes)
+        }
     }
 
     companion object {
@@ -109,18 +152,57 @@ data class MpzPass(
         /**
          * Parses a CBOR array [DataItem] into an [MpzPass].
          *
-         * This decompresses the embedded DEFLATE payload and reconstructs the pass details.
+         * If the pass contains a signed container (`#6.18(COSE_Sign1)`), the signature is checked against
+         * the leaf certificate in the X.509 certificate chain (unless [disableSignatureVerification] is true).
+         * Note that this method only verifies the cryptographic signature; it is the caller's responsibility
+         * to examine [issuerCertificateChain] and check whether it originates from a trusted pass provider.
          *
-         * @param dataItem The top-level CBOR array containing the MpzPass string tag and compressed bytes.
+         * @param dataItem The top-level CBOR array containing the MpzPass string tag and (signed or unsigned) compressed bytes.
+         * @param disableSignatureVerification Set to `true` to skip cryptographic signature verification.
          * @return The parsed [MpzPass].
-         * @throws IllegalArgumentException if CBOR decoding or decompression fails.
+         * @throws IllegalArgumentException if CBOR decoding or decompression fails, or if signature headers are malformed.
+         * @throws SignatureVerificationException if signature verification fails.
          */
-        @Throws(IllegalArgumentException::class, CancellationException::class)
-        suspend fun fromDataItem(dataItem: DataItem): MpzPass {
+        @Throws(
+            IllegalArgumentException::class,
+            SignatureVerificationException::class,
+            CancellationException::class
+        )
+        suspend fun fromDataItem(
+            dataItem: DataItem,
+            disableSignatureVerification: Boolean = false
+        ): MpzPass {
             check(dataItem is CborArray) { "Expected an array" }
             require(dataItem[0].asTstr == "MpzPass") { "Wrong string at start" }
 
-            val compressedCredentialDataBytes = dataItem[1].asBstr
+            val secondElement = dataItem[1]
+            val (compressedCredentialDataBytes, issuerCertChain) = when {
+                secondElement is Bstr -> {
+                    Pair(secondElement.asBstr, null)
+                }
+                secondElement is Tagged && secondElement.tagNumber == Tagged.COSE_SIGN1 -> {
+                    val cose = CoseSign1.fromDataItem(secondElement.taggedItem)
+                    val payload = cose.payload
+                        ?: throw IllegalArgumentException("Missing payload in COSE_Sign1")
+                    val certChain = cose.protectedHeaders[CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)]?.asX509CertChain
+                        ?: throw IllegalArgumentException("x5chain header not found in protected headers")
+                    val algNumber = cose.protectedHeaders[CoseNumberLabel(Cose.COSE_LABEL_ALG)]?.asNumber?.toInt()
+                        ?: throw IllegalArgumentException("alg header not found in protected headers")
+                    val alg = Algorithm.fromCoseAlgorithmIdentifier(algNumber)
+
+                    if (!disableSignatureVerification) {
+                        Cose.coseSign1Check(
+                            publicKey = certChain.certificates.first().ecPublicKey,
+                            detachedData = null,
+                            signature = cose,
+                            signatureAlgorithm = alg
+                        )
+                    }
+                    Pair(payload, certChain)
+                }
+                else -> throw IllegalArgumentException("Expected bstr or Tagged.COSE_SIGN1 in dataItem[1]")
+            }
+
             val credentialDataBytes = compressedCredentialDataBytes.inflate()
             val credentialData = Cbor.decode(credentialDataBytes)
 
@@ -155,8 +237,10 @@ data class MpzPass(
                 typeName = typeName,
                 cardArt = cardArt,
                 isoMdoc = isoMdoc,
-                sdJwtVc = sdJwtVc
+                sdJwtVc = sdJwtVc,
+                issuerCertificateChain = issuerCertChain
             )
         }
     }
 }
+

@@ -2,7 +2,21 @@ package org.multipaz.mpzpass
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.asn1.ASN1Integer
+import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.toDataItem
+import org.multipaz.cose.Cose
+import org.multipaz.cose.CoseNumberLabel
+import org.multipaz.cose.CoseSign1
 import org.multipaz.credential.SecureAreaBoundCredential
+import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.SignatureVerificationException
+import org.multipaz.crypto.X500Name
+import org.multipaz.crypto.X509Cert
+import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.ImportMpzPassException
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
@@ -11,10 +25,13 @@ import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.software.SoftwareKeyUnlockData
+import kotlin.experimental.xor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class MpzPassTest {
@@ -499,5 +516,296 @@ class MpzPassTest {
         )
         assertEquals(updatedDoc2, importedDoc)
         assertEquals(emptyList(), updatedDoc2.readerIdentifiers)
+    }
+
+    @Test
+    fun testSignedPassIsoMdoc() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val doc = harness.documentStore.createDocument(
+            displayName = "Driving license specimen",
+            typeDisplayName = "Utopia driving license",
+            cardArt = ByteString(1, 2, 3),
+        )
+        val credential = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = doc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            domain = "mdoc",
+        )
+        doc.edit { provisioned = true }
+
+        val pass = credential.exportToMpzPass()
+        assertFalse(pass.isSigned)
+        assertNull(pass.issuerCertificateChain)
+
+        val issuerPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val issuerCert = X509Cert.Builder(
+            publicKey = issuerPrivateKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(issuerPrivateKey),
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Multipaz Test Pass Issuer"),
+            issuer = X500Name.fromName("CN=Multipaz Test Pass Issuer"),
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil
+        ).build()
+        val certChain = X509CertChain(listOf(issuerCert))
+
+        val signedDataItem = pass.toDataItem(
+            signingKey = AsymmetricKey.anonymous(issuerPrivateKey),
+            issuerCertificateChain = certChain
+        )
+        val decodedPass = MpzPass.fromDataItem(signedDataItem)
+        assertTrue(decodedPass.isSigned)
+        assertEquals(certChain, decodedPass.issuerCertificateChain)
+        assertEquals(pass.uniqueId, decodedPass.uniqueId)
+        assertEquals(pass.version, decodedPass.version)
+        assertEquals(pass.name, decodedPass.name)
+
+        val importedDoc = harness.documentStore.importMpzPass(
+            mpzPass = decodedPass,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless"
+        )
+        assertEquals(importedDoc.mpzPassId, pass.uniqueId)
+    }
+
+    @Test
+    fun testSignedPassSdJwtVc() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val doc = harness.documentStore.createDocument(
+            displayName = "EU PID specimen",
+            typeDisplayName = "EU PID",
+            cardArt = ByteString(1, 2, 3),
+        )
+        val credential = EUPersonalID.getDocumentType().createKeyBoundSdJwtVcCredentialWithSampleData(
+            document = doc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            domain = "sdjwt",
+        )
+        doc.edit { provisioned = true }
+
+        val pass = credential.exportToMpzPass()
+
+        val issuerPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val issuerCert = X509Cert.Builder(
+            publicKey = issuerPrivateKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(issuerPrivateKey),
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Multipaz Test Pass Issuer"),
+            issuer = X500Name.fromName("CN=Multipaz Test Pass Issuer"),
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil
+        ).build()
+        val certChain = X509CertChain(listOf(issuerCert))
+
+        val signedDataItem = pass.toDataItem(
+            signingKey = AsymmetricKey.anonymous(issuerPrivateKey),
+            issuerCertificateChain = certChain
+        )
+        val decodedPass = MpzPass.fromDataItem(signedDataItem)
+        assertTrue(decodedPass.isSigned)
+        assertEquals(certChain, decodedPass.issuerCertificateChain)
+        assertEquals(pass.uniqueId, decodedPass.uniqueId)
+        assertEquals(pass.version, decodedPass.version)
+        assertEquals(pass.name, decodedPass.name)
+
+        val importedDoc = harness.documentStore.importMpzPass(
+            mpzPass = decodedPass,
+            isoMdocDomain = "mdoc",
+            sdJwtVcDomain = "sdjwt",
+            keylessSdJwtVcDomain = "sdjwt-keyless"
+        )
+        assertEquals(importedDoc.mpzPassId, pass.uniqueId)
+    }
+
+    @Test
+    fun testSignedPassTamperingFails() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val doc = harness.documentStore.createDocument(
+            displayName = "Driving license specimen",
+            typeDisplayName = "Utopia driving license",
+            cardArt = ByteString(1, 2, 3),
+        )
+        val credential = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = doc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            domain = "mdoc",
+        )
+        doc.edit { provisioned = true }
+
+        val pass = credential.exportToMpzPass()
+
+        val issuerPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val issuerCert = X509Cert.Builder(
+            publicKey = issuerPrivateKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(issuerPrivateKey),
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Multipaz Test Pass Issuer"),
+            issuer = X500Name.fromName("CN=Multipaz Test Pass Issuer"),
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil
+        ).build()
+        val certChain = X509CertChain(listOf(issuerCert))
+
+        val signedDataItem = pass.toDataItem(
+            signingKey = AsymmetricKey.anonymous(issuerPrivateKey),
+            issuerCertificateChain = certChain
+        )
+
+        // Modify the payload bytes inside the COSE_Sign1 structure
+        val tagged = signedDataItem.asArray[1] as Tagged
+        val cose = CoseSign1.fromDataItem(tagged.taggedItem)
+        val tamperedPayload = cose.payload!!.copyOf()
+        tamperedPayload[tamperedPayload.size - 1] = (tamperedPayload[tamperedPayload.size - 1] xor 0xFF.toByte())
+        val tamperedCose = cose.copy(payload = tamperedPayload)
+        val tamperedDataItem = buildCborArray {
+            add("MpzPass")
+            add(Tagged(Tagged.COSE_SIGN1, tamperedCose.toDataItem()))
+        }
+
+        assertFailsWith<SignatureVerificationException> {
+            MpzPass.fromDataItem(tamperedDataItem)
+        }
+    }
+
+    @Test
+    fun testSignedPassWrongKeyFails() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val doc = harness.documentStore.createDocument(
+            displayName = "Driving license specimen",
+            typeDisplayName = "Utopia driving license",
+            cardArt = ByteString(1, 2, 3),
+        )
+        val credential = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = doc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            domain = "mdoc",
+        )
+        doc.edit { provisioned = true }
+
+        val pass = credential.exportToMpzPass()
+
+        val issuerPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val otherKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val wrongCert = X509Cert.Builder(
+            publicKey = otherKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(otherKey),
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Wrong Issuer"),
+            issuer = X500Name.fromName("CN=Wrong Issuer"),
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil
+        ).build()
+        val wrongCertChain = X509CertChain(listOf(wrongCert))
+
+        // Sign with issuerPrivateKey, but put wrongCertChain in x5chain
+        val signedDataItem = pass.toDataItem(
+            signingKey = AsymmetricKey.anonymous(issuerPrivateKey),
+            issuerCertificateChain = wrongCertChain
+        )
+
+        assertFailsWith<SignatureVerificationException> {
+            MpzPass.fromDataItem(signedDataItem)
+        }
+
+        // Bypassing signature verification succeeds
+        val decoded = MpzPass.fromDataItem(signedDataItem, disableSignatureVerification = true)
+        assertEquals(pass.uniqueId, decoded.uniqueId)
+        assertTrue(decoded.isSigned)
+    }
+
+    @Test
+    fun testSignedPassUnprotectedHeaderRejected() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val doc = harness.documentStore.createDocument(
+            displayName = "Driving license specimen",
+            typeDisplayName = "Utopia driving license",
+            cardArt = ByteString(1, 2, 3),
+        )
+        val credential = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = doc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            domain = "mdoc",
+        )
+        doc.edit { provisioned = true }
+
+        val pass = credential.exportToMpzPass()
+
+        val issuerPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val issuerCert = X509Cert.Builder(
+            publicKey = issuerPrivateKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(issuerPrivateKey),
+            serialNumber = ASN1Integer.fromRandom(128),
+            subject = X500Name.fromName("CN=Multipaz Test Pass Issuer"),
+            issuer = X500Name.fromName("CN=Multipaz Test Pass Issuer"),
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil
+        ).build()
+        val certChain = X509CertChain(listOf(issuerCert))
+
+        val unsignedDataItem = pass.toDataItem()
+        val compressedBytes = unsignedDataItem.asArray[1].asBstr
+
+        // Sign with x5chain in unprotected header instead of protected header
+        val coseWithUnprotected = Cose.coseSign1Sign(
+            signingKey = AsymmetricKey.anonymous(issuerPrivateKey),
+            message = compressedBytes,
+            includeMessageInPayload = true,
+            protectedHeaders = mapOf(
+                CoseNumberLabel(Cose.COSE_LABEL_ALG) to
+                    issuerPrivateKey.curve.defaultSigningAlgorithmFullySpecified.coseAlgorithmIdentifier!!.toDataItem()
+            ),
+            unprotectedHeaders = mapOf(
+                CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN) to
+                    certChain.toDataItem()
+            )
+        )
+        val dataItem = buildCborArray {
+            add("MpzPass")
+            add(Tagged(Tagged.COSE_SIGN1, coseWithUnprotected.toDataItem()))
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            MpzPass.fromDataItem(dataItem)
+        }
     }
 }

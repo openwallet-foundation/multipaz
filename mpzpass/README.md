@@ -61,6 +61,29 @@ disclosed to readers using reader authentication:
 If `readerIdentifiers` is omitted or empty, the pass is accessible to any
 requesting reader (subject to platform user authentication and holder consent).
 
+## Pass Signatures
+
+To ensure the integrity of the pass container and provide cryptographic proof of
+the issuer's identity, an `MpzPass` container may be digitally signed using
+`COSE_Sign1` according to RFC 9052.
+
+When a pass is signed:
+* The compressed credential bytes (`CompressedCredentialDataBytes`) are signed
+  using `COSE_Sign1` and encapsulated as a tagged CBOR item `#6.18(COSE_Sign1)`
+  as the second element in the `MpzPass` array.
+* The `COSE_Sign1` protected headers MUST contain the signature algorithm
+  (`alg`, label 1).
+* The certificate containing the public key belonging to the private key used to
+  sign the pass shall be included as an `x5chain` element (label 33) as described
+  in RFC 9360. It shall be included as a protected header element. The `x5chain`
+  element shall include at least one certificate and may contain more.
+* The `COSE_Sign1` unprotected headers MUST be empty.
+* The payload of `COSE_Sign1` is `CompressedCredentialDataBytes`.
+
+A receiving wallet verifies the signature against the leaf certificate in the
+certificate chain and can validate the certificate chain against a trust store
+or present the verified issuer identity to the user during import.
+
 ## Data format
 
 The data is encoded in [CBOR](https://datatracker.ietf.org/doc/html/rfc8949) conforming to the following [CDDL](https://datatracker.ietf.org/doc/html/rfc8610):
@@ -70,13 +93,18 @@ The data is encoded in [CBOR](https://datatracker.ietf.org/doc/html/rfc8949) con
 ;
 MpzPass = [
   "MpzPass",
-  CompressedCredentialDataBytes,
+  CompressedCredentialDataBytes / SignedCompressedCredentialDataBytes,
 ]
 
 ; Contains CredentialDataBytes compressed using DEFLATE algorithm according
 ; to [RFC 1951](https://www.ietf.org/rfc/rfc1951.txt).
 ;
 CompressedCredentialDataBytes = bstr
+
+; Contains CompressedCredentialDataBytes signed using COSE_Sign1 according to RFC 9052.
+; The payload of COSE_Sign1 is CompressedCredentialDataBytes.
+;
+SignedCompressedCredentialDataBytes = #6.18(COSE_Sign1)
 
 CredentialDataBytes = bstr .cbor CredentialData
 
