@@ -3,6 +3,7 @@ package org.multipaz.mpzpass
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.toDataItem
@@ -25,6 +26,7 @@ import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.presentment.DocumentStoreTestHarness
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.software.SoftwareKeyUnlockData
+import org.multipaz.util.inflate
 import kotlin.experimental.xor
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -807,5 +809,54 @@ class MpzPassTest {
         assertFailsWith<IllegalArgumentException> {
             MpzPass.fromDataItem(dataItem)
         }
+    }
+
+    @Test
+    fun testShareablePass() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+
+        val doc = harness.documentStore.createDocument(
+            displayName = "Driving license specimen",
+            typeDisplayName = "Utopia driving license",
+            cardArt = ByteString(1, 2, 3),
+        )
+        val credential = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = doc,
+            secureArea = harness.softwareSecureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = harness.dsKey,
+            signedAt = harness.signedAt,
+            validFrom = harness.validFrom,
+            validUntil = harness.validUntil,
+            expectedUpdate = null,
+            domain = "mdoc",
+        )
+        doc.edit { provisioned = true }
+
+        val basePass = credential.exportToMpzPass()
+        assertFalse(basePass.shareable)
+
+        // Test pass with shareable = true
+        val shareablePass = basePass.copy(shareable = true)
+        val shareableDataItem = shareablePass.toDataItem()
+        val decodedShareablePass = MpzPass.fromDataItem(shareableDataItem)
+        assertTrue(decodedShareablePass.shareable)
+
+        // Verify the CBOR encoding actually has "shareable": true
+        val decompressedBytes = shareableDataItem.asArray[1].asBstr.inflate()
+        val decodedMap = Cbor.decode(decompressedBytes)
+        assertEquals(true, decodedMap["shareable"].asBoolean)
+
+        // Test pass with shareable = false
+        val nonShareablePass = basePass.copy(shareable = false)
+        val nonShareableDataItem = nonShareablePass.toDataItem()
+        val decodedNonShareablePass = MpzPass.fromDataItem(nonShareableDataItem)
+        assertFalse(decodedNonShareablePass.shareable)
+
+        // Verify "shareable" key is omitted when false
+        val nonShareableBytes = nonShareableDataItem.asArray[1].asBstr.inflate()
+        val nonShareableMap = Cbor.decode(nonShareableBytes)
+        assertNull(nonShareableMap.getOrNull("shareable"))
     }
 }

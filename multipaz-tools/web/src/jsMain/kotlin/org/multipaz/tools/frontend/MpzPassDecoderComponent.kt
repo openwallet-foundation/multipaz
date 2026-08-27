@@ -615,6 +615,17 @@ val MpzPassDecoderComponent = FC {
                                             }
                                         }
                                         tr {
+                                            td { css { padding = Padding(8.px, 12.px); color = Color("#64748b"); fontWeight = FontWeight.bold }; +"Shareable" }
+                                            td {
+                                                css { padding = Padding(8.px, 12.px) }
+                                                if (pass.shareable) {
+                                                    span { css { color = Color("#22c55e"); fontWeight = FontWeight.bold }; +"Yes (Sharing allowed)" }
+                                                } else {
+                                                    span { css { color = Color("#94a3b8") }; +"No (Sharing not allowed)" }
+                                                }
+                                            }
+                                        }
+                                        tr {
                                             td { css { padding = Padding(8.px, 12.px); color = Color("#64748b"); fontWeight = FontWeight.bold }; +"Pass Signature" }
                                             td {
                                                 css { padding = Padding(8.px, 12.px) }

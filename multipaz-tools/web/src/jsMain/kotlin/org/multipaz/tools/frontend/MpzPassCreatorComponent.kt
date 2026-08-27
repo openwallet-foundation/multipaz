@@ -113,6 +113,7 @@ val MpzPassCreatorComponent = FC {
     var versionStr by useState("0")
     var updateUrl by useState("")
     var userAuthenticationRequired by useState(false)
+    var shareable by useState(true)
     var readerIdentifiers by useState<List<String>>(emptyList())
     var customAkiInput by useState("")
     var customAkiError by useState("")
@@ -451,6 +452,7 @@ val MpzPassCreatorComponent = FC {
                     updateUrl = updateUrl.trim().ifEmpty { null },
                     userAuthenticationRequired = userAuthenticationRequired,
                     readerIdentifiers = readerIdByteStrings,
+                    shareable = shareable,
                     name = passName.ifEmpty { "Untitled Pass" },
                     typeName = passTypeName.ifEmpty { "ISO mDoc Pass" },
                     cardArt = cardArtBytes?.let { ByteString(*it) },
@@ -650,6 +652,23 @@ val MpzPassCreatorComponent = FC {
                             onChange = { userAuthenticationRequired = it.target.checked }
                         }
                         +"Require Platform User Authentication (userAuthenticationRequired)"
+                    }
+                }
+
+                div {
+                    label {
+                        css { display = Display.flex; alignItems = AlignItems.center; color = Color("#cbd5e1"); cursor = Cursor.pointer; fontSize = 13.px }
+                        input {
+                            css { marginRight = 8.px }
+                            type = "checkbox".unsafeCast<InputType>()
+                            checked = shareable
+                            onChange = { shareable = it.target.checked }
+                        }
+                        +"Allow Pass Sharing (shareable)"
+                    }
+                    p {
+                        css { color = Color("#94a3b8"); fontSize = 12.px; margin = Margin(4.px, 0.px, 0.px, 24.px) }
+                        +"Permits holders to share or forward the raw .mpzpass file with others (e.g. via messaging apps, Quick Share, or email)."
                     }
                 }
 
