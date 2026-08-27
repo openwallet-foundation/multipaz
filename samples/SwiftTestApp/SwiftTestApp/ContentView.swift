@@ -127,7 +127,7 @@ struct ContentView: View {
             do {
                 let fileData = try Data(contentsOf: url)
                 let dataItem = try Cbor.shared.decode(encodedCbor: fileData.toByteArray())
-                let mpzPass = try await MpzPass.companion.fromDataItem(dataItem: dataItem)
+                let mpzPass = try await MpzPass.companion.fromDataItem(dataItem: dataItem, disableSignatureVerification: false)
                 let document = try await viewModel.documentStore.importMpzPass(
                     mpzPass: mpzPass,
                     isoMdocDomain: "mdoc",
