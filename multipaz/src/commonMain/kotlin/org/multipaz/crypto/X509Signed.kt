@@ -379,7 +379,7 @@ sealed class X509SignedBuilder<BuilderT: X509SignedBuilder<BuilderT>>(
                 Algorithm.ES256, Algorithm.ESP256, Algorithm.ESB256 -> "1.2.840.10045.4.3.2"
                 Algorithm.ES384, Algorithm.ESP384, Algorithm.ESB384, Algorithm.ESB320 -> "1.2.840.10045.4.3.3"
                 Algorithm.ES512, Algorithm.ESP512, Algorithm.ESB512 -> "1.2.840.10045.4.3.4"
-                Algorithm.EDDSA -> {
+                Algorithm.EDDSA, Algorithm.ED25519, Algorithm.ED448 -> {
                     when (signingKeyCurve) {
                         EcCurve.ED25519 -> "1.3.101.112"
                         EcCurve.ED448 -> "1.3.101.113"

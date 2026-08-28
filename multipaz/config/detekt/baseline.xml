@@ -821,46 +821,6 @@
     <ID>UndocumentedPublicProperty:MultipazExtension_Cbor.kt$val MultipazExtension.Companion.cborSchemaId: ByteString get() = MultipazExtension_cborSchemaId</ID>
     <ID>UndocumentedPublicProperty:NdefRecord.kt$NdefRecord.Tnf$val value: Int</ID>
     <ID>UndocumentedPublicProperty:NfcTransportMdoc.kt$NfcTransportMdoc.NfcError$val status: Int</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$COMMON_NAME : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$COUNTRY_NAME : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$EC_CURVE_BRAINPOOLP256R1 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$EC_CURVE_BRAINPOOLP320R1 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$EC_CURVE_BRAINPOOLP384R1 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$EC_CURVE_BRAINPOOLP512R1 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$EC_CURVE_P256 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$EC_CURVE_P384 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$EC_CURVE_P521 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$EC_PUBLIC_KEY : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$ED25519 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$ED448 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$ISO_18013_5_MDL_DS : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$ISO_18013_5_MDL_READER_AUTH : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$ISO_23220_4_MDOC_DS : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$ISO_23220_4_MDOC_READER_AUTH : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$LOCALITY_NAME : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$ORGANIZATIONAL_UNIT_NAME : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$ORGANIZATION_NAME : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$SERIAL_NUMBER : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$SIGNATURE_ECDSA_SHA256 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$SIGNATURE_ECDSA_SHA384 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$SIGNATURE_ECDSA_SHA512 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$SIGNATURE_RS256 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$SIGNATURE_RS384 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$SIGNATURE_RS512 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$STATE_OR_PROVINCE_NAME : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$X25519 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$X448 : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$X509_EXTENSION_ANDROID_KEYSTORE_ATTESTATION : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$X509_EXTENSION_ANDROID_KEYSTORE_PROVISIONING_INFORMATION : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$X509_EXTENSION_AUTHORITY_KEY_IDENTIFIER : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$X509_EXTENSION_BASIC_CONSTRAINTS : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$X509_EXTENSION_CRL_DISTRIBUTION_POINTS : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$X509_EXTENSION_EXTENDED_KEY_USAGE : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$X509_EXTENSION_ISSUER_ALT_NAME : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$X509_EXTENSION_KEY_USAGE : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$X509_EXTENSION_MULTIPAZ_EXTENSION : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$X509_EXTENSION_SUBJECT_ALT_NAME : OID</ID>
-    <ID>UndocumentedPublicProperty:OID.kt$OID$X509_EXTENSION_SUBJECT_KEY_IDENTIFIER : OID</ID>
     <ID>UndocumentedPublicProperty:OpenID4VP.kt$OpenID4VP.ResponseMode$DC_API</ID>
     <ID>UndocumentedPublicProperty:OpenID4VP.kt$OpenID4VP.ResponseMode$DIRECT_POST</ID>
     <ID>UndocumentedPublicProperty:OpenID4VP.kt$OpenID4VP.Version$DRAFT_24</ID>

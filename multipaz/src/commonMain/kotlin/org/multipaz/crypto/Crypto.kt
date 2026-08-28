@@ -59,12 +59,13 @@ expect object Crypto {
     /**
      * Message encryption.
      *
-     * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], or [Algorithm.A256GCM].
+     * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM],
+     *   [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC].
      * @param key the encryption key.
      * @param nonce the nonce/IV.
      * @param messagePlaintext the message to encrypt.
-     * @param aad additional authenticated data or `null`.
-     * @return the cipher text with the tag appended to it.
+     * @param aad additional authenticated data or `null` (not used for CBC mode).
+     * @return the cipher text with the tag appended for GCM, or padded for CBC.
      * @throws IllegalArgumentException if the given algorithm is not supported.
      */
     suspend fun encrypt(
@@ -78,11 +79,12 @@ expect object Crypto {
     /**
      * Message decryption.
      *
-     * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], or [Algorithm.A256GCM].
+     * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM],
+     *   [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC].
      * @param key the encryption key.
      * @param nonce the nonce/IV.
-     * @param messageCiphertext the message to decrypt with the tag at the end.
-     * @param aad additional authenticated data or `null`.
+     * @param messageCiphertext the message to decrypt with the tag at the end (for GCM) or padded (for CBC).
+     * @param aad additional authenticated data or `null` (not used for CBC mode).
      * @return the plaintext.
      * @throws IllegalArgumentException if the given algorithm is not supported.
      * @throws IllegalStateException if decryption fails
