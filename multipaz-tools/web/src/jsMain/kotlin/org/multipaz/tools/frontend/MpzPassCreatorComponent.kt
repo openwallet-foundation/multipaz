@@ -38,6 +38,7 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.Pkcs12
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
@@ -135,6 +136,11 @@ val MpzPassCreatorComponent = FC {
     var passSignatureMode by useState("auto")
     var customPassCertPem by useState("")
     var customPassPrivateKeyPem by useState("")
+
+    // PKCS#12 Import Modal State
+    var pendingP12Bytes by useState<ByteArray?>(null)
+    var isPassphraseModalOpen by useState(false)
+    var onP12DecodedCallback by useState<Pkcs12Callback?>(null)
 
     // ISO mDoc options
     var docType by useState("org.iso.18013.5.1.mDL")
@@ -1031,81 +1037,181 @@ val MpzPassCreatorComponent = FC {
 
             if (certMode == "custom") {
                 div {
-                    css { display = Display.grid; gridTemplateColumns = "1fr 1fr".unsafeCast<GridTemplateColumns>(); gap = 16.px; marginTop = 16.px }
+                    css { display = Display.flex; flexDirection = FlexDirection.column; gap = 16.px; marginTop = 16.px }
 
+                    // IACA Section
                     div {
-                        label { css { display = Display.block; color = Color("#cbd5e1"); marginBottom = 6.px; fontSize = 13.px }; +"IACA Certificate (PEM):" }
-                        textarea {
-                            css {
-                                width = 100.pct
-                                height = 100.px
-                                background = Color("#1e293b")
-                                border = Border(1.px, LineStyle.solid, Color("#475569"))
-                                borderRadius = 6.px
-                                color = Color("#f8fafc")
-                                fontFamily = "monospace".unsafeCast<FontFamily>()
-                                fontSize = 11.px
+                        css {
+                            background = Color("#1e293b")
+                            border = Border(1.px, LineStyle.solid, Color("#334155"))
+                            borderRadius = 8.px
+                            padding = 16.px
+                        }
+                        div {
+                            css { display = Display.flex; justifyContent = JustifyContent.spaceBetween; alignItems = AlignItems.center; marginBottom = 12.px }
+                            span { css { fontWeight = FontWeight.bold; color = Color("#f1f5f9"); fontSize = 14.px }; +"IACA Authority" }
+                            label {
+                                css {
+                                    padding = Padding(4.px, 10.px)
+                                    background = Color("#334155")
+                                    borderRadius = 6.px
+                                    color = Color("#f1f5f9")
+                                    cursor = Cursor.pointer
+                                    fontSize = 12.px
+                                    fontWeight = FontWeight.bold
+                                    display = Display.inlineFlex
+                                    alignItems = AlignItems.center
+                                    gap = 6.px
+                                    hover { background = Color("#475569") }
+                                }
+                                +"📁 Load IACA from .p12"
+                                input {
+                                    type = "file".unsafeCast<InputType>()
+                                    accept = ".p12,.pfx"
+                                    css { display = None.none }
+                                    onChange = { event ->
+                                        val fileList = event.target.asDynamic().files
+                                        if (fileList != null && fileList.length > 0) {
+                                            val file = fileList[0].unsafeCast<File>()
+                                            loadPkcs12File(
+                                                file = file,
+                                                onLoaded = { p12 ->
+                                                    customIacaPrivateKeyPem = p12.privateKey.toPem()
+                                                    customIacaCertPem = p12.certChain.certificates.joinToString("\n") { it.toPem() }
+                                                },
+                                                onNeedPassphrase = { bytes ->
+                                                    pendingP12Bytes = bytes
+                                                    onP12DecodedCallback = Pkcs12Callback { p12 ->
+                                                        customIacaPrivateKeyPem = p12.privateKey.toPem()
+                                                        customIacaCertPem = p12.certChain.certificates.joinToString("\n") { it.toPem() }
+                                                    }
+                                                    isPassphraseModalOpen = true
+                                                },
+                                                onError = { statusMessage = it }
+                                            )
+                                        }
+                                    }
+                                }
                             }
-                            value = customIacaCertPem
-                            placeholder = "-----BEGIN CERTIFICATE-----\n..."
-                            onChange = { customIacaCertPem = it.target.value }
+                        }
+                        div {
+                            css { display = Display.grid; gridTemplateColumns = "1fr 1fr".unsafeCast<GridTemplateColumns>(); gap = 12.px }
+                            div {
+                                label { css { display = Display.block; color = Color("#cbd5e1"); marginBottom = 4.px; fontSize = 12.px }; +"IACA Certificate (PEM):" }
+                                textarea {
+                                    css {
+                                        width = 100.pct; height = 90.px; background = Color("#0f172a")
+                                        border = Border(1.px, LineStyle.solid, Color("#475569")); borderRadius = 6.px
+                                        color = Color("#34d399"); fontFamily = "monospace".unsafeCast<FontFamily>(); fontSize = 11.px; padding = 8.px
+                                        resize = "none".unsafeCast<Resize>()
+                                    }
+                                    value = customIacaCertPem
+                                    placeholder = "-----BEGIN CERTIFICATE-----\n..."
+                                    onChange = { customIacaCertPem = it.target.value }
+                                }
+                            }
+                            div {
+                                label { css { display = Display.block; color = Color("#cbd5e1"); marginBottom = 4.px; fontSize = 12.px }; +"IACA Private Key (PEM):" }
+                                textarea {
+                                    css {
+                                        width = 100.pct; height = 90.px; background = Color("#0f172a")
+                                        border = Border(1.px, LineStyle.solid, Color("#475569")); borderRadius = 6.px
+                                        color = Color("#38bdf8"); fontFamily = "monospace".unsafeCast<FontFamily>(); fontSize = 11.px; padding = 8.px
+                                        resize = "none".unsafeCast<Resize>()
+                                    }
+                                    value = customIacaPrivateKeyPem
+                                    placeholder = "-----BEGIN PRIVATE KEY-----\n..."
+                                    onChange = { customIacaPrivateKeyPem = it.target.value }
+                                }
+                            }
                         }
                     }
 
+                    // DS Section
                     div {
-                        label { css { display = Display.block; color = Color("#cbd5e1"); marginBottom = 6.px; fontSize = 13.px }; +"IACA Private Key (PEM):" }
-                        textarea {
-                            css {
-                                width = 100.pct
-                                height = 100.px
-                                background = Color("#1e293b")
-                                border = Border(1.px, LineStyle.solid, Color("#475569"))
-                                borderRadius = 6.px
-                                color = Color("#f8fafc")
-                                fontFamily = "monospace".unsafeCast<FontFamily>()
-                                fontSize = 11.px
-                            }
-                            value = customIacaPrivateKeyPem
-                            placeholder = "-----BEGIN PRIVATE KEY-----\n..."
-                            onChange = { customIacaPrivateKeyPem = it.target.value }
+                        css {
+                            background = Color("#1e293b")
+                            border = Border(1.px, LineStyle.solid, Color("#334155"))
+                            borderRadius = 8.px
+                            padding = 16.px
                         }
-                    }
-
-                    div {
-                        label { css { display = Display.block; color = Color("#cbd5e1"); marginBottom = 6.px; fontSize = 13.px }; +"DS Certificate (PEM):" }
-                        textarea {
-                            css {
-                                width = 100.pct
-                                height = 100.px
-                                background = Color("#1e293b")
-                                border = Border(1.px, LineStyle.solid, Color("#475569"))
-                                borderRadius = 6.px
-                                color = Color("#f8fafc")
-                                fontFamily = "monospace".unsafeCast<FontFamily>()
-                                fontSize = 11.px
+                        div {
+                            css { display = Display.flex; justifyContent = JustifyContent.spaceBetween; alignItems = AlignItems.center; marginBottom = 12.px }
+                            span { css { fontWeight = FontWeight.bold; color = Color("#f1f5f9"); fontSize = 14.px }; +"Document Signer (DS)" }
+                            label {
+                                css {
+                                    padding = Padding(4.px, 10.px)
+                                    background = Color("#334155")
+                                    borderRadius = 6.px
+                                    color = Color("#f1f5f9")
+                                    cursor = Cursor.pointer
+                                    fontSize = 12.px
+                                    fontWeight = FontWeight.bold
+                                    display = Display.inlineFlex
+                                    alignItems = AlignItems.center
+                                    gap = 6.px
+                                    hover { background = Color("#475569") }
+                                }
+                                +"📁 Load DS from .p12"
+                                input {
+                                    type = "file".unsafeCast<InputType>()
+                                    accept = ".p12,.pfx"
+                                    css { display = None.none }
+                                    onChange = { event ->
+                                        val fileList = event.target.asDynamic().files
+                                        if (fileList != null && fileList.length > 0) {
+                                            val file = fileList[0].unsafeCast<File>()
+                                            loadPkcs12File(
+                                                file = file,
+                                                onLoaded = { p12 ->
+                                                    customDsPrivateKeyPem = p12.privateKey.toPem()
+                                                    customDsCertPem = p12.certChain.certificates.joinToString("\n") { it.toPem() }
+                                                },
+                                                onNeedPassphrase = { bytes ->
+                                                    pendingP12Bytes = bytes
+                                                    onP12DecodedCallback = Pkcs12Callback { p12 ->
+                                                        customDsPrivateKeyPem = p12.privateKey.toPem()
+                                                        customDsCertPem = p12.certChain.certificates.joinToString("\n") { it.toPem() }
+                                                    }
+                                                    isPassphraseModalOpen = true
+                                                },
+                                                onError = { statusMessage = it }
+                                            )
+                                        }
+                                    }
+                                }
                             }
-                            value = customDsCertPem
-                            placeholder = "-----BEGIN CERTIFICATE-----\n..."
-                            onChange = { customDsCertPem = it.target.value }
                         }
-                    }
-
-                    div {
-                        label { css { display = Display.block; color = Color("#cbd5e1"); marginBottom = 6.px; fontSize = 13.px }; +"DS Private Key (PEM):" }
-                        textarea {
-                            css {
-                                width = 100.pct
-                                height = 100.px
-                                background = Color("#1e293b")
-                                border = Border(1.px, LineStyle.solid, Color("#475569"))
-                                borderRadius = 6.px
-                                color = Color("#f8fafc")
-                                fontFamily = "monospace".unsafeCast<FontFamily>()
-                                fontSize = 11.px
+                        div {
+                            css { display = Display.grid; gridTemplateColumns = "1fr 1fr".unsafeCast<GridTemplateColumns>(); gap = 12.px }
+                            div {
+                                label { css { display = Display.block; color = Color("#cbd5e1"); marginBottom = 4.px; fontSize = 12.px }; +"DS Certificate (PEM):" }
+                                textarea {
+                                    css {
+                                        width = 100.pct; height = 90.px; background = Color("#0f172a")
+                                        border = Border(1.px, LineStyle.solid, Color("#475569")); borderRadius = 6.px
+                                        color = Color("#34d399"); fontFamily = "monospace".unsafeCast<FontFamily>(); fontSize = 11.px; padding = 8.px
+                                        resize = "none".unsafeCast<Resize>()
+                                    }
+                                    value = customDsCertPem
+                                    placeholder = "-----BEGIN CERTIFICATE-----\n..."
+                                    onChange = { customDsCertPem = it.target.value }
+                                }
                             }
-                            value = customDsPrivateKeyPem
-                            placeholder = "-----BEGIN PRIVATE KEY-----\n..."
-                            onChange = { customDsPrivateKeyPem = it.target.value }
+                            div {
+                                label { css { display = Display.block; color = Color("#cbd5e1"); marginBottom = 4.px; fontSize = 12.px }; +"DS Private Key (PEM):" }
+                                textarea {
+                                    css {
+                                        width = 100.pct; height = 90.px; background = Color("#0f172a")
+                                        border = Border(1.px, LineStyle.solid, Color("#475569")); borderRadius = 6.px
+                                        color = Color("#38bdf8"); fontFamily = "monospace".unsafeCast<FontFamily>(); fontSize = 11.px; padding = 8.px
+                                        resize = "none".unsafeCast<Resize>()
+                                    }
+                                    value = customDsPrivateKeyPem
+                                    placeholder = "-----BEGIN PRIVATE KEY-----\n..."
+                                    onChange = { customDsPrivateKeyPem = it.target.value }
+                                }
+                            }
                         }
                     }
                 }
@@ -1177,6 +1283,53 @@ val MpzPassCreatorComponent = FC {
                     css { display = Display.flex; flexDirection = FlexDirection.column; gap = 12.px; marginTop = 12.px }
 
                     div {
+                        css { display = Display.flex; justifyContent = JustifyContent.flexEnd }
+                        label {
+                            css {
+                                padding = Padding(4.px, 10.px)
+                                background = Color("#334155")
+                                borderRadius = 6.px
+                                color = Color("#f1f5f9")
+                                cursor = Cursor.pointer
+                                fontSize = 12.px
+                                fontWeight = FontWeight.bold
+                                display = Display.inlineFlex
+                                alignItems = AlignItems.center
+                                gap = 6.px
+                                hover { background = Color("#475569") }
+                            }
+                            +"📁 Load from .p12"
+                            input {
+                                type = "file".unsafeCast<InputType>()
+                                accept = ".p12,.pfx"
+                                css { display = None.none }
+                                onChange = { event ->
+                                    val fileList = event.target.asDynamic().files
+                                    if (fileList != null && fileList.length > 0) {
+                                        val file = fileList[0].unsafeCast<File>()
+                                        loadPkcs12File(
+                                            file = file,
+                                            onLoaded = { p12 ->
+                                                customPassPrivateKeyPem = p12.privateKey.toPem()
+                                                customPassCertPem = p12.certChain.certificates.joinToString("\n") { it.toPem() }
+                                            },
+                                            onNeedPassphrase = { bytes ->
+                                                pendingP12Bytes = bytes
+                                                onP12DecodedCallback = Pkcs12Callback { p12 ->
+                                                    customPassPrivateKeyPem = p12.privateKey.toPem()
+                                                    customPassCertPem = p12.certChain.certificates.joinToString("\n") { it.toPem() }
+                                                }
+                                                isPassphraseModalOpen = true
+                                            },
+                                            onError = { statusMessage = it }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    div {
                         label { css { display = Display.block; color = Color("#cbd5e1"); marginBottom = 6.px; fontSize = 13.px }; +"Pass Issuer Certificate (PEM):" }
                         textarea {
                             css {
@@ -1185,9 +1338,11 @@ val MpzPassCreatorComponent = FC {
                                 background = Color("#1e293b")
                                 border = Border(1.px, LineStyle.solid, Color("#475569"))
                                 borderRadius = 6.px
-                                color = Color("#f8fafc")
+                                color = Color("#34d399")
                                 fontFamily = "monospace".unsafeCast<FontFamily>()
                                 fontSize = 11.px
+                                padding = 8.px
+                                resize = "none".unsafeCast<Resize>()
                             }
                             value = customPassCertPem
                             placeholder = "-----BEGIN CERTIFICATE-----\n..."
@@ -1204,9 +1359,11 @@ val MpzPassCreatorComponent = FC {
                                 background = Color("#1e293b")
                                 border = Border(1.px, LineStyle.solid, Color("#475569"))
                                 borderRadius = 6.px
-                                color = Color("#f8fafc")
+                                color = Color("#38bdf8")
                                 fontFamily = "monospace".unsafeCast<FontFamily>()
                                 fontSize = 11.px
+                                padding = 8.px
+                                resize = "none".unsafeCast<Resize>()
                             }
                             value = customPassPrivateKeyPem
                             placeholder = "-----BEGIN PRIVATE KEY-----\n..."
@@ -1599,6 +1756,15 @@ val MpzPassCreatorComponent = FC {
                     fontWeight = FontWeight.bold
                 }
                 +statusMessage
+            }
+        }
+
+        Pkcs12PassphraseModalComponent {
+            isOpen = isPassphraseModalOpen
+            onClose = { isPassphraseModalOpen = false }
+            rawBytes = pendingP12Bytes
+            onDecoded = { p12 ->
+                onP12DecodedCallback?.onDecoded?.invoke(p12)
             }
         }
     }

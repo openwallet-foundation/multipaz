@@ -19,6 +19,7 @@ import react.dom.html.ReactHTML.option
 import react.dom.html.ReactHTML.input
 import react.useState
 import web.cssom.*
+import web.file.File
 import web.html.InputType
 import kotlinx.browser.window
 import kotlinx.coroutines.launch
@@ -30,6 +31,7 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.Pkcs12
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X500Name
@@ -98,13 +100,25 @@ val CertGeneratorComponent = FC {
     // Outputs
     var generatedCertPem by useState("")
     var generatedPrivateKeyPem by useState("")
+    var generatedKeyObj by useState<EcPrivateKey?>(null)
+    var generatedCertChainObj by useState<X509CertChain?>(null)
     var copyCertSuccess by useState(false)
     var copyKeySuccess by useState(false)
+    var isExportModalOpen by useState(false)
+    var defaultExportFileName by useState("certificate.p12")
+
+    // PKCS#12 Import Modal State
+    var pendingP12Bytes by useState<ByteArray?>(null)
+    var isPassphraseModalOpen by useState(false)
+    var onP12DecodedCallback by useState<Pkcs12Callback?>(null)
 
     // Helpers to reset outputs
     fun resetOutputs() {
         generatedCertPem = ""
         generatedPrivateKeyPem = ""
+        generatedKeyObj = null
+        generatedCertChainObj = null
+        isExportModalOpen = false
         copyCertSuccess = false
         copyKeySuccess = false
         errorMsg = ""
@@ -390,9 +404,64 @@ val CertGeneratorComponent = FC {
                     css {
                         marginBottom = 24.px
                     }
-                    label {
-                        css { display = Display.block; fontWeight = FontWeight.bold; marginBottom = 6.px; color = Color("#cbd5e1") }
-                        +"Custom Private Key (PEM or JWK format):"
+                    div {
+                        css {
+                            display = Display.flex
+                            justifyContent = JustifyContent.spaceBetween
+                            alignItems = AlignItems.center
+                            marginBottom = 6.px
+                        }
+                        label {
+                            css { fontWeight = FontWeight.bold; color = Color("#cbd5e1") }
+                            +"Custom Private Key (PEM or JWK format):"
+                        }
+                        label {
+                            css {
+                                padding = Padding(4.px, 10.px)
+                                background = Color("#334155")
+                                borderRadius = 6.px
+                                color = Color("#f1f5f9")
+                                cursor = Cursor.pointer
+                                fontSize = 12.px
+                                fontWeight = FontWeight.bold
+                                display = Display.inlineFlex
+                                alignItems = AlignItems.center
+                                gap = 6.px
+                                hover { background = Color("#475569") }
+                            }
+                            +"📁 Load from .p12"
+                            input {
+                                type = "file".unsafeCast<InputType>()
+                                accept = ".p12,.pfx"
+                                css { display = None.none }
+                                onChange = { event ->
+                                    val fileList = event.target.asDynamic().files
+                                    if (fileList != null && fileList.length > 0) {
+                                        val file = fileList[0].unsafeCast<File>()
+                                        loadPkcs12File(
+                                            file = file,
+                                            onLoaded = { p12 ->
+                                                customPrivateKeyPem = p12.privateKey.toPem()
+                                                curve = p12.privateKey.curve
+                                                errorMsg = ""
+                                                resetOutputs()
+                                            },
+                                            onNeedPassphrase = { bytes ->
+                                                pendingP12Bytes = bytes
+                                                onP12DecodedCallback = Pkcs12Callback { p12 ->
+                                                    customPrivateKeyPem = p12.privateKey.toPem()
+                                                    curve = p12.privateKey.curve
+                                                    errorMsg = ""
+                                                    resetOutputs()
+                                                }
+                                                isPassphraseModalOpen = true
+                                            },
+                                            onError = { errorMsg = it }
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                     textarea {
                         css {
@@ -567,6 +636,54 @@ val CertGeneratorComponent = FC {
                             }
                         }
                         +"Auto-generate Demo CA Authority"
+                    }
+
+                    label {
+                        css {
+                            padding = Padding(6.px, 12.px)
+                            background = Color("#334155")
+                            borderRadius = 6.px
+                            color = Color("#f1f5f9")
+                            cursor = Cursor.pointer
+                            fontSize = 12.px
+                            fontWeight = FontWeight.bold
+                            display = Display.inlineFlex
+                            alignItems = AlignItems.center
+                            gap = 6.px
+                            hover { background = Color("#475569") }
+                        }
+                        +"📁 Load CA from .p12"
+                        input {
+                            type = "file".unsafeCast<InputType>()
+                            accept = ".p12,.pfx"
+                            css { display = None.none }
+                            onChange = { event ->
+                                val fileList = event.target.asDynamic().files
+                                if (fileList != null && fileList.length > 0) {
+                                    val file = fileList[0].unsafeCast<File>()
+                                    loadPkcs12File(
+                                        file = file,
+                                        onLoaded = { p12 ->
+                                            signingKeyPem = p12.privateKey.toPem()
+                                            signingCertPem = p12.certChain.certificates.joinToString("\n") { it.toPem() }
+                                            errorMsg = ""
+                                            resetOutputs()
+                                        },
+                                        onNeedPassphrase = { bytes ->
+                                            pendingP12Bytes = bytes
+                                            onP12DecodedCallback = Pkcs12Callback { p12 ->
+                                                signingKeyPem = p12.privateKey.toPem()
+                                                signingCertPem = p12.certChain.certificates.joinToString("\n") { it.toPem() }
+                                                errorMsg = ""
+                                                resetOutputs()
+                                            }
+                                            isPassphraseModalOpen = true
+                                        },
+                                        onError = { errorMsg = it }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -977,6 +1094,57 @@ val CertGeneratorComponent = FC {
                     }
                     if (genericUseSigningCert) {
                         div {
+                            css { display = Display.flex; justifyContent = JustifyContent.flexEnd; paddingLeft = 24.px }
+                            label {
+                                css {
+                                    padding = Padding(6.px, 12.px)
+                                    background = Color("#334155")
+                                    borderRadius = 6.px
+                                    color = Color("#f1f5f9")
+                                    cursor = Cursor.pointer
+                                    fontSize = 12.px
+                                    fontWeight = FontWeight.bold
+                                    display = Display.inlineFlex
+                                    alignItems = AlignItems.center
+                                    gap = 6.px
+                                    hover { background = Color("#475569") }
+                                }
+                                +"📁 Load CA from .p12"
+                                input {
+                                    type = "file".unsafeCast<InputType>()
+                                    accept = ".p12,.pfx"
+                                    css { display = None.none }
+                                    onChange = { event ->
+                                        val fileList = event.target.asDynamic().files
+                                        if (fileList != null && fileList.length > 0) {
+                                            val file = fileList[0].unsafeCast<File>()
+                                            loadPkcs12File(
+                                                file = file,
+                                                onLoaded = { p12 ->
+                                                    genericSigningKeyPem = p12.privateKey.toPem()
+                                                    genericSigningCertPem = p12.certChain.certificates.joinToString("\n") { it.toPem() }
+                                                    errorMsg = ""
+                                                    resetOutputs()
+                                                },
+                                                onNeedPassphrase = { bytes ->
+                                                    pendingP12Bytes = bytes
+                                                    onP12DecodedCallback = Pkcs12Callback { p12 ->
+                                                        genericSigningKeyPem = p12.privateKey.toPem()
+                                                        genericSigningCertPem = p12.certChain.certificates.joinToString("\n") { it.toPem() }
+                                                        errorMsg = ""
+                                                        resetOutputs()
+                                                    }
+                                                    isPassphraseModalOpen = true
+                                                },
+                                                onError = { errorMsg = it }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        div {
                             css {
                                 display = Display.grid
                                 gridTemplateColumns = "repeat(auto-fit, minmax(300px, 1fr))".unsafeCast<GridTemplateColumns>()
@@ -1271,6 +1439,44 @@ val CertGeneratorComponent = FC {
                         }
 
                         generatedCertPem = cert.toPem()
+                        generatedKeyObj = certKey
+                        val parentChainList: List<X509Cert> = when (activeSubTab) {
+                            "ds", "reader" -> {
+                                if (signingCertPem.trim().isNotEmpty()) {
+                                    try {
+                                        signingCertPem.trim().split("-----END CERTIFICATE-----")
+                                            .filter { it.contains("-----BEGIN CERTIFICATE-----") }
+                                            .map { X509Cert.fromPem("$it-----END CERTIFICATE-----") }
+                                    } catch (e: Throwable) {
+                                        listOf(X509Cert.fromPem(signingCertPem.trim()))
+                                    }
+                                } else {
+                                    emptyList()
+                                }
+                            }
+                            "generic" -> {
+                                if (genericUseSigningCert && genericSigningCertPem.trim().isNotEmpty()) {
+                                    try {
+                                        genericSigningCertPem.trim().split("-----END CERTIFICATE-----")
+                                            .filter { it.contains("-----BEGIN CERTIFICATE-----") }
+                                            .map { X509Cert.fromPem("$it-----END CERTIFICATE-----") }
+                                    } catch (e: Throwable) {
+                                        listOf(X509Cert.fromPem(genericSigningCertPem.trim()))
+                                    }
+                                } else {
+                                    emptyList()
+                                }
+                            }
+                            else -> emptyList()
+                        }
+                        generatedCertChainObj = X509CertChain(listOf(cert) + parentChainList)
+                        defaultExportFileName = when (activeSubTab) {
+                            "iaca" -> "iaca_certificate.p12"
+                            "ds" -> "ds_certificate.p12"
+                            "reader-root" -> "reader_root_certificate.p12"
+                            "reader" -> "reader_certificate.p12"
+                            else -> "certificate.p12"
+                        }
                         copyCertSuccess = false
                         copyKeySuccess = false
                     } catch (e: Throwable) {
@@ -1420,6 +1626,50 @@ val CertGeneratorComponent = FC {
                         }
                     }
                 }
+
+                // PKCS#12 Export Button
+                div {
+                    css {
+                        display = Display.flex
+                        justifyContent = JustifyContent.flexStart
+                        gap = 12.px
+                    }
+                    button {
+                        css {
+                            display = Display.flex
+                            alignItems = AlignItems.center
+                            gap = 8.px
+                            padding = Padding(10.px, 20.px)
+                            background = Color("#2563eb")
+                            border = None.none
+                            borderRadius = 8.px
+                            color = Color("#ffffff")
+                            fontSize = 14.px
+                            fontWeight = FontWeight.bold
+                            cursor = Cursor.pointer
+                            hover { background = Color("#1d4ed8") }
+                        }
+                        onClick = { isExportModalOpen = true }
+                        +"💾 Export PKCS#12 (.p12)"
+                    }
+                }
+            }
+        }
+
+        Pkcs12ExportModalComponent {
+            isOpen = isExportModalOpen
+            onClose = { isExportModalOpen = false }
+            privateKey = generatedKeyObj
+            certChain = generatedCertChainObj
+            defaultFileName = defaultExportFileName
+        }
+
+        Pkcs12PassphraseModalComponent {
+            isOpen = isPassphraseModalOpen
+            onClose = { isPassphraseModalOpen = false }
+            rawBytes = pendingP12Bytes
+            onDecoded = { p12 ->
+                onP12DecodedCallback?.onDecoded?.invoke(p12)
             }
         }
     }

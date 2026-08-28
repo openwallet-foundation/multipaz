@@ -40,6 +40,7 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.Pkcs12
 import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.SingleDocumentCannedRequest
@@ -80,6 +81,7 @@ import react.useEffect
 import react.useEffectOnce
 import react.useState
 import web.cssom.*
+import web.file.File
 import web.html.InputType
 import kotlin.random.Random
 
@@ -227,6 +229,11 @@ val Iso180137VerifierComponent: FC<Props> = FC {
     var hpkePrivateKey by useState<EcPrivateKey?>(null)
     var nonceHex by useState("")
     var origin by useState(window.location.origin)
+
+    // PKCS#12 Import Modal State
+    var pendingP12Bytes by useState<ByteArray?>(null)
+    var isPassphraseModalOpen by useState(false)
+    var onP12DecodedCallback by useState<Pkcs12Callback?>(null)
 
     // Reader Authentication Keys Pool (for ReaderAuthAll and shared doc request signing)
     val readerKeys = useState {
@@ -1401,6 +1408,63 @@ val Iso180137VerifierComponent: FC<Props> = FC {
                                 onClick = { kModel.showImport = !kModel.showImport }
                                 +if (kModel.showImport) "Hide Import" else "📥 Import JWK/Hex"
                             }
+
+                            label {
+                                css {
+                                    background = Color("#334155")
+                                    color = Color("#38bdf8")
+                                    border = None.none
+                                    padding = Padding(4.px, 10.px)
+                                    borderRadius = 4.px
+                                    cursor = Cursor.pointer
+                                    fontSize = 11.px
+                                    fontWeight = FontWeight.bold
+                                    display = Display.inlineFlex
+                                    alignItems = AlignItems.center
+                                    gap = 4.px
+                                    hover { background = Color("#475569") }
+                                }
+                                +"📁 Load .p12"
+                                input {
+                                    type = "file".unsafeCast<InputType>()
+                                    accept = ".p12,.pfx"
+                                    css { display = None.none }
+                                    onChange = { event ->
+                                        val fileList = event.target.asDynamic().files
+                                        if (fileList != null && fileList.length > 0) {
+                                            val file = fileList[0].unsafeCast<File>()
+                                            loadPkcs12File(
+                                                file = file,
+                                                onLoaded = { p12 ->
+                                                    kModel.privateKey = p12.privateKey
+                                                    kModel.certChain = p12.certChain
+                                                    kModel.curve = p12.privateKey.curve
+                                                    kModel.name = "Reader Key (imported)"
+                                                    kModel.inputText = ""
+                                                    kModel.inputError = ""
+                                                    kModel.showImport = false
+                                                    rebuildRequest()
+                                                },
+                                                onNeedPassphrase = { bytes ->
+                                                    pendingP12Bytes = bytes
+                                                    onP12DecodedCallback = Pkcs12Callback { p12 ->
+                                                        kModel.privateKey = p12.privateKey
+                                                        kModel.certChain = p12.certChain
+                                                        kModel.curve = p12.privateKey.curve
+                                                        kModel.name = "Reader Key (imported)"
+                                                        kModel.inputText = ""
+                                                        kModel.inputError = ""
+                                                        kModel.showImport = false
+                                                        rebuildRequest()
+                                                    }
+                                                    isPassphraseModalOpen = true
+                                                },
+                                                onError = { kModel.inputError = it }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         if (readerKeys.size > 1) {
@@ -1648,6 +1712,61 @@ val Iso180137VerifierComponent: FC<Props> = FC {
                                     css { background = Color("#334155"); color = Color("#a78bfa"); border = None.none; padding = Padding(2.px, 8.px); borderRadius = 4.px; cursor = Cursor.pointer; fontSize = 11.px; fontWeight = FontWeight.bold }
                                     onClick = { docReq.showDedicatedImport = !docReq.showDedicatedImport }
                                     +if (docReq.showDedicatedImport) "Hide Import" else "📥 Import JWK/Hex"
+                                }
+
+                                label {
+                                    css {
+                                        background = Color("#334155")
+                                        color = Color("#38bdf8")
+                                        border = None.none
+                                        padding = Padding(2.px, 8.px)
+                                        borderRadius = 4.px
+                                        cursor = Cursor.pointer
+                                        fontSize = 11.px
+                                        fontWeight = FontWeight.bold
+                                        display = Display.inlineFlex
+                                        alignItems = AlignItems.center
+                                        gap = 4.px
+                                        hover { background = Color("#475569") }
+                                    }
+                                    +"📁 Load .p12"
+                                    input {
+                                        type = "file".unsafeCast<InputType>()
+                                        accept = ".p12,.pfx"
+                                        css { display = None.none }
+                                        onChange = { event ->
+                                            val fileList = event.target.asDynamic().files
+                                            if (fileList != null && fileList.length > 0) {
+                                                val file = fileList[0].unsafeCast<File>()
+                                                loadPkcs12File(
+                                                    file = file,
+                                                    onLoaded = { p12 ->
+                                                        docReq.dedicatedPrivateKey = p12.privateKey
+                                                        docReq.dedicatedCertChain = p12.certChain
+                                                        docReq.dedicatedCurve = p12.privateKey.curve
+                                                        docReq.dedicatedInputText = ""
+                                                        docReq.dedicatedInputError = ""
+                                                        docReq.showDedicatedImport = false
+                                                        rebuildRequest()
+                                                    },
+                                                    onNeedPassphrase = { bytes ->
+                                                        pendingP12Bytes = bytes
+                                                        onP12DecodedCallback = Pkcs12Callback { p12 ->
+                                                            docReq.dedicatedPrivateKey = p12.privateKey
+                                                            docReq.dedicatedCertChain = p12.certChain
+                                                            docReq.dedicatedCurve = p12.privateKey.curve
+                                                            docReq.dedicatedInputText = ""
+                                                            docReq.dedicatedInputError = ""
+                                                            docReq.showDedicatedImport = false
+                                                            rebuildRequest()
+                                                        }
+                                                        isPassphraseModalOpen = true
+                                                    },
+                                                    onError = { docReq.dedicatedInputError = it }
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -2786,6 +2905,15 @@ val Iso180137VerifierComponent: FC<Props> = FC {
                     diagText = Cdn.encode(resp.deviceResponse, CdnGeneratorOptions.Pretty)
                     maxHeight = 300.px
                 }
+            }
+        }
+
+        Pkcs12PassphraseModalComponent {
+            isOpen = isPassphraseModalOpen
+            onClose = { isPassphraseModalOpen = false }
+            rawBytes = pendingP12Bytes
+            onDecoded = { p12 ->
+                onP12DecodedCallback?.onDecoded?.invoke(p12)
             }
         }
     }

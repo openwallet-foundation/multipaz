@@ -48,6 +48,10 @@ val X509ParserComponent = FC {
     var parsedCert by useState<X509Cert?>(null)
     var parseError by useState("")
 
+    // PKCS#12 Import Modal State
+    var pendingP12Bytes by useState<ByteArray?>(null)
+    var isPassphraseModalOpen by useState(false)
+
     fun parseCert(inputStr: String) {
         mainScope.launch {
             try {
@@ -773,7 +777,7 @@ val X509ParserComponent = FC {
                         +"📁 Load data"
                         input {
                             type = "file".unsafeCast<InputType>()
-                            accept = ".der,.cer,.crt,.pem,.bin,.hex,.txt,*/*"
+                            accept = ".der,.cer,.crt,.pem,.bin,.hex,.p12,.pfx,.txt,*/*"
                             css {
                                 display = None.none
                             }
@@ -781,18 +785,34 @@ val X509ParserComponent = FC {
                                 val fileList = event.target.asDynamic().files
                                 if (fileList != null && fileList.length > 0) {
                                     val file = fileList[0].unsafeCast<File>()
-                                    val reader = FileReader()
-                                    reader.asDynamic().onload = {
-                                        val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
-                                        val bytes = Int8Array(arrayBuffer).toByteArray()
-                                        val text = bytes.decodeToString()
-                                        if (text.contains("-----BEGIN") || text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
-                                            rawInput = text.trim()
-                                        } else {
-                                            rawInput = bytes.toHex()
+                                    if (file.name.endsWith(".p12", ignoreCase = true) || file.name.endsWith(".pfx", ignoreCase = true)) {
+                                        loadPkcs12File(
+                                            file = file,
+                                            onLoaded = { p12 ->
+                                                val pem = p12.certChain.certificates.joinToString("\n") { it.toPem() }
+                                                rawInput = pem
+                                                parseCert(pem)
+                                            },
+                                            onNeedPassphrase = { bytes ->
+                                                pendingP12Bytes = bytes
+                                                isPassphraseModalOpen = true
+                                            },
+                                            onError = { parseError = it }
+                                        )
+                                    } else {
+                                        val reader = FileReader()
+                                        reader.asDynamic().onload = {
+                                            val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
+                                            val bytes = Int8Array(arrayBuffer).toByteArray()
+                                            val text = bytes.decodeToString()
+                                            if (text.contains("-----BEGIN") || text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
+                                                rawInput = text.trim()
+                                            } else {
+                                                rawInput = bytes.toHex()
+                                            }
                                         }
+                                        reader.readAsArrayBuffer(file)
                                     }
-                                    reader.readAsArrayBuffer(file)
                                 }
                             }
                         }
@@ -850,6 +870,17 @@ val X509ParserComponent = FC {
                     parseCert(rawInput)
                 }
                 +"Parse Certificate"
+            }
+        }
+
+        Pkcs12PassphraseModalComponent {
+            isOpen = isPassphraseModalOpen
+            onClose = { isPassphraseModalOpen = false }
+            rawBytes = pendingP12Bytes
+            onDecoded = { p12 ->
+                val pem = p12.certChain.certificates.joinToString("\n") { it.toPem() }
+                rawInput = pem
+                parseCert(pem)
             }
         }
     }
