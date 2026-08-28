@@ -55,6 +55,9 @@ fun pathToTab(path: String): String {
         "/keyDecoder" -> "key-decoder"
         "/keygen" -> "key-generator"
         "/cert" -> "cert-generator"
+        "/pkcs12" -> "pkcs12-decode"
+        "/pkcs12-decode" -> "pkcs12-decode"
+        "/p12" -> "pkcs12-decode"
         "/ndef" -> "ndef-parse"
         "/event" -> "event-decode"
         "/events" -> "event-decode"
@@ -83,6 +86,7 @@ fun tabToPath(tab: String): String {
         "key-decoder" -> "/key-decoder"
         "key-generator" -> "/keygen"
         "cert-generator" -> "/cert"
+        "pkcs12-decode" -> "/pkcs12"
         "ndef-parse" -> "/ndef"
         "event-decode" -> "/event"
         "mpzpass-decode" -> "/mpzpass"
@@ -245,7 +249,8 @@ val App = FC {
                     "x509" to "X.509 Certificate Decoder",
                     "cert-generator" to "X.509 Certificate Generator",
                     "key-decoder" to "Key Decoder",
-                    "key-generator" to "Key Generator"
+                    "key-generator" to "Key Generator",
+                    "pkcs12-decode" to "PKCS#12 Decoder"
                 )),
                 Category("utilities", "Utilities", listOf(
                     "compress" to "Compression Tool",
@@ -382,6 +387,7 @@ val App = FC {
                 "key-decoder" -> KeyDecoderComponent { key = "key-decoder" }
                 "key-generator" -> KeyGeneratorComponent { key = "key-generator" }
                 "cert-generator" -> CertGeneratorComponent { key = "cert-generator" }
+                "pkcs12-decode" -> Pkcs12DecoderComponent { key = "pkcs12-decode" }
                 "ndef-parse" -> NdefParserComponent { key = "ndef-parse" }
                 "event-decode" -> EventDecoderComponent { key = "event-decode" }
                 "mpzpass-decode" -> MpzPassDecoderComponent { key = "mpzpass-decode" }

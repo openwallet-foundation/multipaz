@@ -72,6 +72,10 @@ val KeyDecoderComponent = FC {
     var copyPrivateKeySuccess by useState(false)
     var copyPublicKeySuccess by useState(false)
 
+    // PKCS#12 Import Modal State
+    var pendingP12Bytes by useState<ByteArray?>(null)
+    var isPassphraseModalOpen by useState(false)
+
     fun decodeKey(inputStr: String) {
         mainScope.launch {
             try {
@@ -654,24 +658,40 @@ val KeyDecoderComponent = FC {
                         +"📁 Load data"
                         input {
                             type = "file".unsafeCast<InputType>()
-                            accept = ".json,.pem,.cbor,.hex,.txt,*/*"
+                            accept = ".json,.pem,.cbor,.hex,.p12,.pfx,.txt,*/*"
                             css { display = None.none }
                             onChange = { event ->
                                 val fileList = event.target.asDynamic().files
                                 if (fileList != null && fileList.length > 0) {
                                     val file = fileList[0].unsafeCast<File>()
-                                    val reader = FileReader()
-                                    reader.asDynamic().onload = {
-                                        val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
-                                        val bytes = Int8Array(arrayBuffer).toByteArray()
-                                        val text = bytes.decodeToString()
-                                        if (text.startsWith("{") || text.contains("-----BEGIN") || text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
-                                            rawInput = text.trim()
-                                        } else {
-                                            rawInput = bytes.toHex()
+                                    if (file.name.endsWith(".p12", ignoreCase = true) || file.name.endsWith(".pfx", ignoreCase = true)) {
+                                        loadPkcs12File(
+                                            file = file,
+                                            onLoaded = { p12 ->
+                                                val pem = p12.privateKey.toPem()
+                                                rawInput = pem
+                                                decodeKey(pem)
+                                            },
+                                            onNeedPassphrase = { bytes ->
+                                                pendingP12Bytes = bytes
+                                                isPassphraseModalOpen = true
+                                            },
+                                            onError = { parseError = it }
+                                        )
+                                    } else {
+                                        val reader = FileReader()
+                                        reader.asDynamic().onload = {
+                                            val arrayBuffer = reader.result.unsafeCast<js.buffer.ArrayBuffer>()
+                                            val bytes = Int8Array(arrayBuffer).toByteArray()
+                                            val text = bytes.decodeToString()
+                                            if (text.startsWith("{") || text.contains("-----BEGIN") || text.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it.isWhitespace() }) {
+                                                rawInput = text.trim()
+                                            } else {
+                                                rawInput = bytes.toHex()
+                                            }
                                         }
+                                        reader.readAsArrayBuffer(file)
                                     }
-                                    reader.readAsArrayBuffer(file)
                                 }
                             }
                         }
@@ -725,6 +745,17 @@ val KeyDecoderComponent = FC {
                 disabled = rawInput.trim().isEmpty()
                 onClick = { decodeKey(rawInput) }
                 +"Decode Key"
+            }
+        }
+
+        Pkcs12PassphraseModalComponent {
+            isOpen = isPassphraseModalOpen
+            onClose = { isPassphraseModalOpen = false }
+            rawBytes = pendingP12Bytes
+            onDecoded = { p12 ->
+                val pem = p12.privateKey.toPem()
+                rawInput = pem
+                decodeKey(pem)
             }
         }
     }
