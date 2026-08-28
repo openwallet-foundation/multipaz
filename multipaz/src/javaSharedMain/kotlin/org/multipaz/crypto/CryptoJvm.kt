@@ -17,6 +17,7 @@ import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
 import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
@@ -60,7 +61,14 @@ actual object Crypto {
             }
         }
 
-    actual val supportedEncryptionAlgorithms = setOf(Algorithm.A128GCM, Algorithm.A192GCM, Algorithm.A256GCM)
+    actual val supportedEncryptionAlgorithms = setOf(
+        Algorithm.A128GCM,
+        Algorithm.A192GCM,
+        Algorithm.A256GCM,
+        Algorithm.A128CBC,
+        Algorithm.A192CBC,
+        Algorithm.A256CBC
+    )
 
     actual val provider: String
         get() {
@@ -99,7 +107,9 @@ actual object Crypto {
                 throw IllegalArgumentException("Unsupported algorithm $algorithm")
             }
         }
-        return MessageDigest.getInstance(algName).digest(message)
+        val md = MessageDigest.getInstance(algName)
+        md.update(message)
+        return md.digest()
     }
 
     /**
@@ -127,8 +137,9 @@ actual object Crypto {
             }
         }
 
+        val effectiveKey = if (key.isEmpty()) ByteArray(1) else key
         return Mac.getInstance(algName).run {
-            init(SecretKeySpec(key, ""))
+            init(SecretKeySpec(effectiveKey, ""))
             update(message)
             doFinal()
         }
@@ -137,11 +148,12 @@ actual object Crypto {
     /**
      * Message encryption.
      *
-     * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM].
+     * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM],
+     *   [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC].
      * @param key the encryption key.
      * @param nonce the nonce/IV.
      * @param messagePlaintext the message to encrypt.
-     * @return the cipher text with the tag appended to it.
+     * @return the cipher text with the tag appended to it (for GCM) or padded (for CBC).
      * @throws IllegalArgumentException if the given algorithm is not supported.
      */
     actual suspend fun encrypt(
@@ -152,25 +164,37 @@ actual object Crypto {
         aad: ByteArray?
     ): ByteArray {
         when (algorithm) {
-            Algorithm.A128GCM -> require(key.size == 16) { "Key size must be 16 bytes for AES-128-GCM" }
-            Algorithm.A192GCM -> require(key.size == 24) { "Key size must be 24 bytes for AES-192-GCM" }
-            Algorithm.A256GCM -> require(key.size == 32) { "Key size must be 32 bytes for AES-256-GCM" }
+            Algorithm.A128GCM, Algorithm.A128CBC -> require(key.size == 16) { "Key size must be 16 bytes" }
+            Algorithm.A192GCM, Algorithm.A192CBC -> require(key.size == 24) { "Key size must be 24 bytes" }
+            Algorithm.A256GCM, Algorithm.A256CBC -> require(key.size == 32) { "Key size must be 32 bytes" }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
-        return Cipher.getInstance("AES/GCM/NoPadding").run {
-            init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce))
-            aad?.let { updateAAD(it) }
-            doFinal(messagePlaintext)
+        return when (algorithm) {
+            Algorithm.A128GCM, Algorithm.A192GCM, Algorithm.A256GCM -> {
+                Cipher.getInstance("AES/GCM/NoPadding").run {
+                    init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce))
+                    aad?.let { updateAAD(it) }
+                    doFinal(messagePlaintext)
+                }
+            }
+            Algorithm.A128CBC, Algorithm.A192CBC, Algorithm.A256CBC -> {
+                Cipher.getInstance("AES/CBC/PKCS5Padding").run {
+                    init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(nonce))
+                    doFinal(messagePlaintext)
+                }
+            }
+            else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
     }
 
     /**
      * Message decryption.
      *
-     * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM].
+     * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM],
+     *   [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC].
      * @param key the encryption key.
      * @param nonce the nonce/IV.
-     * @param messageCiphertext the message to decrypt with the tag at the end.
+     * @param messageCiphertext the message to decrypt with the tag at the end (for GCM) or padded (for CBC).
      * @return the plaintext.
      * @throws IllegalArgumentException if the given algorithm is not supported.
      * @throws IllegalStateException if decryption fails
@@ -183,26 +207,38 @@ actual object Crypto {
         aad: ByteArray?
     ): ByteArray {
         when (algorithm) {
-            Algorithm.A128GCM -> {}
-            Algorithm.A192GCM -> {}
-            Algorithm.A256GCM -> {}
-            else -> {
-                throw IllegalArgumentException("Unsupported algorithm $algorithm")
+            Algorithm.A128GCM, Algorithm.A192GCM, Algorithm.A256GCM -> {
+                return try {
+                    Cipher.getInstance("AES/GCM/NoPadding").run {
+                        init(
+                            Cipher.DECRYPT_MODE,
+                            SecretKeySpec(key, "AES"),
+                            GCMParameterSpec(128, nonce)
+                        )
+                        aad?.let { updateAAD(it) }
+                        doFinal(messageCiphertext)
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    throw IllegalStateException("Error decrypting", e)
+                }
             }
-        }
-        return try {
-            Cipher.getInstance("AES/GCM/NoPadding").run {
-                init(
-                    Cipher.DECRYPT_MODE,
-                    SecretKeySpec(key, "AES"),
-                    GCMParameterSpec(128, nonce)
-                )
-                aad?.let { updateAAD(it) }
-                doFinal(messageCiphertext)
+            Algorithm.A128CBC, Algorithm.A192CBC, Algorithm.A256CBC -> {
+                return try {
+                    Cipher.getInstance("AES/CBC/PKCS5Padding").run {
+                        init(
+                            Cipher.DECRYPT_MODE,
+                            SecretKeySpec(key, "AES"),
+                            IvParameterSpec(nonce)
+                        )
+                        doFinal(messageCiphertext)
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    throw IllegalStateException("Error decrypting", e)
+                }
             }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            throw IllegalStateException("Error decrypting", e)
+            else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
     }
 

@@ -13,6 +13,7 @@ import org.multipaz.asn1.OID
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.toBufferSource
+import web.crypto.AesCbcParams
 import web.crypto.AesGcmParams
 import web.crypto.CryptoKey
 import web.crypto.CryptoKeyPair
@@ -113,7 +114,12 @@ actual object Crypto {
             EcCurve.X25519,
         )
 
-    actual val supportedEncryptionAlgorithms = setOf(Algorithm.A128GCM, Algorithm.A256GCM)
+    actual val supportedEncryptionAlgorithms = setOf(
+        Algorithm.A128GCM,
+        Algorithm.A256GCM,
+        Algorithm.A128CBC,
+        Algorithm.A256CBC
+    )
 
     actual val provider: String by lazy {
         "Web Crypto (${window.navigator.userAgent})"
@@ -145,13 +151,14 @@ actual object Crypto {
             Algorithm.HMAC_SHA512 -> "SHA-512"
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
+        val effectiveKey = if (key.isEmpty()) byteArrayOf(0) else key
         val hmacKey = crypto.subtle.importKey(
             format = KeyFormat.Companion.raw,
-            keyData = key.toBufferSource(),
+            keyData = effectiveKey.toBufferSource(),
             algorithm = unsafeJso<HmacImportParams> {
                 name = "HMAC"
                 hash = hashAlgName.toJsString()
-                length = key.size*8
+                length = effectiveKey.size*8
             },
             extractable = false,
             keyUsages = jsArrayOf(KeyUsage.sign, KeyUsage.verify)
@@ -172,27 +179,40 @@ actual object Crypto {
         aad: ByteArray?
     ): ByteArray {
         when (algorithm) {
-            Algorithm.A128GCM -> require(key.size == 16) { "Key size must be 16 bytes for AES-128-GCM" }
-            Algorithm.A192GCM -> require(key.size == 24) { "Key size must be 24 bytes for AES-192-GCM" }
-            Algorithm.A256GCM -> require(key.size == 32) { "Key size must be 32 bytes for AES-256-GCM" }
+            Algorithm.A128GCM, Algorithm.A128CBC -> require(key.size == 16) { "Key size must be 16 bytes" }
+            Algorithm.A192GCM, Algorithm.A192CBC -> require(key.size == 24) { "Key size must be 24 bytes" }
+            Algorithm.A256GCM, Algorithm.A256CBC -> require(key.size == 32) { "Key size must be 32 bytes" }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
-        val algorithm = unsafeJso<AesGcmParams> {
-            name = "AES-GCM"
-            additionalData = (aad ?: byteArrayOf()).toBufferSource()
-            iv = nonce.toBufferSource()
-            tagLength = 128
+        val (webAlgorithm, webImportAlgorithm) = when (algorithm) {
+            Algorithm.A128GCM, Algorithm.A192GCM, Algorithm.A256GCM -> {
+                val params = unsafeJso<AesGcmParams> {
+                    name = "AES-GCM"
+                    additionalData = (aad ?: byteArrayOf()).toBufferSource()
+                    iv = nonce.toBufferSource()
+                    tagLength = 128
+                }
+                Pair(params, params)
+            }
+            Algorithm.A128CBC, Algorithm.A192CBC, Algorithm.A256CBC -> {
+                val params = unsafeJso<AesCbcParams> {
+                    name = "AES-CBC"
+                    iv = nonce.toBufferSource()
+                }
+                Pair(params, params)
+            }
+            else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
-        val key = crypto.subtle.importKey(
+        val cryptoKey = crypto.subtle.importKey(
             format = KeyFormat.Companion.raw,
             keyData = key.toBufferSource(),
-            algorithm = algorithm,
+            algorithm = webImportAlgorithm,
             extractable = false,
             keyUsages = jsArrayOf(KeyUsage.encrypt)
         )
         return crypto.subtle.encrypt(
-            algorithm = algorithm,
-            key = key,
+            algorithm = webAlgorithm,
+            key = cryptoKey,
             data = messagePlaintext.toBufferSource()
         ).toByteArray()
     }
@@ -205,23 +225,36 @@ actual object Crypto {
         messageCiphertext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
-        val algorithm = unsafeJso<AesGcmParams> {
-            name = "AES-GCM"
-            additionalData = (aad ?: byteArrayOf()).toBufferSource()
-            iv = nonce.toBufferSource()
-            tagLength = 128
+        val (webAlgorithm, webImportAlgorithm) = when (algorithm) {
+            Algorithm.A128GCM, Algorithm.A192GCM, Algorithm.A256GCM -> {
+                val params = unsafeJso<AesGcmParams> {
+                    name = "AES-GCM"
+                    additionalData = (aad ?: byteArrayOf()).toBufferSource()
+                    iv = nonce.toBufferSource()
+                    tagLength = 128
+                }
+                Pair(params, params)
+            }
+            Algorithm.A128CBC, Algorithm.A192CBC, Algorithm.A256CBC -> {
+                val params = unsafeJso<AesCbcParams> {
+                    name = "AES-CBC"
+                    iv = nonce.toBufferSource()
+                }
+                Pair(params, params)
+            }
+            else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
-        val key = crypto.subtle.importKey(
+        val cryptoKey = crypto.subtle.importKey(
             format = KeyFormat.Companion.raw,
             keyData = key.toBufferSource(),
-            algorithm = algorithm,
+            algorithm = webImportAlgorithm,
             extractable = false,
             keyUsages = jsArrayOf(KeyUsage.decrypt)
         )
         try {
             return crypto.subtle.decrypt(
-                algorithm = algorithm,
-                key = key,
+                algorithm = webAlgorithm,
+                key = cryptoKey,
                 data = messageCiphertext.toBufferSource()
             ).toByteArray()
         } catch (e : JsException) {

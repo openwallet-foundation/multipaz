@@ -89,6 +89,52 @@ import AuthenticationServices
             return nil
         }
     }
+
+    @objc(aesCbcEncrypt: : :) public class func aesCbcEncrypt(key: Data, plainText: Data, iv: Data) -> Data {
+        var outLength: Int = 0
+        let bufferSize = plainText.count + kCCBlockSizeAES128
+        var buffer = [UInt8](repeating: 0, count: bufferSize)
+        key.withUnsafeBytes { keyBytes in
+            iv.withUnsafeBytes { ivBytes in
+                plainText.withUnsafeBytes { dataBytes in
+                    CCCrypt(CCOperation(kCCEncrypt),
+                            CCAlgorithm(kCCAlgorithmAES),
+                            CCOptions(kCCOptionPKCS7Padding),
+                            keyBytes.baseAddress, key.count,
+                            ivBytes.baseAddress,
+                            dataBytes.baseAddress, plainText.count,
+                            &buffer, bufferSize,
+                            &outLength)
+                }
+            }
+        }
+        return Data(buffer.prefix(outLength))
+    }
+
+    @objc(aesCbcDecrypt: : :) public class func aesCbcDecrypt(key: Data, cipherText: Data, iv: Data) -> Data? {
+        var outLength: Int = 0
+        let bufferSize = cipherText.count
+        var buffer = [UInt8](repeating: 0, count: bufferSize)
+        var status: CCCryptorStatus = CCCryptorStatus(kCCSuccess)
+        key.withUnsafeBytes { keyBytes in
+            iv.withUnsafeBytes { ivBytes in
+                cipherText.withUnsafeBytes { dataBytes in
+                    status = CCCrypt(CCOperation(kCCDecrypt),
+                                     CCAlgorithm(kCCAlgorithmAES),
+                                     CCOptions(kCCOptionPKCS7Padding),
+                                     keyBytes.baseAddress, key.count,
+                                     ivBytes.baseAddress,
+                                     dataBytes.baseAddress, cipherText.count,
+                                     &buffer, bufferSize,
+                                     &outLength)
+                }
+            }
+        }
+        guard status == kCCSuccess, outLength < cipherText.count, outLength >= cipherText.count - kCCBlockSizeAES128 else {
+            return nil
+        }
+        return Data(buffer.prefix(outLength))
+    }
     
     static let CURVE_P256 = 1
     static let CURVE_P384 = 2

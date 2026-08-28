@@ -27,7 +27,14 @@ actual object Crypto {
         EcCurve.P521,
     )
 
-    actual val supportedEncryptionAlgorithms = setOf(Algorithm.A128GCM, Algorithm.A192GCM, Algorithm.A256GCM)
+    actual val supportedEncryptionAlgorithms = setOf(
+        Algorithm.A128GCM,
+        Algorithm.A192GCM,
+        Algorithm.A256GCM,
+        Algorithm.A128CBC,
+        Algorithm.A192CBC,
+        Algorithm.A256CBC
+    )
 
     actual val provider: String = "CryptoKit"
 
@@ -66,17 +73,29 @@ actual object Crypto {
         aad: ByteArray?
     ): ByteArray {
         when (algorithm) {
-            Algorithm.A128GCM -> require(key.size == 16) { "Key size must be 16 bytes for AES-128-GCM" }
-            Algorithm.A192GCM -> require(key.size == 24) { "Key size must be 24 bytes for AES-192-GCM" }
-            Algorithm.A256GCM -> require(key.size == 32) { "Key size must be 32 bytes for AES-256-GCM" }
+            Algorithm.A128GCM, Algorithm.A128CBC -> require(key.size == 16) { "Key size must be 16 bytes" }
+            Algorithm.A192GCM, Algorithm.A192CBC -> require(key.size == 24) { "Key size must be 24 bytes" }
+            Algorithm.A256GCM, Algorithm.A256CBC -> require(key.size == 32) { "Key size must be 32 bytes" }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
-        return SwiftBridge.aesGcmEncrypt(
-            key.toNSData(),
-            messagePlaintext.toNSData(),
-            nonce.toNSData(),
-            aad?.toNSData()
-        ).toByteArray()
+        return when (algorithm) {
+            Algorithm.A128GCM, Algorithm.A192GCM, Algorithm.A256GCM -> {
+                SwiftBridge.aesGcmEncrypt(
+                    key.toNSData(),
+                    messagePlaintext.toNSData(),
+                    nonce.toNSData(),
+                    aad?.toNSData()
+                ).toByteArray()
+            }
+            Algorithm.A128CBC, Algorithm.A192CBC, Algorithm.A256CBC -> {
+                SwiftBridge.aesCbcEncrypt(
+                    key.toNSData(),
+                    messagePlaintext.toNSData(),
+                    nonce.toNSData()
+                ).toByteArray()
+            }
+            else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
+        }
     }
 
     actual suspend fun decrypt(
@@ -86,16 +105,28 @@ actual object Crypto {
         messageCiphertext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
-        val ctLen = messageCiphertext.size
-        val ct = messageCiphertext.sliceArray(IntRange(0, ctLen - 16 - 1))
-        val tag = messageCiphertext.sliceArray(IntRange(ctLen - 16, ctLen - 1))
-        return SwiftBridge.aesGcmDecrypt(
-            key.toNSData(),
-            ct.toNSData(),
-            tag.toNSData(),
-            nonce.toNSData(),
-            aad?.toNSData()
-        )?.toByteArray() ?: throw IllegalStateException("Decryption failed")
+        return when (algorithm) {
+            Algorithm.A128GCM, Algorithm.A192GCM, Algorithm.A256GCM -> {
+                val ctLen = messageCiphertext.size
+                val ct = messageCiphertext.sliceArray(IntRange(0, ctLen - 16 - 1))
+                val tag = messageCiphertext.sliceArray(IntRange(ctLen - 16, ctLen - 1))
+                SwiftBridge.aesGcmDecrypt(
+                    key.toNSData(),
+                    ct.toNSData(),
+                    tag.toNSData(),
+                    nonce.toNSData(),
+                    aad?.toNSData()
+                )?.toByteArray() ?: throw IllegalStateException("Decryption failed")
+            }
+            Algorithm.A128CBC, Algorithm.A192CBC, Algorithm.A256CBC -> {
+                SwiftBridge.aesCbcDecrypt(
+                    key.toNSData(),
+                    messageCiphertext.toNSData(),
+                    nonce.toNSData()
+                )?.toByteArray() ?: throw IllegalStateException("Decryption failed")
+            }
+            else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
+        }
     }
 
     actual suspend fun checkSignature(
