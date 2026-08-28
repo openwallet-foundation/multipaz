@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.101.0] - Expected September 2026
 Significant changes since Multipaz 0.100.0 include:
 - [To be written]
+- New `custom_head_html` server setting, injected into the `<head>` of every HTML page served
+  by `serveResources()`, so a deployment can restyle the built-in pages without forking their
+  markup.
 
 ## [0.100.0] - 2026-07-08
 Significant changes since Multipaz 0.99.0 include:
