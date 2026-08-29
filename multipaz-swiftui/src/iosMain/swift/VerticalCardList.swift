@@ -211,23 +211,9 @@ private struct ScrollViewObserver: UIViewRepresentable {
             guard !isUpdatingOffset else { return }
             guard !scrollView.isDragging && !scrollView.isDecelerating && !scrollView.isTracking else { return }
             let topInset = scrollView.adjustedContentInset.top
-            guard topInset > 0 || scrollView.window == nil else { return }
-
-            let visibleHeight = scrollView.bounds.height - topInset - scrollView.adjustedContentInset.bottom
-            let totalHeight = parent.state.totalHeight
-            let maxRelativeOffset = (visibleHeight > 0 && totalHeight > 0)
-                ? max(0, totalHeight - visibleHeight)
-                : CGFloat.greatestFiniteMagnitude
-
-            var clampedScrollOffset = parent.state.scrollOffset
-            if parent.state.internalFocusedCardIdentifier == nil && clampedScrollOffset > maxRelativeOffset {
-                clampedScrollOffset = maxRelativeOffset
-                parent.state.scrollOffset = clampedScrollOffset
-                parent.state.model.scrollOffset = Double(clampedScrollOffset)
-            }
 
             let baseOffset = -topInset
-            let targetOffset = baseOffset + clampedScrollOffset
+            let targetOffset = baseOffset + parent.state.scrollOffset
             if abs(scrollView.contentOffset.y - targetOffset) > 0.5 {
                 isUpdatingOffset = true
                 scrollView.contentOffset.y = targetOffset
@@ -245,7 +231,6 @@ private struct ScrollViewObserver: UIViewRepresentable {
                 guard !self.isUpdatingOffset else { return }
                 guard scrollView.isDragging || scrollView.isDecelerating || scrollView.isTracking else { return }
                 let topInset = scrollView.adjustedContentInset.top
-                guard topInset > 0 else { return }
                 let newRelativeOffset = max(0, scrollView.contentOffset.y + topInset)
                 if abs(self.parent.state.scrollOffset - newRelativeOffset) > 0.5 {
                     self.parent.state.scrollOffset = newRelativeOffset
@@ -488,7 +473,7 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
         canAnimate: Bool
     ) -> some View {
         let cardDim = layout.getDimensions(cardIdentifier: cardInfo.identifier)
-        let effectiveFocusedId = isAnyFocused ? (internalFocusedCard?.identifier ?? (animateListTransitions ? state.internalFocusedCardIdentifier : focusedCard?.identifier)) : nil
+        let effectiveFocusedId = isAnyFocused ? (internalFocusedCard?.identifier ?? state.internalFocusedCardIdentifier) : nil
         let visualState = CardListLayoutCalculator.shared.computeCardVisualState(
             cardIdentifier: cardInfo.identifier,
             index: Int32(index),
@@ -499,7 +484,6 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
             draggedCardIdentifier: state.draggedCardIdentifier,
             dragCurrentY: Double(state.dragCurrentY)
         )
-        let isDragged = cardInfo.identifier == state.draggedCardIdentifier
 
         ZStack(alignment: .topTrailing) {
             Image(uiImage: cardInfo.cardArt)
@@ -679,8 +663,8 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                 } else {
                     focusedCard?.identifier
                 }
-                let isAnyFocused = focusedCard != nil && effectiveFocusedCardIdentifier != nil
-                let internalFocusedCard: CardInfo? = (focusedCard == nil) ? nil : cardInfos.first {
+                let isAnyFocused = effectiveFocusedCardIdentifier != nil
+                let internalFocusedCard: CardInfo? = cardInfos.first {
                     $0.identifier == effectiveFocusedCardIdentifier
                 }
                 let effectiveShowTopContent = if TopContent.self == EmptyView.self {
@@ -773,6 +757,8 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
                             state.model.lastFocusedCardIdentifier = focusedCard?.identifier
                         }
                     }
+                } else {
+                    state.internalFocusedCardIdentifier = focusedCard?.identifier
                 }
             } else {
                 state.internalFocusedCardIdentifier = focusedCard?.identifier
