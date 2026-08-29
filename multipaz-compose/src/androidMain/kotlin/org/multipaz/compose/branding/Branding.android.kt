@@ -1,5 +1,6 @@
 package org.multipaz.compose.branding
 
+import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -15,18 +16,39 @@ import androidx.compose.ui.text.font.createFontFamilyResolver
 import com.google.accompanist.drawablepainter.DrawablePainter
 import org.multipaz.context.applicationContext
 
+private fun getApplicationContextOrFallback(): Context? {
+    try {
+        return applicationContext
+    } catch (_: Throwable) {
+        // Fallback to ActivityThread.currentApplication() if not explicitly initialized yet
+    }
+    try {
+        val activityThread = Class.forName("android.app.ActivityThread")
+        val currentApp = activityThread.getMethod("currentApplication").invoke(null) as? Context
+        if (currentApp != null) {
+            return currentApp
+        }
+    } catch (_: Throwable) {
+    }
+    return null
+}
+
 internal actual val defaultAppName: String?
     get() {
-        val appInfo = applicationContext.applicationInfo
+        val context = getApplicationContextOrFallback() ?: return null
+        val appInfo = context.applicationInfo
         return if (appInfo.labelRes != 0) {
-            applicationContext.getString(appInfo.labelRes)
+            context.getString(appInfo.labelRes)
         } else {
-            appInfo.nonLocalizedLabel.toString()
+            appInfo.nonLocalizedLabel?.toString()
         }
     }
 
 internal actual val defaultAppIconPainter: Painter?
-    get() = DrawablePainter(applicationContext.packageManager.getApplicationIcon(applicationContext.packageName))
+    get() {
+        val context = getApplicationContextOrFallback() ?: return null
+        return DrawablePainter(context.packageManager.getApplicationIcon(context.packageName))
+    }
 
 @Composable
 private fun AppThemeDefault(content: @Composable () -> Unit) {
@@ -54,5 +76,7 @@ private fun AppThemeDefault(content: @Composable () -> Unit) {
 internal actual val defaultTheme: @Composable (content: @Composable () -> Unit) -> Unit = { AppThemeDefault(it) }
 
 internal actual fun createFontFamilyResolver(): FontFamily.Resolver {
-    return createFontFamilyResolver(applicationContext)
+    val context = getApplicationContextOrFallback()
+        ?: throw IllegalStateException("Android Context is required to create FontFamily.Resolver")
+    return createFontFamilyResolver(context)
 }

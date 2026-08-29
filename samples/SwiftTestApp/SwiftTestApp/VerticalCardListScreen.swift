@@ -126,7 +126,10 @@ struct VerticalCardListScreen: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                TopBarTogglesView(state: viewModel.verticalCardListState)
+                TopBarActionsView(
+                    state: viewModel.verticalCardListState,
+                    documentModel: viewModel.documentModel
+                )
             }
         }
         .background {
@@ -137,8 +140,9 @@ struct VerticalCardListScreen: View {
     }
 }
 
-private struct TopBarTogglesView: View {
+private struct TopBarActionsView: View {
     @Bindable var state: VerticalCardListState
+    let documentModel: DocumentModel
 
     var body: some View {
         HStack(spacing: 8) {
@@ -159,22 +163,15 @@ private struct TopBarTogglesView: View {
                 .labelsHidden()
                 .controlSize(.small)
             }
-            HStack(spacing: 4) {
-                Text("Placeholder")
-                    .font(.caption2)
-                    .lineLimit(1)
-                    .fixedSize()
-                Toggle("", isOn: Binding(
-                    get: { state.showPlaceholderWhenEmpty },
-                    set: { newValue in
-                        withAnimation(.easeInOut(duration: 0.38)) {
-                            state.showPlaceholderWhenEmpty = newValue
-                        }
-                    }
-                ))
-                .toggleStyle(.switch)
-                .labelsHidden()
-                .controlSize(.small)
+            Button(action: {
+                Task {
+                    try? await documentModel.setDocumentOrder(
+                        documentOrder: documentModel.documentOrder.shuffled()
+                    )
+                }
+            }) {
+                Text("Shuffle")
+                    .font(.caption)
             }
         }
     }

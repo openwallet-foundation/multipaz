@@ -128,14 +128,34 @@ public class DocumentModel {
     
     private var _documentInfos: [DocumentInfo] = []
 
+    /**
+     * The list of document IDs in their current display order.
+     */
+    public var documentOrder: [String] {
+        documentInfos.map { $0.document.identifier }
+    }
+
+    /**
+     * Gets the list of document IDs in their current display order.
+     *
+     * - Returns: list of document IDs in order.
+     */
+    public func getDocumentOrder() -> [String] {
+        return documentOrder
+    }
+
     public var documentInfos: [DocumentInfo] {
         _documentInfos.sorted { (a: DocumentInfo, b: DocumentInfo) -> Bool in
             let sa = storageData.sortingOrder[a.document.identifier]
             let sb = storageData.sortingOrder[b.document.identifier]
-            if sa != nil && sb != nil {
+            if let sa = sa, let sb = sb {
                 if sa != sb {
-                    return sa! < sb!
+                    return sa < sb
                 }
+            } else if sa != nil {
+                return true
+            } else if sb != nil {
+                return false
             }
             return Document.Comparator.shared.compare(a: a.document, b: b.document) < 0
         }
@@ -145,31 +165,31 @@ public class DocumentModel {
     private var storageData: DocumentModelStorageData!
     
     /**
-     * Sets the position of a document.
+     * Sets the ordering of documents in the model.
      *
-     * - Parameters:
-     *  - documentInfo: the ``DocumentInfo`` to set position for.
-     *  - position: the position to set.
-     * - Throws: ``DocumentError.noSuchDocument`` if the given ``DocumentInfo`` doesn't exist.
-     * - Throws: ``DocumentError.positionOutOfRange`` if the given position is out of range.
+     * Any documents in the store that are not included in `documentOrder` will be placed
+     * after the specified documents, maintaining their relative order.
+     *
+     * - Parameter documentOrder: the list of document IDs in the desired order.
      */
-    public func setDocumentPosition(
-        documentInfo: DocumentInfo,
-        position: Int
+    public func setDocumentOrder(
+        documentOrder: [String]
     ) async throws {
-        var documentInfos = self.documentInfos
-        let index = documentInfos.firstIndex(of: documentInfo)
-        if index == nil {
-            throw DocumentModelError.noSuchDocument
+        var newOrder: [String] = []
+        var seen = Set<String>()
+        for id in documentOrder {
+            if seen.insert(id).inserted {
+                newOrder.append(id)
+            }
         }
-        documentInfos.remove(at: index!)
-        if position < 0 || position > documentInfos.count {
-            throw DocumentModelError.positionOutOfRange
+        for docInfo in self.documentInfos {
+            if seen.insert(docInfo.document.identifier).inserted {
+                newOrder.append(docInfo.document.identifier)
+            }
         }
-        documentInfos.insert(documentInfo, at: position)
-        var sortingOrder: [String:Int] = [:]
-        documentInfos.enumerated().forEach { index, di in
-            sortingOrder[di.document.identifier] = index
+        var sortingOrder: [String: Int] = [:]
+        for (index, id) in newOrder.enumerated() {
+            sortingOrder[id] = index
         }
         storageData = DocumentModelStorageData(sortingOrder: sortingOrder)
         try await documentStore.getTags().edit(
@@ -180,6 +200,31 @@ public class DocumentModel {
                 )
             }
         )
+    }
+
+    /**
+     * Sets the position of a document.
+     *
+     * - Parameters:
+     *  - documentInfo: the ``DocumentInfo`` to set position for.
+     *  - position: the position to set.
+     * - Throws: ``DocumentModelError.noSuchDocument`` if the given ``DocumentInfo`` doesn't exist.
+     * - Throws: ``DocumentModelError.positionOutOfRange`` if the given position is out of range.
+     */
+    public func setDocumentPosition(
+        documentInfo: DocumentInfo,
+        position: Int
+    ) async throws {
+        var currentOrder = self.documentOrder
+        guard let index = currentOrder.firstIndex(of: documentInfo.document.identifier) else {
+            throw DocumentModelError.noSuchDocument
+        }
+        currentOrder.remove(at: index)
+        if position < 0 || position > currentOrder.count {
+            throw DocumentModelError.positionOutOfRange
+        }
+        currentOrder.insert(documentInfo.document.identifier, at: position)
+        try await setDocumentOrder(documentOrder: currentOrder)
     }
 
     private func getDocumentInfo(_ document: Document) async throws -> DocumentInfo {
