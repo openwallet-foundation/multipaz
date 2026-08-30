@@ -10,17 +10,15 @@ import kotlin.test.assertTrue
 class VerticalCardListModelTest {
 
     @Test
-    fun syncCards_basicAndPreservingOrder() {
+    fun syncCards_basicAndReordering() {
         val model = VerticalCardListModel()
 
         // Initial sync
         model.syncCards(listOf("a", "b", "c"))
         assertEquals(listOf("a", "b", "c"), model.displayOrderIdentifiers)
 
-        // Reordered externally, but model preserves its user display order for existing items
-        // and appends new items
-        model.displayOrderIdentifiers = listOf("b", "a", "c")
-        model.syncCards(listOf("a", "b", "c", "d"))
+        // Reordered externally when not dragging updates displayOrderIdentifiers
+        model.syncCards(listOf("b", "a", "c", "d"))
         assertEquals(listOf("b", "a", "c", "d"), model.displayOrderIdentifiers)
 
         // Item removed

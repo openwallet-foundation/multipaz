@@ -118,11 +118,14 @@ interface Branding {
 }
 
 private object DefaultBranding: Branding {
-    override val appName = defaultAppName
+    override val appName: String?
+        get() = defaultAppName
 
-    override val appIconPainter = defaultAppIconPainter
+    override val appIconPainter: Painter?
+        get() = defaultAppIconPainter
 
-    override val theme = defaultTheme
+    override val theme: @Composable (content: @Composable () -> Unit) -> Unit
+        get() = defaultTheme
 
     override suspend fun renderFallbackCardArt(document: Document): ImageBitmap =
         defaultRenderFallbackCardArt(document)

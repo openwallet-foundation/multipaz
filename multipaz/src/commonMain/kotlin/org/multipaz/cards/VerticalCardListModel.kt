@@ -165,7 +165,6 @@ class VerticalCardListModel(
      * Synchronizes [displayOrderIdentifiers] with the provided list of card identifiers.
      *
      * If a drag operation is currently active, synchronization is deferred to avoid disrupting gestures.
-     * Existing ordering is preserved for existing items; new items are appended, and removed items are deleted.
      *
      * @param incomingIdentifiers the latest list of card identifiers from the data source.
      */
@@ -173,16 +172,8 @@ class VerticalCardListModel(
         if (draggedCardIdentifier != null) {
             return
         }
-        if (displayOrderIdentifiers.isEmpty()) {
-            displayOrderIdentifiers = incomingIdentifiers
-            return
-        }
         if (displayOrderIdentifiers != incomingIdentifiers) {
-            val incomingSet = incomingIdentifiers.toSet()
-            val preserved = displayOrderIdentifiers.filter { incomingSet.contains(it) }
-            val preservedSet = preserved.toSet()
-            val newItems = incomingIdentifiers.filter { !preservedSet.contains(it) }
-            displayOrderIdentifiers = preserved + newItems
+            displayOrderIdentifiers = incomingIdentifiers
         }
     }
 

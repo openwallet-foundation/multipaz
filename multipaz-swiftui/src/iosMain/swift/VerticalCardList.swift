@@ -780,8 +780,10 @@ public struct VerticalCardList<TopContent: View, EmptyContent: View, SelectedCon
             }
         }
         .onChange(of: cardInfos.map { $0.identifier }) { _, newIds in
-            state.model.syncCards(incomingIdentifiers: newIds)
-            state.displayOrderIdentifiers = state.model.displayOrderIdentifiers
+            withAnimation(.easeInOut(duration: 0.38)) {
+                state.model.syncCards(incomingIdentifiers: newIds)
+                state.displayOrderIdentifiers = state.model.displayOrderIdentifiers
+            }
         }
         .onChange(of: state.dragJustEnded) { _, newValue in
             if newValue {
