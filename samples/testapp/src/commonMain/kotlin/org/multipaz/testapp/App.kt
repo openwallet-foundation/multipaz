@@ -134,6 +134,7 @@ import org.multipaz.testapp.ui.DocumentViewerScreen
 import org.multipaz.testapp.ui.EventLoggerScreen
 import org.multipaz.testapp.ui.EventViewerScreen
 import org.multipaz.testapp.ui.FloatingItemListScreen
+import org.multipaz.testapp.ui.LazyFloatingItemListScreen
 import org.multipaz.testapp.ui.GenerateMpzPassScreen
 import org.multipaz.testapp.ui.IsoMdocMultiDeviceTestingScreen
 import org.multipaz.testapp.ui.IsoMdocProximityReadingScreen
@@ -1846,6 +1847,16 @@ class App private constructor (val promptModel: PromptModel) {
                 composable<FloatingItemListDestination> { backstackEntry ->
                     WithAppBar(navController, "FloatingItemList examples") {
                         FloatingItemListScreen(
+                            showToast = { message -> showToast(message) },
+                            onNavigateToLazyFloatingItemList = {
+                                navController.navigate(LazyFloatingItemListDestination)
+                            }
+                        )
+                    }
+                }
+                composable<LazyFloatingItemListDestination> { backstackEntry ->
+                    WithAppBar(navController, "LazyFloatingItemList example") {
+                        LazyFloatingItemListScreen(
                             showToast = { message -> showToast(message) },
                         )
                     }

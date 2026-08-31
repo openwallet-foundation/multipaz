@@ -26,7 +26,7 @@ public struct FloatingItemContainer<Content: View>: View {
     }
 
     public var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 8) {
             ZStack(alignment: .leading) {
                 content()
             }
@@ -35,14 +35,13 @@ public struct FloatingItemContainer<Content: View>: View {
             if showChevron {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(Color.secondary.opacity(0.5))
+                    .foregroundStyle(.tertiary)
             }
         }
-        .padding(.leading, 16)
-        .padding(.top, 16)
-        .padding(.bottom, 16)
-        .padding(.trailing, showChevron ? 8 : 16)
-        // Equivalent to MaterialTheme.colorScheme.surfaceContainerLowest
-        .background(Color(UIColor.systemBackground))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
+        .frame(minHeight: 44)
+        // Equivalent to MaterialTheme.colorScheme.surfaceContainerLowest / iOS grouped cell background
+        .background(Color(UIColor.secondarySystemGroupedBackground))
     }
 }

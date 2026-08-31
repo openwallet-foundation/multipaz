@@ -9,6 +9,17 @@ struct FloatingItemListScreen: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 10) {
+                FloatingItemList(title: "Lazy list variant") {
+                    NavigationLink(destination: LazyFloatingItemListScreen()) {
+                        FloatingItemText(
+                            text: "LazyFloatingItemList (50 items)",
+                            showChevron: true,
+                            secondary: "Tap to open lazy-loaded scrolling list"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 FloatingItemList(title: "FloatingItemText") {
                     FloatingItemText(text: "Primary text")
                     FloatingItemText(text: "Primary text", showChevron: true)

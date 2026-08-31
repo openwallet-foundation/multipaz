@@ -33,9 +33,9 @@ public struct FloatingItemCenteredText: View {
     public var body: some View {
         FloatingItemContainer(showChevron: showChevron) {
             Text(text)
-                .font(.system(size: 15))
+                .font(.subheadline)
                 .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .italic()
                 .frame(maxWidth: .infinity, alignment: .center)
         }

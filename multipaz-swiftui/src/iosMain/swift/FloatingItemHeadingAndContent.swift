@@ -48,8 +48,7 @@ public struct FloatingItemHeadingAndContent<ContentView: View, ImageView: View, 
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(heading)
-                        .font(.system(size: 15))
-                        .fontWeight(.bold)
+                        .font(.headline)
 
                     content()
                 }

@@ -1,6 +1,7 @@
 package org.multipaz.testapp.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -31,6 +32,7 @@ import kotlin.time.Duration.Companion.days
 @Composable
 fun FloatingItemListScreen(
     showToast: (message: String) -> Unit,
+    onNavigateToLazyFloatingItemList: () -> Unit = {},
 ) {
     LazyColumn(
         modifier = Modifier.padding(10.dp),
@@ -38,6 +40,17 @@ fun FloatingItemListScreen(
     ) {
         item {
             Text("This screen contains examples of FloatingItemList and all the various things that can be put in it")
+        }
+
+        item {
+            FloatingItemList(title = "Lazy list variant") {
+                FloatingItemText(
+                    modifier = Modifier.clickable { onNavigateToLazyFloatingItemList() },
+                    text = "LazyFloatingItemList (50 items)",
+                    secondary = "Tap to open lazy-loaded scrolling list",
+                    showChevron = true
+                )
+            }
         }
 
         item {

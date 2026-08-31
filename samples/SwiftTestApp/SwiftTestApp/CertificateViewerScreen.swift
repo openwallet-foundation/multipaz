@@ -30,6 +30,7 @@ private struct CertificateViewerInternal: View {
                         ForEach(0..<certificates.count, id: \.self) { index in
                             ScrollView {
                                 X509CertViewer(certificate: certificates[index])
+                                    .padding(10)
                                     .tag(index)
                             }
                         }
@@ -58,7 +59,6 @@ private struct CertificateViewerInternal: View {
                 .padding(.bottom, 8)
             }
         }
-        .padding()
     }
 }
 

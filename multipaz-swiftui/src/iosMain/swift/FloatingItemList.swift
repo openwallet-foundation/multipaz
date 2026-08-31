@@ -30,36 +30,22 @@ public struct FloatingItemList<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             if let title = title {
                 Text(title)
-                    .font(.subheadline) // Equivalent to bodyMedium
-                    .fontWeight(.bold)
-                    .foregroundColor(.secondary)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
                     .padding(.bottom, 8)
-                /*
-                    .padding(.leading, 10)
-                    .padding(.top, 10)
-                    .padding(.trailing, 10)
-                    .padding(.bottom, 5) // Adjusted slightly to flow into the list naturally
-                 */
             }
 
-            VStack(spacing: 1) { // Spacing creates the divider effect
+            VStack(spacing: 0.5) { // Spacing creates the divider effect
                 content()
             }
-                // The container background acting as the divider color (outlineVariant)
             .background(Color(UIColor.separator))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .shadow(
-                color: Color.black.opacity(0.10),
-                radius: 10,
+                color: Color.black.opacity(0.12),
+                radius: 12,
                 x: 0,
-                y: 2
+                y: 3
             )
-            /*
-            .padding(.leading, 10)
-            .padding(.trailing, 10)
-            .padding(.top, title == nil ? 10 : 5)
-            .padding(.bottom, 15)
-            */
         }
     }
 }

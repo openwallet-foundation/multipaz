@@ -15,13 +15,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 /**
- * An item showing a text, with smaller secondary text below.
+ * An item showing a primary text label, with optional secondary text below.
  *
- * @param text text to be shown.
+ * This is intended for standard list items and interactive navigation rows.
+ *
+ * @param text primary text to be shown.
  * @param modifier a [Modifier].
  * @param showChevron whether to show a right chevron icon on the right side.
  * @param secondary optional text to show below the main text, in smaller font and [secondaryColor].
- * @param secondaryColor the color to use for [secondaryColor], defaults to secondary color.
+ * @param secondaryColor the color to use for [secondaryColor], defaults to [MaterialTheme.colorScheme.onSurfaceVariant].
  * @param image optional image, shown to the left of the text.
  * @param trailingContent optional trailing content.
  */
@@ -31,7 +33,7 @@ fun FloatingItemText(
     modifier: Modifier = Modifier,
     showChevron: Boolean = false,
     secondary: String? = null,
-    secondaryColor: Color = MaterialTheme.colorScheme.secondary,
+    secondaryColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     image: @Composable () -> Unit = {},
     trailingContent: @Composable () -> Unit = {},
 ) {
@@ -54,20 +56,25 @@ fun FloatingItemText(
                     Text(
                         modifier = Modifier.weight(1.0f),
                         text = text,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Start
                     )
                 } else {
                     Column(
-                        modifier = Modifier.weight(1.0f)
+                        modifier = Modifier.weight(1.0f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
                             text = text,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
                             textAlign = TextAlign.Start
                         )
                         Text(
                             text = secondary,
                             textAlign = TextAlign.Start,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = secondaryColor
                         )
                     }
@@ -79,13 +86,15 @@ fun FloatingItemText(
 }
 
 /**
- * An item showing a text, with smaller secondary text below.
+ * An item showing a primary text label, with optional secondary text below.
  *
- * @param text text to be shown.
+ * This is intended for standard list items and interactive navigation rows.
+ *
+ * @param text primary text to be shown.
  * @param modifier a [Modifier].
  * @param showChevron whether to show a right chevron icon on the right side.
  * @param secondary optional text to show below the main text, in smaller font and [secondaryColor].
- * @param secondaryColor the color to use for [secondaryColor], defaults to secondary color.
+ * @param secondaryColor the color to use for [secondaryColor], defaults to [MaterialTheme.colorScheme.onSurfaceVariant].
  * @param image optional image, shown to the left of the text.
  * @param trailingContent optional trailing content.
  */
@@ -95,7 +104,7 @@ fun FloatingItemText(
     modifier: Modifier = Modifier,
     showChevron: Boolean = false,
     secondary: String? = null,
-    secondaryColor: Color = MaterialTheme.colorScheme.secondary,
+    secondaryColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     image: @Composable () -> Unit = {},
     trailingContent: @Composable () -> Unit = {},
 ) {

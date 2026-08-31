@@ -75,16 +75,16 @@ public struct FloatingItemText<ImageView: View, TrailingView: View>: View {
                 if let secondary = secondary {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(text)
-                            .font(.system(size: 15))
+                            .font(.body)
                             .multilineTextAlignment(.leading)
                         Text(secondary)
-                            .font(.system(size: 13))
+                            .font(.subheadline)
                             .multilineTextAlignment(.leading)
-                            .foregroundColor(secondaryColor)
+                            .foregroundStyle(secondaryColor)
                     }
                 } else {
                     Text(text)
-                        .font(.system(size: 15))
+                        .font(.body)
                         .multilineTextAlignment(.leading)
                 }
 

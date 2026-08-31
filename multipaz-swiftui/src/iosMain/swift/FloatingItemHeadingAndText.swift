@@ -66,11 +66,11 @@ public struct FloatingItemHeadingAndText<ImageView: View, TrailingView: View>: V
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(heading)
-                        .font(.system(size: 15))
-                        .fontWeight(.bold)
+                        .font(.headline)
 
                     Text(text)
-                        .font(.system(size: 15))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
 

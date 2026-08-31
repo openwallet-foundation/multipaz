@@ -4,10 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -34,18 +35,14 @@ fun FloatingItemContainer(
         modifier = modifier
             .background(MaterialTheme.colorScheme.surfaceContainerLowest)
             .fillMaxWidth()
-            .padding(
-                start = 16.dp,
-                top = 16.dp,
-                bottom = 16.dp,
-                end = if (showChevron) 4.dp else 16.dp
-            ),
+            .defaultMinSize(minHeight = 56.dp)
+            .padding(16.dp),
         contentAlignment = Alignment.CenterStart
     ) {
         if (showChevron) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -55,9 +52,9 @@ fun FloatingItemContainer(
                     content()
                 }
                 Icon(
-                    imageVector = Icons.Outlined.ChevronRight,
+                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         } else {

@@ -13,10 +13,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /**
- * An item showing a heading in bold with content below it.
+ * An item showing a field heading with custom content below it.
  *
- * @param heading will be shown in bold at the top.
- * @param content will be shown below the heading.
+ * This is intended for key-value inspector and detail views.
+ *
+ * @param heading field label shown at the top in semi-bold.
+ * @param content custom content to display below the heading.
  * @param modifier a [Modifier].
  * @param showChevron whether to show a right chevron icon on the right side.
  * @param image optional image, shown to the left of the text.
@@ -42,12 +44,14 @@ fun FloatingItemHeadingAndContent(
         ) {
             image()
             Column(
-                modifier = Modifier.weight(1.0f)
+                modifier = Modifier.weight(1.0f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
                     text = heading,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 content()
             }
