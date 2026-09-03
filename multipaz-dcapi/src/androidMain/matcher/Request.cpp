@@ -127,6 +127,20 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
         return nullptr;
     }
 
+    std::string version = "1.0";
+    const auto& versionItem = map->get("version");
+    if (versionItem && versionItem->asTstr()) {
+        version = versionItem->asTstr()->value();
+    }
+    int major = 1;
+    int minor = 0;
+    bool isVersion10 = true;
+    if (sscanf(version.c_str(), "%d.%d", &major, &minor) >= 2) {
+        isVersion10 = (major < 1 || (major == 1 && minor < 1));
+    } else {
+        isVersion10 = (version == "1.0");
+    }
+
     // --- Parse DocRequests ---
     const auto& docRequestsArrayItem = map->get("docRequests");
     if (!docRequestsArrayItem || !docRequestsArrayItem->asArray()) {
@@ -136,11 +150,13 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
     auto docRequestsArray = docRequestsArrayItem->asArray();
 
     std::vector<std::vector<uint8_t>> topLevelReaderAkis;
-    const auto& readerAuthAllItem = map->get("readerAuthAll");
-    if (readerAuthAllItem && readerAuthAllItem->asArray()) {
-        auto arr = readerAuthAllItem->asArray();
-        for (size_t k = 0; k < arr->size(); ++k) {
-            extractAkisFromCoseSign1(arr->get(k).get(), topLevelReaderAkis);
+    if (!isVersion10) {
+        const auto& readerAuthAllItem = map->get("readerAuthAll");
+        if (readerAuthAllItem && readerAuthAllItem->asArray()) {
+            auto arr = readerAuthAllItem->asArray();
+            for (size_t k = 0; k < arr->size(); ++k) {
+                extractAkisFromCoseSign1(arr->get(k).get(), topLevelReaderAkis);
+            }
         }
     }
 
@@ -427,24 +443,27 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
                 issuerIdentifiers,
                 readerAuthAkis,
                 dcqlClaims,
-                claimSets
+                claimSets,
+                isVersion10
         ));
     }
 
     // --- Parse DeviceRequestInfo (UseCases) ---
     std::vector<DcqlCredentialSetQuery> credentialSetQueries;
-    const auto& deviceRequestInfoItem = map->get("deviceRequestInfo");
 
     std::unique_ptr<cppbor::Item> drItem;
     cppbor::Map* drInfoMap = nullptr;
 
-    if (deviceRequestInfoItem) {
-        if (deviceRequestInfoItem->asSemanticTag()) {
-            auto innerBytes = deviceRequestInfoItem->asSemanticTag()->asBstr();
-            if (innerBytes) {
-                auto parseResult = cppbor::parse(innerBytes->value());
-                drItem = std::move(std::get<0>(parseResult));
-                if (drItem) drInfoMap = drItem->asMap();
+    if (!isVersion10) {
+        const auto& deviceRequestInfoItem = map->get("deviceRequestInfo");
+        if (deviceRequestInfoItem) {
+            if (deviceRequestInfoItem->asSemanticTag()) {
+                auto innerBytes = deviceRequestInfoItem->asSemanticTag()->asBstr();
+                if (innerBytes) {
+                    auto parseResult = cppbor::parse(innerBytes->value());
+                    drItem = std::move(std::get<0>(parseResult));
+                    if (drItem) drInfoMap = drItem->asMap();
+                }
             }
         }
     }

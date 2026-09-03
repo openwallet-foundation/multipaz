@@ -55,6 +55,11 @@ async function onLoad() {
             scheme.hidden = (
                 selected !== 'uri_scheme_openid4vp_29'
             )
+
+            const devicerequest_version_form = document.getElementById("devicerequest-version-form")
+            if (devicerequest_version_form) {
+                devicerequest_version_form.hidden = !isAnnexAOrC(selected)
+            }
         }
     })
 
@@ -918,6 +923,17 @@ function rawDcqlReset_movie_and_id_alt() {
 `;
 }
 
+function isAnnexAOrC(protocol) {
+    return (
+        protocol === 'uri_scheme_annex_a' ||
+        protocol === 'w3c_dc_mdoc_api' ||
+        protocol === 'w3c_dc_openid4vp_29_and_mdoc_api' ||
+        protocol === 'w3c_dc_openid4vp_24_and_mdoc_api' ||
+        protocol === 'w3c_dc_mdoc_api_and_openid4vp_29' ||
+        protocol === 'w3c_dc_mdoc_api_and_openid4vp_24'
+    )
+}
+
 function updateProtocolOptions(mdocOrVc) {
     const protocolDropdown = document.getElementById('protocolDropdown')
     const mdocOnly = document.querySelectorAll('.mdoc-only');
@@ -941,6 +957,11 @@ function updateProtocolOptions(mdocOrVc) {
         selectedProtocol !== 'w3c_dc_mdoc_api_and_openid4vp_24' &&
         selectedProtocol !== 'uri_scheme_openid4vp_29'
     )
+
+    const devicerequest_version_form = document.getElementById("devicerequest-version-form")
+    if (devicerequest_version_form) {
+        devicerequest_version_form.hidden = !isAnnexAOrC(selectedProtocol)
+    }
 }
 
 async function onLoadRedirect() {
@@ -983,6 +1004,7 @@ async function requestDocumentRawDcql() {
 async function requestDocument(format, docType, requestId, rawDcql, multiDocumentRequestId) {
     console.log('requestDocument, format=' + format + ' docType=' + docType + ' requestId=' + requestId + ' protocol=' + selectedProtocol)
     var issuerIdentifiers = document.getElementById("issuer-identifiers-input")?.value || ""
+    var deviceRequestVersion = document.getElementById("devicerequest-version-select")?.value || "1.1"
     if (selectedProtocol === 'uri_scheme_openid4vp_29') {
         if (document.getElementById("scheme-input").value === "") {
             alert("You must specify a non-empty scheme")
@@ -1020,7 +1042,8 @@ async function requestDocument(format, docType, requestId, rawDcql, multiDocumen
                 protocol: selectedProtocol,
                 origin: location.origin,
                 host: location.host,
-                issuerIdentifiers: issuerIdentifiers
+                issuerIdentifiers: issuerIdentifiers,
+                deviceRequestVersion: deviceRequestVersion
             }
         )
         window.location = response.uri
@@ -1054,7 +1077,8 @@ async function requestDocument(format, docType, requestId, rawDcql, multiDocumen
                     host: location.host,
                     signRequest: signRequest,
                     encryptResponse: encryptResponse,
-                    issuerIdentifiers: issuerIdentifiers
+                    issuerIdentifiers: issuerIdentifiers,
+                    deviceRequestVersion: deviceRequestVersion
                 }
             )
             console.log(response)

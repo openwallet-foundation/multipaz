@@ -48,6 +48,7 @@ import org.multipaz.mdoc.request.ZkRequest
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.mdoc.response.DeviceResponse
+import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.openid.OpenID4VP
@@ -106,6 +107,8 @@ object VerificationUtil {
      * @param cborTransactionData CBOR-formatted transaction data
      * @param docRequestOtherInfo additional data to add to `requestInfo` map in ISO 18013-7.
      * @param issuerIdentifiers optional list of issuer Authority Key Identifiers to match against.
+     * @param deviceRequestVersion the version to use or `null` to automatically determine which
+     *   version to use.
      * @return a [JsonObject] with the request.
      */
     @Throws(CancellationException::class)
@@ -121,7 +124,8 @@ object VerificationUtil {
         jsonTransactionData: List<String> = emptyList(),
         cborTransactionData: TransactionsInfo? = null,
         docRequestOtherInfo: Map<String, DataItem> = emptyMap(),
-        issuerIdentifiers: List<ByteString> = emptyList()
+        issuerIdentifiers: List<ByteString> = emptyList(),
+        deviceRequestVersion: String? = null
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
             generateSingleRequest(
@@ -138,7 +142,8 @@ object VerificationUtil {
                 jsonTransactionData = jsonTransactionData,
                 cborTransactionData = cborTransactionData,
                 docRequestOtherInfo = docRequestOtherInfo,
-                issuerIdentifiers = issuerIdentifiers
+                issuerIdentifiers = issuerIdentifiers,
+                deviceRequestVersion = deviceRequestVersion
             )
         }
         return buildJsonObject {
@@ -179,6 +184,8 @@ object VerificationUtil {
      * @param cborTransactionData transaction data encoded for use in requestInfo map in ISO 18013-5.
      * @param state optional state parameter defined in OpenID4VP and ISO 18013-7 that is then
      *   included in the presentation
+     * @param deviceRequestVersion the version to use or `null` to automatically determine which
+     *   version to use.
      * @throws IllegalArgumentException if [dcql] contains features not supported by [DeviceRequest], for
      *   example a request for credentials that aren't ISO mdocs.
      * @return a [JsonObject] with the request.
@@ -193,7 +200,8 @@ object VerificationUtil {
         verifierIdentities: List<VerifierIdentity>,
         jsonTransactionData: List<String> = emptyList(),
         cborTransactionData: Map<String, TransactionsInfo> = emptyMap(),
-        state: String? = null
+        state: String? = null,
+        deviceRequestVersion: String? = null
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
             generateSingleRequestDcql(
@@ -205,7 +213,8 @@ object VerificationUtil {
                 verifierIdentities = verifierIdentities,
                 jsonTransactionData = jsonTransactionData,
                 cborTransactionData = cborTransactionData,
-                state = state
+                state = state,
+                deviceRequestVersion = deviceRequestVersion
             )
         }
         return buildJsonObject {
@@ -222,7 +231,8 @@ object VerificationUtil {
         verifierIdentities: List<VerifierIdentity>,
         jsonTransactionData: List<String>,
         cborTransactionData: Map<String, TransactionsInfo>,
-        state: String?
+        state: String?,
+        deviceRequestVersion: String? = null
     ): JsonObject = buildJsonObject {
         put("protocol", exchangeProtocol)
         when (exchangeProtocol) {
@@ -275,15 +285,18 @@ object VerificationUtil {
                         add(dcapiInfoDigest)
                     }
                 }
+                val isVersion10 = deviceRequestVersion != null && deviceRequestVersion.mdocVersionCompareTo("1.1") < 0
                 val encodedDeviceRequest = Cbor.encode(
                     buildDeviceRequestFromDcql(
                         sessionTranscript = sessionTranscript,
                         dcql = dcql,
                         transactions = cborTransactionData,
-                        // TODO: sign individual requests with readerAuthenticationKey
+                        version = deviceRequestVersion,
                     ) {
-                        verifierIdentities.forEach { readerIdentity ->
-                            addReaderAuthAll(readerKey = readerIdentity.key)
+                        if (!isVersion10) {
+                            verifierIdentities.forEach { readerIdentity ->
+                                addReaderAuthAll(readerKey = readerIdentity.key)
+                            }
                         }
                     }.toDataItem()
                 )
@@ -315,7 +328,8 @@ object VerificationUtil {
         jsonTransactionData: List<String>,
         cborTransactionData: TransactionsInfo?,
         docRequestOtherInfo: Map<String, DataItem>,
-        issuerIdentifiers: List<ByteString> = emptyList()
+        issuerIdentifiers: List<ByteString> = emptyList(),
+        deviceRequestVersion: String? = null
     ): JsonObject = buildJsonObject {
         put("protocol", exchangeProtocol)
         when (exchangeProtocol) {
@@ -382,11 +396,14 @@ object VerificationUtil {
                 } else {
                     null
                 }
+                val isVersion10 = deviceRequestVersion != null && deviceRequestVersion.mdocVersionCompareTo("1.1") < 0
+                val readerKey = if (isVersion10) verifierIdentities.firstOrNull()?.key else null
                 val encodedDeviceRequest = Cbor.encode(buildDeviceRequest(
                     sessionTranscript = sessionTranscript,
+                    version = deviceRequestVersion,
                     // TODO: UseCases is optional even in a 1.1 request but iOS 26 currently assumes it's set.
                     //   This has been reported to Apple so this can be removed once their bug-fix is out.
-                    deviceRequestInfo = DeviceRequestInfo.fromValues(
+                    deviceRequestInfo = if (isVersion10) null else DeviceRequestInfo.fromValues(
                         useCases = listOf(UseCase(
                             mandatory = true,
                             documentSets = listOf(
@@ -401,17 +418,20 @@ object VerificationUtil {
                     addDocRequest(
                         docType = docType,
                         nameSpaces = itemsToRequest,
-                        docRequestInfo = DocRequestInfo(
+                        docRequestInfo = if (isVersion10) null else DocRequestInfo(
                             zkRequest = zkRequest,
                             docFormat = docFormat,
                             dataElementIdentifierMapping = dataElementIdentifierMapping,
                             transactions = cborTransactionData,
                             otherInfo = docRequestOtherInfo,
                             issuerIdentifiers = issuerIdentifiers
-                        )
+                        ),
+                        readerKey = readerKey
                     )
-                    verifierIdentities.forEach { readerIdentity ->
-                        addReaderAuthAll(readerKey = readerIdentity.key)
+                    if (!isVersion10) {
+                        verifierIdentities.forEach { readerIdentity ->
+                            addReaderAuthAll(readerKey = readerIdentity.key)
+                        }
                     }
                 }.toDataItem())
                 val base64DeviceRequest = encodedDeviceRequest.toBase64Url()
@@ -457,6 +477,8 @@ object VerificationUtil {
      *   see OpenID4VP 1.0 section 8.4.
      * @param cborTransactionData transaction data encoded for use in requestInfo map in ISO 18013-5.
      * @param issuerIdentifiers optional list of issuer Authority Key Identifiers to match against.
+     * @param deviceRequestVersion the version to use or `null` to automatically determine which
+     *   version to use.
      * @return a [JsonObject] with the request.
      */
     @Throws(CancellationException::class)
@@ -470,7 +492,8 @@ object VerificationUtil {
         verifierIdentities: List<VerifierIdentity>,
         jsonTransactionData: List<String> = emptyList(),
         cborTransactionData: TransactionsInfo? = null,
-        issuerIdentifiers: List<ByteString> = emptyList()
+        issuerIdentifiers: List<ByteString> = emptyList(),
+        deviceRequestVersion: String? = null
     ): JsonObject {
         val requests = exchangeProtocols.map { exchangeProtocol ->
             buildJsonObject {
@@ -509,7 +532,8 @@ object VerificationUtil {
                                 cborTransactionData = cborTransactionData,
                                 jsonTransactionData = jsonTransactionData,
                                 docRequestOtherInfo = emptyMap(),
-                                issuerIdentifiers = issuerIdentifiers
+                                issuerIdentifiers = issuerIdentifiers,
+                                deviceRequestVersion = deviceRequestVersion
                             )["data"] as JsonObject
                         )
                     }

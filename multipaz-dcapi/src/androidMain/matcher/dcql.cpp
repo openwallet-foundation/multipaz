@@ -284,24 +284,41 @@ std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDat
         std::vector<DcqlResponseCredentialSetOptionMemberMatch> matches;
         for (auto& cred : credsSatifyingMeta) {
             if (query.claimSets.size() == 0) {
-                bool didNotMatch = false;
-                auto matchingClaimValues = std::vector<Claim*>();
-                for (auto& claim : query.requestedClaims) {
-                    Claim* matchingCredentialClaim = cred->findMatchingClaim(claim);
-                    if (matchingCredentialClaim != nullptr) {
-                        matchingClaimValues.push_back(matchingCredentialClaim);
-                    } else {
-                        LOG("Error resolving requested claim with path %s", claim.joinPath().c_str());
-                        didNotMatch = true;
-                        break;
+                if (query.lenientClaimMatching) {
+                    auto matchingClaimValues = std::vector<Claim*>();
+                    for (auto& claim : query.requestedClaims) {
+                        Claim* matchingCredentialClaim = cred->findMatchingClaim(claim);
+                        if (matchingCredentialClaim != nullptr) {
+                            matchingClaimValues.push_back(matchingCredentialClaim);
+                        }
                     }
-                }
-                if (!didNotMatch) {
-                    // All claims matched, we have a candidate
-                    matches.push_back(DcqlResponseCredentialSetOptionMemberMatch(
-                       cred,
-                       matchingClaimValues
-                    ));
+                    if (!matchingClaimValues.empty()) {
+                        // At least one claim matched, we have a candidate
+                        matches.push_back(DcqlResponseCredentialSetOptionMemberMatch(
+                            cred,
+                            matchingClaimValues
+                        ));
+                    }
+                } else {
+                    bool didNotMatch = false;
+                    auto matchingClaimValues = std::vector<Claim*>();
+                    for (auto& claim : query.requestedClaims) {
+                        Claim* matchingCredentialClaim = cred->findMatchingClaim(claim);
+                        if (matchingCredentialClaim != nullptr) {
+                            matchingClaimValues.push_back(matchingCredentialClaim);
+                        } else {
+                            LOG("Error resolving requested claim with path %s", claim.joinPath().c_str());
+                            didNotMatch = true;
+                            break;
+                        }
+                    }
+                    if (!didNotMatch) {
+                        // All claims matched, we have a candidate
+                        matches.push_back(DcqlResponseCredentialSetOptionMemberMatch(
+                            cred,
+                            matchingClaimValues
+                        ));
+                    }
                 }
             } else {
                 // Go through all the claim sets, one at a time, pick the first to match

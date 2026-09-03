@@ -294,6 +294,9 @@ data class DeviceRequest private constructor(
         private var deviceRequestInfo: DeviceRequestInfo? = null,
         private val version: String? = null,
     ) {
+        internal val isVersion10: Boolean
+            get() = version != null && version.mdocVersionCompareTo("1.1") < 0
+
         private val docRequests = mutableListOf<DocRequest>()
         private val readerAuthAll = mutableListOf<CoseSign1>()
 
@@ -324,10 +327,12 @@ data class DeviceRequest private constructor(
                         }
                     }
                 }
-                docRequestInfo?.let {
-                    val docRequestInfoDataItem = it.toDataItem()
-                    if (docRequestInfoDataItem.asMap.isNotEmpty()) {
-                        put("requestInfo", docRequestInfoDataItem)
+                if (!isVersion10) {
+                    docRequestInfo?.let {
+                        val docRequestInfoDataItem = it.toDataItem()
+                        if (docRequestInfoDataItem.asMap.isNotEmpty()) {
+                            put("requestInfo", docRequestInfoDataItem)
+                        }
                     }
                 }
             }
@@ -336,7 +341,7 @@ data class DeviceRequest private constructor(
                 DocRequest(
                     docType = docType,
                     nameSpaces = nameSpaces,
-                    docRequestInfo = docRequestInfo,
+                    docRequestInfo = if (isVersion10) null else docRequestInfo,
                     docRequestId = docRequests.size,
                     readerAuth_ = null,
                     itemsRequestBytes = itemsRequestBytes
@@ -348,10 +353,15 @@ data class DeviceRequest private constructor(
         /**
          * Adds a document request to the builder.
          *
+         * If reader authentication is used, the certificate chain has more than one certificate,
+         * and the last certificate is a root certificate (self-signed), it is excluded.
+         *
          * @param docType the document type to request.
          * @param nameSpaces the namespaces, data elements, and intent-to-retain values.
          * @param docRequestInfo a [DocRequestInfo] with additional information or `null`.
          * @param readerKey the key to sign with and its certificate chain or `null` to not use reader auth.
+         *   If the certificate chain has more than one certificate, and the last certificate is a root
+         *   certificate (self-signed), it is excluded.
          * @return the builder.
          */
         suspend fun addDocRequest(
@@ -374,10 +384,12 @@ data class DeviceRequest private constructor(
                         }
                     }
                 }
-                docRequestInfo?.let {
-                    val docRequestInfoDataItem = it.toDataItem()
-                    if (docRequestInfoDataItem.asMap.isNotEmpty()) {
-                        put("requestInfo", docRequestInfoDataItem)
+                if (!isVersion10) {
+                    docRequestInfo?.let {
+                        val docRequestInfoDataItem = it.toDataItem()
+                        if (docRequestInfoDataItem.asMap.isNotEmpty()) {
+                            put("requestInfo", docRequestInfoDataItem)
+                        }
                     }
                 }
             }
@@ -398,7 +410,7 @@ data class DeviceRequest private constructor(
                 protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel] = signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
                 val unprotectedHeaders = mutableMapOf<CoseLabel, DataItem>()
                 readerKey.certChain?.let {
-                    unprotectedHeaders.put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, it.toDataItem())
+                    unprotectedHeaders.put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, it.toCoseX5Chain(excludeRoot = true))
                 }
                 Cose.coseSign1Sign(
                     signingKey = readerKey,
@@ -411,7 +423,7 @@ data class DeviceRequest private constructor(
             docRequests.add(DocRequest(
                 docType = docType,
                 nameSpaces = nameSpaces,
-                docRequestInfo = docRequestInfo,
+                docRequestInfo = if (isVersion10) null else docRequestInfo,
                 docRequestId = docRequests.size,
                 readerAuth_ = readerAuth,
                 itemsRequestBytes = itemsRequestBytes,
@@ -437,9 +449,14 @@ data class DeviceRequest private constructor(
         /**
          * Adds a signature over the entire request.
          *
+         * If the certificate chain has more than one certificate, and the last certificate is a root
+         * certificate (self-signed), it is excluded.
+         *
          * After calling this, [addDocRequest] must not be called.
          *
-         * @param readerKey the key to sign with and its certificate chain.
+         * @param readerKey the key to sign with and its certificate chain. If the certificate chain
+         *   has more than one certificate, and the last certificate is a root certificate
+         *   (self-signed), it is excluded.
          * @return the builder.
          */
         suspend fun addReaderAuthAll(readerKey: AsymmetricKey.X509Compatible): Builder {
@@ -470,7 +487,7 @@ data class DeviceRequest private constructor(
             protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel] = signatureAlgorithm.coseAlgorithmIdentifier!!.toDataItem()
             val unprotectedHeaders = mutableMapOf<CoseLabel, DataItem>()
             readerKey.certChain?.let {
-                unprotectedHeaders.put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, it.toDataItem())
+                unprotectedHeaders.put(Cose.COSE_LABEL_X5CHAIN.toCoseLabel, it.toCoseX5Chain(excludeRoot = true))
             }
             val signature = Cose.coseSign1Sign(
                 signingKey = readerKey,
@@ -837,6 +854,64 @@ data class DeviceRequest private constructor(
             }
         }
 
+        val isVersion10 = version.mdocVersionCompareTo("1.1") < 0
+        if (isVersion10) {
+            val matchingClaimValues = mutableMapOf<RequestedClaim, Claim>()
+            val requestedClaimsRemapped = mutableListOf<RequestedClaim>()
+            val missingElements = mutableListOf<String>()
+
+            for (fieldOptions in logicalRequirements) {
+                val baseClaim = fieldOptions[0][0]
+                val remapped = remapClaim(cred, baseClaim, docRequest)
+                val foundClaim = remapped?.let { claimsInCredential.findMatchingClaim(it) }
+                if (remapped != null && foundClaim != null) {
+                    matchingClaimValues[baseClaim] = foundClaim
+                    requestedClaimsRemapped.add(remapped)
+                } else {
+                    missingElements.add("'${baseClaim.dataElementName}' in namespace '${baseClaim.namespaceName}'")
+                }
+            }
+
+            // In ISO 18013-5:2021 (v1.0), the request is satisfied if at least one requested element is present
+            if (matchingClaimValues.isEmpty()) {
+                val reason = if (missingElements.size == 1) {
+                    "missing data element ${missingElements[0]}"
+                } else {
+                    "missing data elements: ${missingElements.joinToString(", ")}"
+                }
+                return ClaimMatchResult(null, reason)
+            }
+
+            val transactionData = extractTransactionData(
+                docRequest.docRequestInfo,
+                presentmentSource.documentTypeRepository
+            )
+            for (transaction in transactionData) {
+                if (!transaction.isApplicable(cred)) {
+                    return ClaimMatchResult(null, null)
+                }
+            }
+
+            val selectedCred = presentmentSource.selectCredential(
+                document = cred.document,
+                requestedClaims = requestedClaimsRemapped,
+                keyAgreementPossible = keyAgreementPossible
+            )
+            if (selectedCred != null) {
+                return ClaimMatchResult(
+                    match = DocRequestMatch(
+                        credential = selectedCred,
+                        claims = matchingClaimValues,
+                        docRequest = docRequest,
+                        transactionData = transactionData
+                    ),
+                    failureReason = null
+                )
+            }
+            return ClaimMatchResult(null, null)
+        }
+
+        // For Version 1.1+: all requested data elements (or alternatives) must be present
         // Check if all logical requirements can be satisfied by the credential
         val missingElements = mutableListOf<String>()
         for (fieldOptions in logicalRequirements) {
@@ -1234,8 +1309,8 @@ inline fun buildDeviceRequest(
  * @param sessionTranscript the `SessionTranscript` CBOR.
  * @param dcql the DCQL query to convert.
  * @param otherInfo other request info to go into [DeviceRequestInfo].
- * @param docRequestOtherInfo other request info to go into [DocRequestInfo] indexed by DCQL
- *  credential query id
+ * @param transactions transaction data to add to [DocRequestInfo].
+ * @param version the version to use or `null` to automatically determine which version to use.
  * @param builderAction optional builder action to configure the request (e.g. add reader authentication).
  * @return the configured [DeviceRequest].
  * @throws IllegalArgumentException if [dcql] contains features not supported by [DeviceRequest], for
@@ -1247,13 +1322,16 @@ inline fun buildDeviceRequestFromDcql(
     dcql: JsonObject,
     otherInfo: Map<String, DataItem> = emptyMap(),
     transactions: Map<String, TransactionsInfo> = emptyMap(),
+    version: String? = null,
     builderAction: DeviceRequest.Builder.() -> Unit = {}
 ): DeviceRequest {
     val dcqlQuery = DcqlQuery.fromJson(dcql)
-    val deviceRequestInfo = deviceRequestCalcDeviceRequestInfo(dcqlQuery, otherInfo)
+    val isVersion10 = version != null && version.mdocVersionCompareTo("1.1") < 0
+    val deviceRequestInfo = if (isVersion10) null else deviceRequestCalcDeviceRequestInfo(dcqlQuery, otherInfo)
     val builder = DeviceRequest.Builder(
         sessionTranscript = sessionTranscript,
         deviceRequestInfo = deviceRequestInfo,
+        version = version,
     )
     deviceRequestAddQueries(dcqlQuery, transactions, builder)
     builder.builderAction()
@@ -1267,7 +1345,9 @@ inline fun buildDeviceRequestFromDcql(
  *
  * @param sessionTranscript the `SessionTranscript` CBOR.
  * @param dcqlString a string with the DCQL query to convert.
- * @property otherInfo other request info to go into [DeviceRequestInfo].
+ * @param otherInfo other request info to go into [DeviceRequestInfo].
+ * @param transactions transaction data to add to [DocRequestInfo].
+ * @param version the version to use or `null` to automatically determine which version to use.
  * @param builderAction optional builder action to configure the request (e.g. add reader authentication).
  * @return the configured [DeviceRequest].
  * @throws IllegalArgumentException if [dcqlString] contains features not supported by [DeviceRequest], for
@@ -1279,6 +1359,7 @@ inline fun buildDeviceRequestFromDcql(
     dcqlString: String,
     otherInfo: Map<String, DataItem> = emptyMap(),
     transactions: Map<String, TransactionsInfo> = emptyMap(),
+    version: String? = null,
     builderAction: DeviceRequest.Builder.() -> Unit = {}
 ): DeviceRequest {
     return buildDeviceRequestFromDcql(
@@ -1286,6 +1367,7 @@ inline fun buildDeviceRequestFromDcql(
         dcql = Json.decodeFromString<JsonObject>(dcqlString),
         otherInfo = otherInfo,
         transactions = transactions,
+        version = version,
         builderAction = builderAction
     )
 }

@@ -2597,6 +2597,151 @@ class MatcherTest {
     }
 
     @Test
+    fun testMatcher_Iso18013_v10_partialMatch() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness ->
+                harness.provisionMdoc(
+                    displayName = "my-mDL-only-name",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to "Erika".toDataItem(),
+                        )
+                    )
+                )
+            },
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript, version = "1.0")
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                                "resident_address" to false
+                            )
+                        )
+                    )
+                    .build()
+            }
+        )
+        Assert.assertEquals(
+            """
+                Set
+                  set_id 0 org-iso-mdoc
+                  SetEntry set_index 0
+                    cred_id 0 org-iso-mdoc __my-mDL-only-name__
+                    Given names: Erika
+            """.trimIndent().trim() + "\n",
+            matcherResult
+        )
+    }
+
+    @Test
+    fun testMatcher_Iso18013_v11_partialMatch_fails() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness ->
+                harness.provisionMdoc(
+                    displayName = "my-mDL-only-name",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to "Erika".toDataItem(),
+                        )
+                    )
+                )
+            },
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript, version = "1.1")
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                                "resident_address" to false
+                            )
+                        )
+                    )
+                    .build()
+            }
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_Iso18013_v10_zeroMatch_fails() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness ->
+                harness.provisionMdoc(
+                    displayName = "my-mDL-only-family-name",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "family_name" to "Mustermann".toDataItem(),
+                        )
+                    )
+                )
+            },
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript, version = "1.0")
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                                "resident_address" to false
+                            )
+                        )
+                    )
+                    .build()
+            }
+        )
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_Iso18013_v10_multipleCredentials() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness ->
+                harness.provisionMdoc(
+                    displayName = "mDL-full",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to "Erika".toDataItem(),
+                            "resident_address" to "Sample Street 123".toDataItem()
+                        )
+                    )
+                )
+                harness.provisionMdoc(
+                    displayName = "mDL-partial",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to "Max".toDataItem()
+                        )
+                    )
+                )
+            },
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript, version = "1.0")
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                                "resident_address" to false
+                            )
+                        )
+                    )
+                    .build()
+            }
+        )
+        Assert.assertTrue(matcherResult.contains("__mDL-full__"))
+        Assert.assertTrue(matcherResult.contains("__mDL-partial__"))
+        Assert.assertTrue(matcherResult.contains("Sample Street 123"))
+    }
+
+    @Test
     fun testMatcher_Iso18013_multipleIssuers_mDL() = runTest {
         val iacaKey1 = Crypto.createEcPrivateKey(EcCurve.P256)
         val iacaCert1 = MdocUtil.generateIacaCertificate(
