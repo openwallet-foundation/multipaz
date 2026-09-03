@@ -71,9 +71,10 @@ class Iso18013TestSingleMdlQuery {
             )
         }
 
-        private fun singleMdlQuery(): DeviceRequest {
+        private fun singleMdlQuery(version: String? = null): DeviceRequest {
             return buildDeviceRequest(
                 sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+                version = version,
             ) {
                 addDocRequest(
                     docType = DrivingLicense.MDL_DOCTYPE,
@@ -257,7 +258,7 @@ class Iso18013TestSingleMdlQuery {
         harness.initialize()
         addMdlErika(harness)
         addMdlErikaNoResidentAddress(harness)
-        // Checks we get one match with one matching credential if the other mDL lacks the resident_address claim
+        // In version 1.1, all requested claims must be present, so the credential lacking resident_address is excluded
         assertEquals(
             """
                 credentialSets:
@@ -284,9 +285,116 @@ class Iso18013TestSingleMdlQuery {
                                       displayName: Resident address
                                       value: Sample Street 123
             """.trimIndent().trim(),
-            singleMdlQuery().execute(
+            singleMdlQuery(version = "1.1").execute(
                 presentmentSource = harness.presentmentSource
             ).prettyPrint().trim()
+        )
+    }
+
+    @Test
+    fun singleMdlQueryV10PartialMatchSucceeds() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        addMdlErikaNoResidentAddress(harness)
+        // In version 1.0, having at least one of the requested data elements is sufficient
+        assertEquals(
+            """
+                credentialSets:
+                  credentialSet:
+                    optional: false
+                    options:
+                      option:
+                        members:
+                          member:
+                            matches:
+                              match:
+                                credential:
+                                  type: MdocCredential
+                                  docId: my-mDL-without-resident-address
+                                  claims:
+                                    claim:
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
+                                      dataElement: given_name
+                                      displayName: Given names
+                                      value: Erika
+            """.trimIndent().trim(),
+            singleMdlQuery(version = "1.0").execute(
+                presentmentSource = harness.presentmentSource
+            ).prettyPrint().trim()
+        )
+    }
+
+    @Test
+    fun singleMdlQueryV10MultipleCandidatesPartialMatch() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        addMdlErika(harness)
+        addMdlErikaNoResidentAddress(harness)
+        // In version 1.0, both credentials match since each has at least one requested element
+        assertEquals(
+            """
+                credentialSets:
+                  credentialSet:
+                    optional: false
+                    options:
+                      option:
+                        members:
+                          member:
+                            matches:
+                              match:
+                                credential:
+                                  type: MdocCredential
+                                  docId: my-mDL-Erika
+                                  claims:
+                                    claim:
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
+                                      dataElement: given_name
+                                      displayName: Given names
+                                      value: Erika
+                                    claim:
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
+                                      dataElement: resident_address
+                                      displayName: Resident address
+                                      value: Sample Street 123
+                              match:
+                                credential:
+                                  type: MdocCredential
+                                  docId: my-mDL-without-resident-address
+                                  claims:
+                                    claim:
+                                      nameSpace: ${DrivingLicense.MDL_NAMESPACE}
+                                      dataElement: given_name
+                                      displayName: Given names
+                                      value: Erika
+            """.trimIndent().trim(),
+            singleMdlQuery(version = "1.0").execute(
+                presentmentSource = harness.presentmentSource
+            ).prettyPrint().trim()
+        )
+    }
+
+    @Test
+    fun singleMdlQueryV10ZeroMatchFails() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.provisionMdoc(
+            displayName = "my-mDL-only-family-name",
+            docType = DrivingLicense.MDL_DOCTYPE,
+            data = mapOf(
+                DrivingLicense.MDL_NAMESPACE to listOf(
+                    "family_name" to Tstr("Mustermann"),
+                )
+            )
+        )
+        // Fails in version 1.0 if none of the requested data elements are present
+        val e = assertFailsWith(Iso18015ResponseException::class) {
+            singleMdlQuery(version = "1.0").execute(
+                presentmentSource = harness.presentmentSource
+            )
+        }
+        assertEquals(
+            "No matching credentials for first DocRequest: missing data elements: 'given_name' in namespace 'org.iso.18013.5.1', 'resident_address' in namespace 'org.iso.18013.5.1'",
+            e.message
         )
     }
 
@@ -296,7 +404,7 @@ class Iso18013TestSingleMdlQuery {
         harness.initialize()
         addMdlErikaNoResidentAddress(harness)
         val e = assertFailsWith(Iso18015ResponseException::class) {
-            singleMdlQuery().execute(
+            singleMdlQuery(version = "1.1").execute(
                 presentmentSource = harness.presentmentSource
             )
         }
@@ -313,6 +421,7 @@ class Iso18013TestSingleMdlQuery {
         addMdlErikaNoResidentAddress(harness)
         val query = buildDeviceRequest(
             sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+            version = "1.1",
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,
@@ -343,6 +452,7 @@ class Iso18013TestSingleMdlQuery {
         addMdlErika(harness)
         val query = buildDeviceRequest(
             sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+            version = "1.1",
         ) {
             addDocRequest(
                 docType = DrivingLicense.MDL_DOCTYPE,

@@ -17,9 +17,11 @@ import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cose.Cose
+import org.multipaz.cose.CoseSign1
 import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
@@ -1668,5 +1670,61 @@ class DeviceRequestTest {
 
         assertTrue(req1.isStructurallyEquivalent(req2))
         assertTrue(req2.isStructurallyEquivalent(req1))
+    }
+
+    @Test
+    fun x5chain_excludesRootCertificate() = runTest {
+        val ra = ReaderAuth.generateSoftware()
+        // ra.readerKey has certChain of [readerCert, readerRootCert]
+        assertEquals(2, ra.readerKey.certChain.certificates.size)
+        val readerCert = ra.readerKey.certChain.certificates[0]
+        val rootCert = ra.readerKey.certChain.certificates[1]
+
+        val sessionTranscript = buildCborArray { add("SessionTranscript") }
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)
+                ),
+                readerKey = ra.readerKey
+            )
+            addReaderAuthAll(readerKey = ra.readerKey)
+        }
+
+        // Verify with raw CBOR that x5chain header parameter contains only readerCert (as Bstr, not array with root)
+        val rawItem = deviceRequest.toDataItem()
+        val docRequestsArray = rawItem["docRequests"].asArray
+        val docRequestItem = docRequestsArray[0]
+        val readerAuthItem = docRequestItem.getOrNull("readerAuth")
+        assertNotNull(readerAuthItem)
+        val readerAuthSign1 = CoseSign1.fromDataItem(readerAuthItem)
+        val docRequestX5chain = readerAuthSign1.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
+        assertNotNull(docRequestX5chain)
+        // Since only 1 cert remains after root exclusion, RFC 9360 requires a single Bstr
+        assertTrue(docRequestX5chain is Bstr)
+        assertEquals(readerCert.encoded, ByteString(docRequestX5chain.asBstr))
+        assertEquals(1, docRequestX5chain.asX509CertChain.certificates.size)
+        assertEquals(readerCert, docRequestX5chain.asX509CertChain.certificates[0])
+
+        val readerAuthAllArray = rawItem.getOrNull("readerAuthAll")?.asArray
+        assertNotNull(readerAuthAllArray)
+        val readerAuthAllSign1 = CoseSign1.fromDataItem(readerAuthAllArray[0])
+        val readerAuthAllX5chain = readerAuthAllSign1.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
+        assertNotNull(readerAuthAllX5chain)
+        assertTrue(readerAuthAllX5chain is Bstr)
+        assertEquals(readerCert.encoded, ByteString(readerAuthAllX5chain.asBstr))
+        assertEquals(1, readerAuthAllX5chain.asX509CertChain.certificates.size)
+        assertEquals(readerCert, readerAuthAllX5chain.asX509CertChain.certificates[0])
+
+        // Verify parsing and authentication verification
+        val parsed = DeviceRequest.fromDataItem(rawItem)
+        parsed.verifyReaderAuthentication(sessionTranscript)
+        val identities = parsed.getRequesterIdentities()
+        assertEquals(1, identities.size)
+        assertEquals(1, identities[0].certChain.certificates.size)
+        assertEquals(readerCert, identities[0].certChain.certificates[0])
     }
 }
