@@ -69,6 +69,8 @@ data class DeviceResponse internal constructor(
      * The following checks are performed for each [MdocDocument] instance in [documents]:
      * - For [MdocDocument.issuerAuth] the signature is checked against the leaf certificate in the associated X.509 chain.
      * - The document type in the MSO matches the docType in the response.
+     * - The MSO's signed date is within the validity period of the leaf certificate in the associated X.509 chain.
+     * - If [rejectIfValidUntilAfterNotAfter] is true, the MSO's validUntil date does not exceed the leaf certificate's validity period.
      * - The MSO is validity period includes the passed-in [atTime].
      * - The data returned in [MdocDocument.issuerNamespaces] is checked against digests in the MSO.
      * - The device-authentication structures (ECDSA or MAC) are checked.
@@ -103,6 +105,10 @@ data class DeviceResponse internal constructor(
      * @param documentTypeRepository repository that contains all known transaction types; must
      *   be given if [deviceRequest] is given
      * @param atTime the point in time for validating whether returned documents are valid.
+     * @param rejectIfValidUntilAfterNotAfter if true, rejects the MSO if its `validUntil` date exceeds
+     *   the Document Signer certificate validity period according to ISO/IEC 18013-5 Second Edition
+     *   clause 12.8.1. This defaults to `false` as this check is discretionary for readers ("may reject")
+     *   and official test vectors in ISO/IEC 18013-5:2021 Annex D have `validUntil` after `notAfter`.
      * @throws IllegalStateException if validation fails.
      */
     suspend fun verify(
@@ -111,6 +117,7 @@ data class DeviceResponse internal constructor(
         deviceRequest: DeviceRequest? = null,
         documentTypeRepository: DocumentTypeRepository? = null,
         atTime: Instant = Clock.System.now(),
+        rejectIfValidUntilAfterNotAfter: Boolean = false,
     ) {
         numTimesVerifyCalled += 1
         documents_.forEach { document ->
@@ -130,7 +137,13 @@ data class DeviceResponse internal constructor(
                     )
                 }
             }
-            document.verify(sessionTranscript, eReaderKey, transactionData, atTime)
+            document.verify(
+                sessionTranscript = sessionTranscript,
+                eReaderKey = eReaderKey,
+                transactionData = transactionData,
+                atTime = atTime,
+                rejectIfValidUntilAfterNotAfter = rejectIfValidUntilAfterNotAfter,
+            )
         }
         otherDocuments.forEach { otherDocument ->
             val transactionData = if (deviceRequest == null) {
@@ -154,25 +167,35 @@ data class DeviceResponse internal constructor(
     }
 
     /**
-     * Variant of [verify] that is intended for use with [DeviceResponse] data embedded in
-     * non-ISO/IEC-18013 verification response (such as OpenID4VP).
+     * Similar to [verify] but for simple responses containing only a single document.
      *
      * [DeviceResponse] must contain a single document. Parsed transaction data is supplied
      * using [transactionData] parameter instead of [DeviceRequest].
      *
      * @param sessionTranscript the session transcript to use.
      * @param transactionData transaction data that was associated with the request
-     * @param atTime the point in time for validating the whether returned documents are valid.
+     * @param atTime the point in time for validating whether returned documents are valid.
+     * @param rejectIfValidUntilAfterNotAfter if true, rejects the MSO if its `validUntil` date exceeds
+     *   the Document Signer certificate validity period according to ISO/IEC 18013-5 Second Edition
+     *   clause 12.8.1. This defaults to `false` as this check is discretionary for readers ("may reject")
+     *   and official test vectors in ISO/IEC 18013-5:2021 Annex D have `validUntil` after `notAfter`.
      * @throws IllegalStateException if validation fails.
      */
     suspend fun verifySingleDoc(
         sessionTranscript: DataItem,
         transactionData: List<TransactionData<*>>,
         atTime: Instant = Clock.System.now(),
+        rejectIfValidUntilAfterNotAfter: Boolean = false,
     ) {
         if (documents_.size == 1 && zkDocuments.isEmpty()) {
             numTimesVerifyCalled += 1
-            documents_.first().verify(sessionTranscript, null, transactionData, atTime)
+            documents_.first().verify(
+                sessionTranscript = sessionTranscript,
+                eReaderKey = null,
+                transactionData = transactionData,
+                atTime = atTime,
+                rejectIfValidUntilAfterNotAfter = rejectIfValidUntilAfterNotAfter,
+            )
         } else if (zkDocuments.size == 1 && documents_.isEmpty()) {
             numTimesVerifyCalled += 1
             // Zero-knowledge proof is verified when generating response

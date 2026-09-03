@@ -546,27 +546,49 @@ class TrustManager(
      * Evaluates a given X.509 certificate chain against all managed trust points to
      * determine if it is trusted.
      *
-     * This evaluation happens in three phases:
-     * 1. Checks against certificates provided by managed VICALs.
-     * 2. Checks against certificates provided by managed RICALs.
-     * 3. Checks against individually managed standalone X.509 certificates.
+     * Trust points are evaluated in the following order:
+     * 1. Certificates provided by managed VICALs.
+     * 2. Certificates provided by managed RICALs.
+     * 3. Individually managed standalone X.509 certificates.
+     *
+     * The following checks are performed:
+     * - A matching trust point is located by comparing its Subject Key Identifier (extension 2.5.29.14)
+     *   with the Authority Key Identifier (extension 2.5.29.35) of the certificate issued under it
+     *   (or by matching the certificate itself if a single certificate is supplied).
+     * - The certification path from the leaf certificate to the root certificate is validated according
+     *   to RFC 5280:
+     *   - The digital signature on each certificate in the chain is verified using the public key of the issuer.
+     *   - The root certificate signature is verified to be self-signed.
+     *   - The leaf certificate validity period is verified against [atTime]. If [validateCaValidity] is
+     *     true, intermediate and root CA validity periods are also checked.
+     *   - The leaf certificate's Key Usage extension is verified to contain `digitalSignature`.
+     * - In accordance with ISO/IEC 18013-5 Second Edition clause 12.8.3, if verifying an issuer
+     *   certificate chain (such as when [docType] is specified or trust is established via a VICAL):
+     *   - If the root (IACA) certificate specifies a `countryName` (C), the leaf certificate must have the
+     *     same `countryName`.
+     *   - If both the root (IACA) and leaf certificate specify a `stateOrProvinceName` (ST), they must match.
+     * - In accordance with ISO/IEC 18013-5 Second Edition clause 12.8.1:
+     *   - If [docType] is provided and trust is established via a VICAL, [docType] must be in the list of
+     *     authorized document types for that certificate.
      *
      * @param chain The certificate chain to verify.
      * @param atTime The exact time to use for validity and expiration checks.
      * @param validateCaValidity whether to validate validity intervals for CA certificates in the chain.
+     * @param docType the ISO mdoc document type (e.g. `org.iso.18013.5.1.mDL`), if validating authorization against a VICAL.
      * @return A [TrustResult] containing the verification status, the resolved chain,
      * and any associated error if verification failed.
      */
     override suspend fun verify(
         chain: List<X509Cert>,
         atTime: Instant,
-        validateCaValidity: Boolean
+        validateCaValidity: Boolean,
+        docType: String?
     ): TrustResult {
         ensureInitialized()
         return stateLock.withLock {
             // VICAL trust managers get first dibs...
             vicalTrustManagers.forEach { (_, trustManager) ->
-                val ret = trustManager.verify(chain, atTime, validateCaValidity)
+                val ret = trustManager.verify(chain, atTime, validateCaValidity, docType)
                 if (ret.isTrusted) {
                     // Make sure we return the right TrustManager instance, not the VicalTrustManager
                     return@withLock ret.copy(
@@ -580,7 +602,7 @@ class TrustManager(
             }
             // Then RICAL..
             ricalTrustManagers.forEach { (_, trustManager) ->
-                val ret = trustManager.verify(chain, atTime, validateCaValidity)
+                val ret = trustManager.verify(chain, atTime, validateCaValidity, docType)
                 if (ret.isTrusted) {
                     // Make sure we return the right TrustManager instance, not the RicalTrustManager
                     return@withLock ret.copy(
@@ -593,7 +615,7 @@ class TrustManager(
                 }
             }
             // Finally certificates...
-            TrustManagerUtil.verifyX509TrustChain(chain, atTime, skiToTrustPoint, validateCaValidity)
+            TrustManagerUtil.verifyX509TrustChain(chain, atTime, skiToTrustPoint, validateCaValidity, docType)
         }
     }
 

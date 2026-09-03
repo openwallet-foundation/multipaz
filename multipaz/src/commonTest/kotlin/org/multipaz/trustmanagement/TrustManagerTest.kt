@@ -1017,6 +1017,38 @@ class TrustManagerTest {
             assertEquals(ca2Certificate, it.trustChain.certificates.last())
         }
 
+        // DocType authorization checks (ISO/IEC 18013-5 clause 12.8.1)
+        trustManager.verify(
+            listOf(dsCertificate, intermediateCertificate),
+            docType = "org.iso.18013.5.1.mDL"
+        ).let {
+            assertEquals(null, it.error)
+            assertTrue(it.isTrusted)
+            assertEquals(listOf("org.iso.18013.5.1.mDL"), it.authorizedDocTypes)
+        }
+        trustManager.verify(
+            listOf(dsCertificate, intermediateCertificate),
+            docType = "com.example.unauthorized"
+        ).let {
+            assertFalse(it.isTrusted)
+            assertEquals(
+                "DocType 'com.example.unauthorized' is not authorized by VICAL for certificate '${dsCertificate.subject.name}'",
+                it.error?.message
+            )
+        }
+        trustManager.verify(listOf(ds2Certificate), docType = "org.iso.18013.5.1.mDL").let {
+            assertEquals(null, it.error)
+            assertTrue(it.isTrusted)
+            assertEquals(listOf("org.iso.18013.5.1.mDL"), it.authorizedDocTypes)
+        }
+        trustManager.verify(listOf(ds2Certificate), docType = "com.example.unauthorized").let {
+            assertFalse(it.isTrusted)
+            assertEquals(
+                "DocType 'com.example.unauthorized' is not authorized by VICAL for certificate '${ds2Certificate.subject.name}'",
+                it.error?.message
+            )
+        }
+
         // Valid in the past
         //
         trustManager.verify(listOf(dsValidInThePastCertificate, intermediateCertificate)).let {
@@ -1868,5 +1900,145 @@ class TrustManagerTest {
         )
         assertFalse(result.isTrusted)
         assertIs<X509CertChainValidationException.Expired>(result.error)
+    }
+
+    @Test
+    fun testIacaSubjectDnMatching() = runTest {
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val iacaKey = Crypto.createEcPrivateKey(EcCurve.P384)
+        val iacaCert = buildX509Cert(
+            publicKey = iacaKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(iacaKey, iacaKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("C=US,ST=California,CN=Test IACA"),
+            issuer = X500Name.fromName("C=US,ST=California,CN=Test IACA"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        suspend fun createDsCert(subjectName: String): X509Cert {
+            val dsKey = Crypto.createEcPrivateKey(EcCurve.P384)
+            return buildX509Cert(
+                publicKey = dsKey.publicKey,
+                signingKey = AsymmetricKey.anonymous(iacaKey, iacaKey.curve.defaultSigningAlgorithm),
+                serialNumber = ASN1Integer(1L),
+                subject = X500Name.fromName(subjectName),
+                issuer = iacaCert.subject,
+                validFrom = now - 1.hours,
+                validUntil = now + 1.hours
+            ) {
+                includeSubjectKeyIdentifier()
+                setAuthorityKeyIdentifierToCertificate(iacaCert)
+                setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            }
+        }
+
+        val trustManager = TrustManager(EphemeralStorage())
+        trustManager.addX509Cert(iacaCert, TrustMetadata())
+
+        val docType = "org.iso.18013.5.1.mDL"
+
+        // 1. Both countryName and stateOrProvinceName match -> OK
+        val dsMatching = createDsCert("C=US,ST=California,CN=Test DS Matching")
+        trustManager.verify(listOf(dsMatching), now, docType = docType).let {
+            assertTrue(it.isTrusted)
+            assertNull(it.error)
+        }
+
+        // 2. State omitted on target cert -> OK (per 12.8.3 "if this element is present in both certificates")
+        val dsStateOmitted = createDsCert("C=US,CN=Test DS State Omitted")
+        trustManager.verify(listOf(dsStateOmitted), now, docType = docType).let {
+            assertTrue(it.isTrusted)
+            assertNull(it.error)
+        }
+
+        // 3. Country mismatch -> rejected when verifying an IACA/docType chain
+        val dsCountryMismatch = createDsCert("C=CA,ST=California,CN=Test DS Country Mismatch")
+        trustManager.verify(listOf(dsCountryMismatch), now, docType = docType).let {
+            assertFalse(it.isTrusted)
+            assertEquals(
+                "Target certificate countryName 'CA' does not match IACA certificate countryName 'US'",
+                it.error?.message
+            )
+        }
+
+        // 4. State mismatch -> rejected when verifying an IACA/docType chain
+        val dsStateMismatch = createDsCert("C=US,ST=Massachusetts,CN=Test DS State Mismatch")
+        trustManager.verify(listOf(dsStateMismatch), now, docType = docType).let {
+            assertFalse(it.isTrusted)
+            assertEquals(
+                "Target certificate stateOrProvinceName 'Massachusetts' does not match IACA certificate stateOrProvinceName 'California'",
+                it.error?.message
+            )
+        }
+
+        // 5. When docType is null (e.g. reader auth where root CA is not an IACA), DN checks do not apply
+        trustManager.verify(listOf(dsCountryMismatch), now, docType = null).let {
+            assertTrue(it.isTrusted)
+            assertNull(it.error)
+        }
+    }
+
+    @Test
+    fun testReaderCaCrossBorderCertificates() = runTest {
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val readerCaKey = Crypto.createEcPrivateKey(EcCurve.P384)
+        val readerCaCert = buildX509Cert(
+            publicKey = readerCaKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(readerCaKey, readerCaKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("C=US,ST=Virginia,O=International Reader Authority,CN=Reader CA Root"),
+            issuer = X500Name.fromName("C=US,ST=Virginia,O=International Reader Authority,CN=Reader CA Root"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        suspend fun createReaderCert(subjectName: String): X509Cert {
+            val readerKey = Crypto.createEcPrivateKey(EcCurve.P384)
+            return buildX509Cert(
+                publicKey = readerKey.publicKey,
+                signingKey = AsymmetricKey.anonymous(readerCaKey, readerCaKey.curve.defaultSigningAlgorithm),
+                serialNumber = ASN1Integer(1L),
+                subject = X500Name.fromName(subjectName),
+                issuer = readerCaCert.subject,
+                validFrom = now - 1.hours,
+                validUntil = now + 1.hours
+            ) {
+                includeSubjectKeyIdentifier()
+                setAuthorityKeyIdentifierToCertificate(readerCaCert)
+                setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            }
+        }
+
+        val readerTrustManager = TrustManager(EphemeralStorage())
+        readerTrustManager.addX509Cert(readerCaCert, TrustMetadata())
+
+        // A Reader CA (e.g. an international or commercial verifier authority) can legitimately
+        // issue reader certificates to organizations across different states or countries.
+        // Verifies that ISO/IEC 18013-5 12.8.3 IACA DN matching is not enforced for reader authentication.
+
+        // 1. Cross-country reader certificate (Root CA: C=US, Reader cert: C=DE)
+        val germanReaderCert = createReaderCert("C=DE,O=German Relying Party,CN=Reader Terminal DE")
+        readerTrustManager.verify(listOf(germanReaderCert), now).let {
+            assertTrue(it.isTrusted)
+            assertNull(it.error)
+            assertEquals(2, it.trustChain!!.certificates.size)
+        }
+
+        // 2. Cross-state reader certificate (Root CA: ST=Virginia, Reader cert: ST=California)
+        val caliReaderCert = createReaderCert("C=US,ST=California,O=US Relying Party,CN=Reader Terminal CA")
+        readerTrustManager.verify(listOf(caliReaderCert), now).let {
+            assertTrue(it.isTrusted)
+            assertNull(it.error)
+            assertEquals(2, it.trustChain!!.certificates.size)
+        }
     }
 }
