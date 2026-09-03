@@ -307,7 +307,10 @@ class Iso18013TestPrivacyPreservingAgeRequest {
                 presentmentSource = harness.presentmentSource
             )
         }
-        assertEquals("No matching credentials for first DocRequest", e.message)
+        assertEquals(
+            "No matching credentials for first DocRequest: missing data element 'age_over_18' in namespace 'org.iso.18013.5.1'",
+            e.message
+        )
     }
 
 }

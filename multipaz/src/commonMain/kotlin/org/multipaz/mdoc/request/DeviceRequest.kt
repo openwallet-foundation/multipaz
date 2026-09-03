@@ -521,7 +521,13 @@ data class DeviceRequest private constructor(
 
     private data class DocRequestResult(
         val docRequest: DocRequest,
-        val matches: List<DocRequestMatch>
+        val matches: List<DocRequestMatch>,
+        val failureReason: String? = null,
+    )
+
+    private data class ClaimMatchResult(
+        val match: DocRequestMatch?,
+        val failureReason: String? = null,
     )
 
     /**
@@ -569,7 +575,8 @@ data class DeviceRequest private constructor(
             // As per 18013-5:2021 we only look at the first DocRequest.
             val result = docRequestResults[0]
             if (result.matches.isEmpty()) {
-                throw Iso18015ResponseException("No matching credentials for first DocRequest")
+                val detail = result.failureReason?.let { ": $it" } ?: ""
+                throw Iso18015ResponseException("No matching credentials for first DocRequest$detail")
             }
 
             // Create a single set, with a single option, containing matches for the first DocRequest.
@@ -623,7 +630,13 @@ data class DeviceRequest private constructor(
                 }
 
                 if (!satisfied && useCase.mandatory) {
-                    throw Iso18015ResponseException("No credentials match required UseCase")
+                    val reasons = useCase.documentSets
+                        .flatMap { it.docRequestIds }
+                        .filter { id -> id >= 0 && id < docRequestResults.size }
+                        .mapNotNull { id -> docRequestResults[id].failureReason }
+                        .distinct()
+                    val detail = if (reasons.isNotEmpty()) ": ${reasons.joinToString("; ")}" else ""
+                    throw Iso18015ResponseException("No credentials match required UseCase$detail")
                 }
 
                 if (options.isNotEmpty()) {
@@ -677,25 +690,58 @@ data class DeviceRequest private constructor(
         }
 
         val matches = mutableListOf<DocRequestMatch>()
+        val failures = mutableListOf<String>()
         // Sort by displayName to ensure deterministic order
         for (cred in candidates.sortedBy { it.document.displayName }) {
-            val bestMatch = findBestMatchingClaims(
+            val result = findBestMatchingClaims(
                 cred = cred,
                 docRequest = docRequest,
                 presentmentSource = presentmentSource,
                 keyAgreementPossible = effectiveKeyAgreementPossible,
                 requesterIdentities = requesterIdentities,
             )
-            if (bestMatch != null) {
-                matches.add(bestMatch)
+            if (result.match != null) {
+                matches.add(result.match)
+            } else if (result.failureReason != null) {
+                failures.add(result.failureReason)
             }
         }
-        return DocRequestResult(docRequest, matches)
+        val failureReason = if (matches.isEmpty() && failures.isNotEmpty()) {
+            failures.distinct().joinToString("; ")
+        } else {
+            null
+        }
+        return DocRequestResult(docRequest, matches, failureReason)
+    }
+
+    private fun remapClaim(
+        cred: Credential,
+        reqClaim: MdocRequestedClaim,
+        docRequest: DocRequest
+    ): RequestedClaim? {
+        return when (cred) {
+            is MdocCredential -> reqClaim
+            is KeyBoundSdJwtVcCredential -> {
+                if (reqClaim.namespaceName != "_") {
+                    null
+                } else {
+                    val jsonReqClaimPath = docRequest.docRequestInfo?.dataElementIdentifierMapping?.get(reqClaim.dataElementName)
+                    jsonReqClaimPath?.let {
+                        JsonRequestedClaim(
+                            vctValues = listOf(docRequest.docType),
+                            claimPath = it
+                        )
+                    }
+                }
+            }
+            else -> null
+        }
     }
 
     /**
      * Checks if a credential satisfies a DocRequest, considering alternative data elements.
-     * Returns the selected Credential and the map of matching claims if satisfied, null otherwise.
+     * Returns the selected Credential and the map of matching claims if satisfied, along with
+     * any failure reason if not.
      *
      * This logic generates all valid permutations of claims (base vs alternatives) and selects
      * the one with the highest preference (lowest score).
@@ -706,12 +752,12 @@ data class DeviceRequest private constructor(
         presentmentSource: PresentmentSource,
         keyAgreementPossible: List<EcCurve>,
         requesterIdentities: List<RequesterIdentity>,
-    ): DocRequestMatch? {
+    ): ClaimMatchResult {
         val readerIdentifiers = cred.document.readerIdentifiers
         if (readerIdentifiers.isNotEmpty()) {
             val readerCertChains = getReaderCertChains(docRequest, requesterIdentities)
             if (readerCertChains.isEmpty()) {
-                return null
+                return ClaimMatchResult(null, null)
             }
             val requiredReaderIdentifiers = readerIdentifiers.toSet()
             val matchFound = readerCertChains.any { certChain ->
@@ -722,7 +768,7 @@ data class DeviceRequest private constructor(
                 }
             }
             if (!matchFound) {
-                return null
+                return ClaimMatchResult(null, null)
             }
         }
 
@@ -734,7 +780,7 @@ data class DeviceRequest private constructor(
                 else -> null
             }
             if (certChain == null) {
-                return null
+                return ClaimMatchResult(null, null)
             }
             val requiredIssuerIdentifiers = issuerIdentifiers.toSet()
             val matchFound = certChain.certificates.any { cert ->
@@ -743,7 +789,7 @@ data class DeviceRequest private constructor(
                 } ?: false
             }
             if (!matchFound) {
-                return null
+                return ClaimMatchResult(null, null)
             }
         }
 
@@ -791,6 +837,30 @@ data class DeviceRequest private constructor(
             }
         }
 
+        // Check if all logical requirements can be satisfied by the credential
+        val missingElements = mutableListOf<String>()
+        for (fieldOptions in logicalRequirements) {
+            val anyOptionSatisfied = fieldOptions.any { optionClaims ->
+                optionClaims.all { reqClaim ->
+                    val remapped = remapClaim(cred, reqClaim, docRequest)
+                    remapped != null && claimsInCredential.findMatchingClaim(remapped) != null
+                }
+            }
+            if (!anyOptionSatisfied) {
+                val baseClaim = fieldOptions[0][0]
+                missingElements.add("'${baseClaim.dataElementName}' in namespace '${baseClaim.namespaceName}'")
+            }
+        }
+
+        if (missingElements.isNotEmpty()) {
+            val reason = if (missingElements.size == 1) {
+                "missing data element ${missingElements[0]}"
+            } else {
+                "missing data elements: ${missingElements.joinToString(", ")}"
+            }
+            return ClaimMatchResult(null, reason)
+        }
+
         // 2. Generate Permutations (Cartesian Product of Options)
         // Score = Sum of indices of chosen options. Lower is better.
         // Result is Pair<List<RequestedClaim>, Score>
@@ -825,27 +895,10 @@ data class DeviceRequest private constructor(
             var didNotMatch = false
 
             for (reqClaim in requestedClaims) {
-                val reqClaimRemapped = when (cred) {
-                    is MdocCredential -> reqClaim
-                    is KeyBoundSdJwtVcCredential -> {
-                        if (reqClaim.namespaceName != "_") {
-                            throw IllegalStateException("Expected namespace _ in request, found ${reqClaim.namespaceName}")
-                        }
-                        val jsonReqClaimPath = docRequest.docRequestInfo?.dataElementIdentifierMapping?.get(reqClaim.dataElementName)
-                        if (jsonReqClaimPath == null) {
-                            throw IllegalStateException("No value in dataElementIdentifierMapping for data element " +
-                                    reqClaim.dataElementName
-                            )
-                        }
-                        JsonRequestedClaim(
-                            // TODO: should ISO 18013-5 support a list of VCT values, just like OpenID4VP? Probably...
-                            vctValues = listOf(docRequest.docType),
-                            claimPath = jsonReqClaimPath
-                        )
-                    }
-                    else -> {
-                        throw IllegalStateException("Unsupported credential type ${cred.credentialType}")
-                    }
+                val reqClaimRemapped = remapClaim(cred, reqClaim, docRequest)
+                if (reqClaimRemapped == null) {
+                    didNotMatch = true
+                    break
                 }
                 requestedClaimsRemapped.add(reqClaimRemapped)
 
@@ -877,17 +930,20 @@ data class DeviceRequest private constructor(
                     keyAgreementPossible = keyAgreementPossible
                 )
                 if (selectedCred != null) {
-                    return DocRequestMatch(
-                        credential = selectedCred,
-                        claims = matchingClaimValues,
-                        docRequest = docRequest,
-                        transactionData = transactionData
+                    return ClaimMatchResult(
+                        match = DocRequestMatch(
+                            credential = selectedCred,
+                            claims = matchingClaimValues,
+                            docRequest = docRequest,
+                            transactionData = transactionData
+                        ),
+                        failureReason = null
                     )
                 }
             }
         }
 
-        return null
+        return ClaimMatchResult(null, null)
     }
 
     private fun extractTransactionData(

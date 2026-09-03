@@ -289,4 +289,118 @@ class Iso18013TestSingleMdlQuery {
             ).prettyPrint().trim()
         )
     }
+
+    @Test
+    fun singleMdlQueryMissingSingleClaim() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        addMdlErikaNoResidentAddress(harness)
+        val e = assertFailsWith(Iso18015ResponseException::class) {
+            singleMdlQuery().execute(
+                presentmentSource = harness.presentmentSource
+            )
+        }
+        assertEquals(
+            "No matching credentials for first DocRequest: missing data element 'resident_address' in namespace 'org.iso.18013.5.1'",
+            e.message
+        )
+    }
+
+    @Test
+    fun singleMdlQueryMissingMultipleClaims() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        addMdlErikaNoResidentAddress(harness)
+        val query = buildDeviceRequest(
+            sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf(
+                        "given_name" to false,
+                        "resident_address" to false,
+                        "driving_privileges" to false
+                    )
+                )
+            )
+        }
+        val e = assertFailsWith(Iso18015ResponseException::class) {
+            query.execute(
+                presentmentSource = harness.presentmentSource
+            )
+        }
+        assertEquals(
+            "No matching credentials for first DocRequest: missing data elements: 'resident_address' in namespace 'org.iso.18013.5.1', 'driving_privileges' in namespace 'org.iso.18013.5.1'",
+            e.message
+        )
+    }
+
+    @Test
+    fun singleMdlQueryMissingCustomNamespaceClaim() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        addMdlErika(harness)
+        val query = buildDeviceRequest(
+            sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    "com.example.custom" to mapOf(
+                        "custom_field" to false
+                    )
+                )
+            )
+        }
+        val e = assertFailsWith(Iso18015ResponseException::class) {
+            query.execute(
+                presentmentSource = harness.presentmentSource
+            )
+        }
+        assertEquals(
+            "No matching credentials for first DocRequest: missing data element 'custom_field' in namespace 'com.example.custom'",
+            e.message
+        )
+    }
+
+    @Test
+    fun singleMdlQueryUseCaseMissingClaim() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        addMdlErikaNoResidentAddress(harness)
+        val query = buildDeviceRequest(
+            sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(
+                            DocumentSet(listOf(0)),
+                        ),
+                        purposeHints = mapOf()
+                    )
+                )
+            )
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf(
+                        "given_name" to false,
+                        "resident_address" to false
+                    )
+                )
+            )
+        }
+        val e = assertFailsWith(Iso18015ResponseException::class) {
+            query.execute(
+                presentmentSource = harness.presentmentSource
+            )
+        }
+        assertEquals(
+            "No credentials match required UseCase: missing data element 'resident_address' in namespace 'org.iso.18013.5.1'",
+            e.message
+        )
+    }
 }
