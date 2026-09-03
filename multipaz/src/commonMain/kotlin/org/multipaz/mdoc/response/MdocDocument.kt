@@ -233,6 +233,19 @@ class MdocDocument(
             }
         }
 
+        // Check DeviceSigned key authorizations
+        for ((namespaceName, innerMap) in deviceNamespaces.data) {
+            for ((dataElementName, _) in innerMap) {
+                val authorizedByNamespace = mso.deviceKeyAuthorizedNamespaces.contains(namespaceName)
+                val authorizedByElement = mso.deviceKeyAuthorizedDataElements[namespaceName]?.contains(dataElementName) == true
+                if (!authorizedByNamespace && !authorizedByElement) {
+                    throw IllegalStateException(
+                        "Device-signed data element '$dataElementName' in namespace '$namespaceName' is not authorized by MSO"
+                    )
+                }
+            }
+        }
+
         // Check transaction data and return transaction processing responses
         this.transactionData = transactionData
         transactionResponse = buildMap {

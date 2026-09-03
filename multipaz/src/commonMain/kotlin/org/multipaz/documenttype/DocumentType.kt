@@ -410,6 +410,8 @@ class DocumentType private constructor(
         domain: String = "mdoc",
         randomProvider: Random = Random,
         includeElement: (namespaceName: String, dataElement: MdocDataElement) -> Boolean = { _, _ -> true },
+        deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
+        deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     ): MdocCredential {
         require(mdocDocumentType != null)
 
@@ -448,6 +450,8 @@ class DocumentType private constructor(
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = mdocCredential.getAttestation().publicKey,
+            deviceKeyAuthorizedNamespaces = deviceKeyAuthorizedNamespaces,
+            deviceKeyAuthorizedDataElements = deviceKeyAuthorizedDataElements,
         )
         val taggedEncodedMso = Cbor.encode(Tagged(
             Tagged.ENCODED_CBOR,

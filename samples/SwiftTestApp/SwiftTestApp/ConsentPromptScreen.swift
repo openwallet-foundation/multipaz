@@ -209,7 +209,9 @@ private func calcRequestData(
         expectedUpdate: nil,
         domain: "mdoc",
         randomProvider: KotlinRandom.companion,
-        includeElement: { _, _ in KotlinBoolean(value: true) }
+        includeElement: { _, _ in KotlinBoolean(value: true) },
+        deviceKeyAuthorizedNamespaces: [],
+        deviceKeyAuthorizedDataElements: [:]
     )
     
     let photoIdDoc = try! await documentStore.createDocument(
@@ -247,7 +249,9 @@ private func calcRequestData(
         expectedUpdate: nil,
         domain: "mdoc",
         randomProvider: KotlinRandom.companion,
-        includeElement: { _, _ in KotlinBoolean(value: true) }
+        includeElement: { _, _ in KotlinBoolean(value: true) },
+        deviceKeyAuthorizedNamespaces: [],
+        deviceKeyAuthorizedDataElements: [:]
     )
     
     let photoIdDoc2 = try! await documentStore.createDocument(
@@ -285,7 +289,9 @@ private func calcRequestData(
         expectedUpdate: nil,
         domain: "mdoc",
         randomProvider: KotlinRandom.companion,
-        includeElement: { _, _ in KotlinBoolean(value: true) }
+        includeElement: { _, _ in KotlinBoolean(value: true) },
+        deviceKeyAuthorizedNamespaces: [],
+        deviceKeyAuthorizedDataElements: [:]
     )
     
     let boardingPassDoc = try! await documentStore.createDocument(
@@ -323,7 +329,9 @@ private func calcRequestData(
         expectedUpdate: nil,
         domain: "mdoc",
         randomProvider: KotlinRandom.companion,
-        includeElement: { _, _ in KotlinBoolean(value: true) }
+        includeElement: { _, _ in KotlinBoolean(value: true) },
+        deviceKeyAuthorizedNamespaces: [],
+        deviceKeyAuthorizedDataElements: [:]
     )
     
     try! await addCredentialsForOpenID4VPComplexExample(

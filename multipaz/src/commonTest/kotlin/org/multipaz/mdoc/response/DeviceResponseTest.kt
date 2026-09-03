@@ -30,8 +30,10 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPrivateKeyDoubleCoordinate
 import org.multipaz.crypto.X500Name
+import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
+import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
@@ -39,6 +41,7 @@ import org.multipaz.documenttype.knowntypes.PhotoID
 import org.multipaz.mdoc.TestVectors
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceAuth
+import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
 import org.multipaz.mdoc.request.EncryptionParameters
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.zkp.ZkDocument
@@ -94,6 +97,10 @@ class DeviceResponseTest {
     private lateinit var photoIdTimeValidityEnd: Instant
     private lateinit var photoIdTimeExpectedUpdate: Instant
 
+    private lateinit var documentStore: DocumentStore
+    private lateinit var mdlDsKey: EcPrivateKey
+    private lateinit var mdlDsCert: X509Cert
+
     private lateinit var euPidDsKey: EcPrivateKey
     private lateinit var euPidDocument: Document
     private lateinit var euPidCredential: KeyBoundSdJwtVcCredential
@@ -113,7 +120,7 @@ class DeviceResponseTest {
     private suspend fun provisionDocuments() {
         val randomProvider = Random(42)
 
-        val documentStore = buildDocumentStore(
+        documentStore = buildDocumentStore(
             storage = storage,
             secureAreaRepository = secureAreaRepository
         ) {
@@ -133,10 +140,10 @@ class DeviceResponseTest {
             crlUrl = "https://github.com/openwallet-foundation/multipaz/crl"
         )
 
-        val mdlDsKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        mdlDsKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val mdlDsValidFrom = iacaValidFrom
         val mdlDsValidUntil = iacaValidUntil
-        val mdlDsCert = MdocUtil.generateDsCertificate(
+        mdlDsCert = MdocUtil.generateDsCertificate(
             iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaKey),
             dsKey = mdlDsKey.publicKey,
             subject = X500Name.fromName("C=US,CN=mDL DS test key"),
@@ -231,6 +238,27 @@ class DeviceResponseTest {
             validUntil = euPidTimeValidityEnd,
             domain = "sdjwtvc_sign",
             randomProvider = randomProvider
+        )
+    }
+
+    private suspend fun createMdlCredentialWithAuthorizations(
+        authorizedNamespaces: List<String> = emptyList(),
+        authorizedDataElements: Map<String, List<String>> = emptyMap()
+    ): MdocCredential {
+        val document = documentStore.createDocument()
+        return DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = document,
+            secureArea = softwareSecureArea,
+            createKeySettings = CreateKeySettings(algorithm = Algorithm.ESP256),
+            dsKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(mdlDsCert)), mdlDsKey),
+            signedAt = mdlTimeSigned,
+            validFrom = mdlTimeValidityBegin,
+            validUntil = mdlTimeValidityEnd,
+            expectedUpdate = mdlTimeExpectedUpdate,
+            domain = "mdoc_sign",
+            randomProvider = Random(42),
+            deviceKeyAuthorizedNamespaces = authorizedNamespaces,
+            deviceKeyAuthorizedDataElements = authorizedDataElements
         )
     }
 
@@ -1200,5 +1228,207 @@ class DeviceResponseTest {
         assertEquals(1, drParsed.otherDocuments.size)
         assertEquals("xyz123-abc", drParsed.otherDocuments[0].docFormat)
         assertContentEquals(byteArrayOf(1, 2, 3), drParsed.otherDocuments[0].data.toByteArray().zlibInflate())
+    }
+
+    @Test
+    fun deviceSignedAuthorizedByNamespace() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val credential = createMdlCredentialWithAuthorizations(
+            authorizedNamespaces = listOf("com.example.device")
+        )
+        val deviceNamespaces = buildDeviceNamespaces {
+            addNamespace("com.example.device") {
+                addDataElement("device_element_1", "foo".toDataItem())
+                addDataElement("device_element_2", 42.toDataItem())
+            }
+        }
+        val deviceResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addDocument(
+                credential = credential,
+                requestedClaims = listOf(
+                    MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        namespaceName = DrivingLicense.MDL_NAMESPACE,
+                        dataElementName = "given_name",
+                        intentToRetain = false
+                    )
+                ),
+                deviceNamespaces = deviceNamespaces
+            )
+        }
+        deviceResponse.verify(
+            sessionTranscript = sessionTranscript,
+            atTime = mdlTimeValidityBegin
+        )
+        val encodedDeviceResponse = Cbor.encode(deviceResponse.toDataItem())
+        val drParsed = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
+        drParsed.verify(
+            sessionTranscript = sessionTranscript,
+            atTime = mdlTimeValidityBegin
+        )
+        assertEquals(drParsed, deviceResponse)
+    }
+
+    @Test
+    fun deviceSignedAuthorizedByDataElements() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val credential = createMdlCredentialWithAuthorizations(
+            authorizedDataElements = mapOf(
+                "com.example.device" to listOf("device_element_1", "device_element_2")
+            )
+        )
+        val deviceNamespaces = buildDeviceNamespaces {
+            addNamespace("com.example.device") {
+                addDataElement("device_element_1", "foo".toDataItem())
+            }
+        }
+        val deviceResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addDocument(
+                credential = credential,
+                requestedClaims = listOf(
+                    MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        namespaceName = DrivingLicense.MDL_NAMESPACE,
+                        dataElementName = "given_name",
+                        intentToRetain = false
+                    )
+                ),
+                deviceNamespaces = deviceNamespaces
+            )
+        }
+        deviceResponse.verify(
+            sessionTranscript = sessionTranscript,
+            atTime = mdlTimeValidityBegin
+        )
+    }
+
+    @Test
+    fun deviceSignedUnauthorizedNoKeyAuthorizations() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val deviceNamespaces = buildDeviceNamespaces {
+            addNamespace("com.example.device") {
+                addDataElement("device_element_1", "foo".toDataItem())
+            }
+        }
+        val deviceResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addDocument(
+                credential = mdlCredentialSignature,
+                requestedClaims = listOf(
+                    MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        namespaceName = DrivingLicense.MDL_NAMESPACE,
+                        dataElementName = "given_name",
+                        intentToRetain = false
+                    )
+                ),
+                deviceNamespaces = deviceNamespaces
+            )
+        }
+        val error = assertFailsWith(IllegalStateException::class) {
+            deviceResponse.verify(
+                sessionTranscript = sessionTranscript,
+                atTime = mdlTimeValidityBegin
+            )
+        }
+        assertEquals(
+            "Device-signed data element 'device_element_1' in namespace 'com.example.device' is not authorized by MSO",
+            error.message
+        )
+    }
+
+    @Test
+    fun deviceSignedUnauthorizedNamespace() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val credential = createMdlCredentialWithAuthorizations(
+            authorizedNamespaces = listOf("com.example.other")
+        )
+        val deviceNamespaces = buildDeviceNamespaces {
+            addNamespace("com.example.device") {
+                addDataElement("device_element_1", "foo".toDataItem())
+            }
+        }
+        val deviceResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addDocument(
+                credential = credential,
+                requestedClaims = listOf(
+                    MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        namespaceName = DrivingLicense.MDL_NAMESPACE,
+                        dataElementName = "given_name",
+                        intentToRetain = false
+                    )
+                ),
+                deviceNamespaces = deviceNamespaces
+            )
+        }
+        val error = assertFailsWith(IllegalStateException::class) {
+            deviceResponse.verify(
+                sessionTranscript = sessionTranscript,
+                atTime = mdlTimeValidityBegin
+            )
+        }
+        assertEquals(
+            "Device-signed data element 'device_element_1' in namespace 'com.example.device' is not authorized by MSO",
+            error.message
+        )
+    }
+
+    @Test
+    fun deviceSignedUnauthorizedDataElement() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val credential = createMdlCredentialWithAuthorizations(
+            authorizedDataElements = mapOf(
+                "com.example.device" to listOf("device_element_1")
+            )
+        )
+        val deviceNamespaces = buildDeviceNamespaces {
+            addNamespace("com.example.device") {
+                addDataElement("device_element_2", "bar".toDataItem())
+            }
+        }
+        val deviceResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addDocument(
+                credential = credential,
+                requestedClaims = listOf(
+                    MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        namespaceName = DrivingLicense.MDL_NAMESPACE,
+                        dataElementName = "given_name",
+                        intentToRetain = false
+                    )
+                ),
+                deviceNamespaces = deviceNamespaces
+            )
+        }
+        val error = assertFailsWith(IllegalStateException::class) {
+            deviceResponse.verify(
+                sessionTranscript = sessionTranscript,
+                atTime = mdlTimeValidityBegin
+            )
+        }
+        assertEquals(
+            "Device-signed data element 'device_element_2' in namespace 'com.example.device' is not authorized by MSO",
+            error.message
+        )
     }
 }
