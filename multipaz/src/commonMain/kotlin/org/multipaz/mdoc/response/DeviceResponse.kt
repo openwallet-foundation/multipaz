@@ -72,6 +72,8 @@ data class DeviceResponse internal constructor(
      * - The MSO is validity period includes the passed-in [atTime].
      * - The data returned in [MdocDocument.issuerNamespaces] is checked against digests in the MSO.
      * - The device-authentication structures (ECDSA or MAC) are checked.
+     * - If any data elements are returned as part of DeviceSigned, all those data elements or
+     *   their namespace are included in the keyAuthorizations map in the DeviceKeyInfo map in the MSO.
      * - For each transaction data in the list, verifies that transaction hash is present in the
      *    response and matches the hash of the source transaction data
      *
@@ -100,7 +102,7 @@ data class DeviceResponse internal constructor(
      *   transaction data was sent in the request
      * @param documentTypeRepository repository that contains all known transaction types; must
      *   be given if [deviceRequest] is given
-     * @param atTime the point in time for validating the whether returned documents are valid.
+     * @param atTime the point in time for validating whether returned documents are valid.
      * @throws IllegalStateException if validation fails.
      */
     suspend fun verify(

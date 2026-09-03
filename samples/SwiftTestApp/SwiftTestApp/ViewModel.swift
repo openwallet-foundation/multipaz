@@ -357,7 +357,9 @@ class ViewModel {
             expectedUpdate: nil,
             domain: "mdoc_user_auth",
             randomProvider: KotlinRandom.companion,
-            includeElement: { _, _ in KotlinBoolean(value: true) }
+            includeElement: { _, _ in KotlinBoolean(value: true) },
+            deviceKeyAuthorizedNamespaces: [],
+            deviceKeyAuthorizedDataElements: [:]
         )
         try! await document.edit(editActionFn: { editor in
             editor.provisioned = true
