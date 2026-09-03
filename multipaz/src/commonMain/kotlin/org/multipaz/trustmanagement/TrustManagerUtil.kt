@@ -81,11 +81,14 @@ internal object TrustManagerUtil {
         chain: List<X509Cert>,
         atTime: Instant,
         skiToTrustPoint: Map<String, TrustPoint>,
-        validateCaValidity: Boolean = true
+        validateCaValidity: Boolean = true,
+        docType: String? = null
     ): TrustResult {
         // TODO: add support for customValidators similar to PKIXCertPathChecker
         try {
             val trustPoints = getAllTrustPointsForX509Cert(chain, skiToTrustPoint)
+            val isIaca = docType != null || trustPoints.any { it.isIaca || it.trustManager is VicalTrustManager }
+            val authorizedDocTypes = trustPoints.flatMap { it.docTypes }.distinct()
             val completeChain = buildList {
                 addAll(chain)
                 for (tp in trustPoints) {
@@ -95,11 +98,27 @@ internal object TrustManagerUtil {
                 }
             }
             try {
-                validateCertificationTrustPath(completeChain, atTime, validateCaValidity)
+                validateCertificationTrustPath(
+                    certificationTrustPath = completeChain,
+                    atTime = atTime,
+                    validateCaValidity = validateCaValidity,
+                    isIaca = isIaca
+                )
+                if (docType != null) {
+                    val isDocTypeAuthorized = trustPoints.any { tp ->
+                        tp.docTypes.isEmpty() || tp.docTypes.contains(docType)
+                    }
+                    if (!isDocTypeAuthorized) {
+                        throw IllegalStateException(
+                            "DocType '$docType' is not authorized by VICAL for certificate '${chain.first().subject.name}'"
+                        )
+                    }
+                }
                 return TrustResult(
                     isTrusted = true,
                     trustPoints = trustPoints,
-                    trustChain = X509CertChain(completeChain)
+                    trustChain = X509CertChain(completeChain),
+                    authorizedDocTypes = authorizedDocTypes
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -108,7 +127,8 @@ internal object TrustManagerUtil {
                     isTrusted = false,
                     trustPoints = trustPoints,
                     trustChain = X509CertChain(completeChain),
-                    error = e
+                    error = e,
+                    authorizedDocTypes = authorizedDocTypes
                 )
             }
         } catch (e: Exception) {
@@ -129,11 +149,17 @@ internal object TrustManagerUtil {
                         if (isSelfSigned(cert)) {
                             verifySignature(cert, cert)
                         }
+                        if (docType != null && trustPoint.docTypes.isNotEmpty() && !trustPoint.docTypes.contains(docType)) {
+                            throw IllegalStateException(
+                                "DocType '$docType' is not authorized by VICAL for certificate '${cert.subject.name}'"
+                            )
+                        }
                         return TrustResult(
                             isTrusted = true,
                             trustChain = X509CertChain(chain),
                             trustPoints = listOf(trustPoint),
-                            error = null
+                            error = null,
+                            authorizedDocTypes = trustPoint.docTypes
                         )
                     } catch (validationException: Exception) {
                         if (validationException is CancellationException) throw validationException
@@ -141,7 +167,8 @@ internal object TrustManagerUtil {
                             isTrusted = false,
                             trustChain = X509CertChain(chain),
                             trustPoints = listOf(trustPoint),
-                            error = validationException
+                            error = validationException,
+                            authorizedDocTypes = trustPoint.docTypes
                         )
                     }
                 }
@@ -205,10 +232,17 @@ internal object TrustManagerUtil {
     private suspend fun validateCertificationTrustPath(
         certificationTrustPath: List<X509Cert>,
         atTime: Instant,
-        validateCaValidity: Boolean = true
+        validateCaValidity: Boolean = true,
+        isIaca: Boolean = false,
     ) {
         val leafCertificate = certificationTrustPath.first()
-        checkKeyUsageDocumentSigner(leafCertificate)
+        check(leafCertificate.keyUsage.contains(X509KeyUsage.DIGITAL_SIGNATURE)) {
+            if (isIaca) {
+                "Document Signer certificate is not a signing certificate"
+            } else {
+                "Certificate is not a signing certificate"
+            }
+        }
 
         val certChain = X509CertChain(certificationTrustPath)
         certChain.validate(
@@ -220,6 +254,30 @@ internal object TrustManagerUtil {
         val rootCertificate = certificationTrustPath.last()
         if (isSelfSigned(rootCertificate)) {
             verifySignature(rootCertificate, rootCertificate)
+        }
+
+        if (isIaca) {
+            // ISO/IEC 18013-5:2021 (and 2nd Edition) clause 12.8.3:
+            // Furthermore, the following steps shall be performed for certificates issued by the IACA.
+            // — Verify that the countryName element in the subject of the IACA certificate and the countryName
+            //   element in the subject of the target certificate issued under the IACA certificate are the same.
+            // — Verify that the stateOrProvinceName element in the subject of the IACA certificate and the
+            //   stateOrProvinceName element in the subject of the target certificate issued under the IACA
+            //   certificate are the same if this element is present in both certificates.
+            val iacaCountry = rootCertificate.subject.countryName
+            if (iacaCountry != null) {
+                val leafCountry = leafCertificate.subject.countryName
+                check(iacaCountry == leafCountry) {
+                    "Target certificate countryName '$leafCountry' does not match IACA certificate countryName '$iacaCountry'"
+                }
+            }
+            val iacaState = rootCertificate.subject.stateOrProvinceName
+            val leafState = leafCertificate.subject.stateOrProvinceName
+            if (iacaState != null && leafState != null) {
+                check(iacaState == leafState) {
+                    "Target certificate stateOrProvinceName '$leafState' does not match IACA certificate stateOrProvinceName '$iacaState'"
+                }
+            }
         }
     }
 }

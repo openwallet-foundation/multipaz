@@ -18,6 +18,24 @@ class X500Name(val components: Map<String, ASN1String>) {
     override fun hashCode(): Int = name.hashCode()
 
     /**
+     * The countryName (C) component, if present.
+     */
+    val countryName: String?
+        get() = components[OID.COUNTRY_NAME.oid]?.value
+
+    /**
+     * The stateOrProvinceName (ST) component, if present.
+     */
+    val stateOrProvinceName: String?
+        get() = components[OID.STATE_OR_PROVINCE_NAME.oid]?.value
+
+    /**
+     * The commonName (CN) component, if present.
+     */
+    val commonName: String?
+        get() = components[OID.COMMON_NAME.oid]?.value
+
+    /**
      *  The X.501 Name encoded according to
      *  [RFC 2253](https://datatracker.ietf.org/doc/html/rfc2253).
      */

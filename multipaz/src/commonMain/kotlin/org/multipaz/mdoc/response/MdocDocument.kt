@@ -123,6 +123,7 @@ class MdocDocument(
         eReaderKey: AsymmetricKey?,
         transactionData: List<TransactionData<*>>,
         atTime: Instant,
+        rejectIfValidUntilAfterNotAfter: Boolean = false,
     ) {
         // First check the issuer signature..
         val issuerAuthorityCertChain = issuerCertChain
@@ -149,6 +150,13 @@ class MdocDocument(
         }
 
         // Check validity
+        val dsCert = issuerAuthorityCertChain.certificates[0]
+        if (mso.signedAt < dsCert.validityNotBefore || mso.signedAt > dsCert.validityNotAfter) {
+            throw IllegalStateException("MSO signed date is outside DS certificate validity period")
+        }
+        if (rejectIfValidUntilAfterNotAfter && mso.validUntil > dsCert.validityNotAfter) {
+            throw IllegalStateException("MSO validUntil is after DS certificate validity period")
+        }
         if (atTime < mso.validFrom) {
             throw IllegalStateException("MSO is not yet valid")
         }

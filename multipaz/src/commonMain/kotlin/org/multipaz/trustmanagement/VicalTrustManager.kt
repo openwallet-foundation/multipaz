@@ -35,7 +35,9 @@ class VicalTrustManager(
                 metadata = TrustMetadata(
                     displayName = displayName
                 ),
-                trustManager = this
+                trustManager = this,
+                isIaca = true,
+                docTypes = certInfo.docTypes
             )
         }
 
@@ -48,10 +50,16 @@ class VicalTrustManager(
     override suspend fun verify(
         chain: List<X509Cert>,
         atTime: Instant,
-        validateCaValidity: Boolean
+        validateCaValidity: Boolean,
+        docType: String?
     ): TrustResult {
-        // TODO: Need a way to return list of doctypes in TrustResult...
-        return TrustManagerUtil.verifyX509TrustChain(chain, atTime, skiToTrustPoint, validateCaValidity)
+        return TrustManagerUtil.verifyX509TrustChain(
+            chain = chain,
+            atTime = atTime,
+            skiToTrustPoint = skiToTrustPoint,
+            validateCaValidity = validateCaValidity,
+            docType = docType
+        )
     }
 
     companion object {

@@ -1431,4 +1431,130 @@ class DeviceResponseTest {
             error.message
         )
     }
+
+    @Test
+    fun msoSignedBeforeDsCertNotBefore() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val credential = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = mdlDocument,
+            secureArea = softwareSecureArea,
+            createKeySettings = CreateKeySettings(algorithm = Algorithm.ESP256),
+            dsKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(mdlDsCert)), mdlDsKey),
+            signedAt = mdlDsCert.validityNotBefore - 1.days,
+            validFrom = mdlDsCert.validityNotBefore,
+            validUntil = mdlDsCert.validityNotBefore + 30.days,
+            domain = "mdoc_sign_before"
+        )
+        val deviceResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addDocument(
+                credential = credential,
+                requestedClaims = listOf(
+                    MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        namespaceName = DrivingLicense.MDL_NAMESPACE,
+                        dataElementName = "given_name",
+                        intentToRetain = false
+                    )
+                )
+            )
+        }
+        val error = assertFailsWith(IllegalStateException::class) {
+            deviceResponse.verify(
+                sessionTranscript = sessionTranscript,
+                atTime = mdlDsCert.validityNotBefore
+            )
+        }
+        assertEquals("MSO signed date is outside DS certificate validity period", error.message)
+    }
+
+    @Test
+    fun msoSignedAfterDsCertNotAfter() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val credential = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = mdlDocument,
+            secureArea = softwareSecureArea,
+            createKeySettings = CreateKeySettings(algorithm = Algorithm.ESP256),
+            dsKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(mdlDsCert)), mdlDsKey),
+            signedAt = mdlDsCert.validityNotAfter + 1.days,
+            validFrom = mdlDsCert.validityNotAfter - 10.days,
+            validUntil = mdlDsCert.validityNotAfter + 30.days,
+            domain = "mdoc_sign_after"
+        )
+        val deviceResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addDocument(
+                credential = credential,
+                requestedClaims = listOf(
+                    MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        namespaceName = DrivingLicense.MDL_NAMESPACE,
+                        dataElementName = "given_name",
+                        intentToRetain = false
+                    )
+                )
+            )
+        }
+        val error = assertFailsWith(IllegalStateException::class) {
+            deviceResponse.verify(
+                sessionTranscript = sessionTranscript,
+                atTime = mdlDsCert.validityNotAfter
+            )
+        }
+        assertEquals("MSO signed date is outside DS certificate validity period", error.message)
+    }
+
+    @Test
+    fun msoValidUntilAfterDsCertNotAfter() = runTest {
+        provisionDocuments()
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val credential = DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
+            document = mdlDocument,
+            secureArea = softwareSecureArea,
+            createKeySettings = CreateKeySettings(algorithm = Algorithm.ESP256),
+            dsKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(mdlDsCert)), mdlDsKey),
+            signedAt = mdlDsCert.validityNotBefore,
+            validFrom = mdlDsCert.validityNotBefore,
+            validUntil = mdlDsCert.validityNotAfter + 1.days,
+            domain = "mdoc_valid_until_after"
+        )
+        val deviceResponse = buildDeviceResponse(
+            sessionTranscript = sessionTranscript,
+            status = DeviceResponse.STATUS_OK,
+        ) {
+            addDocument(
+                credential = credential,
+                requestedClaims = listOf(
+                    MdocRequestedClaim(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        namespaceName = DrivingLicense.MDL_NAMESPACE,
+                        dataElementName = "given_name",
+                        intentToRetain = false
+                    )
+                )
+            )
+        }
+        // Allowed by default (rejectIfValidUntilAfterNotAfter = false)
+        deviceResponse.verify(
+            sessionTranscript = sessionTranscript,
+            atTime = mdlDsCert.validityNotBefore,
+            rejectIfValidUntilAfterNotAfter = false
+        )
+
+        // Rejected when rejectIfValidUntilAfterNotAfter = true
+        val error = assertFailsWith(IllegalStateException::class) {
+            deviceResponse.verify(
+                sessionTranscript = sessionTranscript,
+                atTime = mdlDsCert.validityNotBefore,
+                rejectIfValidUntilAfterNotAfter = true
+            )
+        }
+        assertEquals("MSO validUntil is after DS certificate validity period", error.message)
+    }
 }
