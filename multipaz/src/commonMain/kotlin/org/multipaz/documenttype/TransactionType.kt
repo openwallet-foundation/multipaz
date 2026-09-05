@@ -84,8 +84,6 @@ const val ISO_18013_TRANSACTION_DATA_NAMESPACE = "org.iso.transactiondata"
  *  all [TransactionType] objects must have distinct values.
  * @param openId4VpMdocResponseNamespace namespace to use in `deviceSigned` namespace map in
  *  OpenID4VP response; defaults to [identifier].
- * @param defaultIntentToRetain default value for `intentToRetain` when requesting the transaction data
- *  element in the [ISO_18013_TRANSACTION_DATA_NAMESPACE] namespace in an ISO mdoc request.
  */
 abstract class TransactionType<PayloadT: Any>(
     val displayName: String,
@@ -93,7 +91,6 @@ abstract class TransactionType<PayloadT: Any>(
     val kbJwtResponseClaimName: String = identifier,
     val iso18013RequestInfoIdentifier: String = identifier,
     val openId4VpMdocResponseNamespace: String = identifier,
-    val defaultIntentToRetain: Boolean = true,
 ) {
     /**
      * Returns the DeviceSigned namespace to use for the given presentment protocol.
@@ -162,30 +159,16 @@ abstract class TransactionType<PayloadT: Any>(
      * Parses transaction data serialized for use in ISO/IEC 18013-5 presentment.
      *
      * @param serialized the CBOR data item representing the transaction request.
-     * @param intentToRetain whether the verifier intends to retain the transaction data.
      * @return transaction data wrapping the parsed payload.
      */
-    open fun parseCbor(
-        serialized: DataItem,
-        intentToRetain: Boolean
-    ): TransactionData<PayloadT> {
+    open fun parseCbor(serialized: DataItem): TransactionData<PayloadT> {
         return TransactionData(
             type = this,
             payload = parseIso18013Request(serialized),
             protocol = TransactionProtocol.ISO_18013_5,
             rawBytes = ByteString(Cbor.encode(serialized)),
-            intentToRetain = intentToRetain,
         )
     }
-
-    /**
-     * Parses transaction data serialized for use in ISO/IEC 18013-5 presentment using [defaultIntentToRetain].
-     *
-     * @param serialized the CBOR data item representing the transaction request.
-     * @return transaction data wrapping the parsed payload.
-     */
-    open fun parseCbor(serialized: DataItem): TransactionData<PayloadT> =
-        parseCbor(serialized, defaultIntentToRetain)
 
     /**
      * Determines if this transaction is applicable to the given credential.

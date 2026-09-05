@@ -35,7 +35,6 @@ enum class TransactionProtocol {
  * @param protocol protocol context in which the transaction data was received
  * @param rawBytes raw sequence of bytes representing the transaction data in the request
  * @param hashAlgorithms accepted hash algorithm override list for this transaction data
- * @param intentToRetain whether the reader intends to retain the transaction data
  */
 class TransactionData<PayloadT: Any>(
     val type: TransactionType<PayloadT>,
@@ -43,7 +42,6 @@ class TransactionData<PayloadT: Any>(
     val protocol: TransactionProtocol,
     val rawBytes: ByteString,
     val hashAlgorithms: List<Algorithm>? = null,
-    val intentToRetain: Boolean = type.defaultIntentToRetain,
 ) {
     /**
      * Computes hash of the transaction data.

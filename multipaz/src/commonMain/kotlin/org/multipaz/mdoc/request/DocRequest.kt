@@ -95,7 +95,8 @@ data class DocRequest internal constructor(
     }
 
     /**
-     * Returns parsed transaction data associated with this document request.
+     * Returns parsed transaction data associated with this document request that was
+     * requested by data elements.
      *
      * @param documentTypeRepository repository that contains all supported transaction data types
      * @return list of transaction data
@@ -103,11 +104,27 @@ data class DocRequest internal constructor(
     fun getTransactionData(
         documentTypeRepository: DocumentTypeRepository
     ): List<TransactionData<*>> = buildList {
+        val requestedTxIdentifiers = mutableSetOf<String>()
+        nameSpaces[ISO_18013_TRANSACTION_DATA_NAMESPACE]?.keys?.let { requestedTxIdentifiers.addAll(it) }
+        docRequestInfo?.alternativeDataElements?.forEach { altSet ->
+            if (altSet.requestedElement.namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+                requestedTxIdentifiers.add(altSet.requestedElement.dataElement)
+            }
+            altSet.alternativeElementSets.forEach { elementRefs ->
+                elementRefs.forEach { elementRef ->
+                    if (elementRef.namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+                        requestedTxIdentifiers.add(elementRef.dataElement)
+                    }
+                }
+            }
+        }
         for (transactionType in documentTypeRepository.transactionTypes) {
-            docRequestInfo?.transactionData?.data[transactionType.iso18013RequestInfoIdentifier]?.let { data ->
-                val intentToRetain = nameSpaces[ISO_18013_TRANSACTION_DATA_NAMESPACE]?.get(transactionType.iso18013RequestInfoIdentifier)
-                    ?: transactionType.defaultIntentToRetain
-                add(transactionType.parseCbor(data, intentToRetain))
+            val typeId = transactionType.iso18013RequestInfoIdentifier
+            if (!requestedTxIdentifiers.contains(typeId)) {
+                continue
+            }
+            docRequestInfo?.transactionData?.data[typeId]?.let { data ->
+                add(transactionType.parseCbor(data))
             }
         }
     }

@@ -133,9 +133,19 @@ data class DeviceResponse internal constructor(
                 if (docRequestId < 0) {
                     emptyList()
                 } else {
-                    deviceRequest.docRequests[docRequestId].getTransactionData(
+                    val allTx = deviceRequest.docRequests[docRequestId].getTransactionData(
                         documentTypeRepository!!
                     )
+                    val returnedTxIdentifiers = document.deviceNamespaces.data[ISO_18013_TRANSACTION_DATA_NAMESPACE]?.keys
+                    if (deviceRequest.docRequests[docRequestId].docRequestInfo?.alternativeDataElements?.isNotEmpty() == true) {
+                        if (returnedTxIdentifiers != null) {
+                            allTx.filter { returnedTxIdentifiers.contains(it.type.identifier) }
+                        } else {
+                            emptyList()
+                        }
+                    } else {
+                        allTx
+                    }
                 }
             }
             document.verify(
@@ -158,9 +168,21 @@ data class DeviceResponse internal constructor(
                 if (docRequestId < 0) {
                     emptyList()
                 } else {
-                    deviceRequest.docRequests[docRequestId].getTransactionData(
+                    val allTx = deviceRequest.docRequests[docRequestId].getTransactionData(
                         documentTypeRepository!!
                     )
+                    if (deviceRequest.docRequests[docRequestId].docRequestInfo?.alternativeDataElements?.isNotEmpty() == true) {
+                        try {
+                            val sdJwtKb = SdJwtKb.fromCompactSerialization(
+                                otherDocument.data.toByteArray().zlibInflate().decodeToString()
+                            )
+                            allTx.filter { sdJwtKb.jwtBody.containsKey(it.type.kbJwtResponseClaimName) }
+                        } catch (e: Exception) {
+                            allTx
+                        }
+                    } else {
+                        allTx
+                    }
                 }
             }
             otherDocument.verify(sessionTranscript, eReaderKey, transactionData, atTime)
