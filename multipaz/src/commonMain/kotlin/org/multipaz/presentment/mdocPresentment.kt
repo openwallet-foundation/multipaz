@@ -236,7 +236,7 @@ suspend fun mdocPresentmentGenerateResponse(
                         eReaderKey = eReaderKey,
                         credential = match.credential,
                         requestedClaims = match.claims.keys.toList() as List<MdocRequestedClaim>,
-                        deviceNamespaces = computeTransactionResponse(match, selection.transactionUserInput),
+                        deviceNamespaces = computeTransactionResponse(match),
                         errors = mapOf()
                     )
 
@@ -319,7 +319,7 @@ suspend fun mdocPresentmentGenerateResponse(
                         credential = match.credential,
                         transactionData = match.transactionData,
                         docRequestId = match.source.docRequest.docRequestId,
-                        transactionUserInput = selection.transactionUserInput
+                        transactionUserInput = match.transactionUserInput
                     )
                     val sdJwtKb = filteredSdJwtVc.present(
                         signingKey = AsymmetricKey.AnonymousSecureAreaBased(
@@ -456,8 +456,7 @@ suspend fun mdocPresentment(
 }
 
 internal suspend fun computeTransactionResponse(
-    match: CredentialPresentmentSetOptionMemberMatch,
-    transactionUserInput: Map<String, TransactionUserInput>
+    match: CredentialPresentmentSetOptionMemberMatch
 ): DeviceNamespaces {
     if (match.transactionData.isEmpty()) {
         return buildDeviceNamespaces {}
@@ -470,7 +469,7 @@ internal suspend fun computeTransactionResponse(
         for (transaction in match.transactionData) {
             val responseMap = transaction.generateMdocResponseElements(
                 credential = match.credential,
-                userInput = transactionUserInput[transaction.type.identifier],
+                userInput = match.transactionUserInput[transaction.type.identifier],
                 docRequestId = docRequestId
             )
             val cborMap = buildCborMap {
@@ -485,7 +484,7 @@ internal suspend fun computeTransactionResponse(
         for (transaction in match.transactionData) {
             val responseMap = transaction.generateMdocResponseElements(
                 credential = match.credential,
-                userInput = transactionUserInput[transaction.type.identifier],
+                userInput = match.transactionUserInput[transaction.type.identifier],
                 docRequestId = null
             )
             val ns = transaction.type.getMdocResponseNamespace(TransactionProtocol.OPENID4VP)

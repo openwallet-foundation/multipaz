@@ -45,7 +45,7 @@ data class CredentialQueryResult(
                 matches.add(member.matches[0])
             }
         }
-        return CredentialSelection(matches = matches, transactionUserInput = emptyMap())
+        return CredentialSelection(matches = matches)
     }
 
     private fun pickFromPreselectedDocuments(preselectedDocuments: List<Document>): CredentialSelection? {
@@ -83,7 +83,7 @@ data class CredentialQueryResult(
                     }
                     chosenMatches.add(match)
                 }
-                return CredentialSelection(chosenMatches, emptyMap())
+                return CredentialSelection(chosenMatches)
             }
         }
         Logger.w(TAG, "Error picking combination for pre-selected documents")
@@ -123,7 +123,7 @@ data class CredentialQueryResult(
             path.forEachIndexed { setIndex, selectionIndex ->
                 allMatches.addAll(allSetSelections[setIndex][selectionIndex])
             }
-            finalSelections.add(CredentialSelection(allMatches, emptyMap()))
+            finalSelections.add(CredentialSelection(allMatches))
         }
         return finalSelections
     }

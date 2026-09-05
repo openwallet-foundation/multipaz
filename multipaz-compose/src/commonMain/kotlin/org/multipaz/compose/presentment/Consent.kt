@@ -129,6 +129,7 @@ import org.multipaz.multipaz_compose.generated.resources.credential_presentment_
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_warning_verifier_not_in_trust_list_website
 import org.multipaz.presentment.CredentialMatchSourceIso18013
 import org.multipaz.presentment.CredentialMatchSourceOpenID4VP
+import org.multipaz.presentment.CredentialPresentmentSetOptionMemberMatch
 import org.multipaz.presentment.CredentialSelection
 import org.multipaz.presentment.ConsentData
 import org.multipaz.presentment.ConsentUseCase
@@ -217,7 +218,7 @@ fun Consent(
 
     var selections by remember(initialSelections) { mutableStateOf(initialSelections) }
     var transactionUserInput by remember {
-        mutableStateOf(emptyMap<String, TransactionUserInput>())
+        mutableStateOf(emptyMap<CredentialPresentmentSetOptionMemberMatch, Map<String, TransactionUserInput>>())
     }
     var activeUseCaseIndex by remember { mutableStateOf(0) }
     var isFlipped by remember { mutableStateOf(false) }
@@ -294,8 +295,11 @@ fun Consent(
                                 newList[index] = value
                                 selections = newList
                             },
-                            onTransactionUserInputChanged = { type, userInput ->
-                                transactionUserInput = transactionUserInput.plus(type to userInput)
+                            onTransactionUserInputChanged = { match, type, userInput ->
+                                val current = transactionUserInput[match] ?: emptyMap()
+                                transactionUserInput = transactionUserInput.plus(
+                                    match to current.plus(type to userInput)
+                                )
                             },
                             onShowRequesterInfo = {
                                 navController.navigate("showRequesterInfo")
@@ -452,9 +456,9 @@ private fun ConsentPage(
     imageLoader: ImageLoader?,
     consentData: ConsentData,
     selections: List<Int>,
-    transactionUserInput: Map<String, TransactionUserInput>,
+    transactionUserInput: Map<CredentialPresentmentSetOptionMemberMatch, Map<String, TransactionUserInput>>,
     onSelectionChanged: (Int, Int) -> Unit,
-    onTransactionUserInputChanged: (String, TransactionUserInput) -> Unit,
+    onTransactionUserInputChanged: (CredentialPresentmentSetOptionMemberMatch, String, TransactionUserInput) -> Unit,
     onShowRequesterInfo: () -> Unit,
     onNavigateToPickSolution: (Int) -> Unit,
     onConfirm: (selection: CredentialSelection) -> Unit,
@@ -574,11 +578,11 @@ private fun UseCaseViewer(
     selectionIndex: Int,
     requester: Requester,
     requesterDisplayData: RequesterDisplayData,
-    transactionUserInput: Map<String, TransactionUserInput>,
+    transactionUserInput: Map<CredentialPresentmentSetOptionMemberMatch, Map<String, TransactionUserInput>>,
     trustMetadata: TrustMetadata?,
     appInfo: ApplicationInfo?,
     onSelectionChanged: (Int) -> Unit,
-    onTransactionUserInputChanged: (String, TransactionUserInput) -> Unit,
+    onTransactionUserInputChanged: (CredentialPresentmentSetOptionMemberMatch, String, TransactionUserInput) -> Unit,
     onNavigateToPickSolution: () -> Unit
 ) {
     val isSelected = selectionIndex >= 0
@@ -670,9 +674,10 @@ private fun UseCaseViewer(
                                     DisplayTransactionData(
                                         transactionData = data,
                                         hasClaims = hasClaims,
-                                        userInput = transactionUserInput[data.type.identifier],
+                                        userInput = transactionUserInput[credential.match]?.get(data.type.identifier),
                                         onUserInputChanged = { userInput ->
                                             onTransactionUserInputChanged.invoke(
+                                                credential.match,
                                                 data.type.identifier,
                                                 userInput
                                             )
