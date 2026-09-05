@@ -1008,7 +1008,8 @@ class DigitalCredentialsPresentmentTest {
             addDocRequest(
                 docType = "org.multipaz.payment.sca.1",
                 nameSpaces = mapOf(
-                    "org.multipaz.payment.sca.1" to mapOf("account_id" to false)
+                    "org.multipaz.payment.sca.1" to mapOf("account_id" to false),
+                    ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(PaymentTransaction.identifier to true)
                 ),
                 docRequestInfo = DocRequestInfo(
                     transactionData = TransactionsInfo(
@@ -1203,7 +1204,8 @@ class DigitalCredentialsPresentmentTest {
             addDocRequest(
                 docType = "org.multipaz.payment.sca.1",
                 nameSpaces = mapOf(
-                    "_" to mapOf("sdjwtvc_account_id" to false)
+                    "_" to mapOf("sdjwtvc_account_id" to false),
+                    ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(PaymentTransaction.identifier to true)
                 ),
                 docRequestInfo = DocRequestInfo(
                     docFormat = "dc+sd-jwt",

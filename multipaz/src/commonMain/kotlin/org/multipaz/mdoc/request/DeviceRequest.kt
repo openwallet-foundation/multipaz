@@ -314,23 +314,10 @@ data class DeviceRequest private constructor(
             check(readerAuthAll.isEmpty()) {
                 "Cannot call addDocRequest() after addReaderAuthAll()"
             }
-            val effectiveNameSpaces = if (docRequestInfo?.transactionData != null) {
-                val txData = docRequestInfo.transactionData
-                val mutableNamespaces = nameSpaces.mapValues { it.value.toMutableMap() }.toMutableMap()
-                val txElements = mutableNamespaces.getOrPut(ISO_18013_TRANSACTION_DATA_NAMESPACE) { mutableMapOf() }
-                for ((typeId, _) in txData.data) {
-                    if (!txElements.containsKey(typeId)) {
-                        txElements[typeId] = true
-                    }
-                }
-                mutableNamespaces
-            } else {
-                nameSpaces
-            }
             val itemsRequest = buildCborMap {
                 put("docType", docType)
                 putCborMap("nameSpaces") {
-                    for ((namespaceName, dataElementMap) in effectiveNameSpaces) {
+                    for ((namespaceName, dataElementMap) in nameSpaces) {
                         putCborMap(namespaceName) {
                             for ((dataElementName, intentToRetain) in dataElementMap) {
                                 put(dataElementName, intentToRetain)
@@ -349,7 +336,7 @@ data class DeviceRequest private constructor(
             docRequests.add(
                 DocRequest(
                     docType = docType,
-                    nameSpaces = effectiveNameSpaces,
+                    nameSpaces = nameSpaces,
                     docRequestInfo = docRequestInfo,
                     docRequestId = docRequests.size,
                     readerAuth_ = null,
@@ -382,23 +369,10 @@ data class DeviceRequest private constructor(
             check(readerAuthAll.isEmpty()) {
                 "Cannot call addDocRequest() after addReaderAuthAll()"
             }
-            val effectiveNameSpaces = if (docRequestInfo?.transactionData != null) {
-                val txData = docRequestInfo.transactionData
-                val mutableNamespaces = nameSpaces.mapValues { it.value.toMutableMap() }.toMutableMap()
-                val txElements = mutableNamespaces.getOrPut(ISO_18013_TRANSACTION_DATA_NAMESPACE) { mutableMapOf() }
-                for ((typeId, _) in txData.data) {
-                    if (!txElements.containsKey(typeId)) {
-                        txElements[typeId] = true
-                    }
-                }
-                mutableNamespaces
-            } else {
-                nameSpaces
-            }
             val itemsRequest = buildCborMap {
                 put("docType", docType)
                 putCborMap("nameSpaces") {
-                    for ((namespaceName, dataElementMap) in effectiveNameSpaces) {
+                    for ((namespaceName, dataElementMap) in nameSpaces) {
                         putCborMap(namespaceName) {
                             for ((dataElementName, intentToRetain) in dataElementMap) {
                                 put(dataElementName, intentToRetain)
@@ -442,7 +416,7 @@ data class DeviceRequest private constructor(
             }
             docRequests.add(DocRequest(
                 docType = docType,
-                nameSpaces = effectiveNameSpaces,
+                nameSpaces = nameSpaces,
                 docRequestInfo = docRequestInfo,
                 docRequestId = docRequests.size,
                 readerAuth_ = readerAuth,
@@ -839,9 +813,6 @@ data class DeviceRequest private constructor(
         val logicalRequirements = mutableListOf<List<List<MdocRequestedClaim>>>()
 
         docRequest.nameSpaces.forEach { (namespace, dataElements) ->
-            if (namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
-                return@forEach
-            }
             dataElements.forEach { (elementName, intentToRetain) ->
                 // Base Option (Index 0)
                 val baseClaim = MdocRequestedClaim(
@@ -882,42 +853,54 @@ data class DeviceRequest private constructor(
         if (isVersion10) {
             val matchingClaimValues = mutableMapOf<RequestedClaim, Claim>()
             val requestedClaimsRemapped = mutableListOf<RequestedClaim>()
+            val selectedTransactions = mutableListOf<TransactionData<*>>()
             val missingElements = mutableListOf<String>()
+            var transactionFailureReason: String? = null
 
             for (fieldOptions in logicalRequirements) {
                 val baseClaim = fieldOptions[0][0]
-                val remapped = remapClaim(cred, baseClaim, docRequest)
-                val foundClaim = remapped?.let { claimsInCredential.findMatchingClaim(it) }
-                if (remapped != null && foundClaim != null) {
-                    matchingClaimValues[baseClaim] = foundClaim
-                    requestedClaimsRemapped.add(remapped)
+                if (baseClaim.namespaceName == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+                    val applicableTx = findApplicableTransaction(
+                        cred = cred,
+                        reqClaim = baseClaim,
+                        docRequest = docRequest,
+                        documentTypeRepository = presentmentSource.documentTypeRepository
+                    )
+                    if (applicableTx != null) {
+                        selectedTransactions.add(applicableTx)
+                    } else {
+                        if (docRequest.docRequestInfo?.transactionData?.data?.containsKey(baseClaim.dataElementName) == true) {
+                            if (transactionFailureReason == null) {
+                                transactionFailureReason = "transaction ${baseClaim.dataElementName} is not applicable"
+                            }
+                        }
+                        missingElements.add("'${baseClaim.dataElementName}' in namespace '${baseClaim.namespaceName}'")
+                    }
                 } else {
-                    missingElements.add("'${baseClaim.dataElementName}' in namespace '${baseClaim.namespaceName}'")
+                    val remapped = remapClaim(cred, baseClaim, docRequest)
+                    val foundClaim = remapped?.let { claimsInCredential.findMatchingClaim(it) }
+                    if (remapped != null && foundClaim != null) {
+                        matchingClaimValues[baseClaim] = foundClaim
+                        requestedClaimsRemapped.add(remapped)
+                    } else {
+                        missingElements.add("'${baseClaim.dataElementName}' in namespace '${baseClaim.namespaceName}'")
+                    }
                 }
             }
 
+            if (transactionFailureReason != null) {
+                return ClaimMatchResult(null, transactionFailureReason)
+            }
+
             // In ISO 18013-5:2021 (v1.0), the request is satisfied if at least one requested element is present
-            if ((logicalRequirements.isNotEmpty() && matchingClaimValues.isEmpty()) ||
-                (logicalRequirements.isEmpty() && !docRequest.nameSpaces.containsKey(ISO_18013_TRANSACTION_DATA_NAMESPACE))) {
+            if ((logicalRequirements.isNotEmpty() && matchingClaimValues.isEmpty() && selectedTransactions.isEmpty()) ||
+                logicalRequirements.isEmpty()) {
                 val reason = if (missingElements.size == 1) {
                     "missing data element ${missingElements[0]}"
                 } else {
                     "missing data elements: ${missingElements.joinToString(", ")}"
                 }
                 return ClaimMatchResult(null, reason)
-            }
-
-            val transactionData = extractTransactionData(
-                docRequest.docRequestInfo,
-                presentmentSource.documentTypeRepository
-            )
-            for (transaction in transactionData) {
-                if (!transaction.isApplicable(cred)) {
-                    return ClaimMatchResult(
-                        match = null,
-                        failureReason = "transaction ${transaction.type.identifier} is not applicable"
-                    )
-                }
             }
 
             val selectedCred = presentmentSource.selectCredential(
@@ -931,7 +914,7 @@ data class DeviceRequest private constructor(
                         credential = selectedCred,
                         claims = matchingClaimValues,
                         docRequest = docRequest,
-                        transactionData = transactionData
+                        transactionData = selectedTransactions
                     ),
                     failureReason = null
                 )
@@ -942,39 +925,39 @@ data class DeviceRequest private constructor(
         // For Version 1.1+: all requested data elements (or alternatives) must be present
         // Check if all logical requirements can be satisfied by the credential
         val missingElements = mutableListOf<String>()
+        var transactionFailureReason: String? = null
         for (fieldOptions in logicalRequirements) {
             val anyOptionSatisfied = fieldOptions.any { optionClaims ->
                 optionClaims.all { reqClaim ->
-                    val remapped = remapClaim(cred, reqClaim, docRequest)
-                    remapped != null && claimsInCredential.findMatchingClaim(remapped) != null
+                    isClaimSatisfied(
+                        cred = cred,
+                        reqClaim = reqClaim,
+                        docRequest = docRequest,
+                        claimsInCredential = claimsInCredential,
+                        documentTypeRepository = presentmentSource.documentTypeRepository
+                    )
                 }
             }
             if (!anyOptionSatisfied) {
                 val baseClaim = fieldOptions[0][0]
+                if (baseClaim.namespaceName == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+                    if (transactionFailureReason == null) {
+                        transactionFailureReason = "transaction ${baseClaim.dataElementName} is not applicable"
+                    }
+                }
                 missingElements.add("'${baseClaim.dataElementName}' in namespace '${baseClaim.namespaceName}'")
             }
         }
 
         if (missingElements.isNotEmpty()) {
-            val reason = if (missingElements.size == 1) {
+            val reason = if (transactionFailureReason != null && missingElements.size == 1) {
+                transactionFailureReason
+            } else if (missingElements.size == 1) {
                 "missing data element ${missingElements[0]}"
             } else {
                 "missing data elements: ${missingElements.joinToString(", ")}"
             }
             return ClaimMatchResult(null, reason)
-        }
-
-        val transactionData = extractTransactionData(
-            docRequest.docRequestInfo,
-            presentmentSource.documentTypeRepository
-        )
-        for (transaction in transactionData) {
-            if (!transaction.isApplicable(cred)) {
-                return ClaimMatchResult(
-                    match = null,
-                    failureReason = "transaction ${transaction.type.identifier} is not applicable"
-                )
-            }
         }
 
         // 2. Generate Permutations (Cartesian Product of Options)
@@ -1008,22 +991,37 @@ data class DeviceRequest private constructor(
         for ((requestedClaims, _) in allPermutations) {
             val matchingClaimValues = mutableMapOf<RequestedClaim, Claim>()
             val requestedClaimsRemapped = mutableListOf<RequestedClaim>()
+            val selectedTransactions = mutableListOf<TransactionData<*>>()
             var didNotMatch = false
 
             for (reqClaim in requestedClaims) {
-                val reqClaimRemapped = remapClaim(cred, reqClaim, docRequest)
-                if (reqClaimRemapped == null) {
-                    didNotMatch = true
-                    break
-                }
-                requestedClaimsRemapped.add(reqClaimRemapped)
-
-                val foundClaim = claimsInCredential.findMatchingClaim(reqClaimRemapped)
-                if (foundClaim != null) {
-                    matchingClaimValues[reqClaim] = foundClaim
+                if (reqClaim.namespaceName == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+                    val applicableTx = findApplicableTransaction(
+                        cred = cred,
+                        reqClaim = reqClaim,
+                        docRequest = docRequest,
+                        documentTypeRepository = presentmentSource.documentTypeRepository
+                    )
+                    if (applicableTx == null) {
+                        didNotMatch = true
+                        break
+                    }
+                    selectedTransactions.add(applicableTx)
                 } else {
-                    didNotMatch = true
-                    break
+                    val reqClaimRemapped = remapClaim(cred, reqClaim, docRequest)
+                    if (reqClaimRemapped == null) {
+                        didNotMatch = true
+                        break
+                    }
+                    requestedClaimsRemapped.add(reqClaimRemapped)
+
+                    val foundClaim = claimsInCredential.findMatchingClaim(reqClaimRemapped)
+                    if (foundClaim != null) {
+                        matchingClaimValues[reqClaim] = foundClaim
+                    } else {
+                        didNotMatch = true
+                        break
+                    }
                 }
             }
 
@@ -1040,7 +1038,7 @@ data class DeviceRequest private constructor(
                             credential = selectedCred,
                             claims = matchingClaimValues,
                             docRequest = docRequest,
-                            transactionData = transactionData
+                            transactionData = selectedTransactions
                         ),
                         failureReason = null
                     )
@@ -1051,18 +1049,36 @@ data class DeviceRequest private constructor(
         return ClaimMatchResult(null, null)
     }
 
-    private fun extractTransactionData(
-        requestInfo: DocRequestInfo?,
-        documentTypeRepository: DocumentTypeRepository?
-    ): List<TransactionData<*>> {
-        if (requestInfo == null || documentTypeRepository == null || requestInfo.transactionData == null) {
-            return emptyList()
+    private suspend fun findApplicableTransaction(
+        cred: Credential,
+        reqClaim: MdocRequestedClaim,
+        docRequest: DocRequest,
+        documentTypeRepository: DocumentTypeRepository?,
+    ): TransactionData<*>? {
+        if (reqClaim.namespaceName != ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+            return null
         }
-        return requestInfo.transactionData.data.map { (type, data) ->
-            val knownType = documentTypeRepository.transactionTypes.find {
-                it.iso18013RequestInfoIdentifier == type
-            } ?: throw IllegalArgumentException("Unknown transaction type: '$type'")
-            knownType.parseCbor(data)
+        val txData = docRequest.docRequestInfo?.transactionData ?: return null
+        val serialized = txData.data[reqClaim.dataElementName] ?: return null
+        val txType = documentTypeRepository?.transactionTypes?.find {
+            it.iso18013RequestInfoIdentifier == reqClaim.dataElementName
+        } ?: return null
+        val parsed = txType.parseCbor(serialized)
+        return if (parsed.isApplicable(cred)) parsed else null
+    }
+
+    private suspend fun isClaimSatisfied(
+        cred: Credential,
+        reqClaim: MdocRequestedClaim,
+        docRequest: DocRequest,
+        claimsInCredential: List<Claim>,
+        documentTypeRepository: DocumentTypeRepository?,
+    ): Boolean {
+        return if (reqClaim.namespaceName == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+            findApplicableTransaction(cred, reqClaim, docRequest, documentTypeRepository) != null
+        } else {
+            val remapped = remapClaim(cred, reqClaim, docRequest)
+            remapped != null && claimsInCredential.findMatchingClaim(remapped) != null
         }
     }
 
@@ -1237,6 +1253,9 @@ private fun JsonArrayBuilder.addDcqlCredentialRequest(docRequest: DocRequest, cr
         val logicalRequirements = mutableListOf<List<List<String>>>()
 
         docRequest.nameSpaces.forEach { (namespace, dataElements) ->
+            if (namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+                return@forEach
+            }
             dataElements.forEach { (elementName, intentToRetain) ->
 
                 // Start with Option 0: The base requested element
@@ -1251,11 +1270,17 @@ private fun JsonArrayBuilder.addDcqlCredentialRequest(docRequest: DocRequest, cr
 
                 // If alternatives exist, add them as subsequent options (Option 1, Option 2...)
                 alternatives?.alternativeElementSets?.forEach { altSet ->
-                    val altOptionClaimIds = altSet.map { altElement ->
-                        // Register alternative claims using the intent of the original requirement
-                        registerClaim(altElement.namespace, altElement.dataElement, intentToRetain)
+                    val altOptionClaimIds = altSet.mapNotNull { altElement ->
+                        if (altElement.namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+                            null
+                        } else {
+                            // Register alternative claims using the intent of the original requirement
+                            registerClaim(altElement.namespace, altElement.dataElement, intentToRetain)
+                        }
                     }
-                    optionsForThisField.add(altOptionClaimIds)
+                    if (altOptionClaimIds.isNotEmpty()) {
+                        optionsForThisField.add(altOptionClaimIds)
+                    }
                 }
 
                 logicalRequirements.add(optionsForThisField)
@@ -1340,6 +1365,7 @@ inline fun buildDeviceRequest(
  * @param dcql the DCQL query to convert.
  * @param otherInfo other request info to go into [DeviceRequestInfo].
  * @param transactions transaction data to add to [DocRequestInfo].
+ * @param defaultIntentToRetain the intent to retain to use when requesting transactions in ISO 18013-5 namespace.
  * @param version the version to use or `null` to automatically determine which version to use.
  * @param builderAction optional builder action to configure the request (e.g. add reader authentication).
  * @return the configured [DeviceRequest].
@@ -1352,6 +1378,7 @@ inline fun buildDeviceRequestFromDcql(
     dcql: JsonObject,
     otherInfo: Map<String, DataItem> = emptyMap(),
     transactions: Map<String, TransactionsInfo> = emptyMap(),
+    defaultIntentToRetain: Boolean = false,
     version: String? = null,
     builderAction: DeviceRequest.Builder.() -> Unit = {}
 ): DeviceRequest {
@@ -1363,7 +1390,7 @@ inline fun buildDeviceRequestFromDcql(
         deviceRequestInfo = deviceRequestInfo,
         version = version,
     )
-    deviceRequestAddQueries(dcqlQuery, transactions, builder)
+    deviceRequestAddQueries(dcqlQuery, transactions, builder, defaultIntentToRetain)
     builder.builderAction()
     return builder.build()
 }
@@ -1377,6 +1404,7 @@ inline fun buildDeviceRequestFromDcql(
  * @param dcqlString a string with the DCQL query to convert.
  * @param otherInfo other request info to go into [DeviceRequestInfo].
  * @param transactions transaction data to add to [DocRequestInfo].
+ * @param defaultIntentToRetain the intent to retain to use when requesting transactions in ISO 18013-5 namespace.
  * @param version the version to use or `null` to automatically determine which version to use.
  * @param builderAction optional builder action to configure the request (e.g. add reader authentication).
  * @return the configured [DeviceRequest].
@@ -1389,6 +1417,7 @@ inline fun buildDeviceRequestFromDcql(
     dcqlString: String,
     otherInfo: Map<String, DataItem> = emptyMap(),
     transactions: Map<String, TransactionsInfo> = emptyMap(),
+    defaultIntentToRetain: Boolean = false,
     version: String? = null,
     builderAction: DeviceRequest.Builder.() -> Unit = {}
 ): DeviceRequest {
@@ -1397,6 +1426,7 @@ inline fun buildDeviceRequestFromDcql(
         dcql = Json.decodeFromString<JsonObject>(dcqlString),
         otherInfo = otherInfo,
         transactions = transactions,
+        defaultIntentToRetain = defaultIntentToRetain,
         version = version,
         builderAction = builderAction
     )
@@ -1453,7 +1483,8 @@ internal fun deviceRequestCalcDeviceRequestInfo(
 internal fun deviceRequestAddQueries(
     dcqlQuery: DcqlQuery,
     transactions: Map<String, TransactionsInfo>,
-    builder: DeviceRequest.Builder
+    builder: DeviceRequest.Builder,
+    defaultIntentToRetain: Boolean = false
 ) {
     for (credQuery in dcqlQuery.credentialQueries) {
         if (!(credQuery.format == "mso_mdoc" || credQuery.format == "mso_mdoc_zk" ||
@@ -1629,6 +1660,14 @@ internal fun deviceRequestAddQueries(
         }
 
         val docTransactions = transactions[credQuery.id]
+        if (docTransactions != null) {
+            val txElements = nameSpaces.getOrPut(ISO_18013_TRANSACTION_DATA_NAMESPACE) { mutableMapOf() }
+            for (typeId in docTransactions.data.keys) {
+                if (!txElements.containsKey(typeId)) {
+                    txElements[typeId] = defaultIntentToRetain
+                }
+            }
+        }
         val docRequestInfo = if (alternativeDataElements.isNotEmpty()
             || zkRequest != null || docTransactions != null || credQuery.format == "dc+sd-jwt"
             || dataElementIdentifierMapping.isNotEmpty()

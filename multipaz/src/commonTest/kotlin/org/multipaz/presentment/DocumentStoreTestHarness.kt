@@ -260,6 +260,7 @@ class DocumentStoreTestHarness {
         docType: String,
         data: Map<String, List<Pair<String, DataItem>>>,
         keyAuthorizedNamespaces: List<String> = listOf(),
+        keyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
         dsKey: AsymmetricKey.X509Certified? = null,
         readerIdentifiers: List<ByteString> = emptyList(),
     ): Document {
@@ -286,7 +287,8 @@ class DocumentStoreTestHarness {
             validFrom = validFrom,
             validUntil = validUntil,
             dsKey = effectiveDsKey,
-            keyAuthorizedNamespaces = keyAuthorizedNamespaces
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces,
+            keyAuthorizedDataElements = keyAuthorizedDataElements,
         )
         return document
     }
@@ -504,7 +506,8 @@ class DocumentStoreTestHarness {
         validFrom: Instant,
         validUntil: Instant,
         dsKey: AsymmetricKey.X509Certified,
-        keyAuthorizedNamespaces: List<String>
+        keyAuthorizedNamespaces: List<String>,
+        keyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     ) {
         // Create authentication keys...
         val mdocCredential = MdocCredential.create(
@@ -527,7 +530,8 @@ class DocumentStoreTestHarness {
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = mdocCredential.getAttestation().publicKey,
-            deviceKeyAuthorizedNamespaces = keyAuthorizedNamespaces
+            deviceKeyAuthorizedNamespaces = keyAuthorizedNamespaces,
+            deviceKeyAuthorizedDataElements = keyAuthorizedDataElements,
         )
         val taggedEncodedMso = Cbor.encode(Tagged(
             Tagged.ENCODED_CBOR,

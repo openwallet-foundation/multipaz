@@ -5,7 +5,10 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
+import org.multipaz.documenttype.knowntypes.DrivingLicense
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -979,6 +982,116 @@ class DeviceRequestDcqlConversionsTest {
                 }
             """.trimIndent(),
             prettyJson.encodeToString(deviceRequest.toDcql())
+        )
+    }
+
+    @Test
+    fun toDcql_omitsTransactionDataNamespace() {
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = buildCborArray { add("doesn't"); add("matter") }
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false),
+                    ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf("com.example.txA" to false)
+                ),
+                docRequestInfo = DocRequestInfo(
+                    alternativeDataElements = listOf(
+                        AlternativeDataElementSet(
+                            requestedElement = ElementReference(
+                                ISO_18013_TRANSACTION_DATA_NAMESPACE,
+                                "com.example.txA"
+                            ),
+                            alternativeElementSets = listOf(
+                                listOf(
+                                    ElementReference(
+                                        ISO_18013_TRANSACTION_DATA_NAMESPACE,
+                                        "com.example.txB"
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        }
+        val dcql = deviceRequest.toDcql()
+        assertEquals(
+            """
+                {
+                  "credentials": [
+                    {
+                      "id": "cred0",
+                      "format": "mso_mdoc",
+                      "meta": {
+                        "doctype_value": "org.iso.18013.5.1.mDL"
+                      },
+                      "claims": [
+                        {
+                          "id": "claim0",
+                          "path": [
+                            "org.iso.18013.5.1",
+                            "given_name"
+                          ],
+                          "intent_to_retain": false
+                        }
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent(),
+            prettyJson.encodeToString(dcql)
+        )
+    }
+
+    @Test
+    fun fromDcql_withTransactions_addsToNameSpaces() {
+        val pingTxData = Tstr("ping_data")
+        val dcqlString = """
+            {
+              "credentials": [
+                {
+                  "id": "mdl",
+                  "format": "mso_mdoc",
+                  "meta": {
+                    "doctype_value": "org.iso.18013.5.1.mDL"
+                  },
+                  "claims": [
+                    {"id": "c0", "path": ["org.iso.18013.5.1", "given_name"]}
+                  ]
+                }
+              ]
+            }
+        """.trimIndent()
+
+        // Test defaultIntentToRetain = false (default)
+        val deviceRequestDefault = buildDeviceRequestFromDcql(
+            sessionTranscript = buildCborArray { add("test") },
+            dcqlString = dcqlString,
+            transactions = mapOf(
+                "mdl" to TransactionsInfo(mapOf("org.multipaz.transaction.ping" to pingTxData))
+            )
+        )
+        val docReqDefault = deviceRequestDefault.docRequests[0]
+        assertEquals(
+            mapOf("org.multipaz.transaction.ping" to false),
+            docReqDefault.nameSpaces[ISO_18013_TRANSACTION_DATA_NAMESPACE]
+        )
+
+        // Test defaultIntentToRetain = true
+        val deviceRequestRetain = buildDeviceRequestFromDcql(
+            sessionTranscript = buildCborArray { add("test") },
+            dcqlString = dcqlString,
+            transactions = mapOf(
+                "mdl" to TransactionsInfo(mapOf("org.multipaz.transaction.ping" to pingTxData))
+            ),
+            defaultIntentToRetain = true
+        )
+        val docReqRetain = deviceRequestRetain.docRequests[0]
+        assertEquals(
+            mapOf("org.multipaz.transaction.ping" to true),
+            docReqRetain.nameSpaces[ISO_18013_TRANSACTION_DATA_NAMESPACE]
         )
     }
 }
