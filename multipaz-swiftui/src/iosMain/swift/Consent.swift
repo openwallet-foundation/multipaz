@@ -468,7 +468,7 @@ public struct Consent: View {
 
     @State private var path = NavigationPath()
     @State private var selections: [Int] = []
-    @State private var transactionUserInput: [String: TransactionUserInput] = [:]
+    @State private var transactionUserInput: [CredentialPresentmentSetOptionMemberMatch: [String: TransactionUserInput]] = [:]
     @State private var sheetHeight: CGFloat = 450
 
     private func getDocumentsForSelections(_ selections: [Int]) -> [Document] {
@@ -693,7 +693,7 @@ private struct ConsentMain: View {
     let requester: Requester
     let trustMetadata: TrustMetadata?
     let selections: [Int]
-    @Binding var transactionUserInput: [String: TransactionUserInput]
+    @Binding var transactionUserInput: [CredentialPresentmentSetOptionMemberMatch: [String: TransactionUserInput]]
     @Binding var sheetHeight: CGFloat
     let isActive: Bool
     let onRequesterClicked: () -> Void
@@ -723,8 +723,10 @@ private struct ConsentMain: View {
                                 useCase: consentData.useCases[idx],
                                 selectionIndex: selections[idx],
                                 transactionUserInput: transactionUserInput,
-                                onTransactionUserInputChanged: { typeId, input in
-                                    transactionUserInput[typeId] = input
+                                onTransactionUserInputChanged: { match, typeId, input in
+                                    var current = transactionUserInput[match] ?? [:]
+                                    current[typeId] = input
+                                    transactionUserInput[match] = current
                                 },
                                 onNavigateToPickSolution: {
                                     onNavigateToPickSolution(idx)
@@ -799,8 +801,8 @@ private struct UseCaseSection: View {
     let trustMetadata: TrustMetadata?
     let useCase: ConsentUseCase
     let selectionIndex: Int
-    let transactionUserInput: [String: TransactionUserInput]
-    let onTransactionUserInputChanged: (String, TransactionUserInput) -> Void
+    let transactionUserInput: [CredentialPresentmentSetOptionMemberMatch: [String: TransactionUserInput]]
+    let onTransactionUserInputChanged: (CredentialPresentmentSetOptionMemberMatch, String, TransactionUserInput) -> Void
     let onNavigateToPickSolution: () -> Void
 
     var body: some View {
@@ -882,8 +884,10 @@ private struct UseCaseSection: View {
                                     retainedClaims: retainedClaims,
                                     notRetainedClaims: notRetainedClaims,
                                     transactionData: match.transactionData,
-                                    transactionUserInput: transactionUserInput,
-                                    onTransactionUserInputChanged: onTransactionUserInputChanged,
+                                    transactionUserInput: transactionUserInput[match] ?? [:],
+                                    onTransactionUserInputChanged: { typeId, input in
+                                        onTransactionUserInputChanged(match, typeId, input)
+                                    },
                                     showOptionsButton: showChevron && (credIdx == 0),
                                     onOptionsTapped: onNavigateToPickSolution
                                 )

@@ -28,13 +28,13 @@ data class ConsentData private constructor(
      * Calculates a [CredentialSelection] from a list of selections.
      *
      * @param selections the solution selected for each use-case or -1 if not selecting an optional use-case.
-     * @param transactionUserInput additional user input for transactions, indexed by the transaction
-     *  type identifier
+     * @param transactionUserInput additional user input for transactions, indexed by credential match and transaction
+     *  type identifier.
      * @return a [CredentialSelection].
      */
     fun toCredentialSelection(
         selections: List<Int>,
-        transactionUserInput: Map<String, TransactionUserInput>
+        transactionUserInput: Map<CredentialPresentmentSetOptionMemberMatch, Map<String, TransactionUserInput>> = emptyMap()
     ): CredentialSelection {
         require(selections.size == useCases.size) {
             "Expected selectionPerUseCase length to be that of useCases"
@@ -50,11 +50,12 @@ data class ConsentData private constructor(
                 solution.credentials.forEach { credential ->
                     // TODO: In the future, if encryption is requested, we may need to pass that
                     // information along in the selection or a separate structure.
-                    matches.add(credential.match)
+                    val input = transactionUserInput[credential.match] ?: emptyMap()
+                    matches.add(credential.match.copy(transactionUserInput = input))
                 }
             }
         }
-        return CredentialSelection(matches, transactionUserInput)
+        return CredentialSelection(matches)
     }
 
     companion object {

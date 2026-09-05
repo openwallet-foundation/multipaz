@@ -1,7 +1,6 @@
 package org.multipaz.presentment
 
 import org.multipaz.documenttype.DocumentAttributeSensitivity
-import org.multipaz.documenttype.TransactionUserInput
 
 /**
  * A selection of credentials and claims in a [CredentialQueryResult].
@@ -12,12 +11,9 @@ import org.multipaz.documenttype.TransactionUserInput
  * This is typically returned from a consent prompt user interface.
  *
  * @property matches the list of credentials and claims to return to the relying party.
- * @property transactionUserInput additional user input for transactions, indexed by the transaction
- *  type identifier
  */
 data class CredentialSelection(
-    val matches: List<CredentialPresentmentSetOptionMemberMatch>,
-    val transactionUserInput: Map<String, TransactionUserInput>
+    val matches: List<CredentialPresentmentSetOptionMemberMatch>
 ) {
 
     /**

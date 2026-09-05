@@ -519,8 +519,7 @@ object OpenID4VP {
                     nonce = nonce,
                     reReaderPublicKey = reReaderPublicKey,
                     responseUri = responseUri,
-                    requestIsForZk = requestIsForZk,
-                    transactionUserInput = selection.transactionUserInput
+                    requestIsForZk = requestIsForZk
                 )
             } else if (match.source.credentialQuery.vctValues != null) {
                 openID4VPSdJwt(
@@ -529,8 +528,7 @@ object OpenID4VP {
                     origin = origin,
                     clientId = clientId,
                     nonce = nonce,
-                    responseMode = responseMode,
-                    transactionUserInput = selection.transactionUserInput
+                    responseMode = responseMode
                 )
             } else {
                 throw IllegalArgumentException("Expected ISO mdoc or IETF SD-JWT, got neither")
@@ -615,7 +613,6 @@ object OpenID4VP {
         reReaderPublicKey: EcPublicKey?,
         responseUri: String?,
         requestIsForZk: Boolean,
-        transactionUserInput: Map<String, TransactionUserInput>,
         onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
     ): String {
         match.source as CredentialMatchSourceOpenID4VP
@@ -721,7 +718,7 @@ object OpenID4VP {
             sessionTranscript = Cbor.decode(encodedSessionTranscript),
             credential = mdocCredential,
             requestedClaims = match.source.credentialQuery.claims as List<MdocRequestedClaim>,
-            deviceNamespaces = computeTransactionResponse(match, transactionUserInput)
+            deviceNamespaces = computeTransactionResponse(match)
         )
         val deviceResponse = buildDeviceResponse(
             sessionTranscript = Cbor.decode(encodedSessionTranscript),
@@ -802,8 +799,7 @@ object OpenID4VP {
         origin: String?,
         clientId: String,
         nonce: String,
-        responseMode: ResponseMode,
-        transactionUserInput: Map<String, TransactionUserInput>
+        responseMode: ResponseMode
     ): String {
         match.source as CredentialMatchSourceOpenID4VP
         val sdjwtVcCredential = match.credential as SdJwtVcCredential
@@ -815,7 +811,7 @@ object OpenID4VP {
 
         (sdjwtVcCredential as Credential).increaseUsageCount()
 
-        val transactionResponse = processTransactions(sdjwtVcCredential, match.transactionData, transactionUserInput)
+        val transactionResponse = processTransactions(sdjwtVcCredential, match.transactionData, match.transactionUserInput)
 
         return if (sdjwtVcCredential is SecureAreaBoundCredential) {
             filteredSdJwt.present(

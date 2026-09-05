@@ -54,8 +54,11 @@ import org.multipaz.documenttype.TransactionType
 import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.mdoc.devicesigned.DeviceAuth
+import org.multipaz.mdoc.request.DeviceRequestInfo
 import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.DocumentSet
 import org.multipaz.mdoc.request.TransactionsInfo
+import org.multipaz.mdoc.request.UseCase
 import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.util.MdocUtil
@@ -277,9 +280,14 @@ class DigitalCredentialsPresentmentTest {
         documentTypeRepository = documentTypeRepository
     ) {
         var tipPercent: Double? = null
+        val tipPercentByCredential = mutableMapOf<Credential, Double>()
 
         fun insertTip(tipPercent: Double) {
             this.tipPercent = tipPercent
+        }
+
+        fun insertTipForCredential(credential: Credential, tipPercent: Double) {
+            tipPercentByCredential[credential] = tipPercent
         }
 
         private val delegate = SimplePresentmentSource(
@@ -300,13 +308,38 @@ class DigitalCredentialsPresentmentTest {
             preselectedDocuments: List<Document>,
             onDocumentsInFocus: (documents: List<Document>) -> Unit
         ): CredentialSelection? {
-            val ret = consentData.credentialQueryResult.select(preselectedDocuments)
-            onDocumentsInFocus(ret.matches.map { it.credential.document })
-            val userInputMap = mutableMapOf<String, TransactionUserInput>()
-            tipPercent?.let { tip ->
-                userInputMap[PaymentTransaction.identifier] = PaymentTransaction.UserInput(tipPercent = tip)
+            val selections = consentData.useCases.mapIndexed { useCaseIndex, useCase ->
+                if (preselectedDocuments.isNotEmpty()) {
+                    val targetDoc = preselectedDocuments.getOrNull(useCaseIndex)
+                    if (targetDoc != null) {
+                        val matchingIndex = useCase.solutions.indexOfFirst { solution ->
+                            solution.credentials.any { it.match.credential.document == targetDoc }
+                        }
+                        if (matchingIndex != -1) matchingIndex else 0
+                    } else {
+                        0
+                    }
+                } else {
+                    if (useCase.solutions.isNotEmpty()) 0 else -1
+                }
             }
-            return ret.copy(transactionUserInput = userInputMap)
+            val userInput = mutableMapOf<CredentialPresentmentSetOptionMemberMatch, Map<String, TransactionUserInput>>()
+            consentData.useCases.forEachIndexed { index, useCase ->
+                val selection = selections[index]
+                if (selection >= 0 && selection < useCase.solutions.size) {
+                    for (cred in useCase.solutions[selection].credentials) {
+                        val tip = tipPercentByCredential[cred.match.credential] ?: tipPercent
+                        if (tip != null) {
+                            userInput[cred.match] = mapOf(
+                                PaymentTransaction.identifier to PaymentTransaction.UserInput(tipPercent = tip)
+                            )
+                        }
+                    }
+                }
+            }
+            val ret = consentData.toCredentialSelection(selections, userInput)
+            onDocumentsInFocus(ret.matches.map { it.credential.document })
+            return ret
         }
 
         override suspend fun getBadges(document: Document): List<DocumentBadge> =
@@ -1452,8 +1485,8 @@ class DigitalCredentialsPresentmentTest {
         val sdJwtKb = SdJwtKb.fromCompactSerialization(compactSerialization)
 
         val transactionData = source.documentTypeRepository.parseJsonTransactions(
-            base64UrlEncodedJson = listOf(requestJsonString.encodeToByteArray().toBase64Url())
-        ).values.first()
+            base64UrlEncodedJson = request["transaction_data"]!!.jsonArray.map { it.jsonPrimitive.content }
+        )["payment_credential"]!!
 
         sdJwtKb.verify(
             issuerKey = documentStoreTestHarness.dsKey.publicKey,
@@ -1618,8 +1651,8 @@ class DigitalCredentialsPresentmentTest {
         }
 
         val transactionData = source.documentTypeRepository.parseJsonTransactions(
-            base64UrlEncodedJson = listOf(requestJsonString.encodeToByteArray().toBase64Url())
-        ).values.first()
+            base64UrlEncodedJson = request["transaction_data"]!!.jsonArray.map { it.jsonPrimitive.content }
+        )["payment_credential"]!!
 
         deviceResponse.verifySingleDoc(
             sessionTranscript = sessionTranscript,
@@ -1723,6 +1756,298 @@ class DigitalCredentialsPresentmentTest {
             }
         """.trimIndent()
         assertEquals(expectedResponseCdn, normalizeMdocResponseCdn(responseCdn.trim()))
+    }
+
+    @Test
+    fun payment_Iso18013_TwoCards_DifferentTips() = runTestWithSetup {
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+
+        val secondCard = documentStoreTestHarness.provisionMdoc(
+            displayName = "Second Payment Card Mdoc",
+            docType = "org.multipaz.payment.sca.1",
+            data = mapOf(
+                "org.multipaz.payment.sca.1" to listOf(
+                    Pair("account_id", Tstr("acc-67890"))
+                )
+            ),
+            keyAuthorizedNamespaces = listOf(
+                ISO_18013_TRANSACTION_DATA_NAMESPACE,
+                PaymentTransaction.openId4VpMdocResponseNamespace
+            )
+        )
+        val firstCard = documentStoreTestHarness.documentStore.listDocuments().first { it.displayName == "Payment Card Mdoc" }
+        val firstCardCred = firstCard.getCredentials().first()
+        val secondCardCred = secondCard.getCredentials().first()
+
+        val source = TipPresentmentSource(
+            documentStore = documentStoreTestHarness.documentStore,
+            documentTypeRepository = documentStoreTestHarness.documentTypeRepository,
+        )
+        source.insertTipForCredential(firstCardCred, 15.0)
+        source.insertTipForCredential(secondCardCred, 20.0)
+
+        // 1. Verifier prepares entire DeviceRequest with two DocRequests in ISO 18013-5
+        val payload1 = PaymentTransaction.Payload(
+            transactionId = "3AD99006-6E0D-4D07-AE75-5DAEF0FE21D9",
+            currency = "USD",
+            amount = 100.0,
+            payee = PaymentTransaction.Payee("Store 1", "001"),
+            tipRequested = true
+        )
+        val payload2 = PaymentTransaction.Payload(
+            transactionId = "4BE00117-7F1E-5E18-BF86-6EBF01AF32EA",
+            currency = "USD",
+            amount = 50.0,
+            payee = PaymentTransaction.Payee("Store 2", "002"),
+            tipRequested = true
+        )
+        val requestDataItem1 = PaymentTransaction.serializeIso18013Request(payload1)
+        val requestDataItem2 = PaymentTransaction.serializeIso18013Request(payload2)
+
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript,
+            deviceRequestInfo = DeviceRequestInfo.fromValues(
+                useCases = listOf(
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(listOf(0))),
+                        purposeHints = emptyMap()
+                    ),
+                    UseCase(
+                        mandatory = true,
+                        documentSets = listOf(DocumentSet(listOf(1))),
+                        purposeHints = emptyMap()
+                    )
+                )
+            )
+        ) {
+            addDocRequest(
+                docType = "org.multipaz.payment.sca.1",
+                nameSpaces = mapOf(
+                    "org.multipaz.payment.sca.1" to mapOf("account_id" to false),
+                    ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(PaymentTransaction.identifier to true)
+                ),
+                docRequestInfo = DocRequestInfo(
+                    transactionData = TransactionsInfo(
+                        data = mapOf(PaymentTransaction.identifier to requestDataItem1)
+                    )
+                )
+            )
+            addDocRequest(
+                docType = "org.multipaz.payment.sca.1",
+                nameSpaces = mapOf(
+                    "org.multipaz.payment.sca.1" to mapOf("account_id" to false),
+                    ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(PaymentTransaction.identifier to true)
+                ),
+                docRequestInfo = DocRequestInfo(
+                    transactionData = TransactionsInfo(
+                        data = mapOf(PaymentTransaction.identifier to requestDataItem2)
+                    )
+                )
+            )
+        }
+
+        // 2. Wallet presentment
+        val creationTime = Clock.System.now()
+        val isoResponse = mdocPresentment(
+            deviceRequest = deviceRequest,
+            eReaderKey = null,
+            sessionTranscript = sessionTranscript,
+            source = source,
+            keyAgreementPossible = emptyList(),
+            requesterAppId = null,
+            requesterOrigin = ORIGIN,
+            creationTime = creationTime,
+            preselectedDocuments = listOf(firstCard, secondCard),
+            onWaitingForUserInput = {},
+            onDocumentsInFocus = {}
+        )
+        val deviceResponse = isoResponse.deviceResponse
+
+        // 3. Verifier processes and verifies response
+        deviceResponse.verify(
+            sessionTranscript = sessionTranscript,
+            eReaderKey = null,
+            deviceRequest = deviceRequest,
+            documentTypeRepository = source.documentTypeRepository,
+            atTime = creationTime
+        )
+        assertEquals(DeviceResponse.STATUS_OK, deviceResponse.status)
+        assertEquals(2, deviceResponse.documents.size)
+
+        val doc1 = deviceResponse.documents.first {
+            it.issuerNamespaces.data["org.multipaz.payment.sca.1"]?.get("account_id")?.dataElementValue?.asTstr == "acc-12345"
+        }
+        val tx1 = doc1.deviceNamespaces.data[ISO_18013_TRANSACTION_DATA_NAMESPACE]!![PaymentTransaction.identifier]!!
+        assertEquals(0L, tx1["docRequestId"].asNumber)
+        assertEquals(15.00, tx1["tipAmount"].asDouble)
+        assertEquals(100.00, tx1["amount"].asDouble)
+
+        val doc2 = deviceResponse.documents.first {
+            it.issuerNamespaces.data["org.multipaz.payment.sca.1"]?.get("account_id")?.dataElementValue?.asTstr == "acc-67890"
+        }
+        val tx2 = doc2.deviceNamespaces.data[ISO_18013_TRANSACTION_DATA_NAMESPACE]!![PaymentTransaction.identifier]!!
+        assertEquals(1L, tx2["docRequestId"].asNumber)
+        assertEquals(10.00, tx2["tipAmount"].asDouble)
+        assertEquals(50.00, tx2["amount"].asDouble)
+    }
+
+    @Test
+    fun payment_OpenID4VP_TwoCards_DifferentTips() = runTestWithSetup {
+        val secondCard = documentStoreTestHarness.provisionMdoc(
+            displayName = "Second Payment Card Mdoc",
+            docType = "org.multipaz.payment.sca.1",
+            data = mapOf(
+                "org.multipaz.payment.sca.1" to listOf(
+                    Pair("account_id", Tstr("acc-67890"))
+                )
+            ),
+            keyAuthorizedNamespaces = listOf(
+                ISO_18013_TRANSACTION_DATA_NAMESPACE,
+                PaymentTransaction.openId4VpMdocResponseNamespace
+            )
+        )
+        val firstCard = documentStoreTestHarness.documentStore.listDocuments().first { it.displayName == "Payment Card Mdoc" }
+        val firstCardCred = firstCard.getCredentials().first()
+        val secondCardCred = secondCard.getCredentials().first()
+
+        val source = TipPresentmentSource(
+            documentStore = documentStoreTestHarness.documentStore,
+            documentTypeRepository = documentStoreTestHarness.documentTypeRepository,
+        )
+        source.insertTipForCredential(firstCardCred, 15.0)
+        source.insertTipForCredential(secondCardCred, 20.0)
+
+        // 1. Verifier prepares DCQL query and transaction_data for OpenID4VP request
+        val dcql = buildJsonObject {
+            put("credentials", buildJsonArray {
+                add(buildJsonObject {
+                    put("id", "payment_credential_1")
+                    put("format", "mso_mdoc")
+                    put("meta", buildJsonObject {
+                        put("doctype_value", "org.multipaz.payment.sca.1")
+                    })
+                    put("claims", buildJsonArray {
+                        add(buildJsonObject {
+                            put("path", buildJsonArray {
+                                add("org.multipaz.payment.sca.1")
+                                add("account_id")
+                            })
+                        })
+                    })
+                })
+                add(buildJsonObject {
+                    put("id", "payment_credential_2")
+                    put("format", "mso_mdoc")
+                    put("meta", buildJsonObject {
+                        put("doctype_value", "org.multipaz.payment.sca.1")
+                    })
+                    put("claims", buildJsonArray {
+                        add(buildJsonObject {
+                            put("path", buildJsonArray {
+                                add("org.multipaz.payment.sca.1")
+                                add("account_id")
+                            })
+                        })
+                    })
+                })
+            })
+        }
+
+        val tx1JsonString = PaymentTransaction.serializeOpenId4VpRequest(
+            payload = PaymentTransaction.Payload(
+                transactionId = "TX-CARD-1",
+                currency = "USD",
+                amount = 100.0,
+                payee = PaymentTransaction.Payee("Store 1", "001"),
+                tipRequested = true
+            ),
+            credentialIds = listOf("payment_credential_1"),
+            hashAlgorithms = listOf(Algorithm.SHA256)
+        )
+        val tx2JsonString = PaymentTransaction.serializeOpenId4VpRequest(
+            payload = PaymentTransaction.Payload(
+                transactionId = "TX-CARD-2",
+                currency = "USD",
+                amount = 50.0,
+                payee = PaymentTransaction.Payee("Store 2", "002"),
+                tipRequested = true
+            ),
+            credentialIds = listOf("payment_credential_2"),
+            hashAlgorithms = listOf(Algorithm.SHA256)
+        )
+
+        val nonce = "openid4vp-nonce-twocards"
+        val request = OpenID4VP.generateRequest(
+            version = OpenID4VP.Version.DRAFT_29,
+            origin = ORIGIN,
+            nonce = nonce,
+            responseEncryptionKey = null,
+            verifierIdentities = emptyList(),
+            responseMode = OpenID4VP.ResponseMode.DC_API,
+            responseUri = null,
+            dcqlQuery = dcql,
+            jsonTransactionData = listOf(tx1JsonString, tx2JsonString)
+        )
+
+        // 2. Wallet presentment
+        val response = OpenID4VP.generateResponse(
+            version = OpenID4VP.Version.DRAFT_29,
+            preselectedDocuments = listOf(firstCard, secondCard),
+            source = source,
+            appId = null,
+            origin = ORIGIN,
+            request = request,
+            requesterIdentities = emptyList(),
+        )
+
+        // 3. Verifier processes and verifies responses
+        val vpTokens = response.response["vp_token"]!!.jsonObject
+        val encodedDeviceResponse1 = vpTokens["payment_credential_1"]!!.jsonArray[0].jsonPrimitive.content.fromBase64Url()
+        val deviceResponse1 = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse1))
+        val encodedDeviceResponse2 = vpTokens["payment_credential_2"]!!.jsonArray[0].jsonPrimitive.content.fromBase64Url()
+        val deviceResponse2 = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse2))
+
+        val handoverInfo = Cbor.encode(
+            buildCborArray {
+                add(ORIGIN)
+                add(nonce)
+                add(Simple.NULL)
+            }
+        )
+        val handoverInfoDigest = Crypto.digest(Algorithm.SHA256, handoverInfo)
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            addCborArray {
+                add("OpenID4VPDCAPIHandover")
+                add(handoverInfoDigest)
+            }
+        }
+
+        val txMap = source.documentTypeRepository.parseJsonTransactions(
+            base64UrlEncodedJson = request["transaction_data"]!!.jsonArray.map { it.jsonPrimitive.content }
+        )
+        val tx1Parsed = txMap["payment_credential_1"]!!
+        val tx2Parsed = txMap["payment_credential_2"]!!
+
+        deviceResponse1.verifySingleDoc(
+            sessionTranscript = sessionTranscript,
+            transactionData = tx1Parsed
+        )
+        assertEquals(DeviceResponse.STATUS_OK, deviceResponse1.status)
+        val mdoc1 = deviceResponse1.documents[0]
+        val txElements1 = mdoc1.deviceNamespaces.data[PaymentTransaction.openId4VpMdocResponseNamespace]!!
+        assertEquals(15.0, txElements1["tipAmount"]!!.asDouble)
+
+        deviceResponse2.verifySingleDoc(
+            sessionTranscript = sessionTranscript,
+            transactionData = tx2Parsed
+        )
+        assertEquals(DeviceResponse.STATUS_OK, deviceResponse2.status)
+        val mdoc2 = deviceResponse2.documents[0]
+        val txElements2 = mdoc2.deviceNamespaces.data[PaymentTransaction.openId4VpMdocResponseNamespace]!!
+        assertEquals(10.0, txElements2["tipAmount"]!!.asDouble)
     }
 
     @Test
