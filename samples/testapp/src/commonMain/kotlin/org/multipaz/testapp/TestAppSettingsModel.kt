@@ -177,6 +177,7 @@ class TestAppSettingsModel private constructor(
         bind(cloudSecureAreaUrl, "cloudSecureAreaUrl", CSA_URL_DEFAULT)
         bind(dcApiProtocols, "dcApiProtocols", digitalCredentials.supportedProtocols)
         bind(dcRequestIssuerIdentifiers, "dcRequestIssuerIdentifiers", "")
+        bind(dcRequestLastSelectedRequestId, "dcRequestLastSelectedRequestId", null)
 
         bind(cryptoPreferBouncyCastle, "cryptoForceBouncyCastle", false)
 
@@ -221,6 +222,7 @@ class TestAppSettingsModel private constructor(
     val cloudSecureAreaUrl = MutableStateFlow<String>(CSA_URL_DEFAULT)
     val dcApiProtocols = MutableStateFlow<Set<String>>(emptySet())
     val dcRequestIssuerIdentifiers = MutableStateFlow<String>("")
+    val dcRequestLastSelectedRequestId = MutableStateFlow<String?>(null)
 
     val cryptoPreferBouncyCastle = MutableStateFlow<Boolean>(false)
 

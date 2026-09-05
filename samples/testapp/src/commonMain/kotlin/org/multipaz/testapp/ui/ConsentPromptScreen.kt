@@ -52,8 +52,11 @@ import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.knowntypes.DrivingLicense
+import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.documenttype.knowntypes.PhotoID
+import org.multipaz.utopia.knowntypes.PingTransaction
 import org.multipaz.utopia.knowntypes.UtopiaBoardingPass
 import org.multipaz.documenttype.knowntypes.addKnownTypes
 import org.multipaz.mdoc.request.DeviceRequestInfo
@@ -139,7 +142,8 @@ private enum class Example(
     MDL_NAME_AND_ADDRESS_PARTIALLY_STORED("mDL: Name and address (partially stored)"),
     MDL_NAME_AND_ADDRESS_ALL_STORED("mDL: Name and address (all stored)"),
     PHOTO_ID_MANDATORY("PhotoID: Mandatory data elements (2 docs)"),
-    PAYMENT("Payment"),
+    PAYMENT("DPC: Payment Confirmation"),
+    PAYMENT_ONLY_CONF("DPC: Payment Confirmation (only confirmation)"),
     OPENID4VP_COMPLEX_EXAMPLE("Complex example from OpenID4VP Appendix D"),
     MDL_AND_BOARDING_PASS_EXAMPLE("mDL AND Boarding pass"),
     MDL_AND_OPTIONAL_BOARDING_PASS_EXAMPLE("mDL AND optional Boarding pass"),
@@ -166,6 +170,7 @@ private enum class PaPreselectedDocuments(
     PRESELECTED_DOCUMENTS_MDL("mDL"),
     PRESELECTED_DOCUMENTS_PHOTOID("PhotoID"),
     PRESELECTED_DOCUMENTS_BOARDING_PASS("Boarding pass"),
+    PRESELECTED_DOCUMENTS_PAYMENT("Payment"),
     PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID("mDL and PhotoID"),
     PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID_AND_PHOTOID("mDL and PhotoID and PhotoID"),
     PRESELECTED_DOCUMENTS_MDL_AND_BOARDING_PASS("mDL and boarding pass"),
@@ -207,6 +212,7 @@ fun ConsentPromptScreen(
     var cardArtMdl by remember { mutableStateOf(ByteArray(0)) }
     var cardArtPhotoId by remember { mutableStateOf(ByteArray(0)) }
     var cardArtBoardingPass by remember { mutableStateOf(ByteArray(0)) }
+    var cardArtPayment by remember { mutableStateOf(ByteArray(0)) }
     var utopiaMarketplaceIcon by remember { mutableStateOf(ByteString()) }
     var utopiaAirlinesIcon by remember { mutableStateOf(ByteString()) }
     var utopiaCbpIcon by remember { mutableStateOf(ByteString()) }
@@ -225,11 +231,13 @@ fun ConsentPromptScreen(
     lateinit var documentPhotoId: Document
     lateinit var documentPhotoId2: Document
     lateinit var documentBoardingPass: Document
+    lateinit var documentPayment: Document
 
     LaunchedEffect(Unit) {
         cardArtMdl = Res.readBytes("files/utopia_driving_license_card_art.png")
         cardArtPhotoId = Res.readBytes("drawable/photo_id_card_art.png")
         cardArtBoardingPass = Res.readBytes("files/boarding-pass-utopia-airlines.png")
+        cardArtPayment = Res.readBytes("drawable/payment_card_art.png")
         utopiaMarketplaceIcon = ByteString(Res.readBytes("files/utopia-marketplace.png"))
         utopiaAirlinesIcon = ByteString(Res.readBytes("files/utopia-airlines.png"))
         utopiaCbpIcon = ByteString(Res.readBytes("files/utopia-cbp.png"))
@@ -341,6 +349,32 @@ fun ConsentPromptScreen(
             validUntil = credsValidUntil,
             expectedUpdate = null,
             domain = "mdoc"
+        )
+        documentPayment = documentStore!!.createDocument(
+            displayName = "Erika's Payment Card Credential",
+            typeDisplayName = "Payment Card",
+            cardArt = ByteString(cardArtPayment)
+        )
+        DigitalPaymentCredential.getDocumentType().createMdocCredentialWithSampleData(
+            document = documentPayment,
+            secureArea = secureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = dsKey,
+            signedAt = credsValidFrom,
+            validFrom = credsValidFrom,
+            validUntil = credsValidUntil,
+            expectedUpdate = null,
+            domain = "mdoc",
+            deviceKeyAuthorizedNamespaces = listOf(
+                PaymentTransaction.openId4VpMdocResponseNamespace,
+                PingTransaction.openId4VpMdocResponseNamespace,
+            ),
+            deviceKeyAuthorizedDataElements = mapOf(
+                ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(
+                    PaymentTransaction.identifier,
+                    PingTransaction.identifier,
+                )
+            )
         )
         addCredentialsForOpenID4VPComplexExample(
             documentStore = documentStore!!,
@@ -572,6 +606,7 @@ fun ConsentPromptScreen(
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL -> listOf(documentMdl)
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_PHOTOID -> listOf(documentPhotoId)
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_BOARDING_PASS -> listOf(documentBoardingPass)
+                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_PAYMENT -> listOf(documentPayment)
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID -> listOf(documentMdl, documentPhotoId)
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID_AND_PHOTOID ->
                             listOf(documentMdl, documentPhotoId, documentPhotoId2)
@@ -624,6 +659,8 @@ private suspend fun getQueryResult(
             PhotoID.getDocumentType().cannedRequests.find { it.id == "mandatory" }!!.mdocRequest!!.toDcql(emptyList())
         Example.PAYMENT ->
             DigitalPaymentCredential.getDocumentType().cannedRequests.find { it.id == "payment_transaction" }!!.mdocRequest!!.toDcql(emptyList())
+        Example.PAYMENT_ONLY_CONF ->
+            DigitalPaymentCredential.getDocumentType().cannedRequests.find { it.id == "payment_transaction_only_conf" }!!.mdocRequest!!.toDcql(emptyList())
         Example.OPENID4VP_COMPLEX_EXAMPLE -> Json.parseToJsonElement(
             """
             {
@@ -938,6 +975,9 @@ private suspend fun getQueryResult(
             Example.PAYMENT -> DigitalPaymentCredential.getDocumentType()
                 .cannedRequests.find { it.id == "payment_transaction" }!!
                 .toTransactionDataMap("cred1")
+            Example.PAYMENT_ONLY_CONF -> DigitalPaymentCredential.getDocumentType()
+                .cannedRequests.find { it.id == "payment_transaction_only_conf" }!!
+                .toTransactionDataMap("cred1")
 
             else -> emptyMap()
         }
@@ -961,6 +1001,7 @@ private suspend fun getQueryResult(
         Example.MDL_NAME_AND_ADDRESS_ALL_STORED,
         Example.PHOTO_ID_MANDATORY,
         Example.PAYMENT,
+        Example.PAYMENT_ONLY_CONF,
         Example.OPENID4VP_COMPLEX_EXAMPLE,
         Example.MDL_AND_BOARDING_PASS_EXAMPLE,
         Example.MDL_AND_OPTIONAL_BOARDING_PASS_EXAMPLE,

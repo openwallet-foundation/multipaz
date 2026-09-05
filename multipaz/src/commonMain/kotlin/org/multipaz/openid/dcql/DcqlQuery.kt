@@ -238,7 +238,8 @@ data class DcqlQuery(
                         val credential = presentmentSource.selectCredential(
                             document = cred.document,
                             requestedClaims = credentialQuery.claims,
-                            keyAgreementPossible = effectiveKeyAgreementPossible
+                            keyAgreementPossible = effectiveKeyAgreementPossible,
+                            credential = cred,
                         )
                         if (credential == null) {
                             throw DcqlCredentialQueryException("Error selecting credential with id ${credentialQuery.id}")
@@ -286,7 +287,8 @@ data class DcqlQuery(
                                     credential = presentmentSource.selectCredential(
                                         document = cred.document,
                                         requestedClaims = credentialQuery.claims,
-                                        keyAgreementPossible = effectiveKeyAgreementPossible
+                                        keyAgreementPossible = effectiveKeyAgreementPossible,
+                                        credential = cred,
                                     )!!,
                                     claims = matchingClaimValues,
                                     transactionData = transactionData
@@ -459,35 +461,36 @@ data class DcqlQuery(
                 val dcqlClaimIdToClaim = mutableMapOf<String, RequestedClaim>()
                 val dcqlClaimSets = mutableListOf<DcqlClaimSet>()
 
-                val claims = c["claims"]!!.jsonArray
-                check(claims.isNotEmpty())
-                for (claim in claims) {
-                    val cl = claim.jsonObject
-                    val claimId = cl["id"]?.jsonPrimitive?.content
-                    val path = cl["path"]!!.jsonArray
-                    val values = cl["values"]?.jsonArray
-                    val mdocIntentToRetain = cl["intent_to_retain"]?.jsonPrimitive?.boolean
-                    val requestedClaim = if (mdocDocType != null) {
-                        require(path.size == 2)
-                        MdocRequestedClaim(
-                            id = claimId,
-                            docType = mdocDocType,
-                            namespaceName = path[0].jsonPrimitive.content,
-                            dataElementName = path[1].jsonPrimitive.content,
-                            intentToRetain = mdocIntentToRetain ?: false,
-                            values = values
-                        )
-                    } else {
-                        JsonRequestedClaim(
-                            id = claimId,
-                            vctValues = vctValues!!,
-                            claimPath = path,
-                            values = values
-                        )
-                    }
-                    dcqlClaims.add(requestedClaim)
-                    if (claimId != null) {
-                        dcqlClaimIdToClaim[claimId] = requestedClaim
+                val claims = c["claims"]?.jsonArray
+                if (claims != null) {
+                    for (claim in claims) {
+                        val cl = claim.jsonObject
+                        val claimId = cl["id"]?.jsonPrimitive?.content
+                        val path = cl["path"]!!.jsonArray
+                        val values = cl["values"]?.jsonArray
+                        val mdocIntentToRetain = cl["intent_to_retain"]?.jsonPrimitive?.boolean
+                        val requestedClaim = if (mdocDocType != null) {
+                            require(path.size == 2)
+                            MdocRequestedClaim(
+                                id = claimId,
+                                docType = mdocDocType,
+                                namespaceName = path[0].jsonPrimitive.content,
+                                dataElementName = path[1].jsonPrimitive.content,
+                                intentToRetain = mdocIntentToRetain ?: false,
+                                values = values
+                            )
+                        } else {
+                            JsonRequestedClaim(
+                                id = claimId,
+                                vctValues = vctValues!!,
+                                claimPath = path,
+                                values = values
+                            )
+                        }
+                        dcqlClaims.add(requestedClaim)
+                        if (claimId != null) {
+                            dcqlClaimIdToClaim[claimId] = requestedClaim
+                        }
                     }
                 }
 
@@ -590,9 +593,11 @@ private fun DcqlCredentialQuery.toJson(): JsonObject = buildJsonObject {
             }
         }
     }
-    putJsonArray("claims") {
-        claims.forEach { claim ->
-            add(claim.toJson())
+    if (claims.isNotEmpty()) {
+        putJsonArray("claims") {
+            claims.forEach { claim ->
+                add(claim.toJson())
+            }
         }
     }
     if (claimSets.isNotEmpty()) {

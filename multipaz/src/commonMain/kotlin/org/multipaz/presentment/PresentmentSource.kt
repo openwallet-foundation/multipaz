@@ -98,12 +98,14 @@ abstract class PresentmentSource(
      * @param requestedClaims the requested claims.
      * @param keyAgreementPossible if non-empty, a credential using Key Agreement may be returned provided
      *   its private key is one of the given curves.
+     * @param credential the candidate credential being considered, if known.
      * @return a [Credential] belonging to [document] that may be presented or `null`.
      */
     abstract suspend fun selectCredential(
         document: Document,
         requestedClaims: List<RequestedClaim>,
         keyAgreementPossible: List<EcCurve>,
+        credential: Credential? = null,
     ): Credential?
 
     /**

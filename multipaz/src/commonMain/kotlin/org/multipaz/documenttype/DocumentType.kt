@@ -88,8 +88,11 @@ class DocumentType private constructor(
          * Initialize the [mdocBuilder].
          *
          * @param mdocDocType the DocType of the ISO mdoc.
+         * @return the builder.
          */
-        fun addMdocDocumentType(mdocDocType: String) = apply {
+        fun addMdocDocumentType(
+            mdocDocType: String,
+        ) = apply {
             mdocBuilder = MdocDocumentType.Builder(mdocDocType)
         }
 
@@ -396,6 +399,10 @@ class DocumentType private constructor(
      * @param validUntil the time at which the credential is valid until.
      * @param expectedUpdate the time at which to expect an update, or `null`.
      * @param domain the domain to use for the credential.
+     * @param randomProvider random number generator to use.
+     * @param includeElement predicate to filter which elements are included.
+     * @param deviceKeyAuthorizedNamespaces namespaces the device key is authorized to sign.
+     * @param deviceKeyAuthorizedDataElements data elements the device key is authorized to sign, keyed by namespace.
      * @return the [MdocCredential] that was added to [document].
      */
     suspend fun createMdocCredentialWithSampleData(

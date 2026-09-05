@@ -61,10 +61,70 @@ private struct ClaimsSection : View {
     }
 }
 
-private let tipOptions = ["No tip", "10%", "15%", "20%", "25%"]
+private let tipOptions: [(percent: Double, label: String)] = [
+    (0.0, "No tip"),
+    (10.0, "10%"),
+    (15.0, "15%"),
+    (20.0, "20%"),
+    (25.0, "25%")
+]
+
+private func formatAmount(_ amount: Double) -> String {
+    let roundedCents = Int64((amount * 100.0).rounded())
+    let dollars = roundedCents / 100
+    let cents = abs(roundedCents % 100)
+    return String(format: "%lld.%02lld", dollars, cents)
+}
+
+private struct ChipFlowLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        var maxRowWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > maxWidth && currentX > 0 {
+                maxRowWidth = max(maxRowWidth, currentX - spacing)
+                currentX = 0
+                currentY += lineHeight + lineSpacing
+                lineHeight = 0
+            }
+            currentX += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+        maxRowWidth = max(maxRowWidth, max(0, currentX - spacing))
+        let totalHeight = currentY + lineHeight
+        return CGSize(width: min(maxWidth, maxRowWidth), height: totalHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var currentX: CGFloat = bounds.minX
+        var currentY: CGFloat = bounds.minY
+        var lineHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > bounds.maxX && currentX > bounds.minX {
+                currentX = bounds.minX
+                currentY += lineHeight + lineSpacing
+                lineHeight = 0
+            }
+            subview.place(at: CGPoint(x: currentX, y: currentY), proposal: ProposedViewSize(size))
+            currentX += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+    }
+}
 
 private struct DisplayTransactionData: View {
     let transactionData: TransactionData<AnyObject>
+    let hasClaims: Bool
     let userInput: TransactionUserInput?
     let onUserInputChanged: (TransactionUserInput) -> Void
 
@@ -72,39 +132,65 @@ private struct DisplayTransactionData: View {
         if transactionData.type == PaymentTransaction.shared || transactionData.type.identifier == PaymentTransaction.shared.identifier {
             if let payload = transactionData.payload as? PaymentTransaction.Payload {
                 let tipPercent = (userInput as? PaymentTransaction.UserInput)?.tipPercent ?? 0.0
+                let headerText = hasClaims ? "This payment will also be approved:" : "This payment will be approved:"
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Payment transaction")
-                        .font(.system(size: 15, weight: .semibold))
-                    Text("Amount: \(String(format: "%.2f", payload.amount)) \(payload.currency)")
-                        .font(.system(size: 14))
-                    if payload.tipRequested?.boolValue == true {
-                        HStack {
-                            Text("Add tip:")
+                    Text(headerText)
+                        .font(.system(size: 14, weight: .bold))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if !payload.payee.name.isEmpty {
+                        HStack(spacing: 8) {
+                            Image(systemName: "storefront")
+                                .imageScale(.small)
+                            Text("Payee: \(payload.payee.name)")
                                 .font(.system(size: 14))
-                            Spacer()
-                            Picker("Add tip", selection: Binding<String>(
-                                get: {
-                                    if tipPercent == 0.0 {
-                                        return "No tip"
-                                    } else {
-                                        return "\(Int(tipPercent))%"
-                                    }
-                                },
-                                set: { (option: String) in
-                                    let percent: Double
-                                    if option.hasSuffix("%") {
-                                        percent = Double(option.dropLast()) ?? 0.0
-                                    } else {
-                                        percent = 0.0
-                                    }
-                                    onUserInputChanged(PaymentTransaction.UserInput(tipPercent: percent))
+                        }
+                    }
+
+                    let amountText: String = {
+                        if payload.tipRequested?.boolValue == true && tipPercent > 0.0 {
+                            let tipAmount = ceil(payload.amount * tipPercent) / 100.0
+                            let totalAmount = payload.amount + tipAmount
+                            return "Amount: \(formatAmount(totalAmount)) \(payload.currency) (tip: \(formatAmount(tipAmount)) \(payload.currency))"
+                        } else {
+                            return "Amount: \(formatAmount(payload.amount)) \(payload.currency)"
+                        }
+                    }()
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "creditcard")
+                            .imageScale(.small)
+                        Text(amountText)
+                            .font(.system(size: 14))
+                    }
+
+                    if payload.tipRequested?.boolValue == true {
+                        Text("Add tip")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                            .padding(.top, 4)
+
+                        ChipFlowLayout(spacing: 8, lineSpacing: 6) {
+                            ForEach(tipOptions, id: \.percent) { option in
+                                let isSelected = (tipPercent == option.percent)
+                                Button(action: {
+                                    onUserInputChanged(PaymentTransaction.UserInput(tipPercent: option.percent))
+                                }) {
+                                    Text(option.label)
+                                        .font(.system(size: 13, weight: isSelected ? .bold : .regular))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(isSelected ? Color.accentColor.opacity(0.15) : Color(uiColor: .secondarySystemBackground))
+                                        .foregroundColor(isSelected ? Color.accentColor : Color.primary)
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: 1)
+                                        )
                                 }
-                            )) {
-                                ForEach(tipOptions, id: \.self) { option in
-                                    Text(option).tag(option)
-                                }
+                                .buttonStyle(.plain)
                             }
-                            .pickerStyle(.menu)
                         }
                     }
                 }
@@ -112,24 +198,41 @@ private struct DisplayTransactionData: View {
             }
         } else if transactionData.type == PingTransaction.shared || transactionData.type.identifier == PingTransaction.shared.identifier {
             if let payload = transactionData.payload as? PingTransaction.Payload {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Test \"ping\" transaction")
-                        .font(.system(size: 15, weight: .semibold))
+                let headerText = hasClaims ? "This test \"ping\" transaction will also be approved:" : "This test \"ping\" transaction will be approved:"
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(headerText)
+                        .font(.system(size: 14, weight: .bold))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                     if let str = payload.string {
-                        Text("String value: '\(str)'")
-                            .font(.system(size: 14))
+                        HStack(spacing: 8) {
+                            Image(systemName: "info.circle")
+                                .imageScale(.small)
+                            Text("String: \(str)")
+                                .font(.system(size: 14))
+                        }
                     }
                     if let blob = payload.blob {
                         let byteArray = blob.toByteArray(startIndex: 0, endIndex: blob.size)
-                        Text("Blob value: '\(byteArray.toBase64Url())'")
-                            .font(.system(size: 14))
+                        HStack(spacing: 8) {
+                            Image(systemName: "info.circle")
+                                .imageScale(.small)
+                            Text("Blob: \(byteArray.toBase64Url())")
+                                .font(.system(size: 14))
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         } else {
-            Text("Unknown transaction type '\(transactionData.type.displayName)'")
-                .font(.system(size: 14))
+            let headerText = hasClaims ? "This \(transactionData.type.displayName) transaction will also be approved:" : "This \(transactionData.type.displayName) transaction will be approved:"
+            VStack(alignment: .leading, spacing: 6) {
+                Text(headerText)
+                    .font(.system(size: 14, weight: .bold))
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -200,25 +303,7 @@ private struct RequestedDocumentSection : View {
             }
         }
 
-        if !transactionData.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(0..<transactionData.count, id: \.self) { idx in
-                    let data = transactionData[idx]
-                    DisplayTransactionData(
-                        transactionData: data,
-                        userInput: transactionUserInput[data.type.identifier],
-                        onUserInputChanged: { userInput in
-                            onTransactionUserInputChanged(data.type.identifier, userInput)
-                        }
-                    )
-                }
-            }
-            .padding(10)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.accentColor, lineWidth: 1.5)
-            )
-        }
+        let hasClaims = !retainedClaims.isEmpty || !notRetainedClaims.isEmpty
 
         if (!notRetainedClaims.isEmpty) {
             VStack(alignment: .leading, spacing: 10) {
@@ -236,6 +321,22 @@ private struct RequestedDocumentSection : View {
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                 ClaimsSection(claims: retainedClaims)
+            }
+        }
+
+        if !transactionData.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(0..<transactionData.count, id: \.self) { idx in
+                    let data = transactionData[idx]
+                    DisplayTransactionData(
+                        transactionData: data,
+                        hasClaims: hasClaims,
+                        userInput: transactionUserInput[data.type.identifier],
+                        onUserInputChanged: { userInput in
+                            onTransactionUserInputChanged(data.type.identifier, userInput)
+                        }
+                    )
+                }
             }
         }
     }

@@ -26,6 +26,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
+import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
@@ -107,14 +108,6 @@ private suspend fun updateCredmanUnlocked(
         documentTypeRepository = documentTypeRepository,
         selectedProtocols = selectedProtocols
     )
-    /*
-    Logger.i(TAG, "credentialDatabase: " +
-            Cbor.toDiagnostics(
-                item = credentialDatabase,
-                options = setOf(DiagnosticOption.EMBEDDED_CBOR, DiagnosticOption.PRETTY_PRINT, DiagnosticOption.BSTR_PRINT_LENGTH)
-            )
-    )
-     */
 
     val credentialDatabaseCbor = Cbor.encode(credentialDatabase)
 
@@ -145,6 +138,7 @@ private suspend fun updateCredmanUnlocked(
             set(CREDMAN_DB_SHA256_KEY, credDbSha256)
         }
     }
+    Logger.dCbor(TAG, "credentialDatabase", credentialDatabase)
 
     val documents = documentStore.listDocuments(sort = true)
     for (document in documents) {
@@ -260,6 +254,26 @@ private suspend fun exportMdocCredential(
             if (document.readerIdentifiers.isNotEmpty()) {
                 putCborArray("readerIdentifiers") {
                     document.readerIdentifiers.forEach { add(it.toByteArray()) }
+                }
+            }
+            if (credential.mso.deviceKeyAuthorizedNamespaces.isNotEmpty() ||
+                credential.mso.deviceKeyAuthorizedDataElements.isNotEmpty()
+            ) {
+                putCborMap("keyAuthorizations") {
+                    if (credential.mso.deviceKeyAuthorizedNamespaces.isNotEmpty()) {
+                        putCborArray("nameSpaces") {
+                            credential.mso.deviceKeyAuthorizedNamespaces.forEach { add(it) }
+                        }
+                    }
+                    if (credential.mso.deviceKeyAuthorizedDataElements.isNotEmpty()) {
+                        putCborMap("dataElements") {
+                            credential.mso.deviceKeyAuthorizedDataElements.forEach { (namespace, dataElementList) ->
+                                putCborArray(namespace) {
+                                    dataElementList.forEach { add(it) }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             putCborMap("namespaces") {

@@ -1,6 +1,7 @@
 package org.multipaz.presentment
 
 import kotlinx.io.bytestring.ByteString
+import kotlinx.serialization.json.JsonElement
 import org.multipaz.cbor.DataItem
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
@@ -10,94 +11,102 @@ import org.multipaz.documenttype.TransactionType
 import org.multipaz.documenttype.TransactionUserInput
 
 /**
+ * Protocol through which transaction data was received.
+ */
+enum class TransactionProtocol {
+    /** Transaction data received via ISO/IEC 18013-5 presentment. */
+    ISO_18013_5,
+
+    /** Transaction data received via OpenID4VP presentment. */
+    OPENID4VP
+}
+
+/**
  * An object that holds transaction data.
  *
  * Transaction data is held in two representation: serialized and parsed. Serialized representation
  * is raw sequence of bytes that reflects how transaction data is encoded in the verification
- * protocol (transaction response includes hash of the serialized representation). Parsed
- * representation includes transaction type that describes what kind of transaction this is,
- * the list of hash algorithms that the verifier accepts for this transaction in the order of
- * preference, and transaction payload which is transaction-type-specific data.
+ * protocol. Parsed representation includes transaction type that describes what kind of
+ * transaction this is, the list of hash algorithms that the verifier accepts for this transaction,
+ * and transaction payload which is transaction-type-specific data.
  *
  * @param type type of the transaction data item
- * @param serialized serialized representation of the transaction data
- * @param hashAlgorithms accepted hash algorithm override list for this transaction data in
- *   the order of preference
  * @param payload transaction payload
+ * @param protocol protocol context in which the transaction data was received
+ * @param rawBytes raw sequence of bytes representing the transaction data in the request
+ * @param hashAlgorithms accepted hash algorithm override list for this transaction data
+ * @param intentToRetain whether the reader intends to retain the transaction data
  */
 class TransactionData<PayloadT: Any>(
     val type: TransactionType<PayloadT>,
-    val serialized: ByteString,
-    val hashAlgorithms: List<Algorithm>?,
     val payload: PayloadT,
+    val protocol: TransactionProtocol,
+    val rawBytes: ByteString,
+    val hashAlgorithms: List<Algorithm>? = null,
+    val intentToRetain: Boolean = type.defaultIntentToRetain,
 ) {
     /**
      * Computes hash of the transaction data.
      *
-     * It is important that the verifier uses the same algorithm as the presenter (NB: the set
-     * of supported hash algorithms may differ!).
-     *
      * @return hash of the serialized transaction data
      */
     suspend fun computeHash(algorithm: Algorithm = Algorithm.SHA256): ByteString =
-        ByteString(Crypto.digest(algorithm, serialized.toByteArray()))
+        ByteString(Crypto.digest(algorithm, rawBytes.toByteArray()))
 
     /**
      * Determines if this transaction is applicable to the given credential.
      *
-     * When transaction cannot be processed, it removes a particular "use case" or credential
-     * set option from consideration. If other options are available, presentment still may
-     * succeed.
-     *
      * @param credential one of the credentials in the [Document] being considered
-     * @return true if transaction can be processed false if it cannot
+     * @return true if transaction can be processed, false if it cannot
      */
     suspend fun isApplicable(credential: Credential) = type.isApplicable(this, credential)
 
     /**
-     * Applies transaction in the context of OpenID4VP presentment.
-     *
-     * See [TransactionType.applyJson]
+     * Generates device-signed data elements for an Mdoc credential.
      *
      * @param credential credential being presented
      * @param userInput additional data specified by the user
-     * @return transaction-specific data that should be added to the presentment.
+     * @param docRequestId document request index in ISO 18013-5 presentment, null for OpenID4VP
+     * @return map of data elements for `DeviceSigned.nameSpaces` under `ISO_18013_TRANSACTION_DATA_NAMESPACE`
      */
-    suspend fun applyJson(
+    suspend fun generateMdocResponseElements(
         credential: Credential,
-        userInput: TransactionUserInput?
-    ) = type.applyJson(this, credential, userInput)
+        userInput: TransactionUserInput?,
+        docRequestId: Int? = null
+    ): Map<String, DataItem> = type.generateMdocResponseElements(this, credential, userInput, docRequestId)
 
     /**
-     * Applies transaction in the context of ISO ISO/IEC 18013 presentment.
-     *
-     * See [TransactionType.applyCbor]
+     * Generates Key Binding JWT claims for an SD-JWT credential.
      *
      * @param credential credential being presented
      * @param userInput additional data specified by the user
-     * @return transaction-specific data that should be added to the presentment.
+     * @param docRequestId document request index in ISO 18013-5 presentment, null for OpenID4VP
+     * @return map of claims to include in the KB-JWT payload
      */
-    suspend fun applyCbor(
+    suspend fun generateSdJwtResponseClaims(
         credential: Credential,
-        userInput: TransactionUserInput?
-    ) = type.applyCbor(this, credential, userInput)
+        userInput: TransactionUserInput?,
+        docRequestId: Int? = null
+    ): Map<String, JsonElement> = type.generateSdJwtResponseClaims(this, credential, userInput, docRequestId)
 
     /**
-     * Creates equivalent transaction data for use in ISO ISO/IEC 18013 protocols.
+     * Verifies transaction response returned in an Mdoc presentation.
      *
-     * @return new [TransactionData] object that holds the same payload and hash algorithm, but
-     *  its [TransactionData.serialized] is formatted for use in ISO ISO/IEC 18013 protocols.
+     * @param responseElements key-value-map for values returned in the mdoc presentation
      */
-    fun convertToCbor(): DataItem = type.serializeCbor(payload, hashAlgorithms)
+    suspend fun verifyMdocResponse(responseElements: Map<String, DataItem>) =
+        type.verifyMdocResponse(this, responseElements)
 
     /**
-     * Verify transaction response for mdoc presentment.
+     * Verifies transaction response returned in an SD-JWT presentation.
      *
-     * @see TransactionType.verifyCborResponse
-     *
-     * @param transactionResponse key-value-map for values returned in the presentation
-     * @throws IllegalStateException if response does not pass verification
+     * @param responseClaims claims returned in the Key Binding JWT
      */
-    suspend fun verifyCborResponse(transactionResponse: Map<String, DataItem>) =
-        type.verifyCborResponse(this, transactionResponse)
+    suspend fun verifySdJwtResponse(responseClaims: Map<String, JsonElement>) =
+        type.verifySdJwtResponse(this, responseClaims)
+
+    /**
+     * Creates equivalent transaction data for use in ISO 18013-5 protocols.
+     */
+    fun serializeIso18013Request(): DataItem = type.serializeIso18013Request(payload)
 }

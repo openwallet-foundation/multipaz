@@ -8,6 +8,7 @@ import org.multipaz.document.DocumentBadge
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.eventlogger.EventLogger
+import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.prompt.ShowConsentPromptFn
 import org.multipaz.prompt.promptModelRequestConsent
@@ -16,6 +17,7 @@ import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -104,28 +106,79 @@ class SimplePresentmentSource(
         document: Document,
         requestedClaims: List<RequestedClaim>,
         keyAgreementPossible: List<EcCurve>,
+        credential: Credential?,
     ): Credential? {
-        check(requestedClaims.isNotEmpty())
         val now = Clock.System.now()
-        val credsForPresentment = when (requestedClaims[0]) {
-            is MdocRequestedClaim -> {
-                CredentialForPresentment(
-                    credential = document.findCredential(domains = domainsMdocSignature, now = now),
-                    credentialKeyAgreement = document.findCredential(domains = domainsMdocKeyAgreement, now = now)
-                )
+        val credsForPresentment = if (requestedClaims.isNotEmpty()) {
+            when (requestedClaims[0]) {
+                is MdocRequestedClaim -> {
+                    CredentialForPresentment(
+                        credential = document.findCredential(domains = domainsMdocSignature, now = now),
+                        credentialKeyAgreement = document.findCredential(domains = domainsMdocKeyAgreement, now = now)
+                    )
+                }
+                is JsonRequestedClaim -> {
+                    if (document.getCertifiedCredentials().firstOrNull() is KeylessSdJwtVcCredential) {
+                        CredentialForPresentment(
+                            credential = document.findCredential(domains = domainsKeylessSdJwt, now = now),
+                            credentialKeyAgreement = null
+                        )
+                    } else {
+                        CredentialForPresentment(
+                            credential = document.findCredential(domains = domainsKeyBoundSdJwt, now = now),
+                            credentialKeyAgreement = null
+                        )
+                    }
+                }
             }
-            is JsonRequestedClaim -> {
-                if (document.getCertifiedCredentials().firstOrNull() is KeylessSdJwtVcCredential) {
+        } else if (credential != null) {
+            when (credential) {
+                is MdocCredential -> {
+                    CredentialForPresentment(
+                        credential = document.findCredential(domains = domainsMdocSignature, now = now),
+                        credentialKeyAgreement = document.findCredential(domains = domainsMdocKeyAgreement, now = now)
+                    )
+                }
+                is KeylessSdJwtVcCredential -> {
                     CredentialForPresentment(
                         credential = document.findCredential(domains = domainsKeylessSdJwt, now = now),
                         credentialKeyAgreement = null
                     )
-                } else {
+                }
+                is KeyBoundSdJwtVcCredential -> {
                     CredentialForPresentment(
                         credential = document.findCredential(domains = domainsKeyBoundSdJwt, now = now),
                         credentialKeyAgreement = null
                     )
                 }
+                else -> {
+                    CredentialForPresentment(
+                        credential = document.findCredential(domains = domainsMdocSignature, now = now)
+                            ?: document.findCredential(domains = domainsKeyBoundSdJwt, now = now)
+                            ?: document.findCredential(domains = domainsKeylessSdJwt, now = now),
+                        credentialKeyAgreement = null
+                    )
+                }
+            }
+        } else {
+            val certifiedCreds = document.getCertifiedCredentials()
+            val mdocCred = document.findCredential(domains = domainsMdocSignature, now = now)
+            val mdocKeyAgreementCred = document.findCredential(domains = domainsMdocKeyAgreement, now = now)
+            if (mdocCred != null || mdocKeyAgreementCred != null) {
+                CredentialForPresentment(
+                    credential = mdocCred,
+                    credentialKeyAgreement = mdocKeyAgreementCred
+                )
+            } else if (certifiedCreds.any { it is KeylessSdJwtVcCredential }) {
+                CredentialForPresentment(
+                    credential = document.findCredential(domains = domainsKeylessSdJwt, now = now),
+                    credentialKeyAgreement = null
+                )
+            } else {
+                CredentialForPresentment(
+                    credential = document.findCredential(domains = domainsKeyBoundSdJwt, now = now),
+                    credentialKeyAgreement = null
+                )
             }
         }
         if (!preferSignatureToKeyAgreement && credsForPresentment.credentialKeyAgreement != null) {

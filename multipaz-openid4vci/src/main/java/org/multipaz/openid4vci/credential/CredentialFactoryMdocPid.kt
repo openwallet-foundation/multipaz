@@ -34,6 +34,7 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.Logger
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.utopia.knowntypes.PingTransaction
 import kotlin.collections.component1
 import kotlin.collections.component2
@@ -178,7 +179,12 @@ class CredentialFactoryMdocPid : CredentialFactory {
             deviceKey = authenticationKey!!,
             revocationStatus = revocationStatus,
             deviceKeyAuthorizedNamespaces = listOf(
-                PingTransaction.mdocResponseNamespace
+                PingTransaction.openId4VpMdocResponseNamespace
+            ),
+            deviceKeyAuthorizedDataElements = mapOf(
+                ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(
+                    PingTransaction.identifier
+                )
             )
         )
         val taggedEncodedMso = Cbor.encode(Tagged(

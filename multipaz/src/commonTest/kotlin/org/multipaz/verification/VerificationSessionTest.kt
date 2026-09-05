@@ -19,6 +19,7 @@ import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.MultiDocumentCannedRequest
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
@@ -68,7 +69,8 @@ class VerificationSessionTest {
         harness.initialize()
         harness.provisionStandardDocuments(
             keyAuthorizedNamespaces = listOf(
-                PingTransaction.mdocResponseNamespace
+                ISO_18013_TRANSACTION_DATA_NAMESPACE,
+                PingTransaction.openId4VpMdocResponseNamespace,
             )
         )
 
@@ -148,14 +150,17 @@ class VerificationSessionTest {
         )
 
         if (expectPingTransaction) {
-            // Ping transaction round-trip: the holder echoes the request "string" attribute and
-            // includes a transaction_data_hash binding the response to the request.
+            // Ping transaction round-trip: the holder echoes the request "string" attribute.
             val pingResponse = assertNotNull(
                 mdoc.transactionResponses?.get(PingTransaction.identifier),
                 "expected a Ping transaction response"
             )
             assertEquals("string data", pingResponse["string"]!!.asTstr)
-            assertEquals(32, pingResponse["transactionDataHash"]!!.asBstr.size)
+            if (record is OpenID4VPPresentmentRecord) {
+                assertEquals(32, pingResponse["transactionDataHash"]!!.asBstr.size)
+            } else {
+                assertEquals(null, pingResponse["transactionDataHash"])
+            }
         }
     }
 
@@ -181,7 +186,7 @@ class VerificationSessionTest {
             pid.documentSignerCertChain.certificates.first().ecPublicKey
         )
 
-        // Ping transaction round-trip: applyCbor("string") is echoed in the KB-JWT body under
+        // Ping transaction round-trip: generateSdJwtResponseClaims is echoed in the KB-JWT body under
         // kbJwtResponseClaimName and surfaced under the transaction type's identifier.
         val pingResponse = assertNotNull(
             pid.transactionResponses?.get(PingTransaction.identifier),
@@ -222,7 +227,11 @@ class VerificationSessionTest {
             "expected a Ping transaction response"
         )
         assertEquals(expectedPingString, pingResponse["string"]!!.asTstr)
-        assertEquals(32, pingResponse["transactionDataHash"]!!.asBstr.size)
+        if (record is OpenID4VPPresentmentRecord) {
+            assertEquals(32, pingResponse["transactionDataHash"]!!.asBstr.size)
+        } else {
+            assertEquals(null, pingResponse["transactionDataHash"])
+        }
         assertEquals(expectedDocRequestId, pingResponse["docRequestId"]?.asNumber)
     }
 

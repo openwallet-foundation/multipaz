@@ -34,6 +34,9 @@
         if (useUrlSchema) {
             adjustedRequest.protocols = [];
         }
+        if (!adjustedRequest.origin) {
+            adjustedRequest.origin = window.location.origin;
+        }
         const rq = await(await fetch(baseUrl + "make_request", {
              method: 'POST',
              headers: {

@@ -418,14 +418,25 @@ object VerificationUtil {
                     addDocRequest(
                         docType = docType,
                         nameSpaces = itemsToRequest,
-                        docRequestInfo = if (isVersion10) null else DocRequestInfo(
-                            zkRequest = zkRequest,
-                            docFormat = docFormat,
-                            dataElementIdentifierMapping = dataElementIdentifierMapping,
-                            transactions = cborTransactionData,
-                            otherInfo = docRequestOtherInfo,
-                            issuerIdentifiers = issuerIdentifiers
-                        ),
+                        docRequestInfo = if (isVersion10) {
+                            if (cborTransactionData != null || docRequestOtherInfo.isNotEmpty()) {
+                                DocRequestInfo(
+                                    transactionData = cborTransactionData,
+                                    otherInfo = docRequestOtherInfo
+                                )
+                            } else {
+                                null
+                            }
+                        } else {
+                            DocRequestInfo(
+                                zkRequest = zkRequest,
+                                docFormat = docFormat,
+                                dataElementIdentifierMapping = dataElementIdentifierMapping,
+                                transactionData = cborTransactionData,
+                                otherInfo = docRequestOtherInfo,
+                                issuerIdentifiers = issuerIdentifiers
+                            )
+                        },
                         readerKey = readerKey
                     )
                     if (!isVersion10) {
@@ -970,6 +981,8 @@ object VerificationUtil {
         } else {
             buildMap<String, JsonElement> {
                 for (transaction in transactionData) {
+                    val responseClaims = sdJwtKb.jwtBody[transaction.type.kbJwtResponseClaimName]?.jsonObject ?: emptyMap()
+                    transaction.verifySdJwtResponse(responseClaims)
                     sdJwtKb.jwtBody[transaction.type.kbJwtResponseClaimName]?.let {
                         put(transaction.type.identifier, it)
                     }
@@ -1304,7 +1317,7 @@ object VerificationUtil {
                 }).mapValues { (_, transactionData) ->
                     TransactionsInfo(
                         data = transactionData.associate { data ->
-                            data.type.mdocRequestInfoIdentifier to data.convertToCbor()
+                            data.type.iso18013RequestInfoIdentifier to data.serializeIso18013Request()
                         }
                     )
                 }

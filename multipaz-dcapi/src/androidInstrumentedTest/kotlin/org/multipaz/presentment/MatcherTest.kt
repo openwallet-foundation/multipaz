@@ -20,6 +20,7 @@ import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.crypto.Algorithm
@@ -33,11 +34,15 @@ import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.crypto.buildX509Cert
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.DataItem
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
+import org.multipaz.utopia.knowntypes.PingTransaction
 import org.multipaz.utopia.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.request.DeviceRequest
 import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.TransactionsInfo
+import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.calculateCredentialDatabase
@@ -46,6 +51,7 @@ import org.multipaz.document.setAndroidCredmanExchangeProtocols
 import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.util.Logger
+import org.multipaz.util.fromHex
 import org.multipaz.util.toBase64Url
 import org.multipaz.verification.VerifierIdentity
 import kotlin.random.Random
@@ -3056,6 +3062,48 @@ class MatcherTest {
     }
 
     @Test
+    fun testMatcher_Iso18013_sdjwt_ping_transaction() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness -> harness.provisionStandardDocuments() },
+            deviceRequestBuilder = { harness, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = EUPersonalID.EUPID_VCT,
+                        nameSpaces = mapOf(
+                            "_" to mapOf(
+                                "sdjwtkb_family_name" to false,
+                                "sdjwtkb_given_name" to false,
+                                "sdjwtkb_birthdate" to false,
+                            ),
+                            ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(
+                                PingTransaction.identifier to true
+                            )
+                        ),
+                        docRequestInfo = DocRequestInfo(
+                            docFormat = "dc+sd-jwt",
+                            dataElementIdentifierMapping = mapOf(
+                                "sdjwtkb_family_name" to Json.decodeFromString("""["family_name"]"""),
+                                "sdjwtkb_given_name" to Json.decodeFromString("""["given_name"]"""),
+                                "sdjwtkb_birthdate" to Json.decodeFromString("""["birthdate"]"""),
+                            ),
+                            transactionData = TransactionsInfo(
+                                mapOf(
+                                    PingTransaction.identifier to buildCborMap {
+                                        put("string", "string data")
+                                        put("blob", byteArrayOf(1, 2, 3).toDataItem())
+                                    }
+                                )
+                            )
+                        )
+                    )
+                    .build()
+            }
+        )
+        Assert.assertTrue(matcherResult.contains("__EU PID__"))
+        Assert.assertFalse(matcherResult.contains("org.multipaz.transaction.ping"))
+    }
+
+    @Test
     fun testMatcher_OpenID4VP_mDL_trustedAuthorities_matching() = runTest {
         val matcherResult = testMatcherDcql(
             version = OpenID4VP.Version.DRAFT_29,
@@ -4075,5 +4123,369 @@ class MatcherTest {
         Assert.assertFalse(unsignedResult.contains("__mDL-Matching__"))
         Assert.assertTrue(unsignedResult.contains("__mDL-Public__"))
         Assert.assertFalse(unsignedResult.contains("__mDL-OtherReader__"))
+    }
+
+    @Test
+    fun testMatcher_Iso18013_keyAuthorizations_namespace_matching() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness ->
+                harness.provisionMdoc(
+                    displayName = "mDL-with-auth",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    keyAuthorizedNamespaces = listOf(ISO_18013_TRANSACTION_DATA_NAMESPACE)
+                )
+                harness.provisionMdoc(
+                    displayName = "mDL-no-auth",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    keyAuthorizedNamespaces = emptyList()
+                )
+            },
+            deviceRequestBuilder = { _, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                            ),
+                            ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(
+                                "payment_transaction" to true,
+                            )
+                        )
+                    )
+                    .build()
+            }
+        )
+        // Only mDL-with-auth matches, NOT mDL-no-auth
+        Assert.assertTrue(matcherResult.contains("__mDL-with-auth__"))
+        Assert.assertFalse(matcherResult.contains("__mDL-no-auth__"))
+        // Device-signed / transaction claims must not be displayed in Credman field entries
+        Assert.assertFalse(matcherResult.contains("payment_transaction"))
+        Assert.assertTrue(matcherResult.contains("Given names: Erika"))
+    }
+
+    @Test
+    fun testMatcher_Iso18013_keyAuthorizations_dataElements_matching() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness ->
+                harness.provisionMdoc(
+                    displayName = "mDL-payment-auth",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    keyAuthorizedDataElements = mapOf(
+                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf("payment_transaction")
+                    )
+                )
+                harness.provisionMdoc(
+                    displayName = "mDL-ping-auth",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    keyAuthorizedDataElements = mapOf(
+                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf("ping_transaction")
+                    )
+                )
+            },
+            deviceRequestBuilder = { _, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                            ),
+                            ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(
+                                "payment_transaction" to true,
+                            )
+                        )
+                    )
+                    .build()
+            }
+        )
+        // Only mDL-payment-auth matches, NOT mDL-ping-auth
+        Assert.assertTrue(matcherResult.contains("__mDL-payment-auth__"))
+        Assert.assertFalse(matcherResult.contains("__mDL-ping-auth__"))
+        Assert.assertFalse(matcherResult.contains("payment_transaction"))
+    }
+
+    @Test
+    fun testMatcher_Iso18013_keyAuthorizations_only_transaction_data() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness ->
+                harness.provisionMdoc(
+                    displayName = "PaymentCard",
+                    docType = "org.multipaz.payment.sca.1",
+                    data = mapOf(
+                        "org.multipaz.payment.sca.1" to listOf(
+                            "issuer_name" to Tstr("Utopia Bank"),
+                        )
+                    ),
+                    keyAuthorizedNamespaces = listOf(ISO_18013_TRANSACTION_DATA_NAMESPACE)
+                )
+            },
+            deviceRequestBuilder = { _, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = "org.multipaz.payment.sca.1",
+                        nameSpaces = mapOf(
+                            ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(
+                                "payment_transaction" to true,
+                            )
+                        )
+                    )
+                    .build()
+            }
+        )
+        // Entry is offered without any field items (since only device-signed data was requested)
+        Assert.assertTrue(matcherResult.contains("__PaymentCard__"))
+        Assert.assertFalse(matcherResult.contains("payment_transaction"))
+    }
+
+    @Test
+    fun testMatcher_Iso18013_keyAuthorizations_unauthorized_fails() = runTest {
+        val matcherResult = testMatcherIso18013(
+            harnessInitializer = { harness ->
+                harness.provisionMdoc(
+                    displayName = "mDL-no-auth",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    )
+                )
+            },
+            deviceRequestBuilder = { _, sessionTranscript ->
+                DeviceRequest.Builder(sessionTranscript)
+                    .addDocRequest(
+                        docType = DrivingLicense.MDL_DOCTYPE,
+                        nameSpaces = mapOf(
+                            DrivingLicense.MDL_NAMESPACE to mapOf(
+                                "given_name" to false,
+                            ),
+                            ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf(
+                                "payment_transaction" to true,
+                            )
+                        )
+                    )
+                    .build()
+            }
+        )
+        // Credential does not match because payment_transaction is unauthorized
+        Assert.assertEquals("", matcherResult)
+    }
+
+    @Test
+    fun testMatcher_Dcql_keyAuthorizations_matching() = runTest {
+        val dcql = """
+            {
+              "credentials": [
+                {
+                  "id": "cred1",
+                  "format": "mso_mdoc",
+                  "meta": {
+                    "doctype_value": "org.iso.18013.5.1.mDL"
+                  },
+                  "claims": [
+                    {"path": ["org.iso.18013.5.1", "given_name"]},
+                    {"path": ["org.example.devicesigned", "device_attestation"]}
+                  ]
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val result = testMatcherDcql(
+            version = OpenID4VP.Version.DRAFT_29,
+            signRequest = false,
+            encryptionKey = null,
+            harnessInitializer = { harness ->
+                harness.provisionMdoc(
+                    displayName = "mDL-with-auth",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    keyAuthorizedNamespaces = listOf("org.example.devicesigned")
+                )
+                harness.provisionMdoc(
+                    displayName = "mDL-no-auth",
+                    docType = DrivingLicense.MDL_DOCTYPE,
+                    data = mapOf(
+                        DrivingLicense.MDL_NAMESPACE to listOf(
+                            "given_name" to Tstr("Erika"),
+                        )
+                    ),
+                    keyAuthorizedNamespaces = emptyList()
+                )
+            },
+            dcql = dcql
+        )
+        Assert.assertTrue(result.contains("__mDL-with-auth__"))
+        Assert.assertFalse(result.contains("__mDL-no-auth__"))
+        Assert.assertFalse(result.contains("device_attestation"))
+    }
+
+    @Test
+    fun testMatcher_Iso18013_paymentSca_reproduce_user_case() = runTest {
+        val harness = DocumentStoreTestHarness()
+        harness.initialize()
+        harness.documentTypeRepository.addDocumentType(DigitalPaymentCredential.getDocumentType())
+        harness.provisionMdoc(
+            displayName = "Erika's Payment Card Credential",
+            docType = "org.multipaz.payment.sca.1",
+            data = mapOf(
+                "org.multipaz.payment.sca.1" to listOf(
+                    "issuer_name" to Tstr("Utopia Bank"),
+                    "payment_instrument_id" to Tstr("pi-77AABBCC"),
+                    "masked_account_reference" to Tstr("****1234"),
+                    "holder_name" to Tstr("Erika Mustermann"),
+                    "issue_date" to LocalDate.parse("2018-08-09").toDataItemFullDate(),
+                    "expiry_date" to LocalDate.parse("2028-08-09").toDataItemFullDate(),
+                )
+            ),
+            keyAuthorizedNamespaces = listOf(ISO_18013_TRANSACTION_DATA_NAMESPACE)
+        )
+
+        val certPem = """
+          -----BEGIN CERTIFICATE-----
+          MIICNzCCAb6gAwIBAgIRAJOb6d0HEjTDBzbBCXrggQAwCgYIKoZIzj0EAwMwKzEpMCcGA1UEAwwg
+          T1dGIE11bHRpcGF6IFRlc3RBcHAgUmVhZGVyIFJvb3QwHhcNMjQxMjAxMDAwMDAwWhcNMzQxMjAx
+          MDAwMDAwWjArMSkwJwYDVQQDDCBPV0YgTXVsdGlwYXogVGVzdEFwcCBSZWFkZXIgQ2VydDBZMBMG
+          ByqGSM49AgEGCCqGSM49AwEHA0IABO0B+FZdNKysCNn0M4xtFiwVNQpjEZTYTchA/rUJ7IPhN2RQ
+          fVh/89cL5bPH0MZzMvQrzfqwZSunyz1thGXXE12jgcIwgb8wHwYDVR0jBBgwFoAUq2Ub4FbCkFPx
+          3X9s5Ie+aN5gyfUwDgYDVR0PAQH/BAQDAgeAMBUGA1UdJQEB/wQLMAkGByiBjF0FAQYwVgYDVR0f
+          BE8wTTBLoEmgR4ZFaHR0cHM6Ly9naXRodWIuY29tL29wZW53YWxsZXQtZm91bmRhdGlvbi1sYWJz
+          L2lkZW50aXR5LWNyZWRlbnRpYWwvY3JsMB0GA1UdDgQWBBRZxxCijOoawu7s4peLtCElWPnNkjAK
+          BggqhkjOPQQDAwNnADBkAjAPvNx3CiNFWHr3VekrOYlUz4iCzEHcEzpoIegW/ClpSRHhpG5VNiMo
+          GTlcvbRIRiMCMGFYQ8MNpj5nJMd8OmEys4mxxZMbHK2QdnNPsENkYtHvi6YB5ShPY6gO5ARvEU2B
+          UA==
+          -----END CERTIFICATE-----
+        """.trimIndent()
+        val cert = org.multipaz.crypto.X509Cert.fromPem(certPem)
+
+        val itemsRequest = buildCborMap {
+            put("docType", "org.multipaz.payment.sca.1")
+            put("nameSpaces", buildCborMap {
+                put("org.multipaz.payment.sca.1", buildCborMap {
+                    put("issuer_name", false)
+                    put("payment_instrument_id", false)
+                    put("masked_account_reference", false)
+                    put("holder_name", false)
+                    put("issue_date", false)
+                    put("expiry_date", false)
+                })
+                put(ISO_18013_TRANSACTION_DATA_NAMESPACE, buildCborMap {
+                    put("urn:eudi:sca:payment:1", true)
+                })
+            })
+            put("requestInfo", buildCborMap {
+                put("transactionData", buildCborMap {
+                    put("urn:eudi:sca:payment:1", buildCborMap {
+                        put("payload", buildCborMap {
+                            put("transactionId", "3AD99006-6E0D-4D07-AE75-5DAEF0FE21D9")
+                            put("currency", "USD")
+                            put("amount", 123.25)
+                            put("payee", buildCborMap {
+                                put("name", "Linux Foundation")
+                                put("id", "01234")
+                            })
+                            put("tipRequested", true)
+                        })
+                    })
+                })
+            })
+        }
+
+        val deviceRequestCbor = buildCborMap {
+            put("version", "1.1")
+            put("docRequests", buildCborArray {
+                add(buildCborMap {
+                    put("itemsRequest", org.multipaz.cbor.Tagged(24, org.multipaz.cbor.Bstr(Cbor.encode(itemsRequest))))
+                })
+            })
+            val drInfo = buildCborMap {
+                put("useCases", buildCborArray {
+                    add(buildCborMap {
+                        put("mandatory", true)
+                        put("documentSets", buildCborArray {
+                            add(buildCborArray {
+                                add(0)
+                            })
+                        })
+                    })
+                })
+            }
+            put("deviceRequestInfo", org.multipaz.cbor.Tagged(24, org.multipaz.cbor.Bstr(Cbor.encode(drInfo))))
+            put("readerAuthAll", buildCborArray {
+                add(buildCborArray {
+                    add(org.multipaz.cbor.Bstr(Cbor.encode(buildCborMap {
+                        put(1, -7)
+                    })))
+                    add(buildCborMap {
+                        put(33, cert.encoded.toByteArray())
+                    })
+                    add(Simple.NULL)
+                    add("014943a50387c150da7de3b517d8800efcf52f62b0e81cdc333e4a2d971a9e4e04c82c6ac214189586d6689b8e6028ff7a6c5dff6d3fbcb7eaec727f62bf89f3".fromHex())
+                })
+            })
+        }
+
+        val deviceRequest = DeviceRequest.fromDataItem(deviceRequestCbor)
+        val base64DeviceRequest = Cbor.encode(deviceRequest.toDataItem()).toBase64Url()
+
+        val encryptionKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val nonce = Random.nextBytes(16).toBase64Url()
+        val encryptionInfo = buildCborArray {
+            add("dcapi")
+            addCborMap {
+                put("nonce", nonce.toByteArray())
+                put("recipientPublicKey", encryptionKey.toCoseKey().toDataItem())
+            }
+        }
+        val base64EncryptionInfo = Cbor.encode(encryptionInfo).toBase64Url()
+
+        val credentialDatabase = calculateCredentialDatabase(
+            appName = "Test App",
+            documentStore = harness.documentStore,
+            documentTypeRepository = harness.documentTypeRepository,
+            selectedProtocols = DigitalCredentials.getDefault().supportedProtocols,
+        )
+
+        var result = runMatcher(
+            request = buildJsonObject {
+                putJsonArray("requests") {
+                    addJsonObject {
+                        put("protocol", "org-iso-mdoc")
+                        putJsonObject("data") {
+                            put("deviceRequest", base64DeviceRequest)
+                            put("encryptionInfo", base64EncryptionInfo)
+                        }
+                    }
+                }
+            }.toString().encodeToByteArray(),
+            credentialDatabase = Cbor.encode(credentialDatabase)
+        )
+        println("Matcher result: '$result'")
+        Assert.assertTrue("Expected match but got: '$result'", result.isNotEmpty())
     }
 }

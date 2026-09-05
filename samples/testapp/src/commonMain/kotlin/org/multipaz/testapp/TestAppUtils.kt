@@ -47,8 +47,11 @@ import org.multipaz.documenttype.MultiDocumentCannedRequest
 import org.multipaz.documenttype.SingleDocumentCannedRequest
 import org.multipaz.documenttype.knowntypes.Aadhaar
 import org.multipaz.documenttype.knowntypes.AgeVerification
+import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.utopia.knowntypes.Loyalty
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
+import org.multipaz.utopia.knowntypes.PingTransaction
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.IDPass
@@ -342,7 +345,11 @@ object TestAppUtils {
                     DrivingLicense.getDocumentType(),
                     "Erika",
                     "Erika's Driving License",
-                    Res.drawable.driving_license_card_art
+                    Res.drawable.driving_license_card_art,
+                    deviceKeyAuthorizedNamespaces = listOf(PingTransaction.openId4VpMdocResponseNamespace),
+                    deviceKeyAuthorizedDataElements = mapOf(
+                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(PingTransaction.identifier)
+                    )
                 )
                 // A second, leaner mDL whose MSO is small enough for the Longfellow ZK circuits.
                 // The full mDL above overflows the circuit (MDOC_PROVER_TAGGED_MSO_TOO_BIG), so we
@@ -359,7 +366,11 @@ object TestAppUtils {
                     "Erika",
                     "Erika's Driving License (ZKP-friendly)",
                     Res.drawable.driving_license_card_art,
-                    zkFriendly = true
+                    zkFriendly = true,
+                    deviceKeyAuthorizedNamespaces = listOf(PingTransaction.openId4VpMdocResponseNamespace),
+                    deviceKeyAuthorizedDataElements = mapOf(
+                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(PingTransaction.identifier)
+                    )
                 )
                 provisionDocument(
                     documentStore,
@@ -398,7 +409,11 @@ object TestAppUtils {
                     EUPersonalID.getDocumentType(),
                     "Erika",
                     "Erika's EU PID",
-                    Res.drawable.pid_card_art
+                    Res.drawable.pid_card_art,
+                    deviceKeyAuthorizedNamespaces = listOf(PingTransaction.openId4VpMdocResponseNamespace),
+                    deviceKeyAuthorizedDataElements = mapOf(
+                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(PingTransaction.identifier)
+                    )
                 )
                 provisionDocument(
                     documentStore,
@@ -476,7 +491,17 @@ object TestAppUtils {
                     DigitalPaymentCredential.getDocumentType(),
                     "Erika",
                     "Erika's Payment Card Credential",
-                    Res.drawable.payment_card_art
+                    Res.drawable.payment_card_art,
+                    deviceKeyAuthorizedNamespaces = listOf(
+                        PaymentTransaction.openId4VpMdocResponseNamespace,
+                        PingTransaction.openId4VpMdocResponseNamespace,
+                    ),
+                    deviceKeyAuthorizedDataElements = mapOf(
+                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(
+                            PaymentTransaction.identifier,
+                            PingTransaction.identifier,
+                        )
+                    )
                 )
                 provisionDocument(
                     documentStore = documentStore,
@@ -685,6 +710,8 @@ object TestAppUtils {
         displayName: String,
         cardArtResource: DrawableResource,
         zkFriendly: Boolean = false,
+        deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
+        deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     ) {
         val cardArt = getDrawableResourceBytes(
             getSystemResourceEnvironment(),
@@ -716,7 +743,9 @@ object TestAppUtils {
                 dsKey = dsKey,
                 numCredentialsPerDomain = numCredentialsPerDomain,
                 givenNameOverride = givenNameOverride,
-                zkFriendly = zkFriendly
+                zkFriendly = zkFriendly,
+                deviceKeyAuthorizedNamespaces = deviceKeyAuthorizedNamespaces,
+                deviceKeyAuthorizedDataElements = deviceKeyAuthorizedDataElements,
             )
         }
 
@@ -756,7 +785,9 @@ object TestAppUtils {
         dsKey: AsymmetricKey.X509Certified,
         numCredentialsPerDomain: Int,
         givenNameOverride: String,
-        zkFriendly: Boolean = false
+        zkFriendly: Boolean = false,
+        deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
+        deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     ) {
         val issuerNamespaces = buildIssuerNamespaces {
             for ((nsName, ns) in documentType.mdocDocumentType?.namespaces!!) {
@@ -832,6 +863,8 @@ object TestAppUtils {
                     digestAlgorithm = Algorithm.SHA256,
                     valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
                     deviceKey = mdocCredential.getAttestation().publicKey,
+                    deviceKeyAuthorizedNamespaces = deviceKeyAuthorizedNamespaces,
+                    deviceKeyAuthorizedDataElements = deviceKeyAuthorizedDataElements,
                 )
                 val taggedEncodedMso = Cbor.encode(Tagged(
                     Tagged.ENCODED_CBOR,
@@ -896,7 +929,9 @@ object TestAppUtils {
         validUntil: Instant,
         dsKey: AsymmetricKey.X509Certified,
         numCredentialsPerDomain: Int,
-        givenNameOverride: String
+        givenNameOverride: String,
+        deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
+        deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     ): String? {
         val issuerNamespaces = buildIssuerNamespaces {
             for ((nsName, ns) in documentType.mdocDocumentType?.namespaces!!) {
@@ -968,6 +1003,8 @@ object TestAppUtils {
                 digestAlgorithm = Algorithm.SHA256,
                 valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
                 deviceKey = mdocCredential.getAttestation().publicKey,
+                deviceKeyAuthorizedNamespaces = deviceKeyAuthorizedNamespaces,
+                deviceKeyAuthorizedDataElements = deviceKeyAuthorizedDataElements,
             )
             val taggedEncodedMso = Cbor.encode(Tagged(
                 Tagged.ENCODED_CBOR,

@@ -9,7 +9,7 @@ import org.multipaz.mdoc.response.DeviceResponse
  * @property deviceResponse a [org.multipaz.mdoc.response.DeviceResponse].
  * @property eventData a [eventData] which can be used to log the presentment.
  */
-data class MdocResponse(
+data class Iso18013Response(
     val deviceResponse: DeviceResponse,
     val eventData: EventPresentmentData
 )

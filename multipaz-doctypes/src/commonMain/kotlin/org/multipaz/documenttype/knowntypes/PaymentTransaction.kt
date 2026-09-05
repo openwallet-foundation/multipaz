@@ -9,8 +9,11 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNamingStrategy
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.cbor.toDataItem
 import org.multipaz.credential.Credential
@@ -20,6 +23,8 @@ import org.multipaz.documenttype.TransactionType
 import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.presentment.TransactionData
+import org.multipaz.presentment.TransactionProtocol
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.util.fromBase64Url
 import kotlin.math.ceil
 import kotlin.time.Instant
@@ -52,24 +57,6 @@ object PaymentTransaction: TransactionType<PaymentTransaction.Payload>(
         val transactionDataHashesAlg: List<String>?,
         val payload: Payload
     )
-
-    /**
-     * Represents the wrapper envelope for a CBOR-serialized payment transaction.
-     *
-     * This serves as a binary alternative to [JsonData], optimizing performance
-     * and payload size by mapping algorithm identifiers to numeric values.
-     *
-     * @property transactionDataHashesAlg An optional list of cryptographic hash algorithms
-     * represented as CBOR integer identifiers (`List<Long>`).
-     * @property payload The core [Payload] containing transaction-specific details.
-     */
-    @CborSerializable
-    data class CborData(
-        val transactionDataHashesAlg: List<Long>?,
-        val payload: Payload
-    ) {
-        companion object
-    }
 
     /**
      * The core detail schema of a payment transaction.
@@ -202,7 +189,7 @@ object PaymentTransaction: TransactionType<PaymentTransaction.Payload>(
     data class UserInput(
         val tipPercent: Double
     ): TransactionUserInput() {
-        override fun applyCbor(
+        override fun generateMdocResponseElements(
             transactionData: TransactionData<*>,
             credential: Credential
         ): Map<String, DataItem> = buildMap {
@@ -211,7 +198,7 @@ object PaymentTransaction: TransactionType<PaymentTransaction.Payload>(
             put("tipAmount", amount.toDataItem())
         }
 
-        override fun applyJson(
+        override fun generateSdJwtResponseClaims(
             transactionData: TransactionData<*>,
             credential: Credential
         ): Map<String, JsonElement> = buildMap {
@@ -251,19 +238,13 @@ object PaymentTransaction: TransactionType<PaymentTransaction.Payload>(
         TYEA
     }
 
-    override fun serializeCbor(
-        payload: Payload,
-        hashAlgorithms: List<Algorithm>?
-    ): DataItem =
-        Tagged(
-            tagNumber = Tagged.ENCODED_CBOR,
-            taggedItem = CborData(
-                transactionDataHashesAlg = coseHashAlgorithms(hashAlgorithms),
-                payload = payload
-            ).toCbor().toDataItem()
-        )
+    override fun serializeIso18013Request(payload: Payload): DataItem =
+        payload.toDataItem()
 
-    override fun serializeJson(
+    override fun parseIso18013Request(dataItem: DataItem): Payload =
+        Payload.fromDataItem(dataItem)
+
+    override fun serializeOpenId4VpRequest(
         payload: Payload,
         credentialIds: List<String>,
         hashAlgorithms: List<Algorithm>?
@@ -275,34 +256,105 @@ object PaymentTransaction: TransactionType<PaymentTransaction.Payload>(
             payload = payload
         ))
 
+    override fun parseOpenId4VpRequest(jsonString: String): Payload =
+        jsonFormat.decodeFromString<JsonData>(jsonString).payload
+
+
     override fun parseJson(serialized: ByteString): TransactionData<Payload> {
         val jsonString = serialized.decodeToString().fromBase64Url().decodeToString()
         val data = jsonFormat.decodeFromString<JsonData>(jsonString)
         return TransactionData(
             type = this,
-            serialized = serialized,
-            hashAlgorithms = parseJoseHashAlgorithms(data.transactionDataHashesAlg),
             payload = data.payload,
+            protocol = TransactionProtocol.OPENID4VP,
+            rawBytes = serialized,
+            hashAlgorithms = parseJoseHashAlgorithms(data.transactionDataHashesAlg),
         )
     }
 
-    override fun parseCbor(serialized: DataItem): TransactionData<Payload> {
-        val data = CborData.fromDataItem(serialized.asTaggedEncodedCbor)
-        return TransactionData(
-            type = this,
-            serialized = ByteString(serialized.asTagged.asBstr),
-            hashAlgorithms = parseCoseHashAlgorithms(data.transactionDataHashesAlg),
-            payload = data.payload,
-        )
+
+    override suspend fun generateMdocResponseElements(
+        transactionData: TransactionData<Payload>,
+        credential: Credential,
+        userInput: TransactionUserInput?,
+        docRequestId: Int?
+    ): Map<String, DataItem> = buildMap {
+        putAll(super.generateMdocResponseElements(transactionData, credential, userInput, docRequestId))
+        if (transactionData.protocol == TransactionProtocol.ISO_18013_5) {
+            put("amount", transactionData.payload.amount.toDataItem())
+            put("currency", transactionData.payload.currency.toDataItem())
+        }
+    }
+
+    override suspend fun generateSdJwtResponseClaims(
+        transactionData: TransactionData<Payload>,
+        credential: Credential,
+        userInput: TransactionUserInput?,
+        docRequestId: Int?
+    ): Map<String, JsonElement> = buildMap {
+        putAll(super.generateSdJwtResponseClaims(transactionData, credential, userInput, docRequestId))
+        if (transactionData.protocol == TransactionProtocol.ISO_18013_5) {
+            put("amount", JsonPrimitive(transactionData.payload.amount))
+            put("currency", JsonPrimitive(transactionData.payload.currency))
+        }
+    }
+
+    override suspend fun verifyMdocResponse(
+        transactionData: TransactionData<Payload>,
+        responseElements: Map<String, DataItem>
+    ) {
+        super.verifyMdocResponse(transactionData, responseElements)
+        if (transactionData.protocol == TransactionProtocol.ISO_18013_5) {
+            val amount = responseElements["amount"]?.asDouble
+                ?: throw IllegalStateException("Missing 'amount' in transaction response")
+            if (amount != transactionData.payload.amount) {
+                throw IllegalStateException(
+                    "Amount mismatch in transaction response: expected ${transactionData.payload.amount}, got $amount"
+                )
+            }
+            val currency = responseElements["currency"]?.asTstr
+                ?: throw IllegalStateException("Missing 'currency' in transaction response")
+            if (currency != transactionData.payload.currency) {
+                throw IllegalStateException(
+                    "Currency mismatch in transaction response: expected ${transactionData.payload.currency}, got $currency"
+                )
+            }
+        }
+    }
+
+    override suspend fun verifySdJwtResponse(
+        transactionData: TransactionData<Payload>,
+        responseClaims: Map<String, JsonElement>
+    ) {
+        super.verifySdJwtResponse(transactionData, responseClaims)
+        if (transactionData.protocol == TransactionProtocol.ISO_18013_5) {
+            val amount = responseClaims["amount"]?.jsonPrimitive?.doubleOrNull
+                ?: throw IllegalStateException("Missing 'amount' in transaction response")
+            if (amount != transactionData.payload.amount) {
+                throw IllegalStateException(
+                    "Amount mismatch in transaction response: expected ${transactionData.payload.amount}, got $amount"
+                )
+            }
+            val currency = responseClaims["currency"]?.jsonPrimitive?.contentOrNull
+                ?: throw IllegalStateException("Missing 'currency' in transaction response")
+            if (currency != transactionData.payload.currency) {
+                throw IllegalStateException(
+                    "Currency mismatch in transaction response: expected ${transactionData.payload.currency}, got $currency"
+                )
+            }
+        }
     }
 
     override suspend fun isApplicable(
         transactionData: TransactionData<Payload>,
         credential: Credential
     ): Boolean {
-        return credential is MdocCredential
-                && credential.docType == "org.multipaz.payment.sca.1"
-                && super.isApplicable(transactionData, credential)
+        val matchesType = when (credential) {
+            is MdocCredential -> credential.docType == "org.multipaz.payment.sca.1"
+            is KeyBoundSdJwtVcCredential -> credential.vct == "org.multipaz.payment.sca.1"
+            else -> false
+        }
+        return matchesType && super.isApplicable(transactionData, credential)
     }
 
     /** Sample transaction data for this transaction type */

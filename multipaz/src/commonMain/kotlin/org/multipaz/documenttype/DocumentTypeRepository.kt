@@ -76,8 +76,7 @@ class DocumentTypeRepository {
         for (existingType in transactionTypes) {
             check(existingType.identifier != transactionType.identifier)
             check(existingType.kbJwtResponseClaimName != transactionType.kbJwtResponseClaimName)
-            check(existingType.mdocResponseNamespace != transactionType.mdocResponseNamespace)
-            check(existingType.mdocRequestInfoIdentifier != transactionType.mdocRequestInfoIdentifier)
+            check(existingType.iso18013RequestInfoIdentifier != transactionType.iso18013RequestInfoIdentifier)
         }
         _transactionTypes.add(transactionType)
     }

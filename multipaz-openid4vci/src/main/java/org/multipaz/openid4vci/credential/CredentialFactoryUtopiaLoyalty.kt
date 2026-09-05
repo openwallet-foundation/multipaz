@@ -25,7 +25,6 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.toBase64Url
-import org.multipaz.utopia.knowntypes.PingTransaction
 import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
@@ -139,10 +138,7 @@ class CredentialFactoryUtopiaLoyalty : CredentialFactory {
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = authenticationKey!!,
-            revocationStatus = revocationStatus,
-            deviceKeyAuthorizedNamespaces = listOf(
-                PingTransaction.mdocResponseNamespace
-            )
+            revocationStatus = revocationStatus
         )
         val taggedEncodedMso = Cbor.encode(Tagged(
             Tagged.ENCODED_CBOR,

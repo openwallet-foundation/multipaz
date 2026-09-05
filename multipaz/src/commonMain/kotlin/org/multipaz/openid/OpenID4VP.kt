@@ -57,6 +57,7 @@ import org.multipaz.sdjwt.credential.SdJwtVcCredential
 import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.presentment.ConsentData
 import org.multipaz.presentment.TransactionData
+import org.multipaz.presentment.TransactionProtocol
 import org.multipaz.presentment.computeTransactionResponse
 import org.multipaz.request.OpenID4VPRequesterIdentity
 import org.multipaz.request.RequesterIdentity
@@ -760,36 +761,36 @@ object OpenID4VP {
     ): Map<String, JsonElement> {
         val transactionResponse = mutableMapOf<String, JsonElement>()
         for (data in transactionData) {
-            val response = data.applyJson(credential as Credential, transactionUserInput[data.type.identifier])
-            if (response != null || docRequestId != null) {
-                transactionResponse[data.type.kbJwtResponseClaimName] = if (docRequestId == null) {
-                    response!!
-                } else {
-                    buildJsonObject {
-                        if (response != null) {
-                            for ((name, value) in response.jsonObject) {
-                                put(name, value)
-                            }
-                        }
-                        put("doc_request_id", docRequestId)
+            val responseClaims = data.generateSdJwtResponseClaims(
+                credential as Credential,
+                transactionUserInput[data.type.identifier],
+                docRequestId
+            )
+            if (responseClaims.isNotEmpty()) {
+                transactionResponse[data.type.kbJwtResponseClaimName] = buildJsonObject {
+                    for ((name, value) in responseClaims) {
+                        put(name, value)
                     }
                 }
             }
         }
-        val hashAlgorithm = transactionData.firstNotNullOfOrNull { it.hashAlgorithms?.first() }
-        if (hashAlgorithm != null) {
-            // Non-default hash algorithm; ensure all transaction data items are
-            // using the same one
-            transactionData.forEach { data ->
-                check(hashAlgorithm == (data.hashAlgorithms?.first() ?: Algorithm.SHA256))
+        val isIso18013_5 = transactionData.any { it.protocol == TransactionProtocol.ISO_18013_5 }
+        if (!isIso18013_5) {
+            val hashAlgorithm = transactionData.firstNotNullOfOrNull { it.hashAlgorithms?.first() }
+            if (hashAlgorithm != null) {
+                // Non-default hash algorithm; ensure all transaction data items are
+                // using the same one
+                transactionData.forEach { data ->
+                    check(hashAlgorithm == (data.hashAlgorithms?.first() ?: Algorithm.SHA256))
+                }
+                transactionResponse["transaction_data_hashes_alg"] =
+                    JsonPrimitive(hashAlgorithm.hashAlgorithmName)
             }
-            transactionResponse["transaction_data_hashes_alg"] =
-                JsonPrimitive(hashAlgorithm.hashAlgorithmName)
-        }
-        transactionResponse["transaction_data_hashes"] = buildJsonArray {
-            transactionData.forEach {
-                    data -> add(data.computeHash(
-                hashAlgorithm ?: Algorithm.SHA256).toByteArray().toBase64Url())
+            transactionResponse["transaction_data_hashes"] = buildJsonArray {
+                transactionData.forEach { data ->
+                    add(data.computeHash(
+                        hashAlgorithm ?: Algorithm.SHA256).toByteArray().toBase64Url())
+                }
             }
         }
         return transactionResponse

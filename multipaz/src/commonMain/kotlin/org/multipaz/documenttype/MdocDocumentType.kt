@@ -26,12 +26,13 @@ import org.multipaz.cbor.DataItem
  */
 class MdocDocumentType private constructor(
     val docType: String,
-    val namespaces: Map<String, MdocNamespace>
+    val namespaces: Map<String, MdocNamespace>,
 ) {
     /**
      * Builder class for class [MdocDocumentType].
      *
      * @param docType the docType of the ISO mdoc Document Type.
+     * @property namespaces the mutable map of namespaces being built.
      */
     data class Builder(
         val docType: String,
@@ -102,6 +103,8 @@ class MdocDocumentType private constructor(
 
         /**
          * Build the [MdocDocumentType].
+         *
+         * @return the built [MdocDocumentType].
          */
         fun build() =
             MdocDocumentType(docType, namespaces.map { Pair(it.key, it.value.build()) }.toMap())

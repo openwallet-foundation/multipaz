@@ -14,6 +14,7 @@ import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
@@ -101,8 +102,14 @@ class CredentialFactoryDigitalPaymentCredential : CredentialFactory {
             deviceKey = authenticationKey!!,
             revocationStatus = revocationStatus,
             deviceKeyAuthorizedNamespaces = listOf(
-                PaymentTransaction.mdocResponseNamespace,
-                PingTransaction.mdocResponseNamespace
+                PaymentTransaction.openId4VpMdocResponseNamespace,
+                PingTransaction.openId4VpMdocResponseNamespace,
+            ),
+            deviceKeyAuthorizedDataElements = mapOf(
+                ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(
+                    PaymentTransaction.identifier,
+                    PingTransaction.identifier,
+                )
             )
         )
         val taggedEncodedMso = Cbor.encode(

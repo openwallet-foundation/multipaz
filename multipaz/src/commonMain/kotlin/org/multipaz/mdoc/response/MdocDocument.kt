@@ -30,6 +30,7 @@ import org.multipaz.mdoc.issuersigned.IssuerSignedItem
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.presentment.TransactionData
+import org.multipaz.presentment.TransactionProtocol
 import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.request.MdocRequestedClaim
 import kotlin.time.Instant
@@ -258,9 +259,25 @@ class MdocDocument(
         this.transactionData = transactionData
         transactionResponse = buildMap {
             for (transaction in transactionData) {
-                val response = deviceNamespaces.data[transaction.type.mdocResponseNamespace]
-                    ?: throw IllegalStateException("No transaction response for '${transaction.type.identifier}'")
-                transaction.verifyCborResponse(response)
+                val response: Map<String, DataItem> = when (transaction.protocol) {
+                    TransactionProtocol.ISO_18013_5 -> {
+                        val ns = transaction.type.getMdocResponseNamespace(TransactionProtocol.ISO_18013_5)
+                        val namespaceMap = deviceNamespaces.data[ns]
+                            ?: throw IllegalStateException("No transaction response namespace '$ns'")
+                        val responseItem = namespaceMap[transaction.type.identifier]
+                            ?: throw IllegalStateException("No transaction response for '${transaction.type.identifier}'")
+                        responseItem.asMap.entries.associate { (k, v) -> Pair(k.asTstr, v) }
+                    }
+                    TransactionProtocol.OPENID4VP -> {
+                        val ns = transaction.type.getMdocResponseNamespace(TransactionProtocol.OPENID4VP)
+                        val namespaceMap = deviceNamespaces.data[ns]
+                            ?: throw IllegalStateException(
+                                "No transaction response for '${transaction.type.identifier}' in namespace '$ns'"
+                            )
+                        namespaceMap
+                    }
+                }
+                transaction.verifyMdocResponse(response)
                 put(transaction.type.identifier, response)
             }
         }

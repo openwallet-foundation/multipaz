@@ -1,7 +1,5 @@
 package org.multipaz.documenttype
 
-import org.multipaz.util.fromBase64Url
-
 /**
  * Sample data for request using a particular transaction data type.
  *
@@ -19,5 +17,5 @@ class CannedTransactionData<PayloadT: Any>(
      * @return transaction data serialized as JSON (but **not** Base64Url-encoded)
      */
     fun getSerializedJson(credentialIds: List<String>): String =
-        transactionType.serializeJson(payload, credentialIds, hashAlgorithms = null)
+        transactionType.serializeOpenId4VpRequest(payload, credentialIds, hashAlgorithms = null)
 }

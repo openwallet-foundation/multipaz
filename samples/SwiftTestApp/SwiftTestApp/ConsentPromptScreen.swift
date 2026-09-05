@@ -9,6 +9,8 @@ private enum RequestType: String, CaseIterable {
     case mdlNameAndAddressPartiallyStored = "mDL: Name and address (partially stored)"
     case mdlNameAndAddressAllStored = "mDL: Name and address (all stored)"
     case photoIdMandatory = "PhotoID: Mandatory data elements (two docs)"
+    case payment = "DPC: Payment Confirmation"
+    case paymentOnlyConf = "DPC: Payment Confirmation (only confirmation)"
     case openid4vpComplexExampleFromAppendixD = "Complex example from OpenID4VP Appendix D"
     case mdlAndBoardingPass = "mDL AND Boarding pass"
     case mdlAndOptionalBoardingPass = "mDL AND optional Boarding pass"
@@ -142,6 +144,7 @@ private func calcRequestData(
     let mdlCardArt = UIImage(named: "driving_license_card_art")!.pngData()!
     let photoIdCardArt = UIImage(named: "photo_id_card_art")!.pngData()!
     let boardingPassCardArt = UIImage(named: "boarding-pass-utopia-airlines")!.pngData()!
+    let paymentCardArt = UIImage(named: "payment_card_art")!.pngData()!
     let utopiaMarketplaceLogo = UIImage(named: "utopia-marketplace")!.pngData()!
     let utopiaAirlinesLogo = UIImage(named: "utopia-airlines")!.pngData()!
     let utopiaCbpLogo = UIImage(named: "utopia-cbp")!.pngData()!
@@ -334,6 +337,54 @@ private func calcRequestData(
         deviceKeyAuthorizedDataElements: [:]
     )
     
+    let paymentDoc = try! await documentStore.createDocument(
+        displayName: "Erika's Payment Card Credential",
+        typeDisplayName: "Payment Card",
+        cardArt: paymentCardArt.toByteString(),
+        issuerLogo: nil,
+        authorizationData: nil,
+        appData: nil,
+        created: now.toKotlinInstant(),
+        readerIdentifiers: [],
+        metadata: nil
+    )
+    let _ = try! await DigitalPaymentCredential.shared.getDocumentType(
+        locale: LocalizedStrings.shared.getCurrentLocale()
+    ).createMdocCredentialWithSampleData(
+        document: paymentDoc,
+        secureArea: secureArea,
+        createKeySettings: CreateKeySettings(
+            algorithm: Algorithm.esp256,
+            nonce: ByteStringBuilder(initialCapacity: 3).appendString(string: "123").toByteString(),
+            userAuthenticationRequired: true,
+            userAuthenticationTimeout: 0,
+            validFrom: nil,
+            validUntil: nil
+        ),
+        dsKey: AsymmetricKey.X509CertifiedExplicit(
+            certChain: X509CertChain(certificates: [dsCert]),
+            privateKey: dsKey,
+            algorithm: Algorithm.esp256
+        ),
+        signedAt: signedAt.toKotlinInstant().truncateToWholeSeconds(),
+        validFrom: validFrom.toKotlinInstant().truncateToWholeSeconds(),
+        validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
+        expectedUpdate: nil,
+        domain: "mdoc",
+        randomProvider: KotlinRandom.companion,
+        includeElement: { _, _ in KotlinBoolean(value: true) },
+        deviceKeyAuthorizedNamespaces: [
+            PaymentTransaction.shared.openId4VpMdocResponseNamespace,
+            PingTransaction.shared.openId4VpMdocResponseNamespace,
+        ],
+        deviceKeyAuthorizedDataElements: [
+            ISO_18013_TRANSACTION_DATA_NAMESPACE: [
+                PaymentTransaction.shared.identifier,
+                PingTransaction.shared.identifier,
+            ]
+        ]
+    )
+    
     try! await addCredentialsForOpenID4VPComplexExample(
         documentStore: documentStore,
         secureArea: secureArea,
@@ -353,6 +404,9 @@ private func calcRequestData(
     let photoIdDocType = PhotoID.shared.getDocumentType(
         locale: LocalizedStrings.shared.getCurrentLocale()
     )
+    let paymentDocType = DigitalPaymentCredential.shared.getDocumentType(
+        locale: LocalizedStrings.shared.getCurrentLocale()
+    )
     
     let zks: [ZkSystemSpec] = []
     let dcqlString: String? = switch requestType {
@@ -370,6 +424,10 @@ private func calcRequestData(
         mdlDocType.cannedRequests.first(where: { cr in cr.id == "name-and-address-all-stored" })!.mdocRequest!.toDcqlString(zkSystemSpecs: zks)
     case .photoIdMandatory:
         photoIdDocType.cannedRequests.first(where: { cr in cr.id == "mandatory" })!.mdocRequest!.toDcqlString(zkSystemSpecs: zks)
+    case .payment:
+        paymentDocType.cannedRequests.first(where: { cr in cr.id == "payment_transaction" })!.mdocRequest!.toDcqlString(zkSystemSpecs: zks)
+    case .paymentOnlyConf:
+        paymentDocType.cannedRequests.first(where: { cr in cr.id == "payment_transaction_only_conf" })!.mdocRequest!.toDcqlString(zkSystemSpecs: zks)
     case .openid4vpComplexExampleFromAppendixD:
         """
             {
@@ -788,12 +846,21 @@ private func calcRequestData(
         domainsKeyBoundSdJwt: ["sdjwt"]
     )
     
+    let transactionDataMap: [String: [TransactionData<AnyObject>]] = switch requestType {
+    case .payment:
+        paymentDocType.cannedRequests.first(where: { cr in cr.id == "payment_transaction" })!.toTransactionDataMap(credentialId: "cred1")
+    case .paymentOnlyConf:
+        paymentDocType.cannedRequests.first(where: { cr in cr.id == "payment_transaction_only_conf" })!.toTransactionDataMap(credentialId: "cred1")
+    default:
+        [:]
+    }
+    
     if dcqlString != nil {
         let query = try! DcqlQuery.companion.fromJsonString(dcql: dcqlString!)
         let credentialQueryResult = try! await query.execute(
             presentmentSource: source,
             keyAgreementPossible: [],
-            transactionDataMap: [:],
+            transactionDataMap: transactionDataMap,
             requesterIdentities: requester.requesterIdentities
         )
         
@@ -872,7 +939,7 @@ private func calcRequestData(
                 ),
                 docFormat: nil,
                 dataElementIdentifierMapping: [:],
-                transactions: nil,
+                transactionData: nil,
                 otherInfo: [:])
         )
         drBuilder.setDeviceRequestInfo(

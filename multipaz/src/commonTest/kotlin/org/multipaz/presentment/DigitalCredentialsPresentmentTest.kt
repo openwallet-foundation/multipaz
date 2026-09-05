@@ -11,6 +11,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNamingStrategy
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -18,12 +19,17 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.buildJsonArray
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.cbor.ByteStringFormat
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Cdn
+import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.Uint
 import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.buildCborArray
@@ -40,36 +46,51 @@ import org.multipaz.crypto.JsonWebEncryption
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
+import org.multipaz.document.DocumentBadge
+import org.multipaz.document.DocumentStore
+import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.TransactionType
 import org.multipaz.documenttype.TransactionUserInput
+import org.multipaz.documenttype.knowntypes.PaymentTransaction
+import org.multipaz.mdoc.devicesigned.DeviceAuth
+import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.TransactionsInfo
+import org.multipaz.mdoc.request.buildDeviceRequest
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.openid.OpenID4VP
 import org.multipaz.prompt.promptModelSilentConsent
+import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
+import org.multipaz.request.RequesterIdentity
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.trustmanagement.TrustPoint
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.toHex
+import org.multipaz.util.zlibInflate
 import org.multipaz.verification.VerifierIdentity
 import kotlin.collections.iterator
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.time.Clock
 
 class DigitalCredentialsPresentmentTest {
     internal abstract class BooleanTransaction(
         displayName: String,
         identifier: String,
         kbJwtResponseClaimName: String = identifier,
-        mdocResponseNamespace: String = identifier
+        openId4VpMdocResponseNamespace: String = identifier,
     ): TransactionType<Boolean>(
         displayName = displayName,
         identifier = identifier,
         kbJwtResponseClaimName = kbJwtResponseClaimName,
-        mdocResponseNamespace = mdocResponseNamespace
+        openId4VpMdocResponseNamespace = openId4VpMdocResponseNamespace,
     ) {
         @Serializable
         data class JsonData(
@@ -79,26 +100,14 @@ class DigitalCredentialsPresentmentTest {
             val succeed: Boolean
         )
 
-        override fun serializeCbor(
-            payload: Boolean,
-            hashAlgorithms: List<Algorithm>?
-        ): DataItem = Tagged(
-            tagNumber = Tagged.ENCODED_CBOR,
-            taggedItem = Cbor.encode(
-                item = buildCborMap {
-                    put("succeed", payload)
-                    coseHashAlgorithms(hashAlgorithms)?.let { algs ->
-                        putCborArray("transactionDataHashesAlg") {
-                            for (alg in algs) {
-                                add(alg)
-                            }
-                        }
-                    }
-                }
-            ).toDataItem()
-        )
+        override fun serializeIso18013Request(payload: Boolean): DataItem = buildCborMap {
+            put("succeed", payload)
+        }
 
-        override fun serializeJson(
+        override fun parseIso18013Request(dataItem: DataItem): Boolean =
+            dataItem["succeed"].asBoolean
+
+        override fun serializeOpenId4VpRequest(
             payload: Boolean,
             credentialIds: List<String>,
             hashAlgorithms: List<Algorithm>?
@@ -111,33 +120,22 @@ class DigitalCredentialsPresentmentTest {
             )
         )
 
+        override fun parseOpenId4VpRequest(jsonString: String): Boolean =
+            jsonFormat.decodeFromString<JsonData>(jsonString).succeed
+
+
         override fun parseJson(serialized: ByteString): TransactionData<Boolean> {
             val jsonString = serialized.decodeToString().fromBase64Url().decodeToString()
             val data = jsonFormat.decodeFromString<JsonData>(jsonString)
             return TransactionData(
                 type = this,
-                serialized = serialized,
-                hashAlgorithms = parseJoseHashAlgorithms(data.transactionDataHashesAlg),
                 payload = data.succeed,
+                protocol = TransactionProtocol.OPENID4VP,
+                rawBytes = serialized,
+                hashAlgorithms = parseJoseHashAlgorithms(data.transactionDataHashesAlg),
             )
         }
 
-        override fun parseCbor(serialized: DataItem): TransactionData<Boolean> {
-            val data = serialized.asTaggedEncodedCbor
-            return TransactionData(
-                type = this,
-                serialized = ByteString(serialized.asTagged.asBstr),
-                hashAlgorithms = if (data.hasKey("transactionDataHashesAlg")) {
-                    parseCoseHashAlgorithms(
-                        data["transactionDataHashesAlg"].asArray.map {
-                            it.asNumber
-                        })
-                } else {
-                    null
-                },
-                payload = data["succeed"].asBoolean,
-            )
-        }
 
         override suspend fun isApplicable(
             transactionData: TransactionData<Boolean>,
@@ -158,8 +156,7 @@ class DigitalCredentialsPresentmentTest {
     private object FooTransactionType: BooleanTransaction(
         displayName = "Foo",
         identifier = "foo",
-        kbJwtResponseClaimName = "kb_foo",
-        mdocResponseNamespace = "FooNS"
+        kbJwtResponseClaimName = "kb_foo"
     ) {
         override suspend fun isApplicable(
             transactionData: TransactionData<Boolean>,
@@ -168,23 +165,26 @@ class DigitalCredentialsPresentmentTest {
             return transactionData.payload && super.isApplicable(transactionData, credential)
         }
 
-        override suspend fun applyJson(
+        override suspend fun generateMdocResponseElements(
             transactionData: TransactionData<Boolean>,
             credential: Credential,
-            userInput: TransactionUserInput?
-        ): JsonElement = buildJsonObject {
-            check(userInput == null)
-            put("result", 42)
-        }
-
-        override suspend fun applyCbor(
-            transactionData: TransactionData<Boolean>,
-            credential: Credential,
-            userInput: TransactionUserInput?
+            userInput: TransactionUserInput?,
+            docRequestId: Int?
         ): Map<String, DataItem> = buildMap {
             check(userInput == null)
-            putAll(super.applyCbor(transactionData, credential, userInput))
+            putAll(super.generateMdocResponseElements(transactionData, credential, userInput, docRequestId))
             put("result", Uint(42UL))
+        }
+
+        override suspend fun generateSdJwtResponseClaims(
+            transactionData: TransactionData<Boolean>,
+            credential: Credential,
+            userInput: TransactionUserInput?,
+            docRequestId: Int?
+        ): Map<String, JsonElement> = buildMap {
+            check(userInput == null)
+            putAll(super.generateSdJwtResponseClaims(transactionData, credential, userInput, docRequestId))
+            put("result", JsonPrimitive(42))
         }
     }
 
@@ -192,23 +192,26 @@ class DigitalCredentialsPresentmentTest {
         displayName = "Bar",
         identifier = "bar"
     ) {
-        override suspend fun applyJson(
+        override suspend fun generateMdocResponseElements(
             transactionData: TransactionData<Boolean>,
             credential: Credential,
-            userInput: TransactionUserInput?
-        ): JsonElement = buildJsonObject {
-            check(userInput == null)
-            put("result", 57)
-        }
-
-        override suspend fun applyCbor(
-            transactionData: TransactionData<Boolean>,
-            credential: Credential,
-            userInput: TransactionUserInput?
+            userInput: TransactionUserInput?,
+            docRequestId: Int?
         ): Map<String, DataItem> = buildMap {
             check(userInput == null)
-            putAll(super.applyCbor(transactionData, credential, userInput))
+            putAll(super.generateMdocResponseElements(transactionData, credential, userInput, docRequestId))
             put("result", Uint(57UL))
+        }
+
+        override suspend fun generateSdJwtResponseClaims(
+            transactionData: TransactionData<Boolean>,
+            credential: Credential,
+            userInput: TransactionUserInput?,
+            docRequestId: Int?
+        ): Map<String, JsonElement> = buildMap {
+            check(userInput == null)
+            putAll(super.generateSdJwtResponseClaims(transactionData, credential, userInput, docRequestId))
+            put("result", JsonPrimitive(57))
         }
     }
 
@@ -236,13 +239,86 @@ class DigitalCredentialsPresentmentTest {
         documentStoreTestHarness.initialize()
         documentStoreTestHarness.provisionStandardDocuments(
             keyAuthorizedNamespaces = listOf(
-                FooTransactionType.mdocResponseNamespace,
-                BarTransactionType.mdocResponseNamespace,
-                BuzTransactionType.mdocResponseNamespace
+                ISO_18013_TRANSACTION_DATA_NAMESPACE,
+                "foo",
+                "bar"
             )
         )
         documentStoreTestHarness.documentTypeRepository.addTransactionType(FooTransactionType)
         documentStoreTestHarness.documentTypeRepository.addTransactionType(BarTransactionType)
+        documentStoreTestHarness.documentTypeRepository.addTransactionType(PaymentTransaction)
+        documentStoreTestHarness.provisionMdoc(
+            displayName = "Payment Card Mdoc",
+            docType = "org.multipaz.payment.sca.1",
+            data = mapOf(
+                "org.multipaz.payment.sca.1" to listOf(
+                    Pair("account_id", Tstr("acc-12345"))
+                )
+            ),
+            keyAuthorizedNamespaces = listOf(
+                ISO_18013_TRANSACTION_DATA_NAMESPACE,
+                PaymentTransaction.openId4VpMdocResponseNamespace
+            )
+        )
+        documentStoreTestHarness.provisionSdJwtVc(
+            displayName = "Payment Card SD-JWT",
+            vct = "org.multipaz.payment.sca.1",
+            data = listOf(
+                Pair("account_id", JsonPrimitive("acc-12345"))
+            )
+        )
+    }
+
+    private class TipPresentmentSource(
+        documentStore: DocumentStore,
+        documentTypeRepository: DocumentTypeRepository,
+    ) : PresentmentSource(
+        documentStore = documentStore,
+        documentTypeRepository = documentTypeRepository
+    ) {
+        var tipPercent: Double? = null
+
+        fun insertTip(tipPercent: Double) {
+            this.tipPercent = tipPercent
+        }
+
+        private val delegate = SimplePresentmentSource(
+            documentStore = documentStore,
+            documentTypeRepository = documentTypeRepository,
+            preferSignatureToKeyAgreement = true,
+            domainsMdocSignature = listOf("mdoc"),
+            domainsKeyBoundSdJwt = listOf("sdjwt")
+        )
+
+        override suspend fun resolveTrust(requester: Requester): TrustedRequesterIdentity? =
+            delegate.resolveTrust(requester)
+
+        override suspend fun showConsentPrompt(
+            requester: Requester,
+            trustedRequesterIdentity: TrustedRequesterIdentity?,
+            consentData: ConsentData,
+            preselectedDocuments: List<Document>,
+            onDocumentsInFocus: (documents: List<Document>) -> Unit
+        ): CredentialSelection? {
+            val ret = consentData.credentialQueryResult.select(preselectedDocuments)
+            onDocumentsInFocus(ret.matches.map { it.credential.document })
+            val userInputMap = mutableMapOf<String, TransactionUserInput>()
+            tipPercent?.let { tip ->
+                userInputMap[PaymentTransaction.identifier] = PaymentTransaction.UserInput(tipPercent = tip)
+            }
+            return ret.copy(transactionUserInput = userInputMap)
+        }
+
+        override suspend fun getBadges(document: Document): List<DocumentBadge> =
+            delegate.getBadges(document)
+
+        override suspend fun selectCredential(
+            document: Document,
+            requestedClaims: List<RequestedClaim>,
+            keyAgreementPossible: List<EcCurve>,
+            credential: Credential?,
+        ): Credential? =
+            delegate.selectCredential(document, requestedClaims, keyAgreementPossible, credential)
     }
 
     private data class ShownConsentPrompt(
@@ -588,6 +664,40 @@ class DigitalCredentialsPresentmentTest {
         )
     }
 
+    suspend fun test_OID4VP_mDL_noClaims(
+        versionDraftNumber: Int,
+        signRequest: Boolean,
+        encryptResponse: Boolean,
+    ) {
+        val version = when (versionDraftNumber) {
+            24 -> OpenID4VP.Version.DRAFT_24
+            29 -> OpenID4VP.Version.DRAFT_29
+            else -> throw IllegalArgumentException("Unknown draft number")
+        }
+        val encryptionKey = if (encryptResponse) Crypto.createEcPrivateKey(EcCurve.P256) else null
+        test_OpenID4VP_mdoc(
+            version = version,
+            signRequest = signRequest,
+            encryptionKey = encryptionKey,
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "mDL",
+                          "format": "mso_mdoc",
+                          "meta": { "doctype_value": "org.iso.18013.5.1.mDL" }
+                    }]}
+                """.trimIndent().trim(),
+            transactionData = listOf(),
+            expectedMdocResponse =
+                """
+                    Document 0:
+                      DocType: org.iso.18013.5.1.mDL
+                      IssuerSigned:
+                """.trimIndent().trim(),
+        )
+    }
+
     suspend fun test_OID4VP_mDL_withTransaction(
         versionDraftNumber: Int,
         signRequest: Boolean,
@@ -629,7 +739,7 @@ class DigitalCredentialsPresentmentTest {
                           age_over_21: true
                           portrait: 5318 bytes
                       DeviceNamespaces:
-                        FooNS:
+                        foo:
                           transactionDataHash: 32 bytes
                           result: 42
                         bar:
@@ -857,6 +967,7 @@ class DigitalCredentialsPresentmentTest {
     @Test fun OID4VP_29_NoSignedRequest_EncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(29, false, true) }
     @Test fun OID4VP_29_SignedRequest_NoEncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(29, true, false) }
     @Test fun OID4VP_29_SignedRequest_EncryptedResponse_mDL() = runTestWithSetup { test_OID4VP_mDL(29, true, true) }
+    @Test fun OID4VP_29_NoSignedRequest_NoEncryptedResponse_mDL_noClaims() = runTestWithSetup { test_OID4VP_mDL_noClaims(29, false, false) }
 
     @Test fun OID4VP_29_NoSignedRequest_NoEncryptedResponse_mDL_withTransaction() = runTestWithSetup { test_OID4VP_mDL_withTransaction(29, false, false) }
     @Test fun OID4VP_29_NoSignedRequest_EncryptedResponse_mDL_withTransaction() = runTestWithSetup { test_OID4VP_mDL_withTransaction(29, false, true ) }
@@ -876,6 +987,764 @@ class DigitalCredentialsPresentmentTest {
     @Test fun OID4VP_29_SignedRequest_EncryptedResponse_SDJWT_unknownTransaction() = runTestWithSetup { test_OID4VP_SDJWT_unknownTransaction(29, true, true) }
 
     @Test fun OID4VP_29_SignedRequest_EncryptedResponse_SDJWT_failingTransaction() = runTestWithSetup { test_OID4VP_SDJWT_failingTransaction(29, true, true) }
+
+    // -----------------------------------------------------------------------------------------
+    // PaymentTransaction End-to-End Tests: (ISO 18013-5 vs OpenID4VP) x (ISO mdoc vs SD-JWT VC)
+    // -----------------------------------------------------------------------------------------
+
+    @Test
+    fun payment_Iso18013_IsoMdoc() = runTestWithSetup {
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val source = TipPresentmentSource(
+            documentStore = documentStoreTestHarness.documentStore,
+            documentTypeRepository = documentStoreTestHarness.documentTypeRepository,
+        )
+        source.insertTip(20.0)
+
+        // 1. Verifier prepares entire DeviceRequest in ISO 18013-5
+        val payload = PaymentTransaction.sampleData.payload
+        val requestDataItem = PaymentTransaction.serializeIso18013Request(payload)
+        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = "org.multipaz.payment.sca.1",
+                nameSpaces = mapOf(
+                    "org.multipaz.payment.sca.1" to mapOf("account_id" to false)
+                ),
+                docRequestInfo = DocRequestInfo(
+                    transactionData = TransactionsInfo(
+                        data = mapOf(PaymentTransaction.identifier to requestDataItem)
+                    )
+                )
+            )
+        }
+
+        // Pretty-printed entire DeviceRequest (Concise Diagnostic Notation)
+        val requestCdn = Cdn.encode(
+            item = deviceRequest.toDataItem(),
+            options = CdnGeneratorOptions.Pretty
+        )
+        val expectedRequestCdn = """
+            {
+              "version": "1.1",
+              "docRequests": [
+                {
+                  "itemsRequest": 24(<< {
+                    "docType": "org.multipaz.payment.sca.1",
+                    "nameSpaces": {
+                      "org.multipaz.payment.sca.1": {
+                        "account_id": false
+                      },
+                      "org.iso.transactiondata": {
+                        "urn:eudi:sca:payment:1": true
+                      }
+                    },
+                    "requestInfo": {
+                      "transactionData": {
+                        "urn:eudi:sca:payment:1": {
+                          "transactionId": "3AD99006-6E0D-4D07-AE75-5DAEF0FE21D9",
+                          "currency": "USD",
+                          "amount": 123.25,
+                          "payee": {
+                            "name": "Linux Foundation",
+                            "id": "01234"
+                          },
+                          "tipRequested": true
+                        }
+                      }
+                    }
+                  } >>)
+                }
+              ]
+            }
+        """.trimIndent()
+        assertEquals(expectedRequestCdn, requestCdn.trim())
+
+        // 2. Wallet presentment
+        val creationTime = Clock.System.now()
+        val isoResponse = mdocPresentment(
+            deviceRequest = deviceRequest,
+            eReaderKey = null,
+            sessionTranscript = sessionTranscript,
+            source = source,
+            keyAgreementPossible = emptyList(),
+            requesterAppId = null,
+            requesterOrigin = ORIGIN,
+            creationTime = creationTime,
+            preselectedDocuments = emptyList(),
+            onWaitingForUserInput = {},
+            onDocumentsInFocus = {}
+        )
+        val deviceResponse = isoResponse.deviceResponse
+
+        // 3. Verifier verifies response
+        deviceResponse.verify(
+            sessionTranscript = sessionTranscript,
+            eReaderKey = null,
+            deviceRequest = deviceRequest,
+            documentTypeRepository = source.documentTypeRepository,
+            atTime = creationTime
+        )
+        assertEquals(DeviceResponse.STATUS_OK, deviceResponse.status)
+        assertEquals(1, deviceResponse.documents.size)
+        val mdocDoc = deviceResponse.documents[0]
+        val txElements = mdocDoc.deviceNamespaces.data[ISO_18013_TRANSACTION_DATA_NAMESPACE]!![PaymentTransaction.identifier]!!
+        assertEquals(0L, txElements["docRequestId"].asNumber)
+        assertEquals(123.25, txElements["amount"].asDouble)
+        assertEquals("USD", txElements["currency"].asTstr)
+        assertEquals(24.65, txElements["tipAmount"].asDouble)
+
+        // 4. Pretty-printed entire DeviceResponse (Concise Diagnostic Notation)
+        val responseCdn = Cdn.encode(
+            item = deviceResponse.toDataItem(),
+            options = CdnGeneratorOptions.Pretty
+        )
+        val expectedResponseCdn = """
+            {
+              "version": "1.0",
+              "status": 0,
+              "documents": [
+                {
+                  "docType": "org.multipaz.payment.sca.1",
+                  "issuerSigned": {
+                    "issuerAuth": [ # COSE_Sign1
+                      /protected/ << {
+                        /alg/ 1: -7 # ES256: ECDSA with SHA-256
+                      } >>,
+                      /unprotected/ {
+                        /x5chain/ 33:
+                        # Subject DN: C=US,CN=OWF Multipaz TEST DS
+                        # Issuer DN: C=US,CN=OWF Multipaz TEST IACA
+                        cert'''...'''
+                      },
+                      /payload/ << 24(<< {
+                        "version": "1.0",
+                        "digestAlgorithm": "SHA-256",
+                        "docType": "org.multipaz.payment.sca.1",
+                        "valueDigests": {
+                          "org.multipaz.payment.sca.1": {
+                            0: h'...'
+                          }
+                        },
+                        "deviceKeyInfo": {
+                          "deviceKey": { # COSE_Key
+                            /kty/ 1: 2, # EC2
+                            /crv/ -1: 1, # P-256
+                            /x/ -2: h'...',
+                            /y/ -3: h'...'
+                          },
+                          "keyAuthorizations": {
+                            "nameSpaces": [
+                              "org.iso.transactiondata",
+                              "urn:eudi:sca:payment:1"
+                            ]
+                          }
+                        },
+                        "validityInfo": {
+                          "signed": dt'...',
+                          "validFrom": dt'...',
+                          "validUntil": dt'...'
+                        }
+                      } >>) >>,
+                      /signature/ h'...'
+                    ],
+                    "nameSpaces": {
+                      "org.multipaz.payment.sca.1": [
+                        24(<< {
+                          "digestID": 0,
+                          "random": h'...',
+                          "elementIdentifier": "account_id",
+                          "elementValue": "acc-12345"
+                        } >>)
+                      ]
+                    }
+                  },
+                  "deviceSigned": {
+                    "deviceAuth": {
+                      "deviceSignature": [ # COSE_Sign1
+                        /protected/ << {
+                          /alg/ 1: -7 # ES256: ECDSA with SHA-256
+                        } >>,
+                        /unprotected/ {},
+                        /payload/ null,
+                        /signature/ h'...'
+                      ]
+                    },
+                    "nameSpaces": 24(<< {
+                      "org.iso.transactiondata": {
+                        "urn:eudi:sca:payment:1": {
+                          "tipAmount": 24.65,
+                          "docRequestId": 0,
+                          "amount": 123.25,
+                          "currency": "USD"
+                        }
+                      }
+                    } >>)
+                  }
+                }
+              ]
+            }
+        """.trimIndent()
+        assertEquals(expectedResponseCdn, normalizeMdocResponseCdn(responseCdn.trim()))
+    }
+
+    @Test
+    fun payment_Iso18013_SdJwtVc() = runTestWithSetup {
+        val sessionTranscript = buildCborArray { add(Simple.NULL); add(Simple.NULL); add(byteArrayOf(1, 2, 3)) }
+        val source = TipPresentmentSource(
+            documentStore = documentStoreTestHarness.documentStore,
+            documentTypeRepository = documentStoreTestHarness.documentTypeRepository,
+        )
+        source.insertTip(20.0)
+
+        // 1. Verifier prepares entire DeviceRequest in ISO 18013-5 requesting SD-JWT VC
+        val payload = PaymentTransaction.sampleData.payload
+        val requestDataItem = PaymentTransaction.serializeIso18013Request(payload)
+        val deviceRequest = buildDeviceRequest(sessionTranscript = sessionTranscript) {
+            addDocRequest(
+                docType = "org.multipaz.payment.sca.1",
+                nameSpaces = mapOf(
+                    "_" to mapOf("sdjwtvc_account_id" to false)
+                ),
+                docRequestInfo = DocRequestInfo(
+                    docFormat = "dc+sd-jwt",
+                    dataElementIdentifierMapping = mapOf(
+                        "sdjwtvc_account_id" to buildJsonArray { add("account_id") }
+                    ),
+                    transactionData = TransactionsInfo(
+                        data = mapOf(PaymentTransaction.identifier to requestDataItem)
+                    )
+                )
+            )
+        }
+
+        // Pretty-printed entire DeviceRequest (Concise Diagnostic Notation)
+        val requestCdn = Cdn.encode(
+            item = deviceRequest.toDataItem(),
+            options = CdnGeneratorOptions.Pretty
+        )
+        val expectedRequestCdn = """
+            {
+              "version": "1.1",
+              "docRequests": [
+                {
+                  "itemsRequest": 24(<< {
+                    "docType": "org.multipaz.payment.sca.1",
+                    "nameSpaces": {
+                      "_": {
+                        "sdjwtvc_account_id": false
+                      },
+                      "org.iso.transactiondata": {
+                        "urn:eudi:sca:payment:1": true
+                      }
+                    },
+                    "requestInfo": {
+                      "docFormat": "dc+sd-jwt",
+                      "dataElementIdentifierMapping": {
+                        "sdjwtvc_account_id": [
+                          "account_id"
+                        ]
+                      },
+                      "transactionData": {
+                        "urn:eudi:sca:payment:1": {
+                          "transactionId": "3AD99006-6E0D-4D07-AE75-5DAEF0FE21D9",
+                          "currency": "USD",
+                          "amount": 123.25,
+                          "payee": {
+                            "name": "Linux Foundation",
+                            "id": "01234"
+                          },
+                          "tipRequested": true
+                        }
+                      }
+                    }
+                  } >>)
+                }
+              ]
+            }
+        """.trimIndent()
+        assertEquals(expectedRequestCdn, requestCdn.trim())
+
+        // 2. Wallet presentment
+        val creationTime = Clock.System.now()
+        val isoResponse = mdocPresentment(
+            deviceRequest = deviceRequest,
+            eReaderKey = null,
+            sessionTranscript = sessionTranscript,
+            source = source,
+            keyAgreementPossible = emptyList(),
+            requesterAppId = null,
+            requesterOrigin = ORIGIN,
+            creationTime = creationTime,
+            preselectedDocuments = emptyList(),
+            onWaitingForUserInput = {},
+            onDocumentsInFocus = {}
+        )
+        val deviceResponse = isoResponse.deviceResponse
+
+        // 3. Verifier verifies response
+        deviceResponse.verify(
+            sessionTranscript = sessionTranscript,
+            eReaderKey = null,
+            deviceRequest = deviceRequest,
+            documentTypeRepository = source.documentTypeRepository,
+            atTime = creationTime
+        )
+
+        assertEquals(0, deviceResponse.documents.size)
+        assertEquals(1, deviceResponse.otherDocuments.size)
+        val otherDoc = deviceResponse.otherDocuments[0]
+        assertEquals("dc+sd-jwt", otherDoc.docFormat)
+
+        // Pretty-printed entire DeviceResponse (Concise Diagnostic Notation) using LENGTH_ONLY
+        val responseCdn = Cdn.encode(
+            item = deviceResponse.toDataItem(),
+            options = CdnGeneratorOptions(prettyPrint = true, byteStringFormat = ByteStringFormat.LENGTH_ONLY)
+        )
+        val expectedResponseCdn = """
+            {
+              "version": "1.1",
+              "status": 0,
+              "otherDocuments": [
+                {
+                  "docFormat": "dc+sd-jwt",
+                  "data": ${otherDoc.data.size} bytes
+                }
+              ]
+            }
+        """.trimIndent()
+        assertEquals(expectedResponseCdn, responseCdn.trim())
+
+        // Pretty-printed SD-JWT KB-JWT payload (JSON)
+        val decompressedData = otherDoc.data.toByteArray().zlibInflate()
+        val sdJwtKb = SdJwtKb.fromCompactSerialization(decompressedData.decodeToString())
+        val prettyJson = Json { prettyPrint = true }
+        val kbJwtJson = prettyJson.encodeToString(sdJwtKb.jwtBody)
+        val sdHash = sdJwtKb.jwtBody["sd_hash"]!!.jsonPrimitive.content
+        val iat = sdJwtKb.jwtBody["iat"]!!.jsonPrimitive.content
+        val nonce = sdJwtKb.jwtBody["nonce"]!!.jsonPrimitive.content
+        val expectedKbJwtJson = """
+            {
+                "iat": $iat,
+                "nonce": "$nonce",
+                "aud": "none",
+                "sd_hash": "$sdHash",
+                "urn:eudi:sca:payment:1": {
+                    "tip_amount": 24.65,
+                    "doc_request_id": 0,
+                    "amount": 123.25,
+                    "currency": "USD"
+                }
+            }
+        """.trimIndent()
+        assertEquals(expectedKbJwtJson, kbJwtJson.trim())
+    }
+
+    @Test
+    fun payment_OpenID4VP_SdJwtVc() = runTestWithSetup {
+        val source = TipPresentmentSource(
+            documentStore = documentStoreTestHarness.documentStore,
+            documentTypeRepository = documentStoreTestHarness.documentTypeRepository,
+        )
+        source.insertTip(20.0)
+
+        // 1. Verifier prepares DCQL query and transaction_data for OpenID4VP request
+        val dcql = buildJsonObject {
+            put("credentials", buildJsonArray {
+                add(buildJsonObject {
+                    put("id", "payment_credential")
+                    put("format", "dc+sd-jwt")
+                    put("meta", buildJsonObject {
+                        put("vct_values", buildJsonArray { add("org.multipaz.payment.sca.1") })
+                    })
+                    put("claims", buildJsonArray {
+                        add(buildJsonObject { put("path", buildJsonArray { add("account_id") }) })
+                    })
+                })
+            })
+        }
+
+        val payload = PaymentTransaction.sampleData.payload
+        val requestJsonString = PaymentTransaction.serializeOpenId4VpRequest(
+            payload = payload,
+            credentialIds = listOf("payment_credential"),
+            hashAlgorithms = listOf(Algorithm.SHA256)
+        )
+
+        val prettyJson = Json { prettyPrint = true }
+        val dcqlJsonString = prettyJson.encodeToString(dcql)
+        val expectedDcqlJson = """
+            {
+                "credentials": [
+                    {
+                        "id": "payment_credential",
+                        "format": "dc+sd-jwt",
+                        "meta": {
+                            "vct_values": [
+                                "org.multipaz.payment.sca.1"
+                            ]
+                        },
+                        "claims": [
+                            {
+                                "path": [
+                                    "account_id"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        """.trimIndent()
+        assertEquals(expectedDcqlJson, dcqlJsonString.trim())
+
+        val transactionDataJson = prettyJson.encodeToString(Json.parseToJsonElement(requestJsonString))
+        val expectedTransactionDataJson = """
+            {
+                "type": "urn:eudi:sca:payment:1",
+                "credential_ids": [
+                    "payment_credential"
+                ],
+                "transaction_data_hashes_alg": [
+                    "sha-256"
+                ],
+                "payload": {
+                    "transaction_id": "3AD99006-6E0D-4D07-AE75-5DAEF0FE21D9",
+                    "currency": "USD",
+                    "amount": 123.25,
+                    "payee": {
+                        "name": "Linux Foundation",
+                        "id": "01234"
+                    },
+                    "tip_requested": true
+                }
+            }
+        """.trimIndent()
+        assertEquals(expectedTransactionDataJson, transactionDataJson.trim())
+
+        val nonce = "openid4vp-nonce-67890"
+        val request = OpenID4VP.generateRequest(
+            version = OpenID4VP.Version.DRAFT_29,
+            origin = ORIGIN,
+            nonce = nonce,
+            responseEncryptionKey = null,
+            verifierIdentities = emptyList(),
+            responseMode = OpenID4VP.ResponseMode.DC_API,
+            responseUri = null,
+            dcqlQuery = dcql,
+            jsonTransactionData = listOf(requestJsonString)
+        )
+
+        // 2. Wallet presentment
+        val response = OpenID4VP.generateResponse(
+            version = OpenID4VP.Version.DRAFT_29,
+            preselectedDocuments = emptyList(),
+            source = source,
+            appId = null,
+            origin = ORIGIN,
+            request = request,
+            requesterIdentities = emptyList(),
+        )
+
+        // 3. Verifier processes response
+        val vpTokens = response.response["vp_token"]!!.jsonObject
+        val compactSerialization = vpTokens["payment_credential"]!!.jsonArray[0].jsonPrimitive.content
+        val sdJwtKb = SdJwtKb.fromCompactSerialization(compactSerialization)
+
+        val transactionData = source.documentTypeRepository.parseJsonTransactions(
+            base64UrlEncodedJson = listOf(requestJsonString.encodeToByteArray().toBase64Url())
+        ).values.first()
+
+        sdJwtKb.verify(
+            issuerKey = documentStoreTestHarness.dsKey.publicKey,
+            checkNonce = { it == nonce },
+            checkAudience = { it == "origin:$ORIGIN" },
+            checkCreationTime = { true },
+            transactionData = transactionData
+        )
+
+        // 4. Pretty-printed SD-JWT + SD-JWT KB
+        val kbJwtJson = prettyJson.encodeToString(sdJwtKb.jwtBody)
+        val sdHash = sdJwtKb.jwtBody["sd_hash"]!!.jsonPrimitive.content
+        val iat = sdJwtKb.jwtBody["iat"]!!.jsonPrimitive.content
+        val expectedHash = transactionData.first().computeHash(Algorithm.SHA256).toByteArray().toBase64Url()
+        val expectedKbJwtJson = """
+            {
+                "iat": $iat,
+                "nonce": "openid4vp-nonce-67890",
+                "aud": "origin:https://verifier.multipaz.org",
+                "sd_hash": "$sdHash",
+                "urn:eudi:sca:payment:1": {
+                    "tip_amount": 24.65
+                },
+                "transaction_data_hashes_alg": "sha-256",
+                "transaction_data_hashes": [
+                    "$expectedHash"
+                ]
+            }
+        """.trimIndent()
+        assertEquals(expectedKbJwtJson, kbJwtJson.trim())
+    }
+
+    @Test
+    fun payment_OpenID4VP_IsoMdoc() = runTestWithSetup {
+        val source = TipPresentmentSource(
+            documentStore = documentStoreTestHarness.documentStore,
+            documentTypeRepository = documentStoreTestHarness.documentTypeRepository,
+        )
+        source.insertTip(20.0)
+
+        // 1. Verifier prepares DCQL query and transaction_data for OpenID4VP request
+        val dcql = buildJsonObject {
+            put("credentials", buildJsonArray {
+                add(buildJsonObject {
+                    put("id", "payment_credential")
+                    put("format", "mso_mdoc")
+                    put("meta", buildJsonObject {
+                        put("doctype_value", "org.multipaz.payment.sca.1")
+                    })
+                    put("claims", buildJsonArray {
+                        add(buildJsonObject {
+                            put("path", buildJsonArray {
+                                add("org.multipaz.payment.sca.1")
+                                add("account_id")
+                            })
+                        })
+                    })
+                })
+            })
+        }
+
+        val payload = PaymentTransaction.sampleData.payload
+        val requestJsonString = PaymentTransaction.serializeOpenId4VpRequest(
+            payload = payload,
+            credentialIds = listOf("payment_credential"),
+            hashAlgorithms = listOf(Algorithm.SHA256)
+        )
+
+        val prettyJson = Json { prettyPrint = true }
+        val dcqlJsonString = prettyJson.encodeToString(dcql)
+        val expectedDcqlJson = """
+            {
+                "credentials": [
+                    {
+                        "id": "payment_credential",
+                        "format": "mso_mdoc",
+                        "meta": {
+                            "doctype_value": "org.multipaz.payment.sca.1"
+                        },
+                        "claims": [
+                            {
+                                "path": [
+                                    "org.multipaz.payment.sca.1",
+                                    "account_id"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        """.trimIndent()
+        assertEquals(expectedDcqlJson, dcqlJsonString.trim())
+
+        val transactionDataJson = prettyJson.encodeToString(Json.parseToJsonElement(requestJsonString))
+        val expectedTransactionDataJson = """
+            {
+                "type": "urn:eudi:sca:payment:1",
+                "credential_ids": [
+                    "payment_credential"
+                ],
+                "transaction_data_hashes_alg": [
+                    "sha-256"
+                ],
+                "payload": {
+                    "transaction_id": "3AD99006-6E0D-4D07-AE75-5DAEF0FE21D9",
+                    "currency": "USD",
+                    "amount": 123.25,
+                    "payee": {
+                        "name": "Linux Foundation",
+                        "id": "01234"
+                    },
+                    "tip_requested": true
+                }
+            }
+        """.trimIndent()
+        assertEquals(expectedTransactionDataJson, transactionDataJson.trim())
+
+        val nonce = "openid4vp-nonce-67890"
+        val request = OpenID4VP.generateRequest(
+            version = OpenID4VP.Version.DRAFT_29,
+            origin = ORIGIN,
+            nonce = nonce,
+            responseEncryptionKey = null,
+            verifierIdentities = emptyList(),
+            responseMode = OpenID4VP.ResponseMode.DC_API,
+            responseUri = null,
+            dcqlQuery = dcql,
+            jsonTransactionData = listOf(requestJsonString)
+        )
+
+        // 2. Wallet presentment
+        val response = OpenID4VP.generateResponse(
+            version = OpenID4VP.Version.DRAFT_29,
+            preselectedDocuments = emptyList(),
+            source = source,
+            appId = null,
+            origin = ORIGIN,
+            request = request,
+            requesterIdentities = emptyList(),
+        )
+
+        // 3. Verifier processes response
+        val vpTokens = response.response["vp_token"]!!.jsonObject
+        val encodedDeviceResponse = vpTokens["payment_credential"]!!.jsonArray[0].jsonPrimitive.content.fromBase64Url()
+        val deviceResponse = DeviceResponse.fromDataItem(Cbor.decode(encodedDeviceResponse))
+
+        val handoverInfo = Cbor.encode(
+            buildCborArray {
+                add(ORIGIN)
+                add(nonce)
+                add(Simple.NULL)
+            }
+        )
+        val handoverInfoDigest = Crypto.digest(Algorithm.SHA256, handoverInfo)
+        val sessionTranscript = buildCborArray {
+            add(Simple.NULL)
+            add(Simple.NULL)
+            addCborArray {
+                add("OpenID4VPDCAPIHandover")
+                add(handoverInfoDigest)
+            }
+        }
+
+        val transactionData = source.documentTypeRepository.parseJsonTransactions(
+            base64UrlEncodedJson = listOf(requestJsonString.encodeToByteArray().toBase64Url())
+        ).values.first()
+
+        deviceResponse.verifySingleDoc(
+            sessionTranscript = sessionTranscript,
+            transactionData = transactionData
+        )
+        assertEquals(DeviceResponse.STATUS_OK, deviceResponse.status)
+        assertEquals(1, deviceResponse.documents.size)
+        val mdocDoc = deviceResponse.documents[0]
+        val txElements = mdocDoc.deviceNamespaces.data[PaymentTransaction.openId4VpMdocResponseNamespace]!!
+        assertEquals(-16L, txElements["transactionDataHashAlg"]!!.asNumber)
+        val expectedHash = transactionData.first().computeHash(Algorithm.SHA256)
+        assertEquals(expectedHash, ByteString(txElements["transactionDataHash"]!!.asBstr))
+        assertEquals(24.65, txElements["tipAmount"]!!.asDouble)
+
+        // 4. Pretty-printed entire DeviceResponse (Concise Diagnostic Notation)
+        val responseCdn = Cdn.encode(
+            item = deviceResponse.toDataItem(),
+            options = CdnGeneratorOptions.Pretty
+        )
+        val expectedResponseCdn = """
+            {
+              "version": "1.0",
+              "status": 0,
+              "documents": [
+                {
+                  "docType": "org.multipaz.payment.sca.1",
+                  "issuerSigned": {
+                    "issuerAuth": [ # COSE_Sign1
+                      /protected/ << {
+                        /alg/ 1: -7 # ES256: ECDSA with SHA-256
+                      } >>,
+                      /unprotected/ {
+                        /x5chain/ 33:
+                        # Subject DN: C=US,CN=OWF Multipaz TEST DS
+                        # Issuer DN: C=US,CN=OWF Multipaz TEST IACA
+                        cert'''...'''
+                      },
+                      /payload/ << 24(<< {
+                        "version": "1.0",
+                        "digestAlgorithm": "SHA-256",
+                        "docType": "org.multipaz.payment.sca.1",
+                        "valueDigests": {
+                          "org.multipaz.payment.sca.1": {
+                            0: h'...'
+                          }
+                        },
+                        "deviceKeyInfo": {
+                          "deviceKey": { # COSE_Key
+                            /kty/ 1: 2, # EC2
+                            /crv/ -1: 1, # P-256
+                            /x/ -2: h'...',
+                            /y/ -3: h'...'
+                          },
+                          "keyAuthorizations": {
+                            "nameSpaces": [
+                              "org.iso.transactiondata",
+                              "urn:eudi:sca:payment:1"
+                            ]
+                          }
+                        },
+                        "validityInfo": {
+                          "signed": dt'...',
+                          "validFrom": dt'...',
+                          "validUntil": dt'...'
+                        }
+                      } >>) >>,
+                      /signature/ h'...'
+                    ],
+                    "nameSpaces": {
+                      "org.multipaz.payment.sca.1": [
+                        24(<< {
+                          "digestID": 0,
+                          "random": h'...',
+                          "elementIdentifier": "account_id",
+                          "elementValue": "acc-12345"
+                        } >>)
+                      ]
+                    }
+                  },
+                  "deviceSigned": {
+                    "deviceAuth": {
+                      "deviceSignature": [ # COSE_Sign1
+                        /protected/ << {
+                          /alg/ 1: -7 # ES256: ECDSA with SHA-256
+                        } >>,
+                        /unprotected/ {},
+                        /payload/ null,
+                        /signature/ h'...'
+                      ]
+                    },
+                    "nameSpaces": 24(<< {
+                      "urn:eudi:sca:payment:1": {
+                        "tipAmount": 24.65,
+                        "transactionDataHashAlg": -16,
+                        "transactionDataHash": h'${expectedHash.toByteArray().toHex()}'
+                      }
+                    } >>)
+                  }
+                }
+              ]
+            }
+        """.trimIndent()
+        assertEquals(expectedResponseCdn, normalizeMdocResponseCdn(responseCdn.trim()))
+    }
+
+    @Test
+    fun test_normalizeMdocResponseCdn() {
+        assertEquals(
+            "\"random\": h'...',",
+            normalizeMdocResponseCdn("\"random\": h'2ba86224fbb8692180862f0b7d75',")
+        )
+        assertEquals(
+            "\"random\": h'...',",
+            normalizeMdocResponseCdn("\"random\": << 10(h'2ba86224fbb8692180862f0b7d75') >>,")
+        )
+    }
+}
+
+private fun normalizeMdocResponseCdn(cdn: String): String {
+    return cdn
+        .replace(Regex("""cert'''[\s\S]*?'''"""), "cert'''...'''")
+        .replace(Regex("""0: h'[0-9a-fA-F]+'"""), "0: h'...'")
+        .replace(Regex("""/x/ -2: h'[0-9a-fA-F]+'"""), "/x/ -2: h'...'")
+        .replace(Regex("""/y/ -3: h'[0-9a-fA-F]+'"""), "/y/ -3: h'...'")
+        .replace(Regex("""dt'[0-9T:Z-]+'"""), "dt'...'")
+        .replace(Regex("""/signature/ h'[0-9a-fA-F]+'"""), "/signature/ h'...'")
+        .replace(Regex(""""random": (h'[0-9a-fA-F]+'|<<[\s\S]*?>>(?=\s*[,}]))"""), "\"random\": h'...'")
 }
 
 private fun DeviceResponse.prettyPrint(): String {
