@@ -18,9 +18,12 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <span>
@@ -45,7 +48,7 @@
 namespace cppbor {
 
 enum MajorType : uint8_t {
-    UINT = 0 << 5,
+    UINT = 0,
     NINT = 1 << 5,
     BSTR = 2 << 5,
     TSTR = 3 << 5,
@@ -57,7 +60,10 @@ enum MajorType : uint8_t {
 
 enum SimpleType {
     BOOLEAN,
-    NULL_T,  // Only two supported, as yet.
+    NULL_T,
+    DOUBLE_T,
+    UNDEFINED_T,
+    SIMPLE_VALUE_T,
 };
 
 enum SpecialAddlInfoValues : uint8_t {
@@ -82,6 +88,9 @@ class Bool;
 class Array;
 class Map;
 class Null;
+class Double;
+class Undefined;
+class SimpleValue;
 class SemanticTag;
 class EncodedItem;
 class ViewTstr;
@@ -149,6 +158,12 @@ class Item {
     const Bool* asBool() const { return const_cast<Item*>(this)->asBool(); }
     virtual Null* asNull() { return nullptr; }
     const Null* asNull() const { return const_cast<Item*>(this)->asNull(); }
+    virtual Double* asDouble() { return nullptr; }
+    const Double* asDouble() const { return const_cast<Item*>(this)->asDouble(); }
+    virtual Undefined* asUndefined() { return nullptr; }
+    const Undefined* asUndefined() const { return const_cast<Item*>(this)->asUndefined(); }
+    virtual SimpleValue* asSimpleValue() { return nullptr; }
+    const SimpleValue* asSimpleValue() const { return const_cast<Item*>(this)->asSimpleValue(); }
 
     virtual Map* asMap() { return nullptr; }
     const Map* asMap() const { return const_cast<Item*>(this)->asMap(); }
@@ -834,6 +849,16 @@ class SemanticTag : public Item {
     Bstr* asBstr() override { return mTaggedItem->asBstr(); }
     using Item::asSimple;
     Simple* asSimple() override { return mTaggedItem->asSimple(); }
+    using Item::asBool;
+    Bool* asBool() override { return mTaggedItem->asBool(); }
+    using Item::asNull;
+    Null* asNull() override { return mTaggedItem->asNull(); }
+    using Item::asDouble;
+    Double* asDouble() override { return mTaggedItem->asDouble(); }
+    using Item::asUndefined;
+    Undefined* asUndefined() override { return mTaggedItem->asUndefined(); }
+    using Item::asSimpleValue;
+    SimpleValue* asSimpleValue() override { return mTaggedItem->asSimpleValue(); }
     using Item::asMap;
     Map* asMap() override { return mTaggedItem->asMap(); }
     using Item::asArray;
@@ -927,6 +952,123 @@ class Null : public Simple {
     }
 
     std::unique_ptr<Item> clone() const override { return std::make_unique<Null>(); }
+};
+
+/**
+ * Double is a concrete type that implements CBOR major type 7 floating-point values.
+ */
+class Double : public Simple {
+  public:
+    static constexpr SimpleType kSimpleType = DOUBLE_T;
+
+    explicit Double(double v) : mValue(v) {}
+
+    bool operator==(const Double& other) const& { return mValue == other.mValue; }
+
+    SimpleType simpleType() const override { return kSimpleType; }
+    Double* asDouble() override { return this; }
+
+    size_t encodedSize() const override { return 9; }
+
+    using Item::encode;
+    uint8_t* encode(uint8_t* pos, const uint8_t* end) const override {
+        if (end - pos < 9) return nullptr;
+        *pos++ = (7 << 5) | EIGHT_BYTE_LENGTH;
+        uint64_t bits;
+        memcpy(&bits, &mValue, sizeof(double));
+        for (int i = 7; i >= 0; --i) {
+            *pos++ = (bits >> (i * 8)) & 0xFF;
+        }
+        return pos;
+    }
+    void encode(EncodeCallback encodeCallback) const override {
+        encodeCallback((7 << 5) | EIGHT_BYTE_LENGTH);
+        uint64_t bits;
+        memcpy(&bits, &mValue, sizeof(double));
+        for (int i = 7; i >= 0; --i) {
+            encodeCallback((bits >> (i * 8)) & 0xFF);
+        }
+    }
+
+    double value() const { return mValue; }
+
+    std::unique_ptr<Item> clone() const override { return std::make_unique<Double>(mValue); }
+
+  private:
+    double mValue;
+};
+
+/**
+ * Undefined is a concrete type that implements CBOR major type 7, item value 23.
+ */
+class Undefined : public Simple {
+  public:
+    static constexpr SimpleType kSimpleType = UNDEFINED_T;
+
+    explicit Undefined() {}
+
+    SimpleType simpleType() const override { return kSimpleType; }
+    Undefined* asUndefined() override { return this; }
+
+    size_t encodedSize() const override { return 1; }
+
+    using Item::encode;
+    uint8_t* encode(uint8_t* pos, const uint8_t* end) const override {
+        if (pos == end) return nullptr;
+        *pos++ = (7 << 5) | 23;
+        return pos;
+    }
+    void encode(EncodeCallback encodeCallback) const override {
+        encodeCallback((7 << 5) | 23);
+    }
+
+    std::unique_ptr<Item> clone() const override { return std::make_unique<Undefined>(); }
+};
+
+/**
+ * SimpleValue is a concrete type that implements unassigned/other CBOR major type 7 simple values.
+ */
+class SimpleValue : public Simple {
+  public:
+    static constexpr SimpleType kSimpleType = SIMPLE_VALUE_T;
+
+    explicit SimpleValue(uint32_t val) : mValue(val) {}
+
+    bool operator==(const SimpleValue& other) const& { return mValue == other.mValue; }
+
+    SimpleType simpleType() const override { return kSimpleType; }
+    SimpleValue* asSimpleValue() override { return this; }
+
+    uint32_t value() const { return mValue; }
+
+    size_t encodedSize() const override { return mValue < 24 ? 1 : 2; }
+
+    using Item::encode;
+    uint8_t* encode(uint8_t* pos, const uint8_t* end) const override {
+        if (mValue < 24) {
+            if (pos == end) return nullptr;
+            *pos++ = (7 << 5) | mValue;
+            return pos;
+        } else {
+            if (end - pos < 2) return nullptr;
+            *pos++ = (7 << 5) | ONE_BYTE_LENGTH;
+            *pos++ = mValue & 0xFF;
+            return pos;
+        }
+    }
+    void encode(EncodeCallback encodeCallback) const override {
+        if (mValue < 24) {
+            encodeCallback((7 << 5) | mValue);
+        } else {
+            encodeCallback((7 << 5) | ONE_BYTE_LENGTH);
+            encodeCallback(mValue & 0xFF);
+        }
+    }
+
+    std::unique_ptr<Item> clone() const override { return std::make_unique<SimpleValue>(mValue); }
+
+  private:
+    uint32_t mValue;
 };
 
 /**

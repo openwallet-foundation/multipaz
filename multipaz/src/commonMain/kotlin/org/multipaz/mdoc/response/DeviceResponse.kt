@@ -12,6 +12,7 @@ import org.multipaz.cose.CoseSign1
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
@@ -255,13 +256,13 @@ data class DeviceResponse internal constructor(
         var docRequestId: ULong? = null
         val data = doc.deviceNamespaces.data
         for (transactionType in documentTypeRepository.transactionTypes) {
-            val transactionResponse = data[transactionType.mdocResponseNamespace] ?: continue
-            val transactionDocRequestId = transactionResponse["docRequestId"] as? Uint
+            val transactionItem = data[ISO_18013_TRANSACTION_DATA_NAMESPACE]?.get(transactionType.identifier) ?: continue
+            val transactionDocRequestId = transactionItem.getOrNull("docRequestId") as? Uint
                 ?: throw IllegalStateException(
                     "'docRequestId' is missing or invalid for transaction '${transactionType.identifier}'")
             if (docRequestId == null) {
                 docRequestId = transactionDocRequestId.value
-            } else if(docRequestId != transactionDocRequestId.value) {
+            } else if (docRequestId != transactionDocRequestId.value) {
                 throw IllegalStateException("inconsistent 'docRequestId' values")
             }
         }

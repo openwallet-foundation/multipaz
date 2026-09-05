@@ -7,6 +7,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
@@ -14,6 +15,7 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.presentment.TransactionData
+import org.multipaz.presentment.TransactionProtocol
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 
@@ -93,35 +95,46 @@ class SdJwtKb private constructor(
             throw IllegalStateException("Failed verification of creationTime")
         }
 
+        val isIso18013_5 = transactionData.any { it.protocol == TransactionProtocol.ISO_18013_5 }
         val hashes = jwtBody["transaction_data_hashes"]
-        if (hashes == null) {
-            if (transactionData.isNotEmpty()) {
-                throw IllegalStateException("Transaction data was not processed")
+        if (isIso18013_5) {
+            if (hashes != null) {
+                throw IllegalStateException("Unexpected 'transaction_data_hashes' in ISO 18013-5 presentation")
+            }
+            for (transaction in transactionData) {
+                val responseClaims = jwtBody[transaction.type.kbJwtResponseClaimName]?.jsonObject ?: emptyMap()
+                transaction.verifySdJwtResponse(responseClaims)
             }
         } else {
-            hashes as? JsonArray
-                ?: throw IllegalStateException("Invalid 'transaction_data_hashes'")
-            if (hashes.size != transactionData.size) {
-                if (transactionData.isEmpty()) {
-                    throw IllegalStateException("Unexpected 'transaction_data_hashes'")
-                } else {
-                    throw IllegalStateException("Unexpected 'transaction_data_hashes' size")
+            if (hashes == null) {
+                if (transactionData.isNotEmpty()) {
+                    throw IllegalStateException("Transaction data was not processed")
                 }
-            }
-            val hashAlgorithm = try {
-                jwtBody["transaction_data_hashes_alg"]?.jsonPrimitive?.content?.let {
-                    Algorithm.fromHashAlgorithmIdentifier(it)
-                } ?: Algorithm.SHA256
-            } catch (err: Exception) {
-                throw IllegalStateException("Unknown or invalid transaction data hash algorithm", err)
-            }
-            transactionData.zip(hashes).forEach { (transaction, hash) ->
-                if (hash !is JsonPrimitive || !hash.isString) {
-                    throw IllegalStateException("Invalid transaction data hash value")
+            } else {
+                hashes as? JsonArray
+                    ?: throw IllegalStateException("Invalid 'transaction_data_hashes'")
+                if (hashes.size != transactionData.size) {
+                    if (transactionData.isEmpty()) {
+                        throw IllegalStateException("Unexpected 'transaction_data_hashes'")
+                    } else {
+                        throw IllegalStateException("Unexpected 'transaction_data_hashes' size")
+                    }
                 }
-                val responseHash = ByteString(hash.content.fromBase64Url())
-                if (transaction.computeHash(hashAlgorithm) != responseHash) {
-                    throw IllegalStateException("Transaction data hash mismatch")
+                val hashAlgorithm = try {
+                    jwtBody["transaction_data_hashes_alg"]?.jsonPrimitive?.content?.let {
+                        Algorithm.fromHashAlgorithmIdentifier(it)
+                    } ?: Algorithm.SHA256
+                } catch (err: Exception) {
+                    throw IllegalStateException("Unknown or invalid transaction data hash algorithm", err)
+                }
+                transactionData.zip(hashes).forEach { (transaction, hash) ->
+                    if (hash !is JsonPrimitive || !hash.isString) {
+                        throw IllegalStateException("Invalid transaction data hash value")
+                    }
+                    val responseHash = ByteString(hash.content.fromBase64Url())
+                    if (transaction.computeHash(hashAlgorithm) != responseHash) {
+                        throw IllegalStateException("Transaction data hash mismatch")
+                    }
                 }
             }
         }

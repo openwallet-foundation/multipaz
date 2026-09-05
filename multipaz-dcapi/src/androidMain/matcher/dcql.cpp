@@ -285,15 +285,20 @@ std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDat
         for (auto& cred : credsSatifyingMeta) {
             if (query.claimSets.size() == 0) {
                 if (query.lenientClaimMatching) {
+                    bool failedRequiredClaim = false;
                     auto matchingClaimValues = std::vector<Claim*>();
                     for (auto& claim : query.requestedClaims) {
                         Claim* matchingCredentialClaim = cred->findMatchingClaim(claim);
                         if (matchingCredentialClaim != nullptr) {
                             matchingClaimValues.push_back(matchingCredentialClaim);
+                        } else if (claim.path.size() >= 1 && claim.path[0] == "org.iso.transactiondata") {
+                            // Transaction data claims cannot be omitted even under lenient matching
+                            failedRequiredClaim = true;
+                            break;
                         }
                     }
-                    if (!matchingClaimValues.empty()) {
-                        // At least one claim matched, we have a candidate
+                    if (!failedRequiredClaim && (!matchingClaimValues.empty() || query.requestedClaims.empty())) {
+                        // At least one claim matched, or no claims requested, we have a candidate
                         matches.push_back(DcqlResponseCredentialSetOptionMemberMatch(
                             cred,
                             matchingClaimValues

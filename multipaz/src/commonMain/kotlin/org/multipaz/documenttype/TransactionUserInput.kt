@@ -14,15 +14,13 @@ import org.multipaz.presentment.TransactionData
 abstract class TransactionUserInput {
 
     /**
-     * Returns the list of claims to add to the transaction response in ISO mdoc presentment.
-     *
-     * Note: [TransactionType.applyCbor] may or may not call this method or override its result
+     * Returns the list of data elements to add to the transaction response in ISO mdoc presentment.
      *
      * @param transactionData transaction data
      * @param credential credential being presented
      * @return transaction-specific data that should be added to the presentment
      */
-    abstract fun applyCbor(
+    abstract fun generateMdocResponseElements(
         transactionData: TransactionData<*>,
         credential: Credential
     ): Map<String, DataItem>
@@ -30,13 +28,11 @@ abstract class TransactionUserInput {
     /**
      * Returns the list of claims to add to the transaction response in SD-JWT presentment.
      *
-     * Note: [TransactionType.applyJson] may or may not call this method or override its result
-     *
      * @param transactionData transaction data
      * @param credential credential being presented
      * @return transaction-specific data that should be added to the presentment
      */
-    abstract fun applyJson(
+    abstract fun generateSdJwtResponseClaims(
         transactionData: TransactionData<*>,
         credential: Credential
     ): Map<String, JsonElement>

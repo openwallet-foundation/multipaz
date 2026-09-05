@@ -123,12 +123,15 @@ suspend fun makeRequest(call: ApplicationCall) {
     val sessionId = Session.createSession()
     val encodedSessionId = encodeSessionId(sessionId)
     val transactions = transactionData?.map { it.toString() }
+    val origin = (request["origin"] as? JsonPrimitive)?.content
+        ?: call.request.headers["Origin"]
+        ?: BackendEnvironment.getDomain()
     val verificationSession = VerificationUtil.generateVerificationSessionForDcql(
         requestTypes = requestTypes,
         dcql = dcqlQueryToUse,
         transactionData = transactions,
         nonce = ByteString(nonce?.fromBase64Url() ?: Random.nextBytes(15)),
-        origin = BackendEnvironment.getDomain(),
+        origin = origin,
         responseUri = "$baseUrl/direct_post/$encodedSessionId",
         documentTypeRepository = BackendEnvironment.getInterface(DocumentTypeRepository::class)!!,
         verifierIdentities = verifierIdentities,

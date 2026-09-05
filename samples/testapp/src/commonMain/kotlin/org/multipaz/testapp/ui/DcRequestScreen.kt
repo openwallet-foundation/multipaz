@@ -55,6 +55,7 @@ private fun parseIssuerIdentifiers(input: String?): List<ByteString> {
 }
 
 private data class RequestEntry(
+    val id: String,
     val displayName: String,
     val request: DocumentCannedRequest
 )
@@ -167,7 +168,6 @@ private enum class CredentialFormat(
     IETF_SDJWT("IETF SD-JWT"),
 }
 
-private var lastRequest: Int = 0
 private var lastProtocol: Int = 4
 private var lastFormat: Int = 0
 
@@ -186,8 +186,12 @@ fun DcRequestScreen(
 ) {
     val requestOptions = mutableListOf<RequestEntry>()
     for (documentType in TestAppUtils.provisionedDocumentTypes) {
+        val docTypeId = documentType.mdocDocumentType?.docType
+            ?: documentType.jsonDocumentType?.vct
+            ?: documentType.displayName
         for (sampleRequest in documentType.cannedRequests) {
             requestOptions.add(RequestEntry(
+                id = "${docTypeId}_${sampleRequest.id}",
                 displayName = "${documentType.displayName}: ${sampleRequest.displayName}",
                 request = sampleRequest
             ))
@@ -195,18 +199,24 @@ fun DcRequestScreen(
     }
     for (request in app.documentTypeRepository.extraSingleDocumentCannedRequests) {
         requestOptions.add(RequestEntry(
+            id = "extra_" + request.id,
             displayName = request.displayName,
             request = request
         ))
     }
     for (request in wellKnownMultipleDocumentRequests) {
         requestOptions.add(RequestEntry(
+            id = "multidoc_" + request.id,
             displayName = "Multi-doc: ${request.displayName}",
             request = request
         ))
     }
     val requestDropdownExpanded = remember { mutableStateOf(false) }
-    val requestSelected = remember { mutableStateOf(requestOptions[lastRequest]) }
+    val requestSelected = remember { mutableStateOf(
+        requestOptions.find {
+            it.id == app.settingsModel.dcRequestLastSelectedRequestId.value
+        } ?: requestOptions.first()
+    )}
     val protocolOptions = RequestProtocol.entries
     val protocolDropdownExpanded = remember { mutableStateOf(false) }
     val protocolSelected = remember { mutableStateOf(protocolOptions[lastProtocol]) }
@@ -226,7 +236,9 @@ fun DcRequestScreen(
                 comboBoxSelected = requestSelected,
                 comboBoxExpanded = requestDropdownExpanded,
                 getDisplayName = { it.displayName },
-                onSelected = { index, value -> lastRequest = index }
+                onSelected = { index, value ->
+                    app.settingsModel.dcRequestLastSelectedRequestId.value = value.id
+                }
             )
         }
         item {

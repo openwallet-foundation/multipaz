@@ -1,5 +1,7 @@
 package org.multipaz.mdoc.request
 
+import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cose.Cose
@@ -9,7 +11,9 @@ import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.presentment.TransactionData
+import org.multipaz.presentment.TransactionProtocol
 
 /**
  * Document request according to ISO 18013-5.
@@ -100,8 +104,10 @@ data class DocRequest internal constructor(
         documentTypeRepository: DocumentTypeRepository
     ): List<TransactionData<*>> = buildList {
         for (transactionType in documentTypeRepository.transactionTypes) {
-            docRequestInfo?.transactions?.data[transactionType.mdocRequestInfoIdentifier]?.let { data ->
-                add(transactionType.parseCbor(data))
+            docRequestInfo?.transactionData?.data[transactionType.iso18013RequestInfoIdentifier]?.let { data ->
+                val intentToRetain = nameSpaces[ISO_18013_TRANSACTION_DATA_NAMESPACE]?.get(transactionType.iso18013RequestInfoIdentifier)
+                    ?: transactionType.defaultIntentToRetain
+                add(transactionType.parseCbor(data, intentToRetain))
             }
         }
     }

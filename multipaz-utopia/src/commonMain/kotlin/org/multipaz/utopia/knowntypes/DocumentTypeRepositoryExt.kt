@@ -43,7 +43,7 @@ private fun createEUPersonalIDWithTransactionCannedRequest(
     eupidDocumentType: DocumentType
 ) = SingleDocumentCannedRequest(
     id = "withTransaction",
-    displayName = "With Transaction Data",
+    displayName = "EU PID with Ping Transaction",
     mdocRequest = MdocCannedRequest(
         docType = eupidDocumentType.mdocDocumentType!!.docType,
         useZkp = false,

@@ -143,6 +143,48 @@ fun CredentialViewerScreen(
                                 }
                             }
                         )
+                        val keyAuthorizationsText = try {
+                            val mso = (credentialInfo.credential as MdocCredential).mso
+                            val authorizedNamespaces = mso.deviceKeyAuthorizedNamespaces
+                            val authorizedDataElements = mso.deviceKeyAuthorizedDataElements
+                            if (authorizedNamespaces.isEmpty() && authorizedDataElements.isEmpty()) {
+                                AnnotatedString("None")
+                            } else {
+                                buildAnnotatedString {
+                                    var firstSection = true
+                                    if (authorizedNamespaces.isNotEmpty()) {
+                                        firstSection = false
+                                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                                            append("Namespaces:")
+                                        }
+                                        for (ns in authorizedNamespaces) {
+                                            append("\n• $ns")
+                                        }
+                                    }
+                                    if (authorizedDataElements.isNotEmpty()) {
+                                        if (!firstSection) {
+                                            append("\n\n")
+                                        }
+                                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                                            append("Data Elements:")
+                                        }
+                                        for ((ns, elements) in authorizedDataElements) {
+                                            append("\n• $ns:")
+                                            for (elem in elements) {
+                                                append("\n  - $elem")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e: Throwable) {
+                            Logger.w(TAG, "Error getting MSO key authorizations", e)
+                            AnnotatedString("Error parsing MSO")
+                        }
+                        KeyValuePairText(
+                            keyText = "Key Authorizations",
+                            valueText = keyAuthorizationsText
+                        )
                     }
 
                     is SdJwtVcCredential -> {

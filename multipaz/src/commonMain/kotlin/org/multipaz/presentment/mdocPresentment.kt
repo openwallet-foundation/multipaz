@@ -7,6 +7,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Algorithm
@@ -15,6 +16,7 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.document.Document
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.eventlogger.EventPresentmentData
 import org.multipaz.mdoc.credential.MdocCredential
@@ -151,7 +153,7 @@ suspend fun mdocPresentmentAuthenticateUser(
  * @param requesterAppId the appId if an app is making the request or `null`.
  * @param requesterOrigin the origin or `null`.
  * @param creationTime the time to use for `creationTime` when presenting credentials such as SD-JWT+KB VCs.
- * @return a [MdocResponse] containing [DeviceResponse] and [EventPresentmentData].
+ * @return a [Iso18013Response] containing [DeviceResponse] and [EventPresentmentData].
  */
 @Throws(
     CancellationException::class,
@@ -166,7 +168,7 @@ suspend fun mdocPresentmentGenerateResponse(
     requesterAppId: String? = null,
     requesterOrigin: String? = null,
     creationTime: Instant = Clock.System.now(),
-): MdocResponse {
+): Iso18013Response {
     val requester = Requester(
         requesterIdentities = deviceRequest.getRequesterIdentities(),
         appId = requesterAppId,
@@ -365,7 +367,7 @@ suspend fun mdocPresentmentGenerateResponse(
     if (Logger.isDebugEnabled) {
         Logger.dCbor(TAG, "DeviceResponse", deviceResponse.toDataItem())
     }
-    return MdocResponse(
+    return Iso18013Response(
         deviceResponse = deviceResponse,
         eventData = eventData
     )
@@ -406,7 +408,7 @@ suspend fun mdocPresentmentGenerateResponse(
  * @param onWaitingForUserInput called when waiting for input from the user (consent or authentication)
  * @param onDocumentsInFocus called with the documents currently selected for the user, including when
  *   first shown. If the user selects a different set of documents in the prompt, this will be called again.
- * @return a [MdocResponse] containing [DeviceResponse] and [EventPresentmentData].
+ * @return a [Iso18013Response] containing [DeviceResponse] and [EventPresentmentData].
  * @throws PresentmentCanceledException if the user canceled in a consent prompt.
  * @throws PresentmentCannotSatisfyRequestException if it's not possible to satisfy the request.
  */
@@ -430,7 +432,7 @@ suspend fun mdocPresentment(
     preselectedDocuments: List<Document> = emptyList(),
     onWaitingForUserInput: () -> Unit = {},
     onDocumentsInFocus: (documents: List<Document>) -> Unit
-): MdocResponse {
+): Iso18013Response {
     val selection = mdocPresentmentObtainConsent(
         deviceRequest = deviceRequest,
         source = source,
@@ -457,25 +459,48 @@ internal suspend fun computeTransactionResponse(
     match: CredentialPresentmentSetOptionMemberMatch,
     transactionUserInput: Map<String, TransactionUserInput>
 ): DeviceNamespaces {
-    val transactionResponseMap = match.transactionData.associate { transaction ->
-        Pair(transaction.type.mdocResponseNamespace, buildMap {
-            putAll(transaction.applyCbor(
-                credential = match.credential,
-                userInput = transactionUserInput[transaction.type.identifier]
-            ))
-            (match.source as? CredentialMatchSourceIso18013)?.let { source ->
-                // This is generally not available anywhere is the ISO 18013 response,
-                // but it is needed to verify the transaction, so we keep it in the
-                // transaction response.
-                put("docRequestId", source.docRequest.docRequestId.toDataItem())
-            }
-        })
+    if (match.transactionData.isEmpty()) {
+        return buildDeviceNamespaces {}
     }
+    val isIso18013 = match.source is CredentialMatchSourceIso18013
+    val docRequestId = (match.source as? CredentialMatchSourceIso18013)?.docRequest?.docRequestId
+    val groupedByNamespace = mutableMapOf<String, MutableMap<String, DataItem>>()
+
+    if (isIso18013) {
+        for (transaction in match.transactionData) {
+            val responseMap = transaction.generateMdocResponseElements(
+                credential = match.credential,
+                userInput = transactionUserInput[transaction.type.identifier],
+                docRequestId = docRequestId
+            )
+            val cborMap = buildCborMap {
+                for ((key, value) in responseMap) {
+                    put(key, value)
+                }
+            }
+            val ns = ISO_18013_TRANSACTION_DATA_NAMESPACE
+            groupedByNamespace.getOrPut(ns) { mutableMapOf() }[transaction.type.identifier] = cborMap
+        }
+    } else {
+        for (transaction in match.transactionData) {
+            val responseMap = transaction.generateMdocResponseElements(
+                credential = match.credential,
+                userInput = transactionUserInput[transaction.type.identifier],
+                docRequestId = null
+            )
+            val ns = transaction.type.getMdocResponseNamespace(TransactionProtocol.OPENID4VP)
+            val nsMap = groupedByNamespace.getOrPut(ns) { mutableMapOf() }
+            for ((key, value) in responseMap) {
+                nsMap[key] = value
+            }
+        }
+    }
+
     return buildDeviceNamespaces {
-        for ((namespace, values) in transactionResponseMap) {
+        for ((namespace, elements) in groupedByNamespace) {
             addNamespace(namespace) {
-                for ((key, value) in values) {
-                    addDataElement(key, value)
+                for ((elemName, elemValue) in elements) {
+                    addDataElement(elemName, elemValue)
                 }
             }
         }

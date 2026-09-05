@@ -15,6 +15,8 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -35,19 +37,17 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Payment
+import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -140,7 +140,10 @@ import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
 import org.multipaz.utopia.knowntypes.PingTransaction
+import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.min
+import kotlin.math.round
 
 private val PAGER_INDICATOR_HEIGHT = 30.dp
 private val PAGER_INDICATOR_PADDING = 8.dp
@@ -597,11 +600,13 @@ private fun UseCaseViewer(
                         if (!isSelected) {
                             CredentialViewerNotSelected(
                                 typeDisplayName = credential.match.credential.document.typeDisplayName
-                                    ?: when (credential.match.source) {
+                                    ?: when (val source = credential.match.source) {
                                         is CredentialMatchSourceIso18013 ->
-                                            (credential.match.source as CredentialMatchSourceIso18013).docRequest.docType
+                                            source.docRequest.docType
                                         is CredentialMatchSourceOpenID4VP ->
-                                            (credential.match.source as CredentialMatchSourceOpenID4VP).credentialQuery.vctValues!!.first()
+                                            source.credentialQuery.mdocDocType
+                                                ?: source.credentialQuery.vctValues?.firstOrNull()
+                                                ?: source.credentialQuery.id
                                     },
                                 showChevron = true,
                                 onChevronClicked = { onNavigateToPickSolution() }
@@ -644,34 +649,9 @@ private fun UseCaseViewer(
                                 encryptionTargetTrustMetadata = credential.encryptionTargetTrustMetadata
                             )
 
-                            if (credential.match.transactionData.isNotEmpty()) {
-                                Column(
-                                    modifier = Modifier
-                                        .padding(8.dp)
-                                        .border(
-                                            width = 2.dp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            shape = RoundedCornerShape(8.dp)
-                                        )
-                                        .padding(8.dp)
-                                        .fillMaxWidth()
-                                ) {
-                                    for (data in credential.match.transactionData) {
-                                        DisplayTransactionData(
-                                            transactionData = data,
-                                            userInput = transactionUserInput[data.type.identifier],
-                                            onUserInputChanged = { userInput ->
-                                                onTransactionUserInputChanged.invoke(
-                                                    data.type.identifier,
-                                                    userInput
-                                                )
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-
-                            if (storedClaims.isEmpty()) {
+                            if (storedClaims.isEmpty() && notStoredClaims.isEmpty()) {
+                                // No claims to display
+                            } else if (storedClaims.isEmpty()) {
                                 SharedStoredText(text = sharedWithText)
                                 ClaimsGridView(claims = notStoredClaims, useColumns = true)
                             } else if (notStoredClaims.isEmpty()) {
@@ -682,6 +662,23 @@ private fun UseCaseViewer(
                                 ClaimsGridView(claims = notStoredClaims, useColumns = true)
                                 SharedStoredText(text = sharedWithAndStoredByText)
                                 ClaimsGridView(claims = storedClaims, useColumns = true)
+                            }
+
+                            if (credential.match.transactionData.isNotEmpty()) {
+                                val hasClaims = storedClaims.isNotEmpty() || notStoredClaims.isNotEmpty()
+                                for (data in credential.match.transactionData) {
+                                    DisplayTransactionData(
+                                        transactionData = data,
+                                        hasClaims = hasClaims,
+                                        userInput = transactionUserInput[data.type.identifier],
+                                        onUserInputChanged = { userInput ->
+                                            onTransactionUserInputChanged.invoke(
+                                                data.type.identifier,
+                                                userInput
+                                            )
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -695,87 +692,175 @@ private fun UseCaseViewer(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun DisplayTransactionData(
     transactionData: TransactionData<*>,
+    hasClaims: Boolean,
     userInput: TransactionUserInput?,
     onUserInputChanged: (userInput: TransactionUserInput) -> Unit
 ) {
     when (val type = transactionData.type) {
         PingTransaction -> {
             val payload = transactionData.payload as PingTransaction.Payload
-            Text("Test \"ping\" transaction")
-            payload.string?.let { Text("String value: '$it'") }
-            payload.blob?.let { Text("Blob value: '${it.toByteArray().toBase64Url()}") }
+            val headerText = if (hasClaims) {
+                "This test \"ping\" transaction will also be approved:"
+            } else {
+                "This test \"ping\" transaction will be approved:"
+            }
+            SharedStoredText(text = headerText)
+            payload.string?.let {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start,
+                    modifier = Modifier.fillMaxWidth().padding(4.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "String: $it",
+                        fontWeight = FontWeight.Normal,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+            payload.blob?.let {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start,
+                    modifier = Modifier.fillMaxWidth().padding(4.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Blob: ${it.toByteArray().toBase64Url()}",
+                        fontWeight = FontWeight.Normal,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
         }
 
         PaymentTransaction -> {
             val payload = transactionData.payload as PaymentTransaction.Payload
             val tipPercent = (userInput as? PaymentTransaction.UserInput)?.tipPercent ?: 0.0
-            Text("Payment transaction")
-            Text("Amount: ${payload.amount} ${payload.currency}")
+
+            val headerText = if (hasClaims) {
+                "This payment will also be approved:"
+            } else {
+                "This payment will be approved:"
+            }
+            SharedStoredText(text = headerText)
+
+            if (payload.payee.name.isNotEmpty()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start,
+                    modifier = Modifier.fillMaxWidth().padding(4.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Storefront,
+                        contentDescription = null
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Payee: ${payload.payee.name}",
+                        fontWeight = FontWeight.Normal,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+
+            val amountText = if (payload.tipRequested == true && tipPercent > 0.0) {
+                val tipAmount = ceil(payload.amount * tipPercent) / 100.0
+                val totalAmount = payload.amount + tipAmount
+                "Amount: ${formatAmount(totalAmount)} ${payload.currency} (tip: ${formatAmount(tipAmount)} ${payload.currency})"
+            } else {
+                "Amount: ${formatAmount(payload.amount)} ${payload.currency}"
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start,
+                modifier = Modifier.fillMaxWidth().padding(4.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Payment,
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = amountText,
+                    fontWeight = FontWeight.Normal,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
             if (payload.tipRequested == true) {
-                Row {
-                    // 2. Track the expanded state and the currently selected item
-                    var isExpanded by remember { mutableStateOf(false) }
-                    var selectedOption by remember { mutableStateOf(
-                        if (tipPercent == 0.0) {
-                            tipOptions.first()
-                        } else {
-                            "$tipPercent%"
-                        }
-                    ) }
-
-                    ExposedDropdownMenuBox(
-                        expanded = isExpanded,
-                        onExpandedChange = { isExpanded = !isExpanded },
-                    ) {
-                        OutlinedTextField(
-                            value = selectedOption,
-                            onValueChange = {},
-                            readOnly = true, // Prevents keyboard from appearing
-                            label = { Text("Add tip") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isExpanded) },
-                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                            modifier = Modifier
-                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                                .fillMaxWidth()
-                        )
-
-                        ExposedDropdownMenu(
-                            expanded = isExpanded,
-                            onDismissRequest = { isExpanded = false }
-                        ) {
-                            tipOptions.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(text = option) },
-                                    onClick = {
-                                        selectedOption = option // Update selection truth
-                                        val percent = if (option.endsWith("%")) {
-                                            option.take(option.lastIndex).toDouble()
-                                        } else {
-                                            0.0
-                                        }
-                                        onUserInputChanged(PaymentTransaction.UserInput(percent))
-                                        isExpanded = false      // Close menu
-                                    },
-                                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                    text = "Add tip",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    tipOptions.forEach { (percent, label) ->
+                        val isSelected = (tipPercent == percent)
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                onUserInputChanged(PaymentTransaction.UserInput(percent))
+                            },
+                            label = {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
-                        }
+                        )
                     }
                 }
             }
         }
 
         else -> {
-            Text("Unknown transaction type '${type.displayName}'")
+            val headerText = if (hasClaims) {
+                "This ${type.displayName} transaction will also be approved:"
+            } else {
+                "This ${type.displayName} transaction will be approved:"
+            }
+            SharedStoredText(text = headerText)
         }
     }
 }
 
-private val tipOptions = listOf("No tip", "10%", "15%", "20%", "25%")
+private val tipOptions = listOf(
+    0.0 to "No tip",
+    10.0 to "10%",
+    15.0 to "15%",
+    20.0 to "20%",
+    25.0 to "25%"
+)
+
+private fun formatAmount(amount: Double): String {
+    val roundedCents = round(amount * 100.0).toLong()
+    val dollars = roundedCents / 100
+    val cents = abs(roundedCents % 100)
+    return "$dollars.${cents.toString().padStart(2, '0')}"
+}
 
 @Composable
 private fun calcSharedWithText(

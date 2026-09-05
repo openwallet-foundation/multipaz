@@ -93,6 +93,54 @@ std::tuple<const uint8_t*, ParseClient*> handleNull(const uint8_t* hdrBegin, con
             parseClient->item(item, hdrBegin, hdrEnd /* valueBegin */, hdrEnd /* itemEnd */)};
 }
 
+static double halfToDouble(uint16_t half) {
+    uint32_t sign = (half >> 15) & 0x0001;
+    uint32_t exp = (half >> 10) & 0x001F;
+    uint32_t mant = half & 0x03FF;
+
+    if (exp == 0) {
+        if (mant == 0) {
+            return sign ? -0.0 : 0.0;
+        } else {
+            double val = ldexp((double)mant, -24);
+            return sign ? -val : val;
+        }
+    } else if (exp == 31) {
+        if (mant == 0) {
+            return sign ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
+        } else {
+            return std::numeric_limits<double>::quiet_NaN();
+        }
+    }
+
+    double val = ldexp((double)(mant | 0x0400), exp - 25);
+    return sign ? -val : val;
+}
+
+std::tuple<const uint8_t*, ParseClient*> handleDouble(double value, const uint8_t* hdrBegin,
+                                                      const uint8_t* hdrEnd,
+                                                      ParseClient* parseClient) {
+    std::unique_ptr<Item> item = std::make_unique<Double>(value);
+    return {hdrEnd,
+            parseClient->item(item, hdrBegin, hdrEnd /* valueBegin */, hdrEnd /* itemEnd */)};
+}
+
+std::tuple<const uint8_t*, ParseClient*> handleUndefined(const uint8_t* hdrBegin,
+                                                         const uint8_t* hdrEnd,
+                                                         ParseClient* parseClient) {
+    std::unique_ptr<Item> item = std::make_unique<Undefined>();
+    return {hdrEnd,
+            parseClient->item(item, hdrBegin, hdrEnd /* valueBegin */, hdrEnd /* itemEnd */)};
+}
+
+std::tuple<const uint8_t*, ParseClient*> handleSimpleValue(uint32_t value, const uint8_t* hdrBegin,
+                                                           const uint8_t* hdrEnd,
+                                                           ParseClient* parseClient) {
+    std::unique_ptr<Item> item = std::make_unique<SimpleValue>(value);
+    return {hdrEnd,
+            parseClient->item(item, hdrBegin, hdrEnd /* valueBegin */, hdrEnd /* itemEnd */)};
+}
+
 template <typename T>
 std::tuple<const uint8_t*, ParseClient*> handleString(uint64_t length, const uint8_t* hdrBegin,
                                                       const uint8_t* valueBegin, const uint8_t* end,
@@ -338,15 +386,32 @@ std::tuple<const uint8_t*, ParseClient*> parseRecursively(const uint8_t* begin, 
                                   end, "semantic", emitViews, parseClient, depth);
 
         case SIMPLE:
-            switch (addlData) {
+            switch (tagInt) {
                 case TRUE:
                 case FALSE:
-                    return handleBool(addlData, begin, pos, parseClient);
+                    return handleBool(tagInt, begin, pos, parseClient);
                 case NULL_V:
                     return handleNull(begin, pos, parseClient);
+                case 23:
+                    return handleUndefined(begin, pos, parseClient);
+                case TWO_BYTE_LENGTH: {
+                    double d = halfToDouble(static_cast<uint16_t>(addlData));
+                    return handleDouble(d, begin, pos, parseClient);
+                }
+                case FOUR_BYTE_LENGTH: {
+                    uint32_t u32 = static_cast<uint32_t>(addlData);
+                    float f;
+                    memcpy(&f, &u32, sizeof(float));
+                    return handleDouble(static_cast<double>(f), begin, pos, parseClient);
+                }
+                case EIGHT_BYTE_LENGTH: {
+                    uint64_t u64 = addlData;
+                    double d;
+                    memcpy(&d, &u64, sizeof(double));
+                    return handleDouble(d, begin, pos, parseClient);
+                }
                 default:
-                    parseClient->error(begin, "Unsupported floating-point or simple value.");
-                    return {begin, nullptr};
+                    return handleSimpleValue(static_cast<uint32_t>(addlData), begin, pos, parseClient);
             }
     }
     CHECK(false);  // Impossible to get here.

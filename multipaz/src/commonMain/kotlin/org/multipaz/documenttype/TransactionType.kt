@@ -1,48 +1,108 @@
 package org.multipaz.documenttype
 
 import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.multipaz.cbor.Bstr
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.toDataItem
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.document.Document
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.presentment.TransactionData
+import org.multipaz.presentment.TransactionProtocol
 import org.multipaz.util.Logger
+import org.multipaz.util.fromBase64Url
 
 /**
- * An object that represents a particular transaction data type.
+ * Namespace defined by ISO/IEC 18013-5 for transaction data signing.
+ */
+const val ISO_18013_TRANSACTION_DATA_NAMESPACE = "org.iso.transactiondata"
+
+/**
+ * Represents a transaction data type used for dynamic linking and transaction authorization in
+ * digital credential presentations.
  *
- * All transaction types that are expected to be processed or rejected must be registered in a
- * [DocumentTypeRepository] object. In OpenID4VP unregistered transaction types cause the whole
- * request to be rejected. In ISO/IEC 18013-5:2021, unknown transaction types are not processed,
- * which may or may not fail at verification time.
+ * Dynamic linking cryptographically binds a presentation to a specific transaction context
+ * (such as payment amount, currency, payee, or nonce) and optional user input (such as tip amount),
+ * ensuring the credential holder explicitly authorizes the transaction and protecting against
+ * relay, replay, and man-in-the-middle attacks.
  *
- * @param displayName human-readable transaction name
+ * ### Supported Protocols and Credential Formats
+ *
+ * Transaction processing supports both major presentment protocols and credential formats across four
+ * distinct combinations:
+ *
+ * 1. **ISO/IEC 18013-5 with ISO mdoc (`mso_mdoc`)**: The verifier sends transaction data inside the
+ *    `requestInfo.transactionData` map of an ISO 18013-5 `DeviceRequest`. The wallet returns transaction
+ *    response elements (e.g. `amount`, `currency`, and `tipAmount`) nested inside a CBOR map under the
+ *    transaction [identifier] within the standard namespace ([ISO_18013_TRANSACTION_DATA_NAMESPACE]) in
+ *    `DeviceSigned.nameSpaces`, bound to the request via `docRequestId`.
+ *
+ * 2. **ISO/IEC 18013-5 with SD-JWT VC (`dc+sd-jwt`)**: The verifier requests an SD-JWT VC within an
+ *    ISO 18013-5 `DeviceRequest`. The wallet generates a Key Binding JWT (KB-JWT) where transaction
+ *    processing response claims are placed under [kbJwtResponseClaimName] (along with `doc_request_id`).
+ *
+ * 3. **OpenID4VP with SD-JWT VC (`dc+sd-jwt`)**: The verifier supplies `transaction_data` in the
+ *    OpenID4VP authorization request. The wallet hashes the transaction payload and inserts
+ *    `transaction_data_hashes_alg` and `transaction_data_hashes` (along with user input claims) directly
+ *    into the SD-JWT KB-JWT payload.
+ *
+ * 4. **OpenID4VP with ISO mdoc (`mso_mdoc`)**: The verifier supplies `transaction_data` in the
+ *    OpenID4VP authorization request. The wallet places transaction evidence directly in
+ *    `DeviceSigned.nameSpaces` under [openId4VpMdocResponseNamespace] (defaulting to [identifier]),
+ *    returning top-level data elements for the computed hash (`transactionDataHash`), hash algorithm
+ *    (`transactionDataHashAlg`), and user input (`tipAmount`).
+ *
+ * ### Lifecycle & Verification
+ *
+ * All transaction types expected to be processed or rejected must be registered in a
+ * [DocumentTypeRepository].
+ * - **Applicability ([isApplicable])**: Validates that candidate credentials authorize the device key to
+ *   sign under the protocol's designated namespace ([ISO_18013_TRANSACTION_DATA_NAMESPACE] for ISO 18013-5, or
+ *   [openId4VpMdocResponseNamespace] for OpenID4VP) in the Mobile Security Object (MSO).
+ * - **Generation ([generateMdocResponseElements], [generateSdJwtResponseClaims])**: Invoked during wallet
+ *   presentment to populate device-signed elements or KB-JWT claims based on the transaction payload and
+ *   optional [TransactionUserInput].
+ * - **Verification ([verifyMdocResponse], [verifySdJwtResponse])**: Invoked on the verifier side during
+ *   document authentication to validate that returned amounts, currencies, user inputs, and transaction
+ *   hashes match the requested transaction.
+ *
+ * @param PayloadT type of the transaction-specific payload data.
+ * @param displayName human-readable transaction name.
  * @param identifier unique transaction type identifier, corresponds to the `type` property in
  *  transaction data in OpenID4VP; all [TransactionType] objects must have distinct identifiers.
  * @param kbJwtResponseClaimName if transaction processing results in any data, it will be inserted
- *  in key binding JWT using this claim name; all [TransactionType] objects must have distinct
- *  values.
- * @param mdocRequestInfoIdentifier transaction type to use in `transactions` array in
- *  `requestInfo` map in ISO/IEC 18013-5:2021 document request to represent this transaction
- *  data; all [TransactionType] objects must have distinct values.
- * @param mdocResponseNamespace namespace to use in `deviceSigned` namespace map in
- *  ISO/IEC 18013-5:2021 response to represent transaction hash and transaction processing
- *  results; all [TransactionType] objects must have distinct values.
+ *  in key binding JWT using this claim name; all [TransactionType] objects must have distinct values.
+ * @param iso18013RequestInfoIdentifier transaction type to use in `transactionData` map in
+ *  `requestInfo` map in ISO/IEC 18013-5 document request to represent this transaction data;
+ *  all [TransactionType] objects must have distinct values.
+ * @param openId4VpMdocResponseNamespace namespace to use in `deviceSigned` namespace map in
+ *  OpenID4VP response; defaults to [identifier].
+ * @param defaultIntentToRetain default value for `intentToRetain` when requesting the transaction data
+ *  element in the [ISO_18013_TRANSACTION_DATA_NAMESPACE] namespace in an ISO mdoc request.
  */
 abstract class TransactionType<PayloadT: Any>(
     val displayName: String,
     val identifier: String,
     val kbJwtResponseClaimName: String = identifier,
-    val mdocRequestInfoIdentifier: String = identifier,
-    val mdocResponseNamespace: String = identifier,
+    val iso18013RequestInfoIdentifier: String = identifier,
+    val openId4VpMdocResponseNamespace: String = identifier,
+    val defaultIntentToRetain: Boolean = true,
 ) {
+    /**
+     * Returns the DeviceSigned namespace to use for the given presentment protocol.
+     */
+    fun getMdocResponseNamespace(protocol: TransactionProtocol): String = when (protocol) {
+        TransactionProtocol.ISO_18013_5 -> ISO_18013_TRANSACTION_DATA_NAMESPACE
+        TransactionProtocol.OPENID4VP -> openId4VpMdocResponseNamespace
+    }
+
     /**
      * Serializes transaction data for use in OpenID4VP protocol.
      *
@@ -51,42 +111,81 @@ abstract class TransactionType<PayloadT: Any>(
      * @param hashAlgorithms optional list of hash algorithms that are accepted by the verifier
      * @return JSON-serialized (but **not** Base64Url-encoded!) transaction data
      */
-    abstract fun serializeJson(
+    open fun serializeOpenId4VpRequest(
         payload: PayloadT,
         credentialIds: List<String>,
         hashAlgorithms: List<Algorithm>? = null
-    ): String
+    ): String = throw UnsupportedOperationException("serializeOpenId4VpRequest not implemented for '$identifier'")
 
     /**
      * Serializes transaction data for use in ISO/IEC 18013 protocols.
      *
      * @param payload transaction-specific data
-     * @param hashAlgorithms optional list of hash algorithms that are accepted by the verifier
-     * @return serialized transaction data
+     * @return serialized transaction data as a CBOR map (TransactionDataContent)
      */
-    abstract fun serializeCbor(
-        payload: PayloadT,
-        hashAlgorithms: List<Algorithm>? = null
-    ): DataItem
+    open fun serializeIso18013Request(payload: PayloadT): DataItem =
+        throw UnsupportedOperationException("serializeIso18013Request not implemented for '$identifier'")
 
     /**
      * Parses transaction data serialized for use in OpenID4VP protocol.
      *
-     * @param serialized serialized transaction data (Base64Url-encoded JSON)
-     * @return [TransactionData] object that holds serialized and parsed transaction data representations
+     * @param jsonString parsed JSON string from base64url-encoded OpenID4VP transaction_data
+     * @return transaction payload
      */
-    abstract fun parseJson(serialized: ByteString): TransactionData<PayloadT>
+    open fun parseOpenId4VpRequest(jsonString: String): PayloadT =
+        throw UnsupportedOperationException("parseOpenId4VpRequest not implemented for '$identifier'")
 
     /**
      * Parses transaction data serialized for use in ISO/IEC 18013 protocols.
      *
-     * @param serialized transaction data as it is represented in the request (specifically,
-     *  value of the `data` field in the transaction object in the `transactions` array inside
-     *  `requestInfo`); in many cases [serialized] is expected to be [Tagged] with
-     *  [Tagged.tagNumber] equal to [Tagged.ENCODED_CBOR]
-     * @return [TransactionData] object that holds serialized and parsed transaction data representations
+     * @param dataItem value of the transaction data item in `transactionData` inside `requestInfo`
+     * @return transaction payload
      */
-    abstract fun parseCbor(serialized: DataItem): TransactionData<PayloadT>
+    open fun parseIso18013Request(dataItem: DataItem): PayloadT =
+        throw UnsupportedOperationException("parseIso18013Request not implemented for '$identifier'")
+
+
+    /**
+     * Parses transaction data serialized for use in OpenID4VP protocol.
+     */
+    open fun parseJson(serialized: ByteString): TransactionData<PayloadT> {
+        val jsonString = serialized.decodeToString().fromBase64Url().decodeToString()
+        return TransactionData(
+            type = this,
+            payload = parseOpenId4VpRequest(jsonString),
+            protocol = TransactionProtocol.OPENID4VP,
+            rawBytes = serialized,
+        )
+    }
+
+    /**
+     * Parses transaction data serialized for use in ISO/IEC 18013-5 presentment.
+     *
+     * @param serialized the CBOR data item representing the transaction request.
+     * @param intentToRetain whether the verifier intends to retain the transaction data.
+     * @return transaction data wrapping the parsed payload.
+     */
+    open fun parseCbor(
+        serialized: DataItem,
+        intentToRetain: Boolean
+    ): TransactionData<PayloadT> {
+        return TransactionData(
+            type = this,
+            payload = parseIso18013Request(serialized),
+            protocol = TransactionProtocol.ISO_18013_5,
+            rawBytes = ByteString(Cbor.encode(serialized)),
+            intentToRetain = intentToRetain,
+        )
+    }
+
+    /**
+     * Parses transaction data serialized for use in ISO/IEC 18013-5 presentment using [defaultIntentToRetain].
+     *
+     * @param serialized the CBOR data item representing the transaction request.
+     * @return transaction data wrapping the parsed payload.
+     */
+    open fun parseCbor(serialized: DataItem): TransactionData<PayloadT> =
+        parseCbor(serialized, defaultIntentToRetain)
 
     /**
      * Determines if this transaction is applicable to the given credential.
@@ -95,10 +194,9 @@ abstract class TransactionType<PayloadT: Any>(
      * set option from consideration. If other options are available, presentment still may
      * succeed.
      *
-     * For mdoc credentials this method must check [mdocResponseNamespace] against
-     * [MobileSecurityObject.deviceKeyAuthorizedNamespaces] and possibly
-     * [MobileSecurityObject.deviceKeyAuthorizedDataElements] to determine if the transaction is
-     * applicable for this specific credential.
+     * For mdoc credentials this method checks whether the MSO authorizes the device key for
+     * [ISO_18013_TRANSACTION_DATA_NAMESPACE] in [MobileSecurityObject.deviceKeyAuthorizedNamespaces] or
+     * for [identifier] in [MobileSecurityObject.deviceKeyAuthorizedDataElements].
      *
      * @param transactionData transaction data being considered
      * @param credential one of the credentials in the [Document] being considered
@@ -111,96 +209,101 @@ abstract class TransactionType<PayloadT: Any>(
         return if (credential is MdocCredential) {
             // For mdoc there is a per-credential KeyAuthorizations section. We need to check
             // it to determine if this transaction can be applied to this credential
-            credential.mso.deviceKeyAuthorizedNamespaces.contains(mdocResponseNamespace)
+            val expectedNamespace = getMdocResponseNamespace(transactionData.protocol)
+            when (transactionData.protocol) {
+                TransactionProtocol.ISO_18013_5 -> {
+                    credential.mso.deviceKeyAuthorizedNamespaces.contains(expectedNamespace) ||
+                        credential.mso.deviceKeyAuthorizedDataElements[expectedNamespace]?.contains(identifier) == true
+                }
+                TransactionProtocol.OPENID4VP -> {
+                    credential.mso.deviceKeyAuthorizedNamespaces.contains(expectedNamespace) ||
+                        credential.mso.deviceKeyAuthorizedDataElements[expectedNamespace] != null
+                }
+            }
         } else {
             true
         }
     }
 
     /**
-     * Applies transaction in the context of ISO mdoc presentment.
+     * Generates device-signed data elements for an Mdoc credential.
      *
-     * Note: unlike OpenID4VP, ISO/IEC 18013-5:2021 does not impose a particular requirement on
-     * transaction response (e.g. responding at least with transaction data hash). Each transaction
-     * type should define its own **verifiable** response. This response then will be validated
-     * by the verifier the using [verifyCborResponse] method.
-     *
-     * Default implementation computes transaction data hash, similar to how OpenID4VP does it.
-     *
-     * Note: one should not assume that [transactionData] will be in CBOR format. Transaction data
-     * is formatted according to the presentment protocol.
+     * Used for Case 1 (ISO 18013-5) and Case 4 (OpenID4VP).
      *
      * @param transactionData transaction data
      * @param credential credential being presented
      * @param userInput additional data specified by the user
-     * @return transaction-specific data that should be added to the presentment (in `deviceSigned`
-     *  namespace map using [mdocResponseNamespace]), `null` if no extra data should be added.
+     * @param docRequestId document request index in ISO 18013-5, null in OpenID4VP
+     * @return map of data elements for `DeviceSigned.nameSpaces["org.iso.transactiondata"][identifier]`
      */
-    open suspend fun applyCbor(
+    open suspend fun generateMdocResponseElements(
         transactionData: TransactionData<PayloadT>,
         credential: Credential,
-        userInput: TransactionUserInput?
+        userInput: TransactionUserInput?,
+        docRequestId: Int? = null
     ): Map<String, DataItem> = buildMap {
-        userInput?.applyCbor(transactionData, credential)?.let { putAll(it) }
-        val alg = transactionData.hashAlgorithms?.first()?.also {
-            put("transactionDataHashAlg", it.coseAlgorithmIdentifier!!.toDataItem())
+        userInput?.generateMdocResponseElements(transactionData, credential)?.let { putAll(it) }
+        if (transactionData.protocol == TransactionProtocol.OPENID4VP) {
+            val alg = transactionData.hashAlgorithms?.first()?.also {
+                put("transactionDataHashAlg", it.coseAlgorithmIdentifier!!.toDataItem())
+            }
+            put("transactionDataHash",
+                transactionData.computeHash(alg ?: Algorithm.SHA256).toByteArray().toDataItem())
+        } else {
+            docRequestId?.let { put("docRequestId", it.toDataItem()) }
         }
-        put("transactionDataHash",
-            transactionData.computeHash(alg ?: Algorithm.SHA256).toByteArray().toDataItem())
     }
 
     /**
-     * Applies transaction in the context of IETF SD-JWT presentment.
+     * Generates Key Binding JWT claims for an SD-JWT credential.
      *
-     * Default implementation does not add any transaction-specific data.
+     * Used for Case 2 (ISO 18013-5) and Case 3 (OpenID4VP).
      *
      * @param transactionData transaction data
      * @param credential credential being presented
      * @param userInput additional data specified by the user
-     * @return transaction-specific data that should be added to the presentment (in key-binding
-     *  JWT body using [kbJwtResponseClaimName]), `null` if no extra data should be added.
+     * @param docRequestId document request index in ISO 18013-5, null in OpenID4VP
+     * @return map of claims to include in the KB-JWT payload
      */
-    open suspend fun applyJson(
+    open suspend fun generateSdJwtResponseClaims(
         transactionData: TransactionData<PayloadT>,
         credential: Credential,
-        userInput: TransactionUserInput?
-    ): JsonElement? = userInput?.applyJson(transactionData, credential)?.let { claims ->
-        buildJsonObject {
-            for ((name, value) in claims) {
-                put(name, value)
+        userInput: TransactionUserInput?,
+        docRequestId: Int? = null
+    ): Map<String, JsonElement> = buildMap {
+        userInput?.generateSdJwtResponseClaims(transactionData, credential)?.let { putAll(it) }
+        if (transactionData.protocol == TransactionProtocol.ISO_18013_5) {
+            docRequestId?.let { put("doc_request_id", JsonPrimitive(it)) }
+        }
+    }
+
+    /**
+     * Verifies transaction response returned in an Mdoc presentation.
+     */
+    open suspend fun verifyMdocResponse(
+        transactionData: TransactionData<PayloadT>,
+        responseElements: Map<String, DataItem>
+    ) {
+        if (transactionData.protocol == TransactionProtocol.OPENID4VP) {
+            val hashAlg = responseElements["transactionDataHashAlg"]?.let {
+                Algorithm.fromCoseAlgorithmIdentifier(it.asNumber.toInt())
+            }
+            val hash = responseElements["transactionDataHash"] as? Bstr
+                ?: throw IllegalStateException("Invalid response for transaction '$identifier'")
+            val expectedHash = transactionData.computeHash(hashAlg ?: Algorithm.SHA256)
+            if (ByteString(hash.asBstr) != expectedHash) {
+                throw IllegalStateException("Transaction hash failed to verify for '$identifier'")
             }
         }
     }
 
     /**
-     * Verify transaction response for mdoc presentment.
-     *
-     * Note: unlike OpenID4VP, ISO/IEC 18013-5:2021 does not impose a particular requirement on
-     * transaction response (e.g. responding at least with transaction data hash). Each transaction
-     * type should define its own **verifiable** response and implement verification in this
-     * method.
-     *
-     * Default implementation verifies transaction data hash computed by default implementation
-     * of [applyCbor].
-     *
-     * @param transactionData transaction data
-     * @param transactionResponse key-value-map for values returned in [mdocResponseNamespace]
-     *  namespace in the credential presentation
-     * @throws IllegalStateException if response does not pass verification
+     * Verifies transaction response returned in an SD-JWT presentation.
      */
-    open suspend fun verifyCborResponse(
+    open suspend fun verifySdJwtResponse(
         transactionData: TransactionData<PayloadT>,
-        transactionResponse: Map<String, DataItem>
+        responseClaims: Map<String, JsonElement>
     ) {
-        val hashAlg = transactionResponse["transactionDataHashAlg"]?.let {
-            Algorithm.fromCoseAlgorithmIdentifier(it.asNumber.toInt())
-        }
-        val hash = transactionResponse["transactionDataHash"] as? Bstr
-            ?: throw IllegalStateException("Invalid response for transaction '$identifier'")
-        val expectedHash = transactionData.computeHash(hashAlg ?: Algorithm.SHA256)
-        if (ByteString(hash.asBstr) != expectedHash) {
-            throw IllegalStateException("Transaction hash failed to verify for '$identifier'")
-        }
     }
 
     companion object {
@@ -229,7 +332,7 @@ abstract class TransactionType<PayloadT: Any>(
          */
         fun joseHashAlgorithms(transactionDataHashesAlg: List<Algorithm>?): List<String>? =
             transactionDataHashesAlg
-                ?.mapNotNull { it.joseAlgorithmIdentifier }
+                ?.mapNotNull { it.hashAlgorithmName ?: it.joseAlgorithmIdentifier }
                 ?.ifEmpty { throw IllegalArgumentException("No valid hash algorithms") }
 
         /**

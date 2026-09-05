@@ -36,6 +36,7 @@ import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.Logger
 import org.multipaz.util.truncateToWholeSeconds
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.utopia.knowntypes.PingTransaction
 import kotlin.time.Duration.Companion.days
 
@@ -238,7 +239,12 @@ class CredentialFactoryMdl : CredentialFactory {
             deviceKey = authenticationKey!!,
             revocationStatus = revocationStatus,
             deviceKeyAuthorizedNamespaces = listOf(
-                PingTransaction.mdocResponseNamespace
+                PingTransaction.openId4VpMdocResponseNamespace
+            ),
+            deviceKeyAuthorizedDataElements = mapOf(
+                ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(
+                    PingTransaction.identifier
+                )
             )
         )
         val taggedEncodedMso = Cbor.encode(Tagged(

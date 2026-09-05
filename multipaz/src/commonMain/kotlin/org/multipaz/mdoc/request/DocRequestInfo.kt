@@ -28,7 +28,7 @@ import org.multipaz.cbor.putCborMap
  * @property docResponseEncryption optional request for encrypting the response.
  * @property docFormat optional document format.
  * @property dataElementIdentifierMapping optional data element identifier mapping.
- * @property transactions optional information about requested transactions.
+ * @property transactionData optional information about requested transaction data.
  * @property otherInfo other request info.
  */
 data class DocRequestInfo(
@@ -40,7 +40,7 @@ data class DocRequestInfo(
     val docResponseEncryption: EncryptionParameters? = null,
     val docFormat: String? = null,
     val dataElementIdentifierMapping: Map<String, JsonArray> = emptyMap(),
-    val transactions: TransactionsInfo? = null,
+    val transactionData: TransactionsInfo? = null,
     val otherInfo: Map<String, DataItem> = emptyMap(),
 ) {
     internal fun toDataItem() = buildCborMap {
@@ -99,13 +99,10 @@ data class DocRequestInfo(
                 }
             }
         }
-        transactions?.let {
-            putCborArray("transactions") {
+        transactionData?.let {
+            putCborMap("transactionData") {
                 for ((type, data) in it.data) {
-                    addCborMap {
-                        put("type", type)
-                        put("data", data)
-                    }
+                    put(type, data)
                 }
             }
         }
@@ -124,7 +121,7 @@ data class DocRequestInfo(
                 docResponseEncryption != null ||
                 docFormat != null ||
                 dataElementIdentifierMapping.isNotEmpty() ||
-                transactions != null
+                transactionData != null
     }
 
     companion object {
@@ -156,9 +153,9 @@ data class DocRequestInfo(
                     }.let { JsonArray(it) }
                 }.toMap()
             } ?: emptyMap()
-            val transactions = dataItem.getOrNull("transactions")?.let {
+            val transactionData = dataItem.getOrNull("transactionData")?.let {
                 TransactionsInfo(
-                    data = it.asArray.associate { item -> Pair(item["type"].asTstr, item["data"]) }
+                    data = it.asMap.entries.associate { (k, v) -> Pair(k.asTstr, v) }
                 )
             }
             val otherInfo = mutableMapOf<String, DataItem>()
@@ -172,6 +169,7 @@ data class DocRequestInfo(
                     "docResponseEncryption",
                     "docFormat",
                     "dataElementIdentifierMapping",
+                    "transactionData",
                     "transactions" -> continue
                     else -> otherInfo[otherKey] = otherValue
                 }
@@ -185,7 +183,7 @@ data class DocRequestInfo(
                 docResponseEncryption = docResponseEncryption,
                 docFormat = docFormat,
                 dataElementIdentifierMapping = dataElementIdentifierMapping,
-                transactions = transactions,
+                transactionData = transactionData,
                 otherInfo = otherInfo
             )
         }
