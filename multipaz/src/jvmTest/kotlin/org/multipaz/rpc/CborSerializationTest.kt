@@ -5,10 +5,21 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.cbor.annotation.CborSerializationImplemented
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.Uint
 import org.multipaz.util.fromBase64Url
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.fail
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.nanoseconds
+import kotlin.time.Duration.Companion.seconds
 
 enum class Enum1 { A, B, C }
 
@@ -204,6 +215,22 @@ data class SiInheritsB(
     val moarStuff: String,
 ): SiRoot(stuff)
 
+@CborSerializable
+data class DurationContainer(
+    val duration: Duration,
+    val optionalDuration: Duration? = null,
+) {
+    companion object
+}
+
+@CborSerializable
+data class DurationCollectionsContainer(
+    val durationList: List<Duration>,
+    val durationMap: Map<String, Duration>,
+) {
+    companion object
+}
+
 class CborSerializationTest {
     @Test
     fun structuralEquivalency() {
@@ -372,5 +399,100 @@ class CborSerializationTest {
             b,
             SiRoot.fromDataItem(b.toDataItem())
         )
+    }
+
+    @Test
+    fun durationSerialization_roundTrip() {
+        val testCases = listOf(
+            Duration.ZERO,
+            500.milliseconds,
+            123456789.nanoseconds,
+            42.seconds,
+            15.minutes,
+            2.hours,
+            5.days,
+            (-10).seconds,
+            (-250).milliseconds,
+            (-3).days,
+            Duration.INFINITE,
+            -Duration.INFINITE,
+        )
+        for (d in testCases) {
+            val container = DurationContainer(
+                duration = d,
+                optionalDuration = d,
+            )
+            val dataItem = container.toDataItem()
+            val decoded = DurationContainer.fromDataItem(dataItem)
+            assertEquals(container, decoded)
+            assertEquals(container, DurationContainer.fromCbor(container.toCbor()))
+
+            val collectionsContainer = DurationCollectionsContainer(
+                durationList = listOf(d, Duration.ZERO),
+                durationMap = mapOf("key" to d)
+            )
+            val collectionsDataItem = collectionsContainer.toDataItem()
+            val decodedCollections = DurationCollectionsContainer.fromDataItem(collectionsDataItem)
+            assertEquals(collectionsContainer, decodedCollections)
+            assertEquals(collectionsContainer, DurationCollectionsContainer.fromCbor(collectionsContainer.toCbor()))
+        }
+    }
+
+    @Test
+    fun durationSerialization_optionalNull() {
+        val container = DurationContainer(
+            duration = 10.seconds,
+            optionalDuration = null
+        )
+        val decoded = DurationContainer.fromDataItem(container.toDataItem())
+        assertEquals(container, decoded)
+        assertNull(decoded.optionalDuration)
+    }
+
+    @Test
+    fun durationSerialization_cborRepresentation() {
+        val duration = 1234.milliseconds
+        val container = DurationContainer(duration = duration)
+        val dataItem = container.toDataItem()
+        // Should be encoded as ISO-8601 string: Tstr("PT1.234S")
+        assertEquals(Tstr(duration.toIsoString()), dataItem["duration"])
+    }
+
+    @Test
+    fun durationDeserialization_fromRawIsoStrings() {
+        val cases = listOf(
+            "PT0S" to Duration.ZERO,
+            "PT1.5S" to 1500.milliseconds,
+            "PT1H30M" to 90.minutes,
+            "P1DT2H" to 26.hours,
+            "-PT10S" to (-10).seconds,
+            "PT-10S" to (-10).seconds,
+        )
+        for ((isoString, expectedDuration) in cases) {
+            val cborMap = buildCborMap {
+                put("duration", Tstr(isoString))
+            }
+            val container = DurationContainer.fromDataItem(cborMap)
+            assertEquals(expectedDuration, container.duration)
+        }
+    }
+
+    @Test
+    fun durationDeserialization_invalidValues() {
+        // Invalid ISO-8601 string
+        val invalidStringMap = buildCborMap {
+            put("duration", Tstr("not-a-valid-duration"))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            DurationContainer.fromDataItem(invalidStringMap)
+        }
+
+        // Wrong CBOR type (Uint instead of Tstr)
+        val wrongTypeMap = buildCborMap {
+            put("duration", Uint(1000u))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            DurationContainer.fromDataItem(wrongTypeMap)
+        }
     }
 }

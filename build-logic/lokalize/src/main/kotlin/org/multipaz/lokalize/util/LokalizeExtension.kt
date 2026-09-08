@@ -62,4 +62,15 @@ val generatedTranslationsPackageName: Property<String> = objects.property(String
  * Default: `org.multipaz.doctypes.localization`
  */
 val stringKeysPackageName: Property<String> = objects.property(String::class.java)
+
+/**
+ * Project-relative directory holding the checked-in generated Kotlin sources.
+ * Default: `"src/commonMain/generated"`.
+ *
+ * For JSON-format modules, `generateMultipazStrings` writes into this directory on demand; the
+ * generated sources are committed, compiling does not regenerate them, and `lokalizeCheckGenerated`
+ * guards against drift (issue #1811). Downstreams building without Gradle then see a source tree
+ * that compiles as-is. XML-format modules generate no Kotlin and leave this directory empty.
+ */
+val generatedSourceDir: Property<String> = objects.property(String::class.java)
 }

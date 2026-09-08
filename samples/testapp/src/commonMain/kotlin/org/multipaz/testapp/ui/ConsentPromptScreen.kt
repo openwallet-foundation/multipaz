@@ -52,8 +52,11 @@ import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.knowntypes.DrivingLicense
+import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.documenttype.knowntypes.PhotoID
+import org.multipaz.utopia.knowntypes.PingTransaction
 import org.multipaz.utopia.knowntypes.UtopiaBoardingPass
 import org.multipaz.documenttype.knowntypes.addKnownTypes
 import org.multipaz.mdoc.request.DeviceRequestInfo
@@ -71,7 +74,10 @@ import org.multipaz.presentment.SimplePresentmentSource
 import org.multipaz.presentment.ConsentData
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.requestConsent
+import org.multipaz.request.Iso18013RequesterIdentity
 import org.multipaz.request.Requester
+import org.multipaz.request.RequesterIdentity
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
@@ -93,8 +99,8 @@ import kotlin.time.Instant
 private enum class CertChain(
     val desc: String,
 ) {
-    CERT_CHAIN_UTOPIA_BREWERY("Utopia Brewery (w/ privacy policy)"),
-    CERT_CHAIN_UTOPIA_BREWERY_NO_PRIVACY_POLICY("Utopia Brewery (w/o privacy policy)"),
+    CERT_CHAIN_UTOPIA_MARKETPLACE("Utopia Marketplace (w/ privacy policy)"),
+    CERT_CHAIN_UTOPIA_MARKETPLACE_NO_PRIVACY_POLICY("Utopia Marketplace (w/o privacy policy)"),
     CERT_CHAIN_UTOPIA_AIRLINES("Utopia Airlines"),
     CERT_CHAIN_IDENTITY_READER("Multipaz Identity Reader"),
     CERT_CHAIN_IDENTITY_READER_GOOGLE_ACCOUNT("Multipaz Identity Reader (w/ Google Account)"),
@@ -136,7 +142,8 @@ private enum class Example(
     MDL_NAME_AND_ADDRESS_PARTIALLY_STORED("mDL: Name and address (partially stored)"),
     MDL_NAME_AND_ADDRESS_ALL_STORED("mDL: Name and address (all stored)"),
     PHOTO_ID_MANDATORY("PhotoID: Mandatory data elements (2 docs)"),
-    PAYMENT("Payment"),
+    PAYMENT("DPC: Payment Confirmation"),
+    PAYMENT_ONLY_CONF("DPC: Payment Confirmation (only confirmation)"),
     OPENID4VP_COMPLEX_EXAMPLE("Complex example from OpenID4VP Appendix D"),
     MDL_AND_BOARDING_PASS_EXAMPLE("mDL AND Boarding pass"),
     MDL_AND_OPTIONAL_BOARDING_PASS_EXAMPLE("mDL AND optional Boarding pass"),
@@ -163,6 +170,7 @@ private enum class PaPreselectedDocuments(
     PRESELECTED_DOCUMENTS_MDL("mDL"),
     PRESELECTED_DOCUMENTS_PHOTOID("PhotoID"),
     PRESELECTED_DOCUMENTS_BOARDING_PASS("Boarding pass"),
+    PRESELECTED_DOCUMENTS_PAYMENT("Payment"),
     PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID("mDL and PhotoID"),
     PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID_AND_PHOTOID("mDL and PhotoID and PhotoID"),
     PRESELECTED_DOCUMENTS_MDL_AND_BOARDING_PASS("mDL and boarding pass"),
@@ -182,7 +190,7 @@ expect suspend fun launchAndroidPresentmentActivity(
     source: PresentmentSource,
     paData: AndroidPresentmentActivityData,
     requester: Requester,
-    trustMetadata: TrustMetadata?,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
     consentData: ConsentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
@@ -204,7 +212,8 @@ fun ConsentPromptScreen(
     var cardArtMdl by remember { mutableStateOf(ByteArray(0)) }
     var cardArtPhotoId by remember { mutableStateOf(ByteArray(0)) }
     var cardArtBoardingPass by remember { mutableStateOf(ByteArray(0)) }
-    var utopiaBreweryIcon by remember { mutableStateOf(ByteString()) }
+    var cardArtPayment by remember { mutableStateOf(ByteArray(0)) }
+    var utopiaMarketplaceIcon by remember { mutableStateOf(ByteString()) }
     var utopiaAirlinesIcon by remember { mutableStateOf(ByteString()) }
     var utopiaCbpIcon by remember { mutableStateOf(ByteString()) }
     var identityReaderIcon by remember { mutableStateOf(ByteString()) }
@@ -222,12 +231,14 @@ fun ConsentPromptScreen(
     lateinit var documentPhotoId: Document
     lateinit var documentPhotoId2: Document
     lateinit var documentBoardingPass: Document
+    lateinit var documentPayment: Document
 
     LaunchedEffect(Unit) {
         cardArtMdl = Res.readBytes("files/utopia_driving_license_card_art.png")
         cardArtPhotoId = Res.readBytes("drawable/photo_id_card_art.png")
         cardArtBoardingPass = Res.readBytes("files/boarding-pass-utopia-airlines.png")
-        utopiaBreweryIcon = ByteString(Res.readBytes("files/utopia-brewery.png"))
+        cardArtPayment = Res.readBytes("drawable/payment_card_art.png")
+        utopiaMarketplaceIcon = ByteString(Res.readBytes("files/utopia-marketplace.png"))
         utopiaAirlinesIcon = ByteString(Res.readBytes("files/utopia-airlines.png"))
         utopiaCbpIcon = ByteString(Res.readBytes("files/utopia-cbp.png"))
         identityReaderIcon = ByteString(Res.readBytes("drawable/app_icon.webp"))
@@ -339,6 +350,32 @@ fun ConsentPromptScreen(
             expectedUpdate = null,
             domain = "mdoc"
         )
+        documentPayment = documentStore!!.createDocument(
+            displayName = "Erika's Payment Card Credential",
+            typeDisplayName = "Payment Card",
+            cardArt = ByteString(cardArtPayment)
+        )
+        DigitalPaymentCredential.getDocumentType().createMdocCredentialWithSampleData(
+            document = documentPayment,
+            secureArea = secureArea,
+            createKeySettings = CreateKeySettings(),
+            dsKey = dsKey,
+            signedAt = credsValidFrom,
+            validFrom = credsValidFrom,
+            validUntil = credsValidUntil,
+            expectedUpdate = null,
+            domain = "mdoc",
+            deviceKeyAuthorizedNamespaces = listOf(
+                PaymentTransaction.openId4VpMdocResponseNamespace,
+                PingTransaction.openId4VpMdocResponseNamespace,
+            ),
+            deviceKeyAuthorizedDataElements = mapOf(
+                ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(
+                    PaymentTransaction.identifier,
+                    PingTransaction.identifier,
+                )
+            )
+        )
         addCredentialsForOpenID4VPComplexExample(
             documentStore = documentStore!!,
             secureArea = secureArea,
@@ -402,7 +439,7 @@ fun ConsentPromptScreen(
             source: PresentmentSource,
             paData: AndroidPresentmentActivityData,
             requester: Requester,
-            trustMetadata: TrustMetadata?,
+            trustedRequesterIdentity: TrustedRequesterIdentity?,
             consentData: ConsentData,
             preselectedDocuments: List<Document>,
             onDocumentsInFocus: (documents: List<Document>) -> Unit
@@ -417,18 +454,20 @@ fun ConsentPromptScreen(
                         encryptionTarget = encryptionTarget,
                         origin = origin,
                         appId = appId,
-                        utopiaBreweryIcon = utopiaBreweryIcon,
+                        utopiaMarketplaceIcon = utopiaMarketplaceIcon,
                         utopiaAirlinesIcon = utopiaAirlinesIcon,
                         utopiaCbpIcon = utopiaCbpIcon,
                         identityReaderIcon = identityReaderIcon,
                         documentStore = documentStore,
                         documentTypeRepository = documentTypeRepository
                     )
+                    val trustedRequesterIdentity =
+                        queryResult.source.resolveTrust(queryResult.requester)
                     launcher(
                         queryResult.source,
                         paData,
                         queryResult.requester,
-                        queryResult.source.resolveTrust(queryResult.requester),
+                        trustedRequesterIdentity,
                         queryResult.consentData,
                         emptyList(),
                         { documents ->
@@ -447,11 +486,11 @@ fun ConsentPromptScreen(
 
         item {
             Button(onClick = {
-                launchConsent(launcher = { source, paData,
-                                           requester, trustMetadata, consentData, preselectedDocuments, onDocumentsInFocus ->
+                launchConsent(launcher = { source, paData, requester, trustedRequesterIdentity, consentData,
+                                           preselectedDocuments, onDocumentsInFocus ->
                         promptModel.requestConsent(
                             requester = requester,
-                            trustMetadata = trustMetadata,
+                            trustedRequesterIdentity = trustedRequesterIdentity,
                             consentData = consentData,
                             preselectedDocuments = preselectedDocuments,
                             onDocumentsInFocus = onDocumentsInFocus,
@@ -567,6 +606,7 @@ fun ConsentPromptScreen(
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL -> listOf(documentMdl)
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_PHOTOID -> listOf(documentPhotoId)
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_BOARDING_PASS -> listOf(documentBoardingPass)
+                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_PAYMENT -> listOf(documentPayment)
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID -> listOf(documentMdl, documentPhotoId)
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID_AND_PHOTOID ->
                             listOf(documentMdl, documentPhotoId, documentPhotoId2)
@@ -595,7 +635,7 @@ private suspend fun getQueryResult(
     encryptionTarget: EncryptionTarget,
     origin: Origin,
     appId: AppId,
-    utopiaBreweryIcon: ByteString,
+    utopiaMarketplaceIcon: ByteString,
     utopiaAirlinesIcon: ByteString,
     utopiaCbpIcon: ByteString,
     identityReaderIcon: ByteString,
@@ -619,6 +659,8 @@ private suspend fun getQueryResult(
             PhotoID.getDocumentType().cannedRequests.find { it.id == "mandatory" }!!.mdocRequest!!.toDcql(emptyList())
         Example.PAYMENT ->
             DigitalPaymentCredential.getDocumentType().cannedRequests.find { it.id == "payment_transaction" }!!.mdocRequest!!.toDcql(emptyList())
+        Example.PAYMENT_ONLY_CONF ->
+            DigitalPaymentCredential.getDocumentType().cannedRequests.find { it.id == "payment_transaction_only_conf" }!!.mdocRequest!!.toDcql(emptyList())
         Example.OPENID4VP_COMPLEX_EXAMPLE -> Json.parseToJsonElement(
             """
             {
@@ -902,7 +944,7 @@ private suspend fun getQueryResult(
         certChain = certChain,
         origin = origin,
         appId = appId,
-        utopiaBreweryIcon = utopiaBreweryIcon,
+        utopiaMarketplaceIcon = utopiaMarketplaceIcon,
         utopiaAirlinesIcon = utopiaAirlinesIcon,
         identityReaderIcon = identityReaderIcon
     )
@@ -910,33 +952,18 @@ private suspend fun getQueryResult(
         documentStore = documentStore!!,
         documentTypeRepository = documentTypeRepository,
         resolveTrustFn = { requester ->
-            if (requester.certChain?.certificates?.firstOrNull()?.subject?.name == "CN=Encrypted Document Receiver") {
-                if (encryptionTarget.desc == "None") {
-                    return@SimplePresentmentSource null
-                } else {
-                    return@SimplePresentmentSource TrustMetadata(
-                        displayName = encryptionTarget.desc,
-                        displayIcon = utopiaCbpIcon     // For now, assume this is the only encryption target
-                    )
-                }
+            for (requesterIdentity in requester.requesterIdentities) {
+                val trustMetadata = resolveTrust(
+                    encryptionTarget,
+                    utopiaCbpIcon,
+                    requesterIdentity
+                ) ?: continue
+                return@SimplePresentmentSource TrustedRequesterIdentity(requesterIdentity, trustMetadata)
             }
-
-            // If available, use dynamic metadata...
-            val readerCert = requester.certChain?.certificates?.first()
-            val mpzExtensionData = readerCert?.getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid)
-            if (mpzExtensionData != null) {
-                val mpzExtension = MultipazExtension.fromCbor(mpzExtensionData)
-                mpzExtension.googleAccount?.let {
-                    return@SimplePresentmentSource TrustMetadata(
-                        displayName = it.emailAddress,
-                        displayIconUrl = it.profilePictureUri,
-                        disclaimer = "The email and picture shown are from the requester's Google Account. " +
-                                "This information has been verified but may not be their real identity"
-                    )
-                }
+            // Otherwise, just base it on the trustMetadata
+            trustMetadata?.let {
+                TrustedRequesterIdentity(requester.requesterIdentities.first(), it)
             }
-            // Otherwise, just return the trustMetadata
-            trustMetadata
         },
         domainsMdocSignature = listOf("mdoc"),
         domainsKeyBoundSdJwt = listOf("sdjwt")
@@ -947,6 +974,9 @@ private suspend fun getQueryResult(
         val transactionDataMap = when (example) {
             Example.PAYMENT -> DigitalPaymentCredential.getDocumentType()
                 .cannedRequests.find { it.id == "payment_transaction" }!!
+                .toTransactionDataMap("cred1")
+            Example.PAYMENT_ONLY_CONF -> DigitalPaymentCredential.getDocumentType()
+                .cannedRequests.find { it.id == "payment_transaction_only_conf" }!!
                 .toTransactionDataMap("cred1")
 
             else -> emptyMap()
@@ -971,6 +1001,7 @@ private suspend fun getQueryResult(
         Example.MDL_NAME_AND_ADDRESS_ALL_STORED,
         Example.PHOTO_ID_MANDATORY,
         Example.PAYMENT,
+        Example.PAYMENT_ONLY_CONF,
         Example.OPENID4VP_COMPLEX_EXAMPLE,
         Example.MDL_AND_BOARDING_PASS_EXAMPLE,
         Example.MDL_AND_OPTIONAL_BOARDING_PASS_EXAMPLE,
@@ -1050,11 +1081,45 @@ private suspend fun getQueryResult(
     return QueryResult(requester, source, consentData)
 }
 
+private fun resolveTrust(
+    encryptionTarget: EncryptionTarget,
+    utopiaCbpIcon: ByteString,
+    requesterIdentity: RequesterIdentity
+): TrustMetadata? {
+    if (requesterIdentity.certChain.certificates.first().subject.name == "CN=Encrypted Document Receiver") {
+        return if (encryptionTarget.desc == "None") {
+            null
+        } else {
+            TrustMetadata(
+                displayName = encryptionTarget.desc,
+                displayIcon = utopiaCbpIcon,     // For now, assume this is the only encryption target
+            )
+        }
+    }
+
+    // If available, use dynamic metadata...
+    val readerCert = requesterIdentity.certChain.certificates.first()
+    val mpzExtensionData = readerCert.getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid)
+    if (mpzExtensionData != null) {
+        val mpzExtension = MultipazExtension.fromCbor(mpzExtensionData)
+        mpzExtension.googleAccount?.let {
+            return TrustMetadata(
+                displayName = it.emailAddress,
+                displayIconUrl = it.profilePictureUri,
+                disclaimer = "The email and picture shown are from the requester's Google Account. " +
+                        "This information has been verified but may not be their real identity",
+            )
+        }
+    }
+
+    return null
+}
+
 private suspend fun calculateRequester(
     certChain: CertChain,
     origin: Origin,
     appId: AppId,
-    utopiaBreweryIcon: ByteString,
+    utopiaMarketplaceIcon: ByteString,
     utopiaAirlinesIcon: ByteString,
     identityReaderIcon: ByteString
 ): Pair<Requester, TrustMetadata?> {
@@ -1107,21 +1172,21 @@ private suspend fun calculateRequester(
     )
 
     val (trustMetadata, readerCert) = when (certChain) {
-        CertChain.CERT_CHAIN_UTOPIA_BREWERY -> {
+        CertChain.CERT_CHAIN_UTOPIA_MARKETPLACE -> {
             Pair(
                 TrustMetadata(
-                    displayName = "Utopia Brewery",
-                    displayIcon = utopiaBreweryIcon,
+                    displayName = "Utopia Marketplace",
+                    displayIcon = utopiaMarketplaceIcon,
                     privacyPolicyUrl = "https://apps.multipaz.org",
                 ),
                 readerCertWithoutGoogleAccount
             )
         }
-        CertChain.CERT_CHAIN_UTOPIA_BREWERY_NO_PRIVACY_POLICY -> {
+        CertChain.CERT_CHAIN_UTOPIA_MARKETPLACE_NO_PRIVACY_POLICY -> {
             Pair(
             TrustMetadata(
-                    displayName = "Utopia Brewery",
-                    displayIcon = utopiaBreweryIcon,
+                    displayName = "Utopia Marketplace",
+                    displayIcon = utopiaMarketplaceIcon,
                     privacyPolicyUrl = null,
                 ),
                 readerCertWithoutGoogleAccount
@@ -1162,7 +1227,13 @@ private suspend fun calculateRequester(
 
     return Pair(
         Requester(
-            certChain = readerCert?.let { X509CertChain(certificates = listOf(readerCert, readerRootCert)) },
+            requesterIdentities = buildList {
+                readerCert?.let {
+                    add(Iso18013RequesterIdentity(
+                        certChain = X509CertChain(certificates = listOf(readerCert, readerRootCert))
+                    ))
+                }
+            },
             appId = appId.appId,
             origin = origin.origin
         ),

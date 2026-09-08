@@ -9,19 +9,13 @@ import org.multipaz.util.Logger
 
 /**
  * Connection method for NFCv2.
- *
- * The [apduResponseMaxSize] parameter is used to tell the mdoc that it needs to send its responses in APDUs no
- * larger than this size and this value must be smaller or equal to 65536, the maximum size of an Extended APDU.
- * Since this class is usually not used in an environment where a 64 KiB buffer is a showstopper we default to the
- * maximum size.
- *
- * @property apduResponseMaxSize the maximum length of the response data field.
  */
-data class MdocConnectionMethodNfcV2(
-    val apduResponseMaxSize: Long = 65536L
-): MdocConnectionMethod() {
-    override fun toString(): String =
-        "nfcv2:apdu_response_max_size=$apduResponseMaxSize"
+class MdocConnectionMethodNfcV2 : MdocConnectionMethod() {
+    override fun equals(other: Any?): Boolean = other is MdocConnectionMethodNfcV2
+
+    override fun hashCode(): Int = MdocConnectionMethodNfcV2::class.hashCode()
+
+    override fun toString(): String = "nfcv2"
 
     override fun toDeviceEngagement(): ByteArray {
         return Cbor.encode(
@@ -29,7 +23,6 @@ data class MdocConnectionMethodNfcV2(
                 add(METHOD_TYPE)
                 add(METHOD_MAX_VERSION)
                 addCborMap {
-                    put(OPTION_KEY_APDU_RESPONSE_MAX_LENGTH, apduResponseMaxSize)
                 }
             }
         )
@@ -68,9 +61,10 @@ data class MdocConnectionMethodNfcV2(
                 return null
             }
             val map = array[2]
-            return MdocConnectionMethodNfcV2(
-                map[OPTION_KEY_APDU_RESPONSE_MAX_LENGTH].asNumber
-            )
+            if (map.asMap.isNotEmpty()) {
+                Logger.w(TAG, "Unexpected non-empty map in DeviceEngagement for NFCv2")
+            }
+            return MdocConnectionMethodNfcV2()
         }
     }
 }

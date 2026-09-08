@@ -172,8 +172,15 @@ enum class ServerIdentity(
  * The private key alias and the certificate chain are then stored in the database, so they can
  * be used in the future.
  */
-suspend fun getServerIdentity(serverIdentity: ServerIdentity): AsymmetricKey.X509Certified =
+suspend fun getServerIdentity(serverIdentity: ServerIdentity): AsymmetricKey =
     EnrollmentImpl.getServerIdentity(serverIdentity).await()
+
+/**
+ * Same as [getServerIdentity], but the returned key is required to have associated certificate
+ * chain.
+ */
+suspend fun getServerIdentityCertified(serverIdentity: ServerIdentity): AsymmetricKey.X509Certified =
+    getServerIdentity(serverIdentity) as AsymmetricKey.X509Certified
 
 private class CachedIdentity(val signingKey: AsymmetricKey)
 
@@ -228,8 +235,19 @@ private suspend fun getLocalRootIdentity(
         val secureArea = BackendEnvironment.getInterface(SecureAreaProvider::class)!!.get()
         val rootSigningKeyDataTable = BackendEnvironment.getTable(rootSigningKeyDataTableSpec)
         val rootSigningKeyData = rootSigningKeyDataTable.get(serverIdentity.name)?.let {
-            Logger.i(TAG, "Loaded $serverIdentity root key and certificate")
-            SigningKeyData.fromCbor(it.toByteArray())
+            val keyData = SigningKeyData.fromCbor(it.toByteArray())
+            val cert = keyData.certChain.certificates.firstOrNull()
+            val expectedPathLen = if (serverIdentity == ServerIdentity.KEY_ATTESTATION
+                || serverIdentity == ServerIdentity.CLOUD_SECURE_AREA_BINDING) 1 else 0
+            val actualPathLen = cert?.basicConstraints?.second
+            if (cert?.basicConstraints?.first != true || (actualPathLen != null && actualPathLen < expectedPathLen)) {
+                Logger.w(TAG, "Root certificate for $serverIdentity in database has invalid pathLenConstraint ($actualPathLen < $expectedPathLen), regenerating...")
+                rootSigningKeyDataTable.delete(serverIdentity.name)
+                null
+            } else {
+                Logger.i(TAG, "Loaded $serverIdentity root key and certificate")
+                keyData
+            }
         } ?: run {
             if (!createOnRequest) {
                 throw IllegalStateException("$serverIdentity not available")

@@ -139,6 +139,7 @@ internal class OpenID4VCIProvisioningClient(
         }
         // obtain c_nonce (serves as challenge for the device-bound key)
         val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
+        Logger.d(TAG, "Requesting nonce from ${issuerConfiguration.nonceEndpoint}")
         val nonceResponse = httpClient.post(issuerConfiguration.nonceEndpoint!!) {}
         if (nonceResponse.status != HttpStatusCode.OK) {
             throw IllegalStateException("Error getting a nonce")
@@ -147,7 +148,9 @@ internal class OpenID4VCIProvisioningClient(
         // A fresh DPoP nonce might or might not be given
         nonceResponse.headers["DPoP-Nonce"]?.let { issuerDPoPNonce = it }
         val responseText = nonceResponse.readRawBytes().decodeToString()
-        val cNonce = Json.parseToJsonElement(responseText).jsonObject.string("c_nonce")
+        val json = Json.parseToJsonElement(responseText).jsonObject
+        Logger.dJson(TAG, "Received nonce response", json)
+        val cNonce = json.string("c_nonce")
         keyChallenge = cNonce
         return cNonce
     }
@@ -165,6 +168,23 @@ internal class OpenID4VCIProvisioningClient(
             issuerConfiguration.credentialConfigurations[credentialOffer.configurationId]!!
         val keyProofs = buildKeyProofs(keyInfo, credentialConfiguration)
         val dpopKey = getDPopKey()
+        val requestBody = buildJsonObject {
+            put("credential_configuration_id", credentialOffer.configurationId)
+            if (keyProofs != null) {
+                put("proofs", keyProofs)
+            }
+            when (credentialMetadata.format) {
+                is CredentialFormat.Mdoc -> {
+                    put("format", "mso_mdoc")
+                    put("doctype", credentialMetadata.format.docType)
+                }
+                is CredentialFormat.SdJwt -> {
+                    put("format", "dc+sd-jwt")
+                    put("vct", credentialMetadata.format.vct)
+                }
+            }
+        }
+        Logger.dJson(TAG, "Sending credential request to ${issuerConfiguration.credentialEndpoint}", requestBody)
         while (true) {
             val dpop = OpenID4VCIUtil.generateDPoP(
                 dpopKey = dpopKey,
@@ -173,28 +193,14 @@ internal class OpenID4VCIProvisioningClient(
                 dpopNonce = issuerDPoPNonce,
                 accessToken = token
             )
+            Logger.dJwt(TAG, "Credential DPoP JWT", dpop)
             credentialResponse = httpClient.post(issuerConfiguration.credentialEndpoint) {
                 headers {
                     append("Authorization", "DPoP $token")
                     append("DPoP", dpop)
                     contentType(ContentType.Application.Json)
                 }
-                setBody(buildJsonObject {
-                    put("credential_configuration_id", credentialOffer.configurationId)
-                    if (keyProofs != null) {
-                        put("proofs", keyProofs)
-                    }
-                    when (credentialMetadata.format) {
-                        is CredentialFormat.Mdoc -> {
-                            put("format", "mso_mdoc")
-                            put("doctype", credentialMetadata.format.docType)
-                        }
-                        is CredentialFormat.SdJwt -> {
-                            put("format", "dc+sd-jwt")
-                            put("vct", credentialMetadata.format.vct)
-                        }
-                    }
-                }.toString())
+                setBody(requestBody.toString())
             }
             if (credentialResponse.headers.contains("DPoP-Nonce")) {
                 issuerDPoPNonce = credentialResponse.headers["DPoP-Nonce"]!!
@@ -218,6 +224,7 @@ internal class OpenID4VCIProvisioningClient(
         Logger.i(TAG, "Got successful response for credential request")
 
         val response = Json.parseToJsonElement(responseText) as JsonObject
+        Logger.dJson(TAG, "Received credential response", response)
         val serializedCredentials = response["credentials"]!!.jsonArray.map {
             if (it !is JsonObject) {
                 throw IllegalStateException("Credential must be represented as json string")
@@ -249,6 +256,7 @@ internal class OpenID4VCIProvisioningClient(
             is KeyBindingInfo.OpenidProofOfPossession -> buildJsonObject {
                 putJsonArray("jwt") {
                     for (jwt in keyInfo.jwtList) {
+                        Logger.dJwt(TAG, "Proof of Possession JWT", jwt)
                         add(jwt)
                     }
                 }
@@ -270,6 +278,7 @@ internal class OpenID4VCIProvisioningClient(
                         credentialKeyAttestations = keyInfo.attestations,
                         challenge = keyChallenge!!
                     )
+                    Logger.dJwt(TAG, "Key Attestation JWT", jwtKeyAttestation)
                     putJsonArray("attestation") {
                         add(jwtKeyAttestation)
                     }
@@ -352,6 +361,48 @@ internal class OpenID4VCIProvisioningClient(
             val redirectState = createUniqueStateValue()
             this.redirectState = redirectState
 
+            val parParams = buildJsonObject {
+                if (scope != null) {
+                    put("scope", scope)
+                } else {
+                    put("authorization_details", buildJsonArray {
+                        addJsonObject {
+                            put("type", "openid_credential")
+                            put("credential_configuration_id", configurationId)
+                        }
+                    })
+                }
+                if (credentialOffer is CredentialOffer.AuthorizationCode) {
+                    val issuerState = credentialOffer.issuerState
+                    if (issuerState != null) {
+                        put("issuer_state", issuerState)
+                    }
+                }
+                if (clientAssertion != null) {
+                    put("client_assertion", clientAssertion)
+                    put(
+                        "client_assertion_type",
+                        "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+                    )
+                }
+                put("response_type", "code")
+                put("code_challenge_method", "S256")
+                put("redirect_uri", clientPreferences.redirectUrl)
+                put("code_challenge", codeChallenge)
+                put("client_id", clientPreferences.clientId)
+                put("state", redirectState)
+            }
+            Logger.dJson(
+                TAG,
+                "Sending PAR request to ${authorizationConfiguration.pushedAuthorizationRequestEndpoint}",
+                parParams
+            )
+
+            Logger.dJwt(TAG, "PAR DPoP JWT", dpop)
+            clientAssertion?.let { Logger.dJwt(TAG, "PAR Client Assertion JWT", it) }
+            authorizationData.walletAttestation?.let { Logger.dJwt(TAG, "PAR OAuth-Client-Attestation JWT", it) }
+            walletAttestationPoP?.let { Logger.dJwt(TAG, "PAR OAuth-Client-Attestation-PoP JWT", it) }
+
             response = httpClient.submitForm(
                 url = authorizationConfiguration.pushedAuthorizationRequestEndpoint,
                 formParameters = parameters {
@@ -411,6 +462,7 @@ internal class OpenID4VCIProvisioningClient(
         }
         val responseText = response.readRawBytes().decodeToString()
         val parsedResponse = Json.parseToJsonElement(responseText).jsonObject
+        Logger.dJson(TAG, "Received PAR response", parsedResponse)
         return parsedResponse.string("request_uri")
     }
 
@@ -437,6 +489,7 @@ internal class OpenID4VCIProvisioningClient(
     }
 
     private suspend fun processOauthResponse(parameterizedRedirectUrl: String) {
+        Logger.d(TAG, "Processing OAuth redirect URL: $parameterizedRedirectUrl")
         val navigatedUrl = Url(parameterizedRedirectUrl)
         if (navigatedUrl.parameters["state"] != redirectState) {
             throw IllegalStateException("Openid4Vci: state parameter value mismatch")
@@ -455,6 +508,7 @@ internal class OpenID4VCIProvisioningClient(
     }
 
     private suspend fun processSecretTextResponse(secret: String) {
+        Logger.d(TAG, "Processing secret text response")
         val credentialOffer = this.credentialOffer as CredentialOffer.PreauthorizedCode
         obtainToken(preauthorizedCode = credentialOffer.preauthorizedCode, txCode = secret)
     }
@@ -510,6 +564,50 @@ internal class OpenID4VCIProvisioningClient(
             } else {
                 null
             }
+
+            val tokenParams = buildJsonObject {
+                if (refreshToken != null) {
+                    put("grant_type", "refresh_token")
+                    put("refresh_token", refreshToken)
+                } else if (authorizationCode != null) {
+                    put("grant_type", "authorization_code")
+                    put("code", authorizationCode)
+                } else if (preauthorizedCode != null) {
+                    put("grant_type", "urn:ietf:params:oauth:grant-type:pre-authorized_code")
+                    put("pre-authorized_code", preauthorizedCode)
+                    if (txCode != null) {
+                        put("tx_code", txCode)
+                    }
+                    put("authorization_details", buildJsonArray {
+                        addJsonObject {
+                            put("type", "openid_credential")
+                            put("credential_configuration_id", credentialOffer.configurationId)
+                        }
+                    })
+                }
+                if (codeVerifier != null) {
+                    put("code_verifier", codeVerifier)
+                }
+                if (clientAssertion != null) {
+                    put("client_assertion", clientAssertion)
+                    put(
+                        "client_assertion_type",
+                        "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+                    )
+                }
+                put("client_id", clientPreferences.clientId)
+                put("redirect_uri", clientPreferences.redirectUrl)
+            }
+            Logger.dJson(
+                TAG,
+                "Sending token request to ${authorizationConfiguration.tokenEndpoint}",
+                tokenParams
+            )
+
+            Logger.dJwt(TAG, "Token DPoP JWT", dpop)
+            clientAssertion?.let { Logger.dJwt(TAG, "Token Client Assertion JWT", it) }
+            authorizationData.walletAttestation?.let { Logger.dJwt(TAG, "Token OAuth-Client-Attestation JWT", it) }
+            walletAttestationPoP?.let { Logger.dJwt(TAG, "Token OAuth-Client-Attestation-PoP JWT", it) }
 
             val response = httpClient.submitForm(
                 url = authorizationConfiguration.tokenEndpoint,
@@ -588,6 +686,7 @@ internal class OpenID4VCIProvisioningClient(
             }
             val tokenResponseString = response.readRawBytes().decodeToString()
             val tokenResponse = Json.parseToJsonElement(tokenResponseString) as JsonObject
+            Logger.dJson(TAG, "Received token response", tokenResponse)
             token = tokenResponse.string("access_token")
             val duration = tokenResponse.integer("expires_in")
             tokenExpiration = Clock.System.now() + duration.seconds
@@ -603,6 +702,7 @@ internal class OpenID4VCIProvisioningClient(
         if (authorizationConfiguration.clientAuthentication == ClientAuthenticationType.CLIENT_ATTESTATION) {
             // Using client attestation. Check if we need to get a fresh challenge
             if (authorizationConfiguration.challengeEndpoint != null) {
+                Logger.d(TAG, "Requesting client attestation challenge from ${authorizationConfiguration.challengeEndpoint}")
                 val httpClient = BackendEnvironment.getInterface(HttpClient::class)!!
                 val response = httpClient.post(authorizationConfiguration.challengeEndpoint) {}
                 if (response.status != HttpStatusCode.OK) {
@@ -612,8 +712,9 @@ internal class OpenID4VCIProvisioningClient(
                 // DPoP nonce might or might not be given
                 authorizationDPoPNonce = response.headers["DPoP-Nonce"]
                 val responseText = response.readRawBytes().decodeToString()
-                clientAttestationChallenge = Json.parseToJsonElement(responseText)
-                    .jsonObject.string("attestation_challenge")
+                val json = Json.parseToJsonElement(responseText).jsonObject
+                Logger.dJson(TAG, "Received client attestation challenge response", json)
+                clientAttestationChallenge = json.string("attestation_challenge")
             }
         }
     }
@@ -780,6 +881,10 @@ internal class OpenID4VCIProvisioningClient(
             authorizationData: OpenID4VCIAuthorizationData
         ): OpenID4VCIProvisioningClient {
             require(authorizationData.secureAreaId == secureArea.identifier)
+            Logger.d(
+                TAG,
+                "Creating OpenID4VCIProvisioningClient: issuerUri='${credentialOffer.issuerUri}', configurationId='${credentialOffer.configurationId}'"
+            )
             val issuerConfig = IssuerConfiguration.get(
                 url = credentialOffer.issuerUri,
                 httpClient = BackendEnvironment.getInterface(HttpClient::class)!!,

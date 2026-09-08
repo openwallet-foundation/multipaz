@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import multipazproject.samples.testapp.generated.resources.Res
 import multipazproject.samples.testapp.generated.resources.av18_card_art
@@ -46,8 +47,11 @@ import org.multipaz.documenttype.MultiDocumentCannedRequest
 import org.multipaz.documenttype.SingleDocumentCannedRequest
 import org.multipaz.documenttype.knowntypes.Aadhaar
 import org.multipaz.documenttype.knowntypes.AgeVerification
+import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.utopia.knowntypes.Loyalty
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
+import org.multipaz.utopia.knowntypes.PingTransaction
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.IDPass
@@ -66,6 +70,7 @@ import org.multipaz.util.Logger
 import org.multipaz.util.truncateToWholeSeconds
 import org.multipaz.verification.VerificationSession
 import org.multipaz.verification.VerificationUtil
+import org.multipaz.verification.VerifierIdentity
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -73,6 +78,21 @@ import kotlin.time.Instant
 
 object TestAppUtils {
     private const val TAG = "TestAppUtils"
+
+    // The Longfellow ZK circuits can only hash a Mobile Security Object (MSO) up to roughly 2 KB,
+    // and the MSO contains a digest for *every* issuer-signed element (not just the disclosed
+    // ones). A full sample mdoc has too many elements, so its MSO overflows the circuit and proof
+    // generation fails with MDOC_PROVER_TAGGED_MSO_TOO_BIG. To keep the in-app credentials usable
+    // with ZK (matching how the issuer-server mints leaner credentials), we only provision the
+    // mandatory elements plus the handful of attributes typically proven in ZK.
+    private val ZK_FRIENDLY_NON_MANDATORY_ELEMENTS = setOf(
+        "age_over_18",
+        "age_over_21",
+        "portrait",
+        "given_name",
+        "family_name",
+        "birth_date",
+    )
 
     // This domain is for MdocCredential using mdoc ECDSA/EdDSA authentication and requiring user authentication.
     const val CREDENTIAL_DOMAIN_MDOC_USER_AUTH = "mdoc_user_auth"
@@ -109,6 +129,7 @@ object TestAppUtils {
         eReaderKey: EcPrivateKey,
         handover: DataItem,
         signRequest: Boolean = true,
+        issuerIdentifiers: List<ByteString> = emptyList(),
     ): VerificationSession {
         val requestDefinition = when (request) {
             is SingleDocumentCannedRequest -> if (requestSdJwtVc) {
@@ -131,11 +152,23 @@ object TestAppUtils {
                     } ?: emptyList()
                 )
         }
+        val dcqlToUse = if (issuerIdentifiers.isNotEmpty()) {
+            VerificationUtil.injectIssuerIdentifiersIntoDcql(
+                Json.parseToJsonElement(requestDefinition.dcql).jsonObject,
+                issuerIdentifiers
+            ).toString()
+        } else {
+            requestDefinition.dcql
+        }
         return VerificationUtil.generateVerificationSessionForDcql(
             requestTypes = setOf(VerificationSession.RequestType.ISO_18013_PROXIMITY),
-            dcql = requestDefinition.dcql,
+            dcql = dcqlToUse,
             transactionData = requestDefinition.transactionData,
-            readerAuthenticationKey = if (signRequest) app.readerKey else null,
+            verifierIdentities = buildList {
+                if (signRequest) {
+                    add(VerifierIdentity(app.readerKey))
+                }
+            },
             deviceEngagement = deviceEngagement,
             eReaderKey = eReaderKey,
             handover = handover,
@@ -312,7 +345,32 @@ object TestAppUtils {
                     DrivingLicense.getDocumentType(),
                     "Erika",
                     "Erika's Driving License",
-                    Res.drawable.driving_license_card_art
+                    Res.drawable.driving_license_card_art,
+                    deviceKeyAuthorizedNamespaces = listOf(PingTransaction.openId4VpMdocResponseNamespace),
+                    deviceKeyAuthorizedDataElements = mapOf(
+                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(PingTransaction.identifier)
+                    )
+                )
+                // A second, leaner mDL whose MSO is small enough for the Longfellow ZK circuits.
+                // The full mDL above overflows the circuit (MDOC_PROVER_TAGGED_MSO_TOO_BIG), so we
+                // also provision this ZK-friendly variant for proof-generation demos.
+                provisionDocument(
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain,
+                    DrivingLicense.getDocumentType(),
+                    "Erika",
+                    "Erika's Driving License (ZKP-friendly)",
+                    Res.drawable.driving_license_card_art,
+                    zkFriendly = true,
+                    deviceKeyAuthorizedNamespaces = listOf(PingTransaction.openId4VpMdocResponseNamespace),
+                    deviceKeyAuthorizedDataElements = mapOf(
+                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(PingTransaction.identifier)
+                    )
                 )
                 provisionDocument(
                     documentStore,
@@ -351,7 +409,11 @@ object TestAppUtils {
                     EUPersonalID.getDocumentType(),
                     "Erika",
                     "Erika's EU PID",
-                    Res.drawable.pid_card_art
+                    Res.drawable.pid_card_art,
+                    deviceKeyAuthorizedNamespaces = listOf(PingTransaction.openId4VpMdocResponseNamespace),
+                    deviceKeyAuthorizedDataElements = mapOf(
+                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(PingTransaction.identifier)
+                    )
                 )
                 provisionDocument(
                     documentStore,
@@ -429,7 +491,17 @@ object TestAppUtils {
                     DigitalPaymentCredential.getDocumentType(),
                     "Erika",
                     "Erika's Payment Card Credential",
-                    Res.drawable.payment_card_art
+                    Res.drawable.payment_card_art,
+                    deviceKeyAuthorizedNamespaces = listOf(
+                        PaymentTransaction.openId4VpMdocResponseNamespace,
+                        PingTransaction.openId4VpMdocResponseNamespace,
+                    ),
+                    deviceKeyAuthorizedDataElements = mapOf(
+                        ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(
+                            PaymentTransaction.identifier,
+                            PingTransaction.identifier,
+                        )
+                    )
                 )
                 provisionDocument(
                     documentStore = documentStore,
@@ -637,6 +709,9 @@ object TestAppUtils {
         givenNameOverride: String,
         displayName: String,
         cardArtResource: DrawableResource,
+        zkFriendly: Boolean = false,
+        deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
+        deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     ) {
         val cardArt = getDrawableResourceBytes(
             getSystemResourceEnvironment(),
@@ -667,7 +742,10 @@ object TestAppUtils {
                 validUntil = validUntil,
                 dsKey = dsKey,
                 numCredentialsPerDomain = numCredentialsPerDomain,
-                givenNameOverride = givenNameOverride
+                givenNameOverride = givenNameOverride,
+                zkFriendly = zkFriendly,
+                deviceKeyAuthorizedNamespaces = deviceKeyAuthorizedNamespaces,
+                deviceKeyAuthorizedDataElements = deviceKeyAuthorizedDataElements,
             )
         }
 
@@ -706,12 +784,20 @@ object TestAppUtils {
         validUntil: Instant,
         dsKey: AsymmetricKey.X509Certified,
         numCredentialsPerDomain: Int,
-        givenNameOverride: String
+        givenNameOverride: String,
+        zkFriendly: Boolean = false,
+        deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
+        deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     ) {
         val issuerNamespaces = buildIssuerNamespaces {
             for ((nsName, ns) in documentType.mdocDocumentType?.namespaces!!) {
                 addNamespace(nsName) {
                     for ((deName, de) in ns.dataElements) {
+                        if (zkFriendly &&
+                            !de.mandatory &&
+                            de.attribute.identifier !in ZK_FRIENDLY_NON_MANDATORY_ELEMENTS) {
+                            continue
+                        }
                         val sampleValue = de.attribute.sampleValueMdoc
                         if (sampleValue != null) {
                             val value = if (deName.startsWith("given_name")) {
@@ -777,6 +863,8 @@ object TestAppUtils {
                     digestAlgorithm = Algorithm.SHA256,
                     valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
                     deviceKey = mdocCredential.getAttestation().publicKey,
+                    deviceKeyAuthorizedNamespaces = deviceKeyAuthorizedNamespaces,
+                    deviceKeyAuthorizedDataElements = deviceKeyAuthorizedDataElements,
                 )
                 val taggedEncodedMso = Cbor.encode(Tagged(
                     Tagged.ENCODED_CBOR,
@@ -796,7 +884,7 @@ object TestAppUtils {
                 val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
                     Pair(
                         CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                        dsKey.certChain.toDataItem()
+                        dsKey.certChain.toCoseX5Chain()
                     )
                 )
                 val encodedIssuerAuth = Cbor.encode(
@@ -841,7 +929,9 @@ object TestAppUtils {
         validUntil: Instant,
         dsKey: AsymmetricKey.X509Certified,
         numCredentialsPerDomain: Int,
-        givenNameOverride: String
+        givenNameOverride: String,
+        deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
+        deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     ): String? {
         val issuerNamespaces = buildIssuerNamespaces {
             for ((nsName, ns) in documentType.mdocDocumentType?.namespaces!!) {
@@ -913,6 +1003,8 @@ object TestAppUtils {
                 digestAlgorithm = Algorithm.SHA256,
                 valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
                 deviceKey = mdocCredential.getAttestation().publicKey,
+                deviceKeyAuthorizedNamespaces = deviceKeyAuthorizedNamespaces,
+                deviceKeyAuthorizedDataElements = deviceKeyAuthorizedDataElements,
             )
             val taggedEncodedMso = Cbor.encode(Tagged(
                 Tagged.ENCODED_CBOR,
@@ -932,7 +1024,7 @@ object TestAppUtils {
             val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
                 Pair(
                     CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                    dsKey.certChain.toDataItem()
+                    dsKey.certChain.toCoseX5Chain()
                 )
             )
             val encodedIssuerAuth = Cbor.encode(

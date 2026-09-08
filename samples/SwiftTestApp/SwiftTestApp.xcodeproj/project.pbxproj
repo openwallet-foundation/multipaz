@@ -74,6 +74,10 @@
 		7B04AEB72FCDDD1700DAEA40 /* TagsExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE762FCDDD1700DAEA40 /* TagsExt.swift */; };
 		7B04AEB82FCDDD1700DAEA40 /* DocumentExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE5F2FCDDD1700DAEA40 /* DocumentExt.swift */; };
 		7B04AEB92FCDDD1700DAEA40 /* FloatingItemCenteredText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AE632FCDDD1700DAEA40 /* FloatingItemCenteredText.swift */; };
+		7B04AEBA2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AEBC2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift */; };
+		7B04AEBB2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AEBC2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift */; };
+		7B04AEBE2FCDDD1700DAEA40 /* LazyFloatingItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AEBD2FCDDD1700DAEA40 /* LazyFloatingItemList.swift */; };
+		7B04AEBF2FCDDD1700DAEA40 /* LazyFloatingItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AEBD2FCDDD1700DAEA40 /* LazyFloatingItemList.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -137,6 +141,8 @@
 		7B04AE762FCDDD1700DAEA40 /* TagsExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsExt.swift; sourceTree = "<group>"; };
 		7B04AE772FCDDD1700DAEA40 /* VerticalCardList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerticalCardList.swift; sourceTree = "<group>"; };
 		7B04AE782FCDDD1700DAEA40 /* X509CertViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = X509CertViewer.swift; sourceTree = "<group>"; };
+		7B04AEBC2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentProvisioningHandlerExt.swift; sourceTree = "<group>"; };
+		7B04AEBD2FCDDD1700DAEA40 /* LazyFloatingItemList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LazyFloatingItemList.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -257,10 +263,12 @@
 				7B04AE762FCDDD1700DAEA40 /* TagsExt.swift */,
 				7B04AE772FCDDD1700DAEA40 /* VerticalCardList.swift */,
 				7B04AE782FCDDD1700DAEA40 /* X509CertViewer.swift */,
+				7B04AEBC2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift */,
+				7B04AEBD2FCDDD1700DAEA40 /* LazyFloatingItemList.swift */,
 			);
 			name = swift;
-			path = "/Users/zeuthen/StudioProjects/multipaz/multipaz-swiftui/src/iosMain/swift";
-			sourceTree = "<absolute>";
+			path = "../../multipaz-swiftui/src/iosMain/swift";
+			sourceTree = SOURCE_ROOT;
 		};
 /* End PBXGroup section */
 
@@ -450,6 +458,8 @@
 				7B04AEB72FCDDD1700DAEA40 /* TagsExt.swift in Sources */,
 				7B04AEB82FCDDD1700DAEA40 /* DocumentExt.swift in Sources */,
 				7B04AEB92FCDDD1700DAEA40 /* FloatingItemCenteredText.swift in Sources */,
+				7B04AEBB2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift in Sources */,
+				7B04AEBE2FCDDD1700DAEA40 /* LazyFloatingItemList.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -489,6 +499,8 @@
 				7B04AE972FCDDD1700DAEA40 /* TagsExt.swift in Sources */,
 				7B04AE982FCDDD1700DAEA40 /* DocumentExt.swift in Sources */,
 				7B04AE992FCDDD1700DAEA40 /* FloatingItemCenteredText.swift in Sources */,
+				7B04AEBA2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift in Sources */,
+				7B04AEBF2FCDDD1700DAEA40 /* LazyFloatingItemList.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -659,7 +671,7 @@
 					"$(inherited)",
 					"-lsqlite3",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.multipaz.SwiftTestApp;
+				PRODUCT_BUNDLE_IDENTIFIER = "${SWIFT_TESTAPP_BUNDLE_ID}";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -706,7 +718,7 @@
 					"$(inherited)",
 					"-lsqlite3",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.multipaz.SwiftTestApp;
+				PRODUCT_BUNDLE_IDENTIFIER = "${SWIFT_TESTAPP_BUNDLE_ID}";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -737,7 +749,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = org.multipaz.SwiftTestApp.IdentityDocumentProviderExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = "${SWIFT_TESTAPP_BUNDLE_ID}.IdentityDocumentProviderExtension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -768,7 +780,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = org.multipaz.SwiftTestApp.IdentityDocumentProviderExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = "${SWIFT_TESTAPP_BUNDLE_ID}.IdentityDocumentProviderExtension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

@@ -12,6 +12,7 @@ import org.multipaz.cose.CoseSign1
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.devicesigned.DeviceNamespaces
 import org.multipaz.mdoc.devicesigned.buildDeviceNamespaces
@@ -69,14 +70,18 @@ data class DeviceResponse internal constructor(
      * The following checks are performed for each [MdocDocument] instance in [documents]:
      * - For [MdocDocument.issuerAuth] the signature is checked against the leaf certificate in the associated X.509 chain.
      * - The document type in the MSO matches the docType in the response.
+     * - The MSO's signed date is within the validity period of the leaf certificate in the associated X.509 chain.
+     * - If [rejectIfValidUntilAfterNotAfter] is true, the MSO's validUntil date does not exceed the leaf certificate's validity period.
      * - The MSO is validity period includes the passed-in [atTime].
      * - The data returned in [MdocDocument.issuerNamespaces] is checked against digests in the MSO.
      * - The device-authentication structures (ECDSA or MAC) are checked.
+     * - If any data elements are returned as part of DeviceSigned, all those data elements or
+     *   their namespace are included in the keyAuthorizations map in the DeviceKeyInfo map in the MSO.
      * - For each transaction data in the list, verifies that transaction hash is present in the
      *    response and matches the hash of the source transaction data
      *
      * The following checks are performed for each [OtherDocument] instance in [otherDocuments]:
-     *  - For document format `sd-jwt+kb`:
+     *  - For document format `dc+sd-jwt`:
      *    - The SD-JWT+KB is constructed from decompressing [OtherDocument.data]
      *    - Verification is done with [org.multipaz.sdjwt.SdJwtKb.verify] using the issuer signing key
      *      from the leaf certificate in the [org.multipaz.sdjwt.SdJwt.x5c], the nonce derived from
@@ -100,7 +105,11 @@ data class DeviceResponse internal constructor(
      *   transaction data was sent in the request
      * @param documentTypeRepository repository that contains all known transaction types; must
      *   be given if [deviceRequest] is given
-     * @param atTime the point in time for validating the whether returned documents are valid.
+     * @param atTime the point in time for validating whether returned documents are valid.
+     * @param rejectIfValidUntilAfterNotAfter if true, rejects the MSO if its `validUntil` date exceeds
+     *   the Document Signer certificate validity period according to ISO/IEC 18013-5 Second Edition
+     *   clause 12.8.1. This defaults to `false` as this check is discretionary for readers ("may reject")
+     *   and official test vectors in ISO/IEC 18013-5:2021 Annex D have `validUntil` after `notAfter`.
      * @throws IllegalStateException if validation fails.
      */
     suspend fun verify(
@@ -109,6 +118,7 @@ data class DeviceResponse internal constructor(
         deviceRequest: DeviceRequest? = null,
         documentTypeRepository: DocumentTypeRepository? = null,
         atTime: Instant = Clock.System.now(),
+        rejectIfValidUntilAfterNotAfter: Boolean = false,
     ) {
         numTimesVerifyCalled += 1
         documents_.forEach { document ->
@@ -123,12 +133,28 @@ data class DeviceResponse internal constructor(
                 if (docRequestId < 0) {
                     emptyList()
                 } else {
-                    deviceRequest.docRequests[docRequestId].getTransactionData(
+                    val allTx = deviceRequest.docRequests[docRequestId].getTransactionData(
                         documentTypeRepository!!
                     )
+                    val returnedTxIdentifiers = document.deviceNamespaces.data[ISO_18013_TRANSACTION_DATA_NAMESPACE]?.keys
+                    if (deviceRequest.docRequests[docRequestId].docRequestInfo?.alternativeDataElements?.isNotEmpty() == true) {
+                        if (returnedTxIdentifiers != null) {
+                            allTx.filter { returnedTxIdentifiers.contains(it.type.identifier) }
+                        } else {
+                            emptyList()
+                        }
+                    } else {
+                        allTx
+                    }
                 }
             }
-            document.verify(sessionTranscript, eReaderKey, transactionData, atTime)
+            document.verify(
+                sessionTranscript = sessionTranscript,
+                eReaderKey = eReaderKey,
+                transactionData = transactionData,
+                atTime = atTime,
+                rejectIfValidUntilAfterNotAfter = rejectIfValidUntilAfterNotAfter,
+            )
         }
         otherDocuments.forEach { otherDocument ->
             val transactionData = if (deviceRequest == null) {
@@ -142,9 +168,21 @@ data class DeviceResponse internal constructor(
                 if (docRequestId < 0) {
                     emptyList()
                 } else {
-                    deviceRequest.docRequests[docRequestId].getTransactionData(
+                    val allTx = deviceRequest.docRequests[docRequestId].getTransactionData(
                         documentTypeRepository!!
                     )
+                    if (deviceRequest.docRequests[docRequestId].docRequestInfo?.alternativeDataElements?.isNotEmpty() == true) {
+                        try {
+                            val sdJwtKb = SdJwtKb.fromCompactSerialization(
+                                otherDocument.data.toByteArray().zlibInflate().decodeToString()
+                            )
+                            allTx.filter { sdJwtKb.jwtBody.containsKey(it.type.kbJwtResponseClaimName) }
+                        } catch (e: Exception) {
+                            allTx
+                        }
+                    } else {
+                        allTx
+                    }
                 }
             }
             otherDocument.verify(sessionTranscript, eReaderKey, transactionData, atTime)
@@ -152,25 +190,35 @@ data class DeviceResponse internal constructor(
     }
 
     /**
-     * Variant of [verify] that is intended for use with [DeviceResponse] data embedded in
-     * non-ISO/IEC-18013 verification response (such as OpenID4VP).
+     * Similar to [verify] but for simple responses containing only a single document.
      *
      * [DeviceResponse] must contain a single document. Parsed transaction data is supplied
      * using [transactionData] parameter instead of [DeviceRequest].
      *
      * @param sessionTranscript the session transcript to use.
      * @param transactionData transaction data that was associated with the request
-     * @param atTime the point in time for validating the whether returned documents are valid.
+     * @param atTime the point in time for validating whether returned documents are valid.
+     * @param rejectIfValidUntilAfterNotAfter if true, rejects the MSO if its `validUntil` date exceeds
+     *   the Document Signer certificate validity period according to ISO/IEC 18013-5 Second Edition
+     *   clause 12.8.1. This defaults to `false` as this check is discretionary for readers ("may reject")
+     *   and official test vectors in ISO/IEC 18013-5:2021 Annex D have `validUntil` after `notAfter`.
      * @throws IllegalStateException if validation fails.
      */
     suspend fun verifySingleDoc(
         sessionTranscript: DataItem,
-        transactionData: List<TransactionData>,
+        transactionData: List<TransactionData<*>>,
         atTime: Instant = Clock.System.now(),
+        rejectIfValidUntilAfterNotAfter: Boolean = false,
     ) {
         if (documents_.size == 1 && zkDocuments.isEmpty()) {
             numTimesVerifyCalled += 1
-            documents_.first().verify(sessionTranscript, null, transactionData, atTime)
+            documents_.first().verify(
+                sessionTranscript = sessionTranscript,
+                eReaderKey = null,
+                transactionData = transactionData,
+                atTime = atTime,
+                rejectIfValidUntilAfterNotAfter = rejectIfValidUntilAfterNotAfter,
+            )
         } else if (zkDocuments.size == 1 && documents_.isEmpty()) {
             numTimesVerifyCalled += 1
             // Zero-knowledge proof is verified when generating response
@@ -230,14 +278,14 @@ data class DeviceResponse internal constructor(
         var docRequestId: ULong? = null
         val data = doc.deviceNamespaces.data
         for (transactionType in documentTypeRepository.transactionTypes) {
-            val transactionResponse = data[transactionType.mdocResponseNamespace] ?: continue
-            val transactionDocRequestId = transactionResponse["doc_request_id"] as? Uint
+            val transactionItem = data[ISO_18013_TRANSACTION_DATA_NAMESPACE]?.get(transactionType.identifier) ?: continue
+            val transactionDocRequestId = transactionItem.getOrNull("docRequestId") as? Uint
                 ?: throw IllegalStateException(
-                    "'doc_request_id' is missing or invalid for transaction '${transactionType.identifier}'")
+                    "'docRequestId' is missing or invalid for transaction '${transactionType.identifier}'")
             if (docRequestId == null) {
                 docRequestId = transactionDocRequestId.value
-            } else if(docRequestId != transactionDocRequestId.value) {
-                throw IllegalStateException("inconsistent 'doc_request_id' values")
+            } else if (docRequestId != transactionDocRequestId.value) {
+                throw IllegalStateException("inconsistent 'docRequestId' values")
             }
         }
         return docRequestId?.toInt() ?: -1
@@ -247,7 +295,7 @@ data class DeviceResponse internal constructor(
         documentTypeRepository: DocumentTypeRepository?,
         doc: OtherDocument
     ): Int {
-        if (documentTypeRepository == null || doc.docFormat != "sd-jwt+kb") {
+        if (documentTypeRepository == null || doc.docFormat != "dc+sd-jwt") {
             return -1
         }
         var docRequestId: Int? = null

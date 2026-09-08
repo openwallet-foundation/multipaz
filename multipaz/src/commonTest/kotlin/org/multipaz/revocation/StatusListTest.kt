@@ -4,22 +4,25 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.CborArray
-import org.multipaz.cbor.CborMap
-import org.multipaz.cbor.Tagged
-import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.X509Cert
+import org.multipaz.testUtilSetupCryptoProvider
 import org.multipaz.util.fromHex
 import org.multipaz.webtoken.WebTokenCheck
 import kotlin.collections.component1
 import kotlin.collections.component2
+import kotlin.io.encoding.Base64
 import kotlin.random.Random
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.fail
-import kotlin.time.Duration
+import kotlin.time.Instant
 
 class StatusListTest {
+    @BeforeTest
+    fun setup() = testUtilSetupCryptoProvider()
+
     // testSpecVectorN tests use datasets from the spec (see "Test vectors for Status List encoding"
     // section in https://datatracker.ietf.org/doc/draft-ietf-oauth-status-list/)
     @Test
@@ -42,7 +45,7 @@ class StatusListTest {
             "bits": 1,
             "lst": "eNrt3AENwCAMAEGogklACtKQPg9LugC9k_ACvreiogEAAKkeCQAAAAAAAAAAAAAAAAAAAIBylgQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXG9IAAAAAAAAAPwsJAAAAAAAAAAAAAAAvhsSAAAAAAAAAAAA7KpLAAAAAAAAAAAAAAAAAAAAAJsLCQAAAAAAAAAAADjelAAAAAAAAAAAKjDMAQAAAACAZC8L2AEb"
         }
-        """).jsonObject)
+        """).jsonObject, Instant.DISTANT_FUTURE)
 
         assertEquals(1, statusListJson.bitsPerItem)
         assertStatusList(status, statusListJson)
@@ -54,7 +57,7 @@ class StatusListTest {
             000000000000005c6f4800000000000000fc2c240000000000000000000000be1b12
             000000000000000000ecaa4b000000000000000000000000000000009b0b09000000
             00000000000038de9400000000000000002a30cc010000000080642f0bd8011b
-        """.replace(Regex("\\s+"), "").fromHex()))
+        """.replace(Regex("\\s+"), "").fromHex()), Instant.DISTANT_FUTURE)
 
         assertEquals(1, statusListCbor.bitsPerItem)
         assertStatusList(status, statusListCbor)
@@ -80,7 +83,7 @@ class StatusListTest {
             "bits": 2,
             "lst": "eNrt2zENACEQAEEuoaBABP5VIO01fCjIHTMStt9ovGVIAAAAAABAbiEBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEB5WwIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAID0ugQAAAAAAAAAAAAAAAAAQG12SgAAAAAAAAAAAAAAAAAAAAAAAAAAAOCSIQEAAAAAAAAAAAAAAAAAAAAAAAD8ExIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwJEuAQAAAAAAAAAAAAAAAAAAAAAAAMB9SwIAAAAAAAAAAAAAAAAAAACoYUoAAAAAAAAAAAAAAEBqH81gAQw"
         }
-        """).jsonObject)
+        """).jsonObject, Instant.DISTANT_FUTURE)
 
         assertEquals(2, statusList.bitsPerItem)
         assertStatusList(status, statusList)
@@ -96,7 +99,7 @@ class StatusListTest {
                00000000000000000000000000000000000000000000000000000000000000c0912e
                01000000000000000000000000000000000000c07d4b020000000000000000000000
                00000000a8614a0000000000000000000000406a1fcd60010c
-        """.replace(Regex("\\s+"), "").fromHex()))
+        """.replace(Regex("\\s+"), "").fromHex()), Instant.DISTANT_FUTURE)
 
         assertEquals(2, statusListCbor.bitsPerItem)
         assertStatusList(status, statusListCbor)
@@ -126,7 +129,7 @@ class StatusListTest {
             "bits": 4,
             "lst": "eNrt0EENgDAQADAIHwImkIIEJEwCUpCEBBQRHOy35Li1EjoOQGabAgAAAAAAAAAAAAAAAAAAACC1SQEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABADrsCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADoxaEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIIoCgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACArpwKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGhqVkAzlwIAAAAAiGVRAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABx3AoAgLpVAQAAAAAAAAAAAAAAwM89rwMAAAAAAAAAAAjsA9xMBMA"
         }
-        """).jsonObject)
+        """).jsonObject, Instant.DISTANT_FUTURE)
 
         assertEquals(4, statusList.bitsPerItem)
         assertStatusList(status, statusList)
@@ -150,7 +153,7 @@ class StatusListTest {
                000000686a5640339702000000008865510000000000000000000000000000000000
                00000000000000000000000000000071dc0a0080ba55010000000000000000000000
                c0cf3daf03000000000000000008ec03dc4c04c0
-        """.replace(Regex("\\s+"), "").fromHex()))
+        """.replace(Regex("\\s+"), "").fromHex()), Instant.DISTANT_FUTURE)
 
         assertEquals(4, statusListCbor.bitsPerItem)
         assertStatusList(status, statusListCbor)
@@ -421,7 +424,7 @@ class StatusListTest {
             "bits": 8,
             "lst": "eNrt0WOQM2kYhtGsbdu2bdu2bdu2bdu2bdu2jVnU1my-SWYm6U5enFPVf7ue97orFYAo7CQBAACQuuckAABStqUEAAAAAAAAtN6wEgAE71QJAAAAAIrwhwQAAAAAAdtAAgAAAAAAACLwkAQAAAAAAAAAAACUaFcJAACAeJwkAQAAAAAAAABQvL4kAAAAWmJwCQAAAAAAAAjAwBIAAAB06ywJoDKQBARpfgkAAAAAAAAAAAAAAAAAAACo50sJAAAAAAAAAOiRcSQAAAAAgAJNKgEAAG23mgQAAAAAAECw3pUAQvegBAAAAAAAAADduE4CAAAAyjSvBAAQiw8koHjvSABAb-wlARCONyVoxtMSZOd0CQAAAOjWDRKQmLckAAAAAACysLYEQGcnSAAAAAAQooUlAABI15kSAIH5RAIgLB9LABC4_SUgGZNIAABAmM6RoLbTJIASzCIBAEAhfpcAAAAAAABquk8CAAAAAAAAaJl9SvvzBOICAFWmkIBgfSgBAAAANOgrCQAAAAAAAADStK8EAAC03gASAAAAAAAAAADFWFUCAAAAMjOaBEADHpYAQjCIBADduFwCAAAAAGitMSSI3BUSAECOHpAA6IHrJQAAAAAAsjeVBAAAKRpVAorWvwQAAAAAAAAAkKRtJAAAAAAAgCbcLAF0bXUJAAAAoF02kYDg7CYBAAAAAEB6NpQAAAAAAAAAAAAAAEr1uQQAAF06VgIAAAAAAAAAqDaeBAAQqgMkAAAAAABogQMlAAAAAAAa87MEAAAQiwslAAAAAAAAAAAAAAAAMrOyBAAAiekv-hcsY0Sgne6QAAAAAAAgaUtJAAAAAAAAAAAAAAAAAAAAAAAAAADwt-07vjVkAAAAgDy8KgFAUEaSAAAAAJL3vgQAWdhcAgAAoBHDSUDo1pQAAACI2o4SAABZm14CALoyuwQAAPznGQkgZwdLAAAQukclAAAAAAAAAAAAgKbMKgEAAAAAAAAAAAAAAAAAAECftpYAAAAAAAAAAAAACnaXBAAAAADk7iMJAAAAAAAAAABqe00CAnGbBBG4TAIAgFDdKgFAXCaWAAAAAAAAAAAAAAAAAKAJQwR72XbGAQAAAKAhh0sAAAAAAABQgO8kAAAAAAAAAAAAACAaM0kAAAC5W0QCAIJ3mAQAxGwxCQAA6nhSAsjZBRIAANEbWQIAAAAAaJE3JACAwA0qAUBIVpKAlphbAiAPp0iQnKEkAAAAAAAgBP1KAAAAdOl4CQAAAAAAAPjLZBIAAG10RtrPm8_CAEBMTpYAAAAAAIjQYBL8z5QSAAAAAEDYPpUAACAsj0gAAADQkHMlAAjHDxIA0Lg9JQAAgHDsLQEAAABAQS6WAAAAgLjNFs2l_RgLAIAEfCEBlGZZCQAAaIHjJACgtlskAAAozb0SAAAAVFtfAgAAAAAAAAAAAAAAAAAAAAAAAKDDtxIAAAAAVZaTAKB5W0kAANCAsSUgJ0tL0GqHSNBbL0gAZflRAgCARG0kQXNmlgCABiwkAQAAAEB25pIAAAAAAAAAAAAAoFh9SwAAAAAAADWNmOSrpjFsEoaRgDKcF9Q1dxsEAAAAAAAAAAAAAAAAgPZ6SQIAAAAAAAAAgChMLgEAAAAAAAAAqZlQAsK2qQQAAAAAAAD06XUJAAAAqG9bCQAAgLD9IgEAAAAAAAAAAAAAAAAAAEBNe0gAAAAAAAAAAEBPHSEBAAAAlOZtCYA4fS8B0GFRCQAo0gISAOTgNwmC840EAAAAAAAAAAAAAAAAAAAAUJydJfjXPBIAAAAAAAAAAAAAAABk6WwJAAAAAAAAAAAAAAAAqG8UCQAAgPpOlAAAIA83SQAANWwc9HUjGAgAAAAAAACAusaSAAAAAAAAAAAAAAAAAAAAAAAAAAAAqHKVBACQjxklAAAAAAAAAKBHxpQAAAAAACBME0lAdlaUAACyt7sEAAAA0Nl0EgAAAAAAAAAAAABA-8wgAQAAAAAAAKU4SgKgUtlBAgAAAAAAAAAAgMCMLwEE51kJICdzSgCJGl2CsE0tAQAA0L11JQAAAAAAAAjUOhIAAAAAAAAAAAAAAGTqeQkAAAAAAAAAAAAAKM8SEjTrJwkAAAAAAACocqQEULgVJAAAACjDUxJUKgtKAAAAqbpRAgCA0n0mAQAAAABAGzwmAUCTLpUAAAAAAAAAAEjZNRIAAAAAAAAAAAAAAAAAAAAA8I-vJaAlhpQAAAAAAHrvzjJ-OqCuuVlLAojP8BJAr70sQZVDJYAgXS0BAAAAAAAAAAAAtMnyEgAAAAAAFONKCQAAAAAAAADorc0kAAAAAAAAgDqOlgAAAAAAAAAAAADIwv0SAAAAAAAAAAAAAADBuV0CIFVDSwAAAABAAI6RAAAAAGIwrQSEZAsJAABouRclAAAAAKDDrxIAAAA0bkkJgFiMKwEAAAAAAHQyhwRk7h4JAAAAAAAAAAAgatdKAACUYj0JAAAAAAAAAAAAQnORBLTFJRIAAAAAkIaDJAAAAJryngQAAAAAAAAAAAA98oQEAAAAAAAAAEC2zpcgWY9LQKL2kwAgGK9IAAAAAPHaRQIAAAAAAAAAAADIxyoSAAAAAAAAAAAAAADQFotLAECz_gQ1PX-B"
         }
-        """).jsonObject)
+        """).jsonObject, Instant.DISTANT_FUTURE)
 
         assertEquals(8, statusList.bitsPerItem)
         assertStatusList(status, statusList)
@@ -486,7 +489,7 @@ class StatusListTest {
                00000000003df284040000000000000040b6ce9720598f4b40a2f693002018af4800
                000000f1da4502000000000000000000c8c72a120000000000000000000000d0168b
                4b0040b3fe04353d7f81
-        """.replace(Regex("\\s+"), "").fromHex()))
+        """.replace(Regex("\\s+"), "").fromHex()), Instant.DISTANT_FUTURE)
 
         assertEquals(8, statusListCbor.bitsPerItem)
         assertStatusList(status, statusListCbor)
@@ -551,6 +554,20 @@ class StatusListTest {
     @Test
     fun roundtripCwt8() = runTest { testRoundtrip(5000, 8, false) }
 
+    @Test
+    fun testSignature() = runTest {
+        if (!Crypto.supportedCurves.contains(testIacaCert.ecPublicKey.curve)) {
+            println("Curve ${testIacaCert.ecPublicKey.curve} not supported on platform")
+            return@runTest
+        }
+        val time = Instant.parse("2026-08-07T22:11:30Z")
+        CompressedStatusList.fromCwt(
+            cwt = testCwtStatusList,
+            trustedRootCert = testIacaCert,
+            atTime = time
+        )
+    }
+
     suspend fun testRoundtrip(size: Int, bits: Int, useJwt: Boolean) {
         val map = mutableMapOf<Int, Int>()
         val statusCount = (1 shl bits)  // number of distinct status values
@@ -562,17 +579,18 @@ class StatusListTest {
         for ((index, status) in map.entries.sortedWith { (i1, _), (i2, _) -> i1 - i2 }) {
             builder.addStatus(index, status)
         }
-        val key = AsymmetricKey.ephemeral()
+        val dsKey = createTestDsKey()
+        val iacaCert = dsKey.certChain.certificates.last()
         val compressed = builder.build().compress()
         if (useJwt) {
-            val jwt = compressed.serializeAsJwt(key, "foo")
+            val jwt = compressed.serializeAsJwt(dsKey, "foo")
             val statusList =
-                StatusList.fromJwt(jwt, key.publicKey, mapOf(WebTokenCheck.SUB to "foo"))
+                StatusList.fromJwt(jwt, iacaCert, mapOf(WebTokenCheck.SUB to "foo"))
             assertStatusList(map, statusList)
         } else {
-            val cwt = compressed.serializeAsCwt(key, "foo")
+            val cwt = compressed.serializeAsCwt(dsKey, "foo")
             val statusList =
-                StatusList.fromCwt(cwt, key.publicKey, mapOf(WebTokenCheck.SUB to "foo"))
+                StatusList.fromCwt(cwt, iacaCert, mapOf(WebTokenCheck.SUB to "foo"))
             assertStatusList(map, statusList)
         }
     }
@@ -590,5 +608,48 @@ class StatusListTest {
                 assertEquals(0, statusList[index])
             }
         }
+    }
+
+    companion object {
+        val testCwtStatusList = Base64.Mime.decode("""
+            0oRZAyOjASYQeBphcHBsaWNhdGlvbi9zdGF0dXNsaXN0K2N3dBghWQL+MIIC+jCCAqGgAwIBAgIQDTtk
+            40HHu09NJhVKiQJCrDAKBggqhkjOPQQDAjB7MTUwMwYDVQQDEyxJQUNBIENlcnRpZmljYXRlIERlZmF1
+            bHQgSXNzdWVyIEJhbmdrb2sgMjAyNjELMAkGA1UEBhMCVEgxFTATBgNVBAoTDEJhbmdrb2sgMjAyNjEe
+            MBwGA1UECxMVQ2VydGlmaWNhdGUgQXV0aG9yaXR5MB4XDTI2MDYxMTExMjMwN1oXDTI5MDkxMDExMjMw
+            N1owgY0xRzBFBgNVBAMTPlJldm9jYXRpb24gTGlzdCBTaWduZXIgQ2VydGlmaWNhdGUgRGVmYXVsdCBJ
+            c3N1ZXIgQmFuZ2tvayAyMDI2MQswCQYDVQQGEwJUSDEVMBMGA1UEChMMQmFuZ2tvayAyMDI2MR4wHAYD
+            VQQLExVDZXJ0aWZpY2F0ZSBBdXRob3JpdHkwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASqXiY0Jrk+
+            CMuTzCeoLEOgCcEum28xjHf8oQoWG7j8ZGiWJT+reKfJT0FaGpOqDJD4x588Mi2UVkkDS5xpXqrgo4Hz
+            MIHwMB0GA1UdDgQWBBTEk/h+I/JPldq5gDnrMfjZYJG3zTAOBgNVHQ8BAf8EBAMCB4AwUwYDVR0fBEww
+            SjBIoEagRIZCaHR0cHM6Ly9iYW5na29rMjAyNi5tZG9jLm9ubGluZS9DZXJ0aWZpY2F0ZXMvMS9JYWNh
+            Q2VydGlmaWNhdGUuY3JsMB8GA1UdIwQYMBaAFDvS3rYOZTPLX3EicErMLO5SOs7rMEkGA1UdEgRCMECG
+            IGh0dHBzOi8vYmFuZ2tvazIwMjYubWRvYy5vbmxpbmUvgRxpYWNhQGJhbmdrb2syMDI2Lm1kb2Mub25s
+            aW5lMAoGCCqGSM49BAMCA0cAMEQCIHr2u6rnWeaNaqMoZWDlQiN2LRdykAmokCtRGy4kZHShAiBv4doJ
+            kKBPd3Q+iwsCn6HFpSpvsW0uF8Ac73ymltgJNqBZAT+jAnhnaHR0cHM6Ly9iYW5na29rMjAyNi5tZG9j
+            Lm9ubGluZS9SZXZvY2F0aW9uTGlzdHMvM0JEMkRFQjYwRTY1MzNDQjVGNzEyMjcwNEFDQzJDRUU1MjNB
+            Q0VFQi9zdGF0dXNsaXN0LmN3dAYaaml/1Rn//aNkYml0cwFjbHN0WEV42uzaMQ0AIAxFwbIxIgEpSEM6
+            wQArNNwNFfC2nzQCAMigSwAA/ykSnAwJAAAAW+FVUwIAAAivKGnUfZoOAPcsAAAA//9vYWdncmVnYXRp
+            b25fdXJpeGdodHRwczovL2Jhbmdrb2syMDI2Lm1kb2Mub25saW5lL1Jldm9jYXRpb25MaXN0cy8zQkQy
+            REVCNjBFNjUzM0NCNUY3MTIyNzA0QUNDMkNFRTUyM0FDRUVCL3N0YXR1c2xpc3QuY3d0WEDPdczqCYdy
+            IoFYpM32GiQBcfq7HzDwidSKiFQeudpxG45HYwPGaIHH48jlqahvtH9DoKVs+LtyN6Kppv3lXtkL
+        """.trimIndent())
+
+        val testIacaCert = X509Cert.fromPem("""
+            -----BEGIN CERTIFICATE-----
+            MIIC2jCCAn+gAwIBAgIQBn47HNeX5RrJwddevXOhsDAKBggqhkjOPQQDAjB7MTUwMwYDVQQDEyxJQUNBI
+            ENlcnRpZmljYXRlIERlZmF1bHQgSXNzdWVyIEJhbmdrb2sgMjAyNjELMAkGA1UEBhMCVEgxFTATBgNVBA
+            oTDEJhbmdrb2sgMjAyNjEeMBwGA1UECxMVQ2VydGlmaWNhdGUgQXV0aG9yaXR5MB4XDTI2MDYxMTExMjM
+            wN1oXDTQ2MDYxMTExMjMwN1owezE1MDMGA1UEAxMsSUFDQSBDZXJ0aWZpY2F0ZSBEZWZhdWx0IElzc3Vl
+            ciBCYW5na29rIDIwMjYxCzAJBgNVBAYTAlRIMRUwEwYDVQQKEwxCYW5na29rIDIwMjYxHjAcBgNVBAsTF
+            UNlcnRpZmljYXRlIEF1dGhvcml0eTBaMBQGByqGSM49AgEGCSskAwMCCAEBBwNCAAR7oaJvNGwl/URUWf
+            STilYwyrodGNGOsG1DvZ7tc4A1aAwwA1fZJgBSFuCLkksC+xglCO0xt2bqqW4q4PVhyVRno4HjMIHgMB0
+            GA1UdDgQWBBQ70t62DmUzy19xInBKzCzuUjrO6zAOBgNVHQ8BAf8EBAMCAQYwSQYDVR0SBEIwQIYgaHR0
+            cHM6Ly9iYW5na29rMjAyNi5tZG9jLm9ubGluZS+BHGlhY2FAYmFuZ2tvazIwMjYubWRvYy5vbmxpbmUwD
+            wYDVR0TAQH/BAUwAwEB/zBTBgNVHR8ETDBKMEigRqBEhkJodHRwczovL2Jhbmdrb2syMDI2Lm1kb2Mub2
+            5saW5lL0NlcnRpZmljYXRlcy8xL0lhY2FDZXJ0aWZpY2F0ZS5jcmwwCgYIKoZIzj0EAwIDSQAwRgIhAIB
+            uSUkaNPXgZAiwWHfksJZ6H4hJPBZgQ/lq+pJm2kt+AiEAjOZ4cr55j7aoS8GLc0m2z4qY3gHQLo7p7mfV
+            k43daP0=
+            -----END CERTIFICATE-----
+        """.trimIndent())
     }
 }

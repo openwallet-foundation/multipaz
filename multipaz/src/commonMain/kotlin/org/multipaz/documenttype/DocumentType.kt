@@ -88,8 +88,11 @@ class DocumentType private constructor(
          * Initialize the [mdocBuilder].
          *
          * @param mdocDocType the DocType of the ISO mdoc.
+         * @return the builder.
          */
-        fun addMdocDocumentType(mdocDocType: String) = apply {
+        fun addMdocDocumentType(
+            mdocDocType: String,
+        ) = apply {
             mdocBuilder = MdocDocumentType.Builder(mdocDocType)
         }
 
@@ -317,7 +320,7 @@ class DocumentType private constructor(
             mdocDataElements: Map<String, Map<String, Boolean>>? = null,
             mdocUseZkp: Boolean = false,
             jsonClaims: List<String>? = null,
-            cannedTransactionData: List<CannedTransactionData> = listOf()
+            cannedTransactionData: List<CannedTransactionData<*>> = listOf()
         ) = apply {
             val mdocRequest = if (mdocDataElements == null) {
                 null
@@ -396,6 +399,10 @@ class DocumentType private constructor(
      * @param validUntil the time at which the credential is valid until.
      * @param expectedUpdate the time at which to expect an update, or `null`.
      * @param domain the domain to use for the credential.
+     * @param randomProvider random number generator to use.
+     * @param includeElement predicate to filter which elements are included.
+     * @param deviceKeyAuthorizedNamespaces namespaces the device key is authorized to sign.
+     * @param deviceKeyAuthorizedDataElements data elements the device key is authorized to sign, keyed by namespace.
      * @return the [MdocCredential] that was added to [document].
      */
     suspend fun createMdocCredentialWithSampleData(
@@ -409,6 +416,9 @@ class DocumentType private constructor(
         expectedUpdate: Instant? = null,
         domain: String = "mdoc",
         randomProvider: Random = Random,
+        includeElement: (namespaceName: String, dataElement: MdocDataElement) -> Boolean = { _, _ -> true },
+        deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
+        deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     ): MdocCredential {
         require(mdocDocumentType != null)
 
@@ -419,7 +429,7 @@ class DocumentType private constructor(
                 addNamespace(nsName) {
                     for ((deName, de) in ns.dataElements) {
                         val sampleValue = de.attribute.sampleValueMdoc
-                        if (sampleValue != null) {
+                        if (sampleValue != null && includeElement(nsName, de)) {
                             addDataElement(deName, sampleValue)
                         }
                     }
@@ -447,6 +457,8 @@ class DocumentType private constructor(
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = mdocCredential.getAttestation().publicKey,
+            deviceKeyAuthorizedNamespaces = deviceKeyAuthorizedNamespaces,
+            deviceKeyAuthorizedDataElements = deviceKeyAuthorizedDataElements,
         )
         val taggedEncodedMso = Cbor.encode(Tagged(
             Tagged.ENCODED_CBOR,
@@ -466,7 +478,7 @@ class DocumentType private constructor(
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                dsKey.certChain.toDataItem()
+                dsKey.certChain.toCoseX5Chain()
             )
         )
         val encodedIssuerAuth = Cbor.encode(

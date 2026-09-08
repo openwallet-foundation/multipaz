@@ -39,4 +39,23 @@ data class DocumentProvisioningSettings(
     val sdJwtUserAuthDomain: String = "sdjwt_user_auth",
     val sdJwtNoUserAuthDomain: String = "sdjwt_no_user_auth",
     val sdJwtKeylessDomain: String = "sdjwt_keyless"
-)
+) {
+    /**
+     * Creates a new [DocumentProvisioningSettings] with default values.
+     */
+    constructor() : this(
+        minValidTime = 5.days,
+        keyBoundCredentialMaxUses = 1,
+        keyBoundCredentialNumPerDomain = 5,
+        keylessCredentialMaxUses = Int.MAX_VALUE,
+        keylessCredentialNumPerDomain = 1,
+        userAuthTimeout = 0.seconds,
+        requestUserAuth = true,
+        requestNoUserAuth = true,
+        mdocUserAuthDomain = "mdoc_user_auth",
+        mdocNoUserAuthDomain = "mdoc_no_user_auth",
+        sdJwtUserAuthDomain = "sdjwt_user_auth",
+        sdJwtNoUserAuthDomain = "sdjwt_no_user_auth",
+        sdJwtKeylessDomain = "sdjwt_keyless"
+    )
+}

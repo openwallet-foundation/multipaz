@@ -183,5 +183,6 @@
   "cor_description_document_number": "Номер COR, присвоенный поставщиком COR.",
   "cor_description_administrative_number": "Номер, присвоенный поставщиком COR для целей аудита или других целей.",
   "cor_description_issuing_jurisdiction": "Код административно-территориальной единицы юрисдикции, выдавшей COR, как определено в ISO 3166-2:2020, Пункт 8. Первая часть кода ДОЛЖНА совпадать со значением поля issuing_country.",
-  "cor_description_issuing_country": "Двухбуквенный код страны, как определено в ISO 3166-1, страны или территории выдающего органа."
+  "cor_description_issuing_country": "Двухбуквенный код страны, как определено в ISO 3166-1, страны или территории выдающего органа.",
+  "payment_request_payment_sca_transaction": "SCA для платежа с платежной транзакцией"
 }

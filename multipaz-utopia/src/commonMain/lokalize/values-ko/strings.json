@@ -183,5 +183,6 @@
   "cor_description_document_number": "COR 제공자가 할당한 COR 번호.",
   "cor_description_administrative_number": "감사 관리 또는 기타 목적으로 COR 제공자가 할당한 번호.",
   "cor_description_issuing_jurisdiction": "COR을 발급한 관할 구역의 국가 세분 코드(ISO 3166-2:2020, 8절에 정의됨). 코드의 첫 부분은 issuing_country 값과 동일해야 합니다.",
-  "cor_description_issuing_country": "발급 당국의 국가 또는 영토의 알파-2 국가 코드(ISO 3166-1에 정의됨)"
+  "cor_description_issuing_country": "발급 당국의 국가 또는 영토의 알파-2 국가 코드(ISO 3166-1에 정의됨)",
+  "payment_request_payment_sca_transaction": "결제 거래 연동 SCA"
 }

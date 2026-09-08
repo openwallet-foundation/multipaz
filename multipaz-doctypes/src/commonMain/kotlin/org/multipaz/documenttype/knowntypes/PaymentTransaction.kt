@@ -1,268 +1,380 @@
 package org.multipaz.documenttype.knowntypes
 
+import kotlinx.datetime.LocalDate
+import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.decodeToString
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNamingStrategy
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.putCborMap
+import org.multipaz.cbor.annotation.CborSerializable
+import org.multipaz.cbor.toDataItem
 import org.multipaz.credential.Credential
-import org.multipaz.documenttype.DocumentAttribute
-import org.multipaz.documenttype.DocumentAttributeType
-import org.multipaz.documenttype.MdocDataElement
-import org.multipaz.documenttype.StringOption
+import org.multipaz.crypto.Algorithm
+import org.multipaz.documenttype.CannedTransactionData
 import org.multipaz.documenttype.TransactionType
+import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.presentment.TransactionData
+import org.multipaz.presentment.TransactionProtocol
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.util.fromBase64Url
+import kotlin.math.ceil
+import kotlin.time.Instant
 
 /**
  * Payment transaction as defined by
  * [Specification of Strong Customer Authentication (SCA) Implementation with the Wallet](https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/blob/main/docs/technical-specifications/ts12-electronic-payments-SCA-implementation-with-wallet.md)
  */
-object PaymentTransaction: TransactionType(
+object PaymentTransaction: TransactionType<PaymentTransaction.Payload>(
     displayName = "Payment",
-    identifier = "urn:eudi:sca:payment:1",
-    attributes = listOf(
-        MdocDataElement(
-            mandatory = true,
-            attribute = DocumentAttribute(
-                identifier = "payload",
-                type = DocumentAttributeType.ComplexType,
-                displayName = "Transaction data",
-                description = "Transaction data",
-                embeddedAttributes = listOf(
-                    DocumentAttribute(
-                        identifier = "transaction_id",
-                        type = DocumentAttributeType.String,
-                        displayName = "Transaction identifier",
-                        description = "Unique identifier of the Relying Party's interaction with the User"
-                    ),
-                    DocumentAttribute(
-                        identifier = "date_time",
-                        type = DocumentAttributeType.DateTime,
-                        displayName = "Payment date",
-                        description = "Date and time when the Relying Party started to interact with the User"
-                    ),
-                    DocumentAttribute(
-                        identifier = "payee",
-                        type = DocumentAttributeType.ComplexType,
-                        displayName = "Payee",
-                        description = "Payee details",
-                        embeddedAttributes = listOf(
-                            DocumentAttribute(
-                                identifier = "name",
-                                type = DocumentAttributeType.String,
-                                displayName = "Name",
-                                description = "Name of the Payee to whom the payment is being made"
-                            ),
-                            DocumentAttribute(
-                                identifier = "id",
-                                type = DocumentAttributeType.String,
-                                displayName = "Id",
-                                description = "An identifier of the Payee that is understood by the payment system used to process the transaction"
-                            ),
-                            DocumentAttribute(
-                                identifier = "logo",
-                                type = DocumentAttributeType.String,
-                                displayName = "Logo",
-                                description = "Resolvable or Data (as per [RFC2397]) URL of the Payee logo"
-                            ),
-                            DocumentAttribute(
-                                identifier = "website",
-                                type = DocumentAttributeType.String,
-                                displayName = "Website",
-                                description = "Resolvable URL of the Payee's website"
-                            ),
-                        )
-                    ),
-                    DocumentAttribute(
-                        identifier = "pisp",
-                        type = DocumentAttributeType.ComplexType,
-                        displayName = "PISP",
-                        description = "If present, it indicates that the payment is being facilitated by a PISP",
-                        embeddedAttributes = listOf(
-                            DocumentAttribute(
-                                identifier = "legal_name",
-                                type = DocumentAttributeType.String,
-                                displayName = "Legal name",
-                                description = "Legal name of the PISP"
-                            ),
-                            DocumentAttribute(
-                                identifier = "brand_name",
-                                type = DocumentAttributeType.String,
-                                displayName = "Brand name",
-                                description = "Brand name of the PISP"
-                            ),
-                            DocumentAttribute(
-                                identifier = "domain_name",
-                                type = DocumentAttributeType.String,
-                                displayName = "Domain name",
-                                description = "Domain name of the PISP as secured by the [eIDAS] QWAC certificate of the TPP"
-                            ),
-                        )
-                    ),
-                    DocumentAttribute(
-                        identifier = "execution_date",
-                        type = DocumentAttributeType.Date,
-                        displayName = "Execution date",
-                        description = "[ISO8601] date of the payment's execution"
-                    ),
-                    DocumentAttribute(
-                        identifier = "currency",
-                        type = DocumentAttributeType.String,
-                        displayName = "Currency",
-                        description = "Currency of the payment(s) as [ISO4217] Alpha-3 code"
-                    ),
-                    DocumentAttribute(
-                        identifier = "amount",
-                        type = DocumentAttributeType.Number,
-                        displayName = "Amount",
-                        description = "Amount of the single payment, or regular amount of a recurring payment, consisting of major currency units as the integer component and an optional fraction part consisting of the decimal point followed by minor currency units, with the number of fractional digits as per [ISO4217]"
-                    ),
-                    DocumentAttribute(
-                        identifier = "amount_estimated",
-                        type = DocumentAttributeType.Boolean,
-                        displayName = "Is estimated",
-                        description = "In case of an MIT, indicates that the amount is estimated. Absence of this optional attribute indicates that the amount is not estimated"
-                    ),
-                    DocumentAttribute(
-                        identifier = "amount_earmarked",
-                        type = DocumentAttributeType.Boolean,
-                        displayName = "Is earmarked",
-                        description = "In case of an MIT that is not executed immediately, indicates that the Payee earmarks the amount immediately. Absence of this optional attribute indicates that no earmarking is taking place"
-                    ),
-                    DocumentAttribute(
-                        identifier = "sct_inst",
-                        type = DocumentAttributeType.Boolean,
-                        displayName = "Is Instant Credit Transfer",
-                        description = "Indicates that the ASPSP is requested to execute the payment as SEPA Instant Credit Transfer. Absence of this optional attribute indicates that no instant transfer has been requested"
-                    ),
-                    DocumentAttribute(
-                        identifier = "recurrence",
-                        type = DocumentAttributeType.ComplexType,
-                        displayName = "Recurrence",
-                        description = "If present, it indicates a recurring payment",
-                        embeddedAttributes = listOf(
-                            DocumentAttribute(
-                                identifier = "start_date",
-                                type = DocumentAttributeType.Date,
-                                displayName = "Start date",
-                                description = "[ISO8601] date of the first payment's execution. This attribute is expected to be present in most cases, with the only exception of MITs when the date of the first payment due is unknown at the time of SCA"
-                            ),
-                            DocumentAttribute(
-                                identifier = "end_date",
-                                type = DocumentAttributeType.Date,
-                                displayName = "End date",
-                                description = "[ISO8601] date of the last payment's execution"
-                            ),
-                            DocumentAttribute(
-                                identifier = "number",
-                                type = DocumentAttributeType.Number,
-                                displayName = "Number",
-                                description = "Number of recurring payments"
-                            ),
-                            DocumentAttribute(
-                                identifier = "frequency",
-                                type = DocumentAttributeType.StringOptions(
-                                    listOf(
-                                        StringOption(
-                                            "INDA",
-                                            "intraday (i.e., several times a day)"
-                                        ),
-                                        StringOption("DAIL", "daily"),
-                                        StringOption("WEEK", "weekly"),
-                                        StringOption("TOWK", "bi-weekly"),
-                                        StringOption("TWMN", "twice a month"),
-                                        StringOption("MNTH", "monthly"),
-                                        StringOption("TOMN", "every two months"),
-                                        StringOption("QUTR", "quarterly"),
-                                        StringOption("FOMN", "every four months"),
-                                        StringOption("SEMI", "twice a year"),
-                                        StringOption("YEAR", "yearly"),
-                                        StringOption("TYEA", "every two years"),
-                                    )
-                                ),
-                                displayName = "Frequency",
-                                description = "Frequency of recurring payments"
-                            ),
-                            DocumentAttribute(
-                                identifier = "mit_options",
-                                type = DocumentAttributeType.ComplexType,
-                                displayName = "MIT options",
-                                description = "Recurring MITs options",
-                                embeddedAttributes = listOf(
-                                    DocumentAttribute(
-                                        identifier = "amount_variable",
-                                        type = DocumentAttributeType.Boolean,
-                                        displayName = "Amount is variable",
-                                        description = "Indicates if subsequent transactions may have a different amount compared to the first transaction. Absence of this optional attribute indicates that the amount does not vary"
-                                    ),
-                                    DocumentAttribute(
-                                        identifier = "min_amount",
-                                        type = DocumentAttributeType.Number,
-                                        displayName = "Minimum amount",
-                                        description = "The minimum amount of a single payment under this transaction"
-                                    ),
-                                    DocumentAttribute(
-                                        identifier = "max_amount",
-                                        type = DocumentAttributeType.Number,
-                                        displayName = "Maximum amount",
-                                        description = "The maximum amount of a single payment under this transaction"
-                                    ),
-                                    DocumentAttribute(
-                                        identifier = "total_amount",
-                                        type = DocumentAttributeType.Number,
-                                        displayName = "Total amount",
-                                        description = "The total amount of all payments under this transaction"
-                                    ),
-                                    DocumentAttribute(
-                                        identifier = "initial_amount",
-                                        type = DocumentAttributeType.Number,
-                                        displayName = "Initial amount",
-                                        description = "The deviating amount for a fixed number of initial instances of the recurring payment"
-                                    ),
-                                    DocumentAttribute(
-                                        identifier = "initial_amount_number",
-                                        type = DocumentAttributeType.Number,
-                                        displayName = "Number of initial amount payments",
-                                        description = "The number of initial instances of the recurring payment with a deviating amount"
-                                    ),
-                                    DocumentAttribute(
-                                        identifier = "apr",
-                                        type = DocumentAttributeType.Number,
-                                        displayName = "Annual Percentage Rate",
-                                        description = "Annual Percentage Rate of the installment. Presence of this attribute indicates that the transaction is an interest-bearing installment"
-                                    ),
-                                )
-                            )
-                        )
-                    ),
-                )
-            )
-        )
-    )
+    identifier = "urn:eudi:sca:payment:1"
 ) {
-    override suspend fun isApplicable(
-        transactionData: TransactionData,
-        credential: Credential
-    ): Boolean {
-        return credential is MdocCredential
-                && credential.docType == "org.multipaz.payment.sca.1"
+    /**
+     * Represents the wrapper envelope for a JSON-serialized payment transaction.
+     *
+     * This class encapsulates metadata such as credential IDs used for authorization,
+     * a list of cryptographic hash algorithms applied to the transaction data, and the
+     * core transaction [payload].
+     *
+     * @property type The identifier of the payload or credential type.
+     * @property credentialIds A list of unique identifiers for authorized credentials.
+     * @property transactionDataHashesAlg An optional list of cryptographic hash algorithms used
+     * to secure the transaction data.
+     * @property payload The core [Payload] containing transaction-specific details.
+     */
+    @Serializable
+    data class JsonData(
+        val type: String,
+        val credentialIds: List<String>,
+        val transactionDataHashesAlg: List<String>?,
+        val payload: Payload
+    )
+
+    /**
+     * The core detail schema of a payment transaction.
+     *
+     * In the target JSON schema, these properties map to `snake_case` (e.g., `transactionId`
+     * maps to `transaction_id`).
+     *
+     * @property transactionId Unique identifier for the transaction (mapped to `transaction_id`).
+     * Must be between 1 and 36 characters (typically a UUID). **Required.**
+     * @property currency ISO 4217 3-letter currency code matching the pattern `^[A-Z]{3}$`. **Required.**
+     * @property amount The numeric value of the transaction. **Required.**
+     * @property payee Details of the receiving entity ([Payee]). **Required.**
+     * @property dateTime The exact point in time when the transaction was created (mapped to `date_time`).
+     *  Expected in RFC 3339 date-time format (e.g., "2025-11-13T20:20:39+00:00").
+     * @property pisp The Payment Initiation Service Provider ([Pisp]) assisting in the transaction, if applicable.
+     * @property executionDate The planned execution date (mapped to `execution_date`).
+     *  Mapped to `date-time` format in the JSON schema.
+     * @property amountEstimated Flag indicating if the amount is an estimate rather than the final total (mapped to `amount_estimated`).
+     * @property amountEarmarked Flag indicating if the funds are reserved/earmarked for this transaction (mapped to `amount_earmarked`).
+     * @property sctInst Flag indicating if the transaction uses SEPA Instant Credit Transfer (mapped to `sct_inst`).
+     * @property tipRequested (extension, not defined in the spec) Flag indicating that a tip can additionally be added by the payee.
+     * @property recurrence Optional [Recurrence] configuration specifying payment intervals for standing/recurring orders.
+     * @property mitOptions Optional Merchant Initiated Transaction options ([MitOptions]).
+     */
+    @CborSerializable
+    @Serializable
+    data class Payload(
+        val transactionId: String,
+        val currency: String,
+        val amount: Double,
+        val payee: Payee,
+        val dateTime: Instant? = null,
+        val pisp: Pisp? = null,
+        val executionDate: LocalDate? = null,
+        val amountEstimated: Boolean? = null,
+        val amountEarmarked: Boolean? = null,
+        val sctInst: Boolean? = null,
+        val tipRequested: Boolean? = null,
+        val recurrence: Recurrence? = null,
+        val mitOptions: MitOptions? = null
+    ) {
+        companion object
     }
 
-    override suspend fun applyCbor(
-        transactionData: TransactionData,
+    /**
+     * Represents the merchant or individual receiving the payment.
+     *
+     * @property name The display name or legal name of the receiving merchant/person. **Required.**
+     * @property id Unique identifier of the payee. **Required.**
+     * @property logo An optional URI string pointing to the payee's brand logo asset.
+     * @property website An optional URI string linking to the payee's official website.
+     */
+    @CborSerializable
+    @Serializable
+    data class Payee(
+        val name: String,
+        val id: String,
+        val logo: String? = null,
+        val website: String? = null
+    ) {
+        companion object
+    }
+
+    /**
+     * Details of the Payment Initiation Service Provider (PISP) executing the payment request.
+     *
+     * @property legalName The official registered company name of the provider (mapped to `legal_name`). **Required.**
+     * @property brandName The commercial customer-facing brand name of the provider (mapped to `brand_name`). **Required.**
+     * @property domainName The verified domain name associated with the provider (mapped to `domain_name`). **Required.**
+     */
+    @CborSerializable
+    @Serializable
+    data class Pisp(
+        val legalName: String,
+        val brandName: String,
+        val domainName: String
+    ) {
+        companion object
+    }
+
+    /**
+     * Configures the timeline and interval parameters of a recurring payment sequence.
+     *
+     * @property frequency How often the payment repeats ([Frequency]). **Required.**
+     * @property startDate The date when the payment series officially begins (mapped to `start_date`).
+     * @property endDate The final date of the payment series (mapped to `end_date`).
+     * @property number The total occurrences planned for this recurring agreement.
+     */
+    @CborSerializable
+    @Serializable
+    data class Recurrence(
+        val frequency: Frequency,
+        val startDate: LocalDate? = null,
+        val endDate: LocalDate? = null,
+        val number: Long? = null,
+    ) {
+        companion object
+    }
+
+    /**
+     * Merchant-Initiated Transaction (MIT) configurations for variable or conditional recurring payments.
+     *
+     * @property amountVariable True if payment amounts fluctuate based on actual usage/billing (mapped to `amount_variable`).
+     * @property minAmount The absolute minimum amount allowed per cycle (mapped to `min_amount`).
+     * @property maxAmount The absolute maximum amount allowed per cycle (mapped to `max_amount`).
+     * @property totalAmount The maximum lifetime cap for all payments combined under this agreement (mapped to `total_amount`).
+     * @property initialAmount The specific cost of the very first transaction in the cycle (mapped to `initial_amount`).
+     * @property initialAmountNumber The sequence index or identifier for the initial pricing tier (mapped to `initial_amount_number`).
+     * @property apr Annual Percentage Rate (APR) applied if this recurring transaction acts as a credit/finance agreement.
+     */
+    @CborSerializable
+    @Serializable
+    data class MitOptions(
+        val amountVariable: Boolean?,
+        val minAmount: Double?,
+        val maxAmount: Double?,
+        val totalAmount: Double?,
+        val initialAmount: Double?,
+        val initialAmountNumber: Long?,
+        val apr: Double?
+    ) {
+        companion object
+    }
+
+    /**
+     * Optional user input for payment transaction processing.
+     *
+     * @property tipPercent amount of tip in the currency specified in [Payload.currency]
+     */
+    data class UserInput(
+        val tipPercent: Double
+    ): TransactionUserInput() {
+        override fun generateMdocResponseElements(
+            transactionData: TransactionData<*>,
+            credential: Credential
+        ): Map<String, DataItem> = buildMap {
+            val payload = transactionData.payload as Payload
+            val amount = ceil(payload.amount * tipPercent) / 100.0
+            put("tipAmount", amount.toDataItem())
+        }
+
+        override fun generateSdJwtResponseClaims(
+            transactionData: TransactionData<*>,
+            credential: Credential
+        ): Map<String, JsonElement> = buildMap {
+            val payload = transactionData.payload as Payload
+            val amount = ceil(payload.amount * tipPercent) / 100.0
+            put("tip_amount", JsonPrimitive(amount))
+        }
+    }
+
+    /**
+     * Standard banking frequency codes used to define how often a recurring payment occurs.
+     */
+    enum class Frequency {
+        /** Intraday (i.e., several times a day). */
+        INDA,
+        /** Daily. */
+        DAIL,
+        /** Weekly. */
+        WEEK,
+        /** Bi-weekly. */
+        TOWK,
+        /** Twice a month. */
+        TWMN,
+        /** Monthly. */
+        MNTH,
+        /** Every two months. */
+        TOMN,
+        /** Quarterly. */
+        QUTR,
+        /** Every four months. */
+        FOMN,
+        /** Twice a year. */
+        SEMI,
+        /** Yearly. */
+        YEAR,
+        /** Every two years. */
+        TYEA
+    }
+
+    override fun serializeIso18013Request(payload: Payload): DataItem =
+        payload.toDataItem()
+
+    override fun parseIso18013Request(dataItem: DataItem): Payload =
+        Payload.fromDataItem(dataItem)
+
+    override fun serializeOpenId4VpRequest(
+        payload: Payload,
+        credentialIds: List<String>,
+        hashAlgorithms: List<Algorithm>?
+    ): String =
+        jsonFormat.encodeToString(JsonData(
+            type = identifier,
+            transactionDataHashesAlg = joseHashAlgorithms(hashAlgorithms),
+            credentialIds = credentialIds,
+            payload = payload
+        ))
+
+    override fun parseOpenId4VpRequest(jsonString: String): Payload =
+        jsonFormat.decodeFromString<JsonData>(jsonString).payload
+
+
+    override fun parseJson(serialized: ByteString): TransactionData<Payload> {
+        val jsonString = serialized.decodeToString().fromBase64Url().decodeToString()
+        val data = jsonFormat.decodeFromString<JsonData>(jsonString)
+        return TransactionData(
+            type = this,
+            payload = data.payload,
+            protocol = TransactionProtocol.OPENID4VP,
+            rawBytes = serialized,
+            hashAlgorithms = parseJoseHashAlgorithms(data.transactionDataHashesAlg),
+        )
+    }
+
+
+    override suspend fun generateMdocResponseElements(
+        transactionData: TransactionData<Payload>,
+        credential: Credential,
+        userInput: TransactionUserInput?,
+        docRequestId: Int?
+    ): Map<String, DataItem> = buildMap {
+        putAll(super.generateMdocResponseElements(transactionData, credential, userInput, docRequestId))
+        if (transactionData.protocol == TransactionProtocol.ISO_18013_5) {
+            put("amount", transactionData.payload.amount.toDataItem())
+            put("currency", transactionData.payload.currency.toDataItem())
+        }
+    }
+
+    override suspend fun generateSdJwtResponseClaims(
+        transactionData: TransactionData<Payload>,
+        credential: Credential,
+        userInput: TransactionUserInput?,
+        docRequestId: Int?
+    ): Map<String, JsonElement> = buildMap {
+        putAll(super.generateSdJwtResponseClaims(transactionData, credential, userInput, docRequestId))
+        if (transactionData.protocol == TransactionProtocol.ISO_18013_5) {
+            put("amount", JsonPrimitive(transactionData.payload.amount))
+            put("currency", JsonPrimitive(transactionData.payload.currency))
+        }
+    }
+
+    override suspend fun verifyMdocResponse(
+        transactionData: TransactionData<Payload>,
+        responseElements: Map<String, DataItem>
+    ) {
+        super.verifyMdocResponse(transactionData, responseElements)
+        if (transactionData.protocol == TransactionProtocol.ISO_18013_5) {
+            val amount = responseElements["amount"]?.asDouble
+                ?: throw IllegalStateException("Missing 'amount' in transaction response")
+            if (amount != transactionData.payload.amount) {
+                throw IllegalStateException(
+                    "Amount mismatch in transaction response: expected ${transactionData.payload.amount}, got $amount"
+                )
+            }
+            val currency = responseElements["currency"]?.asTstr
+                ?: throw IllegalStateException("Missing 'currency' in transaction response")
+            if (currency != transactionData.payload.currency) {
+                throw IllegalStateException(
+                    "Currency mismatch in transaction response: expected ${transactionData.payload.currency}, got $currency"
+                )
+            }
+        }
+    }
+
+    override suspend fun verifySdJwtResponse(
+        transactionData: TransactionData<Payload>,
+        responseClaims: Map<String, JsonElement>
+    ) {
+        super.verifySdJwtResponse(transactionData, responseClaims)
+        if (transactionData.protocol == TransactionProtocol.ISO_18013_5) {
+            val amount = responseClaims["amount"]?.jsonPrimitive?.doubleOrNull
+                ?: throw IllegalStateException("Missing 'amount' in transaction response")
+            if (amount != transactionData.payload.amount) {
+                throw IllegalStateException(
+                    "Amount mismatch in transaction response: expected ${transactionData.payload.amount}, got $amount"
+                )
+            }
+            val currency = responseClaims["currency"]?.jsonPrimitive?.contentOrNull
+                ?: throw IllegalStateException("Missing 'currency' in transaction response")
+            if (currency != transactionData.payload.currency) {
+                throw IllegalStateException(
+                    "Currency mismatch in transaction response: expected ${transactionData.payload.currency}, got $currency"
+                )
+            }
+        }
+    }
+
+    override suspend fun isApplicable(
+        transactionData: TransactionData<Payload>,
         credential: Credential
-    ): Map<String, DataItem> {
-        return buildMap {}
+    ): Boolean {
+        val matchesType = when (credential) {
+            is MdocCredential -> credential.docType == "org.multipaz.payment.sca.1"
+            is KeyBoundSdJwtVcCredential -> credential.vct == "org.multipaz.payment.sca.1"
+            else -> false
+        }
+        return matchesType && super.isApplicable(transactionData, credential)
     }
 
     /** Sample transaction data for this transaction type */
-    val sampleData = buildCanned {
-        putCborMap("payload") {
-            put("transaction_id", "3AD99006-6E0D-4D07-AE75-5DAEF0FE21D9")
-            put("amount", 123.25)
-            put("currency", "USD")
-            putCborMap("payee") {
-                put("id", "01234")
-                put("name", "Linux Foundation")
-            }
-        }
+    val sampleData = CannedTransactionData<Payload>(
+        transactionType = PaymentTransaction,
+        payload = Payload(
+            transactionId = "3AD99006-6E0D-4D07-AE75-5DAEF0FE21D9",
+            amount = 123.25,
+            currency = "USD",
+            tipRequested = true,
+            payee = Payee(
+                id = "01234",
+                name = "Linux Foundation"
+            )
+        )
+    )
+
+    @OptIn(ExperimentalSerializationApi::class)
+    private val jsonFormat = Json {
+        explicitNulls = false
+        namingStrategy = JsonNamingStrategy.SnakeCase
     }
 }

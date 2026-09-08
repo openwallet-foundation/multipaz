@@ -24,6 +24,8 @@ import kotlin.time.Clock
 import org.multipaz.crypto.Algorithm
 import org.multipaz.prompt.Reason
 
+import org.multipaz.securearea.software.SoftwareUserAuthType
+
 private val TAG = "SoftwareSecureAreaScreen"
 
 @Composable
@@ -41,13 +43,33 @@ fun SoftwareSecureAreaScreen(
             Text(text = "Implementation: ${Crypto.provider}")
         }
         for (algorithm in softwareSecureArea.supportedAlgorithms) {
-            for ((passphraseRequired, description) in arrayOf(
-                Pair(true, "- Passphrase"),
-                Pair(false, ""),
+            for ((passphraseRequired, userAuthTypes, description) in arrayOf(
+                Triple(false, emptySet<SoftwareUserAuthType>(), ""),
+                Triple(true, emptySet<SoftwareUserAuthType>(), "- Passphrase"),
+                Triple(
+                    false,
+                    setOf(SoftwareUserAuthType.PASSCODE, SoftwareUserAuthType.BIOMETRIC),
+                    "- User Auth (Passcode or Biometric)"
+                ),
+                Triple(
+                    false,
+                    setOf(SoftwareUserAuthType.PASSCODE),
+                    "- User Auth (Passcode only)"
+                ),
+                Triple(
+                    false,
+                    setOf(SoftwareUserAuthType.BIOMETRIC),
+                    "- User Auth (Biometric only)"
+                ),
+                Triple(
+                    true,
+                    setOf(SoftwareUserAuthType.PASSCODE, SoftwareUserAuthType.BIOMETRIC),
+                    "- Passphrase & User Auth"
+                ),
             )) {
-                // For brevity, only do passphrase for P-256 Signature and P-256 Key Agreement)
+                // For brevity, only do passphrase / user auth for P-256 Signature and P-256 Key Agreement
                 if (algorithm.curve!! != EcCurve.P256) {
-                    if (passphraseRequired) {
+                    if (passphraseRequired || userAuthTypes.isNotEmpty()) {
                         continue;
                     }
                 }
@@ -69,6 +91,7 @@ fun SoftwareSecureAreaScreen(
                                 } else {
                                     null
                                 },
+                                userAuthTypes = userAuthTypes,
                                 showToast = showToast
                             )
                         }
@@ -90,13 +113,14 @@ private suspend fun swTest(
     algorithm: Algorithm,
     passphrase: String?,
     passphraseConstraints: PassphraseConstraints?,
+    userAuthTypes: Set<SoftwareUserAuthType>,
     showToast: (message: String) -> Unit) {
     Logger.d(
         TAG,
-        "swTest algorithm:$algorithm passphrase:$passphrase"
+        "swTest algorithm:$algorithm passphrase:$passphrase userAuthTypes:$userAuthTypes"
     )
     try {
-        swTestUnguarded(softwareSecureArea, algorithm, passphrase, passphraseConstraints, showToast)
+        swTestUnguarded(softwareSecureArea, algorithm, passphrase, passphraseConstraints, userAuthTypes, showToast)
     } catch (e: Exception) {
         if (e is CancellationException) throw e
         e.printStackTrace();
@@ -109,6 +133,7 @@ private suspend fun swTestUnguarded(
     algorithm: Algorithm,
     passphrase: String?,
     passphraseConstraints: PassphraseConstraints?,
+    userAuthTypes: Set<SoftwareUserAuthType>,
     showToast: (message: String) -> Unit) {
 
     val builder = SoftwareCreateKeySettings.Builder()
@@ -116,14 +141,18 @@ private suspend fun swTestUnguarded(
     if (passphrase != null) {
         builder.setPassphraseRequired(true, passphrase, passphraseConstraints)
     }
+    if (userAuthTypes.isNotEmpty()) {
+        builder.setUserAuthenticationRequired(
+            true,
+            userAuthTypes
+        )
+    }
 
     softwareSecureArea.createKey("testKey", builder.build())
 
     val unlockReason = Reason.HumanReadable(
-        title = "Enter Knowledge Factor",
-        subtitle = "This is used to decrypt the private key material. " +
-                "In this sample the knowledge factor is '1111' but try " +
-                "entering something else to check out error handling",
+        title = "Authentication Required",
+        subtitle = "Authentication is required to use this software-backed key",
         requireConfirmation = false
     )
 

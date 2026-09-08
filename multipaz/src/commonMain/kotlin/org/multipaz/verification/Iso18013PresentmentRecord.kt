@@ -18,8 +18,6 @@ import kotlin.time.Instant
 /**
  * [PresentmentRecord] for ISO 18013-5 mdoc presentment.
  *
- * TODO: support recording Annex A, proximity and zero-knowledge presentations as well.
- *
  * @property response CBOR-encoded `DeviceResponse` as defined in ISO 18013-5.
  * @property sessionTranscript CBOR `SessionTranscript` used for presentment authentication.
  * @property request original ISO 18013 request

@@ -183,5 +183,6 @@
   "cor_description_document_number": "Eine vom COR-Anbieter zugewiesene Nummer für den COR.",
   "cor_description_administrative_number": "Eine vom COR-Anbieter für Revisionszwecke oder andere Zwecke zugewiesene Nummer.",
   "cor_description_issuing_jurisdiction": "Code der Länderuntergliederung der Gerichtsbarkeit, die den COR ausgestellt hat, gemäß ISO 3166-2:2020, Abschnitt 8. Der erste Teil des Codes MUSS mit dem Wert für issuing_country übereinstimmen.",
-  "cor_description_issuing_country": "Alpha-2-Ländercode gemäß ISO 3166-1 für das Land oder Gebiet der ausstellenden Behörde."
+  "cor_description_issuing_country": "Alpha-2-Ländercode gemäß ISO 3166-1 für das Land oder Gebiet der ausstellenden Behörde.",
+  "payment_request_payment_sca_transaction": "SCA bei Zahlungstransaktion"
 }

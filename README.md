@@ -106,6 +106,50 @@ To use snapshot builds in a project consuming Multipaz:
 > ```
 > Alternatively, you can run Gradle with the `--refresh-dependencies` flag (e.g., `./gradlew build --refresh-dependencies`) to update cached snapshots on demand.
 
+## Upgrading Kotlin/JS NPM Lockfiles
+
+This project uses Kotlin Multiplatform (KMP) JS and Wasm targets. NPM dependency versions are pinned in `kotlin-js-store/yarn.lock` and `kotlin-js-store/wasm/yarn.lock` to ensure build reproducibility.
+
+To upgrade the locked package versions (e.g., to address Dependabot vulnerability alerts):
+
+1. **Clean intermediate Gradle build artifacts:**
+   ```shell
+   $ ./gradlew clean
+   ```
+
+2. **Generate the initial NPM workspaces:**
+   ```shell
+   $ ./gradlew kotlinUpgradeYarnLock kotlinWasmUpgradeYarnLock
+   ```
+
+3. **Upgrade npm package versions using Yarn:**
+   ```shell
+   $ cd build/js && npx yarn upgrade
+   $ cd ../wasm && npx yarn upgrade
+   $ cd ../..
+   ```
+
+4. **Persist the updated lockfiles to the repository store:**
+   ```shell
+   $ ./gradlew kotlinUpgradeYarnLock kotlinWasmUpgradeYarnLock
+   ```
+
+## Regenerating Translation Sources
+
+Modules that localize strings (`multipaz-doctypes` and `multipaz-utopia`) keep their string resources as JSON under `src/commonMain/lokalize/`, and the Kotlin rendered from them is **checked into the tree** under `src/commonMain/generated/` so the source compiles as-is on non-Gradle build systems.
+
+Because those Kotlin files are committed rather than regenerated on every build, after adding or editing strings you must regenerate and commit them:
+
+1. **Regenerate the Kotlin sources for the affected module:**
+   ```shell
+   $ ./gradlew :multipaz-doctypes:generateMultipazStrings
+   $ ./gradlew :multipaz-utopia:generateMultipazStrings
+   ```
+
+2. **Commit the regenerated files** under `src/commonMain/generated/` together with the `strings.json` changes.
+
+`lokalizeCheckGenerated` runs as part of `./gradlew check` (and CI) and fails the build if the committed sources drift from the JSON resources, printing the exact command to run.
+
 ## Getting involved
 
 We have resources for people already involved and people wishing to contribute

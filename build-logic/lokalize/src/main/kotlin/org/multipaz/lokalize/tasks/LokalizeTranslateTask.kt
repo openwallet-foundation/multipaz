@@ -1,17 +1,21 @@
 package org.multipaz.lokalize.tasks
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.FileCollection
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
-import org.gradle.workers.WorkerExecutor
+import org.gradle.process.ExecOperations
 import org.multipaz.lokalize.engine.ResourceScanner
 import org.multipaz.lokalize.engine.ResourceWriterStrategy
 import org.multipaz.lokalize.engine.ResourceWriterStrategyFactory
@@ -23,7 +27,6 @@ import org.multipaz.lokalize.util.LLmModel
 import org.multipaz.lokalize.util.LokalizeExtension
 import org.multipaz.lokalize.util.OutputFormat
 import org.multipaz.lokalize.util.toProvider
-import org.multipaz.lokalize.worker.TranslationWorkAction
 import java.io.File
 import javax.inject.Inject
 
@@ -32,7 +35,7 @@ import javax.inject.Inject
  * NOTE: Not cacheable - modifies source files and makes external API calls.
  */
 abstract class LokalizeTranslateTask @Inject constructor(
-    private val workerExecutor: WorkerExecutor
+    private val execOperations: ExecOperations
 ) : DefaultTask() {
 
     @get:Internal
@@ -78,7 +81,7 @@ abstract class LokalizeTranslateTask @Inject constructor(
             }
 
         val provider = llmProvider.getOrElse(LLMProvider.GOOGLE)
-        val model = llModel.getOrElse(LLmModel.GEMINI2_0_FLASH)
+        val model = llModel.getOrElse(LLmModel.GEMINI2_5_FLASH_LITE)
 
         val modelProvider = model.toProvider()
         val effectiveProvider = when {
@@ -94,13 +97,12 @@ abstract class LokalizeTranslateTask @Inject constructor(
 
         logger.lifecycle("Using LLM: ${model.name} (${effectiveProvider.name})")
 
-        // CRITICAL: Use process isolation with explicit classpath from lokalizeWorker configuration
-        // This ensures the worker JVM only sees Koog dependencies and its own Kotlin 2.2.x
-        // NOT Gradle's embedded Kotlin 2.0.x runtime
+        // CRITICAL: Run translation in a plain forked `java` process (not Gradle's
+        // WorkerExecutor). Gradle's Worker API layers the worker classpath as a child
+        // of Gradle's own classloader, which leaks `kotlin.*` packages from Gradle's
+        // bundled (older) kotlin-stdlib ahead of ours - and koog needs a newer one
+        // (kotlin.time.Clock). A plain forked process has no such parent classloader.
         val workerClasspath = project.configurations.getByName("lokalizeWorker")
-        val workQueue = workerExecutor.processIsolation { spec ->
-            spec.classpath.from(workerClasspath)
-        }
 
         val baseLocale = defaultLocale.get()
         val resDir = resourcesDir.get()
@@ -152,7 +154,7 @@ abstract class LokalizeTranslateTask @Inject constructor(
                 apiKey = apiKey,
                 provider = effectiveProvider,
                 model = model,
-                workQueue = workQueue
+                workerClasspath = workerClasspath
             )
         }
     }
@@ -170,7 +172,7 @@ abstract class LokalizeTranslateTask @Inject constructor(
         apiKey: String,
         provider: LLMProvider,
         model: LLmModel,
-        workQueue: org.gradle.workers.WorkQueue
+        workerClasspath: FileCollection
     ) {
         val targetFile = File(project.projectDir, "$resDir/$targetFilePrefix$targetLocale$targetFileExtension")
         val targetBundle = if (targetFile.exists()) {
@@ -238,7 +240,7 @@ abstract class LokalizeTranslateTask @Inject constructor(
                 apiKey = apiKey,
                 provider = provider,
                 model = model,
-                workQueue = workQueue
+                workerClasspath = workerClasspath
             )
         } else {
             emptyMap()
@@ -252,7 +254,7 @@ abstract class LokalizeTranslateTask @Inject constructor(
                 apiKey = apiKey,
                 provider = provider,
                 model = model,
-                workQueue = workQueue
+                workerClasspath = workerClasspath
             )
         } else {
             emptyMap()
@@ -338,28 +340,34 @@ abstract class LokalizeTranslateTask @Inject constructor(
         apiKey: String,
         provider: LLMProvider,
         model: LLmModel,
-        workQueue: org.gradle.workers.WorkQueue
+        workerClasspath: FileCollection
     ): Map<String, String> {
         val resultsFile = File(outputDirectory.get().asFile, "translations_${targetLocale}.json")
+        val inputFile = File(outputDirectory.get().asFile, "translation_input_${targetLocale}.json")
 
         // Clean up any stale results file to prevent using cached results from previous runs
         if (resultsFile.exists()) {
             resultsFile.delete()
         }
 
-        workQueue.submit(TranslationWorkAction::class.java) { params ->
-            params.apiKey.set(apiKey)
-            params.provider.set(provider)
-            params.model.set(model)
-            params.baseLocale.set(baseLocale)
-            params.targetLocale.set(targetLocale)
-            params.texts.set(stringWorkItems.map { it.second })
-            params.keys.set(stringWorkItems.map { it.first })
-            params.resultsFile.set(resultsFile)
+        val inputJson = buildJsonObject {
+            put("apiKey", JsonPrimitive(apiKey))
+            put("provider", JsonPrimitive(provider.name))
+            put("model", JsonPrimitive(model.name))
+            put("baseLocale", JsonPrimitive(baseLocale))
+            put("targetLocale", JsonPrimitive(targetLocale))
+            put("texts", buildJsonArray { stringWorkItems.forEach { add(JsonPrimitive(it.second)) } })
+            put("keys", buildJsonArray { stringWorkItems.forEach { add(JsonPrimitive(it.first)) } })
         }
+        inputFile.parentFile?.mkdirs()
+        inputFile.writeText(inputJson.toString())
 
-        // Wait for all workers to complete
-        workQueue.await()
+        // Run translation in a plain forked `java` process - see comment in run().
+        execOperations.javaexec { spec ->
+            spec.classpath = workerClasspath
+            spec.mainClass.set("org.multipaz.lokalize.worker.TranslationWorkerMainKt")
+            spec.args = listOf(inputFile.absolutePath, resultsFile.absolutePath)
+        }
 
         // Collect all translations from results files
         val allTranslations = mutableMapOf<String, String>()

@@ -21,6 +21,17 @@ import kotlin.time.Instant
 private const val TAG = "DocumentProvisioningHandler"
 
 /**
+ * Result of selecting a [SecureArea] and customizing [CreateKeySettings] for credential creation.
+ *
+ * @property secureArea the selected [SecureArea].
+ * @property createKeySettings the customized [CreateKeySettings].
+ */
+data class SelectedSecureArea(
+    val secureArea: SecureArea,
+    val createKeySettings: CreateKeySettings
+)
+
+/**
  * Implementation of [AbstractDocumentMetadataHandler] suitable for most uses.
  *
  * This implementation uses [DocumentUtil.managedCredentialHelper] with per-document settings
@@ -45,13 +56,39 @@ private const val TAG = "DocumentProvisioningHandler"
  *  provided if [DocumentStore] uses an [AbstractDocumentMetadata] factory (see
  *  [DocumentStore.Builder.setDocumentMetadataFactory]).
  * @param defaultDocumentProvisioningSettings the default [DocumentProvisioningSettings] to use.
+ * @param selectSecureArea optional lambda to select [SecureArea] and customize [CreateKeySettings]
+ *  based on `appData` and suggested key settings.
  */
 open class DocumentProvisioningHandler(
     val secureArea: SecureArea,
     val documentStore: DocumentStore,
     val metadataHandler: AbstractDocumentMetadataHandler? = null,
-    val defaultDocumentProvisioningSettings: DocumentProvisioningSettings = DocumentProvisioningSettings()
+    val defaultDocumentProvisioningSettings: DocumentProvisioningSettings = DocumentProvisioningSettings(),
+    val selectSecureArea: (suspend (
+        appData: ByteString?,
+        suggestedCreateKeySettings: CreateKeySettings
+    ) -> SelectedSecureArea)? = null
 ): AbstractDocumentProvisioningHandler {
+
+    /**
+     * Function to select [SecureArea] and customize [CreateKeySettings] for a document.
+     *
+     * The default implementation invokes [selectSecureArea] lambda if provided, or returns
+     * `SelectedSecureArea(this.secureArea, suggestedCreateKeySettings)`.
+     *
+     * Applications can override this method or pass a [selectSecureArea] lambda to the constructor.
+     *
+     * @param document the [Document] that credentials are being created for.
+     * @param suggestedCreateKeySettings suggested settings for creating the key.
+     * @return the [SelectedSecureArea] specifying the [SecureArea] and [CreateKeySettings] to use for key creation.
+     */
+    open suspend fun selectSecureArea(
+        document: Document,
+        suggestedCreateKeySettings: CreateKeySettings
+    ): SelectedSecureArea {
+        return selectSecureArea?.invoke(document.appData, suggestedCreateKeySettings)
+            ?: SelectedSecureArea(secureArea, suggestedCreateKeySettings)
+    }
 
     /**
      * Function to select which [DocumentProvisioningSettings] to use when provisioning.
@@ -66,14 +103,15 @@ open class DocumentProvisioningHandler(
      */
     open suspend fun getDocumentProvisioningSettings(
         document: Document,
-        credentialMetadata: CredentialMetadata,
-        issuerMetadata: ProvisioningMetadata
+        credentialMetadata: CredentialMetadata?,
+        issuerMetadata: ProvisioningMetadata?
     ): DocumentProvisioningSettings = defaultDocumentProvisioningSettings
 
     override suspend fun createDocument(
         credentialMetadata: CredentialMetadata,
         issuerMetadata: ProvisioningMetadata,
-        documentAuthorizationData: ByteString?
+        documentAuthorizationData: ByteString?,
+        appData: ByteString?
     ): Document =
         documentStore.createDocument(
             displayName = credentialMetadata.display.text,
@@ -81,6 +119,7 @@ open class DocumentProvisioningHandler(
             cardArt = credentialMetadata.display.logo,
             issuerLogo = issuerMetadata.display.logo,
             authorizationData = documentAuthorizationData,
+            appData = appData,
             metadata = metadataHandler?.initializeDocumentMetadata(
                 credentialDisplay = credentialMetadata.display,
                 issuerDisplay = issuerMetadata.display,
@@ -121,8 +160,9 @@ open class DocumentProvisioningHandler(
         pendingCredentials: List<Credential>,
         err: Throwable
     ) {
-        // Since we're using DocumentUtil.managedCredentialHelper() there is no need to clean up
-        // these pending credentials as they'll be reused the next time
+        for (credential in pendingCredentials) {
+            documentStore.lookupDocument(credential.document.identifier)?.deleteCredential(credential.identifier)
+        }
     }
 
     override suspend fun getPendingKeyBoundCredentials(
@@ -178,6 +218,10 @@ open class DocumentProvisioningHandler(
             validFrom = null,
             validUntil = null
         )
+        val (selectedSecureArea, finalCreateKeySettings) = selectSecureArea(
+            document = document,
+            suggestedCreateKeySettings = cks
+        )
         val domain = when (format) {
             is CredentialFormat.Mdoc -> if (userAuth) settings.mdocUserAuthDomain else settings.mdocNoUserAuthDomain
             is CredentialFormat.SdJwt -> if (userAuth) settings.sdJwtUserAuthDomain else settings.sdJwtNoUserAuthDomain
@@ -192,9 +236,9 @@ open class DocumentProvisioningHandler(
                             document = document,
                             asReplacementForIdentifier = credentialIdentifierToReplace,
                             domain = domain,
-                            secureArea = secureArea,
+                            secureArea = selectedSecureArea,
                             docType = format.docType,
-                            createKeySettings = cks
+                            createKeySettings = finalCreateKeySettings
                         )
                     }
 
@@ -203,9 +247,9 @@ open class DocumentProvisioningHandler(
                             document = document,
                             asReplacementForIdentifier = credentialIdentifierToReplace,
                             domain = domain,
-                            secureArea = secureArea,
+                            secureArea = selectedSecureArea,
                             vct = format.vct,
-                            createKeySettings = cks
+                            createKeySettings = finalCreateKeySettings
                         )
                     }
                 }
@@ -245,6 +289,45 @@ open class DocumentProvisioningHandler(
             dryRun = false
         )
         return document.getPendingCredentials()
+    }
+
+    override suspend fun haveCredentialsToRefresh(document: Document): Boolean {
+        if (!document.provisioned || document.getCredentials().isEmpty()) {
+            return true
+        }
+        val pending = document.getPendingCredentials()
+        if (pending.isNotEmpty()) {
+            return true
+        }
+        val settings = getDocumentProvisioningSettings(document, null, null)
+        val now = Clock.System.now()
+        val credentials = document.getCredentials()
+        val domains = credentials.map { it.domain }.toSet()
+        for (domain in domains) {
+            val certifiedInDomain = document.getCertifiedCredentialsForDomain(domain)
+            if (certifiedInDomain.isEmpty()) {
+                continue
+            }
+            val maxUses = if (domain == settings.sdJwtKeylessDomain) {
+                settings.keylessCredentialMaxUses
+            } else {
+                settings.keyBoundCredentialMaxUses
+            }
+            val count = DocumentUtil.managedCredentialHelper(
+                document = document,
+                domain = domain,
+                createCredential = null,
+                now = now,
+                numCredentials = certifiedInDomain.size,
+                maxUsesPerCredential = maxUses,
+                minValidTime = settings.minValidTime,
+                dryRun = true
+            )
+            if (count > 0) {
+                return true
+            }
+        }
+        return false
     }
 
     /**

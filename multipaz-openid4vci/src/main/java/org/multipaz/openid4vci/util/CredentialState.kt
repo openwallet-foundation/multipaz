@@ -262,6 +262,14 @@ class CredentialState(
             }
         }
 
+        fun identifierToIndex(identifier: ByteString): Int {
+            var value = 0
+            for (byte in identifier.toByteArray()) {
+                value = (value shl 8) or (byte.toInt() and 0xFF)
+            }
+            return value
+        }
+
         /**
          * Sets the credential status.
          *
@@ -321,7 +329,7 @@ class CredentialState(
 
         /** Inverse of [encodeIndexToKey] */
         private fun decodeKeyToIndex(key: String): Int {
-            check(key.substring(0, 1).toInt() + 1 == key.length)
+            check(key.take(1).toInt() + 1 == key.length)
             return key.substring(1).toInt(36)
         }
     }

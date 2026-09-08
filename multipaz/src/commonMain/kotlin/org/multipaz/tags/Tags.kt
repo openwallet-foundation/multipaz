@@ -63,12 +63,12 @@ class Tags(
     fun hasKey(key: String): Boolean = _tags.containsKey(key)
 
     /**
-     * Internal helper accessed by the inline functions below.
+     * Retrieves the raw [DataItem] for the given [key].
      *
-     * @PublishedApi makes this visible to the inlined code of the caller.
+     * @param key the name of the key to get.
+     * @return the raw [DataItem] or `null` if not found.
      */
-    @PublishedApi
-    internal fun getRawDataItem(key: String): DataItem? = _tags[key]
+    fun getRawDataItem(key: String): DataItem? = _tags[key]
 
     /**
      * Retrieves a scalar value for the given [key].
@@ -156,6 +156,18 @@ class Tags(
      * @returns the value or `null` if not found.
      */
     fun getByteString(key: String): ByteString? = getRawDataItem(key)?.asBstr?.let { ByteString(it) }
+
+    /**
+     * Convenience function to get a list of strings.
+     *
+     * @param key the name of the key to get.
+     * @returns the list of strings or `null` if not found.
+     */
+    fun getStringList(key: String): List<String>? {
+        val item = getRawDataItem(key) ?: return null
+        val array = try { item.asArray } catch (_: Exception) { return null }
+        return array.map { it.asTstr }
+    }
 
 
     // --- EDITING ---
@@ -286,5 +298,13 @@ class Tags(
          * @param value the value to set.
          */
         fun setByteString(key: String, value: ByteString) = set(key, value)
+
+        /**
+         * Convenience function to set a list of strings.
+         *
+         * @param key the name of the key to set.
+         * @param value the list of strings to set.
+         */
+        fun setStringList(key: String, value: List<String>) = setList(key, value)
     }
 }

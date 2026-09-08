@@ -5,28 +5,72 @@
 
 #include "base64.h"
 #include "cppbor_parse.h"
+#include "x509_aki.h"
 
 #include "Request.h"
 #include "logger.h"
 
 using namespace std;
 
-std::string base64UrlDecode(const std::string& data) {
-    size_t len = data.size();
-    std::string s = data;
-    if (data[len - 1] == '=') {
-        // already have padding
-    } else {
-        size_t rem = len & 3;
-        if (rem == 2) {
-            s = s + "==";
-        } else if (rem == 3) {
-            s = s + "=";
-        } else {
-            // no padding needed
+// Helper to extract AKIs from a COSE_Sign1 structure
+static void extractAkisFromCoseSign1(const cppbor::Item* coseSign1Item, std::vector<std::vector<uint8_t>>& outAkis) {
+    if (!coseSign1Item) return;
+    const cppbor::Array* arr = nullptr;
+    if (coseSign1Item->asSemanticTag() && coseSign1Item->asSemanticTag()->asArray()) {
+        arr = coseSign1Item->asSemanticTag()->asArray();
+    } else if (coseSign1Item->asArray()) {
+        arr = coseSign1Item->asArray();
+    }
+    if (!arr || arr->size() < 4) return;
+
+    auto extractFromMap = [&](const cppbor::Map* map) {
+        if (!map) return;
+        for (auto it = map->begin(); it != map->end(); ++it) {
+            bool isX5Chain = false;
+            if (it->first->asUint() && it->first->asUint()->value() == 33) {
+                isX5Chain = true;
+            } else if (it->first->asInt() && it->first->asInt()->value() == 33) {
+                isX5Chain = true;
+            }
+            if (isX5Chain) {
+                if (it->second->asBstr()) {
+                    const auto& bstrVal = it->second->asBstr()->value();
+                    std::vector<uint8_t> aki;
+                    if (x509::extractAkiFromDerCert(bstrVal.data(), bstrVal.size(), aki)) {
+                        outAkis.push_back(aki);
+                    }
+                } else if (it->second->asArray()) {
+                    auto chainArr = it->second->asArray();
+                    for (size_t c = 0; c < chainArr->size(); ++c) {
+                        const auto& certElem = chainArr->get(c);
+                        if (certElem && certElem->asBstr()) {
+                            const auto& bstrVal = certElem->asBstr()->value();
+                            std::vector<uint8_t> aki;
+                            if (x509::extractAkiFromDerCert(bstrVal.data(), bstrVal.size(), aki)) {
+                                outAkis.push_back(aki);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    // 1. Check unprotected header (arr->get(1))
+    if (arr->get(1) && arr->get(1)->asMap()) {
+        extractFromMap(arr->get(1)->asMap());
+    }
+
+    // 2. Check protected header (arr->get(0)) which is a bstr containing CBOR map
+    if (arr->get(0) && arr->get(0)->asBstr()) {
+        const auto& protBytes = arr->get(0)->asBstr()->value();
+        if (!protBytes.empty()) {
+            auto [parsedProt, pos, msg] = cppbor::parse(protBytes.data(), protBytes.size());
+            if (parsedProt && parsedProt->asMap()) {
+                extractFromMap(parsedProt->asMap());
+            }
         }
     }
-    return from_base64(s);
 }
 
 // Helper struct for generating permutations
@@ -83,6 +127,20 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
         return nullptr;
     }
 
+    std::string version = "1.0";
+    const auto& versionItem = map->get("version");
+    if (versionItem && versionItem->asTstr()) {
+        version = versionItem->asTstr()->value();
+    }
+    int major = 1;
+    int minor = 0;
+    bool isVersion10 = true;
+    if (sscanf(version.c_str(), "%d.%d", &major, &minor) >= 2) {
+        isVersion10 = (major < 1 || (major == 1 && minor < 1));
+    } else {
+        isVersion10 = (version == "1.0");
+    }
+
     // --- Parse DocRequests ---
     const auto& docRequestsArrayItem = map->get("docRequests");
     if (!docRequestsArrayItem || !docRequestsArrayItem->asArray()) {
@@ -91,12 +149,29 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
     }
     auto docRequestsArray = docRequestsArrayItem->asArray();
 
+    std::vector<std::vector<uint8_t>> topLevelReaderAkis;
+    if (!isVersion10) {
+        const auto& readerAuthAllItem = map->get("readerAuthAll");
+        if (readerAuthAllItem && readerAuthAllItem->asArray()) {
+            auto arr = readerAuthAllItem->asArray();
+            for (size_t k = 0; k < arr->size(); ++k) {
+                extractAkisFromCoseSign1(arr->get(k).get(), topLevelReaderAkis);
+            }
+        }
+    }
+
     std::vector<DcqlCredentialQuery> credentialQueries;
 
     for (size_t i = 0; i < docRequestsArray->size(); ++i) {
         const auto& docRequestItem = docRequestsArray->get(i);
         if (!docRequestItem || !docRequestItem->asMap()) continue;
         auto docRequestMap = docRequestItem->asMap();
+
+        std::vector<std::vector<uint8_t>> readerAuthAkis = topLevelReaderAkis;
+        const auto& readerAuthItem = docRequestMap->get("readerAuth");
+        if (readerAuthItem) {
+            extractAkisFromCoseSign1(readerAuthItem.get(), readerAuthAkis);
+        }
 
         const auto& itemsRequestItem = docRequestMap->get("itemsRequest");
         if (!itemsRequestItem) continue;
@@ -147,6 +222,7 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
         cppbor::Array* altDataElementsArray = nullptr;
         std::string docFormat = "mso_mdoc";
         std::map<std::string, std::vector<std::string>> dataElementIdentifierMapping;
+        std::vector<std::vector<uint8_t>> issuerIdentifiers;
 
         const auto& requestInfoItem = itemsRequestMap->get("requestInfo");
         if (requestInfoItem) {
@@ -158,6 +234,17 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
                 const auto& docFormatItem = riMap->get("docFormat");
                 if (docFormatItem && docFormatItem->asTstr()) {
                     docFormat = docFormatItem->asTstr()->value();
+                }
+
+                const auto& issuerIdentifiersItem = riMap->get("issuerIdentifiers");
+                if (issuerIdentifiersItem && issuerIdentifiersItem->asArray()) {
+                    auto arr = issuerIdentifiersItem->asArray();
+                    for (size_t k = 0; k < arr->size(); ++k) {
+                        const auto& elem = arr->get(k);
+                        if (elem && elem->asBstr()) {
+                            issuerIdentifiers.push_back(elem->asBstr()->value());
+                        }
+                    }
                 }
 
                 const auto& deimItem = riMap->get("dataElementIdentifierMapping");
@@ -341,7 +428,7 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
         std::string mdocDocType = "";
         std::vector<std::string> vctValues;
 
-        if (docFormat == "sd-jwt+kb") {
+        if (docFormat == "dc+sd-jwt") {
             format = "dc+sd-jwt";
             vctValues.push_back(docType);
         } else {
@@ -353,25 +440,30 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
                 format,
                 mdocDocType,
                 vctValues,
+                issuerIdentifiers,
+                readerAuthAkis,
                 dcqlClaims,
-                claimSets
+                claimSets,
+                isVersion10
         ));
     }
 
     // --- Parse DeviceRequestInfo (UseCases) ---
     std::vector<DcqlCredentialSetQuery> credentialSetQueries;
-    const auto& deviceRequestInfoItem = map->get("deviceRequestInfo");
 
     std::unique_ptr<cppbor::Item> drItem;
     cppbor::Map* drInfoMap = nullptr;
 
-    if (deviceRequestInfoItem) {
-        if (deviceRequestInfoItem->asSemanticTag()) {
-            auto innerBytes = deviceRequestInfoItem->asSemanticTag()->asBstr();
-            if (innerBytes) {
-                auto parseResult = cppbor::parse(innerBytes->value());
-                drItem = std::move(std::get<0>(parseResult));
-                if (drItem) drInfoMap = drItem->asMap();
+    if (!isVersion10) {
+        const auto& deviceRequestInfoItem = map->get("deviceRequestInfo");
+        if (deviceRequestInfoItem) {
+            if (deviceRequestInfoItem->asSemanticTag()) {
+                auto innerBytes = deviceRequestInfoItem->asSemanticTag()->asBstr();
+                if (innerBytes) {
+                    auto parseResult = cppbor::parse(innerBytes->value());
+                    drItem = std::move(std::get<0>(parseResult));
+                    if (drItem) drInfoMap = drItem->asMap();
+                }
             }
         }
     }
@@ -439,8 +531,8 @@ std::unique_ptr<MdocRequest> MdocRequest::parseMdocApi(const std::string& protoc
     return std::unique_ptr<MdocRequest> { new MdocRequest(protocolName, dcqlQuery) };
 }
 
-std::vector<Combination> MdocRequest::getCredentialCombinations(const CredentialDatabase* db) {
-    auto result = dcqlQuery.execute((CredentialDatabase*)db);
+std::vector<Combination> MdocRequest::getCredentialCombinations(const CredentialDatabase* db, const std::string& protocol) {
+    auto result = dcqlQuery.execute((CredentialDatabase*)db, protocol);
     if (result.has_value()) {
         return result.value().getCredentialCombinations();
     }
@@ -455,6 +547,8 @@ std::unique_ptr<OpenID4VPRequest> OpenID4VPRequest::parseOpenID4VP(cJSON* dataJs
     auto dcqlCredentialQueries = std::vector<DcqlCredentialQuery>();
     auto dcqlCredentialSetQueries = std::vector<DcqlCredentialSetQuery>();
 
+    std::vector<std::vector<uint8_t>> readerAuthAkis;
+
     cJSON* request = cJSON_GetObjectItem(dataJson, "request");
     if (request != nullptr) {
         std::string jwtStr = std::string(cJSON_GetStringValue(request));
@@ -466,13 +560,74 @@ std::unique_ptr<OpenID4VPRequest> OpenID4VPRequest::parseOpenID4VP(cJSON* dataJs
         if (secondDot == std::string::npos) {
             return nullptr;
         }
+
+        std::string headerBase64 = jwtStr.substr(0, firstDot);
+        std::string headerJsonStr = base64UrlDecode(headerBase64);
+        cJSON* headerJson = cJSON_Parse(headerJsonStr.c_str());
+        if (headerJson) {
+            cJSON* x5c = cJSON_GetObjectItem(headerJson, "x5c");
+            if (x5c && cJSON_IsArray(x5c)) {
+                cJSON* certObj;
+                cJSON_ArrayForEach(certObj, x5c) {
+                    if (cJSON_IsString(certObj)) {
+                        std::string certDer = base64UrlDecode(cJSON_GetStringValue(certObj));
+                        std::vector<uint8_t> aki;
+                        if (x509::extractAkiFromDerCert((const uint8_t*)certDer.data(), certDer.size(), aki)) {
+                            readerAuthAkis.push_back(aki);
+                        }
+                    }
+                }
+            }
+            cJSON_Delete(headerJson);
+        }
+
         std::string payloadBase64 = jwtStr.substr(firstDot + 1, secondDot - firstDot - 1);
         std::string payload = base64UrlDecode(payloadBase64);
         dataJson = cJSON_Parse(payload.c_str());
+    } else {
+        cJSON* signaturesItem = cJSON_GetObjectItem(dataJson, "signatures");
+        if (signaturesItem && cJSON_IsArray(signaturesItem)) {
+            cJSON* sig;
+            cJSON_ArrayForEach(sig, signaturesItem) {
+                cJSON* prot = cJSON_GetObjectItem(sig, "protected");
+                if (prot && cJSON_IsString(prot)) {
+                    std::string protJsonStr = base64UrlDecode(cJSON_GetStringValue(prot));
+                    cJSON* protJson = cJSON_Parse(protJsonStr.c_str());
+                    if (protJson) {
+                        cJSON* x5c = cJSON_GetObjectItem(protJson, "x5c");
+                        if (x5c && cJSON_IsArray(x5c)) {
+                            cJSON* certObj;
+                            cJSON_ArrayForEach(certObj, x5c) {
+                                if (cJSON_IsString(certObj)) {
+                                    std::string certDer = base64UrlDecode(cJSON_GetStringValue(certObj));
+                                    std::vector<uint8_t> aki;
+                                    if (x509::extractAkiFromDerCert((const uint8_t*)certDer.data(), certDer.size(), aki)) {
+                                        readerAuthAkis.push_back(aki);
+                                    }
+                                }
+                            }
+                        }
+                        cJSON_Delete(protJson);
+                    }
+                }
+            }
+        }
+
+        cJSON* payloadItem = cJSON_GetObjectItem(dataJson, "payload");
+        if (payloadItem != nullptr) {
+            std::string payloadBase64 = std::string(cJSON_GetStringValue(payloadItem));
+            std::string payload = base64UrlDecode(payloadBase64);
+            dataJson = cJSON_Parse(payload.c_str());
+        }
     }
 
     cJSON* query = cJSON_GetObjectItem(dataJson, "dcql_query");
     auto dcqlQuery = DcqlQuery::parse(query);
+    if (!readerAuthAkis.empty()) {
+        for (auto& cq : dcqlQuery.dcqlCredentialQueries) {
+            cq.readerAuthAkis = readerAuthAkis;
+        }
+    }
     // dcqlQuery.log();
 
     return std::unique_ptr<OpenID4VPRequest> { new OpenID4VPRequest(

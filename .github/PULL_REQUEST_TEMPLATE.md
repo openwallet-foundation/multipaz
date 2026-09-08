@@ -1,6 +1,6 @@
 Fixes #<issue_number_goes_here>
 
-> It's a good idea to open an issue first for discussion.
+> It is mandatory to create an issue before opening a PR!
 
 - [ ] Tests pass
 - [ ] Appropriate changes to README are included in PR

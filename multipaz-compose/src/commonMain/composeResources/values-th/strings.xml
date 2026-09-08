@@ -184,4 +184,26 @@
     <string name="trust_entry_rical_is_trust_anchor">จุดยึดความน่าเชื่อถือ</string>
     <string name="trust_entry_rical_is_trust_anchor_true">ใช่</string>
     <string name="trust_entry_rical_is_trust_anchor_false">ไม่</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s กำลังขอข้อมูลนี้ในนามของผู้ไม่ทราบฝ่าย:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">ข้อมูลนี้ถูกร้องขอในนามของผู้ไม่ทราบฝ่าย:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s กำลังขอข้อมูลนี้ในนามของ %2$s:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">ข้อมูลนี้ถูกร้องขอในนามของ %1$s:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s กำลังขอข้อมูลนี้ในนามของผู้ไม่ทราบฝ่ายที่จะจัดเก็บข้อมูลนี้:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">ข้อมูลนี้ถูกร้องขอในนามของผู้ไม่ทราบฝ่ายที่จะจัดเก็บข้อมูลนี้:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s กำลังขอข้อมูลนี้ในนามของ %2$s ผู้ที่จะจัดเก็บข้อมูลนี้:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">ข้อมูลนี้ถูกร้องขอในนามของ %1$s ผู้ที่จะจัดเก็บข้อมูลนี้:</string>
+    <string name="credential_presentment_select_option">เลือกสิ่งที่ต้องการแชร์</string>
+    <string name="credential_presentment_share_something_else">แชร์อย่างอื่น...</string>
+    <string name="credential_presentment_not_sharing_any_document">แชร์บางอย่าง…</string>
+    <string name="credential_presentment_dont_return_any_document">ไม่แชร์อะไรเลย</string>
+    <string name="credential_presentment_no_document_returned">ไม่มีเอกสารส่งคืน</string>
+    <string name="credential_presentment_transaction_data">รวมข้อมูลธุรกรรม:</string>
+    <string name="issuer_loading">กำลังโหลดข้อมูลเมตาของผู้ออก...</string>
+    <string name="issuer_loading_failed">การโหลดข้อมูลเมตาของผู้ออกล้มเหลว</string>
+    <string name="provisioning_select_credential">เลือกข้อมูลประจำตัวเพื่อจัดเตรียม:</string>
+    <string name="provisioning_cancel_button">ยกเลิกการจัดเตรียม</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">ป้อน PIN ที่คุณได้รับแจ้งก่อนหน้านี้</string>
+    <string name="provisioning_tx_code_fallback_prompt">ป้อนรหัสผ่านที่คุณได้รับแจ้งก่อนหน้านี้</string>
+    <string name="floating_item_heading_and_date_not_set">ไม่ได้ตั้งค่า</string>
+    <string name="floating_item_heading_and_date_time_not_set">ไม่ได้ตั้งค่า</string>
 </resources>

@@ -208,4 +208,26 @@
     <string name="trust_entry_rical_is_trust_anchor">עוגן אמון</string>
     <string name="trust_entry_rical_is_trust_anchor_true">כן</string>
     <string name="trust_entry_rical_is_trust_anchor_false">לא</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s מבקש את הנתונים האלה מטעם גורם לא ידוע:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">הנתונים האלה מתבקשים מטעם גורם לא ידוע:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s מבקש את הנתונים האלה מטעם %2$s:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">הנתונים האלה מתבקשים מטעם %1$s:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s מבקש את הנתונים האלה מטעם גורם לא ידוע שיאחסן אותם:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">הנתונים האלה מתבקשים מטעם גורם לא ידוע שיאחסן אותם:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s מבקש את הנתונים האלה מטעם %2$s שיאחסן אותם:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">הנתונים האלה מתבקשים מטעם %1$s שיאחסן אותם:</string>
+    <string name="credential_presentment_select_option">בחר מה לשתף</string>
+    <string name="credential_presentment_share_something_else">שתף משהו אחר…</string>
+    <string name="credential_presentment_not_sharing_any_document">שתף משהו…</string>
+    <string name="credential_presentment_dont_return_any_document">אל תשתף דבר</string>
+    <string name="credential_presentment_no_document_returned">לא הוחזר מסמך</string>
+    <string name="credential_presentment_transaction_data">כולל נתוני עסקה:</string>
+    <string name="issuer_loading">טוען מטא-דאטה של המנפיק...</string>
+    <string name="issuer_loading_failed">טעינת מטא-דאטה של המנפיק נכשלה</string>
+    <string name="provisioning_select_credential">בחר אישור להגדרה:</string>
+    <string name="provisioning_cancel_button">בטל הגדרה</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">הזן את קוד ה-PIN שנמסר לך בעבר</string>
+    <string name="provisioning_tx_code_fallback_prompt">הזן את מילת הקוד שנמסרה לך בעבר</string>
+    <string name="floating_item_heading_and_date_not_set">לא מוגדר</string>
+    <string name="floating_item_heading_and_date_time_not_set">לא מוגדר</string>
 </resources>

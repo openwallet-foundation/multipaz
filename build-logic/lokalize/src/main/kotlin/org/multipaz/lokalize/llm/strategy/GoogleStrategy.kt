@@ -13,14 +13,12 @@ class GoogleStrategy : ProviderStrategy {
     override val providerName: String = "Google"
 
     override fun resolveKoogModel(model: LLmModel): LLModel = when (model) {
-        LLmModel.GEMINI2_0_FLASH -> GoogleModels.Gemini2_0Flash
-        LLmModel.GEMINI2_0_FLASH_LITE -> GoogleModels.Gemini2_0FlashLite
         LLmModel.GEMINI2_5_PRO -> GoogleModels.Gemini2_5Pro
         LLmModel.GEMINI2_5_FLASH -> GoogleModels.Gemini2_5Flash
         LLmModel.GEMINI2_5_FLASH_LITE -> GoogleModels.Gemini2_5FlashLite
-        LLmModel.GEMINI3_PRO_PREVIEW -> GoogleModels.Gemini2_5Pro
-        LLmModel.GEMINI15FLASH -> GoogleModels.Gemini2_0Flash
-        else -> GoogleModels.Gemini2_0Flash
+        LLmModel.GEMINI3_PRO_PREVIEW -> GoogleModels.Gemini3_Pro_Preview
+        LLmModel.GEMINI3_FLASH_PREVIEW -> GoogleModels.Gemini3_Flash_Preview
+        else -> error("Unsupported Google model: $model")
     }
 
     override fun createExecutor(apiKey: String) = simpleGoogleAIExecutor(apiKey)

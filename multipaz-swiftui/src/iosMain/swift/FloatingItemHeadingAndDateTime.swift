@@ -9,12 +9,15 @@ public struct FloatingItemHeadingAndDateTime<ImageView: View, TrailingView: View
 
     /// The date and time to show or `nil`.
     public var dateTime: Date?
-    
+
+    /// Whether to show a right chevron icon on the right side.
+    public var showChevron: Bool
+
     private let text: String
-    
+
     /// The time zone to use.
     public var timeZone: Foundation.TimeZone
-    
+
     /// The style of formatting to apply.
     public var dateStyle: DateFormatter.Style
 
@@ -32,6 +35,7 @@ public struct FloatingItemHeadingAndDateTime<ImageView: View, TrailingView: View
     /// - Parameters:
     ///   - heading: The bold heading to display.
     ///   - dateTime: The date and time to display below the heading.
+    ///   - showChevron: Whether to show a right chevron icon on the right side. Defaults to `false`.
     ///   - timeZone: The time zone to use.
     ///   - dateStyle: The style of formatting to apply.
     ///   - timeStyle: The style of formatting to apply.
@@ -40,6 +44,7 @@ public struct FloatingItemHeadingAndDateTime<ImageView: View, TrailingView: View
     public init(
         heading: String,
         dateTime: Date?,
+        showChevron: Bool = false,
         timeZone: Foundation.TimeZone = TimeZone.current,
         dateStyle: DateFormatter.Style = .medium,
         timeStyle: DateFormatter.Style = .medium,
@@ -48,6 +53,7 @@ public struct FloatingItemHeadingAndDateTime<ImageView: View, TrailingView: View
     ) {
         self.heading = heading
         self.dateTime = dateTime
+        self.showChevron = showChevron
         self.timeZone = timeZone
         self.dateStyle = dateStyle
         self.timeStyle = timeStyle
@@ -69,6 +75,7 @@ public struct FloatingItemHeadingAndDateTime<ImageView: View, TrailingView: View
         FloatingItemHeadingAndText(
             heading: heading,
             text: text,
+            showChevron: showChevron,
             image: image,
             trailingContent: trailingContent
         )

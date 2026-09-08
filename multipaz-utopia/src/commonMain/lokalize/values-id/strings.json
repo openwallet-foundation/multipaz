@@ -183,5 +183,6 @@
   "cor_description_document_number": "Nomor untuk COR, yang ditentukan oleh Penyedia COR.",
   "cor_description_administrative_number": "Nomor yang ditentukan oleh Penyedia COR untuk kontrol audit atau tujuan lainnya.",
   "cor_description_issuing_jurisdiction": "Kode sub-divisi negara dari yurisdiksi yang menerbitkan COR, sebagaimana didefinisikan dalam ISO 3166-2:2020, Klausul 8. Bagian pertama kode HARUS sama dengan nilai untuk issuing_country.",
-  "cor_description_issuing_country": "Kode negara Alfa-2, sebagaimana didefinisikan dalam ISO 3166-1, dari negara atau wilayah otoritas penerbit"
+  "cor_description_issuing_country": "Kode negara Alfa-2, sebagaimana didefinisikan dalam ISO 3166-1, dari negara atau wilayah otoritas penerbit",
+  "payment_request_payment_sca_transaction": "SCA Pembayaran dengan transaksi pembayaran"
 }

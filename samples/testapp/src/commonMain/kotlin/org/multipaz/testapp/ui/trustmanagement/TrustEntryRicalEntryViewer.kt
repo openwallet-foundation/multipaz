@@ -1,0 +1,84 @@
+package org.multipaz.testapp.ui.trustmanagement
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import org.multipaz.compose.certificateviewer.X509CertViewer
+import org.multipaz.compose.items.FloatingItemHeadingAndText
+import org.multipaz.compose.items.FloatingItemList
+import org.multipaz.compose.trustmanagement.TrustEntryInfo
+import org.multipaz.compose.trustmanagement.TrustManagerModel
+import org.multipaz.trustmanagement.TrustEntryBasedTrustManager
+
+/**
+ * A Composable that displays the details of a specific individual certificate
+ * embedded within a larger RICAL trust entry.
+ *
+ * @param trustManagerModel A [TrustManagerModel].
+ * @param ricalTrustEntryId The identifier of the parent RICAL trust entry.
+ * @param certNum The index position of the specific certificate within the RICAL's certificate list.
+ */
+@Composable
+fun TrustEntryRicalEntryViewer(
+    trustManagerModel: TrustManagerModel,
+    ricalTrustEntryId: String,
+    certNum: Int
+) {
+    val info = trustManagerModel.trustManagerInfos.collectAsState().value?.find {
+        it.entry.identifier == ricalTrustEntryId
+    } ?: return
+
+    val rical = info.signedRical!!.rical
+    val ricalCertInfo = rical.certificateInfos[certNum]
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        ricalCertInfo.RenderIconWithFallback(size = 160.dp)
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = ricalCertInfo.displayNameWithFallback,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        FloatingItemList(
+            modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
+            title = "RICAL entry"
+        ) {
+            FloatingItemHeadingAndText(
+                heading = "Trust anchor",
+                text = if (ricalCertInfo.isTrustAnchor) {
+                    "Yes"
+                } else {
+                    "No"
+                }
+            )
+            if (ricalCertInfo.extensions.isNotEmpty()) {
+                ItemWithExtensions(
+                    heading = "Extensions",
+                    extensions = ricalCertInfo.extensions
+                )
+            }
+        }
+
+        X509CertViewer(certificate = ricalCertInfo.certificate)
+    }
+}

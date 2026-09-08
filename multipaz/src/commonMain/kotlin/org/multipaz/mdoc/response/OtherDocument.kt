@@ -21,7 +21,7 @@ private const val TAG = "OtherDocument"
 /**
  * A document in a [DeviceResponse] which isn't an ISO mdoc.
  *
- * @property docFormat the format of the document, e.g. "sd-jwt+kb".
+ * @property docFormat the format of the document, e.g. "dc+sd-jwt".
  * @property data the compressed data of the document, using the DEFLATE algorithm according
  * to [RFC 1951](https://www.ietf.org/rfc/rfc1951.txt).
  */
@@ -32,7 +32,7 @@ data class OtherDocument(
     /**
      * List of verified transaction data which was sent in the request
      */
-    lateinit var transactionData: List<TransactionData>
+    lateinit var transactionData: List<TransactionData<*>>
 
     internal fun toDataItem() = buildCborMap {
         put("docFormat", docFormat)
@@ -42,11 +42,11 @@ data class OtherDocument(
     internal suspend fun verify(
         sessionTranscript: DataItem,
         eReaderKey: AsymmetricKey?,
-        transactionData: List<TransactionData>,
+        transactionData: List<TransactionData<*>>,
         atTime: Instant,
     ) {
         when (docFormat) {
-            "sd-jwt+kb" -> verifySdJwtVc(
+            "dc+sd-jwt" -> verifySdJwtVc(
                 sessionTranscript = sessionTranscript,
                 eReaderKey = eReaderKey,
                 transactionData = transactionData,
@@ -58,7 +58,7 @@ data class OtherDocument(
     internal suspend fun verifySdJwtVc(
         sessionTranscript: DataItem,
         eReaderKey: AsymmetricKey?,
-        transactionData: List<TransactionData>,
+        transactionData: List<TransactionData<*>>,
         atTime: Instant,
     ) {
         val sdJwtKb = SdJwtKb.fromCompactSerialization(data.toByteArray().zlibInflate().decodeToString())

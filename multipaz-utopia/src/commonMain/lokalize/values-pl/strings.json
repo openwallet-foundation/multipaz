@@ -183,5 +183,6 @@
   "cor_description_document_number": "Numer dla COR, przypisany przez Dostawcę COR.",
   "cor_description_administrative_number": "Numer przypisany przez Dostawcę COR do kontroli audytowej lub innych celów.",
   "cor_description_issuing_jurisdiction": "Kod podziału administracyjnego kraju jurysdykcji, która wydała COR, zgodnie z definicją w ISO 3166-2:2020, klauzula 8. Pierwsza część kodu MUSI być taka sama jak wartość dla issuing_country.",
-  "cor_description_issuing_country": "Kod kraju Alpha-2, zgodnie z definicją w ISO 3166-1, kraju lub terytorium organu wydającego."
+  "cor_description_issuing_country": "Kod kraju Alpha-2, zgodnie z definicją w ISO 3166-1, kraju lub terytorium organu wydającego.",
+  "payment_request_payment_sca_transaction": "Płatność SCA z transakcją płatniczą"
 }

@@ -34,7 +34,11 @@ struct ConsentPromptDialog: View {
                 Consent(
                     consentData: data.state.parameters!.consentData,
                     requester: data.state.parameters!.requester,
-                    trustMetadata: data.state.parameters!.trustMetadata,
+                    trustedRequesterIdentity: data.state.parameters!.trustedRequesterIdentity,
+                    preselectedDocuments: data.state.parameters!.preselectedDocuments,
+                    onDocumentsInFocus: { documents in
+                        data.state.parameters!.onDocumentsInFocus(documents)
+                    },
                     onConfirm: { selection in
                         Task {
                             try await data.state.resultChannel.send(element: selection)

@@ -169,6 +169,12 @@ class DocumentModel private constructor(
         }
     }
 
+    /**
+     * The list of document IDs in their current display order.
+     */
+    val documentOrder: List<String>
+        get() = _documentInfos.value.map { it.document.identifier }
+
     private fun List<DocumentInfo>.sorted(): List<DocumentInfo> {
         return this.sortedWith { a, b ->
             val sa = storageData.sortingOrder[a.document.identifier]
@@ -177,9 +183,42 @@ class DocumentModel private constructor(
                 if (sa != sb) {
                     return@sortedWith sa.compareTo(sb)
                 }
+            } else if (sa != null) {
+                return@sortedWith -1
+            } else if (sb != null) {
+                return@sortedWith 1
             }
             return@sortedWith a.document.created.compareTo(b.document.created)
         }
+    }
+
+    /**
+     * Sets the ordering of documents in the model.
+     *
+     * Any documents in the store that are not included in [documentOrder] will be placed
+     * after the specified documents, maintaining their relative order.
+     *
+     * @param documentOrder the list of document IDs in the desired order.
+     */
+    suspend fun setDocumentOrder(documentOrder: List<String>) {
+        val newOrder = mutableListOf<String>()
+        val seen = mutableSetOf<String>()
+        for (id in documentOrder) {
+            if (seen.add(id)) {
+                newOrder.add(id)
+            }
+        }
+        for (docInfo in _documentInfos.value) {
+            if (seen.add(docInfo.document.identifier)) {
+                newOrder.add(docInfo.document.identifier)
+            }
+        }
+        val sortingOrder = newOrder.mapIndexed { index, id -> id to index }.toMap()
+        storageData.sortingOrder = sortingOrder
+        documentStore.getTags().edit {
+            set(documentOrderKey, ByteString(Cbor.encode(storageData.toDataItem())))
+        }
+        _documentInfos.value = _documentInfos.value.sorted()
     }
 
     /**
@@ -188,29 +227,22 @@ class DocumentModel private constructor(
      * @param documentInfo the [DocumentInfo] to set the position for.
      * @param position the new position, zero-based.
      * @throws IllegalArgumentException if [documentInfo] doesn't exist in the model or if [position]
-     *   exceed the number of documents in the store.
+     *   exceeds the number of documents in the store.
      */
     suspend fun setDocumentPosition(
         documentInfo: DocumentInfo,
         position: Int
     ) {
-        val documentInfos = _documentInfos.value.toMutableList()
-        if (!documentInfos.remove(documentInfo)) {
+        val currentOrder = documentOrder.toMutableList()
+        val id = documentInfo.document.identifier
+        if (!currentOrder.remove(id)) {
             throw IllegalArgumentException("Passed in documentInfo is not in list")
         }
-        documentInfos.add(
-            index = position,
-            element = documentInfo,
-        )
-        val sortingOrder = mutableMapOf<String, Int>()
-        documentInfos.forEachIndexed { index, documentInfo ->
-            sortingOrder.put(documentInfo.document.identifier, index)
+        if (position < 0 || position > currentOrder.size) {
+            throw IllegalArgumentException("Position $position is out of range 0..${currentOrder.size}")
         }
-        storageData.sortingOrder = sortingOrder
-        documentStore.getTags().edit {
-            set(documentOrderKey, ByteString(Cbor.encode(storageData.toDataItem())))
-        }
-        _documentInfos.value = documentInfos
+        currentOrder.add(position, id)
+        setDocumentOrder(currentOrder)
     }
 
     // Use a simple LRU cache to avoid decoding the same cardArt over and over again

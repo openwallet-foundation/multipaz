@@ -12,6 +12,20 @@ import org.multipaz.securearea.AndroidKeystoreSecureArea
 import multipazproject.samples.testapp.generated.resources.Res
 import multipazproject.samples.testapp.generated.resources.app_icon
 import multipazproject.samples.testapp.generated.resources.app_icon_red
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.multipaz.compose.notifications.NotificationManagerAndroid
 import org.multipaz.compose.prompt.PresentmentActivity
@@ -93,6 +107,28 @@ actual object TestAppConfiguration {
     fun getPendingIntentForLaunchingQuickAccessWallet(
         source: PresentmentSource,
         initiallySelectedDocumentId: String?,
+        onDocumentSelected: ((documentId: String?) -> Unit)? = { documentId ->
+            Logger.i(TAG, "Quick Access Wallet card selected: $documentId")
+        },
+        documentSelectedContent: (@Composable (documentId: String) -> Unit)? = @Composable { documentId ->
+            var dummyState by remember { mutableStateOf(true) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Example option for document",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1.0f)
+                )
+                Switch(
+                    checked = dummyState,
+                    onCheckedChange = { dummyState = it }
+                )
+            }
+        }
     ): PendingIntent {
         return PresentmentActivity.getPendingIntent(
             source = source,
@@ -113,7 +149,9 @@ actual object TestAppConfiguration {
                     /* flags = */ PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
             },
-            preferredService = ComponentName(applicationContext, TestAppCombinedNfcService::class.java)
+            preferredService = ComponentName(applicationContext, TestAppCombinedNfcService::class.java),
+            onDocumentSelected = onDocumentSelected,
+            documentSelectedContent = documentSelectedContent
         )
     }
 

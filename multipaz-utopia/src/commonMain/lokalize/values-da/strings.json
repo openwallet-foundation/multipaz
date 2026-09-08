@@ -183,5 +183,6 @@
   "cor_description_document_number": "Et nummer for COR'en, tildelt af COR-udbyderen.",
   "cor_description_administrative_number": "Et nummer tildelt af COR-udbyderen til revisionskontrol eller andre formål.",
   "cor_description_issuing_jurisdiction": "Landets underopdelingskode for den jurisdiktion, der udstedte COR'en, som defineret i ISO 3166-2:2020, Klausul 8. Den første del af koden SKAL være den samme som værdien for udstedelsesland.",
-  "cor_description_issuing_country": "Alpha-2 landekode, som defineret i ISO 3166-1, for den udstedende myndigheds land eller territorium"
+  "cor_description_issuing_country": "Alpha-2 landekode, som defineret i ISO 3166-1, for den udstedende myndigheds land eller territorium",
+  "payment_request_payment_sca_transaction": "SCA-godkendelse af betalingstransaktion"
 }

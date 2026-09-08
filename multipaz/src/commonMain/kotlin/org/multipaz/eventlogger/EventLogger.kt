@@ -22,8 +22,8 @@ interface EventLogger {
      * coroutine and thus not slow down a time-sensitive code such as credential presentment
      * where an external component is waiting for data to be returned.
      *
-     * @param event The [Event] to be recorded, note that [Event.identifier], [Event.timestamp],
-     * and [Event.appData] will be overwritten.
+     * @param event The [Event] to be recorded, note that [Event.identifier] and [Event.timestamp]
+     * will be overwritten, and [Event.appData] will be updated to include any injected application data.
      * @return A copy of the [Event] with assigned id, timestamp, and appData. Returns `null` if
      * the event was dropped.
      */

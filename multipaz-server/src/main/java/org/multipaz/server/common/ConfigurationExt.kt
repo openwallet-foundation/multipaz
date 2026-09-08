@@ -23,3 +23,19 @@ val Configuration.baseUrl: String get() = getValue("base_url")
  * from the `enrollment_server_url` setting. `null` if not configured.
  */
 val Configuration.enrollmentServerUrl: String? get() = getValue("enrollment_server_url")
+
+/**
+ * HTML injected immediately before the closing `</head>` tag of every HTML page served by
+ * [serveResources], from the `custom_head_html` setting. `null` if not configured.
+ *
+ * This allows a deployment to restyle or extend the built-in pages without forking their
+ * markup, for example:
+ *
+ * ```json
+ * "custom_head_html": "<link rel=\"stylesheet\" href=\"custom.css\">"
+ * ```
+ *
+ * Any asset referenced this way is served like every other static resource, so it must be
+ * present in the server's `www` resource folder.
+ */
+val Configuration.customHeadHtml: String? get() = getValue("custom_head_html")

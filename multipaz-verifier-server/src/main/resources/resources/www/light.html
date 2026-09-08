@@ -31,10 +31,8 @@
 </textarea>
 </label>
 </div>
-<div>
-<div>
-    <input type="checkbox" id="sign-request" checked="checked"/>
-    <label for="sign-request">Sign Request</label>
+<div id="signing">
+    <span>Request Signing:</span>
 </div>
 <div>
     <input type="checkbox" id="encrypt-response" checked="checked"/>
@@ -45,6 +43,11 @@ DC API Protocols:
 <label><input id="protocol_iso" type="checkbox" checked="checked"/>ISO 18013-7 Annex C</label>
 <br/>
 <label><input id="protocol_openid4vp" type="checkbox" checked="checked"/>OpenID4VP v1</label>
+</div>
+<div>
+<label>Issuer Identifiers (hex, comma separated):<br/>
+<input class="form-control" type="text" id="issuer_identifiers">
+</label>
 </div>
 <button onclick="run()">Submit</button>
 <div id="result">

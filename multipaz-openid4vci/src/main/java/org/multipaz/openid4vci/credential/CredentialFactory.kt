@@ -8,8 +8,8 @@ import org.multipaz.openid4vci.request.wellKnownOpenidCredentialIssuer
 import org.multipaz.openid4vci.util.CredentialId
 import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.server.enrollment.ServerIdentity
-import org.multipaz.server.enrollment.getServerIdentity
 import org.multipaz.rpc.backend.BackendEnvironment
+import org.multipaz.server.enrollment.getServerIdentityCertified
 
 /**
  * Factory for credentials of a particular type.
@@ -58,8 +58,8 @@ interface CredentialFactory {
      * Only X509-certified keys are supported
      */
     suspend fun getSigningKey(): AsymmetricKey.X509Certified =
-        getServerIdentity(ServerIdentity.CREDENTIAL_SIGNING)
-     // the key that is used to sign the credential
+        // the key that is used to sign the credential
+        getServerIdentityCertified(ServerIdentity.CREDENTIAL_SIGNING)
 
     /**
      * Initializes the factory and ensures that all the necessary resources are loaded

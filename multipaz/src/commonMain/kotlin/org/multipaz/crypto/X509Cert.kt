@@ -148,11 +148,12 @@ data class X509Cert(
     val authorityKeyIdentifier: ByteArray?
         get() {
             val extVal = getExtensionValue(OID.X509_EXTENSION_AUTHORITY_KEY_IDENTIFIER.oid) ?: return null
-            val seq = ASN1.decode(extVal) as ASN1Sequence
-            val taggedObject = seq.elements[0] as ASN1TaggedObject
+            val seq = ASN1.decode(extVal) as? ASN1Sequence ?: return null
+            val taggedObject = seq.elements
+                .filterIsInstance<ASN1TaggedObject>()
+                .firstOrNull { it.tag == 0 } ?: return null
             check(taggedObject.cls == ASN1TagClass.CONTEXT_SPECIFIC) { "Expected context-specific tag" }
             check(taggedObject.enc == ASN1Encoding.PRIMITIVE)
-            check(taggedObject.tag == 0) { "Expected tag 0" }
             // Note: tags in AuthorityKeyIdentifier are IMPLICIT b/c its definition appear in
             // the implicitly tagged ASN.1 module, see RFC 5280 Appendix A.2.
             //

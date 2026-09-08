@@ -183,5 +183,6 @@
   "cor_description_document_number": "Een nummer voor de COR, toegekend door de COR-provider.",
   "cor_description_administrative_number": "Een nummer toegekend door de COR-provider voor auditcontrole of andere doeleinden.",
   "cor_description_issuing_jurisdiction": "Code van landonderverdeling van de jurisdictie die de COR heeft uitgegeven, zoals gedefinieerd in ISO 3166-2:2020, Clausule 8. Het eerste deel van de code MOET overeenkomen met de waarde voor issuing_country.",
-  "cor_description_issuing_country": "Alpha-2-landcode, zoals gedefinieerd in ISO 3166-1, van het land of grondgebied van de uitgevende autoriteit"
+  "cor_description_issuing_country": "Alpha-2-landcode, zoals gedefinieerd in ISO 3166-1, van het land of grondgebied van de uitgevende autoriteit",
+  "payment_request_payment_sca_transaction": "Betalings-SCA met betalingstransactie"
 }

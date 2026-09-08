@@ -68,6 +68,7 @@ import org.multipaz.mdoc.request.buildDeviceRequestFromDcql
 import org.multipaz.mdoc.response.DeviceResponse
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
+import org.multipaz.mdoc.util.mdocVersionCompareTo
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.mdoc.zkp.longfellow.LongfellowZkSystem
@@ -83,7 +84,7 @@ import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.server.common.baseUrl
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.server.enrollment.ServerIdentity
-import org.multipaz.server.enrollment.getServerIdentity
+import org.multipaz.server.enrollment.getServerIdentityCertified
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.TrustManager
@@ -98,6 +99,7 @@ import org.multipaz.util.toBase64Url
 import org.multipaz.util.zlibInflate
 import org.multipaz.utopia.knowntypes.addUtopiaTypes
 import org.multipaz.verification.VerificationUtil
+import org.multipaz.verification.VerifierIdentity
 import java.net.URLEncoder
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
@@ -144,6 +146,14 @@ enum class Protocol {
     URI_SCHEME_ANNEX_A,
 }
 
+private fun parseIssuerIdentifiers(input: String?): List<ByteString> {
+    if (input.isNullOrBlank()) return emptyList()
+    return input.split(",")
+        .map { it.filterNot { c -> c.isWhitespace() } }
+        .filter { it.isNotEmpty() }
+        .map { it.fromHexByteString() }
+}
+
 @Serializable
 private data class OpenID4VPBeginRequest(
     val format: String,
@@ -157,6 +167,7 @@ private data class OpenID4VPBeginRequest(
     val scheme: String,
     val signRequest: Boolean,
     val encryptResponse: Boolean,
+    val issuerIdentifiers: String = "",
 )
 
 @Serializable
@@ -169,6 +180,8 @@ private data class AnnexABeginRequest(
     val protocol: String,
     val origin: String,
     val host: String,
+    val issuerIdentifiers: String = "",
+    val deviceRequestVersion: String? = null,
 )
 
 @Serializable
@@ -222,6 +235,8 @@ data class Session(
     val encryptionKey: EcPrivateKey,
     val signRequest: Boolean = true,
     val encryptResponse: Boolean = true,
+    val issuerIdentifiers: List<ByteString> = emptyList(),
+    val deviceRequestVersion: String? = null,
     var responseUri: String? = null,
     var deviceResponses: MutableList<ByteArray> = mutableListOf(),
     var verifiablePresentations: MutableList<String> = mutableListOf(),
@@ -274,6 +289,8 @@ private data class DCBeginRequest(
     val host: String,
     val signRequest: Boolean,
     val encryptResponse: Boolean,
+    val issuerIdentifiers: String = "",
+    val deviceRequestVersion: String? = null,
 )
 
 @Serializable
@@ -284,6 +301,7 @@ private data class DCBeginRawDcqlRequest(
     val host: String,
     val signRequest: Boolean,
     val encryptResponse: Boolean,
+    val issuerIdentifiers: String = "",
 )
 
 @Serializable
@@ -357,7 +375,7 @@ private suspend fun clientId(): String {
 }
 
 private suspend fun getReaderIdentity(): AsymmetricKey.X509Certified =
-    getServerIdentity(ServerIdentity.VERIFIER)
+    getServerIdentityCertified(ServerIdentity.VERIFIER)
 
 private suspend fun handleGetAvailableRequests(
     call: ApplicationCall,
@@ -445,6 +463,7 @@ private suspend fun handleDcBegin(
     }
 
     // Create a new session
+    val issuerIdentifiers = parseIssuerIdentifiers(request.issuerIdentifiers)
     val session = Session(
         nonce = ByteString(Random.Default.nextBytes(16)),
         origin = request.origin,
@@ -458,6 +477,8 @@ private suspend fun handleDcBegin(
         protocol = protocol,
         signRequest = request.signRequest,
         encryptResponse = request.encryptResponse,
+        issuerIdentifiers = issuerIdentifiers,
+        deviceRequestVersion = request.deviceRequestVersion,
     )
     val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
     val sessionId = verifierSessionTable.insert(
@@ -595,6 +616,7 @@ private suspend fun handleDcBeginRawDcql(
     Logger.i(TAG, "version $version")
 
     // Create a new session
+    val issuerIdentifiers = parseIssuerIdentifiers(request.issuerIdentifiers)
     val session = Session(
         nonce = ByteString(Random.Default.nextBytes(16)),
         origin = request.origin,
@@ -608,6 +630,7 @@ private suspend fun handleDcBeginRawDcql(
         protocol = protocol,
         signRequest = request.signRequest,
         encryptResponse = request.encryptResponse,
+        issuerIdentifiers = issuerIdentifiers,
     )
 
     val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
@@ -619,6 +642,9 @@ private suspend fun handleDcBeginRawDcql(
 
     val readerAuthKey = getReaderIdentity()
 
+    val rawDcqlJson = Json.decodeFromString(JsonObject.serializer(), request.rawDcql)
+    val dcqlToUse = VerificationUtil.injectIssuerIdentifiersIntoDcql(rawDcqlJson, session.issuerIdentifiers)
+
     val dcRequestString = calcDcRequestStringOpenID4VPforDCQL(
         version = version,
         session = session,
@@ -627,7 +653,7 @@ private suspend fun handleDcBeginRawDcql(
         readerAuthKey = readerAuthKey,
         signRequest = request.signRequest,
         encryptResponse = request.encryptResponse,
-        dcql = Json.decodeFromString(JsonObject.serializer(), request.rawDcql),
+        dcql = dcqlToUse,
         responseMode = OpenID4VP.ResponseMode.DC_API,
         responseUri = null
     )
@@ -935,6 +961,7 @@ private suspend fun handleAnnexABegin(
     val readerEngagementEncodedBase64 = Cbor.encode(readerEngagement.toDataItem()).toBase64Url()
 
     // Create a new session
+    val issuerIdentifiers = parseIssuerIdentifiers(request.issuerIdentifiers)
     val session = Session(
         nonce = ByteString(Random.Default.nextBytes(16)),
         origin = request.origin,
@@ -948,6 +975,8 @@ private suspend fun handleAnnexABegin(
         protocol = protocol,
         readerEngagementEncodedBase64 = readerEngagementEncodedBase64,
         annexAMessageCounter = 0,
+        issuerIdentifiers = issuerIdentifiers,
+        deviceRequestVersion = request.deviceRequestVersion,
     )
     val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
     verifierSessionTable.insert(
@@ -1022,7 +1051,9 @@ private suspend fun handleAnnexARequest(
             multiDocumentRequestId = session.multiDocumentRequestId,
             rawDcql = session.rawDcql,
             readerAuthKey = readerAuthKey,
-            sessionTranscript = sessionTranscript
+            sessionTranscript = sessionTranscript,
+            issuerIdentifiers = session.issuerIdentifiers,
+            deviceRequestVersion = session.deviceRequestVersion,
         )
 
         val sessionEncryption = SessionEncryption(
@@ -1146,6 +1177,7 @@ private suspend fun handleOpenID4VPBegin(
     }
 
     // Create a new session
+    val issuerIdentifiers = parseIssuerIdentifiers(request.issuerIdentifiers)
     val session = Session(
         nonce = ByteString(Random.Default.nextBytes(16)),
         origin = request.origin,
@@ -1159,6 +1191,7 @@ private suspend fun handleOpenID4VPBegin(
         protocol = protocol,
         signRequest = request.signRequest,
         encryptResponse = request.encryptResponse,
+        issuerIdentifiers = issuerIdentifiers,
     )
     val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
     val baseUrl = BackendEnvironment.getBaseUrl()
@@ -1629,7 +1662,7 @@ private suspend fun handleGetDataMdoc(
         }
         for (otherDocument in deviceResponse.otherDocuments) {
             lines.add(ResultLine("OtherDocument", otherDocument.docFormat))
-            if (otherDocument.docFormat == "sd-jwt+kb") {
+            if (otherDocument.docFormat == "dc+sd-jwt") {
                 val compactSerialization = otherDocument.data.toByteArray().zlibInflate().decodeToString()
                 handleGetDataAppendSdJwt(
                     compactSerialization = compactSerialization,
@@ -1805,7 +1838,8 @@ private suspend fun calcDcRequest(
                     origin,
                     readerKey,
                     readerPublicKey,
-                    readerAuthKey
+                    readerAuthKey,
+                    session.issuerIdentifiers
                 ),
                 dcRequestProtocol2 = null,
                 dcRequestString2 = null
@@ -1891,6 +1925,7 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
+                    session.issuerIdentifiers
                 ),
             )
         }
@@ -1924,6 +1959,7 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
+                    session.issuerIdentifiers
                 ),
             )
         }
@@ -1939,6 +1975,7 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
+                    session.issuerIdentifiers
                 ),
                 dcRequestProtocol2 = if (signRequest) "openid4vp-v1-signed" else "openid4vp-v1-unsigned",
                 dcRequestString2 = calcDcRequestStringOpenID4VP(
@@ -1972,6 +2009,7 @@ private suspend fun calcDcRequest(
                     readerKey,
                     readerPublicKey,
                     readerAuthKey,
+                    session.issuerIdentifiers
                 ),
                 dcRequestProtocol2 = "openid4vp",
                 dcRequestString2 = calcDcRequestStringOpenID4VP(
@@ -2013,14 +2051,21 @@ private suspend fun calcDcRequestNewRawDcql(
     signRequest: Boolean,
     encryptResponse: Boolean,
 ): DCBeginResponse {
+    val rawDcqlJson = Json.decodeFromString<JsonObject>(rawDcql)
+    val dcqlToUse = VerificationUtil.injectIssuerIdentifiersIntoDcql(rawDcqlJson, session.issuerIdentifiers)
     val request = VerificationUtil.generateDcRequestDcql(
         exchangeProtocols = exchangeProtocols,
-        dcql = Json.decodeFromString<JsonObject>(rawDcql),
+        dcql = dcqlToUse,
         nonce = nonce,
         origin = origin,
-        clientId = "x509_san_dns:${session.host}",
         responseEncryptionKey = if (encryptResponse) readerKey.publicKey else null,
-        readerAuthenticationKey = readerAuthKey,
+        verifierIdentities = listOf(
+            VerifierIdentity(
+                key = readerAuthKey,
+                clientId = "x509_san_dns:${session.host}"
+            )
+        ),
+        deviceRequestVersion = session.deviceRequestVersion
     )
 
     val dcRequestProtocol = request["requests"]!!.jsonArray[0].jsonObject["protocol"]!!.jsonPrimitive.content
@@ -2077,9 +2122,12 @@ private suspend fun calcDcRequestNew(
             claims = claims,
             nonce = nonce,
             origin = origin,
-            clientId = "x509_san_dns:${session.host}",
             responseEncryptionKey = if (encryptResponse) readerKey.publicKey else null,
-            readerAuthenticationKey = readerAuthKey
+            verifierIdentities = listOf(
+                VerifierIdentity(readerAuthKey, "x509_san_dns:${session.host}")
+            ),
+            issuerIdentifiers = session.issuerIdentifiers,
+            deviceRequestVersion = session.deviceRequestVersion
         )
     } else {
         val claims = mutableListOf<MdocRequestedClaim>()
@@ -2107,10 +2155,15 @@ private suspend fun calcDcRequestNew(
             claims = claims,
             nonce = nonce,
             origin = origin,
-            clientId = "x509_san_dns:${session.host}",
             responseEncryptionKey = if (encryptResponse) readerKey.publicKey else null,
-            readerAuthenticationKey = if (signRequest) readerAuthKey else null,
-            zkSystemSpecs = zkSystemSpecs
+            verifierIdentities = buildList {
+                if (signRequest) {
+                    add(VerifierIdentity(readerAuthKey, "x509_san_dns:${session.host}"))
+                }
+            },
+            zkSystemSpecs = zkSystemSpecs,
+            issuerIdentifiers = session.issuerIdentifiers,
+            deviceRequestVersion = session.deviceRequestVersion
         )
     }
     Logger.iJson(TAG, "request", request)
@@ -2149,13 +2202,12 @@ private suspend fun calcDcRequestStringOpenID4VPforDCQL(
     return OpenID4VP.generateRequest(
         version = version,
         origin = session.origin,
-        clientId = "x509_san_dns:${session.host}",
         nonce = nonce.toByteArray().toBase64Url(),
         responseEncryptionKey = if (encryptResponse) readerPublicKey else null,
-        requestSigningKey = if (signRequest) {
-            readerAuthKey
-        } else {
-            null
+        verifierIdentities = buildList {
+            if (signRequest) {
+                add(VerifierIdentity(readerAuthKey, "x509_san_dns:${session.host}"))
+            }
         },
         responseMode = responseMode,
         responseUri = responseUri,
@@ -2187,7 +2239,8 @@ private suspend fun calcDcRequestStringOpenID4VP(
     }
 
     val dcql = if (rawDcql != null) {
-        Json.decodeFromString<JsonObject>(rawDcql)
+        val rawDcqlJson = Json.decodeFromString<JsonObject>(rawDcql)
+        VerificationUtil.injectIssuerIdentifiersIntoDcql(rawDcqlJson, session.issuerIdentifiers)
     } else {
         require(request != null) { "request cannot be null" }
         buildJsonObject {
@@ -2203,6 +2256,18 @@ private suspend fun calcDcRequestStringOpenID4VP(
                                     add(JsonPrimitive(request.jsonRequest!!.vct))
                                 }
                             )
+                        }
+                        if (session.issuerIdentifiers.isNotEmpty()) {
+                            putJsonArray("trusted_authorities") {
+                                addJsonObject {
+                                    put("type", "aki")
+                                    putJsonArray("values") {
+                                        session.issuerIdentifiers.forEach { aki ->
+                                            add(JsonPrimitive(aki.toByteArray().toBase64Url()))
+                                        }
+                                    }
+                                }
+                            }
                         }
                         putJsonArray("claims") {
                             for (claim in request.jsonRequest!!.claimsToRequest) {
@@ -2234,6 +2299,18 @@ private suspend fun calcDcRequestStringOpenID4VP(
                                             spec.params.forEach { param ->
                                                 put(param.key, param.value.toJson())
                                             }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (session.issuerIdentifiers.isNotEmpty()) {
+                            putJsonArray("trusted_authorities") {
+                                addJsonObject {
+                                    put("type", "aki")
+                                    putJsonArray("values") {
+                                        session.issuerIdentifiers.forEach { aki ->
+                                            add(JsonPrimitive(aki.toByteArray().toBase64Url()))
                                         }
                                     }
                                 }
@@ -2278,7 +2355,8 @@ private suspend fun mdocCalcDcRequestStringMdocApi(
     origin: String,
     readerKey: EcPrivateKey,
     readerPublicKey: EcPublicKeyDoubleCoordinate,
-    readerAuthKey: AsymmetricKey.X509Certified
+    readerAuthKey: AsymmetricKey.X509Certified,
+    issuerIdentifiers: List<ByteString> = emptyList()
 ): String {
     val encryptionInfo = buildCborArray {
         add("dcapi")
@@ -2334,7 +2412,8 @@ private suspend fun mdocCalcDcRequestStringMdocApi(
             docType = request.mdocRequest!!.docType,
             nameSpaces = itemsToRequest,
             docRequestInfo = DocRequestInfo(
-                zkRequest = zkRequest
+                zkRequest = zkRequest,
+                issuerIdentifiers = issuerIdentifiers
             ),
             readerKey = readerAuthKey
         )
@@ -2356,8 +2435,11 @@ private suspend fun AnnexACalcRequest(
     multiDocumentRequestId: String,
     rawDcql: String,
     readerAuthKey: AsymmetricKey.X509Certified,
-    sessionTranscript: DataItem
+    sessionTranscript: DataItem,
+    issuerIdentifiers: List<ByteString> = emptyList(),
+    deviceRequestVersion: String? = null,
 ): DeviceRequest {
+    val isVersion10 = deviceRequestVersion != null && deviceRequestVersion.mdocVersionCompareTo("1.1") < 0
     if (requestId.isNotEmpty()) {
         val request = lookupWellknownRequest(requestFormat, requestDocType, requestId)
 
@@ -2383,17 +2465,21 @@ private suspend fun AnnexACalcRequest(
                 null
             }
             return buildDeviceRequest(
-                sessionTranscript = sessionTranscript
+                sessionTranscript = sessionTranscript,
+                version = deviceRequestVersion,
             ) {
                 addDocRequest(
                     docType = request.mdocRequest!!.docType,
                     nameSpaces = itemsToRequest,
-                    docRequestInfo = DocRequestInfo(
-                        zkRequest = zkRequest
+                    docRequestInfo = if (isVersion10) null else DocRequestInfo(
+                        zkRequest = zkRequest,
+                        issuerIdentifiers = issuerIdentifiers
                     ),
                     readerKey = readerAuthKey
                 )
-                addReaderAuthAll(readerKey = readerAuthKey)
+                if (!isVersion10) {
+                    addReaderAuthAll(readerKey = readerAuthKey)
+                }
             }
         } else {
             check(requestFormat == "vc") { "unexpected request format $requestFormat" }
@@ -2411,18 +2497,22 @@ private suspend fun AnnexACalcRequest(
                 mapping[dataElementName] = JsonArray(path)
             }
             return buildDeviceRequest(
-                sessionTranscript = sessionTranscript
+                sessionTranscript = sessionTranscript,
+                version = deviceRequestVersion,
             ) {
                 addDocRequest(
                     docType = request.jsonRequest!!.vct,
                     nameSpaces = mapOf("_" to claimsToRequest),
-                    docRequestInfo = DocRequestInfo(
-                        docFormat = "sd-jwt+kb",
-                        dataElementIdentifierMapping = mapping
+                    docRequestInfo = if (isVersion10) null else DocRequestInfo(
+                        docFormat = "dc+sd-jwt",
+                        dataElementIdentifierMapping = mapping,
+                        issuerIdentifiers = issuerIdentifiers
                     ),
                     readerKey = readerAuthKey
                 )
-                addReaderAuthAll(readerKey = readerAuthKey)
+                if (!isVersion10) {
+                    addReaderAuthAll(readerKey = readerAuthKey)
+                }
             }
         }
     } else {
@@ -2431,11 +2521,18 @@ private suspend fun AnnexACalcRequest(
         } else {
             rawDcql
         }
+        val dcqlJson = VerificationUtil.injectIssuerIdentifiersIntoDcql(
+            Json.decodeFromString<JsonObject>(dcql),
+            issuerIdentifiers
+        )
         return buildDeviceRequestFromDcql(
-            dcql = Json.decodeFromString<JsonObject>(dcql),
-            sessionTranscript = sessionTranscript
+            dcql = dcqlJson,
+            sessionTranscript = sessionTranscript,
+            version = deviceRequestVersion,
         ) {
-            addReaderAuthAll(readerKey = readerAuthKey)
+            if (!isVersion10) {
+                addReaderAuthAll(readerKey = readerAuthKey)
+            }
         }
     }
 }

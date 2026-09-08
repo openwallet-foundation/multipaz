@@ -15,7 +15,7 @@ import Multipaz
 func getPresentmentSource() async -> PresentmentSource {
     let storage = IosStorage(
         storageFileUrl: FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: "group.org.multipaz.SwiftTestApp")!
+            forSecurityApplicationGroupIdentifier: Bundle.main.object(forInfoDictionaryKey: "AppGroupID") as! String)!
             .appendingPathComponent("storage.db"),
         excludeFromBackup: true
     )
@@ -48,21 +48,26 @@ func getPresentmentSource() async -> PresentmentSource {
         documentTypeRepository: documentTypeRepository,
         zkSystemRepository: zkSystemRepository,
         resolveTrustFn: { requester in
-            if let certChain = requester.certChain {
+            for requesterIdentity in requester.requesterIdentities {
+                let certChain = requesterIdentity.certChain
                 let result = try! await readerTrustManager.verify(
                     chain: certChain.certificates,
-                    atTime: KotlinClockCompanion().getSystem().now()
+                    atTime: KotlinClockCompanion().getSystem().now(),
+                    validateCaValidity: true
                 )
-                if result.isTrusted {
-                    return result.trustPoints.first?.metadata
+                if result.isTrusted && result.trustPoints.first != nil {
+                    return TrustedRequesterIdentity(
+                        identity: requesterIdentity,
+                        trustMetadata: result.trustPoints.first!.metadata
+                    )
                 }
             }
             return nil
         },
-        showConsentPromptFn: { requester, trustMetadata, consentData, preselectedDocuments, onDocumentsInFocus in
+        showConsentPromptFn: { requester, trustedRequesterIdentity, consentData, preselectedDocuments, onDocumentsInFocus in
             try! await promptModelSilentConsent(
                 requester: requester,
-                trustMetadata: trustMetadata,
+                trustedRequesterIdentity: trustedRequesterIdentity,
                 consentData: consentData,
                 preselectedDocuments: preselectedDocuments,
                 onDocumentsInFocus: { documents in onDocumentsInFocus(documents) }
@@ -91,6 +96,20 @@ struct DocumentProviderExtension: IdentityDocumentProvider {
     }
 
     func performRegistrationUpdates() async {
-        
+        print("In performRegistrationUpdates()")
+        let source = await getPresentmentSource()
+        let dcApi = try! await DigitalCredentialsCompanion.shared.getDefault()
+        if dcApi.registerAvailable {
+            do {
+                try await dcApi.register(
+                    documentStore: source.documentStore,
+                    documentTypeRepository: source.documentTypeRepository,
+                    selectedProtocols: dcApi.supportedProtocols,
+                    forceRegistration: true
+                )
+            } catch {
+                print("Error registering with DigitalCredentials API: \(error)")
+            }
+        }
     }
 }

@@ -77,6 +77,7 @@ tasks.register("buildAll") {
 fun getContainerTool(): String {
     return if (file("/usr/bin/podman").exists() ||
         file("/usr/local/bin/podman").exists() ||
+        file("/opt/podman/bin/podman").exists() ||
         file("/opt/homebrew/bin/podman").exists()) {
         "podman"
     } else {

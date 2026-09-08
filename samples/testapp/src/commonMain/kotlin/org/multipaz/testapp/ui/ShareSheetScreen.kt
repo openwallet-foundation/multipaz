@@ -50,14 +50,14 @@ fun ShareSheetScreen(
                         val now = Clock.System.now()
                         val shareManager = ShareManager()
                         shareManager.shareDocument(
-                            content = Res.readBytes("files/utopia-brewery.png"),
+                            content = Res.readBytes("files/utopia-marketplace.png"),
                             filename = "test-image.png",
                             mimeType = "image/png",
                             title = "Test sharing of image/png"
                         )
                     }
                 },
-                content = { Text("Share Utopia Brewery image (image/png)") }
+                content = { Text("Share Utopia Marketplace image (image/png)") }
             )
         }
     }

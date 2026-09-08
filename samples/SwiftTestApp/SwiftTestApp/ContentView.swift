@@ -27,7 +27,8 @@ struct ContentView: View {
                 case .aboutScreen: AboutScreen()
                 case .documentStoreScreen: DocumentStoreScreen()
                 case .documentScreen(let documentId): DocumentScreen(documentId: documentId)
-                case .verticalCardListScreen(let focusedDocumentId): VerticalCardListScreen(focusedDocumentId: focusedDocumentId)
+                case .verticalCardListScreen(let focusedDocumentId, let animateListTransitions):
+                    VerticalCardListScreen(focusedDocumentId: focusedDocumentId, animateListTransitions: animateListTransitions)
                 case .credentialScreen(documentId: let documentId, credentialId: let credentialId):
                     CredentialScreen(documentId: documentId, credentialId: credentialId)
                 case .claimsScreen(documentId: let documentId, credentialId: let credentialId):
@@ -102,7 +103,8 @@ struct ContentView: View {
                     viewModel.provisioningModel.launchOpenID4VCIProvisioning(
                         offerUri: url.absoluteString,
                         clientPreferences: viewModel.provisioningSupport.getOpenID4VCIClientPreferences(),
-                        backend: viewModel.provisioningSupport.getOpenID4VCIBackend()
+                        backend: viewModel.provisioningSupport.getOpenID4VCIBackend(),
+                        appData: nil
                     )
                 }
             } else {
@@ -125,7 +127,7 @@ struct ContentView: View {
             do {
                 let fileData = try Data(contentsOf: url)
                 let dataItem = try Cbor.shared.decode(encodedCbor: fileData.toByteArray())
-                let mpzPass = try await MpzPass.companion.fromDataItem(dataItem: dataItem)
+                let mpzPass = try await MpzPass.companion.fromDataItem(dataItem: dataItem, disableSignatureVerification: false)
                 let document = try await viewModel.documentStore.importMpzPass(
                     mpzPass: mpzPass,
                     isoMdocDomain: "mdoc",

@@ -90,14 +90,19 @@ class ProvisioningModel(
      * @param offerUri credential offer (formatted as URI with custom protocol name)
      * @param clientPreferences configuration parameters for OpenID4VCI client
      * @param backend interface to the wallet back-end service
+     * @param appData optional application-specific data to store with the document
      * @return deferred [Document] value
      */
     fun launchOpenID4VCIProvisioning(
         offerUri: String,
         clientPreferences: OpenID4VCIClientPreferences,
         backend: OpenID4VCIBackend,
+        appData: ByteString? = null,
     ): Deferred<Document> =
-        launch(createCoroutineContext(clientPreferences, backend)) {
+        launch(
+            coroutineContext = createCoroutineContext(clientPreferences, backend),
+            appData = appData
+        ) {
             targetDocument = null
             OpenID4VCI.createClientFromOffer(offerUri, clientPreferences)
         }
@@ -110,6 +115,7 @@ class ProvisioningModel(
      * @param credentialId credential configuration id
      * @param clientPreferences configuration parameters for OpenID4VCI client
      * @param backend interface to the wallet back-end service
+     * @param appData optional application-specific data to store with the document
      * @return deferred [Document] value
      */
     fun launchOpenID4VCIProvisioning(
@@ -117,8 +123,12 @@ class ProvisioningModel(
         credentialId: String,
         clientPreferences: OpenID4VCIClientPreferences,
         backend: OpenID4VCIBackend,
+        appData: ByteString? = null,
     ): Deferred<Document> =
-        launch(createCoroutineContext(clientPreferences, backend)) {
+        launch(
+            coroutineContext = createCoroutineContext(clientPreferences, backend),
+            appData = appData
+        ) {
             targetDocument = null
             OpenID4VCI.createClientCredentialId(issuerUrl, credentialId, clientPreferences)
         }
@@ -150,16 +160,19 @@ class ProvisioningModel(
      *
      * Note that this bypasses the model and throws an exception if something goes wrong.
      *
+     * It is guaranteed that no network I/O to the issuer will be performed unless there are credentials
+     * that actually need to be fetched (as determined by
+     * [AbstractDocumentProvisioningHandler.haveCredentialsToRefresh]).
+     *
      * @param document [Document] where credentials should be provisioned
      * @param authorizationData authorization data from a previous provisioning session (see
      *  [DocumentProvisioningHandler.AbstractDocumentMetadataHandler.updateDocumentMetadata]
      *  `authorizationData` parameter)
      * @param clientPreferences configuration parameters for OpenID4VCI client
      * @param backend interface to the wallet back-end service
-     * @return deferred [Document] value, resolved when credentials are provisioned
+     * @return number of credentials fetched
      * @throws Exception if an error occurred
      */
-    // TODO: be more specific with what exceptions are thrown
     @Throws(
         CancellationException::class,
         Exception::class
@@ -170,6 +183,9 @@ class ProvisioningModel(
         clientPreferences: OpenID4VCIClientPreferences,
         backend: OpenID4VCIBackend,
     ): Int {
+        if (!documentProvisioningHandler.haveCredentialsToRefresh(document)) {
+            return 0
+        }
         val numCredentialsFetched = CoroutineScope(createCoroutineContext(clientPreferences, backend)).async {
             val provisioningClient = Provisioning.createClientFromAuthorizationData(authorizationData)
             requestCredentials(
@@ -189,12 +205,14 @@ class ProvisioningModel(
      * @param coroutineContext coroutine context to run [ProvisioningClient] in
      * @param document if null, this is an initial provisioning, if not null, provision more
      *  credentials into the given document
+     * @param appData optional application-specific data to store with the document (used if [document] is null)
      * @param provisioningClientFactory function that creates [ProvisioningClient]
      * @return deferred [Document] value
      */
     fun launch(
         coroutineContext: CoroutineContext,
         document: Document? = null,
+        appData: ByteString? = null,
         provisioningClientFactory: suspend () -> ProvisioningClient
     ): Deferred<Document> {
         if (isActive) {
@@ -223,6 +241,7 @@ class ProvisioningModel(
                     provisioningClient = provisioningClient,
                     targetDocument = targetDocument,
                     documentProvisioningHandler = documentProvisioningHandler,
+                    appData = appData,
                     eventLogger = eventLogger,
                     onRequestingCredentials = {
                         mutableState.emit(RequestingCredentials)
@@ -394,6 +413,7 @@ class ProvisioningModel(
  * @param provisioningClient a [ProvisioningClient]
  * @param targetDocument the document to request credentials for or `null`.
  * @param documentProvisioningHandler a [AbstractDocumentProvisioningHandler].
+ * @param appData optional application-specific data to store with the document (used if [targetDocument] is null).
  * @param onRequestingCredentials called when requesting credentials.
  * @return the [Document] (either newly created or [targetDocument] if not null) and how many credentials were fetched.
  */
@@ -401,6 +421,7 @@ private suspend fun requestCredentials(
     provisioningClient: ProvisioningClient,
     targetDocument: Document?,
     documentProvisioningHandler: AbstractDocumentProvisioningHandler,
+    appData: ByteString? = null,
     eventLogger: EventLogger?,
     onRequestingCredentials: suspend () -> Unit = {},
 ): Pair<Document, Int> {
@@ -412,7 +433,8 @@ private suspend fun requestCredentials(
         documentProvisioningHandler.createDocument(
             credentialConfig,
             issuerMetadata,
-            documentAuthorizationData
+            documentAuthorizationData,
+            appData
         )
     }
 

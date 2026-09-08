@@ -25,6 +25,7 @@ import org.multipaz.claim.MdocClaim
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.cose.CoseSign1
+import org.multipaz.cose.toCoseLabel
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
@@ -301,22 +302,25 @@ class MdocCredential : SecureAreaBoundCredential {
      * Convenience property for accessing the X.509 certificate chain for the issuer signature from [issuerAuth].
      */
     val issuerCertChain: X509CertChain by lazy {
-        issuerAuth.unprotectedHeaders[
-            CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)
-        ]!!.asX509CertChain
+        (issuerAuth.protectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
+            ?: issuerAuth.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel])!!.asX509CertChain
     }
 
     override suspend fun exportToMpzPass(keyUnlockData: KeyUnlockData?): MpzPass {
         check(secureArea is SoftwareSecureArea) {
             "You can only export a credential if it's using a SoftwareSecureArea"
         }
-        val deviceKeyPrivate = (secureArea as SoftwareSecureArea).getPrivateKey(alias, keyUnlockData)
+        val swSecureArea = secureArea as SoftwareSecureArea
+        val keyInfo = swSecureArea.getKeyInfo(alias)
+        val deviceKeyPrivate = swSecureArea.getPrivateKey(alias, keyUnlockData)
         val issuerNamespaces = IssuerNamespaces.fromDataItem(issuerSigned["nameSpaces"])
         val issuerAuth = issuerSigned["issuerAuth"].asCoseSign1
         return MpzPass(
             name = document.displayName,
             typeName = document.typeDisplayName,
             cardArt = document.cardArt,
+            userAuthenticationRequired = keyInfo.isUserAuthenticationRequired,
+            readerIdentifiers = document.readerIdentifiers,
             isoMdoc = listOf(MpzPassIsoMdoc(
                 docType = docType,
                 deviceKeyPrivate = deviceKeyPrivate,

@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -80,11 +81,26 @@ import org.multipaz.eventlogger.EventPresentmentUriSchemeOpenID4VP
 import org.multipaz.eventlogger.EventProvisioning
 import org.multipaz.eventlogger.EventProvisioningIssuerDataOpenID4VCI
 import org.multipaz.eventlogger.EventSimple
+import org.multipaz.eventlogger.EventVerification
+import org.multipaz.eventlogger.EventVerificationDigitalCredentials
+import org.multipaz.eventlogger.EventVerificationIso18013Proximity
 import org.multipaz.eventlogger.SimpleEventLogger
 import org.multipaz.eventlogger.toDataItem
+import org.multipaz.mdoc.engagement.EngagementType
 import org.multipaz.prompt.PromptModel
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.RequestedClaim
+import org.multipaz.verification.MdocVerifiedPresentation
+import org.multipaz.verification.JsonVerifiedPresentation
+import org.multipaz.verification.VerifiedPresentation
+import org.multipaz.verification.Iso18013PresentmentRecord
+import org.multipaz.verification.OpenID4VPPresentmentRecord
+import org.multipaz.compose.getOutlinedImageVector
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.text.font.FontFamily
+import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlin.time.Clock
 
 @OptIn(ExperimentalMaterial3Api::class, FormatStringsInDatetimeFormats::class)
@@ -164,8 +180,6 @@ fun EventViewerScreen(
                             coroutineScope.launch {
                                 val event = eventLogger.getEvents().find { it.identifier == eventId }
                                 if (event != null) {
-                                    // For TestApp, just do a text file for now. In the future we might define
-                                    // a binary format and provide tools for offline analysis.
                                     val format = DateTimeComponents.Format {
                                         byUnicodePattern("yyyyMMdd-HHmmss")
                                     }
@@ -173,15 +187,15 @@ fun EventViewerScreen(
                                         format = format,
                                         offset = TimeZone.currentSystemDefault().offsetAt(Clock.System.now())
                                     )
+                                    val eventDataItem = event.toDataItem()
+                                    val type = eventDataItem["type"].asTstr
+                                    val eventBytes = Cbor.encode(eventDataItem)
                                     val shareManager = ShareManager()
                                     shareManager.shareDocument(
-                                        content = Cbor.toDiagnostics(
-                                            item = event.toDataItem(),
-                                            options = setOf(DiagnosticOption.PRETTY_PRINT, DiagnosticOption.EMBEDDED_CBOR)
-                                        ).encodeToByteArray(),
-                                        filename = "mpztestapp-event-${timeStampString}.txt",
-                                        mimeType = "text/plain",
-                                        title = "Multipaz TestApp Event recorded ${event.timestamp}"
+                                        content = eventBytes,
+                                        filename = "mpztestapp-Event-${type}-${timeStampString}.mpzevent",
+                                        mimeType = "application/vnd.multipaz.mpzevent",
+                                        title = "Multipaz Event for ${type} recorded at ${event.timestamp}"
                                     )
                                 }
                             }
@@ -261,6 +275,17 @@ private fun EventViewer(
         }
         is EventProvisioning -> {
             EventViewerProvisioning(
+                event = event,
+                documentTypeRepository = documentTypeRepository,
+                documentModel = documentModel,
+                imageLoader = imageLoader,
+                onViewCertificateChain = onViewCertificateChain,
+                timeZone = timeZone,
+                modifier = modifier
+            )
+        }
+        is EventVerification -> {
+            EventViewerVerification(
                 event = event,
                 documentTypeRepository = documentTypeRepository,
                 documentModel = documentModel,
@@ -599,5 +624,281 @@ private fun ExtractClaimsItems(
                 )
             }
         )
+    }
+}
+
+@Composable
+private fun EventViewerVerification(
+    event: EventVerification,
+    documentTypeRepository: DocumentTypeRepository,
+    documentModel: DocumentModel,
+    imageLoader: ImageLoader,
+    onViewCertificateChain: (certChain: X509CertChain) -> Unit,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    modifier: Modifier = Modifier
+) {
+    val eventDateTime = event.timestamp.toLocalDateTime(timeZone = timeZone)
+    val eventDateTimeString = eventDateTime.formatLocalized(
+        dateStyle = FormatStyle.LONG,
+        timeStyle = FormatStyle.LONG
+    )
+
+    val protocol = when (event.presentmentRecord) {
+        is Iso18013PresentmentRecord -> "ISO 18013-5 mdoc presentment"
+        is OpenID4VPPresentmentRecord -> "OpenID4VP presentation"
+    }
+
+    var verifiedPresentations by remember { mutableStateOf<List<VerifiedPresentation>?>(null) }
+    var verificationError by remember { mutableStateOf<Throwable?>(null) }
+    var jsonDialogTitle by remember { mutableStateOf<String?>(null) }
+    var jsonDialogContent by remember { mutableStateOf<String?>(null) }
+
+    if (jsonDialogTitle != null && jsonDialogContent != null) {
+        AlertDialog(
+            onDismissRequest = {
+                jsonDialogTitle = null
+                jsonDialogContent = null
+            },
+            title = { Text(text = jsonDialogTitle!!) },
+            text = {
+                val scrollState = rememberScrollState()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState)
+                ) {
+                    Text(
+                        text = jsonDialogContent!!,
+                        fontFamily = FontFamily.Monospace,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        jsonDialogTitle = null
+                        jsonDialogContent = null
+                    }
+                ) {
+                    Text(text = "Close")
+                }
+            }
+        )
+    }
+
+    LaunchedEffect(event) {
+        try {
+            verifiedPresentations = event.presentmentRecord.verify(
+                atTime = event.timestamp,
+                documentTypeRepository = documentTypeRepository
+            )
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            verificationError = t
+        }
+    }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        val imageSize = 80.dp
+        Icon(
+            imageVector = org.multipaz.documenttype.Icon.BADGE.getOutlinedImageVector(),
+            contentDescription = null,
+            modifier = Modifier.size(imageSize)
+        )
+
+        Text(
+            text = "Verification Result",
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+
+        FloatingItemList(
+            modifier = Modifier.padding(top = 10.dp, bottom = 20.dp)
+        ) {
+            FloatingItemHeadingAndText(
+                heading = "Date and time",
+                text = eventDateTimeString
+            )
+
+            when (event) {
+                is EventVerificationDigitalCredentials -> {
+                    OriginAndAppIdItem(event.origin, event.appId)
+                    FloatingItemHeadingAndText(
+                        heading = "Presentment protocol",
+                        text = protocol
+                    )
+                    event.durationRequestSentToResponseReceived?.let {
+                        FloatingItemHeadingAndText(
+                            heading = "Latency",
+                            text = "${it.inWholeMilliseconds} ms"
+                        )
+                    }
+                    FloatingItemHeadingAndText(
+                        heading = "Request JSON",
+                        text = "Click to view",
+                        modifier = Modifier.clickable {
+                            jsonDialogTitle = "Request JSON"
+                            jsonDialogContent = formatJson(event.requestJson)
+                        }
+                    )
+                    FloatingItemHeadingAndText(
+                        heading = "Response JSON",
+                        text = "Click to view",
+                        modifier = Modifier.clickable {
+                            jsonDialogTitle = "Response JSON"
+                            jsonDialogContent = formatJson(event.responseJson)
+                        }
+                    )
+                }
+                is EventVerificationIso18013Proximity -> {
+                    val engagementText = when (event.engagementType) {
+                        EngagementType.QR_CODE -> "QR Code"
+                        EngagementType.NFC_STATIC_HANDOVER -> "NFC Static Handover"
+                        EngagementType.NFC_NEGOTIATED_HANDOVER -> "NFC Negotiated Handover"
+                        EngagementType.NFC_CONCURRENT_CHANNEL_ENGAGEMENT -> "NFC Concurrent Channel Engagement"
+                    }
+                    FloatingItemHeadingAndText(
+                        heading = "Engagement channel",
+                        text = engagementText
+                    )
+                    FloatingItemHeadingAndText(
+                        heading = "Presentment protocol",
+                        text = protocol
+                    )
+                    event.durationNfcTapToEngagement?.let {
+                        FloatingItemHeadingAndText(
+                            heading = "NFC tap to engagement",
+                            text = "${it.inWholeMilliseconds} ms"
+                        )
+                    }
+                    event.durationEngagementReceivedToRequestSent?.let {
+                        FloatingItemHeadingAndText(
+                            heading = "Engagement to request sent",
+                            text = "${it.inWholeMilliseconds} ms"
+                        )
+                    }
+                    event.durationRequestSentToResponseReceived?.let {
+                        FloatingItemHeadingAndText(
+                            heading = "Request sent to response received",
+                            text = "${it.inWholeMilliseconds} ms"
+                        )
+                    }
+                    event.durationScanningTime?.let {
+                        FloatingItemHeadingAndText(
+                            heading = "Transport scanning time",
+                            text = "${it.inWholeMilliseconds} ms"
+                        )
+                    }
+                    event.nfcHybridTransportStats?.let { stats ->
+                        FloatingItemHeadingAndText(
+                            heading = "NFC hybrid transport stats",
+                            text = "Sent: ${stats.numSent} (${stats.numSentViaNfc} NFC, ${stats.numSentViaTransport} transport)\nReceived: ${stats.numReceived} (${stats.numReceivedFirstOnNfc} NFC, ${stats.numReceivedFirstOnTransport} transport)"
+                        )
+                    }
+                }
+                else -> {
+                    FloatingItemHeadingAndText(
+                        heading = "Presentment protocol",
+                        text = protocol
+                    )
+                }
+            }
+
+            if (verificationError != null) {
+                FloatingItemHeadingAndText(
+                    heading = "Verification status",
+                    text = buildAnnotatedString {
+                        withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.error)) {
+                            append("Failed: ${verificationError?.message}")
+                        }
+                    }
+                )
+            } else if (verifiedPresentations == null) {
+                FloatingItemHeadingAndText(
+                    heading = "Verification status",
+                    text = "Verifying..."
+                )
+            } else {
+                FloatingItemHeadingAndText(
+                    heading = "Verification status",
+                    text = "Verified successfully"
+                )
+            }
+        }
+
+        verifiedPresentations?.forEachIndexed { index, vp ->
+            val formatText = when (vp) {
+                is MdocVerifiedPresentation -> "ISO mdoc"
+                is JsonVerifiedPresentation -> "IETF SD-JWT VC"
+            }
+            val titleText = when (vp) {
+                is MdocVerifiedPresentation -> "Document ${index + 1}: ${vp.docType} ($formatText)"
+                is JsonVerifiedPresentation -> "Document ${index + 1}: ${vp.vct} ($formatText)"
+            }
+            FloatingItemList(
+                modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
+                title = titleText
+            ) {
+                vp.documentSignerCertChain?.let { certChain ->
+                    FloatingItemHeadingAndText(
+                        heading = "Issuer certificate chain",
+                        text = "Click to view",
+                        modifier = Modifier.clickable {
+                            onViewCertificateChain(certChain)
+                        }
+                    )
+                }
+
+                if (vp.zkpUsed) {
+                    FloatingItemHeadingAndText(
+                        heading = "ZK proof",
+                        text = "Successfully verified \uD83E\uDE84"
+                    )
+                }
+
+                for (n in listOf(0, 1)) {
+                    val (claims, suffix) = if (n == 0) {
+                        Pair(vp.issuerSignedClaims, "")
+                    } else {
+                        Pair(vp.deviceSignedClaims, " (Device Signed)")
+                    }
+                    claims.forEach { claim ->
+                        val typedClaim = Claim.fromDataItem(
+                            dataItem = claim.toDataItem(),
+                            documentTypeRepository = documentTypeRepository
+                        )
+                        val textValue = typedClaim.render()
+                        FloatingItemHeadingAndText(
+                            heading = typedClaim.displayName + suffix,
+                            text = textValue,
+                            image = {
+                                val icon = typedClaim.attribute?.icon ?: org.multipaz.documenttype.Icon.PERSON
+                                Icon(
+                                    imageVector = icon.getOutlinedImageVector(),
+                                    contentDescription = null
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private val jsonPrettyPrint = Json { prettyPrint = true }
+
+private fun formatJson(jsonString: String): String {
+    return try {
+        val element = Json.parseToJsonElement(jsonString)
+        jsonPrettyPrint.encodeToString(JsonElement.serializer(), element)
+    } catch (_: Throwable) {
+        jsonString
     }
 }

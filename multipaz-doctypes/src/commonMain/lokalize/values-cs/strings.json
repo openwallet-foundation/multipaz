@@ -391,5 +391,7 @@
   "multi_request_mdl_and_photoid": "mDL A FotoID",
   "multi_request_mdl_or_photoid": "mDL NEBO FotoID",
   "age_verification_attribute_older_than_years": "Starší {age} let",
-  "age_verification_description_older_than_years": "Údaj, zda je držitel mDL starý {age} let nebo starší"
+  "age_verification_description_older_than_years": "Údaj, zda je držitel mDL starý {age} let nebo starší",
+  "multi_request_payment_and_age_over_18": "Platba a věk nad 18 let",
+  "multi_request_age_over_18_mdl_or_pid": "Věk nad 18 let přes mDL nebo PID + transakce"
 }

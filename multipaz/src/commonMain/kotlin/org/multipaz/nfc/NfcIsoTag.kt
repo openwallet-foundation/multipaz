@@ -6,6 +6,7 @@ import org.multipaz.util.putUInt16
 import kotlinx.coroutines.delay
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.buildByteString
+import org.multipaz.util.Logger
 import kotlin.time.Duration
 
 /**
@@ -195,6 +196,7 @@ abstract class NfcIsoTag {
         onMessageSent: (suspend () -> Unit)? = null
     ): NdefMessage {
         val encodedNdefMessage = ndefMessage.encode()
+        Logger.dHex(TAG, "ndefTransact: Sending NDEF message", encodedNdefMessage)
 
         // See Type 4 Tag Technical Specification Version 1.2 section 7.5.5 NDEF Write Procedure
         // for how this is done.
@@ -243,7 +245,11 @@ abstract class NfcIsoTag {
         }
 
         // Now read NDEF file...
-        return ndefReadMessage(wtInt, nWait)
+        val responseMessage = ndefReadMessage(wtInt, nWait)
+        if (Logger.isDebugEnabled) {
+            Logger.dHex(TAG, "ndefTransact: Received NDEF message", responseMessage.encode())
+        }
+        return responseMessage
     }
 
     companion object {

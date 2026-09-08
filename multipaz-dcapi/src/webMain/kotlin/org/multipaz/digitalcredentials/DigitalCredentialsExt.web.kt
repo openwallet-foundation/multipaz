@@ -26,7 +26,8 @@ private val supportedProtocols = setOf<String>()
 internal actual suspend fun defaultRegister(
     documentStore: DocumentStore,
     documentTypeRepository: DocumentTypeRepository,
-    selectedProtocols: Set<String>
+    selectedProtocols: Set<String>,
+    forceRegistration: Boolean
 ) {
     throw NotImplementedError("DigitalCredentials is not available on JS or WasmJs")
 }

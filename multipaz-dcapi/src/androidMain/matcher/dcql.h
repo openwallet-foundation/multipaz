@@ -43,8 +43,28 @@ struct DcqlCredentialQuery {
     std::string mdocDocType;
     std::vector<std::string> vctValues;
 
+    std::vector<std::vector<uint8_t>> issuerIdentifiers;
+    std::vector<std::vector<uint8_t>> readerAuthAkis;
+
     std::vector<DcqlRequestedClaim> requestedClaims;
     std::vector<DcqlClaimSet> claimSets;
+
+    bool lenientClaimMatching = false;
+
+    DcqlCredentialQuery(
+            std::string id_,
+            std::string format_,
+            std::string mdocDocType_,
+            std::vector<std::string> vctValues_,
+            std::vector<std::vector<uint8_t>> issuerIdentifiers_,
+            std::vector<std::vector<uint8_t>> readerAuthAkis_,
+            std::vector<DcqlRequestedClaim> requestedClaims_,
+            std::vector<DcqlClaimSet> claimSets_,
+            bool lenientClaimMatching_ = false
+    ) : id(id_), format(format_), mdocDocType(mdocDocType_), vctValues(vctValues_),
+        issuerIdentifiers(issuerIdentifiers_), readerAuthAkis(readerAuthAkis_),
+        requestedClaims(requestedClaims_), claimSets(claimSets_),
+        lenientClaimMatching(lenientClaimMatching_) {}
 
     DcqlRequestedClaim* findRequestedClaim(const std::string& claimId);
 };
@@ -66,7 +86,7 @@ struct DcqlQuery {
 
     void log();
 
-    std::optional<DcqlResponse> execute(CredentialDatabase* credentialDatabase);
+    std::optional<DcqlResponse> execute(CredentialDatabase* credentialDatabase, const std::string& protocol);
 
     static DcqlQuery parse(cJSON* dcqlQuery);
 };

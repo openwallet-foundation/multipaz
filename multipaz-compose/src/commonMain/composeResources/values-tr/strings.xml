@@ -192,4 +192,26 @@
     <string name="trust_entry_rical_is_trust_anchor">Güven çapası</string>
     <string name="trust_entry_rical_is_trust_anchor_true">Evet</string>
     <string name="trust_entry_rical_is_trust_anchor_false">Hayır</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s bu verileri bilinmeyen bir taraf adına talep ediyor:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">Bu veriler bilinmeyen bir taraf adına talep ediliyor:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s bu verileri %2$s adına talep ediyor:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">Bu veriler %1$s adına talep ediliyor:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s bu verileri, depolayacak bilinmeyen bir taraf adına talep ediyor:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">Bu veriler, depolayacak bilinmeyen bir taraf adına talep ediliyor:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s bu verileri, depolayacak %2$s adına talep ediyor:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">Bu veriler, depolayacak %1$s adına talep ediliyor:</string>
+    <string name="credential_presentment_select_option">Ne paylaşılacağını seçin</string>
+    <string name="credential_presentment_share_something_else">Başka bir şey paylaş…</string>
+    <string name="credential_presentment_not_sharing_any_document">Bir şeyler paylaşın…</string>
+    <string name="credential_presentment_dont_return_any_document">Hiçbir şey paylaşmayın</string>
+    <string name="credential_presentment_no_document_returned">Hiç belge döndürülmedi</string>
+    <string name="credential_presentment_transaction_data">İşlem verilerini içerir:</string>
+    <string name="issuer_loading">Düzenleyici meta verileri yükleniyor...</string>
+    <string name="issuer_loading_failed">Düzenleyici meta verileri yüklenemedi</string>
+    <string name="provisioning_select_credential">Sağlanacak kimlik bilgisini seçin:</string>
+    <string name="provisioning_cancel_button">Sağlama işlemini iptal et</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">Size önceden iletilen PIN'i girin</string>
+    <string name="provisioning_tx_code_fallback_prompt">Size önceden iletilen parolayı girin</string>
+    <string name="floating_item_heading_and_date_not_set">Ayarlanmadı</string>
+    <string name="floating_item_heading_and_date_time_not_set">Ayarlanmadı</string>
 </resources>

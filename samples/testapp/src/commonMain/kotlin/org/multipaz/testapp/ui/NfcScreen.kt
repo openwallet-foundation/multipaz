@@ -95,7 +95,7 @@ fun NfcScreen(
         readers.add(NfcReaderInternal("Internal NFC Reader", index))
     }
     externalNfcReaderStore.readers.value.forEach { externalReader ->
-        readers.add(NfcReaderExternal(externalReader.displayName, externalReader))
+        readers.add(NfcReaderExternal(externalReader.userDisplayName ?: externalReader.displayName, externalReader))
     }
     if (readers.isEmpty()) {
         readers.add(NfcReaderNoneAvailable())

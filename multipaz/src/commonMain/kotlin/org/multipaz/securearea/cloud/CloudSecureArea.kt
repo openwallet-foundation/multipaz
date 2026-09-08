@@ -14,6 +14,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.buildByteString
@@ -86,6 +87,8 @@ import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.PromptModelNotAvailableException
 import org.multipaz.securearea.KeyUnlockDataProvider
+import org.multipaz.securearea.PreloadedKeyUnlockDataProvider
+import org.multipaz.securearea.buildPreloadedKeyUnlockDataProvider
 import org.multipaz.prompt.Reason
 import kotlin.random.Random
 import kotlin.time.Duration
@@ -462,7 +465,7 @@ open class CloudSecureArea protected constructor(
             appendUInt32(ivIdentifier)
             appendUInt32(encryptedCounter++)
         }.toByteArray()
-        return Crypto.encrypt(Algorithm.A128GCM, skDevice!!, iv, messagePlaintext)
+        return Crypto.encrypt(Algorithm.A256GCM, skDevice!!, iv, messagePlaintext)
     }
 
     private suspend fun decryptFromCloud(messageCiphertext: ByteArray): ByteArray {
@@ -716,6 +719,7 @@ open class CloudSecureArea protected constructor(
                     val unlockData = unlockDataProvider.getKeyUnlockData(
                         secureArea = this,
                         alias = alias,
+                        algorithm = getKeyInfo(alias).algorithm,
                         unlockReason = unlockReason
                     )
                     op.invoke(unlockData)
@@ -921,6 +925,31 @@ open class CloudSecureArea protected constructor(
         return platformSecureArea.getKeyInvalidated(getLocalKeyAlias(alias))
     }
 
+    override suspend fun unlockKey(
+        alias: String,
+        unlockReason: Reason
+    ): List<KeyUnlockData> {
+        val list = mutableListOf<KeyUnlockData>()
+        val keyInfo = getKeyInfo(alias)
+        if (keyInfo.isPassphraseRequired) {
+            val unlockDataProvider = currentCoroutineContext()[KeyUnlockDataProvider.Key]
+                ?: DefaultKeyUnlockDataProvider
+            val cloudUnlockData = unlockDataProvider.getKeyUnlockData(
+                secureArea = this,
+                alias = alias,
+                algorithm = keyInfo.algorithm,
+                unlockReason = unlockReason
+            )
+            list.add(cloudUnlockData)
+        }
+        val platformUnlockDataList = platformSecureArea.unlockKey(
+            alias = getLocalKeyAlias(alias),
+            unlockReason = unlockReason
+        )
+        list.addAll(platformUnlockDataList)
+        return list
+    }
+
     private suspend fun saveKeyMetadata(
         alias: String,
         settings: CloudCreateKeySettings,
@@ -953,7 +982,7 @@ open class CloudSecureArea protected constructor(
     }
 
     @CborSerializable(
-        schemaHash = "w-5iNr7XcEFY2B2L8dT64GO06QiTsDV87YdGHeocruI"
+        schemaHash = "Ily6ZWEcm-zioB_3CcU2Usiq14cX4HuVich4tuQNw5k"
     )
     internal data class KeyMetadata(
         val algorithm: Algorithm,
@@ -971,6 +1000,7 @@ open class CloudSecureArea protected constructor(
         override suspend fun getKeyUnlockData(
             secureArea: SecureArea,
             alias: String,
+            algorithm: Algorithm,
             unlockReason: Reason
         ): KeyUnlockData {
             check(secureArea is CloudSecureArea)

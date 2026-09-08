@@ -17,6 +17,7 @@ import org.multipaz.cbor.Simple
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.getDefault
+import org.multipaz.util.Logger
 import kotlin.Boolean
 
 /**
@@ -171,9 +172,12 @@ class TestAppSettingsModel private constructor(
         bind(readerAutomaticallySelectTransport, "readerAutomaticallySelectTransport", false)
         bind(readerAllowMultipleRequests, "readerAllowMultipleRequests", false)
         bind(readerLastSelectedRequestId, "readerLastSelectedRequestId", null)
+        bind(readerIssuerIdentifiers, "readerIssuerIdentifiers", "")
 
         bind(cloudSecureAreaUrl, "cloudSecureAreaUrl", CSA_URL_DEFAULT)
         bind(dcApiProtocols, "dcApiProtocols", digitalCredentials.supportedProtocols)
+        bind(dcRequestIssuerIdentifiers, "dcRequestIssuerIdentifiers", "")
+        bind(dcRequestLastSelectedRequestId, "dcRequestLastSelectedRequestId", null)
 
         bind(cryptoPreferBouncyCastle, "cryptoForceBouncyCastle", false)
 
@@ -183,6 +187,14 @@ class TestAppSettingsModel private constructor(
         bind(currentlyFocusedDocumentId, "currentlyFocusedDocumentId", "")
 
         bind(signRequest, "signRequest", true)
+
+        bind(loggingDebugEnabled, "loggingDebugEnabled", false)
+        Logger.isDebugEnabled = loggingDebugEnabled.value
+        CoroutineScope(Dispatchers.Default).launch {
+            loggingDebugEnabled.collect { enabled ->
+                Logger.isDebugEnabled = enabled
+            }
+        }
     }
 
     val presentmentBleCentralClientModeEnabled = MutableStateFlow<Boolean>(false)
@@ -205,9 +217,12 @@ class TestAppSettingsModel private constructor(
     val readerAutomaticallySelectTransport = MutableStateFlow<Boolean>(false)
     val readerAllowMultipleRequests = MutableStateFlow<Boolean>(false)
     val readerLastSelectedRequestId = MutableStateFlow<String?>(null)
+    val readerIssuerIdentifiers = MutableStateFlow<String>("")
 
     val cloudSecureAreaUrl = MutableStateFlow<String>(CSA_URL_DEFAULT)
     val dcApiProtocols = MutableStateFlow<Set<String>>(emptySet())
+    val dcRequestIssuerIdentifiers = MutableStateFlow<String>("")
+    val dcRequestLastSelectedRequestId = MutableStateFlow<String?>(null)
 
     val cryptoPreferBouncyCastle = MutableStateFlow<Boolean>(false)
 
@@ -215,6 +230,8 @@ class TestAppSettingsModel private constructor(
     val observeModeEmitPollingFramesAsReader = MutableStateFlow<Boolean>(false)
     val currentlyFocusedDocumentId = MutableStateFlow<String>("")
     val signRequest = MutableStateFlow<Boolean>(true)
+
+    val loggingDebugEnabled = MutableStateFlow<Boolean>(false)
 }
 
 // Default to our open CSA, where "open" means it'll work with even unlocked bootloaders

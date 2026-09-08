@@ -1,5 +1,7 @@
 package org.multipaz.webtoken
 
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -23,7 +25,7 @@ import kotlin.time.Instant
  * @param creationTime JWT issuance timestamp (`iat`)
  * @param expiresIn validity duration for the JWT (if any)
  * @param builderAction JSON object builder block for JWT body
- * @return signed JWT
+ * @return signed JWT (compact serialization)
  */
 suspend fun buildJwt(
     type: String,
@@ -33,27 +35,81 @@ suspend fun buildJwt(
     expiresIn: Duration? = null,
     builderAction: suspend JsonObjectBuilder.() -> Unit
 ): String {
-    val head = buildJsonObject {
-        put("typ", type)
-        key.addToJwtHeader(this)
-        header.invoke(this)
-    }.toString().encodeToByteArray().toBase64Url()
-
-    val payload = buildJsonObject {
-        if (creationTime != Instant.DISTANT_PAST) {
-            expiresIn?.let {
-                put("exp", (creationTime + expiresIn).epochSeconds)
-            }
-            put("iat", creationTime.epochSeconds)
-        }
-        builderAction.invoke(this)
-    }.toString().encodeToByteArray().toBase64Url()
+    val head = buildHeader(type, key, header)
+    val payload = buildPayload(creationTime, expiresIn, builderAction)
 
     val message = "$head.$payload"
     val signature = key.sign(message.encodeToByteArray()).toCoseEncoded().toBase64Url()
 
     return "$message.$signature"
 }
+
+/**
+ * Creates a JWT message signed with the multiple keys.
+ *
+ * JWT headers contains type (`typ`), signature algorithm (`alg`) and, unless the keys are
+ * [AsymmetricKey.Anonymous], key identification (either `kid` or `x5c`). The body of the JWT will
+ * have issuance time (`iat`) and optionally expiration time (`exp`), unless [creationTime] is
+ * set to [Instant.DISTANT_PAST]
+ *
+ * @param type JWT type
+ * @param keys list of the private keys to sign JWT and provide key identifying information
+ *  in the JWT header
+ * @param header JSON object builder block to provide additional header fields
+ * @param creationTime JWT issuance timestamp (`iat`)
+ * @param expiresIn validity duration for the JWT (if any)
+ * @param builderAction JSON object builder block for JWT body
+ * @return signed JWT (JSON object)
+ */
+suspend fun buildMultisignedJwt(
+    type: String,
+    keys: List<AsymmetricKey>,
+    header: suspend JsonObjectBuilder.(index: Int) -> Unit = {},
+    creationTime: Instant = Clock.System.now(),
+    expiresIn: Duration? = null,
+    builderAction: suspend JsonObjectBuilder.() -> Unit
+): JsonObject {
+    val payload = buildPayload(creationTime, expiresIn, builderAction)
+
+    val signatures = keys.withIndex().map { (index, key) ->
+        val head = buildHeader(type, key) { header.invoke(this, index) }
+        val message = "$head.$payload"
+        val signature = key.sign(message.encodeToByteArray())
+        buildJsonObject {
+            put("protected", head)
+            put("signature", signature.toCoseEncoded().toBase64Url())
+        }
+    }
+
+    return buildJsonObject {
+        put("payload", payload)
+        put("signatures", JsonArray(signatures))
+    }
+}
+
+private suspend fun buildHeader(
+    type: String,
+    key: AsymmetricKey,
+    builderAction: suspend JsonObjectBuilder.() -> Unit
+): String = buildJsonObject {
+    put("typ", type)
+    key.addToJwtHeader(this)
+    builderAction.invoke(this)
+}.toString().encodeToByteArray().toBase64Url()
+
+private suspend fun buildPayload(
+    creationTime: Instant,
+    expiresIn: Duration?,
+    builderAction: suspend JsonObjectBuilder.() -> Unit
+): String = buildJsonObject {
+    if (creationTime != Instant.DISTANT_PAST) {
+        expiresIn?.let {
+            put("exp", (creationTime + expiresIn).epochSeconds)
+        }
+        put("iat", creationTime.epochSeconds)
+    }
+    builderAction.invoke(this)
+}.toString().encodeToByteArray().toBase64Url()
 
 private fun AsymmetricKey.addToJwtHeader(header: JsonObjectBuilder) {
     header.put(

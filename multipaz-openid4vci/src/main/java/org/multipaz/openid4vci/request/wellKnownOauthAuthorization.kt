@@ -11,6 +11,10 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.server.common.baseUrl
 
+import org.multipaz.util.Logger
+
+private const val TAG = "wellKnownOauthAuthorization"
+
 /**
  * Generates `.well-known/oauth-authorization-server` metadata file.
  */
@@ -21,42 +25,44 @@ suspend fun wellKnownOauthAuthorization(call: ApplicationCall) {
     val supportClientAttestation = configuration.getValue("support_client_attestation") != "false"
     val useClientAttestationChallenge =
         configuration.getValue("use_client_attestation_challenge") != "false"
+    val responseJson = buildJsonObject {
+        put("issuer", baseUrl)
+        if (useClientAttestationChallenge) {
+            put("challenge_endpoint", "$baseUrl/challenge")
+        }
+        put("authorization_endpoint", "$baseUrl/authorize")
+        // OAuth for First-Party Apps (FiPA), this got reworked substantially, disable for now
+        //put("authorization_challenge_endpoint", "$baseUrl/authorize_challenge")
+        put("token_endpoint", "$baseUrl/token")
+        put("pushed_authorization_request_endpoint", "$baseUrl/par")
+        put("require_pushed_authorization_requests", true)
+        putJsonArray("token_endpoint_auth_methods_supported") {
+            if (supportClientAssertion) {
+                add("private_key_jwt")
+            }
+            if (supportClientAttestation) {
+                add("attest_jwt_client_auth")
+            }
+        }
+        putJsonArray("response_types_supported") {
+            add("code")
+        }
+        putJsonArray("code_challenge_methods_supported") {
+            add("S256")
+        }
+        putJsonArray("dpop_signing_alg_values_supported") {
+            add("ES256")
+        }
+        putJsonArray("client_attestation_signing_alg_values_supported") {
+            add("ES256")
+        }
+        putJsonArray("client_attestation_pop_signing_alg_values_supported") {
+            add("ES256")
+        }
+    }
+    Logger.dJson(TAG, "Sending well-known oauth-authorization-server response", responseJson)
     call.respondText(
-        text = buildJsonObject {
-            put("issuer", baseUrl)
-            if (useClientAttestationChallenge) {
-                put("challenge_endpoint", "$baseUrl/challenge")
-            }
-            put("authorization_endpoint", "$baseUrl/authorize")
-            // OAuth for First-Party Apps (FiPA), this got reworked substantially, disable for now
-            //put("authorization_challenge_endpoint", "$baseUrl/authorize_challenge")
-            put("token_endpoint", "$baseUrl/token")
-            put("pushed_authorization_request_endpoint", "$baseUrl/par")
-            put("require_pushed_authorization_requests", true)
-            putJsonArray("token_endpoint_auth_methods_supported") {
-                if (supportClientAssertion) {
-                    add("private_key_jwt")
-                }
-                if (supportClientAttestation) {
-                    add("attest_jwt_client_auth")
-                }
-            }
-            putJsonArray("response_types_supported") {
-                add("code")
-            }
-            putJsonArray("code_challenge_methods_supported") {
-                add("S256")
-            }
-            putJsonArray("dpop_signing_alg_values_supported") {
-                add("ES256")
-            }
-            putJsonArray("client_attestation_signing_alg_values_supported") {
-                add("ES256")
-            }
-            putJsonArray("client_attestation_pop_signing_alg_values_supported") {
-                add("ES256")
-            }
-        }.toString(),
+        text = responseJson.toString(),
         contentType = ContentType.Application.Json
     )
 }

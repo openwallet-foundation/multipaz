@@ -19,6 +19,8 @@ import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.util.Logger
+import org.multipaz.util.toHex
 import kotlin.collections.component1
 import kotlin.collections.component2
 
@@ -153,8 +155,16 @@ data class SignedVical(
             val certificateInfos = mutableListOf<VicalCertificateInfo>()
 
             for (certInfo in (vicalMap["certificateInfos"] as CborArray).items) {
-                val ski = ByteString(certInfo["ski"].asBstr)
                 val certBytes = certInfo["certificate"].asBstr
+                val certificate = X509Cert(ByteString(certBytes))
+                val ski = certificate.subjectKeyIdentifier?.let { ByteString(it) }
+                    ?: throw IllegalArgumentException("No SKI in certificate")
+                val skiInCertInfo = ByteString(certInfo["ski"].asBstr)
+                if (ski != skiInCertInfo) {
+                    Logger.w(TAG, "For certificate with subject ${certificate.subject.name} the SKI in "
+                        + "CertificateInfo (${skiInCertInfo.toHex()}) differs from SKI in X.509 certificate " +
+                            "(${ski.toHex()})")
+                }
                 val docTypes = (certInfo["docType"] as CborArray).items.map { it.asTstr }
                 val certProfiles = certInfo.getOrNull("certificateProfile")?.let {
                     (it as CborArray).items.map { it.asTstr }

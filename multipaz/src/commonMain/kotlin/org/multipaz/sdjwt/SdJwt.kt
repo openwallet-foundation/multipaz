@@ -88,9 +88,9 @@ class SdJwt private constructor(
         jwtHeader["x5c"]?.let { X509CertChain.fromX5c(it) }
     }
 
-    /** The value of the `iss` claim in the issuer-signed JWT. */
-    val issuer: String by lazy {
-        jwtBody["iss"]!!.jsonPrimitive.content
+    /** The value of the `iss` or `issuer` claim in the issuer-signed JWT, if present. */
+    val issuer: String? by lazy {
+        (jwtBody["iss"] ?: jwtBody["issuer"])?.jsonPrimitive?.content
     }
 
     /** The value of the `sub` claim in the issuer-signed JWT, if present. */
@@ -140,19 +140,21 @@ class SdJwt private constructor(
     /**
      * Verifies a SD-JWT according to Section 7.1 of the SD-JWT specification.
      *
-     * @param issuerKey the issuer's key to use for verification.
+     * @param issuerKey the issuer's key to use for verification or `null` to not perform issuer signature validation.
      * @return the processed SD-JWT payload.
      * @throws SignatureVerificationException if the issuer signature or key-binding signature failed to validate.
      */
     suspend fun verify(
-        issuerKey: EcPublicKey,
+        issuerKey: EcPublicKey? = null,
     ): JsonObject {
         // TODO: make sure we perform all checks in Section 7.1
-        try {
-            JsonWebSignature.verify("$header.$body.$signature", issuerKey)
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            throw SignatureVerificationException("Error validating issuer signature", e)
+        if (issuerKey != null) {
+            try {
+                JsonWebSignature.verify("$header.$body.$signature", issuerKey)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                throw SignatureVerificationException("Error validating issuer signature", e)
+            }
         }
         return processObject(
             obj = jwtBody,

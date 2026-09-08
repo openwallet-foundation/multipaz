@@ -391,5 +391,7 @@
   "multi_request_mdl_and_photoid": "mDL ΚΑΙ Ταυτότητα με φωτογραφία",
   "multi_request_mdl_or_photoid": "mDL Ή Ταυτότητα με φωτογραφία",
   "age_verification_attribute_older_than_years": "Άνω των {age} ετών",
-  "age_verification_description_older_than_years": "Ένδειξη αν ο κάτοχος της mDL είναι {age} ετών ή μεγαλύτερος"
+  "age_verification_description_older_than_years": "Ένδειξη αν ο κάτοχος της mDL είναι {age} ετών ή μεγαλύτερος",
+  "multi_request_payment_and_age_over_18": "Πληρωμή και άνω των 18 ετών",
+  "multi_request_age_over_18_mdl_or_pid": "Ηλικία άνω των 18 μέσω mDL ή PID + συναλλαγή"
 }

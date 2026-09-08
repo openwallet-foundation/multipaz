@@ -38,6 +38,10 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
+import org.multipaz.document.androidCredmanBitmap
+import org.multipaz.document.androidCredmanExchangeProtocols
+import org.multipaz.document.androidCredmanSubtitle
+import org.multipaz.document.androidCredmanTitle
 import org.multipaz.documenttype.DocumentAttribute
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.credential.MdocCredential
@@ -87,7 +91,8 @@ private fun getDataElementDisplayName(
 private suspend fun updateCredmanUnlocked(
     documentStore: DocumentStore,
     documentTypeRepository: DocumentTypeRepository,
-    selectedProtocols: Set<String>
+    selectedProtocols: Set<String>,
+    forceRegistration: Boolean
 ) {
     val startTime = Clock.System.now()
     val appInfo = applicationContext.applicationInfo
@@ -103,14 +108,6 @@ private suspend fun updateCredmanUnlocked(
         documentTypeRepository = documentTypeRepository,
         selectedProtocols = selectedProtocols
     )
-    /*
-    Logger.i(TAG, "credentialDatabase: " +
-            Cbor.toDiagnostics(
-                item = credentialDatabase,
-                options = setOf(DiagnosticOption.EMBEDDED_CBOR, DiagnosticOption.PRETTY_PRINT, DiagnosticOption.BSTR_PRINT_LENGTH)
-            )
-    )
-     */
 
     val credentialDatabaseCbor = Cbor.encode(credentialDatabase)
 
@@ -127,7 +124,7 @@ private suspend fun updateCredmanUnlocked(
     val lastCredDbSha256 = documentStore.getTags().get<ByteString>(CREDMAN_DB_SHA256_KEY)
     val credDbNotChanged = lastCredDbSha256 != null && credDbSha256 == lastCredDbSha256
 
-    if (matcherNotChanged && credDbNotChanged) {
+    if (!forceRegistration && matcherNotChanged && credDbNotChanged) {
         Logger.i(TAG, "No change in Credman database or matcher since last registration")
         return
     }
@@ -141,6 +138,17 @@ private suspend fun updateCredmanUnlocked(
             set(CREDMAN_DB_SHA256_KEY, credDbSha256)
         }
     }
+    Logger.dCbor(TAG, "credentialDatabase", credentialDatabase)
+
+    val documents = documentStore.listDocuments(sort = true)
+    for (document in documents) {
+        val hasCredential = document.getCertifiedCredentials().any { it is MdocCredential || it is SdJwtVcCredential }
+        if (hasCredential) {
+            val displayName = document.androidCredmanTitle ?: document.displayName ?: document.typeDisplayName ?: "Unnamed Document"
+            Logger.i(TAG, "Registering document with docId ${document.identifier} ('$displayName') with CredMan")
+        }
+    }
+
     val client = IdentityCredentialManager.getClient(applicationContext)
     client.registerCredentials(
         RegistrationRequest(
@@ -209,9 +217,10 @@ private suspend fun exportMdocCredential(
 ): DataItem {
     val credentialType = documentTypeRepository.getDocumentTypeForMdoc(credential.docType)
 
-    val cardArt = document.cardArt?.toByteArray()
-    val displayName = document.displayName ?: "Unnamed Credential"
-    val displayNameSub = document.typeDisplayName ?: "Unknown Credential Type"
+    val cardArt = document.androidCredmanBitmap?.toByteArray() ?: document.cardArt?.toByteArray()
+    val displayName = document.androidCredmanTitle ?: document.displayName ?: "Unnamed Document"
+    val displayNameSub = document.androidCredmanSubtitle ?: document.typeDisplayName ?: "Unknown Document Type"
+    val exchangeProtocols = document.androidCredmanExchangeProtocols
 
     val cardArtResized = resizedCardArt(cardArt)
 
@@ -222,13 +231,51 @@ private suspend fun exportMdocCredential(
             "Error reading claims: '${credential.document.identifier}.${credential.identifier}'", err)
         emptyList()
     }
+    val issuerIdentifiers = credential.issuerCertChain.certificates.mapNotNull {
+        it.authorityKeyIdentifier
+    }
     return buildCborMap {
         put("title", displayName)
         put("subtitle", displayNameSub)
         put("bitmap", cardArtResized ?: byteArrayOf())
+        if (exchangeProtocols != null) {
+            putCborArray("protocols") {
+                exchangeProtocols.forEach { add(it) }
+            }
+        }
         putCborMap("mdoc") {
             put("documentId", document.identifier)
             put("docType", credential.docType)
+            if (issuerIdentifiers.isNotEmpty()) {
+                putCborArray("issuerIdentifiers") {
+                    issuerIdentifiers.forEach { add(it) }
+                }
+            }
+            if (document.readerIdentifiers.isNotEmpty()) {
+                putCborArray("readerIdentifiers") {
+                    document.readerIdentifiers.forEach { add(it.toByteArray()) }
+                }
+            }
+            if (credential.mso.deviceKeyAuthorizedNamespaces.isNotEmpty() ||
+                credential.mso.deviceKeyAuthorizedDataElements.isNotEmpty()
+            ) {
+                putCborMap("keyAuthorizations") {
+                    if (credential.mso.deviceKeyAuthorizedNamespaces.isNotEmpty()) {
+                        putCborArray("nameSpaces") {
+                            credential.mso.deviceKeyAuthorizedNamespaces.forEach { add(it) }
+                        }
+                    }
+                    if (credential.mso.deviceKeyAuthorizedDataElements.isNotEmpty()) {
+                        putCborMap("dataElements") {
+                            credential.mso.deviceKeyAuthorizedDataElements.forEach { (namespace, dataElementList) ->
+                                putCborArray(namespace) {
+                                    dataElementList.forEach { add(it) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             putCborMap("namespaces") {
                 for ((namespace, claimsInNamespace) in claims.organizeByNamespace()) {
                     putCborMap(namespace) {
@@ -270,9 +317,10 @@ private suspend fun exportSdJwtVcCredential(
     credential: SdJwtVcCredential,
     documentTypeRepository: DocumentTypeRepository
 ): DataItem {
-    val cardArt = document.cardArt?.toByteArray()
-    val displayName = document.displayName ?: "Unnamed Credential"
-    val displayNameSub = document.typeDisplayName ?: "Unknown Credential Type"
+    val cardArt = document.androidCredmanBitmap?.toByteArray() ?: document.cardArt?.toByteArray()
+    val displayName = document.androidCredmanTitle ?: document.displayName ?: "Unnamed Document"
+    val displayNameSub = document.androidCredmanSubtitle ?: document.typeDisplayName ?: "Unknown Document Type"
+    val exchangeProtocols = document.androidCredmanExchangeProtocols
 
     val cardArtResized = resizedCardArt(cardArt)
 
@@ -284,13 +332,31 @@ private suspend fun exportSdJwtVcCredential(
             "Error reading claims: '${cred.document.identifier}.${credential.identifier}'", err)
         emptyList()
     }
+    val issuerIdentifiers = credential.getIssuerCertChain()?.certificates?.mapNotNull {
+        it.authorityKeyIdentifier
+    } ?: emptyList()
     return buildCborMap {
         put("title", displayName)
         put("subtitle", displayNameSub)
         put("bitmap", cardArtResized ?: byteArrayOf())
+        if (exchangeProtocols != null) {
+            putCborArray("protocols") {
+                exchangeProtocols.forEach { add(it) }
+            }
+        }
         putCborMap("sdjwt") {
             put("documentId", document.identifier)
             put("vct", credential.vct)
+            if (issuerIdentifiers.isNotEmpty()) {
+                putCborArray("issuerIdentifiers") {
+                    issuerIdentifiers.forEach { add(it) }
+                }
+            }
+            if (document.readerIdentifiers.isNotEmpty()) {
+                putCborArray("readerIdentifiers") {
+                    document.readerIdentifiers.forEach { add(it.toByteArray()) }
+                }
+            }
             putCborMap("claims") {
                 for (claim in claims) {
                     val claimName = claim.claimPath[0].jsonPrimitive.content
@@ -391,6 +457,7 @@ internal actual val defaultSupportedProtocols: Set<String>
 private val supportedProtocols = setOf(
     "openid4vp-v1-signed",
     "openid4vp-v1-unsigned",
+    "openid4vp-v1-multisigned",
     "org-iso-mdoc",
     "openid4vp",
 )
@@ -400,7 +467,8 @@ private val registerLock = Mutex()
 internal actual suspend fun defaultRegister(
     documentStore: DocumentStore,
     documentTypeRepository: DocumentTypeRepository,
-    selectedProtocols: Set<String>
+    selectedProtocols: Set<String>,
+    forceRegistration: Boolean
 ) {
     require(supportedProtocols.containsAll(selectedProtocols)) {
         "The selected protocols is not a subset of supported protocols"
@@ -409,7 +477,8 @@ internal actual suspend fun defaultRegister(
         updateCredmanUnlocked(
             documentStore = documentStore,
             documentTypeRepository = documentTypeRepository,
-            selectedProtocols = selectedProtocols
+            selectedProtocols = selectedProtocols,
+            forceRegistration = forceRegistration
         )
     }
 }

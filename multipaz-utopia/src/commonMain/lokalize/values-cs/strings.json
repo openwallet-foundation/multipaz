@@ -183,5 +183,6 @@
   "cor_description_document_number": "Číslo pro COR, přiřazené poskytovatelem COR.",
   "cor_description_administrative_number": "Číslo přiřazené poskytovatelem COR pro auditní kontrolu nebo jiné účely.",
   "cor_description_issuing_jurisdiction": "Kód dílčího územního celku jurisdikce, která vydala COR, jak je definováno v ISO 3166-2:2020, klauzule 8. První část kódu MUSÍ být stejná jako hodnota pro issuing_country.",
-  "cor_description_issuing_country": "Kód země Alpha-2, jak je definováno v ISO 3166-1, země nebo území vydávajícího orgánu."
+  "cor_description_issuing_country": "Kód země Alpha-2, jak je definováno v ISO 3166-1, země nebo území vydávajícího orgánu.",
+  "payment_request_payment_sca_transaction": "Ověření SCA s platební transakcí"
 }

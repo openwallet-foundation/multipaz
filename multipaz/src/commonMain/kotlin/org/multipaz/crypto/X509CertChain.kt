@@ -44,20 +44,15 @@ data class X509CertChain(
     }
 
     /**
-     * Encodes the certificate as JSON Array according to RFC 7515 Section 4.1.6.
+     * Encodes the certificate chain as JSON Array according to RFC 7515 Section 4.1.6.
      *
-     * Current draft of HAIP spec states "The X.509 certificate of the trust anchor MUST NOT be
-     * included in the x5c JOSE header of the Status List Token. The X.509 certificate signing
-     * the request MUST NOT be self-signed.". [excludeRoot] parameter helps to enforce this.
-     * Note that including trust root is always redundant, as both the key and the issuer identity
-     * must be known to the party that validates the certificate chain.
-     *
-     * @param excludeRoot if the last certificate is root (self-signed), exclude it
+     * @param excludeRoot if the certificate chain has more than one certificate and the last certificate is a root
+     *   certificate (self-signed), exclude it.
      * @return a [JsonElement].
      */
     fun toX5c(excludeRoot: Boolean = true): JsonElement {
         val last = certificates.last()
-        val certs = if (excludeRoot && last.subject == last.issuer) {
+        val certs = if (excludeRoot && certificates.size > 1 && last.subject == last.issuer) {
             certificates.subList(0, certificates.size - 1)
         } else {
             certificates
@@ -68,6 +63,35 @@ data class X509CertChain(
                 JsonPrimitive( Base64.encode(certificate.encoded.toByteArray()))
             }
         ) as JsonElement
+    }
+
+    /**
+     * Encodes the certificate chain as CBOR for use in COSE 'x5chain' header parameter (label 33)
+     * according to RFC 9360 Section 2.
+     *
+     * If [excludeRoot] is true, the certificate chain has more than one certificate, and the last
+     * certificate is a root certificate (self-signed), it is excluded.
+     *
+     * If the resulting chain has only one certificate, a [Bstr] containing the DER-encoded certificate
+     * is returned. Otherwise, a [CborArray] of [Bstr]s containing each DER-encoded certificate is returned.
+     *
+     * @param excludeRoot whether to exclude a self-signed root certificate if the chain has more than one certificate.
+     * @return a [DataItem] representing the COSE 'x5chain'.
+     */
+    fun toCoseX5Chain(excludeRoot: Boolean = true): DataItem {
+        val last = certificates.last()
+        val certs = if (excludeRoot && certificates.size > 1 && last.subject == last.issuer) {
+            certificates.subList(0, certificates.size - 1)
+        } else {
+            certificates
+        }
+        return if (certs.size == 1) {
+            certs[0].toDataItem()
+        } else {
+            buildCborArray {
+                certs.forEach { certificate -> add(certificate.toDataItem()) }
+            }
+        }
     }
 
     /**
@@ -86,11 +110,15 @@ data class X509CertChain(
      *
      * @param validateAt time of the validation
      * @param requireBasicConstraints if non-leaf certificates must use basic constrains extension
+     * @param validateValidity if validityNotBefore / validityNotAfter should be checked for the leaf certificate
+     * @param validateCaValidity if validityNotBefore / validityNotAfter should be checked for non-leaf CA certificates
      * @throws [X509CertChainValidationException] if validation fails.
      */
     suspend fun validate(
         validateAt: Instant = Clock.System.now(),
-        requireBasicConstraints: Boolean = true
+        requireBasicConstraints: Boolean = true,
+        validateValidity: Boolean = true,
+        validateCaValidity: Boolean = true
     ) {
         if (!Crypto.validateCertChainSignatures(this)) {
             throw X509CertChainValidationException.Signature()
@@ -124,11 +152,18 @@ data class X509CertChain(
                 }
             }
             previous = certificate
-            if (certificate.validityNotAfter < validateAt) {
-                throw X509CertChainValidationException.Expired(certificate.validityNotAfter)
+            val shouldCheckValidity = if (index == 0) {
+                validateValidity
+            } else {
+                validateValidity && validateCaValidity
             }
-            if (certificate.validityNotBefore > validateAt) {
-                throw X509CertChainValidationException.NotYetValid(certificate.validityNotBefore)
+            if (shouldCheckValidity) {
+                if (certificate.validityNotAfter < validateAt) {
+                    throw X509CertChainValidationException.Expired(certificate.validityNotAfter)
+                }
+                if (certificate.validityNotBefore > validateAt) {
+                    throw X509CertChainValidationException.NotYetValid(certificate.validityNotBefore)
+                }
             }
         }
     }

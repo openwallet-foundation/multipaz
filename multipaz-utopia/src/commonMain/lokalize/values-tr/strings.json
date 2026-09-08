@@ -183,5 +183,6 @@
   "cor_description_document_number": "COR Sağlayıcı tarafından atanan bir COR numarası.",
   "cor_description_administrative_number": "Denetim kontrolü veya diğer amaçlar için COR Sağlayıcı tarafından atanan bir numara.",
   "cor_description_issuing_jurisdiction": "COR'u düzenleyen yetki alanının, ISO 3166-2:2020, Madde 8'de tanımlandığı üzere ülke alt bölüm kodu. Kodun ilk kısmı, issuing_country değeriyle aynı OLMALIDIR.",
-  "cor_description_issuing_country": "Düzenleyici makamın ülkesinin veya bölgesinin, ISO 3166-1'de tanımlandığı üzere Alfa-2 ülke kodu."
+  "cor_description_issuing_country": "Düzenleyici makamın ülkesinin veya bölgesinin, ISO 3166-1'de tanımlandığı üzere Alfa-2 ülke kodu.",
+  "payment_request_payment_sca_transaction": "Ödeme işlemiyle Ödeme SCA'sı"
 }

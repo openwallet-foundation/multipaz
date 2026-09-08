@@ -12,6 +12,7 @@ import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
@@ -27,6 +28,7 @@ import org.multipaz.cbor.putCborMap
  * @property docResponseEncryption optional request for encrypting the response.
  * @property docFormat optional document format.
  * @property dataElementIdentifierMapping optional data element identifier mapping.
+ * @property transactionData optional information about requested transaction data.
  * @property otherInfo other request info.
  */
 data class DocRequestInfo(
@@ -38,6 +40,7 @@ data class DocRequestInfo(
     val docResponseEncryption: EncryptionParameters? = null,
     val docFormat: String? = null,
     val dataElementIdentifierMapping: Map<String, JsonArray> = emptyMap(),
+    val transactionData: TransactionsInfo? = null,
     val otherInfo: Map<String, DataItem> = emptyMap(),
 ) {
     internal fun toDataItem() = buildCborMap {
@@ -96,6 +99,13 @@ data class DocRequestInfo(
                 }
             }
         }
+        transactionData?.let {
+            putCborMap("transactionData") {
+                for ((type, data) in it.data) {
+                    put(type, data)
+                }
+            }
+        }
         otherInfo.forEach { (key, value) ->
             put(key, value)
         }
@@ -110,7 +120,8 @@ data class DocRequestInfo(
                 zkRequest != null ||
                 docResponseEncryption != null ||
                 docFormat != null ||
-                dataElementIdentifierMapping.isNotEmpty()
+                dataElementIdentifierMapping.isNotEmpty() ||
+                transactionData != null
     }
 
     companion object {
@@ -142,10 +153,14 @@ data class DocRequestInfo(
                     }.let { JsonArray(it) }
                 }.toMap()
             } ?: emptyMap()
+            val transactionData = dataItem.getOrNull("transactionData")?.let {
+                TransactionsInfo(
+                    data = it.asMap.entries.associate { (k, v) -> Pair(k.asTstr, v) }
+                )
+            }
             val otherInfo = mutableMapOf<String, DataItem>()
             for ((otherKeyDataItem, otherValue) in dataItem.asMap) {
-                val otherKey = otherKeyDataItem.asTstr
-                when (otherKey) {
+                when (val otherKey = otherKeyDataItem.asTstr) {
                     "alternativeDataElements",
                     "issuerIdentifiers",
                     "uniqueDocSetRequired",
@@ -153,7 +168,9 @@ data class DocRequestInfo(
                     "zkRequest",
                     "docResponseEncryption",
                     "docFormat",
-                    "dataElementIdentifierMapping" -> continue
+                    "dataElementIdentifierMapping",
+                    "transactionData",
+                    "transactions" -> continue
                     else -> otherInfo[otherKey] = otherValue
                 }
             }
@@ -166,6 +183,7 @@ data class DocRequestInfo(
                 docResponseEncryption = docResponseEncryption,
                 docFormat = docFormat,
                 dataElementIdentifierMapping = dataElementIdentifierMapping,
+                transactionData = transactionData,
                 otherInfo = otherInfo
             )
         }

@@ -200,4 +200,26 @@
     <string name="trust_entry_rical_is_trust_anchor">Důvěryhodná kotva</string>
     <string name="trust_entry_rical_is_trust_anchor_true">Ano</string>
     <string name="trust_entry_rical_is_trust_anchor_false">Ne</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s požaduje tato data jménem neznámé strany:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">Tato data jsou požadována jménem neznámé strany:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s požaduje tato data jménem %2$s:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">Tato data jsou požadována jménem %1$s:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s požaduje tato data jménem neznámé strany, která je uloží:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">Tato data jsou požadována jménem neznámé strany, která je uloží:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s požaduje tato data jménem %2$s, která je uloží:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">Tato data jsou požadována jménem %1$s, která je uloží:</string>
+    <string name="credential_presentment_select_option">Vyberte, co sdílet</string>
+    <string name="credential_presentment_share_something_else">Sdílet něco jiného…</string>
+    <string name="credential_presentment_not_sharing_any_document">Sdílet něco…</string>
+    <string name="credential_presentment_dont_return_any_document">Nesdílet nic</string>
+    <string name="credential_presentment_no_document_returned">Žádný dokument nebyl vrácen</string>
+    <string name="credential_presentment_transaction_data">Obsahuje transakční data:</string>
+    <string name="issuer_loading">Načítám metadata vystavitele...</string>
+    <string name="issuer_loading_failed">Načítání metadat vystavitele se nezdařilo</string>
+    <string name="provisioning_select_credential">Vyberte pověření k zřízení:</string>
+    <string name="provisioning_cancel_button">Zrušit zřizování</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">Zadejte PIN, který vám byl dříve sdělen</string>
+    <string name="provisioning_tx_code_fallback_prompt">Zadejte heslovou frázi, která vám byla dříve sdělena</string>
+    <string name="floating_item_heading_and_date_not_set">Nenastaveno</string>
+    <string name="floating_item_heading_and_date_time_not_set">Nenastaveno</string>
 </resources>

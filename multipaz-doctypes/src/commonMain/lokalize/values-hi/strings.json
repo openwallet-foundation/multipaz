@@ -391,5 +391,7 @@
   "multi_request_mdl_and_photoid": "mDL और फोटो आईडी",
   "multi_request_mdl_or_photoid": "mDL या फोटो आईडी",
   "age_verification_attribute_older_than_years": "{age} वर्ष से अधिक आयु",
-  "age_verification_description_older_than_years": "क्या एमडीएल धारक {age} वर्ष या उससे अधिक आयु का है, इसका संकेत"
+  "age_verification_description_older_than_years": "क्या एमडीएल धारक {age} वर्ष या उससे अधिक आयु का है, इसका संकेत",
+  "multi_request_payment_and_age_over_18": "भुगतान और 18 वर्ष से अधिक आयु",
+  "multi_request_age_over_18_mdl_or_pid": "mDL या PID के ज़रिए 18 वर्ष से अधिक आयु और लेनदेन"
 }

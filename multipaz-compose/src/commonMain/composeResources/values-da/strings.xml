@@ -190,4 +190,26 @@
     <string name="trust_entry_rical_is_trust_anchor">Tillidsanker</string>
     <string name="trust_entry_rical_is_trust_anchor_true">Ja</string>
     <string name="trust_entry_rical_is_trust_anchor_false">Nej</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s anmoder om disse data på vegne af en ukendt part:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">Disse data anmodes om på vegne af en ukendt part:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s anmoder om disse data på vegne af %2$s:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">Disse data anmodes om på vegne af %1$s:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s anmoder om disse data på vegne af en ukendt part, som vil gemme dem:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">Disse data anmodes om på vegne af en ukendt part, som vil gemme dem:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s anmoder om disse data på vegne af %2$s, som vil gemme dem:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">Disse data anmodes om på vegne af %1$s, som vil gemme dem:</string>
+    <string name="credential_presentment_select_option">Vælg hvad der skal deles</string>
+    <string name="credential_presentment_share_something_else">Del noget andet…</string>
+    <string name="credential_presentment_not_sharing_any_document">Del noget...</string>
+    <string name="credential_presentment_dont_return_any_document">Del intet</string>
+    <string name="credential_presentment_no_document_returned">Intet dokument returneret</string>
+    <string name="credential_presentment_transaction_data">Inkluderer transaktionsdata:</string>
+    <string name="issuer_loading">Indlæser udstederdata...</string>
+    <string name="issuer_loading_failed">Indlæsning af udstederdata mislykkedes</string>
+    <string name="provisioning_select_credential">Vælg legitimationsoplysninger til klargøring:</string>
+    <string name="provisioning_cancel_button">Annuller klargøring</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">Indtast den PIN-kode, der tidligere blev meddelt dig</string>
+    <string name="provisioning_tx_code_fallback_prompt">Indtast den adgangskode, der tidligere blev meddelt dig</string>
+    <string name="floating_item_heading_and_date_not_set">Ikke angivet</string>
+    <string name="floating_item_heading_and_date_time_not_set">Ikke angivet</string>
 </resources>

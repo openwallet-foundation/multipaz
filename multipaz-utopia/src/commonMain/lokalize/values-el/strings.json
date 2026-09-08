@@ -183,5 +183,6 @@
   "cor_description_document_number": "Ένας αριθμός για το COR, που εκχωρείται από τον Πάροχο COR.",
   "cor_description_administrative_number": "Ένας αριθμός που εκχωρείται από τον Πάροχο COR για σκοπούς ελέγχου ή άλλους.",
   "cor_description_issuing_jurisdiction": "Κωδικός υποδιαίρεσης χώρας της δικαιοδοσίας που εξέδωσε το COR, όπως ορίζεται στο ISO 3166-2:2020, Κλάση 8. Το πρώτο μέρος του κωδικού ΠΡΕΠΕΙ να είναι ίδιο με την τιμή για issuing_country.",
-  "cor_description_issuing_country": "Κωδικός χώρας Alpha-2, όπως ορίζεται στο ISO 3166-1, της χώρας ή της επικράτειας της εκδούσας αρχής."
+  "cor_description_issuing_country": "Κωδικός χώρας Alpha-2, όπως ορίζεται στο ISO 3166-1, της χώρας ή της επικράτειας της εκδούσας αρχής.",
+  "payment_request_payment_sca_transaction": "Πληρωμή SCA με συναλλαγή πληρωμής"
 }

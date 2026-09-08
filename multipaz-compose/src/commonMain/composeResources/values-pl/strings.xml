@@ -212,4 +212,26 @@
     <string name="trust_entry_rical_is_trust_anchor">Kotwica zaufania</string>
     <string name="trust_entry_rical_is_trust_anchor_true">Tak</string>
     <string name="trust_entry_rical_is_trust_anchor_false">Nie</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s prosi o te dane w imieniu nieznanej strony:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">Te dane są żądane w imieniu nieznanej strony:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s prosi o te dane w imieniu %2$s:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">Te dane są żądane w imieniu %1$s:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s prosi o te dane w imieniu nieznanej strony, która je przechowa:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">Te dane są żądane w imieniu nieznanej strony, która je przechowa:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s prosi o te dane w imieniu %2$s, która je przechowa:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">Te dane są żądane w imieniu %1$s, która je przechowa:</string>
+    <string name="credential_presentment_select_option">Wybierz, co udostępnić</string>
+    <string name="credential_presentment_share_something_else">Udostępnij coś innego…</string>
+    <string name="credential_presentment_not_sharing_any_document">Udostępnij coś…</string>
+    <string name="credential_presentment_dont_return_any_document">Nie udostępniaj niczego</string>
+    <string name="credential_presentment_no_document_returned">Nie zwrócono żadnego dokumentu</string>
+    <string name="credential_presentment_transaction_data">Zawiera dane transakcyjne:</string>
+    <string name="issuer_loading">Ładowanie metadanych wystawcy...</string>
+    <string name="issuer_loading_failed">Ładowanie metadanych wystawcy nie powiodło się</string>
+    <string name="provisioning_select_credential">Wybierz poświadczenie do provisioningu:</string>
+    <string name="provisioning_cancel_button">Anuluj provisioning</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">Wprowadź kod PIN, który został wcześniej Tobie przekazany</string>
+    <string name="provisioning_tx_code_fallback_prompt">Wprowadź hasło, które zostało wcześniej Tobie przekazane</string>
+    <string name="floating_item_heading_and_date_not_set">Nie ustawiono</string>
+    <string name="floating_item_heading_and_date_time_not_set">Nie ustawiono</string>
 </resources>

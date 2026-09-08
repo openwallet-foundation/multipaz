@@ -276,8 +276,9 @@ actual fun AndroidKeystoreSecureAreaScreen(
                     Triple(AUTH_BIOMETRIC_ONLY, 0L, "- Auth (Biometric Only)"),
                     Triple(AUTH_LSKF_OR_BIOMETRIC, -1L, "- Auth (No Confirmation)"),
                 )) {
+                    val curveMatch = algorithm.curve!! == EcCurve.P256 || algorithm.curve!! == EcCurve.ED25519
                     // For brevity, Only do auth for P-256 Sign and Mac
-                    if (algorithm.curve!! != EcCurve.P256 && userAuthType != AUTH_NONE) {
+                    if (!curveMatch && userAuthType != AUTH_NONE) {
                         continue
                     }
 

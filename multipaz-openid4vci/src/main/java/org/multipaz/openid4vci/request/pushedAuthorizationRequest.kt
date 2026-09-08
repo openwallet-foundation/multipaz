@@ -18,6 +18,10 @@ import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
+import org.multipaz.util.Logger
+
+private const val TAG = "pushedAuthorizationRequest"
+
 /**
  * Pushed Authorization Request, which is the first request to be sent to our OpenID4VCI server
  * if authorize challenge path is not used. In theory, other, simpler (and less secure) forms of
@@ -37,6 +41,7 @@ import kotlin.time.Duration.Companion.minutes
  */
 suspend fun pushedAuthorizationRequest(call: ApplicationCall) {
     val parameters = call.receiveParameters()
+    Logger.d(TAG, "Received PAR request with parameters: $parameters")
     val timeout: Duration = 5.minutes
     val nonces = NonceManager.get().pushedAuthorizationRequest()
 
@@ -55,11 +60,13 @@ suspend fun pushedAuthorizationRequest(call: ApplicationCall) {
     nonces.clientAttestationNonce?.let {
         call.response.header("OAuth-Client-Attestation-Challenge", it)
     }
+    val responseJson = buildJsonObject {
+        put("request_uri", "urn:ietf:params:oauth:request_uri:$code")
+        put("expires_in", timeout.inWholeSeconds)
+    }
+    Logger.dJson(TAG, "Sending PAR response", responseJson)
     call.respondText(
-        text = buildJsonObject {
-                put("request_uri", "urn:ietf:params:oauth:request_uri:$code")
-                put("expires_in", timeout.inWholeSeconds)
-            }.toString(),
+        text = responseJson.toString(),
         contentType = ContentType.Application.Json,
         status = HttpStatusCode.Created
     )

@@ -212,4 +212,26 @@
     <string name="trust_entry_rical_is_trust_anchor">Якір довіри</string>
     <string name="trust_entry_rical_is_trust_anchor_true">Так</string>
     <string name="trust_entry_rical_is_trust_anchor_false">Ні</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s запитує ці дані від імені невідомої сторони:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">Ці дані запитуються від імені невідомої сторони:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s запитує ці дані від імені %2$s:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">Ці дані запитуються від імені %1$s:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s запитує ці дані від імені невідомої сторони, яка зберігатиме їх:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">Ці дані запитуються від імені невідомої сторони, яка зберігатиме їх:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s запитує ці дані від імені %2$s, яка зберігатиме їх:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">Ці дані запитуються від імені %1$s, яка зберігатиме їх:</string>
+    <string name="credential_presentment_select_option">Виберіть, чим поділитися</string>
+    <string name="credential_presentment_share_something_else">Поділитися чимось іншим…</string>
+    <string name="credential_presentment_not_sharing_any_document">Поділитися чимось…</string>
+    <string name="credential_presentment_dont_return_any_document">Нічим не ділитися</string>
+    <string name="credential_presentment_no_document_returned">Документи не повернено</string>
+    <string name="credential_presentment_transaction_data">Включає дані транзакції:</string>
+    <string name="issuer_loading">Завантаження метаданих емітента...</string>
+    <string name="issuer_loading_failed">Не вдалося завантажити метадані емітента</string>
+    <string name="provisioning_select_credential">Виберіть облікові дані для надання:</string>
+    <string name="provisioning_cancel_button">Скасувати надання</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">Введіть PIN-код, який було вам раніше повідомлено</string>
+    <string name="provisioning_tx_code_fallback_prompt">Введіть парольну фразу, яку було вам раніше повідомлено</string>
+    <string name="floating_item_heading_and_date_not_set">Не встановлено</string>
+    <string name="floating_item_heading_and_date_time_not_set">Не встановлено</string>
 </resources>

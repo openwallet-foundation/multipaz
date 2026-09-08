@@ -192,4 +192,26 @@
     <string name="trust_entry_rical_is_trust_anchor">Ancla de confianza</string>
     <string name="trust_entry_rical_is_trust_anchor_true">Sí</string>
     <string name="trust_entry_rical_is_trust_anchor_false">No</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s está solicitando estos datos en nombre de un tercero desconocido:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">Estos datos se solicitan en nombre de un tercero desconocido:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s está solicitando estos datos en nombre de %2$s:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">Estos datos se solicitan en nombre de %1$s:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s está solicitando estos datos en nombre de un tercero desconocido que los almacenará:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">Estos datos se solicitan en nombre de un tercero desconocido que los almacenará:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s está solicitando estos datos en nombre de %2$s que los almacenará:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">Estos datos se solicitan en nombre de %1$s que los almacenará:</string>
+    <string name="credential_presentment_select_option">Seleccionar qué compartir</string>
+    <string name="credential_presentment_share_something_else">Compartir otra cosa…</string>
+    <string name="credential_presentment_not_sharing_any_document">Compartir algo…</string>
+    <string name="credential_presentment_dont_return_any_document">No compartir nada</string>
+    <string name="credential_presentment_no_document_returned">Ningún documento devuelto</string>
+    <string name="credential_presentment_transaction_data">Incluye datos de transacción:</string>
+    <string name="issuer_loading">Cargando metadatos del emisor...</string>
+    <string name="issuer_loading_failed">Error al cargar los metadatos del emisor</string>
+    <string name="provisioning_select_credential">Selecciona la credencial para aprovisionar:</string>
+    <string name="provisioning_cancel_button">Cancelar aprovisionamiento</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">Introduce el PIN que se te comunicó previamente</string>
+    <string name="provisioning_tx_code_fallback_prompt">Introduce la frase de contraseña que se te comunicó previamente</string>
+    <string name="floating_item_heading_and_date_not_set">No establecido</string>
+    <string name="floating_item_heading_and_date_time_not_set">No establecido</string>
 </resources>

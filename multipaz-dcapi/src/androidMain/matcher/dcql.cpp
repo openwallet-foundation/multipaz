@@ -2,6 +2,7 @@
 #include "dcql.h"
 #include "logger.h"
 #include "paths.h"
+#include "base64.h"
 
 extern "C" {
 #include "credentialmanager.h"
@@ -89,11 +90,38 @@ DcqlQuery DcqlQuery::parse(cJSON* dcqlQuery) {
             claimSets.push_back(DcqlClaimSet(claimIdentifiers));
         }
 
+        std::vector<std::vector<uint8_t>> issuerIdentifiers;
+        cJSON* trustedAuthorities = cJSON_GetObjectItem(credential, "trusted_authorities");
+        if (trustedAuthorities != nullptr && cJSON_IsArray(trustedAuthorities)) {
+            cJSON* ta;
+            cJSON_ArrayForEach(ta, trustedAuthorities) {
+                cJSON* type = cJSON_GetObjectItem(ta, "type");
+                if (type != nullptr && cJSON_IsString(type)) {
+                    std::string typeStr = cJSON_GetStringValue(type);
+                    if (typeStr == "aki") {
+                        cJSON* values = cJSON_GetObjectItem(ta, "values");
+                        if (values != nullptr && cJSON_IsArray(values)) {
+                            cJSON* val;
+                            cJSON_ArrayForEach(val, values) {
+                                if (cJSON_IsString(val)) {
+                                    std::string decoded = base64UrlDecode(cJSON_GetStringValue(val));
+                                    issuerIdentifiers.push_back(std::vector<uint8_t>(decoded.begin(), decoded.end()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        std::vector<std::vector<uint8_t>> readerAuthAkis;
         dcqlCredentialQueries.push_back(DcqlCredentialQuery(
                 id,
                 format,
                 mdocDocType,
                 vctValues,
+                issuerIdentifiers,
+                readerAuthAkis,
                 requestedClaims,
                 claimSets
         ));
@@ -198,45 +226,104 @@ bool CredentialSetOptionIsSatisfied(
     return true;
 }
 
-std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDatabase) {
+std::optional<DcqlResponse> DcqlQuery::execute(CredentialDatabase* credentialDatabase, const std::string& protocol) {
     std::vector<DcqlResponseCredentialSet> credentialSets;
 
     std::map<std::string, QueryResponse> credentialQueryIdToResponse;
     for (auto& query: dcqlCredentialQueries) {
         std::vector<Credential*> credsSatifyingMeta;
         for (auto& cred: credentialDatabase->credentials) {
+            if (!cred.supportsProtocol(protocol)) {
+                continue;
+            }
             if (query.format == "mso_mdoc" || query.format == "mso_mdoc_zk") {
-                if (cred.mdocDocType == query.mdocDocType) {
-                    credsSatifyingMeta.push_back(&cred);
+                if (cred.mdocDocType != query.mdocDocType) {
+                    continue;
                 }
             } else if (query.format == "dc+sd-jwt") {
-                if (std::find(query.vctValues.begin(), query.vctValues.end(), cred.vcVct) != query.vctValues.end()) {
-                    credsSatifyingMeta.push_back(&cred);
+                if (std::find(query.vctValues.begin(), query.vctValues.end(), cred.vcVct) == query.vctValues.end()) {
+                    continue;
                 }
             }
+            if (!cred.readerIdentifiers.empty()) {
+                if (query.readerAuthAkis.empty()) {
+                    continue;
+                }
+                bool matchesReader = false;
+                for (const auto& requiredAki : cred.readerIdentifiers) {
+                    for (const auto& reqAki : query.readerAuthAkis) {
+                        if (requiredAki == reqAki) {
+                            matchesReader = true;
+                            break;
+                        }
+                    }
+                    if (matchesReader) break;
+                }
+                if (!matchesReader) {
+                    continue;
+                }
+            }
+            if (!query.issuerIdentifiers.empty()) {
+                bool matchesIssuer = false;
+                for (const auto& requestedId : query.issuerIdentifiers) {
+                    for (const auto& credId : cred.issuerIdentifiers) {
+                        if (credId == requestedId) {
+                            matchesIssuer = true;
+                            break;
+                        }
+                    }
+                    if (matchesIssuer) break;
+                }
+                if (!matchesIssuer) {
+                    continue;
+                }
+            }
+            credsSatifyingMeta.push_back(&cred);
         }
 
         std::vector<DcqlResponseCredentialSetOptionMemberMatch> matches;
         for (auto& cred : credsSatifyingMeta) {
             if (query.claimSets.size() == 0) {
-                bool didNotMatch = false;
-                auto matchingClaimValues = std::vector<Claim*>();
-                for (auto& claim : query.requestedClaims) {
-                    Claim* matchingCredentialClaim = cred->findMatchingClaim(claim);
-                    if (matchingCredentialClaim != nullptr) {
-                        matchingClaimValues.push_back(matchingCredentialClaim);
-                    } else {
-                        LOG("Error resolving requested claim with path %s", claim.joinPath().c_str());
-                        didNotMatch = true;
-                        break;
+                if (query.lenientClaimMatching) {
+                    bool failedRequiredClaim = false;
+                    auto matchingClaimValues = std::vector<Claim*>();
+                    for (auto& claim : query.requestedClaims) {
+                        Claim* matchingCredentialClaim = cred->findMatchingClaim(claim);
+                        if (matchingCredentialClaim != nullptr) {
+                            matchingClaimValues.push_back(matchingCredentialClaim);
+                        } else if (claim.path.size() >= 1 && claim.path[0] == "org.iso.transactiondata") {
+                            // Transaction data claims cannot be omitted even under lenient matching
+                            failedRequiredClaim = true;
+                            break;
+                        }
                     }
-                }
-                if (!didNotMatch) {
-                    // All claims matched, we have a candidate
-                    matches.push_back(DcqlResponseCredentialSetOptionMemberMatch(
-                       cred,
-                       matchingClaimValues
-                    ));
+                    if (!failedRequiredClaim && (!matchingClaimValues.empty() || query.requestedClaims.empty())) {
+                        // At least one claim matched, or no claims requested, we have a candidate
+                        matches.push_back(DcqlResponseCredentialSetOptionMemberMatch(
+                            cred,
+                            matchingClaimValues
+                        ));
+                    }
+                } else {
+                    bool didNotMatch = false;
+                    auto matchingClaimValues = std::vector<Claim*>();
+                    for (auto& claim : query.requestedClaims) {
+                        Claim* matchingCredentialClaim = cred->findMatchingClaim(claim);
+                        if (matchingCredentialClaim != nullptr) {
+                            matchingClaimValues.push_back(matchingCredentialClaim);
+                        } else {
+                            LOG("Error resolving requested claim with path %s", claim.joinPath().c_str());
+                            didNotMatch = true;
+                            break;
+                        }
+                    }
+                    if (!didNotMatch) {
+                        // All claims matched, we have a candidate
+                        matches.push_back(DcqlResponseCredentialSetOptionMemberMatch(
+                            cred,
+                            matchingClaimValues
+                        ));
+                    }
                 }
             } else {
                 // Go through all the claim sets, one at a time, pick the first to match

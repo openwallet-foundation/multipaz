@@ -53,6 +53,8 @@ abstract class CombinedNfcService: HostApduService() {
     override fun processCommandApdu(encodedCommandApdu: ByteArray?, extras: Bundle?): ByteArray? {
         if (encodedCommandApdu == null) return null
 
+        Logger.dHex(TAG, "Handling Command APDU", encodedCommandApdu)
+
         // With Extended APDUs it's possible we get a partial APDU so gracefully handle if decoding fails. Simply
         // log and discard, we'll likely get hit with an onDeactivated call soon anyway.
         //
@@ -73,12 +75,14 @@ abstract class CombinedNfcService: HostApduService() {
             services[activeAid]?.let { service ->
                 return service.processCommandApdu(encodedCommandApdu, extras)
             }
+            Logger.w(TAG, "No handler for AID ${activeAid.toHex()}, returning 6a82")
             return ResponseApdu(Nfc.RESPONSE_STATUS_ERROR_FILE_OR_APPLICATION_NOT_FOUND).encode()
         }
         return null
     }
 
     override fun onDeactivated(reason: Int) {
+        Logger.d(TAG, "onDeactivated reason $reason")
         activeAid?.let { activeAid ->
             services[activeAid]?.let { service ->
                 return service.onDeactivated(reason)

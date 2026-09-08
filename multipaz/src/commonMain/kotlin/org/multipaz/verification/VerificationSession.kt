@@ -90,10 +90,12 @@ class VerificationSession(
                 addJsonObject {
                     val parsedRequest =
                         Json.parseToJsonElement(request.openID4VPRequest).jsonObject
-                    put("protocol", if (OpenID4VPRequest.isSignedRequest(parsedRequest)) {
-                        "openid4vp-v1-signed"
-                    } else {
+                    put("protocol", if (!OpenID4VPRequest.isSignedRequest(parsedRequest)) {
                         "openid4vp-v1-unsigned"
+                    } else if (OpenID4VPRequest.isMultisignedRequest(parsedRequest)) {
+                        "openid4vp-v1-multisigned"
+                    } else {
+                        "openid4vp-v1-signed"
                     })
                     put("data", parsedRequest)
                 }
@@ -165,7 +167,8 @@ class VerificationSession(
             "org-iso-mdoc" -> processDcIso18013Response(dcData)
             "openid4vp" -> processDcOpenID4VPResponse(dcData, find<DcOpenID4VPDraft24Request>())
             "openid4vp-v1-unsigned",
-            "openid4vp-v1-signed" -> processDcOpenID4VPResponse(dcData, find<DcOpenID4VPRequest>())
+            "openid4vp-v1-signed",
+            "openid4vp-v1-multisigned" -> processDcOpenID4VPResponse(dcData, find<DcOpenID4VPRequest>())
             else -> throw IllegalArgumentException("unknown protocol: '$protocol'")
         }
     }
@@ -261,7 +264,7 @@ class VerificationSession(
 
         companion object {
             /**
-             * Heuristic to determine if the request was signed.
+             * Heuristic to determine if the request was signed (or multi-signed).
              *
              * We want to have a single place where it is defined in case it needs to be tweaked.
              *
@@ -270,6 +273,17 @@ class VerificationSession(
              */
             fun isSignedRequest(parsedRequest: JsonObject): Boolean =
                 !parsedRequest.containsKey("dcql_query")
+
+            /**
+             * Heuristic to determine if the request was multi-signed.
+             *
+             * We want to have a single place where it is defined in case it needs to be tweaked.
+             *
+             * @param parsedRequest [OpenID4VPRequest.openID4VPRequest] parsed as JSON object
+             * @return whether the request was signed
+             */
+            fun isMultisignedRequest(parsedRequest: JsonObject): Boolean =
+                isSignedRequest(parsedRequest) && parsedRequest.containsKey("signatures")
         }
     }
 
@@ -440,12 +454,16 @@ class VerificationSession(
     ): PresentmentRecord {
         val parsedRequest = Json.parseToJsonElement(request.openID4VPRequest).jsonObject
         val isSigned = OpenID4VPRequest.isSignedRequest(parsedRequest)
-        val jsonRequest = if (isSigned) {
-            // This got to be signed request, extract JWT body
-            val jwtParts = parsedRequest["request"]!!.jsonPrimitive.content.split('.')
-            Json.parseToJsonElement(jwtParts[1].fromBase64Url().decodeToString()).jsonObject
-        } else {
+        val jsonRequest = if (!isSigned) {
             parsedRequest
+        } else {
+            val payload = if (OpenID4VPRequest.isMultisignedRequest(parsedRequest)) {
+                parsedRequest["payload"]!!.jsonPrimitive.content
+            } else {
+                // This got to be single-signed request, extract JWT body
+                parsedRequest["request"]!!.jsonPrimitive.content.split('.')[1]
+            }
+            Json.parseToJsonElement(payload.fromBase64Url().decodeToString()).jsonObject
         }
         val queryData = QueryData.fromDcql(jsonRequest["dcql_query"]!!.jsonObject)
         val nonceFromRequest = jsonRequest["nonce"]!!.jsonPrimitive.content

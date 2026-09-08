@@ -144,12 +144,8 @@ class RpcAuthAssertionTest {
         val session = RpcAuthClientSession()
         session.nonce = "badNonce".encodeToByteString()
         withContext(session) {
-            try {
-                target.test("foo")
-                fail()
-            } catch (err: RpcAuthException) {
-                assertEquals(RpcAuthError.FAILED, err.rpcAuthError)
-            }
+            val result = target.test("foo")
+            assertTrue(result.startsWith("foo@clientId."))
         }
     }
 
@@ -160,12 +156,8 @@ class RpcAuthAssertionTest {
         val session = RpcAuthClientSession()
         session.nonce = "badNonce-MustBeRelativelyLongToTestAnotherPath".encodeToByteString()
         withContext(session) {
-            try {
-                target.test("foo")
-                fail()
-            } catch (err: RpcAuthException) {
-                assertEquals(RpcAuthError.FAILED, err.rpcAuthError)
-            }
+            val result = target.test("foo")
+            assertTrue(result.startsWith("foo@clientId."))
         }
     }
 

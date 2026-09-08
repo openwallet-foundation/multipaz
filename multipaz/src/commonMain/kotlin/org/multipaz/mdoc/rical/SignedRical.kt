@@ -20,6 +20,7 @@ import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.util.Logger
+import org.multipaz.util.toHex
 
 data class SignedRical(
     val rical: Rical,
@@ -48,17 +49,11 @@ data class SignedRical(
                         addCborMap {
                             put("certificate", certInfo.certificate.encoded.toByteArray())
                             put("isTrustAnchor", certInfo.isTrustAnchor)
-                            put(
-                                "serialNumber", Tagged(
-                                    Tagged.UNSIGNED_BIGNUM,
-                                    Bstr(certInfo.certificate.serialNumber.value)
-                                )
-                            )
-                            put("ski", certInfo.certificate.subjectKeyIdentifier!!)
                             put("serialNumber", Tagged(
-                                tagNumber = Tagged.UNSIGNED_BIGNUM,
-                                taggedItem = Bstr(certInfo.serialNumber.toByteArray())
+                                Tagged.UNSIGNED_BIGNUM,
+                                Bstr(certInfo.certificate.serialNumber.value)
                             ))
+                            put("ski", certInfo.certificate.subjectKeyIdentifier!!)
                             certInfo.type?.let { put("type", it) }
                             certInfo.name?.let { put("name", it) }
                             if (certInfo.extensions.isNotEmpty()) {
@@ -167,16 +162,23 @@ data class SignedRical(
 
             val certificateInfos = mutableListOf<RicalCertificateInfo>()
             (ricalMap["certificateInfos"] as CborArray).items.forEachIndexed { certInfoIndex, certInfo ->
-                val ski = ByteString(certInfo["ski"].asBstr)
                 // Be lenient about missing isTrustAnchor for now
                 val isTrustAnchor = certInfo.getOrNull("isTrustAnchor")?.asBoolean ?: true.also {
                     Logger.w(TAG, "isTrustAnchor not present in RICAL entry $certInfoIndex")
                 }
                 val certBytes = certInfo["certificate"].asBstr
+                val certificate = X509Cert(ByteString(certBytes))
+                val ski = certificate.subjectKeyIdentifier?.let { ByteString(it) }
+                    ?: throw IllegalArgumentException("No SKI in certificate")
+                val skiInCertInfo = ByteString(certInfo["ski"].asBstr)
+                if (ski != skiInCertInfo) {
+                    Logger.w(TAG, "For certificate with subject ${certificate.subject.name} the SKI in "
+                            + "RICALCertificateInfo (${skiInCertInfo.toHex()}) differs from SKI in X.509 certificate " +
+                            "(${ski.toHex()})")
+                }
                 val extensionsInCertInfo = certInfo.getOrNull("extensions")?.let {
                     it.asMap.entries.associate { (extName, extValue) -> Pair(extName.asTstr, extValue) }
                 } ?: emptyMap()
-                val serialNumberTaggedItem = certInfo["serialNumber"] as Tagged
                 val trustConstraints = mutableListOf<RicalTrustConstraint>()
                 if (certInfo.hasKey("trustConstraints")) {
                     for (trustConstraint in (certInfo["trustConstraints"] as CborArray).items) {
@@ -192,10 +194,8 @@ data class SignedRical(
                         )
                     }
                 }
-                require(serialNumberTaggedItem.tagNumber == Tagged.UNSIGNED_BIGNUM)
                 certificateInfos.add(RicalCertificateInfo(
-                    certificate = X509Cert(ByteString(certBytes)),
-                    serialNumber = ByteString(serialNumberTaggedItem.taggedItem.asBstr),
+                    certificate = certificate,
                     isTrustAnchor = isTrustAnchor,
                     ski = ski,
                     type = certInfo.getOrNull("type")?.asTstr,

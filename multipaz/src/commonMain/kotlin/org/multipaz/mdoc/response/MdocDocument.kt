@@ -30,6 +30,7 @@ import org.multipaz.mdoc.issuersigned.IssuerSignedItem
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.presentment.TransactionData
+import org.multipaz.presentment.TransactionProtocol
 import org.multipaz.presentment.PresentmentUnlockReason
 import org.multipaz.request.MdocRequestedClaim
 import kotlin.time.Instant
@@ -65,15 +66,14 @@ class MdocDocument(
      * Convenience property for accessing the X.509 certificate chain for the issuer signature from [issuerAuth].
      */
     val issuerCertChain: X509CertChain by lazy {
-        issuerAuth.unprotectedHeaders[
-            CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)
-        ]!!.asX509CertChain
+        (issuerAuth.protectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
+            ?: issuerAuth.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel])!!.asX509CertChain
     }
 
     /**
      * List of verified transaction data which was sent in the request
      */
-    lateinit var transactionData: List<TransactionData>
+    lateinit var transactionData: List<TransactionData<*>>
     /**
      * Transaction response indexed by [TransactionType.identifier]
      */
@@ -122,14 +122,12 @@ class MdocDocument(
     internal suspend fun verify(
         sessionTranscript: DataItem,
         eReaderKey: AsymmetricKey?,
-        transactionData: List<TransactionData>,
+        transactionData: List<TransactionData<*>>,
         atTime: Instant,
+        rejectIfValidUntilAfterNotAfter: Boolean = false,
     ) {
         // First check the issuer signature..
-        val issuerAuthorityCertChain =
-            issuerAuth.unprotectedHeaders[
-                CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN)
-            ]!!.asX509CertChain
+        val issuerAuthorityCertChain = issuerCertChain
         val signatureAlgorithm = Algorithm.fromCoseAlgorithmIdentifier(
             issuerAuth.protectedHeaders[
                 CoseNumberLabel(Cose.COSE_LABEL_ALG)
@@ -153,6 +151,13 @@ class MdocDocument(
         }
 
         // Check validity
+        val dsCert = issuerAuthorityCertChain.certificates[0]
+        if (mso.signedAt < dsCert.validityNotBefore || mso.signedAt > dsCert.validityNotAfter) {
+            throw IllegalStateException("MSO signed date is outside DS certificate validity period")
+        }
+        if (rejectIfValidUntilAfterNotAfter && mso.validUntil > dsCert.validityNotAfter) {
+            throw IllegalStateException("MSO validUntil is after DS certificate validity period")
+        }
         if (atTime < mso.validFrom) {
             throw IllegalStateException("MSO is not yet valid")
         }
@@ -237,21 +242,42 @@ class MdocDocument(
             }
         }
 
+        // Check DeviceSigned key authorizations
+        for ((namespaceName, innerMap) in deviceNamespaces.data) {
+            for ((dataElementName, _) in innerMap) {
+                val authorizedByNamespace = mso.deviceKeyAuthorizedNamespaces.contains(namespaceName)
+                val authorizedByElement = mso.deviceKeyAuthorizedDataElements[namespaceName]?.contains(dataElementName) == true
+                if (!authorizedByNamespace && !authorizedByElement) {
+                    throw IllegalStateException(
+                        "Device-signed data element '$dataElementName' in namespace '$namespaceName' is not authorized by MSO"
+                    )
+                }
+            }
+        }
+
         // Check transaction data and return transaction processing responses
         this.transactionData = transactionData
         transactionResponse = buildMap {
             for (transaction in transactionData) {
-                val response = deviceNamespaces.data[transaction.type.mdocResponseNamespace]
-                    ?: throw IllegalStateException("No transaction response for '${transaction.type.identifier}'")
-                val hashAlg = response["transaction_data_hash_alg"]?.let {
-                    Algorithm.fromCoseAlgorithmIdentifier(it.asNumber.toInt())
+                val response: Map<String, DataItem> = when (transaction.protocol) {
+                    TransactionProtocol.ISO_18013_5 -> {
+                        val ns = transaction.type.getMdocResponseNamespace(TransactionProtocol.ISO_18013_5)
+                        val namespaceMap = deviceNamespaces.data[ns]
+                            ?: throw IllegalStateException("No transaction response namespace '$ns'")
+                        val responseItem = namespaceMap[transaction.type.identifier]
+                            ?: throw IllegalStateException("No transaction response for '${transaction.type.identifier}'")
+                        responseItem.asMap.entries.associate { (k, v) -> Pair(k.asTstr, v) }
+                    }
+                    TransactionProtocol.OPENID4VP -> {
+                        val ns = transaction.type.getMdocResponseNamespace(TransactionProtocol.OPENID4VP)
+                        val namespaceMap = deviceNamespaces.data[ns]
+                            ?: throw IllegalStateException(
+                                "No transaction response for '${transaction.type.identifier}' in namespace '$ns'"
+                            )
+                        namespaceMap
+                    }
                 }
-                val hash = response["transaction_data_hash"] as? Bstr
-                    ?: throw IllegalStateException("Invalid response for transaction '${transaction.type.identifier}'")
-                val expectedHash = transaction.getHash(hashAlg ?: Algorithm.SHA256)
-                if (ByteString(hash.asBstr) != expectedHash) {
-                    throw IllegalStateException("Transaction hash failed to verify for '${transaction.type.identifier}'")
-                }
+                transaction.verifyMdocResponse(response)
                 put(transaction.type.identifier, response)
             }
         }

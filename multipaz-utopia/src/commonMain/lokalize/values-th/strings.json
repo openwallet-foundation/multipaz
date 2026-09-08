@@ -183,5 +183,6 @@
   "cor_description_document_number": "หมายเลขสำหรับ COR ที่ผู้ให้บริการ COR กำหนดให้",
   "cor_description_administrative_number": "หมายเลขที่ผู้ให้บริการ COR กำหนดให้เพื่อการควบคุมการตรวจสอบหรือวัตถุประสงค์อื่น ๆ",
   "cor_description_issuing_jurisdiction": "รหัสการแบ่งย่อยประเทศของเขตอำนาจศาลที่ออก COR ตามที่กำหนดใน ISO 3166-2:2020 ข้อ 8 ส่วนแรกของรหัสจะต้องเหมือนกับค่าสำหรับ issuing_country",
-  "cor_description_issuing_country": "รหัสประเทศ Alpha-2 ตามที่กำหนดใน ISO 3166-1 ของประเทศหรือดินแดนของหน่วยงานผู้ออก"
+  "cor_description_issuing_country": "รหัสประเทศ Alpha-2 ตามที่กำหนดใน ISO 3166-1 ของประเทศหรือดินแดนของหน่วยงานผู้ออก",
+  "payment_request_payment_sca_transaction": "SCA พร้อมธุรกรรมการชำระเงิน"
 }

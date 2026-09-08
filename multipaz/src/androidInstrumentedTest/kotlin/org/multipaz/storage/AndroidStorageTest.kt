@@ -26,6 +26,8 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.minutes
 
 class AndroidStorageTest {
@@ -522,6 +524,63 @@ class AndroidStorageTest {
             assertEquals(setOf(key3), table.enumerate(partitionId = "C").toSet())
             assertNull(table.get(key = key1, partitionId = "B"))
             assertNull(table.get(key = key2, partitionId = "B"))
+        }
+    }
+
+    @Test
+    fun testBusyTimeout() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().context
+        val dbFile = context.getDatabasePath("test_busy_timeout.db")
+        dbFile.delete()
+        try {
+            val storage1 = AndroidStorage(
+                databasePath = dbFile.absolutePath,
+                clock = TestClock,
+                keySize = 3
+            )
+            val storage2 = AndroidStorage(
+                databasePath = dbFile.absolutePath,
+                clock = TestClock,
+                keySize = 3
+            )
+            val tableSpec = StorageTableSpec("test_table", supportPartitions = false, supportExpiration = false)
+            val table1 = storage1.getTable(tableSpec)
+            val table2 = storage2.getTable(tableSpec)
+
+            table1.insert("k1", data = "v1".encodeToByteString())
+
+            // Android SQLite automatically configures a non-zero busy_timeout (typically 2500ms).
+            storage1.withDatabase { db ->
+                db.rawQuery("PRAGMA busy_timeout", null).use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val timeout = cursor.getLong(0)
+                        assertTrue(timeout >= 2000L, "Expected busy_timeout >= 2000ms, got $timeout")
+                    }
+                }
+            }
+
+            // Connection 1 holds an exclusive transaction for 200ms.
+            val lockJob = launch(Dispatchers.IO) {
+                storage1.withDatabase { db ->
+                    db.execSQL("BEGIN EXCLUSIVE TRANSACTION")
+                    try {
+                        Thread.sleep(200)
+                        db.execSQL("COMMIT")
+                    } catch (e: Throwable) {
+                        db.execSQL("ROLLBACK")
+                    }
+                }
+            }
+
+            delay(50)
+
+            // Connection 2 writes while Connection 1 holds the lock.
+            // With Android's busy timeout, this automatically waits and succeeds.
+            table2.insert("k2", data = "v2".encodeToByteString())
+            assertEquals("v2".encodeToByteString(), table2.get("k2"))
+            lockJob.join()
+        } finally {
+            dbFile.delete()
         }
     }
 

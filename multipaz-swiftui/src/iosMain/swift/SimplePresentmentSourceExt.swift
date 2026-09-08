@@ -38,10 +38,10 @@ extension SimplePresentmentSource.Companion {
         eventLogger: EventLogger? = nil,
         resolveTrustFn: @escaping @MainActor @Sendable (
             _ requester: Requester
-        ) async -> TrustMetadata?,
+        ) async -> TrustedRequesterIdentity?,
         showConsentPromptFn: @escaping @MainActor @Sendable (
             _ requester: Requester,
-            _ trustMetadata: TrustMetadata?,
+            _ trustMetadata: TrustedRequesterIdentity?,
             _ consentData: ConsentData,
             _ preselectedDocuments: [Document],
             _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void,
@@ -91,9 +91,69 @@ extension SimplePresentmentSource.Companion {
 
 }
 
+private typealias ObjcBlockWithNSArray = @convention(block) (NSArray) -> Void
+private typealias ObjcBlockWithDocs = @convention(block) ([Document]) -> Void
+private typealias ObjcBlockWithAny = @convention(block) (AnyObject) -> Void
+private typealias ObjcBlockWithAnyOptional = @convention(block) (Any?) -> Void
+private typealias SwiftBlockWithDocs = ([Document]) -> Void
+private typealias SwiftBlockWithAny = (Any?) -> Void
+
+private func invokeOnDocumentsInFocus(callback: Any?, documents: [Document]) {
+    guard let callback = callback else { return }
+    
+    // 1. Try Obj-C blocks
+    if let block = callback as? ObjcBlockWithNSArray {
+        block(documents as NSArray)
+        return
+    }
+    if let block = callback as? ObjcBlockWithDocs {
+        block(documents)
+        return
+    }
+    if let block = callback as? ObjcBlockWithAny {
+        block(documents as NSArray)
+        return
+    }
+    if let block = callback as? ObjcBlockWithAnyOptional {
+        block(documents)
+        return
+    }
+    
+    // 2. Try Swift closures
+    if let block = callback as? SwiftBlockWithDocs {
+        block(documents)
+        return
+    }
+    if let block = callback as? SwiftBlockWithAny {
+        block(documents)
+        return
+    }
+    
+    // 3. Try unsafeBitCast for Objective-C block
+    if let obj = callback as? AnyObject, NSStringFromClass(type(of: obj)).contains("Block") {
+        let block = unsafeBitCast(obj, to: ObjcBlockWithNSArray.self)
+        block(documents as NSArray)
+        return
+    }
+    
+    // 4. Try selectors
+    if let obj = callback as? AnyObject {
+        let selector = Selector(("invoke:"))
+        if obj.responds(to: selector) {
+            _ = obj.perform(selector, with: documents)
+            return
+        }
+        let sel2 = Selector(("invokeWithDocuments:"))
+        if obj.responds(to: sel2) {
+            _ = obj.perform(sel2, with: documents)
+            return
+        }
+    }
+}
+
 private func runResolveTrust(
     requester: Requester,
-    f: @escaping @MainActor @Sendable (Requester) async -> TrustMetadata?,
+    f: @escaping @MainActor @Sendable (Requester) async -> TrustedRequesterIdentity?,
     completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void
 ) {
     Task { @MainActor in
@@ -104,12 +164,13 @@ private func runResolveTrust(
 
 private func runShowConsentPrompt(
     requester: Requester,
-    trustMetadata: TrustMetadata?,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
     consentData: ConsentData,
     preselectedDocuments: [Document],
+    onDocumentsInFocusCallback: Any?,
     f: @escaping @MainActor @Sendable (
         _ requester: Requester,
-        _ trustMetadata: TrustMetadata?,
+        _ trustedRequesterIdentity: TrustedRequesterIdentity?,
         _ consentData: ConsentData,
         _ preselectedDocuments: [Document],
         _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void
@@ -117,13 +178,14 @@ private func runShowConsentPrompt(
     completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void
 ) {
     Task { @MainActor in
-        // TODO: The cast for onDocumentsInFocus fails at runtime, figure out how to make it work
         let value = await f(
             requester,
-            trustMetadata,
+            trustedRequesterIdentity,
             consentData,
             preselectedDocuments,
-            { documents in }
+            { documents in
+                invokeOnDocumentsInFocus(callback: onDocumentsInFocusCallback, documents: documents)
+            }
         )
         completionHandler(value, nil)
     }
@@ -143,9 +205,9 @@ private func runGetBadges(
 private class ResolveTrustHandler: KotlinSuspendFunction1 {
     let f: @MainActor @Sendable (
         _ requester: Requester
-    ) async -> TrustMetadata?
+    ) async -> TrustedRequesterIdentity?
     
-    init(f: @escaping @MainActor @Sendable (_ requester: Requester) async -> TrustMetadata?) {
+    init(f: @escaping @MainActor @Sendable (_ requester: Requester) async -> TrustedRequesterIdentity?) {
         self.f = f
     }
 
@@ -158,32 +220,34 @@ private class ResolveTrustHandler: KotlinSuspendFunction1 {
 private class ShowConsentPromptHandler: KotlinSuspendFunction5 {
     let f: @MainActor @Sendable (
         _ requester: Requester,
-        _ trustMetadata: TrustMetadata?,
+        _ trustedRequesterIdentity: TrustedRequesterIdentity?,
         _ consentData: ConsentData,
         _ preselectedDocuments: [Document],
-        _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void,
+        _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void
     ) async -> CredentialSelection?
     
     init(f: @escaping @MainActor @Sendable (
         _ requester: Requester,
-        _ trustMetadata: TrustMetadata?,
+        _ trustedRequesterIdentity: TrustedRequesterIdentity?,
         _ consentData: ConsentData,
         _ preselectedDocuments: [Document],
-        _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void,
+        _ onDocumentsInFocus: @escaping @MainActor @Sendable (_ documents: [Document]) -> Void
     ) async -> CredentialSelection?) {
         self.f = f
     }
 
     func __invoke(p1: Any?, p2: Any?, p3: Any?, p4: Any?, p5: Any?, completionHandler: @escaping @Sendable (Any?, (any Error)?) -> Void) {
         let requester = p1 as! Requester
-        let trustMetadata = p2 as! TrustMetadata?
+        let trustedRequesterIdentity = p2 as! TrustedRequesterIdentity?
         let consentData = p3 as! ConsentData
         let preselectedDocuments = p4 as! [Document]
+        let onDocumentsInFocusCallback = p5
         runShowConsentPrompt(
             requester: requester,
-            trustMetadata: trustMetadata,
+            trustedRequesterIdentity: trustedRequesterIdentity,
             consentData: consentData,
             preselectedDocuments: preselectedDocuments,
+            onDocumentsInFocusCallback: onDocumentsInFocusCallback,
             f: self.f,
             completionHandler: completionHandler
         )

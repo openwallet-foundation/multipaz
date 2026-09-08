@@ -1,6 +1,6 @@
 import SwiftUI
 
-func getIconName(claim: Claim) -> String {
+private func getIconName(claim: Claim) -> String {
     if let attribute = claim.attribute {
         switch attribute.icon {
         case .person: return "person"
@@ -39,8 +39,7 @@ func getIconName(claim: Claim) -> String {
     return "gear"
 }
 
-struct ClaimsSection : View {
-
+private struct ClaimsSection : View {
     let claims: [Claim]
 
     var body: some View {
@@ -53,7 +52,7 @@ struct ClaimsSection : View {
                 HStack {
                     Image(systemName: getIconName(claim: claim))
                         .imageScale(.small)
-                    Text("\(claim .displayName)")
+                    Text("\(claim.displayName)")
                         .font(.system(size: 14))
                 }
             }
@@ -62,8 +61,183 @@ struct ClaimsSection : View {
     }
 }
 
-struct RequestedDocumentSection : View {
- 
+private let tipOptions: [(percent: Double, label: String)] = [
+    (0.0, "No tip"),
+    (10.0, "10%"),
+    (15.0, "15%"),
+    (20.0, "20%"),
+    (25.0, "25%")
+]
+
+private func formatAmount(_ amount: Double) -> String {
+    let roundedCents = Int64((amount * 100.0).rounded())
+    let dollars = roundedCents / 100
+    let cents = abs(roundedCents % 100)
+    return String(format: "%lld.%02lld", dollars, cents)
+}
+
+private struct ChipFlowLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        var maxRowWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > maxWidth && currentX > 0 {
+                maxRowWidth = max(maxRowWidth, currentX - spacing)
+                currentX = 0
+                currentY += lineHeight + lineSpacing
+                lineHeight = 0
+            }
+            currentX += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+        maxRowWidth = max(maxRowWidth, max(0, currentX - spacing))
+        let totalHeight = currentY + lineHeight
+        return CGSize(width: min(maxWidth, maxRowWidth), height: totalHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var currentX: CGFloat = bounds.minX
+        var currentY: CGFloat = bounds.minY
+        var lineHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > bounds.maxX && currentX > bounds.minX {
+                currentX = bounds.minX
+                currentY += lineHeight + lineSpacing
+                lineHeight = 0
+            }
+            subview.place(at: CGPoint(x: currentX, y: currentY), proposal: ProposedViewSize(size))
+            currentX += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+    }
+}
+
+private struct DisplayTransactionData: View {
+    let transactionData: TransactionData<AnyObject>
+    let hasClaims: Bool
+    let userInput: TransactionUserInput?
+    let onUserInputChanged: (TransactionUserInput) -> Void
+
+    var body: some View {
+        if transactionData.type == PaymentTransaction.shared || transactionData.type.identifier == PaymentTransaction.shared.identifier {
+            if let payload = transactionData.payload as? PaymentTransaction.Payload {
+                let tipPercent = (userInput as? PaymentTransaction.UserInput)?.tipPercent ?? 0.0
+                let headerText = hasClaims ? "This payment will also be approved:" : "This payment will be approved:"
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(headerText)
+                        .font(.system(size: 14, weight: .bold))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if !payload.payee.name.isEmpty {
+                        HStack(spacing: 8) {
+                            Image(systemName: "storefront")
+                                .imageScale(.small)
+                            Text("Payee: \(payload.payee.name)")
+                                .font(.system(size: 14))
+                        }
+                    }
+
+                    let amountText: String = {
+                        if payload.tipRequested?.boolValue == true && tipPercent > 0.0 {
+                            let tipAmount = ceil(payload.amount * tipPercent) / 100.0
+                            let totalAmount = payload.amount + tipAmount
+                            return "Amount: \(formatAmount(totalAmount)) \(payload.currency) (tip: \(formatAmount(tipAmount)) \(payload.currency))"
+                        } else {
+                            return "Amount: \(formatAmount(payload.amount)) \(payload.currency)"
+                        }
+                    }()
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "creditcard")
+                            .imageScale(.small)
+                        Text(amountText)
+                            .font(.system(size: 14))
+                    }
+
+                    if payload.tipRequested?.boolValue == true {
+                        Text("Add tip")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                            .padding(.top, 4)
+
+                        ChipFlowLayout(spacing: 8, lineSpacing: 6) {
+                            ForEach(tipOptions, id: \.percent) { option in
+                                let isSelected = (tipPercent == option.percent)
+                                Button(action: {
+                                    onUserInputChanged(PaymentTransaction.UserInput(tipPercent: option.percent))
+                                }) {
+                                    Text(option.label)
+                                        .font(.system(size: 13, weight: isSelected ? .bold : .regular))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(isSelected ? Color.accentColor.opacity(0.15) : Color(uiColor: .secondarySystemBackground))
+                                        .foregroundColor(isSelected ? Color.accentColor : Color.primary)
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: 1)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else if transactionData.type == PingTransaction.shared || transactionData.type.identifier == PingTransaction.shared.identifier {
+            if let payload = transactionData.payload as? PingTransaction.Payload {
+                let headerText = hasClaims ? "This test \"ping\" transaction will also be approved:" : "This test \"ping\" transaction will be approved:"
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(headerText)
+                        .font(.system(size: 14, weight: .bold))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let str = payload.string {
+                        HStack(spacing: 8) {
+                            Image(systemName: "info.circle")
+                                .imageScale(.small)
+                            Text("String: \(str)")
+                                .font(.system(size: 14))
+                        }
+                    }
+                    if let blob = payload.blob {
+                        let byteArray = blob.toByteArray(startIndex: 0, endIndex: blob.size)
+                        HStack(spacing: 8) {
+                            Image(systemName: "info.circle")
+                                .imageScale(.small)
+                            Text("Blob: \(byteArray.toBase64Url())")
+                                .font(.system(size: 14))
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            let headerText = hasClaims ? "This \(transactionData.type.displayName) transaction will also be approved:" : "This \(transactionData.type.displayName) transaction will be approved:"
+            VStack(alignment: .leading, spacing: 6) {
+                Text(headerText)
+                    .font(.system(size: 14, weight: .bold))
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct RequestedDocumentSection : View {
     let rpName: String
     let requester: Requester
     let encryptionRequested: Bool
@@ -71,6 +245,9 @@ struct RequestedDocumentSection : View {
     let document: Document
     let retainedClaims: [Claim]
     let notRetainedClaims: [Claim]
+    let transactionData: [TransactionData<AnyObject>]
+    let transactionUserInput: [String: TransactionUserInput]
+    let onTransactionUserInputChanged: (String, TransactionUserInput) -> Void
     let showOptionsButton: Bool
     let onOptionsTapped: () -> Void
 
@@ -126,6 +303,8 @@ struct RequestedDocumentSection : View {
             }
         }
 
+        let hasClaims = !retainedClaims.isEmpty || !notRetainedClaims.isEmpty
+
         if (!notRetainedClaims.isEmpty) {
             VStack(alignment: .leading, spacing: 10) {
                 Text(sharedText)
@@ -144,12 +323,28 @@ struct RequestedDocumentSection : View {
                 ClaimsSection(claims: retainedClaims)
             }
         }
+
+        if !transactionData.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(0..<transactionData.count, id: \.self) { idx in
+                    let data = transactionData[idx]
+                    DisplayTransactionData(
+                        transactionData: data,
+                        hasClaims: hasClaims,
+                        userInput: transactionUserInput[data.type.identifier],
+                        onUserInputChanged: { userInput in
+                            onTransactionUserInputChanged(data.type.identifier, userInput)
+                        }
+                    )
+                }
+            }
+        }
     }
 }
 
-func getRelyingPartyName(
+private func getRelyingPartyName(
     requester: Requester,
-    trustMetadata: TrustMetadata?,
+    trustMetadata: TrustMetadata?
 ) -> String {
     if trustMetadata != nil {
         if let displayName = trustMetadata?.displayName {
@@ -164,14 +359,12 @@ func getRelyingPartyName(
     }
 }
 
-struct RelyingPartySection : View {
-
+private struct RelyingPartySection : View {
     let rpName: String
     let trustMetadata: TrustMetadata?
     let onRequesterClicked: () -> Void
 
     var body: some View {
-
         VStack(spacing: 10) {
             if let iconUrl = trustMetadata?.displayIconUrl {
                 AsyncImage(url: URL(string: iconUrl)) { phase in
@@ -209,7 +402,7 @@ struct RelyingPartySection : View {
     }
 }
 
-struct InfoSection: View {
+private struct InfoSection: View {
     let markdown: String
     let showWarning: Bool
     
@@ -227,49 +420,75 @@ struct InfoSection: View {
     }
 }
 
-
-
 private enum ConsentDestinations: Hashable {
     case showRequesterInfo
     case pickSolution(useCaseIndex: Int)
 }
 
-/// A ``View`` which asks the user to approve sharing of a credentials.
+/// A ``View`` which asks the user to approve sharing of credentials.
 ///
 /// - Parameters:
 ///   - consentData: the consent data containing use cases and solutions.
 ///   - requester: the relying party which is requesting the data.
-///   - trustMetadata:``TrustMetadata`` conveying the level of trust in the requester, if any.
+///   - trustedRequesterIdentity: the identity of the trusted requester, if any.
+///   - preselectedDocuments: list of documents that should be preselected.
 ///   - maxHeight: the maximum height of the view.
+///   - onDocumentsInFocus: callback invoked with the list of documents currently in focus as the user changes selections.
 ///   - onConfirm: callback when the user presses the Share button with the credentials that were selected.
 ///   - onCancel: callback when the user presses the Cancel button.
 public struct Consent: View {
     let maxHeight: CGFloat
     let consentData: ConsentData
     let requester: Requester
-    let trustMetadata: TrustMetadata?
+    let trustedRequesterIdentity: TrustedRequesterIdentity?
+    let preselectedDocuments: [Document]
+    let onDocumentsInFocus: ((_ documents: [Document]) -> Void)?
     let onConfirm: (_: CredentialSelection) -> Void
     let onCancel: () -> Void
 
     public init(
         consentData: ConsentData,
         requester: Requester,
-        trustMetadata: TrustMetadata?,
+        trustedRequesterIdentity: TrustedRequesterIdentity?,
+        preselectedDocuments: [Document] = [],
         maxHeight: CGFloat = .infinity,
+        onDocumentsInFocus: ((_ documents: [Document]) -> Void)? = nil,
         onConfirm: @escaping (_: CredentialSelection) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.consentData = consentData
         self.requester = requester
-        self.trustMetadata = trustMetadata
+        self.trustedRequesterIdentity = trustedRequesterIdentity
+        self.preselectedDocuments = preselectedDocuments
         self.maxHeight = maxHeight
+        self.onDocumentsInFocus = onDocumentsInFocus
         self.onConfirm = onConfirm
         self.onCancel = onCancel
     }
 
     @State private var path = NavigationPath()
     @State private var selections: [Int] = []
+    @State private var transactionUserInput: [CredentialPresentmentSetOptionMemberMatch: [String: TransactionUserInput]] = [:]
     @State private var sheetHeight: CGFloat = 450
+
+    private func getDocumentsForSelections(_ selections: [Int]) -> [Document] {
+        var documents: [Document] = []
+        for (useCaseIndex, solutionIndex) in selections.enumerated() {
+            if useCaseIndex < consentData.useCases.count && solutionIndex >= 0 {
+                let useCase = consentData.useCases[useCaseIndex]
+                if solutionIndex < useCase.solutions.count {
+                    let solution = useCase.solutions[solutionIndex]
+                    for credential in solution.credentials {
+                        let doc = credential.match.credential.document
+                        if !documents.contains(where: { $0.identifier == doc.identifier }) {
+                            documents.append(doc)
+                        }
+                    }
+                }
+            }
+        }
+        return documents
+    }
 
     private func getInitialSelections(preselectedDocuments: [Document]) -> [Int] {
         var result: [Int] = []
@@ -313,7 +532,7 @@ public struct Consent: View {
     public var body: some View {
         let rpName = getRelyingPartyName(
             requester: requester,
-            trustMetadata: trustMetadata
+            trustMetadata: trustedRequesterIdentity?.trustMetadata
         )
         NavigationStack(path: $path) {
             VStack {
@@ -325,12 +544,13 @@ public struct Consent: View {
                         consentData: consentData,
                         rpName: rpName,
                         requester: requester,
-                        trustMetadata: trustMetadata,
+                        trustMetadata: trustedRequesterIdentity?.trustMetadata,
                         selections: selections,
+                        transactionUserInput: $transactionUserInput,
                         sheetHeight: $sheetHeight,
                         isActive: path.isEmpty,
                         onRequesterClicked: {
-                            if requester.certChain != nil {
+                            if trustedRequesterIdentity != nil {
                                 path.append(ConsentDestinations.showRequesterInfo)
                             }
                         },
@@ -351,7 +571,9 @@ public struct Consent: View {
             }
             .onAppear {
                 if selections.isEmpty {
-                    selections = getInitialSelections(preselectedDocuments: [])
+                    selections = getInitialSelections(preselectedDocuments: preselectedDocuments)
+                    let initialDocs = getDocumentsForSelections(selections)
+                    onDocumentsInFocus?(initialDocs)
                 }
             }
             .navigationDestination(for: ConsentDestinations.self) { destination in
@@ -359,7 +581,8 @@ public struct Consent: View {
                 case .showRequesterInfo:
                     ShowRequesterInfo(
                         maxHeight: maxHeight,
-                        requester: requester
+                        requester: requester,
+                        trustedRequesterIdentity: trustedRequesterIdentity!
                     )
                 case .pickSolution(let useCaseIndex):
                     PickSolutionView(
@@ -368,6 +591,8 @@ public struct Consent: View {
                         currentSolutionIndex: selections[useCaseIndex],
                         onSolutionSelected: { solutionIndex in
                             selections[useCaseIndex] = solutionIndex
+                            let updatedDocs = getDocumentsForSelections(selections)
+                            onDocumentsInFocus?(updatedDocs)
                             path.removeLast()
                         }
                     )
@@ -382,13 +607,14 @@ public struct Consent: View {
 private struct ShowRequesterInfo: View {
     let maxHeight: CGFloat
     let requester: Requester
+    let trustedRequesterIdentity: TrustedRequesterIdentity
     @State private var currentPage: Int = 0
     @State private var pageHeights: [Int: CGFloat] = [:]
 
     var body: some View {
         SmartSheet(maxHeight: maxHeight, updateDetents: false) {
         } content: {
-            let certificates = requester.certChain!.certificates
+            let certificates = trustedRequesterIdentity.identity.certChain.certificates
             VStack {
                 TabView(selection: $currentPage) {
                     ForEach(0..<certificates.count, id: \.self) { index in
@@ -405,7 +631,7 @@ private struct ShowRequesterInfo: View {
                 }
             }
         } footer: { isAtBottom, scrollDown in
-            let certificates = requester.certChain!.certificates
+            let certificates = trustedRequesterIdentity.identity.certChain.certificates
             if certificates.count > 1 {
                 HStack(spacing: 4) {
                     ForEach(0..<certificates.count, id: \.self) { index in
@@ -467,6 +693,7 @@ private struct ConsentMain: View {
     let requester: Requester
     let trustMetadata: TrustMetadata?
     let selections: [Int]
+    @Binding var transactionUserInput: [CredentialPresentmentSetOptionMemberMatch: [String: TransactionUserInput]]
     @Binding var sheetHeight: CGFloat
     let isActive: Bool
     let onRequesterClicked: () -> Void
@@ -495,6 +722,12 @@ private struct ConsentMain: View {
                                 trustMetadata: trustMetadata,
                                 useCase: consentData.useCases[idx],
                                 selectionIndex: selections[idx],
+                                transactionUserInput: transactionUserInput,
+                                onTransactionUserInputChanged: { match, typeId, input in
+                                    var current = transactionUserInput[match] ?? [:]
+                                    current[typeId] = input
+                                    transactionUserInput[match] = current
+                                },
                                 onNavigateToPickSolution: {
                                     onNavigateToPickSolution(idx)
                                 }
@@ -543,7 +776,10 @@ private struct ConsentMain: View {
                         if (!isAtBottom) {
                             scrollDown()
                         } else {
-                            onConfirm(consentData.toCredentialSelection(selections: selections.map { KotlinInt(int: Int32($0)) }))
+                            onConfirm(consentData.toCredentialSelection(
+                                selections: selections.map { KotlinInt(int: Int32($0)) },
+                                transactionUserInput: transactionUserInput
+                            ))
                         }
                     }) {
                         Text(buttonText)
@@ -565,6 +801,8 @@ private struct UseCaseSection: View {
     let trustMetadata: TrustMetadata?
     let useCase: ConsentUseCase
     let selectionIndex: Int
+    let transactionUserInput: [CredentialPresentmentSetOptionMemberMatch: [String: TransactionUserInput]]
+    let onTransactionUserInputChanged: (CredentialPresentmentSetOptionMemberMatch, String, TransactionUserInput) -> Void
     let onNavigateToPickSolution: () -> Void
 
     var body: some View {
@@ -645,6 +883,11 @@ private struct UseCaseSection: View {
                                     document: match.credential.document,
                                     retainedClaims: retainedClaims,
                                     notRetainedClaims: notRetainedClaims,
+                                    transactionData: match.transactionData,
+                                    transactionUserInput: transactionUserInput[match] ?? [:],
+                                    onTransactionUserInputChanged: { typeId, input in
+                                        onTransactionUserInputChanged(match, typeId, input)
+                                    },
                                     showOptionsButton: showChevron && (credIdx == 0),
                                     onOptionsTapped: onNavigateToPickSolution
                                 )
@@ -728,7 +971,7 @@ private struct PickSolutionView: View {
     }
 }
 
-func getDisclaimer(
+private func getDisclaimer(
     requester: Requester,
     trustMetadata: TrustMetadata?,
     rpName: String

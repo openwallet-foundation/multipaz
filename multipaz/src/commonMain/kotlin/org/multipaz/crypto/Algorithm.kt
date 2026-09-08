@@ -103,6 +103,18 @@ enum class Algorithm(
     A256GCM(coseAlgorithmIdentifier = 3, joseAlgorithmIdentifier = "A256GCM",
         description = "AES-GCM mode w/ 256-bit key, 128-bit tag"),
 
+    /** AES-CBC mode w/ 128-bit key and PKCS#7 padding */
+    A128CBC(coseAlgorithmIdentifier = -65531, joseAlgorithmIdentifier = "A128CBC",
+        description = "AES-CBC mode w/ 128-bit key and PKCS#7 padding"),
+
+    /** AES-CBC mode w/ 192-bit key and PKCS#7 padding */
+    A192CBC(coseAlgorithmIdentifier = -65530, joseAlgorithmIdentifier = "A192CBC",
+        description = "AES-CBC mode w/ 192-bit key and PKCS#7 padding"),
+
+    /** AES-CBC mode w/ 256-bit key and PKCS#7 padding */
+    A256CBC(coseAlgorithmIdentifier = -65529, joseAlgorithmIdentifier = "A256CBC",
+        description = "AES-CBC mode w/ 256-bit key and PKCS#7 padding"),
+
     /** RSASSA-PKCS1-v1_5 using SHA-256 */
     RS256(coseAlgorithmIdentifier = -257, joseAlgorithmIdentifier = "RS256",
         description = "RSASSA-PKCS1-v1_5 using SHA-256"),

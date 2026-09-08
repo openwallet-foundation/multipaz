@@ -1,11 +1,10 @@
 package org.multipaz.request
 
-import org.multipaz.crypto.X509CertChain
-
 /**
  * Details about an entity requesting data.
  *
- * @property certChain if the requester signed the request and provided a certificate chain.
+ * @property requesterIdentities list of identities that were used by the requestor (each
+ *  corresponding to a request signature).
  * @property appId if this is a request from a local application, this contains the app identifier
  *   for example `com.example.app` on Android or `<teamId>.<bundleId>` on iOS.
  * @property origin the origin of the requester, if known. If this calling application is a trusted web browser
@@ -15,7 +14,7 @@ import org.multipaz.crypto.X509CertChain
  *   If empty it means that the requester is a website but the origin wasn't passed from the web browser.
  */
 data class Requester(
-    val certChain: X509CertChain? = null,
+    val requesterIdentities: List<RequesterIdentity>,
     val appId: String? = null,
     val origin: String? = null,
 ) {

@@ -391,5 +391,7 @@
   "multi_request_mdl_and_photoid": "mDL VÀ PhotoID",
   "multi_request_mdl_or_photoid": "mDL HOẶC PhotoID",
   "age_verification_attribute_older_than_years": "Trên {age} tuổi",
-  "age_verification_description_older_than_years": "Cho biết người giữ mDL đã đủ hoặc lớn hơn {age} tuổi"
+  "age_verification_description_older_than_years": "Cho biết người giữ mDL đã đủ hoặc lớn hơn {age} tuổi",
+  "multi_request_payment_and_age_over_18": "Thanh toán và tuổi trên 18",
+  "multi_request_age_over_18_mdl_or_pid": "Tuổi trên 18 qua mDL hoặc PID + giao dịch"
 }

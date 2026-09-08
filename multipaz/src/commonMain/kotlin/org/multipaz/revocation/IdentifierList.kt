@@ -2,22 +2,25 @@ package org.multipaz.revocation
 
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborMap
+import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.crypto.AsymmetricKey
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.X509Cert
+import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.webtoken.WebTokenCheck
 import org.multipaz.webtoken.WebTokenClaim
 import org.multipaz.webtoken.WebTokenClaim.Companion.put
 import org.multipaz.webtoken.buildCwt
+import org.multipaz.webtoken.trustedRootCertificateChainValidator
 import org.multipaz.webtoken.validateCwt
-import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /**
@@ -29,19 +32,29 @@ import kotlin.time.Instant
  *
  * @param [identifiers] set of identifiers of revoked document
  * @param [creationTime] time when this object was created
+ * @param [expirationTime] time when this object expires and should be refreshed
  */
+@CborSerializable(typeId = "identifierList")
 class IdentifierList(
-    private val identifiers: Set<ByteString>,
-    val creationTime: Instant = Clock.System.now()
-) {
+    internal val identifiers: Set<ByteString>,
+    override val creationTime: Instant = Clock.System.now(),
+    override val expirationTime: Instant = creationTime + 20.minutes
+): RevocationData() {
+    /**
+     * Serializes this list as CWT.
+     *
+     * @param key key for CWT signing
+     * @param subject CWT subject field (typically URL which is used to serve this identifier list)
+     * @return serialized CWT
+     */
     suspend fun serializeAsCwt(
         key: AsymmetricKey,
         subject: String,
-        expiresIn: Duration = 20.minutes + Random.Default.nextInt(1000).seconds
     ) = buildCwt(
         key = key,
         type = "application/identifierlist+cwt",
-        expiresIn = expiresIn
+        creationTime = creationTime,
+        expiresIn = expirationTime - creationTime
     ) {
         put(WebTokenClaim.Sub, subject)
         putCborMap(IDENTIFIER_LIST_CLAIM) {
@@ -51,20 +64,43 @@ class IdentifierList(
                 }
             }
         }
-        put(TTL_CLAIM, expiresIn.inWholeSeconds)
+        put(TTL_CLAIM, (expirationTime - creationTime).inWholeSeconds)
     }
 
+    /**
+     * Checks if this identifier list contains the given identifier
+     *
+     * @param identifier identifier to check
+     * @return if this list contains the given identifier
+     */
     fun contains(identifier: ByteString) = identifiers.contains(identifier)
 
+    /**
+     * Checks if this identifier list contains the given identifier
+     *
+     * @param identifier identifier to check
+     * @return if this list contains the given identifier
+     */
     fun contains(identifier: Bstr) = identifiers.contains(ByteString(identifier.value))
 
+    /**
+     * Builder class for [IdentifierList].
+     */
     class Builder {
         private val identifiers = mutableSetOf<ByteString>()
 
+        /**
+         * Adds an identifier to the list.
+         *
+         * @param identifier identifier to add
+         */
         fun add(identifier: ByteString) {
             identifiers.add(identifier)
         }
 
+        /**
+         * Builds [IdentifierList] object.
+         */
         fun build(): IdentifierList {
             return IdentifierList(identifiers.toSet())
         }
@@ -74,10 +110,24 @@ class IdentifierList(
         private const val IDENTIFIER_LIST_CLAIM = 65530L
         private const val TTL_CLAIM = 65534L
 
+        /**
+         * Parses and validates CWT that holds the identifier list.
+         *
+         * @param cwt identifier list CWT representation
+         * @param trustedRootCert root certificate to check CWT signature
+         * @param checks additional checks for JWT validation
+         * @param atTime time instant to check for expiration
+         * @param maxValidity maximum CWT validity duration to accept
+         * @return parsed [IdentifierList]
+         * @throws IllegalArgumentException when [cwt] cannot be parsed as CWT identifier list
+         * @throws InvalidRequestException when CWT validation fails
+         */
         suspend fun fromCwt(
             cwt: ByteArray,
-            publicKey: EcPublicKey? = null,
-            checks: Map<WebTokenCheck, String> = mapOf()
+            trustedRootCert: X509Cert,
+            checks: Map<WebTokenCheck, String> = mapOf(),
+            atTime: Instant = Clock.System.now(),
+            maxValidity: Duration = 365.days
         ): IdentifierList {
             val body = validateCwt(
                 cwt = cwt,
@@ -86,9 +136,37 @@ class IdentifierList(
                     put(WebTokenCheck.TYP, "application/identifierlist+cwt")
                     putAll(checks)
                 },
-                publicKey = publicKey,
-                maxValidity = 365.days
+                publicKey = null,
+                certificateChainValidator = trustedRootCertificateChainValidator(trustedRootCert),
+                atTime = atTime,
+                maxValidity = maxValidity
             )
+            return fromCwtBody(body)
+        }
+
+        /**
+         * Parses and validates CWT that holds the identifier list without validating its signature.
+         *
+         * @param cwt identifier list CWT representation
+         * @return parsed [IdentifierList]
+         * @throws IllegalArgumentException when [cwt] cannot be parsed as CWT identifier list
+         */
+        fun fromCwtNoTrust(cwt: ByteArray): IdentifierList {
+            val cbor = Cbor.decode(cwt)
+            val unwrapped = if (cbor is Tagged && cbor.tagNumber == Tagged.COSE_SIGN1) {
+                cbor.taggedItem
+            } else {
+                cbor
+            }
+            val sign1 = unwrapped.asCoseSign1
+
+            val body = Cbor.decode(sign1.payload!!) as? CborMap
+                ?: throw IllegalArgumentException("Identifier List: not a valid CWT")
+
+            return fromCwtBody(body)
+        }
+
+        private fun fromCwtBody(body: CborMap): IdentifierList {
             if (!body.hasKey(IDENTIFIER_LIST_CLAIM)) {
                 throw IllegalArgumentException("not a valid identifier list CWT")
             }

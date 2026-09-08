@@ -235,12 +235,15 @@ bool prettyPrintInternal(const Item* item, string& out, size_t indent, size_t ma
         case SIMPLE:
             const Bool* asBool = item->asSimple()->asBool();
             const Null* asNull = item->asSimple()->asNull();
+            const Double* asDouble = item->asSimple()->asDouble();
             if (asBool != nullptr) {
                 out.append(asBool->value() ? "true" : "false");
             } else if (asNull != nullptr) {
                 out.append("null");
+            } else if (asDouble != nullptr) {
+                out.append(std::to_string(asDouble->value()));
             } else {
-                return false;
+                out.append("simple");
             }
             break;
     }
@@ -364,7 +367,12 @@ bool Simple::operator==(const Simple& other) const& {
         case BOOLEAN:
             return *asBool() == *(other.asBool());
         case NULL_T:
+        case UNDEFINED_T:
             return true;
+        case DOUBLE_T:
+            return asDouble()->value() == other.asDouble()->value();
+        case SIMPLE_VALUE_T:
+            return asSimpleValue()->value() == other.asSimpleValue()->value();
         default:
             CHECK(false);  // Impossible to get here.
             return false;

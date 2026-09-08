@@ -9,7 +9,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.DataItem
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.mdoc.zkp.ZkSystemRepository
-import org.multipaz.presentment.TransactionDataJson
+import org.multipaz.presentment.TransactionData
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.util.toBase64Url
 import kotlin.time.Instant
@@ -63,15 +63,14 @@ class OpenID4VPPresentmentRecord(
         private fun getTransactionData(
             request: JsonObject,
             documentTypeRepository: DocumentTypeRepository?
-        ): Map<String, List<TransactionDataJson>> {
+        ): Map<String, List<TransactionData<*>>> {
             val transactionData = request["transaction_data"]?.jsonArray
             return if (transactionData.isNullOrEmpty()) {
                 emptyMap()
             } else {
-                TransactionDataJson.parse(
-                    transactionData = transactionData,
-                    documentTypeRepository = documentTypeRepository!!
-                )
+                documentTypeRepository!!.parseJsonTransactions(transactionData.map {
+                    it.jsonPrimitive.content
+                })
             }
         }
     }

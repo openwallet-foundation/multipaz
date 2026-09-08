@@ -42,6 +42,7 @@ class JsonResourceWriterStrategy : ResourceWriterStrategy {
 
     private val json = Json {
         prettyPrint = true
+        prettyPrintIndent = "  "
         encodeDefaults = true
     }
 
@@ -139,7 +140,7 @@ class JsonResourceWriterStrategy : ResourceWriterStrategy {
             }
         }
 
-        file.writeText(json.encodeToString(JsonObject.serializer(), jsonObject))
+        file.writeText(json.encodeToString(JsonObject.serializer(), jsonObject) + "\n")
     }
 
     /**

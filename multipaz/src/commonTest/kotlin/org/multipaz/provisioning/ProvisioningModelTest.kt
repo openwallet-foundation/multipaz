@@ -38,6 +38,10 @@ import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
 import org.multipaz.mdoc.mso.StaticAuthDataGenerator
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.prompt.PromptModel
+import org.multipaz.provisioning.openid4vci.OpenID4VCIBackend
+import org.multipaz.provisioning.openid4vci.OpenID4VCIClientPreferences
+import org.multipaz.securearea.KeyAttestation
+import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
@@ -47,6 +51,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -57,7 +62,7 @@ import kotlin.time.Duration.Companion.days
 class ProvisioningModelTest {
     private lateinit var storage: Storage
     private lateinit var secureAreaRepository: SecureAreaRepository
-
+    private lateinit var secureArea: SecureArea
     private lateinit var documentStore: DocumentStore
 
     private val mockHttpEngine = MockEngine { request ->
@@ -70,7 +75,7 @@ class ProvisioningModelTest {
     @BeforeTest
     fun setup() = runTest {
         storage = EphemeralStorage()
-        val secureArea = SoftwareSecureArea.create(storage)
+        secureArea = SoftwareSecureArea.create(storage)
         secureAreaRepository = SecureAreaRepository.Builder()
             .add(secureArea)
             .build()
@@ -96,6 +101,7 @@ class ProvisioningModelTest {
             TestProvisioningClient()
         }.await()
         assertTrue(doc.provisioned)
+        assertNull(doc.appData)
         assertEquals("Document Title", doc.displayName)
         assertEquals("Test Document", doc.typeDisplayName)
         val credentials = doc.getCredentials()
@@ -103,6 +109,82 @@ class ProvisioningModelTest {
         val credential = credentials.first() as MdocCredential
         assertTrue(credential.isCertified)
         assertEquals(TestProvisioningClient.DOCTYPE, credential.docType)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun basicWithAppData() = runTest {
+        val expectedAppData = ByteString(10, 20, 30, 40)
+        val doc = model.launch(
+            coroutineContext = UnconfinedTestDispatcher(testScheduler),
+            appData = expectedAppData
+        ) {
+            TestProvisioningClient()
+        }.await()
+        assertTrue(doc.provisioned)
+        assertEquals(expectedAppData, doc.appData)
+        assertEquals("Document Title", doc.displayName)
+        assertEquals("Test Document", doc.typeDisplayName)
+
+        // Verify it was persisted in DocumentStore
+        val docFromStore = documentStore.lookupDocument(doc.identifier)!!
+        assertEquals(expectedAppData, docFromStore.appData)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun basicWithCustomSecureAreaSelection() = runTest {
+        val alternateSecureArea = object : SecureArea by secureArea {
+            override val identifier: String get() = "AlternateSecureArea"
+            override val displayName: String get() = "Alternate Secure Area"
+        }
+        val customRepo = SecureAreaRepository.Builder()
+            .add(secureArea)
+            .add(alternateSecureArea)
+            .build()
+        val customDocStore = buildDocumentStore(
+            storage = storage,
+            secureAreaRepository = customRepo
+        ) {}
+        val customHandler = DocumentProvisioningHandler(
+            documentStore = customDocStore,
+            secureArea = secureArea,
+            selectSecureArea = { appData, suggestedSettings ->
+                if (appData == ByteString(0x01)) {
+                    SelectedSecureArea(alternateSecureArea, suggestedSettings)
+                } else {
+                    SelectedSecureArea(secureArea, suggestedSettings)
+                }
+            }
+        )
+        val customModel = ProvisioningModel(
+            documentProvisioningHandler = customHandler,
+            httpClient = HttpClient(mockHttpEngine),
+            promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build(),
+            authorizationSecureArea = secureArea
+        )
+
+        // Provision with appData = 0x01 -> should use alternateSecureArea
+        val docWithAlternate = customModel.launch(
+            coroutineContext = UnconfinedTestDispatcher(testScheduler),
+            appData = ByteString(0x01)
+        ) {
+            TestProvisioningClient()
+        }.await()
+        assertEquals(ByteString(0x01), docWithAlternate.appData)
+        val cred1 = docWithAlternate.getCredentials().first() as MdocCredential
+        assertEquals(alternateSecureArea.identifier, cred1.secureArea.identifier)
+
+        // Provision with appData = null -> should use default secureArea
+        val docWithDefault = customModel.launch(
+            coroutineContext = UnconfinedTestDispatcher(testScheduler),
+            appData = null
+        ) {
+            TestProvisioningClient()
+        }.await()
+        assertNull(docWithDefault.appData)
+        val cred2 = docWithDefault.getCredentials().first() as MdocCredential
+        assertEquals(secureArea.identifier, cred2.secureArea.identifier)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -218,9 +300,151 @@ class ProvisioningModelTest {
         assertTrue(documentStore.listDocumentIds().isEmpty())
     }
 
-    class TestProvisioningClient(
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun refreshNoOpWhenNoCredentialsToFetch() = runTest {
+        val doc = model.launch(UnconfinedTestDispatcher(testScheduler)) {
+            TestProvisioningClient()
+        }.await()
+        assertTrue(doc.provisioned)
+
+        val handler = DocumentProvisioningHandler(
+            documentStore = documentStore,
+            secureArea = secureArea
+        )
+        // With all credentials certified and up to date, no credentials need refresh
+        assertFalse(handler.haveCredentialsToRefresh(doc))
+
+        // openID4VCIRefreshCredentials should immediately return 0 without attempting network I/O
+        // (Invalid authorizationData would throw an exception if network I/O / client creation was attempted)
+        val numRefreshed = model.openID4VCIRefreshCredentials(
+            document = doc,
+            authorizationData = ByteString(byteArrayOf(0x00)),
+            clientPreferences = OpenID4VCIClientPreferences(
+                clientId = "test",
+                redirectUrl = "https://example.com/redirect",
+                locales = listOf("en-US"),
+                signingAlgorithms = listOf(Algorithm.ES256)
+            ),
+            backend = object : OpenID4VCIBackend {
+                override suspend fun getClientId(): String = "test"
+                override suspend fun createJwtClientAssertion(authorizationServerIdentifier: String): String = ""
+                override suspend fun createJwtWalletAttestation(keyAttestation: KeyAttestation): String = ""
+                override suspend fun createJwtKeyAttestation(
+                    credentialKeyAttestations: List<CredentialKeyAttestation>,
+                    challenge: String,
+                    userAuthentication: List<String>?,
+                    keyStorage: List<String>?
+                ): String = ""
+            }
+        )
+        assertEquals(0, numRefreshed)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun retryAfterFailureWithNewChallenge() = runTest {
+        var failFirst = true
+        val client = TestProvisioningClient(
+            obtainCredentialsHook = {
+                if (failFirst) {
+                    failFirst = false
+                    throw IllegalStateException("Simulated network error")
+                }
+                true
+            }
+        )
+        // First attempt fails during initial provisioning
+        try {
+            model.launch(UnconfinedTestDispatcher(testScheduler)) {
+                client
+            }.await()
+            fail("Expected exception")
+        } catch (e: IllegalStateException) {
+            assertEquals("Simulated network error", e.message)
+        }
+
+        // Verify document was deleted on error
+        assertEquals(0, documentStore.listDocuments().size)
+
+        // Second attempt succeeds
+        val doc = model.launch(UnconfinedTestDispatcher(testScheduler)) {
+            client
+        }.await()
+        assertTrue(doc.provisioned)
+        assertEquals(2, doc.getCredentials().size)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun refreshRetryAfterFailureWithNewChallenge() = runTest {
+        var currentChallenge = "challenge_1"
+        var failRefresh = false
+        val attestedPublicKeys = mutableListOf<List<EcPublicKey>>()
+
+        val client = object : TestProvisioningClient(
+            keyBindingChallengeHook = { currentChallenge }
+        ) {
+            override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials {
+                if (keyInfo is KeyBindingInfo.Attestation) {
+                    attestedPublicKeys.add(keyInfo.attestations.map { it.keyAttestation.publicKey })
+                }
+                if (failRefresh) {
+                    failRefresh = false
+                    throw IllegalStateException("Simulated network failure on refresh")
+                }
+                return super.obtainCredentials(keyInfo)
+            }
+        }
+
+        // 1. Initial provisioning succeeds
+        val doc = model.launch(UnconfinedTestDispatcher(testScheduler)) {
+            client
+        }.await()
+        assertTrue(doc.provisioned)
+        assertEquals(2, doc.getCertifiedCredentials().size)
+        assertEquals(0, doc.getPendingCredentials().size)
+
+        // Mark existing credentials as used so they require replacement during refresh
+        for (cred in doc.getCertifiedCredentials()) {
+            cred.increaseUsageCount()
+        }
+
+        // 2. Refresh fails midway
+        currentChallenge = "challenge_2"
+        failRefresh = true
+        try {
+            model.launch(UnconfinedTestDispatcher(testScheduler), doc) {
+                client
+            }.await()
+            fail("Expected refresh to fail")
+        } catch (e: IllegalStateException) {
+            assertEquals("Simulated network failure on refresh", e.message)
+        }
+
+        // Verify pending credentials were cleaned up on failure
+        assertEquals(0, doc.getPendingCredentials().size)
+        val failedAttemptKeys = attestedPublicKeys.last()
+
+        // 3. Retry refresh with a new challenge
+        currentChallenge = "challenge_3"
+        val docAfterRetry = model.launch(UnconfinedTestDispatcher(testScheduler), doc) {
+            client
+        }.await()
+        assertTrue(docAfterRetry.provisioned)
+        assertEquals(0, docAfterRetry.getPendingCredentials().size)
+        val retryAttemptKeys = attestedPublicKeys.last()
+
+        // Verify that retry attempt generated fresh keys and did NOT reuse the keys from the failed attempt
+        for (key in retryAttemptKeys) {
+            assertFalse(failedAttemptKeys.contains(key))
+        }
+    }
+
+    open class TestProvisioningClient(
         val obtainCredentialsHook: suspend () -> Boolean = { true },
-        val authorizationChallenges: List<AuthorizationChallenge> = listOf()
+        val authorizationChallenges: List<AuthorizationChallenge> = listOf(),
+        val keyBindingChallengeHook: suspend () -> String = { "test_challenge" }
     ) : ProvisioningClient {
         companion object {
             const val DOCTYPE = "http://doctype.example.org"
@@ -257,7 +481,7 @@ class ProvisioningModelTest {
         override suspend fun getAuthorizationData(): ByteString =
             ByteString("foobar_auth".encodeToByteArray())
 
-        override suspend fun getKeyBindingChallenge(): String = "test_challenge"
+        override suspend fun getKeyBindingChallenge(): String = keyBindingChallengeHook()
 
         override suspend fun obtainCredentials(keyInfo: KeyBindingInfo): Credentials {
             when (keyInfo) {

@@ -7,6 +7,9 @@ public struct FloatingItemText<ImageView: View, TrailingView: View>: View {
     /// The primary text to display, formatted as an `AttributedString`.
     public var text: AttributedString
 
+    /// Whether to show a right chevron icon on the right side.
+    public var showChevron: Bool
+
     /// An optional secondary string displayed beneath the primary text in a smaller font.
     public var secondary: String?
 
@@ -23,17 +26,21 @@ public struct FloatingItemText<ImageView: View, TrailingView: View>: View {
     ///
     /// - Parameters:
     ///   - text: The primary text to display.
+    ///   - showChevron: Whether to show a right chevron icon on the right side. Defaults to `false`.
     ///   - secondary: An optional secondary string to display below the primary text. Defaults to `nil`.
+    ///   - secondaryColor: Color for secondary text, defaults to `Color.secondary`.
     ///   - image: A view builder that provides a leading image or icon. Defaults to an `EmptyView`.
     ///   - trailingContent: A view builder that provides a trailing view. Defaults to an `EmptyView`.
     public init(
         text: AttributedString,
+        showChevron: Bool = false,
         secondary: String? = nil,
         secondaryColor: Color = .secondary,
         @ViewBuilder image: @escaping () -> ImageView = { EmptyView() },
         @ViewBuilder trailingContent: @escaping () -> TrailingView = { EmptyView() }
     ) {
         self.text = text
+        self.showChevron = showChevron
         self.secondary = secondary
         self.secondaryColor = secondaryColor
         self.image = image
@@ -44,38 +51,40 @@ public struct FloatingItemText<ImageView: View, TrailingView: View>: View {
     ///
     /// - Parameters:
     ///   - text: The primary string to display.
+    ///   - showChevron: Whether to show a right chevron icon on the right side. Defaults to `false`.
     ///   - secondary: An optional secondary string to display below the primary text. Defaults to `nil`.
     ///   - secondaryColor: Color for secondary text, defaults to `Color.secondary`.
     ///   - image: A view builder that provides a leading image or icon. Defaults to an `EmptyView`.
     ///   - trailingContent: A view builder that provides a trailing view. Defaults to an `EmptyView`.
     public init(
         text: String,
+        showChevron: Bool = false,
         secondary: String? = nil,
         secondaryColor: Color = .secondary,
         @ViewBuilder image: @escaping () -> ImageView = { EmptyView() },
         @ViewBuilder trailingContent: @escaping () -> TrailingView = { EmptyView() }
     ) {
-        self.init(text: AttributedString(text), secondary: secondary, secondaryColor: secondaryColor, image: image, trailingContent: trailingContent)
+        self.init(text: AttributedString(text), showChevron: showChevron, secondary: secondary, secondaryColor: secondaryColor, image: image, trailingContent: trailingContent)
     }
 
     public var body: some View {
-        FloatingItemContainer {
+        FloatingItemContainer(showChevron: showChevron) {
             HStack(alignment: .center, spacing: 16) {
                 image()
 
                 if let secondary = secondary {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(text)
-                            .font(.system(size: 15))
+                            .font(.body)
                             .multilineTextAlignment(.leading)
                         Text(secondary)
-                            .font(.system(size: 13))
+                            .font(.subheadline)
                             .multilineTextAlignment(.leading)
-                            .foregroundColor(secondaryColor)
+                            .foregroundStyle(secondaryColor)
                     }
                 } else {
                     Text(text)
-                        .font(.system(size: 15))
+                        .font(.body)
                         .multilineTextAlignment(.leading)
                 }
 

@@ -1,8 +1,6 @@
 package org.multipaz.utopia.knowntypes
 
-import org.multipaz.cbor.CborMap
-import org.multipaz.cbor.buildCborMap
-import org.multipaz.cbor.toDataItem
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.documenttype.CannedTransactionData
 import org.multipaz.documenttype.DocumentAttribute
 import org.multipaz.documenttype.DocumentType
@@ -45,7 +43,7 @@ private fun createEUPersonalIDWithTransactionCannedRequest(
     eupidDocumentType: DocumentType
 ) = SingleDocumentCannedRequest(
     id = "withTransaction",
-    displayName = "With Transaction Data",
+    displayName = "EU PID with Ping Transaction",
     mdocRequest = MdocCannedRequest(
         docType = eupidDocumentType.mdocDocumentType!!.docType,
         useZkp = false,
@@ -75,10 +73,10 @@ private fun createEUPersonalIDWithTransactionCannedRequest(
     transactionData = listOf(
         CannedTransactionData(
             transactionType = PingTransaction,
-            attributes = buildCborMap {
-                put("string", "string data")
-                put("blob", byteArrayOf(1, 2, 3).toDataItem())
-            } as CborMap
+            payload = PingTransaction.Payload(
+                string = "string data",
+                blob = ByteString(byteArrayOf(1, 2, 3))
+            )
         )
     )
 )

@@ -47,12 +47,14 @@ internal data class IssuerConfiguration(
 
             // Fetch issuer metadata
             val issuerMetadataUrl = wellKnown(url, "openid-credential-issuer")
+            Logger.d(TAG, "Fetching issuer metadata from $issuerMetadataUrl")
             val issuerMetadataRequest = httpClient.get(issuerMetadataUrl) {}
             if (issuerMetadataRequest.status != HttpStatusCode.OK) {
                 throw IllegalStateException("Invalid issuer, no $issuerMetadataUrl")
             }
             val credentialMetadataText = issuerMetadataRequest.readRawBytes().decodeToString()
             val credentialMetadata = Json.parseToJsonElement(credentialMetadataText).jsonObject
+            Logger.dJson(TAG, "Received issuer metadata", credentialMetadata)
 
             val authorizationServers = credentialMetadata.arrayOrNull("authorization_servers")
             val authorizationServerUrls =

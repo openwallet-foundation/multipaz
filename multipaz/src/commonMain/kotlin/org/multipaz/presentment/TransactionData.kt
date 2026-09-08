@@ -1,67 +1,110 @@
 package org.multipaz.presentment
 
 import kotlinx.io.bytestring.ByteString
+import kotlinx.serialization.json.JsonElement
+import org.multipaz.cbor.DataItem
+import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.Crypto
+import org.multipaz.document.Document
 import org.multipaz.documenttype.TransactionType
+import org.multipaz.documenttype.TransactionUserInput
 
 /**
- * An abstract object that describes transaction data item.
+ * Protocol through which transaction data was received.
+ */
+enum class TransactionProtocol {
+    /** Transaction data received via ISO/IEC 18013-5 presentment. */
+    ISO_18013_5,
+
+    /** Transaction data received via OpenID4VP presentment. */
+    OPENID4VP
+}
+
+/**
+ * An object that holds transaction data.
  *
- * Exact format of the transaction data and hashing rules depend on the presentation protocol.
+ * Transaction data is held in two representation: serialized and parsed. Serialized representation
+ * is raw sequence of bytes that reflects how transaction data is encoded in the verification
+ * protocol. Parsed representation includes transaction type that describes what kind of
+ * transaction this is, the list of hash algorithms that the verifier accepts for this transaction,
+ * and transaction payload which is transaction-type-specific data.
  *
  * @param type type of the transaction data item
+ * @param payload transaction payload
+ * @param protocol protocol context in which the transaction data was received
+ * @param rawBytes raw sequence of bytes representing the transaction data in the request
+ * @param hashAlgorithms accepted hash algorithm override list for this transaction data
  */
-sealed class TransactionData(
-    val type: TransactionType
+class TransactionData<PayloadT: Any>(
+    val type: TransactionType<PayloadT>,
+    val payload: PayloadT,
+    val protocol: TransactionProtocol,
+    val rawBytes: ByteString,
+    val hashAlgorithms: List<Algorithm>? = null,
 ) {
-    /**
-     * Transaction attributes
-     */
-    abstract val attributes: Attributes
-    /**
-     * Hash algorithm override for this transaction data.
-     *
-     * By default [Algorithm.SHA256] is used, but transaction data can specify a list of the desired
-     * algorithms.
-     *
-     * @return the first supported algorithm in the list specified by the transaction data.
-     */
-    abstract fun getHashAlgorithm(): Algorithm?
-
     /**
      * Computes hash of the transaction data.
      *
-     * It is important that the verifier uses the same algorithm as the presenter (NB: the set
-     * of supported hash algorithms may differ!).
-     *
-     * @return hash of the transaction data
+     * @return hash of the serialized transaction data
      */
-    abstract suspend fun getHash(algorithm: Algorithm = Algorithm.SHA256): ByteString
+    suspend fun computeHash(algorithm: Algorithm = Algorithm.SHA256): ByteString =
+        ByteString(Crypto.digest(algorithm, rawBytes.toByteArray()))
 
     /**
-     * A set of attributes either in the transaction data itself or in one of the compound
-     * objects that it contains.
+     * Determines if this transaction is applicable to the given credential.
      *
-     * Transaction can come in either JSON or CBOR format depending on the presentment protocol.
-     * This helps writing code generically, so it works with either format.
+     * @param credential one of the credentials in the [Document] being considered
+     * @return true if transaction can be processed, false if it cannot
      */
-    interface Attributes {
-        /** @return string attribute */
-        fun getString(name: String): String?
+    suspend fun isApplicable(credential: Credential) = type.isApplicable(this, credential)
 
-        /** @return integer attribute */
-        fun getLong(name: String): Long?
+    /**
+     * Generates device-signed data elements for an Mdoc credential.
+     *
+     * @param credential credential being presented
+     * @param userInput additional data specified by the user
+     * @param docRequestId document request index in ISO 18013-5 presentment, null for OpenID4VP
+     * @return map of data elements for `DeviceSigned.nameSpaces` under `ISO_18013_TRANSACTION_DATA_NAMESPACE`
+     */
+    suspend fun generateMdocResponseElements(
+        credential: Credential,
+        userInput: TransactionUserInput?,
+        docRequestId: Int? = null
+    ): Map<String, DataItem> = type.generateMdocResponseElements(this, credential, userInput, docRequestId)
 
-        /** @return number attribute */
-        fun getDouble(name: String): Double?
+    /**
+     * Generates Key Binding JWT claims for an SD-JWT credential.
+     *
+     * @param credential credential being presented
+     * @param userInput additional data specified by the user
+     * @param docRequestId document request index in ISO 18013-5 presentment, null for OpenID4VP
+     * @return map of claims to include in the KB-JWT payload
+     */
+    suspend fun generateSdJwtResponseClaims(
+        credential: Credential,
+        userInput: TransactionUserInput?,
+        docRequestId: Int? = null
+    ): Map<String, JsonElement> = type.generateSdJwtResponseClaims(this, credential, userInput, docRequestId)
 
-        /** @return boolean attribute */
-        fun getBoolean(name: String): Boolean?
+    /**
+     * Verifies transaction response returned in an Mdoc presentation.
+     *
+     * @param responseElements key-value-map for values returned in the mdoc presentation
+     */
+    suspend fun verifyMdocResponse(responseElements: Map<String, DataItem>) =
+        type.verifyMdocResponse(this, responseElements)
 
-        /** @return binary attribute */
-        fun getBlob(name: String): ByteString?
+    /**
+     * Verifies transaction response returned in an SD-JWT presentation.
+     *
+     * @param responseClaims claims returned in the Key Binding JWT
+     */
+    suspend fun verifySdJwtResponse(responseClaims: Map<String, JsonElement>) =
+        type.verifySdJwtResponse(this, responseClaims)
 
-        /** @return compound attribute */
-        fun getCompound(name: String): Attributes?
-    }
+    /**
+     * Creates equivalent transaction data for use in ISO 18013-5 protocols.
+     */
+    fun serializeIso18013Request(): DataItem = type.serializeIso18013Request(payload)
 }

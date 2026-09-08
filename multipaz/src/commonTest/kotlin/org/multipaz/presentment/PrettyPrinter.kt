@@ -36,7 +36,7 @@ internal fun CredentialPresentmentSetOptionMemberMatch.print(pp: PrettyPrinter) 
     pp.append("docId: ${credential.document.displayName}")
     pp.append("claims:")
     pp.pushIndent()
-    for ((requestedClaim, claim) in claims) {
+    for ((_, claim) in claims) {
         pp.append("claim:")
         pp.pushIndent()
         when (claim) {
@@ -62,7 +62,7 @@ internal fun CredentialPresentmentSetOptionMember.print(pp: PrettyPrinter) {
     pp.pushIndent()
     pp.append("matches:")
     pp.pushIndent()
-    if (matches.size == 0) {
+    if (matches.isEmpty()) {
         pp.append("<empty>")
     } else {
         for (match in matches) {
@@ -78,7 +78,7 @@ internal fun CredentialPresentmentSetOption.print(pp: PrettyPrinter) {
     pp.pushIndent()
     pp.append("members:")
     pp.pushIndent()
-    if (members.size == 0) {
+    if (members.isEmpty()) {
         pp.append("<empty>")
     } else {
         for (member in members) {
@@ -95,7 +95,7 @@ internal fun CredentialPresentmentSet.print(pp: PrettyPrinter) {
     pp.append("optional: $optional")
     pp.append("options:")
     pp.pushIndent()
-    if (options.size == 0) {
+    if (options.isEmpty()) {
         pp.append("<empty>")
     } else {
         for (option in options) {
@@ -110,7 +110,7 @@ internal fun CredentialQueryResult.prettyPrint(): String {
     val pp = PrettyPrinter()
     pp.append("credentialSets:")
     pp.pushIndent()
-    if (credentialSets.size == 0) {
+    if (credentialSets.isEmpty()) {
         pp.append("<empty>")
     } else {
         for (credentialSet in credentialSets) {
@@ -124,7 +124,7 @@ internal fun CredentialQueryResult.prettyPrint(): String {
 internal fun CredentialSelection.print(pp: PrettyPrinter): String {
     pp.append("matches:")
     pp.pushIndent()
-    if (matches.size == 0) {
+    if (matches.isEmpty()) {
         pp.append("<empty>")
     } else {
         for (match in matches) {
@@ -143,7 +143,7 @@ internal fun List<CredentialSelection>.prettyPrint(): String {
     val pp = PrettyPrinter()
     pp.append("selections:")
     pp.pushIndent()
-    if (this.size == 0) {
+    if (this.isEmpty()) {
         pp.append("<empty>")
     } else {
         for (element in this) {
@@ -158,7 +158,10 @@ internal fun ConsentCredential.print(pp: PrettyPrinter) {
     pp.append("credential:")
     pp.pushIndent()
     pp.append("encryptionRequested: $encryptionRequested")
-    pp.append("encryptionTargetTrustMetadata: $encryptionTargetTrustMetadata")
+    pp.append("encryptionTargetTrustMetadata:")
+    pp.pushIndent()
+    pp.append("displayName: ${encryptionTargetTrustMetadata?.displayName}")
+    pp.popIndent()
     match.print(pp)
     pp.popIndent()
 }

@@ -391,5 +391,7 @@
   "multi_request_mdl_and_photoid": "mDLおよび顔写真付きID",
   "multi_request_mdl_or_photoid": "mDLまたは顔写真付きID",
   "age_verification_attribute_older_than_years": "{age}歳以上",
-  "age_verification_description_older_than_years": "mDL保持者が{age}歳以上であるかを示す情報"
+  "age_verification_description_older_than_years": "mDL保持者が{age}歳以上であるかを示す情報",
+  "multi_request_payment_and_age_over_18": "支払いと18歳以上",
+  "multi_request_age_over_18_mdl_or_pid": "mDLまたはPIDによる18歳以上の確認 + 取引"
 }

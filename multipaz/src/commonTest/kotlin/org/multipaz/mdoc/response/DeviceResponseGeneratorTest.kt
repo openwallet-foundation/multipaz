@@ -167,6 +167,7 @@ class DeviceResponseGeneratorTest {
                 mdocCredential.getAttestation().publicKey
             )
             msoGenerator.setValidityInfo(timeSigned, timeValidityBegin, timeValidityEnd, null)
+            msoGenerator.setDeviceKeyAuthorizedNameSpaces(listOf("ns1", "ns3", "ns4"))
             val issuerNameSpaces = MdocUtil.generateIssuerNameSpaces(
                 nameSpacedData,
                 randomProvider,

@@ -192,4 +192,26 @@
     <string name="trust_entry_rical_is_trust_anchor">Ancre de confiance</string>
     <string name="trust_entry_rical_is_trust_anchor_true">Oui</string>
     <string name="trust_entry_rical_is_trust_anchor_false">Non</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s demande ces données au nom d'une partie inconnue :</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">Ces données sont demandées au nom d'une partie inconnue :</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s demande ces données au nom de %2$s :</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">Ces données sont demandées au nom de %1$s :</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s demande ces données au nom d'une partie inconnue qui les stockera :</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">Ces données sont demandées au nom d'une partie inconnue qui les stockera :</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s demande ces données au nom de %2$s qui les stockera :</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">Ces données sont demandées au nom de %1$s qui les stockera :</string>
+    <string name="credential_presentment_select_option">Sélectionnez ce que vous souhaitez partager</string>
+    <string name="credential_presentment_share_something_else">Partager autre chose…</string>
+    <string name="credential_presentment_not_sharing_any_document">Partager quelque chose…</string>
+    <string name="credential_presentment_dont_return_any_document">Ne rien partager</string>
+    <string name="credential_presentment_no_document_returned">Aucun document partagé</string>
+    <string name="credential_presentment_transaction_data">Inclut les données de transaction :</string>
+    <string name="issuer_loading">Chargement des métadonnées de l'émetteur...</string>
+    <string name="issuer_loading_failed">Échec du chargement des métadonnées de l'émetteur</string>
+    <string name="provisioning_select_credential">Sélectionnez le justificatif à provisionner :</string>
+    <string name="provisioning_cancel_button">Annuler le provisionnement</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">Saisissez le code PIN qui vous a été communiqué précédemment</string>
+    <string name="provisioning_tx_code_fallback_prompt">Saisissez la phrase secrète qui vous a été communiquée précédemment</string>
+    <string name="floating_item_heading_and_date_not_set">Non défini</string>
+    <string name="floating_item_heading_and_date_time_not_set">Non défini</string>
 </resources>

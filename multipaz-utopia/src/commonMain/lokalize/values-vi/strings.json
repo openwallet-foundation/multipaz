@@ -183,5 +183,6 @@
   "cor_description_document_number": "Số của COR, được chỉ định bởi Nhà cung cấp COR.",
   "cor_description_administrative_number": "Số được Nhà cung cấp COR chỉ định cho mục đích kiểm soát kiểm toán hoặc các mục đích khác.",
   "cor_description_issuing_jurisdiction": "Mã phân khu quốc gia của khu vực tài phán đã cấp COR, theo định nghĩa trong ISO 3166-2:2020, Điều 8. Phần đầu tiên của mã PHẢI giống với giá trị của issuing_country.",
-  "cor_description_issuing_country": "Mã quốc gia Alpha-2, theo định nghĩa trong ISO 3166-1, của quốc gia hoặc lãnh thổ của cơ quan cấp phép."
+  "cor_description_issuing_country": "Mã quốc gia Alpha-2, theo định nghĩa trong ISO 3166-1, của quốc gia hoặc lãnh thổ của cơ quan cấp phép.",
+  "payment_request_payment_sca_transaction": "SCA với giao dịch thanh toán"
 }

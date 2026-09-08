@@ -168,4 +168,7 @@ data object GenerateMpzPassDestination: Destination()
 data object FloatingItemListDestination: Destination()
 
 @Serializable
+data object LazyFloatingItemListDestination: Destination()
+
+@Serializable
 data object DeviceCheckDestination: Destination()

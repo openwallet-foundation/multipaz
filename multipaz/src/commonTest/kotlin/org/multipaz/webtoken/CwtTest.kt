@@ -96,7 +96,7 @@ class CwtTest {
                 WebTokenCheck.IDENT to "foo"
             ),
             maxValidity = 48.hours,
-            clock = clock
+            atTime = clock.now()
         )
     }
 
@@ -104,7 +104,7 @@ class CwtTest {
     fun testSimple() = runBackendTest {
         val cwt = makeCwt(privateTrustedKey)
         validateCwt(
-            cwt, "test", privateTrustedKey.publicKey, clock = clock, checks = mapOf(
+            cwt, "test", privateTrustedKey.publicKey, atTime = clock.now(), checks = mapOf(
                 WebTokenCheck.SUB to TEST_SUB,
                 WebTokenCheck.ISS to TEST_ISS,
                 WebTokenCheck.AUD to TEST_AUD,
@@ -119,7 +119,7 @@ class CwtTest {
         val cwt = makeCwt(privateTrustedKey)
         clock.advance(2.minutes)
         try {
-            validateCwt(cwt, "test", privateTrustedKey.publicKey, clock = clock)
+            validateCwt(cwt, "test", privateTrustedKey.publicKey, atTime = clock.now())
             fail()
         } catch (err: InvalidRequestException) {
             assertTrue(err.message!!.lowercase().contains("expired"))
@@ -133,7 +133,7 @@ class CwtTest {
         try {
             validateCwt(
                 cwt, "test", privateTrustedKey.publicKey,
-                clock = clock, maxValidity = 1.minutes
+                atTime = clock.now(), maxValidity = 1.minutes
             )
             fail()
         } catch (err: InvalidRequestException) {
@@ -147,7 +147,7 @@ class CwtTest {
         try {
             validateCwt(
                 cwt, "test", privateTrustedKey.publicKey,
-                clock = clock, maxValidity = 1.minutes
+                atTime = clock.now(), maxValidity = 1.minutes
             )
             fail()
         } catch (err: InvalidRequestException) {
@@ -158,19 +158,19 @@ class CwtTest {
     @Test
     fun testClockSkewSmall() = runBackendTest {
         val cwt = makeCwt(privateTrustedKey, exp = null, iat = clock.now() + 1.seconds)
-        validateCwt(cwt, "test", privateTrustedKey.publicKey, clock = clock)
+        validateCwt(cwt, "test", privateTrustedKey.publicKey, atTime = clock.now())
     }
 
     @Test
     fun testReplay() = runBackendTest {
         val cwt = makeCwt(privateTrustedKey)
         validateCwt(
-            cwt, "test", privateTrustedKey.publicKey, clock = clock,
+            cwt, "test", privateTrustedKey.publicKey, atTime = clock.now(),
             checks = mapOf(WebTokenCheck.IDENT to "cti-space1")
         )
         try {
             validateCwt(
-                cwt, "test", privateTrustedKey.publicKey, clock = clock,
+                cwt, "test", privateTrustedKey.publicKey, atTime = clock.now(),
                 checks = mapOf(WebTokenCheck.IDENT to "cti-space1")
             )
             fail()
@@ -178,13 +178,13 @@ class CwtTest {
             assertTrue(err.message!!.lowercase().contains("cti"))
         }
         validateCwt(
-            cwt, "test", privateTrustedKey.publicKey, clock = clock,
+            cwt, "test", privateTrustedKey.publicKey, atTime = clock.now(),
             checks = mapOf(WebTokenCheck.IDENT to "cti-space2")
         )
         clock.advance(2.minutes)
         val newCwt = makeCwt(privateTrustedKey)
         validateCwt(
-            newCwt, "test", privateTrustedKey.publicKey, clock = clock,
+            newCwt, "test", privateTrustedKey.publicKey, atTime = clock.now(),
             checks = mapOf(WebTokenCheck.IDENT to "cti-space1")
         )
     }
@@ -193,7 +193,7 @@ class CwtTest {
     fun testTrustIssKid() = runBackendTest {
         val cwt = makeCwt(privateTrustedKey, iss = "test-iss", kid = "test-kid")
         validateCwt(
-            cwt, "test", publicKey = null, clock = clock,
+            cwt, "test", publicKey = null, atTime = clock.now(),
             checks = mapOf(WebTokenCheck.TRUST to "iss_kid")
         )
     }
@@ -218,7 +218,7 @@ class CwtTest {
         val chain = X509CertChain(listOf(cert))
         val cwt = makeCwt(x5cKey, iss = "test-x5c-leaf", x5c = chain)
         validateCwt(
-            cwt, "test", publicKey = null, clock = clock,
+            cwt, "test", publicKey = null, atTime = clock.now(),
             checks = mapOf(WebTokenCheck.TRUST to "x5c")
         )
     }

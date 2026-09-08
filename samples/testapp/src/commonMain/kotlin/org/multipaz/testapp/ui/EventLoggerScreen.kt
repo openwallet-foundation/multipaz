@@ -52,7 +52,14 @@ import org.multipaz.eventlogger.EventPresentmentIso18013Proximity
 import org.multipaz.eventlogger.EventPresentmentUriSchemeOpenID4VP
 import org.multipaz.eventlogger.EventProvisioning
 import org.multipaz.eventlogger.EventSimple
+import org.multipaz.eventlogger.EventVerification
+import org.multipaz.eventlogger.EventVerificationDigitalCredentials
+import org.multipaz.eventlogger.EventVerificationIso18013Proximity
 import org.multipaz.eventlogger.SimpleEventLogger
+import org.multipaz.mdoc.engagement.EngagementType
+import org.multipaz.verification.Iso18013PresentmentRecord
+import org.multipaz.verification.OpenID4VPPresentmentRecord
+import org.multipaz.compose.getOutlinedImageVector
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -208,6 +215,16 @@ private fun EventItem(
                 modifier = modifier
             )
         }
+        is EventVerification -> {
+            EventItemVerification(
+                event = event,
+                imageLoader = imageLoader,
+                documentModel = documentModel,
+                imageSize = imageSize,
+                timeZone = timeZone,
+                modifier = modifier
+            )
+        }
         is EventSimple -> {
             FloatingItemCenteredText(
                 text = "EventSimple w/ ${event.appData.size} bytes of data"
@@ -309,4 +326,52 @@ private fun getSharingType(origin: String?): String {
         }
     }
     return "Shared with website"
+}
+
+@Composable
+private fun EventItemVerification(
+    event: EventVerification,
+    imageLoader: ImageLoader,
+    documentModel: DocumentModel,
+    imageSize: Dp = 40.dp,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    modifier: Modifier = Modifier
+) {
+    val eventDateTimeString = event.timestamp.toLocalDateTime(timeZone = timeZone).formatLocalized()
+    val details = when (event) {
+        is EventVerificationDigitalCredentials -> {
+            val originOrApp = event.origin ?: event.appId
+            val originPart = if (originOrApp != null) " • $originOrApp" else ""
+            "Digital Credentials$originPart"
+        }
+        is EventVerificationIso18013Proximity -> {
+            val engagement = when (event.engagementType) {
+                EngagementType.QR_CODE -> "QR Code"
+                EngagementType.NFC_STATIC_HANDOVER -> "NFC Static"
+                EngagementType.NFC_NEGOTIATED_HANDOVER -> "NFC Negotiated"
+                EngagementType.NFC_CONCURRENT_CHANNEL_ENGAGEMENT -> "NFC Concurrent Channel"
+            }
+            "ISO 18013-5 • $engagement"
+        }
+        else -> {
+            when (event.presentmentRecord) {
+                is Iso18013PresentmentRecord -> "ISO 18013-5"
+                is OpenID4VPPresentmentRecord -> "OpenID4VP"
+            }
+        }
+    }
+    val text = "$eventDateTimeString • $details"
+
+    FloatingItemText(
+        modifier = modifier,
+        image = {
+            Icon(
+                imageVector = org.multipaz.documenttype.Icon.BADGE.getOutlinedImageVector(),
+                contentDescription = null,
+                modifier = Modifier.size(imageSize)
+            )
+        },
+        text = "Verified credentials",
+        secondary = text,
+    )
 }

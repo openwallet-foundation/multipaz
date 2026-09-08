@@ -55,7 +55,7 @@ class CredentialFactoryUtopiaLoyalty : CredentialFactory {
         get() = "Wholesale card"
 
     override val logo: String
-        get() = "card_utopia_wholesale.png"
+        get() = "card_utopia_wholesale.jpg"
 
     override suspend fun mint(
         systemOfRecordData: DataItem,
@@ -156,7 +156,7 @@ class CredentialFactoryUtopiaLoyalty : CredentialFactory {
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                signingKey.certChain.toDataItem()
+                signingKey.certChain.toCoseX5Chain()
             )
         )
         val encodedIssuerAuth = Cbor.encode(

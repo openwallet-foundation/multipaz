@@ -81,8 +81,18 @@ suspend fun ByteArray.zlibDeflate(compressionLevel: Int = 9): ByteArray =
  * @throws IllegalArgumentException if the given data is invalid
  */
 suspend fun ByteArray.zlibInflate(): ByteArray {
-    if (!(sliceArray(0..<2) contentEquals zlibWrapperHeader)) {
+    if (size < 6) {
+        throw IllegalArgumentException("invalid compression (truncated)")
+    }
+    val cmf = this[0].toInt() and 0xFF
+    val flg = this[1].toInt() and 0xFF
+    // RFC 1950 section 2.2. FLEVEL, the upper two bits of FLG, is informational only and varies
+    // with the compression level used by the producer, so it must not be part of the check.
+    if ((cmf and 0x0F) != 8 || (cmf shr 4) > 7 || (cmf * 256 + flg) % 31 != 0) {
         throw IllegalArgumentException("invalid compression (wrong header)")
+    }
+    if ((flg and 0x20) != 0) {
+        throw IllegalArgumentException("invalid compression (preset dictionary is not supported)")
     }
     val data = sliceArray(2..<size - 4).inflate()
     val checksum = data.adler32()

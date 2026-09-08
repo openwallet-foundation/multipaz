@@ -183,5 +183,6 @@
   "cor_description_document_number": "رقم لـ COR، مُعيّن من قِبل مزود COR.",
   "cor_description_administrative_number": "رقم مُعيّن من قِبل مزود COR لأغراض مراقبة التدقيق أو لأغراض أخرى.",
   "cor_description_issuing_jurisdiction": "رمز التقسيم الفرعي لبلد الولاية القضائية التي أصدرت COR، كما هو محدد في ISO 3166-2:2020، البند 8. يجب أن يكون الجزء الأول من الرمز مطابقًا لقيمة بلد الإصدار.",
-  "cor_description_issuing_country": "رمز البلد Alpha-2، كما هو محدد في ISO 3166-1، لبلد أو إقليم السلطة المصدرة"
+  "cor_description_issuing_country": "رمز البلد Alpha-2، كما هو محدد في ISO 3166-1، لبلد أو إقليم السلطة المصدرة",
+  "payment_request_payment_sca_transaction": "SCA للدفع مع معاملة دفع"
 }

@@ -27,18 +27,43 @@ xcode-select -p   # check whether set succesfully or not
 /Applications/Xcode.app   # expected to return 
 ```
 
-To build Testapp in Xcode you will need to create the `samples/testapp/iosApp/DeveloperConfig.xcconfig`
-file with the Team ID assigned to you by Apple. The project includes a template which can
-be used for this in the `samples/testapp/iosApp/DeveloperConfig.xcconfig.template` file.
+To build TestApp in Xcode you need local Apple signing settings in
+`samples/testapp/iosApp/DeveloperConfig.xcconfig`. This file is intentionally
+gitignored because each developer uses their own Apple Developer Team, bundle ID,
+and App Group. The project includes a template at
+`samples/testapp/iosApp/DeveloperConfig.xcconfig.template`.
 
 ```shell
 cp samples/testapp/iosApp/DeveloperConfig.xcconfig.template samples/testapp/iosApp/DeveloperConfig.xcconfig && \
 $EDITOR samples/testapp/iosApp/DeveloperConfig.xcconfig
 ```
-In the opened editor, add the Team ID assigned to you by Apple.
 
-Then, you can open `/samples/testapp/iosApp/TestApp.xcodeproj` in Xcode, select TestApp and a target
-(e.g. an iPhone), and run the app.
+In the opened editor, set:
+
+```xcconfig
+DEVELOPMENT_TEAM = YOUR_APPLE_TEAM_ID
+LOCAL_BUNDLE_ID = your.registered.testapp.bundle.id
+APP_GROUP_ID = group.your.registered.testapp.app.group
+SWIFT_TESTAPP_BUNDLE_ID = your.registered.swift.testapp.bundle.id
+SWIFT_TESTAPP_APP_GROUP_ID = group.your.registered.swift.testapp.app.group
+```
+
+`LOCAL_BUNDLE_ID` is used as the TestApp bundle identifier. The
+DocumentProviderExtension target appends `.DocumentProviderExtension` to the same
+value, so register both bundle identifiers in your Apple Developer account. Both
+targets use `APP_GROUP_ID` for their App Groups entitlement and for the shared
+iOS storage container, so the App Group must be enabled for both App IDs.
+
+For example, if `LOCAL_BUNDLE_ID` is `org.example.testapp`, the extension bundle
+identifier is `org.example.testapp.DocumentProviderExtension`.
+
+`SWIFT_TESTAPP_BUNDLE_ID` and `SWIFT_TESTAPP_APP_GROUP_ID` do the same for
+`samples/SwiftTestApp/SwiftTestApp.xcodeproj`. The Swift extension target
+appends `.IdentityDocumentProviderExtension`, so register both SwiftTestApp
+bundle identifiers and enable the Swift App Group for both of them.
+
+Then open `samples/testapp/iosApp/TestApp.xcodeproj` in Xcode, select the
+TestApp scheme and a target device, and run the app.
 
 # Linux and Windows
 

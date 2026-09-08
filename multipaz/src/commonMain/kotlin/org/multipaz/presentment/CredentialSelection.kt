@@ -13,7 +13,7 @@ import org.multipaz.documenttype.DocumentAttributeSensitivity
  * @property matches the list of credentials and claims to return to the relying party.
  */
 data class CredentialSelection(
-    val matches: List<CredentialPresentmentSetOptionMemberMatch>,
+    val matches: List<CredentialPresentmentSetOptionMemberMatch>
 ) {
 
     /**

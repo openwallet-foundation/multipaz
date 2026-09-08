@@ -13,6 +13,10 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.handler.InvalidRequestException
 
+import org.multipaz.util.Logger
+
+private const val TAG = "challenge"
+
 /**
  * Issues a fresh wallet attestation challenge
  */
@@ -21,10 +25,12 @@ suspend fun challenge(call: ApplicationCall) {
     call.response.header("Cache-Control", "no-store")
     nonces.dpopNonce?.let { call.response.header("DPoP-Nonce", it) }
     check(nonces.credentialNonce == null)
+    val responseJson = buildJsonObject {
+        put("attestation_challenge", nonces.clientAttestationNonce!!)
+    }
+    Logger.dJson(TAG, "Sending challenge response", responseJson)
     call.respondText(
-        text = buildJsonObject {
-            put("attestation_challenge", nonces.clientAttestationNonce!!)
-        }.toString(),
+        text = responseJson.toString(),
         contentType = ContentType.Application.Json
     )
 }

@@ -1,10 +1,11 @@
 package org.multipaz.compose.provisioning
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.ContextWrapper
-import android.net.Uri
+import android.content.Intent
 import android.util.Log
 import androidx.browser.customtabs.CustomTabsClient
 import androidx.browser.customtabs.CustomTabsIntent
@@ -39,6 +40,7 @@ internal actual fun EvidenceRequestOAuthBrowser(
     // setInitialActivityHeightPx() is silently ignored and the tab opens full screen.
     // The session starts as null and is set asynchronously once the service connects.
     var session by remember { mutableStateOf<CustomTabsSession?>(null) }
+    var hasCustomTabsProvider by remember { mutableStateOf<Boolean?>(null) }
 
     // Connection callback for the Custom Tabs service binding. This is invoked
     // asynchronously by the system after bindCustomTabsService() is called:
@@ -69,8 +71,13 @@ internal actual fun EvidenceRequestOAuthBrowser(
     DisposableEffect(Unit) {
         val packageName = CustomTabsClient.getPackageName(context, null)
         if (packageName != null) {
-            CustomTabsClient.bindCustomTabsService(context, packageName, connection)
+            hasCustomTabsProvider =
+                CustomTabsClient.bindCustomTabsService(context, packageName, connection)
+            if (hasCustomTabsProvider != true) {
+                Log.w(TAG, "Could not bind to Custom Tabs provider")
+            }
         } else {
+            hasCustomTabsProvider = false
             Log.w(TAG, "No Custom Tabs provider found")
         }
         onDispose {
@@ -95,13 +102,24 @@ internal actual fun EvidenceRequestOAuthBrowser(
     // once the service connection provides a session. We use startActivityForResult()
     // instead of CustomTabsIntent.launchUrl() because partial-height Custom Tabs
     // require this launch method.
-    LaunchedEffect(url, session) {
-        val currentSession = session ?: return@LaunchedEffect
+    LaunchedEffect(url, session, hasCustomTabsProvider) {
         val activity = context.findActivity()
         if (activity == null) {
             Log.w(TAG, "Could not find Activity in context chain, cannot launch Custom Tab")
             return@LaunchedEffect
         }
+        val customTabsProviderAvailable = hasCustomTabsProvider ?: return@LaunchedEffect
+        if (!customTabsProviderAvailable) {
+            try {
+                val fallbackIntent = Intent(Intent.ACTION_VIEW, url.toUri())
+                activity.startActivity(fallbackIntent)
+            } catch (e: ActivityNotFoundException) {
+                Log.w(TAG, "No Activity found for fallback auth URL", e)
+            }
+            return@LaunchedEffect
+        }
+
+        val currentSession = session ?: return@LaunchedEffect
         val initialHeightPx = (containerSize * 7) / 10
 
         val customTabsIntent = CustomTabsIntent.Builder(currentSession)

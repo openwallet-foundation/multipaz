@@ -102,7 +102,7 @@ suspend fun mdocReaderNfcHandover(
         }
         if (selectApplicationResponse != null) {
             Logger.i(TAG, "Successfully selected NFCv2 AID")
-            Logger.i(TAG, "payload: ${selectApplicationResponse.payload.toByteArray().toHex()}")
+            Logger.d(TAG, "payload: ${selectApplicationResponse.payload.toByteArray().toHex()}")
             val payload = Cbor.decode(selectApplicationResponse.payload.toByteArray())
             val mdocNfcMaxCommandApduSize = payload.get(0).asNumber.toInt()
             Logger.i(TAG, "mdoc indicates APDU max command length is $mdocNfcMaxCommandApduSize")
@@ -135,6 +135,9 @@ suspend fun mdocReaderNfcHandover(
     tag.selectFile(ndefFileId)
 
     val initialNdefMessage = tag.ndefReadMessage()
+    if (Logger.isDebugEnabled) {
+        Logger.dHex(TAG, "Initial NDEF message", initialNdefMessage.encode())
+    }
 
     // First see if we should use negotiated handover by looking for the Handover Service parameter record...
     val hspr = initialNdefMessage.records.mapNotNull {
@@ -142,6 +145,7 @@ suspend fun mdocReaderNfcHandover(
         if (parsed?.serviceNameUri == "urn:nfc:sn:handover") parsed else null
     }.firstOrNull()
     if (hspr == null) {
+        Logger.i(TAG, "No service parameter record, assuming Static Handover")
         val (encodedDeviceEngagement, connectionMethods) = parseHandoverSelectMessage(initialNdefMessage, null)
         check(!connectionMethods.isEmpty()) { "No connection methods in Handover Select" }
         val handover = buildCborArray {
@@ -163,6 +167,7 @@ suspend fun mdocReaderNfcHandover(
     // Select the service, the resulting NDEF message is specified in
     // in Tag NDEF Exchange Protocol Technical Specification Version 1.0
     // section 4.3 TNEP Status Message
+    Logger.i(TAG, "Service parameter record found, continuing with Static Handover")
     val serviceSelectionResponse = tag.ndefTransact(
         NdefMessage(listOf(
             ServiceSelectRecord(Nfc.SERVICE_NAME_CONNECTION_HANDOVER).toNdefRecord()
@@ -182,19 +187,7 @@ suspend fun mdocReaderNfcHandover(
     val hrMessage = generateHandoverRequestMessage(combinedNegotiatedHandoverConnectionMethods)
     val hsMessage = tag.ndefTransact(hrMessage, hspr.wtInt, hspr.nWait)
 
-    var bleUuid: UUID? = null
-    for (cm in negotiatedHandoverConnectionMethods) {
-        if (cm is MdocConnectionMethodBle) {
-            if (cm.peripheralServerModeUuid != null) {
-                bleUuid = cm.peripheralServerModeUuid
-                break
-            }
-            if (cm.centralClientModeUuid != null) {
-                bleUuid = cm.centralClientModeUuid
-                break
-            }
-        }
-    }
+    val bleUuid = extractBleUuid(negotiatedHandoverConnectionMethods)
     Logger.i(TAG, "Supplementing with UUID $bleUuid")
     val (encodedDeviceEngagement, connectionMethods) = parseHandoverSelectMessage(hsMessage, bleUuid)
     check(connectionMethods.size >= 1) { "No Alternative Carriers in HS message" }
@@ -215,6 +208,52 @@ suspend fun mdocReaderNfcHandover(
     )
 }
 
+private fun extractBleUuid(methods: List<MdocConnectionMethod>): UUID? {
+    for (cm in methods) {
+        if (cm is MdocConnectionMethodBle) {
+            if (cm.peripheralServerModeUuid != null) {
+                return cm.peripheralServerModeUuid
+            }
+            if (cm.centralClientModeUuid != null) {
+                return cm.centralClientModeUuid
+            }
+        }
+    }
+    return null
+}
+
+private fun supplementBleUuid(
+    methods: List<MdocConnectionMethod>,
+    bleUuid: UUID?
+): List<MdocConnectionMethod> {
+    return methods.map { cm ->
+        if (cm is MdocConnectionMethodBle) {
+            var peripheralUuid = cm.peripheralServerModeUuid
+            var centralUuid = cm.centralClientModeUuid
+            if (cm.supportsPeripheralServerMode && peripheralUuid == null) {
+                peripheralUuid = bleUuid
+            }
+            if (cm.supportsCentralClientMode && centralUuid == null) {
+                centralUuid = bleUuid
+            }
+            if (peripheralUuid != cm.peripheralServerModeUuid || centralUuid != cm.centralClientModeUuid) {
+                MdocConnectionMethodBle(
+                    supportsPeripheralServerMode = cm.supportsPeripheralServerMode,
+                    supportsCentralClientMode = cm.supportsCentralClientMode,
+                    peripheralServerModeUuid = peripheralUuid,
+                    centralClientModeUuid = centralUuid,
+                    peripheralServerModePsm = cm.peripheralServerModePsm,
+                    peripheralServerModeMacAddress = cm.peripheralServerModeMacAddress
+                )
+            } else {
+                cm
+            }
+        } else {
+            cm
+        }
+    }
+}
+
 private suspend fun mdocReaderNfcV2Handover(
     tag: NfcIsoTag,
     mdocNfcMaxCommandApduSize: Int,
@@ -224,7 +263,6 @@ private suspend fun mdocReaderNfcV2Handover(
     //
     val combinedNegotiatedHandoverConnectionMethods = listOf(MdocConnectionMethodNfcV2()) +
             MdocConnectionMethod.combine(negotiatedHandoverConnectionMethods)
-
 
     val nfcV2HandoverRequest = buildCborMap {
         // ReaderEngagement is at key 0
@@ -239,12 +277,14 @@ private suspend fun mdocReaderNfcV2Handover(
         }
     }
     val encodedNfcV2HandoverRequest = Cbor.encode(nfcV2HandoverRequest)
+    Logger.dCbor(TAG, "NFCv2 Handover Request", nfcV2HandoverRequest)
 
     val encodedNfcV2HandoverSelect = tag.nfcV2Transact(
         message = ByteString(encodedNfcV2HandoverRequest),
         commandDataFieldMaxLength = tag.maxTransceiveLength,
         responseDataFieldMaxLength = tag.maxTransceiveLength
     ).toByteArray()
+    Logger.dCbor(TAG, "NFCv2 Handover Select", encodedNfcV2HandoverSelect)
 
     Logger.i(TAG, "Handover complete")
 
@@ -259,6 +299,10 @@ private suspend fun mdocReaderNfcV2Handover(
         "Expected exactly one Device Retrieval methods in engagement, found ${deviceEngagement.connectionMethods.size}"
     }
 
+    val bleUuid = extractBleUuid(negotiatedHandoverConnectionMethods)
+    Logger.i(TAG, "Supplementing with UUID $bleUuid")
+    val supplementedConnectionMethods = supplementBleUuid(deviceEngagement.connectionMethods, bleUuid)
+
     val handover = buildCborArray {
         add(encodedNfcV2HandoverSelect) // Handover Select message
         add(encodedNfcV2HandoverRequest)  // Handover Request message
@@ -266,7 +310,7 @@ private suspend fun mdocReaderNfcV2Handover(
 
     return MdocReaderNfcHandoverResult(
         connectionMethods = MdocConnectionMethod.disambiguate(
-            deviceEngagement.connectionMethods,
+            supplementedConnectionMethods,
             MdocRole.MDOC_READER
         ),
         encodedDeviceEngagement = ByteString(encodedDeviceEngagement),

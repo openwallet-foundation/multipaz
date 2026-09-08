@@ -192,4 +192,26 @@
     <string name="trust_entry_rical_is_trust_anchor">Άγκυρα εμπιστοσύνης</string>
     <string name="trust_entry_rical_is_trust_anchor_true">Ναι</string>
     <string name="trust_entry_rical_is_trust_anchor_false">Όχι</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">Ο/Η %1$s ζητά αυτά τα δεδομένα για λογαριασμό ενός άγνωστου μέρους:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">Αυτά τα δεδομένα ζητούνται για λογαριασμό ενός άγνωστου μέρους:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">Ο/Η %1$s ζητά αυτά τα δεδομένα για λογαριασμό του/της %2$s:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">Αυτά τα δεδομένα ζητούνται για λογαριασμό του/της %1$s:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">Ο/Η %1$s ζητά αυτά τα δεδομένα για λογαριασμό ενός άγνωστου μέρους που θα τα αποθηκεύσει:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">Αυτά τα δεδομένα ζητούνται για λογαριασμό ενός άγνωστου μέρους που θα τα αποθηκεύσει:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">Ο/Η %1$s ζητά αυτά τα δεδομένα για λογαριασμό του/της %2$s που θα τα αποθηκεύσει:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">Αυτά τα δεδομένα ζητούνται για λογαριασμό του/της %1$s που θα τα αποθηκεύσει:</string>
+    <string name="credential_presentment_select_option">Επιλέξτε τι θα κοινοποιήσετε</string>
+    <string name="credential_presentment_share_something_else">Κοινοποίηση κάτι άλλου…</string>
+    <string name="credential_presentment_not_sharing_any_document">Μοιραστείτε κάτι…</string>
+    <string name="credential_presentment_dont_return_any_document">Να μη μοιραστείτε τίποτα</string>
+    <string name="credential_presentment_no_document_returned">Δεν επεστράφη κανένα έγγραφο</string>
+    <string name="credential_presentment_transaction_data">Περιλαμβάνει δεδομένα συναλλαγής:</string>
+    <string name="issuer_loading">Φόρτωση μεταδεδομένων εκδότη...</string>
+    <string name="issuer_loading_failed">Η φόρτωση μεταδεδομένων εκδότη απέτυχε</string>
+    <string name="provisioning_select_credential">Επιλέξτε διαπιστευτήριο για παροχή:</string>
+    <string name="provisioning_cancel_button">Ακύρωση παροχής</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">Εισαγάγετε το PIN που σας κοινοποιήθηκε προηγουμένως</string>
+    <string name="provisioning_tx_code_fallback_prompt">Εισαγάγετε τον κωδικό πρόσβασης που σας κοινοποιήθηκε προηγουμένως</string>
+    <string name="floating_item_heading_and_date_not_set">Δεν έχει οριστεί</string>
+    <string name="floating_item_heading_and_date_time_not_set">Δεν έχει οριστεί</string>
 </resources>

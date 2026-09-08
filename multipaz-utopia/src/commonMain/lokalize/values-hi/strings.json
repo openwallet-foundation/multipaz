@@ -183,5 +183,6 @@
   "cor_description_document_number": "COR के लिए एक संख्या, जो COR प्रदाता द्वारा सौंपी गई है।",
   "cor_description_administrative_number": "COR प्रदाता द्वारा ऑडिट नियंत्रण या अन्य उद्देश्यों के लिए सौंपी गई एक संख्या।",
   "cor_description_issuing_jurisdiction": "उस क्षेत्राधिकार का देश उपखंड कोड जिसने COR जारी किया है, जैसा कि ISO 3166-2:2020, खंड 8 में परिभाषित है। कोड का पहला भाग 'जारी करने वाले देश' (issuing_country) के मान के समान होना चाहिए।",
-  "cor_description_issuing_country": "जारी करने वाले प्राधिकारी के देश या क्षेत्र का अल्फा-2 देश कोड, जैसा कि ISO 3166-1 में परिभाषित है।"
+  "cor_description_issuing_country": "जारी करने वाले प्राधिकारी के देश या क्षेत्र का अल्फा-2 देश कोड, जैसा कि ISO 3166-1 में परिभाषित है।",
+  "payment_request_payment_sca_transaction": "भुगतान लेन-देन के साथ भुगतान SCA"
 }

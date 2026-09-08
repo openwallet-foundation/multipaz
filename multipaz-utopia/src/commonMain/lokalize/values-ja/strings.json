@@ -183,5 +183,6 @@
   "cor_description_document_number": "CORプロバイダーによって割り当てられるCORの番号。",
   "cor_description_administrative_number": "監査管理またはその他の目的のためにCORプロバイダーによって割り当てられる番号。",
   "cor_description_issuing_jurisdiction": "CORを発行した管轄区域の国細分コード（ISO 3166-2:2020、第8項で定義）。コードの最初の部分はissuing_countryの値と同じでなければなりません。",
-  "cor_description_issuing_country": "発行機関の国または地域のISO 3166-1で定義されているAlpha-2国コード。"
+  "cor_description_issuing_country": "発行機関の国または地域のISO 3166-1で定義されているAlpha-2国コード。",
+  "payment_request_payment_sca_transaction": "決済トランザクションでのSCA決済"
 }

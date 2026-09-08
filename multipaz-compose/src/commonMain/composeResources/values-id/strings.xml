@@ -192,4 +192,26 @@
     <string name="trust_entry_rical_is_trust_anchor">Jangkar kepercayaan</string>
     <string name="trust_entry_rical_is_trust_anchor_true">Ya</string>
     <string name="trust_entry_rical_is_trust_anchor_false">Tidak</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s meminta data ini atas nama pihak yang tidak dikenal:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">Data ini diminta atas nama pihak yang tidak dikenal:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s meminta data ini atas nama %2$s:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">Data ini diminta atas nama %1$s:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s meminta data ini atas nama pihak yang tidak dikenal yang akan menyimpannya:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">Data ini diminta atas nama pihak yang tidak dikenal yang akan menyimpannya:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s meminta data ini atas nama %2$s yang akan menyimpannya:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">Data ini diminta atas nama %1$s yang akan menyimpannya:</string>
+    <string name="credential_presentment_select_option">Pilih apa yang akan dibagikan</string>
+    <string name="credential_presentment_share_something_else">Bagikan hal lain…</string>
+    <string name="credential_presentment_not_sharing_any_document">Bagikan sesuatu…</string>
+    <string name="credential_presentment_dont_return_any_document">Jangan bagikan apa pun</string>
+    <string name="credential_presentment_no_document_returned">Tidak ada dokumen yang dikembalikan</string>
+    <string name="credential_presentment_transaction_data">Termasuk data transaksi:</string>
+    <string name="issuer_loading">Memuat metadata penerbit...</string>
+    <string name="issuer_loading_failed">Gagal memuat metadata penerbit</string>
+    <string name="provisioning_select_credential">Pilih kredensial untuk diprovisi:</string>
+    <string name="provisioning_cancel_button">Batalkan provisi</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">Masukkan PIN yang sebelumnya telah dikomunikasikan kepada Anda</string>
+    <string name="provisioning_tx_code_fallback_prompt">Masukkan frasa sandi yang sebelumnya telah dikomunikasikan kepada Anda</string>
+    <string name="floating_item_heading_and_date_not_set">Belum diatur</string>
+    <string name="floating_item_heading_and_date_time_not_set">Belum diatur</string>
 </resources>

@@ -24,6 +24,7 @@ private const val TAG = "validateAndroidKeyAttestation"
  * @param requireAppSignatureCertificateDigests identifies trusted app signing keys
  * @param requireAppPackages identifies trusted app package names
  * @param validateAt time instant used to validate certificate validity intervals
+ * @param validateCaValidity whether to validate validity intervals for CA certificates in the chain
  * @return challenge/nonce used during key creation
  *
  * @throws IllegalStateException if Android key attestation is not valid
@@ -36,7 +37,8 @@ suspend fun validateAndroidKeyAttestation(
     requireKeyMintSecurityLevel: AndroidKeystoreSecurityLevel,
     requireAppSignatureCertificateDigests: Set<ByteString>,
     requireAppPackages: Set<String>,
-    validateAt: Instant = Clock.System.now()
+    validateAt: Instant = Clock.System.now(),
+    validateCaValidity: Boolean = false
 ): ByteString {
     try {
         if (requireGmsAttestation) {
@@ -54,9 +56,15 @@ suspend fun validateAndroidKeyAttestation(
                     ?: throw IllegalArgumentException(
                         "No trusted root in Android Key Attestation: ${rootlessChain.last().subject.name}")
             val chainToVerify = rootlessChain + listOf(trustedRoot)
-            X509CertChain(chainToVerify).validate(validateAt)
+            X509CertChain(chainToVerify).validate(
+                validateAt = validateAt,
+                validateCaValidity = validateCaValidity
+            )
         } else {
-            chain.validate(validateAt)
+            chain.validate(
+                validateAt = validateAt,
+                validateCaValidity = validateCaValidity
+            )
         }
     } catch (err: X509CertChainValidationException) {
         throw IllegalStateException("Android key attestation certificate chain is invalid", err)

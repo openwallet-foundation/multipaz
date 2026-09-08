@@ -1,7 +1,8 @@
 package org.multipaz.mdoc.request
 
+import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseNumberLabel
@@ -10,7 +11,9 @@ import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentTypeRepository
-import org.multipaz.presentment.TransactionDataCbor
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
+import org.multipaz.presentment.TransactionData
+import org.multipaz.presentment.TransactionProtocol
 
 /**
  * Document request according to ISO 18013-5.
@@ -61,6 +64,27 @@ data class DocRequest internal constructor(
             )
         }
 
+    /**
+     * Compares two [DocRequest] instances and checks if they are similar in structure,
+     * including signing structure (protected headers and unprotected header keys), ignoring
+     * session-transcript-dependent signatures and ephemeral differences (such as certificate
+     * chains when the reader uses single-use keys).
+     *
+     * @param otherDocRequest the other document request to compare against.
+     * @return `true` if structurally equivalent, `false` otherwise.
+     */
+    fun isStructurallyEquivalent(otherDocRequest: DocRequest): Boolean {
+        if (docType != otherDocRequest.docType) return false
+        if (nameSpaces != otherDocRequest.nameSpaces) return false
+        if (docRequestInfo != otherDocRequest.docRequestInfo) return false
+        if ((readerAuth_ != null) != (otherDocRequest.readerAuth_ != null)) return false
+        if (readerAuth_ != null && otherDocRequest.readerAuth_ != null) {
+            if (readerAuth_.protectedHeaders != otherDocRequest.readerAuth_.protectedHeaders) return false
+            if (readerAuth_.unprotectedHeaders.keys != otherDocRequest.readerAuth_.unprotectedHeaders.keys) return false
+        }
+        return true
+    }
+
     internal fun toDataItem(): DataItem {
         return buildCborMap {
             put("itemsRequest", itemsRequestBytes)
@@ -71,17 +95,36 @@ data class DocRequest internal constructor(
     }
 
     /**
-     * Returns parsed transaction data associated with this document request.
+     * Returns parsed transaction data associated with this document request that was
+     * requested by data elements.
      *
      * @param documentTypeRepository repository that contains all supported transaction data types
      * @return list of transaction data
      */
     fun getTransactionData(
         documentTypeRepository: DocumentTypeRepository
-    ): List<TransactionDataCbor> = buildList {
+    ): List<TransactionData<*>> = buildList {
+        val requestedTxIdentifiers = mutableSetOf<String>()
+        nameSpaces[ISO_18013_TRANSACTION_DATA_NAMESPACE]?.keys?.let { requestedTxIdentifiers.addAll(it) }
+        docRequestInfo?.alternativeDataElements?.forEach { altSet ->
+            if (altSet.requestedElement.namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+                requestedTxIdentifiers.add(altSet.requestedElement.dataElement)
+            }
+            altSet.alternativeElementSets.forEach { elementRefs ->
+                elementRefs.forEach { elementRef ->
+                    if (elementRef.namespace == ISO_18013_TRANSACTION_DATA_NAMESPACE) {
+                        requestedTxIdentifiers.add(elementRef.dataElement)
+                    }
+                }
+            }
+        }
         for (transactionType in documentTypeRepository.transactionTypes) {
-            docRequestInfo?.otherInfo[transactionType.mdocRequestInfoKeyName]?.let { data ->
-                add(TransactionDataCbor(transactionType, data as Tagged))
+            val typeId = transactionType.iso18013RequestInfoIdentifier
+            if (!requestedTxIdentifiers.contains(typeId)) {
+                continue
+            }
+            docRequestInfo?.transactionData?.data[typeId]?.let { data ->
+                add(transactionType.parseCbor(data))
             }
         }
     }

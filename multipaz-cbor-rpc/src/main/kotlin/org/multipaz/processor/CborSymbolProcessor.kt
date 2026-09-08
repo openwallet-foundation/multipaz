@@ -144,7 +144,15 @@ class CborSymbolProcessor(
                 "kotlin.Double" -> return "${base}asDouble"
                 "kotlin.Boolean" -> return "${base}asBoolean"
                 "kotlin.time.Instant" -> "${base}asDateTimeString"
-                "kotlin.time.LocalDate" -> "${base}asDateString"
+                "kotlin.time.Duration" -> {
+                    codeBuilder.importQualifiedName("kotlin.time.Duration")
+                    return if (type.isMarkedNullable) {
+                        "${base}asNullable?.asTstr?.let { Duration.parse(it) }"
+                    } else {
+                        "Duration.parse(${base}asTstr)"
+                    }
+                }
+                "kotlinx.datetime.LocalDate" -> "${base}asDateString"
                 DATA_ITEM_CLASS -> return code
                 else -> return if (declaration is KSClassDeclaration &&
                     declaration.classKind == ClassKind.ENUM_CLASS
@@ -339,6 +347,16 @@ class CborSymbolProcessor(
                         "${base}toDataItemDateTimeString() ?: Simple.NULL"
                     } else {
                         "${base}toDataItemDateTimeString()"
+                    }
+                }
+
+                "kotlin.time.Duration" -> {
+                    codeBuilder.importQualifiedName(TSTR_TYPE)
+                    return if (nullable) {
+                        codeBuilder.importQualifiedName(SIMPLE_TYPE)
+                        "${base}let { Tstr(it.toIsoString()) } ?: Simple.NULL"
+                    } else {
+                        "Tstr(${base}toIsoString())"
                     }
                 }
 
@@ -771,16 +789,29 @@ class CborSymbolProcessor(
     }
 
     private fun getSealedSuperclass(classDeclaration: KSClassDeclaration): KSClassDeclaration? {
-        for (supertype in classDeclaration.superTypes) {
-            val superDeclaration = supertype.resolve().declaration
-            if (superDeclaration is KSClassDeclaration &&
-                superDeclaration.classKind == ClassKind.CLASS &&
-                superDeclaration.modifiers.contains(Modifier.SEALED)) {
-                return superDeclaration
+        var current = classDeclaration
+        while (true) {
+            var superClass: KSClassDeclaration? = null
+            for (supertype in current.superTypes) {
+                val superDeclaration = supertype.resolve().declaration
+                if (superDeclaration is KSClassDeclaration &&
+                    superDeclaration.classKind == ClassKind.CLASS &&
+                    superDeclaration.qualifiedName?.asString() != "kotlin.Any") {
+                    superClass = superDeclaration
+                    break
+                }
             }
+            if (superClass == null) {
+                return null
+            }
+            if (superClass.modifiers.contains(Modifier.SEALED) &&
+                findAnnotation(superClass, ANNOTATION_SERIALIZABLE) != null) {
+                return superClass
+            }
+            current = superClass
         }
-        return null
     }
+
 
     private fun getTypeKey(annotation: KSAnnotation?): String {
         annotation?.arguments?.forEach { arg ->
@@ -816,7 +847,7 @@ class CborSymbolProcessor(
         return if (name.startsWith(superName)) {
             name.substring(superName.length)
         } else if (name.endsWith(superName)) {
-            name.substring(0, name.length - superName.length)
+            name.dropLast(superName.length)
         } else if (subclass.parentDeclaration != null &&
             (subclass.parentDeclaration === superclass
                 || subclass.parentDeclaration == superclass.parentDeclaration)) {
@@ -905,7 +936,7 @@ class CborSymbolProcessor(
 
         val graphHasher = GraphHasher {
             object: HashBuilder {
-                val digest = MessageDigest.getInstance("SHA3-256");
+                val digest = MessageDigest.getInstance("SHA3-256")
                 override fun update(data: ByteString) = digest.update(data.toByteArray())
                 override fun build(): ByteString = ByteString(digest.digest())
             }
@@ -934,7 +965,7 @@ class CborSymbolProcessor(
                         }
                     }
                 }
-                val random = ByteString(Random.Default.nextBytes(32)).toBase64Url()
+                val random = ByteString(Random.nextBytes(32)).toBase64Url()
                 logger.error("Specify ($className) schemaId on one of the loop members, e.g, schemaId = \"$random\"")
                 return emptyMap()
             }
@@ -1158,6 +1189,7 @@ class CborSymbolProcessor(
             "kotlin.Double" -> simpleLeaf("Double")
             "kotlin.Boolean" -> simpleLeaf("Boolean")
             "kotlin.time.Instant" -> simpleLeaf("DateTimeString")
+            "kotlin.time.Duration" -> simpleLeaf("DurationString")
             "kotlinx.datetime.LocalDate" -> simpleLeaf("DateString")
             DATA_ITEM_CLASS -> simpleLeaf("Any")
             else -> {

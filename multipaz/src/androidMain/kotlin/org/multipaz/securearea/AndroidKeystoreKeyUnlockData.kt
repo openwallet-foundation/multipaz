@@ -6,6 +6,8 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.securearea.KeyUnlockData
 import java.security.KeyFactory
 import java.security.KeyStore
+import java.security.NoSuchAlgorithmException
+import java.security.PrivateKey
 import java.security.Signature
 import java.security.spec.InvalidKeySpecException
 
@@ -17,8 +19,8 @@ import java.security.spec.InvalidKeySpecException
  * @param alias the alias of the key to unlock.
  */
 class AndroidKeystoreKeyUnlockData(
-    val secureArea: AndroidKeystoreSecureArea,
-    val alias: String
+    override val secureArea: AndroidKeystoreSecureArea,
+    override val alias: String
 ): KeyUnlockData {
     internal var signature: Signature? = null
     private var cryptoObjectForSigning: BiometricPrompt.CryptoObject? = null
@@ -44,10 +46,15 @@ class AndroidKeystoreKeyUnlockData(
         try {
             val ks = KeyStore.getInstance("AndroidKeyStore")
             ks.load(null)
-            val entry = ks.getEntry(alias, null)
+            // getKey() rather than getEntry(): getEntry()'s PrivateKeyEntry rejects Ed25519
+            // (private-key algo "EdDSA" vs the cert) — see AndroidKeystoreSecureArea (b/282063229).
+            val privateKey = (ks.getKey(alias, null) as? PrivateKey)
                 ?: throw IllegalArgumentException("No entry for alias")
-            val privateKey = (entry as KeyStore.PrivateKeyEntry).privateKey
-            val factory = KeyFactory.getInstance(privateKey.algorithm, "AndroidKeyStore")
+            val factory = try {
+                KeyFactory.getInstance(privateKey.algorithm, "AndroidKeyStore")
+            } catch (e: NoSuchAlgorithmException) {
+                KeyFactory.getInstance("EC", "AndroidKeyStore") // "EdDSA" has no dedicated factory
+            }
             try {
                 val keyInfo = factory.getKeySpec(
                     privateKey,
@@ -93,10 +100,13 @@ class AndroidKeystoreKeyUnlockData(
             try {
                 val ks = KeyStore.getInstance("AndroidKeyStore")
                 ks.load(null)
-                val entry = ks.getEntry(alias, null)
+                val privateKey = (ks.getKey(alias, null) as? PrivateKey)
                     ?: throw IllegalArgumentException("No entry for alias")
-                val privateKey = (entry as KeyStore.PrivateKeyEntry).privateKey
-                val factory = KeyFactory.getInstance(privateKey.algorithm, "AndroidKeyStore")
+                val factory = try {
+                    KeyFactory.getInstance(privateKey.algorithm, "AndroidKeyStore")
+                } catch (e: NoSuchAlgorithmException) {
+                    KeyFactory.getInstance("EC", "AndroidKeyStore")
+                }
                 try {
                     val keyInfo = factory.getKeySpec(
                         privateKey,

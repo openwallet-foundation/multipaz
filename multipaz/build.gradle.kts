@@ -15,6 +15,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.buildconfig)
     alias(libs.plugins.skie)
+    alias(libs.plugins.kotlinSerialization)
     id("maven-publish")
     id("org.jetbrains.dokka") version "2.1.0"
 }
@@ -173,6 +174,13 @@ kotlin {
                 // dependency can be moved into commonMain.
                 implementation(libs.androidx.sqlite)
                 implementation(libs.androidx.sqlite.framework)
+            }
+        }
+
+        val androidUnitTest by getting {
+            dependencies {
+                implementation(libs.bouncy.castle.bcprov)
+                implementation(libs.bouncy.castle.bcpkix)
             }
         }
 

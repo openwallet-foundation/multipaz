@@ -1,10 +1,14 @@
 package org.multipaz.mdoc.request
 
+import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DiagnosticOption
+import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
+import org.multipaz.documenttype.knowntypes.DrivingLicense
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -81,7 +85,7 @@ class DeviceRequestDcqlConversionsTest {
                           }
                         },
                         "requestInfo": {
-                          "docFormat": "sd-jwt+kb",
+                          "docFormat": "dc+sd-jwt",
                           "dataElementIdentifierMapping": {
                             "sdjwtkb_given_name": ["given_name"],
                             "sdjwtkb_address_street_address": ["address", "street_address"]
@@ -856,6 +860,238 @@ class DeviceRequestDcqlConversionsTest {
                 }
             """.trimIndent(),
             prettyJson.encodeToString(deviceRequest.toDcql())
+        )
+    }
+
+    @Test
+    fun singleMdlWithIssuerIdentifiers() {
+        val deviceRequest = buildDeviceRequestFromDcql(
+            sessionTranscript = buildCborArray { add("doesn't"); add("matter") },
+            dcqlString =
+                """
+                    {
+                      "credentials": [
+                        {
+                          "id": "my_credential",
+                          "format": "mso_mdoc",
+                          "meta": {
+                            "doctype_value": "org.iso.18013.5.1.mDL"
+                          },
+                          "trusted_authorities": [
+                            {
+                              "type": "aki",
+                              "values": [
+                                "AQIDBA=="
+                              ]
+                            }
+                          ],
+                          "claims": [
+                            {"path": ["org.iso.18013.5.1", "given_name"]},
+                            {"path": ["org.iso.18013.5.1", "resident_address"]}
+                          ]
+                        }
+                      ]
+                    }
+                """.trimIndent()
+        )
+        assertEquals(
+            """
+                {
+                  "version": "1.1",
+                  "docRequests": [
+                    {
+                      "itemsRequest": 24(<< {
+                        "docType": "org.iso.18013.5.1.mDL",
+                        "nameSpaces": {
+                          "org.iso.18013.5.1": {
+                            "given_name": false,
+                            "resident_address": false
+                          }
+                        },
+                        "requestInfo": {
+                          "issuerIdentifiers": [h'01020304']
+                        }
+                      } >>)
+                    }
+                  ],
+                  "deviceRequestInfo": 24(<< {
+                    "useCases": [
+                      {
+                        "mandatory": true,
+                        "documentSets": [
+                          [0]
+                        ]
+                      }
+                    ]
+                  } >>)
+                }
+            """.trimIndent(),
+            Cbor.toDiagnostics(
+                item = deviceRequest.toDataItem(),
+                options = setOf(DiagnosticOption.PRETTY_PRINT)
+            )
+        )
+        assertEquals(
+            """
+                {
+                  "credentials": [
+                    {
+                      "id": "cred0",
+                      "format": "mso_mdoc",
+                      "meta": {
+                        "doctype_value": "org.iso.18013.5.1.mDL"
+                      },
+                      "trusted_authorities": [
+                        {
+                          "type": "aki",
+                          "values": [
+                            "AQIDBA"
+                          ]
+                        }
+                      ],
+                      "claims": [
+                        {
+                          "id": "claim0",
+                          "path": [
+                            "org.iso.18013.5.1",
+                            "given_name"
+                          ],
+                          "intent_to_retain": false
+                        },
+                        {
+                          "id": "claim1",
+                          "path": [
+                            "org.iso.18013.5.1",
+                            "resident_address"
+                          ],
+                          "intent_to_retain": false
+                        }
+                      ]
+                    }
+                  ],
+                  "credential_sets": [
+                    {
+                      "required": true,
+                      "options": [
+                        [
+                          "cred0"
+                        ]
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent(),
+            prettyJson.encodeToString(deviceRequest.toDcql())
+        )
+    }
+
+    @Test
+    fun toDcql_omitsTransactionDataNamespace() {
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = buildCborArray { add("doesn't"); add("matter") }
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("given_name" to false),
+                    ISO_18013_TRANSACTION_DATA_NAMESPACE to mapOf("com.example.txA" to false)
+                ),
+                docRequestInfo = DocRequestInfo(
+                    alternativeDataElements = listOf(
+                        AlternativeDataElementSet(
+                            requestedElement = ElementReference(
+                                ISO_18013_TRANSACTION_DATA_NAMESPACE,
+                                "com.example.txA"
+                            ),
+                            alternativeElementSets = listOf(
+                                listOf(
+                                    ElementReference(
+                                        ISO_18013_TRANSACTION_DATA_NAMESPACE,
+                                        "com.example.txB"
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        }
+        val dcql = deviceRequest.toDcql()
+        assertEquals(
+            """
+                {
+                  "credentials": [
+                    {
+                      "id": "cred0",
+                      "format": "mso_mdoc",
+                      "meta": {
+                        "doctype_value": "org.iso.18013.5.1.mDL"
+                      },
+                      "claims": [
+                        {
+                          "id": "claim0",
+                          "path": [
+                            "org.iso.18013.5.1",
+                            "given_name"
+                          ],
+                          "intent_to_retain": false
+                        }
+                      ]
+                    }
+                  ]
+                }
+            """.trimIndent(),
+            prettyJson.encodeToString(dcql)
+        )
+    }
+
+    @Test
+    fun fromDcql_withTransactions_addsToNameSpaces() {
+        val pingTxData = Tstr("ping_data")
+        val dcqlString = """
+            {
+              "credentials": [
+                {
+                  "id": "mdl",
+                  "format": "mso_mdoc",
+                  "meta": {
+                    "doctype_value": "org.iso.18013.5.1.mDL"
+                  },
+                  "claims": [
+                    {"id": "c0", "path": ["org.iso.18013.5.1", "given_name"]}
+                  ]
+                }
+              ]
+            }
+        """.trimIndent()
+
+        // Test defaultIntentToRetain = false (default)
+        val deviceRequestDefault = buildDeviceRequestFromDcql(
+            sessionTranscript = buildCborArray { add("test") },
+            dcqlString = dcqlString,
+            transactions = mapOf(
+                "mdl" to TransactionsInfo(mapOf("org.multipaz.transaction.ping" to pingTxData))
+            )
+        )
+        val docReqDefault = deviceRequestDefault.docRequests[0]
+        assertEquals(
+            mapOf("org.multipaz.transaction.ping" to false),
+            docReqDefault.nameSpaces[ISO_18013_TRANSACTION_DATA_NAMESPACE]
+        )
+
+        // Test defaultIntentToRetain = true
+        val deviceRequestRetain = buildDeviceRequestFromDcql(
+            sessionTranscript = buildCborArray { add("test") },
+            dcqlString = dcqlString,
+            transactions = mapOf(
+                "mdl" to TransactionsInfo(mapOf("org.multipaz.transaction.ping" to pingTxData))
+            ),
+            defaultIntentToRetain = true
+        )
+        val docReqRetain = deviceRequestRetain.docRequests[0]
+        assertEquals(
+            mapOf("org.multipaz.transaction.ping" to true),
+            docReqRetain.nameSpaces[ISO_18013_TRANSACTION_DATA_NAMESPACE]
         )
     }
 }

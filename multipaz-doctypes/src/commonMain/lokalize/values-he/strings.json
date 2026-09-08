@@ -391,5 +391,7 @@
   "multi_request_mdl_and_photoid": "mDL ו-PhotoID",
   "multi_request_mdl_or_photoid": "mDL או PhotoID",
   "age_verification_attribute_older_than_years": "מעל {age} שנים",
-  "age_verification_description_older_than_years": "ציון אם בעל הרישיון הוא בן {age} או מבוגר יותר"
+  "age_verification_description_older_than_years": "ציון אם בעל הרישיון הוא בן {age} או מבוגר יותר",
+  "multi_request_payment_and_age_over_18": "תשלום וגיל מעל 18",
+  "multi_request_age_over_18_mdl_or_pid": "גיל מעל 18 באמצעות mDL או PID ועסקה"
 }

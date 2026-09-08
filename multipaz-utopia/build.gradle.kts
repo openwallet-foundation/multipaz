@@ -1,11 +1,14 @@
 @file:OptIn(ExperimentalWasmDsl::class)
 
+import org.gradle.kotlin.dsl.project
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.multipaz.lokalize.util.OutputFormat
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlinSerialization)
     id("maven-publish")
     id("org.jetbrains.dokka") version "2.1.0"
     id("org.multipaz.lokalize.convention")
@@ -69,6 +72,7 @@ kotlin {
 
     sourceSets {
         val commonMain by getting {
+            kotlin.srcDir("build/generated/ksp/metadata/commonMain/kotlin")
             dependencies {
                 implementation(project(":multipaz"))
                 implementation(project(":multipaz-doctypes"))
@@ -112,6 +116,29 @@ kotlin {
     }
 }
 
+dependencies {
+    add("kspCommonMainMetadata", project(":multipaz-cbor-rpc"))
+    add("kspJvmTest", project(":multipaz-cbor-rpc"))
+}
+
+tasks.all {
+    if (name == "compileDebugKotlinAndroid" || name == "compileReleaseKotlinAndroid" ||
+        name == "androidReleaseSourcesJar" || name == "iosArm64SourcesJar" ||
+        name == "iosSimulatorArm64SourcesJar" || name == "iosX64SourcesJar" ||
+        name == "jsSourcesJar" || name == "wasmJsSourcesJar"  || name == "jvmSourcesJar" || name == "sourcesJar") {
+        dependsOn("kspCommonMainKotlinMetadata")
+    }
+}
+
+tasks["compileKotlinIosX64"].dependsOn("kspCommonMainKotlinMetadata")
+tasks["compileKotlinIosArm64"].dependsOn("kspCommonMainKotlinMetadata")
+tasks["compileKotlinIosSimulatorArm64"].dependsOn("kspCommonMainKotlinMetadata")
+tasks["compileKotlinJvm"].dependsOn("kspCommonMainKotlinMetadata")
+if (!disableWebTargets) {
+    tasks["compileKotlinJs"].dependsOn("kspCommonMainKotlinMetadata")
+    tasks["compileKotlinWasmJs"].dependsOn("kspCommonMainKotlinMetadata")
+}
+
 group = "org.multipaz"
 
 android {
@@ -135,6 +162,15 @@ android {
 // during Android's mergeJavaResource step in downstream consumers (issue #1714).
 // Nothing reads these JSONs at runtime — they are build-time inputs to the lokalize
 // plugin only; runtime translations are baked into GeneratedTranslations as constants.
+//
+// The Kotlin rendered from those JSONs is checked in under src/commonMain/generated/ rather than
+// generated into build/ on every compile, so that downstreams on non-Gradle build systems see a
+// source tree that compiles as-is (issue #1811). It is a pure function of the committed
+// values*/strings.json, and lokalizeCheckGenerated (wired into `check`) fails the build if the two
+// drift apart. After editing strings, run:
+//
+//     ./gradlew :multipaz-utopia:generateMultipazStrings
+//
 lokalize {
     outputFormat.set(OutputFormat.JSON)
     resourcesDir.set("src/commonMain/lokalize")

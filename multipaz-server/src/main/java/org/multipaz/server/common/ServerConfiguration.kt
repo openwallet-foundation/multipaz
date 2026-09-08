@@ -4,8 +4,11 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.multipaz.rpc.backend.Configuration
+import org.multipaz.util.Logger
 import java.io.File
 import kotlin.collections.iterator
+
+private const val TAG = "ServerConfiguration"
 
 /**
  * Server-side configuration implementation.
@@ -32,6 +35,10 @@ class ServerConfiguration(args: Array<String>) : Configuration {
                         throw IllegalArgumentException("No '=' in param: '$value'")
                     }
                     map[value.take(index)] = value.substring(index + 1)
+                }
+                "-debug" -> {
+                    Logger.isDebugEnabled = true
+                    Logger.i(TAG, "Enabled debug logging level")
                 }
                 else -> {
                     println("Unknown command-line argument: $arg")

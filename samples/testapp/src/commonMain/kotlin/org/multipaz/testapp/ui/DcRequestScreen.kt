@@ -1,9 +1,11 @@
 package org.multipaz.testapp.ui
 
 import kotlinx.coroutines.CancellationException
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -17,6 +19,7 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import org.multipaz.cbor.DataItem
 import org.multipaz.compose.rememberUiBoundCoroutineScope
 import org.multipaz.crypto.Crypto
@@ -28,6 +31,7 @@ import org.multipaz.documenttype.SingleDocumentCannedRequest
 import org.multipaz.testapp.App
 import org.multipaz.testapp.TestAppUtils
 import org.multipaz.util.Logger
+import org.multipaz.util.fromHexByteString
 import org.multipaz.util.toBase64Url
 import org.multipaz.testapp.ShowResponseMetadata
 import org.multipaz.testapp.TestAppConfiguration
@@ -35,12 +39,23 @@ import org.multipaz.utopia.knowntypes.wellKnownMultipleDocumentRequests
 import org.multipaz.testapp.DcqlRequestDefinition
 import org.multipaz.verification.VerificationSession
 import org.multipaz.verification.VerificationUtil
+import org.multipaz.verification.VerifierIdentity
+import org.multipaz.eventlogger.EventVerificationDigitalCredentials
 import kotlin.random.Random
 import kotlin.time.Clock
 
 private const val TAG = "AppToAppReadingScreen"
 
+private fun parseIssuerIdentifiers(input: String?): List<ByteString> {
+    if (input.isNullOrBlank()) return emptyList()
+    return input.split(",")
+        .map { it.filterNot { c -> c.isWhitespace() } }
+        .filter { it.isNotEmpty() }
+        .map { it.fromHexByteString() }
+}
+
 private data class RequestEntry(
+    val id: String,
     val displayName: String,
     val request: DocumentCannedRequest
 )
@@ -153,8 +168,7 @@ private enum class CredentialFormat(
     IETF_SDJWT("IETF SD-JWT"),
 }
 
-private var lastRequest: Int = 0
-private var lastProtocol: Int = 0
+private var lastProtocol: Int = 4
 private var lastFormat: Int = 0
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalCoroutinesApi::class)
@@ -172,8 +186,12 @@ fun DcRequestScreen(
 ) {
     val requestOptions = mutableListOf<RequestEntry>()
     for (documentType in TestAppUtils.provisionedDocumentTypes) {
+        val docTypeId = documentType.mdocDocumentType?.docType
+            ?: documentType.jsonDocumentType?.vct
+            ?: documentType.displayName
         for (sampleRequest in documentType.cannedRequests) {
             requestOptions.add(RequestEntry(
+                id = "${docTypeId}_${sampleRequest.id}",
                 displayName = "${documentType.displayName}: ${sampleRequest.displayName}",
                 request = sampleRequest
             ))
@@ -181,24 +199,31 @@ fun DcRequestScreen(
     }
     for (request in app.documentTypeRepository.extraSingleDocumentCannedRequests) {
         requestOptions.add(RequestEntry(
+            id = "extra_" + request.id,
             displayName = request.displayName,
             request = request
         ))
     }
     for (request in wellKnownMultipleDocumentRequests) {
         requestOptions.add(RequestEntry(
+            id = "multidoc_" + request.id,
             displayName = "Multi-doc: ${request.displayName}",
             request = request
         ))
     }
     val requestDropdownExpanded = remember { mutableStateOf(false) }
-    val requestSelected = remember { mutableStateOf(requestOptions[lastRequest]) }
+    val requestSelected = remember { mutableStateOf(
+        requestOptions.find {
+            it.id == app.settingsModel.dcRequestLastSelectedRequestId.value
+        } ?: requestOptions.first()
+    )}
     val protocolOptions = RequestProtocol.entries
     val protocolDropdownExpanded = remember { mutableStateOf(false) }
     val protocolSelected = remember { mutableStateOf(protocolOptions[lastProtocol]) }
     val formatOptions = CredentialFormat.entries
     val formatDropdownExpanded = remember { mutableStateOf(false) }
     val formatSelected = remember { mutableStateOf(formatOptions[lastFormat]) }
+    val issuerIdentifiers = remember { mutableStateOf(app.settingsModel.dcRequestIssuerIdentifiers.value) }
     val coroutineScope = rememberUiBoundCoroutineScope { app.promptModel }
 
     LazyColumn(
@@ -211,7 +236,9 @@ fun DcRequestScreen(
                 comboBoxSelected = requestSelected,
                 comboBoxExpanded = requestDropdownExpanded,
                 getDisplayName = { it.displayName },
-                onSelected = { index, value -> lastRequest = index }
+                onSelected = { index, value ->
+                    app.settingsModel.dcRequestLastSelectedRequestId.value = value.id
+                }
             )
         }
         item {
@@ -235,6 +262,17 @@ fun DcRequestScreen(
             )
         }
         item {
+            OutlinedTextField(
+                value = issuerIdentifiers.value,
+                onValueChange = {
+                    issuerIdentifiers.value = it
+                    app.settingsModel.dcRequestIssuerIdentifiers.value = it
+                },
+                label = { Text("Issuer Identifiers (hex, comma separated)") },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
+        }
+        item {
             TextButton(
                 onClick = {
                     coroutineScope.launch {
@@ -244,6 +282,7 @@ fun DcRequestScreen(
                                 request = requestSelected.value.request,
                                 protocol = protocolSelected.value,
                                 format = formatSelected.value,
+                                issuerIdentifiers = parseIssuerIdentifiers(issuerIdentifiers.value),
                                 showResponse = showResponse
                             )
                         } catch (error: Exception) {
@@ -264,6 +303,7 @@ private suspend fun doDcRequestFlow(
     request: DocumentCannedRequest,
     protocol: RequestProtocol,
     format: CredentialFormat,
+    issuerIdentifiers: List<ByteString> = emptyList(),
     showResponse: (
         vpToken: JsonObject?,
         deviceResponse: DataItem?,
@@ -323,17 +363,25 @@ private suspend fun doDcRequestFlow(
         }
     }
 
+    val dcqlToUse = if (issuerIdentifiers.isNotEmpty()) {
+        VerificationUtil.injectIssuerIdentifiersIntoDcql(
+            Json.parseToJsonElement(requestDefinition.dcql).jsonObject,
+            issuerIdentifiers
+        ).toString()
+    } else {
+        requestDefinition.dcql
+    }
+
     val session = VerificationUtil.generateVerificationSessionForDcql(
         requestTypes = protocol.requestTypes,
-        dcql = requestDefinition.dcql,
+        dcql = dcqlToUse,
         transactionData = requestDefinition.transactionData,
         nonce = nonce,
         origin = origin,
-        clientId = clientId,
-        readerAuthenticationKey = if (protocol.signRequest) {
-            app.readerKey
-        } else {
-            null
+        verifierIdentities = buildList {
+            if (protocol.signRequest) {
+                add(VerifierIdentity(app.readerKey, clientId))
+            }
         },
         documentTypeRepository = app.documentTypeRepository,
     )
@@ -345,7 +393,22 @@ private suspend fun doDcRequestFlow(
     Logger.iJson(TAG, "Request", dcRequestObject)
     val t0 = Clock.System.now()
     val dcResponseObject = app.digitalCredentials.request(dcRequestObject)
+    val durationRequestSentToResponseReceived = Clock.System.now() - t0
     Logger.iJson(TAG, "Response", dcResponseObject)
+
+    val presentmentRecord = session.processDcResponse(dcResponse = dcResponseObject)
+    val requestJson = Json.encodeToString(dcRequestObject)
+    val responseJson = Json.encodeToString(dcResponseObject)
+    app.eventLogger.addEventAsync(
+        EventVerificationDigitalCredentials(
+            presentmentRecord = presentmentRecord,
+            requestJson = requestJson,
+            responseJson = responseJson,
+            durationRequestSentToResponseReceived = durationRequestSentToResponseReceived,
+            origin = origin,
+            appId = clientId
+        )
+    )
 
     val metadata = ShowResponseMetadata(
         engagementType = "OS-provided CredentialManager API",

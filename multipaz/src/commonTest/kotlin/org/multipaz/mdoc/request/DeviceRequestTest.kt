@@ -17,9 +17,11 @@ import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cose.Cose
+import org.multipaz.cose.CoseSign1
 import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
@@ -27,7 +29,10 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
+import kotlin.time.Clock
+import kotlinx.datetime.Instant
 import org.multipaz.crypto.X500Name
+import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
@@ -48,6 +53,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 
 class DeviceRequestTest {
     // Test against the test vector in Annex D of 18013-5:2021
@@ -860,7 +867,7 @@ class DeviceRequestTest {
                     )
                 ),
                 docRequestInfo = DocRequestInfo(
-                    docFormat = "sd-jwt+kb",
+                    docFormat = "dc+sd-jwt",
                     dataElementIdentifierMapping = mapOf(
                         "sdjwtvc_given_name" to buildJsonArray { add("given_name") },
                         "sdjwtvc_family_name" to buildJsonArray { add("family_name") },
@@ -890,7 +897,7 @@ class DeviceRequestTest {
                           }
                         },
                         "requestInfo": {
-                          "docFormat": "sd-jwt+kb",
+                          "docFormat": "dc+sd-jwt",
                           "dataElementIdentifierMapping": {
                             "sdjwtvc_given_name": ["given_name"],
                             "sdjwtvc_family_name": ["family_name"],
@@ -1571,5 +1578,153 @@ class DeviceRequestTest {
         assertEquals(false, dri.useCases[1].mandatory)
         assertEquals(listOf(DocumentSet(listOf(1)), DocumentSet(listOf(2))), dri.useCases[1].documentSets)
         assertEquals(mapOf("org.iso.jtc1.sc17" to 1), dri.useCases[1].purposeHints)
+    }
+
+    @Test
+    fun testIsStructurallyEquivalent() = runTest {
+        val transcript1 = buildCborArray { add("Session1") }
+        val transcript2 = buildCborArray { add("Session2") }
+
+        val req1 = DeviceRequest.Builder(transcript1)
+            .addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)
+                )
+            )
+            .build()
+
+        val req2 = DeviceRequest.Builder(transcript2)
+            .addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)
+                )
+            )
+            .build()
+
+        val req3 = DeviceRequest.Builder(transcript1)
+            .addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false, "given_name" to false)
+                )
+            )
+            .build()
+
+        assertEquals(true, req1.isStructurallyEquivalent(req2))
+        assertEquals(true, req2.isStructurallyEquivalent(req1))
+        assertEquals(false, req1.isStructurallyEquivalent(req3))
+    }
+
+    @Test
+    fun testIsStructurallyEquivalentWithDifferentReaderAuthCerts() = runTest {
+        val transcript = buildCborArray { add("Session") }
+
+        val key1 = Crypto.createEcPrivateKey(EcCurve.P256)
+        val key2 = Crypto.createEcPrivateKey(EcCurve.P256)
+
+        val validFrom = Clock.System.now()
+        val validUntil = Instant.fromEpochMilliseconds(
+            validFrom.toEpochMilliseconds() + 30L * 24 * 60 * 60 * 1000
+        )
+
+        val cert1 = X509Cert.Builder(
+            publicKey = key1.publicKey,
+            signingKey = AsymmetricKey.anonymous(key1, Algorithm.ES256),
+            serialNumber = ASN1Integer(1),
+            subject = X500Name.fromName("CN=Reader 1"),
+            issuer = X500Name.fromName("CN=Reader 1"),
+            validFrom = validFrom,
+            validUntil = validUntil
+        ).build()
+
+        val cert2 = X509Cert.Builder(
+            publicKey = key2.publicKey,
+            signingKey = AsymmetricKey.anonymous(key2, Algorithm.ES256),
+            serialNumber = ASN1Integer(2),
+            subject = X500Name.fromName("CN=Reader 2"),
+            issuer = X500Name.fromName("CN=Reader 2"),
+            validFrom = validFrom,
+            validUntil = validUntil
+        ).build()
+
+        val readerKey1 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(cert1)), key1)
+        val readerKey2 = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(cert2)), key2)
+
+        val req1 = DeviceRequest.Builder(transcript)
+            .addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = readerKey1
+            )
+            .build()
+
+        val req2 = DeviceRequest.Builder(transcript)
+            .addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)),
+                readerKey = readerKey2
+            )
+            .build()
+
+        assertTrue(req1.isStructurallyEquivalent(req2))
+        assertTrue(req2.isStructurallyEquivalent(req1))
+    }
+
+    @Test
+    fun x5chain_excludesRootCertificate() = runTest {
+        val ra = ReaderAuth.generateSoftware()
+        // ra.readerKey has certChain of [readerCert, readerRootCert]
+        assertEquals(2, ra.readerKey.certChain.certificates.size)
+        val readerCert = ra.readerKey.certChain.certificates[0]
+        val rootCert = ra.readerKey.certChain.certificates[1]
+
+        val sessionTranscript = buildCborArray { add("SessionTranscript") }
+        val deviceRequest = buildDeviceRequest(
+            sessionTranscript = sessionTranscript
+        ) {
+            addDocRequest(
+                docType = DrivingLicense.MDL_DOCTYPE,
+                nameSpaces = mapOf(
+                    DrivingLicense.MDL_NAMESPACE to mapOf("family_name" to false)
+                ),
+                readerKey = ra.readerKey
+            )
+            addReaderAuthAll(readerKey = ra.readerKey)
+        }
+
+        // Verify with raw CBOR that x5chain header parameter contains only readerCert (as Bstr, not array with root)
+        val rawItem = deviceRequest.toDataItem()
+        val docRequestsArray = rawItem["docRequests"].asArray
+        val docRequestItem = docRequestsArray[0]
+        val readerAuthItem = docRequestItem.getOrNull("readerAuth")
+        assertNotNull(readerAuthItem)
+        val readerAuthSign1 = CoseSign1.fromDataItem(readerAuthItem)
+        val docRequestX5chain = readerAuthSign1.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
+        assertNotNull(docRequestX5chain)
+        // Since only 1 cert remains after root exclusion, RFC 9360 requires a single Bstr
+        assertTrue(docRequestX5chain is Bstr)
+        assertEquals(readerCert.encoded, ByteString(docRequestX5chain.asBstr))
+        assertEquals(1, docRequestX5chain.asX509CertChain.certificates.size)
+        assertEquals(readerCert, docRequestX5chain.asX509CertChain.certificates[0])
+
+        val readerAuthAllArray = rawItem.getOrNull("readerAuthAll")?.asArray
+        assertNotNull(readerAuthAllArray)
+        val readerAuthAllSign1 = CoseSign1.fromDataItem(readerAuthAllArray[0])
+        val readerAuthAllX5chain = readerAuthAllSign1.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
+        assertNotNull(readerAuthAllX5chain)
+        assertTrue(readerAuthAllX5chain is Bstr)
+        assertEquals(readerCert.encoded, ByteString(readerAuthAllX5chain.asBstr))
+        assertEquals(1, readerAuthAllX5chain.asX509CertChain.certificates.size)
+        assertEquals(readerCert, readerAuthAllX5chain.asX509CertChain.certificates[0])
+
+        // Verify parsing and authentication verification
+        val parsed = DeviceRequest.fromDataItem(rawItem)
+        parsed.verifyReaderAuthentication(sessionTranscript)
+        val identities = parsed.getRequesterIdentities()
+        assertEquals(1, identities.size)
+        assertEquals(1, identities[0].certChain.certificates.size)
+        assertEquals(readerCert, identities[0].certChain.certificates[0])
     }
 }

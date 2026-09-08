@@ -54,33 +54,13 @@ internal object TrustManagerUtil {
         // NOTE does not check if it is valid within the validity period of
         // the issuing CA
         check(atTime >= certificate.validityNotBefore) {
-            "Certificate is not yet valid ($atTime < ${certificate.validityNotBefore}"
+            "Certificate is not yet valid ($atTime < ${certificate.validityNotBefore})"
         }
         check(atTime <= certificate.validityNotAfter) {
             "Certificate is no longer valid ($atTime > ${certificate.validityNotAfter})"
         }
     }
 
-    /**
-     * Check that the key usage is to sign certificates.
-     */
-    fun checkKeyUsageCaCertificate(caCertificate: X509Cert) {
-        check(caCertificate.keyUsage.contains(X509KeyUsage.KEY_CERT_SIGN)) {
-            "CA certificate doesn't have the key usage to sign certificates"
-        }
-    }
-
-    /**
-     * Check that the issuer in [certificate] is equal to the subject in
-     * [caCertificate].
-     */
-    fun checkCaIsIssuer(certificate: X509Cert, caCertificate: X509Cert) {
-        val issuerName = certificate.issuer.name
-        val nameCA = caCertificate.subject.name
-        if (issuerName != nameCA) {
-            throw IllegalStateException("CA certificate '$nameCA' isn't the issuer of the certificate before it. It should be '$issuerName'")
-        }
-    }
 
     /**
      * Verify the signature of the [certificate] with the public key of the
@@ -100,18 +80,45 @@ internal object TrustManagerUtil {
     internal suspend fun verifyX509TrustChain(
         chain: List<X509Cert>,
         atTime: Instant,
-        skiToTrustPoint: Map<String, TrustPoint>
+        skiToTrustPoint: Map<String, TrustPoint>,
+        validateCaValidity: Boolean = true,
+        docType: String? = null
     ): TrustResult {
         // TODO: add support for customValidators similar to PKIXCertPathChecker
         try {
             val trustPoints = getAllTrustPointsForX509Cert(chain, skiToTrustPoint)
-            val completeChain = chain.plus(trustPoints.map { it.certificate })
+            val isIaca = docType != null || trustPoints.any { it.isIaca || it.trustManager is VicalTrustManager }
+            val authorizedDocTypes = trustPoints.flatMap { it.docTypes }.distinct()
+            val completeChain = buildList {
+                addAll(chain)
+                for (tp in trustPoints) {
+                    if (!contains(tp.certificate)) {
+                        add(tp.certificate)
+                    }
+                }
+            }
             try {
-                validateCertificationTrustPath(completeChain, atTime)
+                validateCertificationTrustPath(
+                    certificationTrustPath = completeChain,
+                    atTime = atTime,
+                    validateCaValidity = validateCaValidity,
+                    isIaca = isIaca
+                )
+                if (docType != null) {
+                    val isDocTypeAuthorized = trustPoints.any { tp ->
+                        tp.docTypes.isEmpty() || tp.docTypes.contains(docType)
+                    }
+                    if (!isDocTypeAuthorized) {
+                        throw IllegalStateException(
+                            "DocType '$docType' is not authorized by VICAL for certificate '${chain.first().subject.name}'"
+                        )
+                    }
+                }
                 return TrustResult(
                     isTrusted = true,
                     trustPoints = trustPoints,
-                    trustChain = X509CertChain(completeChain)
+                    trustChain = X509CertChain(completeChain),
+                    authorizedDocTypes = authorizedDocTypes
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -120,7 +127,8 @@ internal object TrustManagerUtil {
                     isTrusted = false,
                     trustPoints = trustPoints,
                     trustChain = X509CertChain(completeChain),
-                    error = e
+                    error = e,
+                    authorizedDocTypes = authorizedDocTypes
                 )
             }
         } catch (e: Exception) {
@@ -133,14 +141,36 @@ internal object TrustManagerUtil {
             // just submits a certificate for the key that their reader will be using.
             //
             if (chain.size == 1) {
-                val trustPoint = skiToTrustPoint[chain[0].subjectKeyIdentifier!!.toHex()]
-                if (trustPoint != null) {
-                    return TrustResult(
-                        isTrusted = true,
-                        trustChain = X509CertChain(chain),
-                        listOf(trustPoint),
-                        error = null
-                    )
+                val cert = chain[0]
+                val trustPoint = cert.subjectKeyIdentifier?.toHex()?.let { skiToTrustPoint[it] }
+                if (trustPoint != null && cert.ecPublicKey == trustPoint.certificate.ecPublicKey) {
+                    try {
+                        checkValidity(cert, atTime)
+                        if (isSelfSigned(cert)) {
+                            verifySignature(cert, cert)
+                        }
+                        if (docType != null && trustPoint.docTypes.isNotEmpty() && !trustPoint.docTypes.contains(docType)) {
+                            throw IllegalStateException(
+                                "DocType '$docType' is not authorized by VICAL for certificate '${cert.subject.name}'"
+                            )
+                        }
+                        return TrustResult(
+                            isTrusted = true,
+                            trustChain = X509CertChain(chain),
+                            trustPoints = listOf(trustPoint),
+                            error = null,
+                            authorizedDocTypes = trustPoint.docTypes
+                        )
+                    } catch (validationException: Exception) {
+                        if (validationException is CancellationException) throw validationException
+                        return TrustResult(
+                            isTrusted = false,
+                            trustChain = X509CertChain(chain),
+                            trustPoints = listOf(trustPoint),
+                            error = validationException,
+                            authorizedDocTypes = trustPoint.docTypes
+                        )
+                    }
                 }
             }
             // no CA certificate could be found.
@@ -156,16 +186,25 @@ internal object TrustManagerUtil {
         skiToTrustPoint: Map<String, TrustPoint>
     ): List<TrustPoint> {
         val result = mutableListOf<TrustPoint>()
+        val visitedSkis = mutableSetOf<String>()
 
         // only an exception if not a single CA certificate is found
-        var caCertificate: TrustPoint? = findCaCertificate(chain, skiToTrustPoint)
+        var caCertificate: TrustPoint = findCaCertificate(listOf(chain.last()), skiToTrustPoint)
+            ?: findCaCertificate(chain, skiToTrustPoint)
             ?: throw IllegalStateException("No trusted root certificate could not be found")
-        result.add(caCertificate!!)
-        while (caCertificate != null && !isSelfSigned(caCertificate.certificate)) {
-            caCertificate = findCaCertificate(listOf(caCertificate.certificate), skiToTrustPoint)
-            if (caCertificate != null) {
-                result.add(caCertificate)
+        caCertificate.certificate.subjectKeyIdentifier?.toHex()?.let { visitedSkis.add(it) }
+        result.add(caCertificate)
+
+        val maxPathDepth = 32
+        while (!isSelfSigned(caCertificate.certificate) && result.size < maxPathDepth) {
+            val nextCaCertificate = findCaCertificate(listOf(caCertificate.certificate), skiToTrustPoint)
+                ?: break
+            val nextSki = nextCaCertificate.certificate.subjectKeyIdentifier?.toHex()
+            if (nextSki != null && !visitedSkis.add(nextSki)) {
+                break
             }
+            result.add(nextCaCertificate)
+            caCertificate = nextCaCertificate
         }
         return result
     }
@@ -178,9 +217,9 @@ internal object TrustManagerUtil {
         skiToTrustPoint: Map<String, TrustPoint>
     ): TrustPoint? {
         chain.forEach { cert ->
-            cert.authorityKeyIdentifier?.toHex().let {
-                if (skiToTrustPoint.containsKey(it)) {
-                    return skiToTrustPoint[it]
+            cert.authorityKeyIdentifier?.toHex()?.let { aki ->
+                if (skiToTrustPoint.containsKey(aki)) {
+                    return skiToTrustPoint[aki]
                 }
             }
         }
@@ -192,26 +231,53 @@ internal object TrustManagerUtil {
      */
     private suspend fun validateCertificationTrustPath(
         certificationTrustPath: List<X509Cert>,
-        atTime: Instant
+        atTime: Instant,
+        validateCaValidity: Boolean = true,
+        isIaca: Boolean = false,
     ) {
-        val certIterator = certificationTrustPath.iterator()
-        val leafCertificate = certIterator.next()
-        checkKeyUsageDocumentSigner(leafCertificate)
-        checkValidity(leafCertificate, atTime)
-
-        var previousCertificate = leafCertificate
-        var caCertificate: X509Cert? = null
-        while (certIterator.hasNext()) {
-            caCertificate = certIterator.next()
-            checkKeyUsageCaCertificate(caCertificate)
-            checkCaIsIssuer(previousCertificate, caCertificate)
-            verifySignature(previousCertificate, caCertificate)
-            previousCertificate = caCertificate
+        val leafCertificate = certificationTrustPath.first()
+        check(leafCertificate.keyUsage.contains(X509KeyUsage.DIGITAL_SIGNATURE)) {
+            if (isIaca) {
+                "Document Signer certificate is not a signing certificate"
+            } else {
+                "Certificate is not a signing certificate"
+            }
         }
-        if (caCertificate != null && isSelfSigned(caCertificate)) {
-            // check the signature of the self signed root certificate
-            verifySignature(caCertificate, caCertificate)
+
+        val certChain = X509CertChain(certificationTrustPath)
+        certChain.validate(
+            validateAt = atTime,
+            requireBasicConstraints = false,
+            validateCaValidity = validateCaValidity
+        )
+
+        val rootCertificate = certificationTrustPath.last()
+        if (isSelfSigned(rootCertificate)) {
+            verifySignature(rootCertificate, rootCertificate)
+        }
+
+        if (isIaca) {
+            // ISO/IEC 18013-5:2021 (and 2nd Edition) clause 12.8.3:
+            // Furthermore, the following steps shall be performed for certificates issued by the IACA.
+            // — Verify that the countryName element in the subject of the IACA certificate and the countryName
+            //   element in the subject of the target certificate issued under the IACA certificate are the same.
+            // — Verify that the stateOrProvinceName element in the subject of the IACA certificate and the
+            //   stateOrProvinceName element in the subject of the target certificate issued under the IACA
+            //   certificate are the same if this element is present in both certificates.
+            val iacaCountry = rootCertificate.subject.countryName
+            if (iacaCountry != null) {
+                val leafCountry = leafCertificate.subject.countryName
+                check(iacaCountry == leafCountry) {
+                    "Target certificate countryName '$leafCountry' does not match IACA certificate countryName '$iacaCountry'"
+                }
+            }
+            val iacaState = rootCertificate.subject.stateOrProvinceName
+            val leafState = leafCertificate.subject.stateOrProvinceName
+            if (iacaState != null && leafState != null) {
+                check(iacaState == leafState) {
+                    "Target certificate stateOrProvinceName '$leafState' does not match IACA certificate stateOrProvinceName '$iacaState'"
+                }
+            }
         }
     }
-
 }

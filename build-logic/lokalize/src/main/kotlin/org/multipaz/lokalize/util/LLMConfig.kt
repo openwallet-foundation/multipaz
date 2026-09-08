@@ -34,6 +34,12 @@ enum class LLmModel {
     GPT4_1_MINI,
 
     // O Series - Reasoning models
+    /** O1 - Reasoning model for complex, multi-step tasks */
+    O1,
+
+    /** O3 - Advanced reasoning model */
+    O3,
+
     /** O3 Mini - Smaller, affordable reasoning model */
     O3_MINI,
 
@@ -50,6 +56,9 @@ enum class LLmModel {
     /** GPT-5 Nano - Fastest, most cost-efficient GPT-5 */
     GPT5_NANO,
 
+    /** GPT-5 Codex - GPT-5 tuned for coding/agentic tasks */
+    GPT5_CODEX,
+
     /** GPT-5 Pro - Most advanced reasoning model */
     GPT5_PRO,
 
@@ -57,18 +66,40 @@ enum class LLmModel {
     /** GPT-5.1 - Flagship with configurable reasoning */
     GPT5_1,
 
+    /** GPT-5.1 Codex - GPT-5.1 tuned for coding/agentic tasks */
+    GPT5_1_CODEX,
+
+    /** GPT-5.1 Codex Max - Highest-capability GPT-5.1 Codex variant */
+    GPT5_1_CODEX_MAX,
+
     // GPT-5.2 Series
     /** GPT-5.2 - Flagship for coding and agentic tasks */
     GPT5_2,
 
+    /** GPT-5.2 Pro - Most advanced GPT-5.2 reasoning model */
+    GPT5_2_PRO,
+
+    /** GPT-5.2 Codex - GPT-5.2 tuned for coding/agentic tasks */
+    GPT5_2_CODEX,
+
+    // GPT-5.3 Series
+    /** GPT-5.3 Codex - GPT-5.3 tuned for coding/agentic tasks */
+    GPT5_3_CODEX,
+
+    // GPT-5.4 Series
+    /** GPT-5.4 - Flagship for coding, reasoning, and agentic tasks */
+    GPT5_4,
+
+    /** GPT-5.4 Mini - Faster, cost-efficient version of GPT-5.4 */
+    GPT5_4_MINI,
+
+    /** GPT-5.4 Nano - Fastest, most cost-efficient GPT-5.4 */
+    GPT5_4_NANO,
+
+    /** GPT-5.4 Pro - Most advanced GPT-5.4 reasoning model */
+    GPT5_4_PRO,
+
     // ==================== GOOGLE (GEMINI) MODELS ====================
-
-    // Gemini 2.0 Series
-    /** Gemini 2.0 Flash - Fast, efficient model for wide range of tasks */
-    GEMINI2_0_FLASH,
-
-    /** Gemini 2.0 Flash Lite - Most efficient model for low-latency apps */
-    GEMINI2_0_FLASH_LITE,
 
     // Gemini 2.5 Series
     /** Gemini 2.5 Pro - Advanced capabilities for complex tasks */
@@ -84,29 +115,10 @@ enum class LLmModel {
     /** Gemini 3 Pro Preview - Advanced reasoning with thinking_level control */
     GEMINI3_PRO_PREVIEW,
 
-    // Legacy model (deprecated, kept for compatibility)
-    @Deprecated("Use GEMINI2_0_FLASH or GEMINI2_5_FLASH instead")
-    GEMINI15FLASH,
+    /** Gemini 3 Flash Preview - Pro-level intelligence at Flash speed/pricing */
+    GEMINI3_FLASH_PREVIEW,
 
     // ==================== ANTHROPIC (CLAUDE) MODELS ====================
-
-    // Claude 3 Series
-    /** Claude 3 Opus - Most powerful for highly complex tasks */
-    CLAUDE_OPUS_3,
-
-    /** Claude 3 Haiku - Fastest and most compact */
-    CLAUDE_HAIKU_3,
-
-    // Claude 3.5 Series
-    /** Claude 3.5 Sonnet - Enhanced performance, balanced intelligence/speed */
-    CLAUDE_SONNET_3_5,
-
-    /** Claude 3.5 Haiku - Fastest model with blazing speeds */
-    CLAUDE_HAIKU_3_5,
-
-    // Claude 3.7 Series
-    /** Claude 3.7 Sonnet - Highest intelligence with extended thinking */
-    CLAUDE_SONNET_3_7,
 
     // Claude 4 Series
     /** Claude Sonnet 4 - High-performance with exceptional reasoning */
@@ -127,6 +139,13 @@ enum class LLmModel {
 
     /** Claude Haiku 4.5 - Near-frontier intelligence at blazing speeds */
     CLAUDE_HAIKU_4_5,
+
+    // Claude 4.6 Series
+    /** Claude Sonnet 4.6 - Best combination of speed and intelligence */
+    CLAUDE_SONNET_4_6,
+
+    /** Claude Opus 4.6 - Frontier model for engineering, agentic and knowledge work */
+    CLAUDE_OPUS_4_6,
 }
 
 /**
@@ -139,34 +158,41 @@ fun LLmModel.toProvider(): LLMProvider = when (this) {
     LLmModel.GPT4_1,
     LLmModel.GPT4_1_NANO,
     LLmModel.GPT4_1_MINI,
+    LLmModel.O1,
+    LLmModel.O3,
     LLmModel.O3_MINI,
     LLmModel.O4_MINI,
     LLmModel.GPT5,
     LLmModel.GPT5_MINI,
     LLmModel.GPT5_NANO,
+    LLmModel.GPT5_CODEX,
     LLmModel.GPT5_PRO,
     LLmModel.GPT5_1,
-    LLmModel.GPT5_2 -> LLMProvider.OPENAI
+    LLmModel.GPT5_1_CODEX,
+    LLmModel.GPT5_1_CODEX_MAX,
+    LLmModel.GPT5_2,
+    LLmModel.GPT5_2_PRO,
+    LLmModel.GPT5_2_CODEX,
+    LLmModel.GPT5_3_CODEX,
+    LLmModel.GPT5_4,
+    LLmModel.GPT5_4_MINI,
+    LLmModel.GPT5_4_NANO,
+    LLmModel.GPT5_4_PRO -> LLMProvider.OPENAI
 
     // Google models
-    LLmModel.GEMINI2_0_FLASH,
-    LLmModel.GEMINI2_0_FLASH_LITE,
     LLmModel.GEMINI2_5_PRO,
     LLmModel.GEMINI2_5_FLASH,
     LLmModel.GEMINI2_5_FLASH_LITE,
     LLmModel.GEMINI3_PRO_PREVIEW,
-    LLmModel.GEMINI15FLASH -> LLMProvider.GOOGLE
+    LLmModel.GEMINI3_FLASH_PREVIEW -> LLMProvider.GOOGLE
 
     // Anthropic models
-    LLmModel.CLAUDE_OPUS_3,
-    LLmModel.CLAUDE_HAIKU_3,
-    LLmModel.CLAUDE_SONNET_3_5,
-    LLmModel.CLAUDE_HAIKU_3_5,
-    LLmModel.CLAUDE_SONNET_3_7,
     LLmModel.CLAUDE_SONNET_4,
     LLmModel.CLAUDE_OPUS_4,
     LLmModel.CLAUDE_OPUS_4_1,
     LLmModel.CLAUDE_OPUS_4_5,
     LLmModel.CLAUDE_SONNET_4_5,
-    LLmModel.CLAUDE_HAIKU_4_5 -> LLMProvider.ANTHROPIC
+    LLmModel.CLAUDE_HAIKU_4_5,
+    LLmModel.CLAUDE_SONNET_4_6,
+    LLmModel.CLAUDE_OPUS_4_6 -> LLMProvider.ANTHROPIC
 }

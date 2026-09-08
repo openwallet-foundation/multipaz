@@ -212,4 +212,26 @@
     <string name="trust_entry_rical_is_trust_anchor">Якорь доверия</string>
     <string name="trust_entry_rical_is_trust_anchor_true">Да</string>
     <string name="trust_entry_rical_is_trust_anchor_false">Нет</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s запрашивает эти данные от имени неизвестной стороны:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">Эти данные запрашиваются от имени неизвестной стороны:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s запрашивает эти данные от имени %2$s:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">Эти данные запрашиваются от имени %1$s:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s запрашивает эти данные от имени неизвестной стороны, которая будет их хранить:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">Эти данные запрашиваются от имени неизвестной стороны, которая будет их хранить:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s запрашивает эти данные от имени %2$s, которая будет их хранить:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">Эти данные запрашиваются от имени %1$s, которая будет их хранить:</string>
+    <string name="credential_presentment_select_option">Выберите, что предоставить</string>
+    <string name="credential_presentment_share_something_else">Поделиться чем-то другим…</string>
+    <string name="credential_presentment_not_sharing_any_document">Поделиться чем-нибудь…</string>
+    <string name="credential_presentment_dont_return_any_document">Ничем не делиться</string>
+    <string name="credential_presentment_no_document_returned">Документ не предоставлен</string>
+    <string name="credential_presentment_transaction_data">Включает данные транзакции:</string>
+    <string name="issuer_loading">Загрузка метаданных эмитента...</string>
+    <string name="issuer_loading_failed">Не удалось загрузить метаданные эмитента</string>
+    <string name="provisioning_select_credential">Выберите учетные данные для предоставления:</string>
+    <string name="provisioning_cancel_button">Отменить предоставление</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">Введите PIN-код, который был вам сообщен ранее</string>
+    <string name="provisioning_tx_code_fallback_prompt">Введите парольную фразу, которая была вам сообщена ранее</string>
+    <string name="floating_item_heading_and_date_not_set">Не задано</string>
+    <string name="floating_item_heading_and_date_time_not_set">Не задано</string>
 </resources>

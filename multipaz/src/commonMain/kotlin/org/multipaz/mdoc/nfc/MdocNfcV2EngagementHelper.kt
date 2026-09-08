@@ -104,7 +104,7 @@ class MdocNfcV2EngagementHelper(
 
     private suspend fun nfcV2TransactHandleHandoverRequest(message: ByteString): ByteString {
         val nfcV2HandoverRequest = Cbor.decode(message.toByteArray())
-        Logger.iCbor(TAG, "Received nfcV2HandoverRequest", nfcV2HandoverRequest)
+        Logger.dCbor(TAG, "Received nfcV2HandoverRequest", nfcV2HandoverRequest)
 
         // ReaderEngagement is at key 0
         val readerEngagementDataItem = nfcV2HandoverRequest.get(0)
@@ -113,7 +113,7 @@ class MdocNfcV2EngagementHelper(
         val availableConnectionMethods = readerEngagementDataItem.get(2).asArray.mapNotNull {
             val cm = MdocConnectionMethod.fromDeviceEngagement(Cbor.encode(it))
             if (cm == null) {
-                Logger.iCbor(TAG, "Unknown data retrieval method", it)
+                Logger.dCbor(TAG, "Unknown data retrieval method", it)
             }
             cm
         }

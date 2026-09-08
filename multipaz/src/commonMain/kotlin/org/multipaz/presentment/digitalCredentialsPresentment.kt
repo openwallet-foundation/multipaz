@@ -2,7 +2,10 @@ package org.multipaz.presentment
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.multipaz.cbor.Cbor
@@ -13,6 +16,7 @@ import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.EcSignature
 import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.X509CertChain
@@ -25,6 +29,8 @@ import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.PromptModelNotAvailableException
 import org.multipaz.prompt.PromptUiNotAvailableException
+import org.multipaz.request.OpenID4VPRequesterIdentity
+import org.multipaz.request.RequesterIdentity
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
@@ -117,9 +123,11 @@ suspend fun digitalCredentialsPresentment(
     source: PresentmentSource,
     onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
 ): JsonObject {
-    when (protocol) {
-        "openid4vp", "openid4vp-v1-unsigned", "openid4vp-v1-signed" -> {
-            return digitalCredentialsOpenID4VPProtocol(
+    Logger.d(TAG, "Handling W3C DC request from origin $origin and appId ${appId ?: "<not set>"}")
+    Logger.dJson(TAG, "Request", data)
+    val response = when (protocol) {
+        "openid4vp", "openid4vp-v1-unsigned", "openid4vp-v1-signed", "openid4vp-v1-multisigned" -> {
+            digitalCredentialsOpenID4VPProtocol(
                 protocol = protocol,
                 data = data,
                 appId = appId,
@@ -130,7 +138,7 @@ suspend fun digitalCredentialsPresentment(
             )
         }
         "org.iso.mdoc", "org-iso-mdoc" -> {
-            return digitalCredentialsMdocApiProtocol(
+            digitalCredentialsMdocApiProtocol(
                 protocol = protocol,
                 data = data,
                 appId = appId,
@@ -144,6 +152,8 @@ suspend fun digitalCredentialsPresentment(
             throw IllegalStateException("Protocol $protocol is not supported")
         }
     }
+    Logger.dJson(TAG, "Response", response)
+    return response
 }
 
 @OptIn(ExperimentalEncodingApi::class)
@@ -158,23 +168,52 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
 ): JsonObject {
     val version = when (protocol) {
         "openid4vp" -> OpenID4VP.Version.DRAFT_24
-        "openid4vp-v1-unsigned", "openid4vp-v1-signed" -> OpenID4VP.Version.DRAFT_29
+        "openid4vp-v1-unsigned", "openid4vp-v1-signed", "openid4vp-v1-multisigned" -> OpenID4VP.Version.DRAFT_29
         else -> throw IllegalStateException("Unexpected protocol $protocol")
     }
-    var requesterCertChain: X509CertChain? = null
-    val preReq = data
-
-    val signedRequest = preReq["request"]
+    val requesterIdentities = mutableListOf<RequesterIdentity>()
+    val signedRequest = data["request"]
     val req = if (signedRequest != null) {
         val jws = Json.parseToJsonElement(signedRequest.jsonPrimitive.content)
         val info = JsonWebSignature.getInfo(jws.jsonPrimitive.content)
         check(info.x5c != null) { "x5c missing in JWS" }
         JsonWebSignature.verify(jws.jsonPrimitive.content, info.x5c.certificates.first().ecPublicKey)
-        requesterCertChain = info.x5c
+        val clientId = (info.claimsSet["client_id"] as? JsonPrimitive)?.content
+            ?: throw IllegalArgumentException("'client_id' is not given in the request")
+        requesterIdentities.add(OpenID4VPRequesterIdentity(info.x5c, clientId))
         info.x5c.validate()
         info.claimsSet
+    } else if (data.containsKey("signatures")) {
+        val payload = (data["payload"] as? JsonPrimitive)?.content
+            ?: throw IllegalArgumentException("'payload' is missing in multisigned request")
+        for (item in data["signatures"]!!.jsonArray) {
+            item as? JsonObject ?:
+                throw IllegalArgumentException("'signatures' is invalid in multisigned request")
+            val header = item["protected"]!!.jsonPrimitive.content
+            val signature = item["signature"]!!.jsonPrimitive.content
+            val headerObj = Json.parseToJsonElement(header.fromBase64Url().decodeToString()).jsonObject
+            if (!headerObj.containsKey("x5c")) {
+                // we only support X509-certified keys, ignore others
+                continue
+            }
+            val x5c = X509CertChain.fromX5c(headerObj["x5c"]!!)
+            val toBeVerified = "$header.$payload".encodeToByteArray()
+            val ecSignature = EcSignature.fromCoseEncoded(signature.fromBase64Url())
+            val algorithm = Algorithm.fromJoseAlgorithmIdentifier(headerObj["alg"]!!.jsonPrimitive.content)
+            Crypto.checkSignature(
+                publicKey = x5c.certificates.first().ecPublicKey,
+                message = toBeVerified,
+                algorithm = algorithm,
+                signature = ecSignature
+            )
+            val clientId = (headerObj["client_id"] as? JsonPrimitive)?.content
+                ?: throw IllegalArgumentException("'client_id' is not given in the request")
+            requesterIdentities.add(OpenID4VPRequesterIdentity(x5c, clientId))
+            x5c.validate()
+        }
+        Json.parseToJsonElement(payload.fromBase64Url().decodeToString()).jsonObject
     } else {
-        preReq
+        data
     }
     val responseObject = OpenID4VP.generateResponse(
         version = version,
@@ -183,7 +222,7 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
         appId = appId,
         origin = origin,
         request = req,
-        requesterCertChain = requesterCertChain,
+        requesterIdentities = requesterIdentities,
         onDocumentsInFocus = onDocumentsInFocus
     )
 
@@ -216,12 +255,11 @@ private suspend fun digitalCredentialsMdocApiProtocol(
     source: PresentmentSource,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
 ): JsonObject {
-    val arfRequest = data
-    val deviceRequestBase64 = arfRequest["deviceRequest"]!!.jsonPrimitive.content
-    val encryptionInfoBase64 = arfRequest["encryptionInfo"]!!.jsonPrimitive.content
+    val deviceRequestBase64 = data["deviceRequest"]!!.jsonPrimitive.content
+    val encryptionInfoBase64 = data["encryptionInfo"]!!.jsonPrimitive.content
 
     val encryptionInfo = Cbor.decode(encryptionInfoBase64.fromBase64Url())
-    Logger.iCbor(TAG, "encryptionInfo", encryptionInfo)
+    Logger.dCbor(TAG, "encryptionInfo", encryptionInfo)
     if (encryptionInfo.asArray[0].asTstr != "dcapi") {
         throw IllegalArgumentException("Malformed EncryptionInfo")
     }
@@ -233,7 +271,7 @@ private suspend fun digitalCredentialsMdocApiProtocol(
         add(origin)
     }
 
-    Logger.iCbor(TAG, "dcapiInfo", dcapiInfo)
+    Logger.dCbor(TAG, "dcapiInfo", dcapiInfo)
     val dcapiInfoDigest = Crypto.digest(Algorithm.SHA256, Cbor.encode(dcapiInfo))
     val sessionTranscript = buildCborArray {
         add(Simple.NULL) // DeviceEngagementBytes
@@ -243,8 +281,11 @@ private suspend fun digitalCredentialsMdocApiProtocol(
             add(dcapiInfoDigest)
         }
     }
+    Logger.dCbor(TAG, "SessionTranscript", sessionTranscript)
 
-    val deviceRequest = DeviceRequest.fromDataItem(Cbor.decode(deviceRequestBase64.fromBase64Url()))
+    val encodedDeviceRequest = deviceRequestBase64.fromBase64Url()
+    Logger.dCbor(TAG, "DeviceRequest", encodedDeviceRequest)
+    val deviceRequest = DeviceRequest.fromDataItem(Cbor.decode(encodedDeviceRequest))
     deviceRequest.verifyReaderAuthentication(sessionTranscript)
     val responseObject = mdocPresentment(
         deviceRequest = deviceRequest,

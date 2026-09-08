@@ -18,6 +18,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,9 +28,14 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +44,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
@@ -51,10 +58,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.fragment.app.FragmentActivity
 import coil3.ImageLoader
 import coil3.network.ktor3.KtorNetworkFetcherFactory
@@ -74,6 +87,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.branding.Branding
+import org.multipaz.compose.cards.CardBadges
+import org.multipaz.compose.cards.CardView
 import org.multipaz.compose.cards.VerticalCardList
 import org.multipaz.compose.document.DocumentInfo
 import org.multipaz.compose.document.DocumentModel
@@ -89,9 +104,12 @@ import org.multipaz.multipaz_compose.generated.resources.presentment_activity_co
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_hold_to_reader
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_info_was_shared
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_no_documents_available
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_nfc_only_tip
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_open_wallet
+import org.multipaz.multipaz_compose.generated.resources.presentment_activity_removed_too_fast
 import org.multipaz.multipaz_compose.generated.resources.presentment_activity_something_went_wrong
 import org.multipaz.presentment.DocumentChooserData
+import org.multipaz.presentment.Iso18013PresentmentNfcDisconnectedException
 import org.multipaz.presentment.PresentmentCanceledException
 import org.multipaz.presentment.PresentmentCannotSatisfyRequestException
 import org.multipaz.presentment.PresentmentModel
@@ -166,20 +184,27 @@ class PresentmentActivity: FragmentActivity() {
          * for when the user presses the "Open Wallet" button.
          * @param preferredService the [ComponentName]s which will be preferred over other
          * services. This is used in [onResume] to pass to [CardEmulation.setPreferredService].
+         * @param onDocumentSelected a callback invoked whenever a document is shown as selected
+         * (with non-null document ID) or when no document is selected (with null).
+         * @param documentSelectedContent optional composable content rendered below the buttons when a document is selected.
          */
         fun getPendingIntent(
             source: PresentmentSource,
             initiallySelectedDocumentId: String?,
             openWalletAppPendingIntentFn: (document: Document) -> PendingIntent,
-            preferredService: ComponentName
+            preferredService: ComponentName,
+            onDocumentSelected: ((documentId: String?) -> Unit)? = null,
+            documentSelectedContent: (@Composable (documentId: String) -> Unit)? = null
         ): PendingIntent {
             presentmentModel.reset(
                 source = source,
                 preselectedDocuments = emptyList(),
-                showDocumentChooser = DocumentChooserData(
+                showDocumentChooser = ComposeDocumentChooserData(
                     initiallySelectedDocumentId = initiallySelectedDocumentId,
                     openAppPendingIntentFn = openWalletAppPendingIntentFn,
-                    preferredService = preferredService
+                    preferredService = preferredService,
+                    onDocumentSelected = onDocumentSelected,
+                    documentSelectedContent = documentSelectedContent
                 )
             )
 
@@ -244,23 +269,23 @@ class PresentmentActivity: FragmentActivity() {
         }
     }
 
-    override fun onPause() {
-        super.onPause()
-        val state = presentmentModel.state.value
-        if (state is PresentmentModel.State.Reset && presentmentModel.showDocumentChooser != null) {
-            NfcAdapter.getDefaultAdapter(this)?.let {
-                val cardEmulation = CardEmulation.getInstance(it)
-                if (!cardEmulation.unsetPreferredService(this)) {
-                    Logger.w(TAG, "CardEmulation.unsetPreferredService() return false")
-                }
-            }
-        }
-    }
-
     override fun onStop() {
         super.onStop()
-        Logger.i(TAG, "in onStop(), canceling")
-        presentmentModel.setCanceledByUser()
+        val state = presentmentModel.state.value
+        val isNfcConnected = presentmentModel.isNfcConnected.value
+        val isNfcOnly = presentmentModel.isNfcOnly.value
+        if (isNfcOnly && !isNfcConnected && (state is PresentmentModel.State.WaitingForReader || state is PresentmentModel.State.Sending || state is PresentmentModel.State.WaitingForUserInput)) {
+            Logger.i(TAG, "in onStop() but waiting for NFC re-tap, preserving presentment session")
+        } else {
+            Logger.i(TAG, "in onStop(), canceling presentment")
+            presentmentModel.setCanceledByUser()
+        }
+        presentmentModel.showDocumentChooser?.onDocumentSelected?.invoke(null)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        presentmentModel.showDocumentChooser?.onDocumentSelected?.invoke(null)
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -409,25 +434,35 @@ internal fun PresentmentActivityContent(
                         .fillMaxHeight()
                         .widthIn(max = 600.dp) // Limits width for foldable/tablet support
                         .padding(
-                            top = innerPadding.calculateTopPadding(),
                             start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
                             end = innerPadding.calculateEndPadding(LocalLayoutDirection.current)
+                            // Omitting top padding so the card list extends up under the status bar
                             // Omitting the bottom padding since we want to draw under the navigation bar
                         ),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     if (state is PresentmentModel.State.Reset && presentmentModel!!.showDocumentChooser != null) {
+                        val isNfcOnly by presentmentModel!!.isNfcOnly.collectAsState()
                         ShowCardChooser(
                             documentModel = documentModel!!,
                             initiallySelectedDocumentId = presentmentModel!!.showDocumentChooser!!.initiallySelectedDocumentId,
                             selectedDocIdFromCardChooser = selectedDocIdFromCardChooser,
-                            contentBelow = {
+                            onDocumentSelected = presentmentModel!!.showDocumentChooser!!.onDocumentSelected,
+                            paddingTop = innerPadding.calculateTopPadding() + 16.dp,
+                            contentBelow = { documentId ->
                                 Column(
-                                    modifier = Modifier.fillMaxHeight(),
-                                    horizontalAlignment = Alignment.CenterHorizontally
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .verticalScroll(rememberScrollState()),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    ShowHoldToReader()
-                                    Spacer(modifier = Modifier.weight(1.0f))
+                                    val isNfcOnly by presentmentModel!!.isNfcOnly.collectAsState()
+                                    ShowHoldToReader(isNfcOnly = isNfcOnly)
+                                    val customContent = (presentmentModel!!.showDocumentChooser as? ComposeDocumentChooserData)?.documentSelectedContent
+                                    if (customContent != null) {
+                                        customContent(documentId)
+                                    }
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -445,7 +480,7 @@ internal fun PresentmentActivityContent(
                                                     switchToAppOnFinishPendingIntent =
                                                         presentmentModel!!.showDocumentChooser!!.openAppPendingIntentFn(
                                                             presentmentModel!!.source.documentStore.lookupDocument(
-                                                                selectedDocIdFromCardChooser.value!!
+                                                                documentId
                                                             )!!
                                                         )
                                                     startFadeOut = true
@@ -466,57 +501,73 @@ internal fun PresentmentActivityContent(
                             }
                         )
                     } else {
-                        val docIdToShow =
-                            docsToShow.firstOrNull()?.identifier ?: selectedDocIdFromCardChooser.value
+                        val docsToShow = presentmentModel!!.documentsSelected.collectAsState().value
+                        val docIdsToShow = if (docsToShow.isNotEmpty()) {
+                            docsToShow.map { it.identifier }.distinct()
+                        } else {
+                            listOfNotNull(selectedDocIdFromCardChooser.value)
+                        }
                         ShowCard(
                             documentModel = documentModel!!,
-                            documentId = docIdToShow,
+                            documentIds = docIdsToShow,
+                            paddingTop = innerPadding.calculateTopPadding() + 16.dp,
                             contentBelow = {
-                                when (state) {
-                                    is PresentmentModel.State.Reset -> {}
-                                    is PresentmentModel.State.Connecting -> {
-                                        ShowConnectingToReader()
-                                    }
-                                    is PresentmentModel.State.WaitingForReader -> {
-                                        // Keep showing the NFC logo while waiting for a request...
-                                        if (numRequestsServed == 0) {
-                                            ShowConnectingToReader()
-                                        } else {
-                                            ShowWaiting()
+                                val isNfcConnected by presentmentModel!!.isNfcConnected.collectAsState()
+                                val isNfcOnly by presentmentModel!!.isNfcOnly.collectAsState()
+                                if (isNfcOnly && !isNfcConnected && state is PresentmentModel.State.Sending) {
+                                    ShowHoldToReader(isNfcOnly = isNfcOnly)
+                                } else {
+                                    when (state) {
+                                        is PresentmentModel.State.Reset -> {}
+                                        is PresentmentModel.State.Connecting -> {
+                                            ShowConnectingToReader(isNfcOnly = isNfcOnly)
                                         }
-                                    }
-                                    is PresentmentModel.State.WaitingForUserInput -> {}
-                                    is PresentmentModel.State.Sending -> {
-                                        ShowWaiting()
-                                    }
-                                    is PresentmentModel.State.Completed -> {
-                                        if (state.error != null) {
-                                            when (state.error!!) {
-                                                is PresentmentCanceledException -> {
-                                                    if (state.error!!.message != null) {
+                                        is PresentmentModel.State.WaitingForReader -> {
+                                            // Keep showing the NFC logo while waiting for a request...
+                                            if (numRequestsServed == 0) {
+                                                ShowConnectingToReader(isNfcOnly = isNfcOnly)
+                                            } else {
+                                                ShowWaiting(isNfcOnly = isNfcOnly)
+                                            }
+                                        }
+                                        is PresentmentModel.State.WaitingForUserInput -> {}
+                                        is PresentmentModel.State.Sending -> {
+                                            ShowWaiting(isNfcOnly = isNfcOnly)
+                                        }
+                                        is PresentmentModel.State.Completed -> {
+                                            if (state.error != null) {
+                                                when (state.error!!) {
+                                                    is PresentmentCanceledException -> {
+                                                        if (state.error!!.message != null) {
+                                                            ShowFailure(stringResource(
+                                                                Res.string.presentment_activity_canceled
+                                                            ))
+                                                        } else {
+                                                            startFadeOut = true
+                                                        }
+                                                    }
+                                                    is PresentmentCannotSatisfyRequestException -> {
                                                         ShowFailure(stringResource(
-                                                            Res.string.presentment_activity_canceled
+                                                            Res.string.presentment_activity_cannot_satisfy_request
                                                         ))
-                                                    } else {
-                                                        startFadeOut = true
+                                                    }
+                                                    is Iso18013PresentmentNfcDisconnectedException -> {
+                                                        ShowFailure(stringResource(
+                                                            Res.string.presentment_activity_removed_too_fast
+                                                        ))
+                                                    }
+                                                    else -> {
+                                                        ShowFailure(stringResource(
+                                                            Res.string.presentment_activity_something_went_wrong
+                                                        ))
                                                     }
                                                 }
-                                                is PresentmentCannotSatisfyRequestException -> {
-                                                    ShowFailure(stringResource(
-                                                        Res.string.presentment_activity_cannot_satisfy_request
-                                                    ))
-                                                }
-                                                else -> {
-                                                    ShowFailure(stringResource(
-                                                        Res.string.presentment_activity_something_went_wrong
-                                                    ))
-                                                }
+                                            } else {
+                                                ShowShared()
                                             }
-                                        } else {
-                                            ShowShared()
                                         }
+                                        is PresentmentModel.State.CanceledByUser -> {}
                                     }
-                                    is PresentmentModel.State.CanceledByUser -> {}
                                 }
                             }
                         )
@@ -527,32 +578,89 @@ internal fun PresentmentActivityContent(
     }
 }
 
+private const val STACKED_CARD_SCALE_PERCENT = 85
+
 @Composable
 private fun ShowCard(
     documentModel: DocumentModel,
-    documentId: String?,
+    documentIds: List<String>,
+    paddingTop: Dp = 16.dp,
     contentBelow: @Composable () -> Unit
 ) {
     val configuration = LocalConfiguration.current
     val maxCardHeight = configuration.screenHeightDp.dp / 3
 
     val docInfos by documentModel.documentInfos.collectAsState()
-    val documentInfo = docInfos.find { it.document.identifier == documentId }
-    if (documentInfo != null) {
-        VerticalCardList(
-            cardInfos = docInfos,
-            focusedCard = documentInfo,
-            unfocusedVisiblePercent = 25,
-            allowCardReordering = false,
-            showStackWhileFocused = false,
-            cardMaxHeight = maxCardHeight,
-            showCardInfo = { cardInfo ->
+    val matchingDocInfos = remember(docInfos, documentIds) {
+        documentIds.mapNotNull { id -> docInfos.find { it.document.identifier == id } }.distinctBy { it.document.identifier }
+    }
+
+    if (matchingDocInfos.isNotEmpty()) {
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            val density = LocalDensity.current
+            val maxWidthDp = maxWidth
+            var cardWidthDp = maxWidthDp - 32.dp
+            var cardHeightDp = cardWidthDp / 1.586f
+            if (cardHeightDp > maxCardHeight) {
+                cardHeightDp = maxCardHeight
+                cardWidthDp = cardHeightDp * 1.586f
+            }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(paddingTop))
+                Box(
+                    modifier = Modifier
+                        .width(cardWidthDp)
+                        .height(cardHeightDp),
+                    contentAlignment = Alignment.TopStart
+                ) {
+                    if (matchingDocInfos.size == 1) {
+                        val documentInfo = matchingDocInfos.first()
+                        CardView(
+                            cardInfo = documentInfo,
+                            modifier = Modifier.fillMaxSize(),
+                            shape = RoundedCornerShape(24.dp),
+                            elevation = 12.dp
+                        )
+                    } else {
+                        val cardCount = matchingDocInfos.size
+                        val scale = STACKED_CARD_SCALE_PERCENT / 100f
+                        val cardW = cardWidthDp * scale
+                        val cardH = cardHeightDp * scale
+                        val maxXOffset = cardWidthDp * (1.0f - scale)
+                        val maxYOffset = cardHeightDp * (1.0f - scale)
+
+                        matchingDocInfos.forEachIndexed { index, documentInfo ->
+                            val offsetX = maxXOffset * (index.toFloat() / (cardCount - 1))
+                            val offsetY = maxYOffset * (index.toFloat() / (cardCount - 1))
+                            CardView(
+                                cardInfo = documentInfo,
+                                modifier = Modifier
+                                    .offset(x = offsetX, y = offsetY)
+                                    .width(cardW)
+                                    .height(cardH)
+                                    .zIndex(index.toFloat()),
+                                shape = RoundedCornerShape((24 * scale).dp),
+                                elevation = 12.dp
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
                 contentBelow()
             }
-        )
+        }
     } else {
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
             contentBelow()
         }
@@ -564,21 +672,31 @@ private fun ShowCardChooser(
     documentModel: DocumentModel,
     initiallySelectedDocumentId: String?,
     selectedDocIdFromCardChooser: MutableState<String?>,
-    contentBelow: @Composable () -> Unit
+    onDocumentSelected: ((documentId: String?) -> Unit)?,
+    paddingTop: Dp = 16.dp,
+    contentBelow: @Composable (documentId: String) -> Unit
 ) {
     val configuration = LocalConfiguration.current
     val maxCardHeight = configuration.screenHeightDp.dp / 3
 
     val docInfos by documentModel.documentInfos.collectAsState()
     var focusedDocumentId by rememberSaveable { mutableStateOf<String?>(
-        initiallySelectedDocumentId ?: docInfos.firstOrNull()?.document?.identifier
+        initiallySelectedDocumentId
     )}
     val focusedDocument = docInfos.find { documentInfo ->
         documentInfo.document.identifier == focusedDocumentId
     }
+    val currentSelectedDocId = focusedDocument?.document?.identifier
 
-    LaunchedEffect(Unit) {
-        selectedDocIdFromCardChooser.value = focusedDocumentId
+    DisposableEffect(Unit) {
+        onDispose {
+            onDocumentSelected?.invoke(null)
+        }
+    }
+
+    LaunchedEffect(currentSelectedDocId) {
+        selectedDocIdFromCardChooser.value = currentSelectedDocId
+        onDocumentSelected?.invoke(currentSelectedDocId)
     }
 
     VerticalCardList(
@@ -588,7 +706,8 @@ private fun ShowCardChooser(
         allowCardReordering = false,
         showStackWhileFocused = true,
         cardMaxHeight = maxCardHeight,
-        showCardInfo = { cardInfo -> contentBelow() },
+        paddingTop = paddingTop,
+        showCardInfo = { cardInfo -> contentBelow(cardInfo.identifier) },
         emptyContent = {
             Text(stringResource(
                 Res.string.presentment_activity_no_documents_available
@@ -597,15 +716,12 @@ private fun ShowCardChooser(
         onCardFocused = { cardInfo ->
             val documentInfo = cardInfo as DocumentInfo
             focusedDocumentId = documentInfo.document.identifier
-            selectedDocIdFromCardChooser.value = documentInfo.document.identifier
         },
         onCardFocusedTapped = { _ ->
             focusedDocumentId = null
-            selectedDocIdFromCardChooser.value = null
         },
         onCardFocusedStackTapped = {
             focusedDocumentId = null
-            selectedDocIdFromCardChooser.value = null
         }
     )
 }
@@ -629,16 +745,17 @@ private fun ShowFailure(message: String) {
 }
 
 @Composable
-private fun ShowWaiting() {
+private fun ShowWaiting(isNfcOnly: Boolean = false) {
     ShowLottieAnimation(
         message = null,
         animationPath = "files/waiting_animation.json",
-        repeat = true
+        repeat = true,
+        tip = if (isNfcOnly) stringResource(Res.string.presentment_activity_nfc_only_tip) else null
     )
 }
 
 @Composable
-private fun ShowHoldToReader() {
+private fun ShowHoldToReader(isNfcOnly: Boolean = false) {
     val isDarkTheme = isSystemInDarkTheme()
     ShowLottieAnimation(
         message = stringResource(Res.string.presentment_activity_hold_to_reader),
@@ -647,12 +764,13 @@ private fun ShowHoldToReader() {
         } else {
             "files/nfc_animation.json"
         },
-        repeat = true
+        repeat = true,
+        tip = if (isNfcOnly) stringResource(Res.string.presentment_activity_nfc_only_tip) else null
     )
 }
 
 @Composable
-private fun ShowConnectingToReader() {
+private fun ShowConnectingToReader(isNfcOnly: Boolean = false) {
     val isDarkTheme = isSystemInDarkTheme()
     ShowLottieAnimation(
         message = stringResource(Res.string.presentment_activity_connecting_to_reader),
@@ -661,7 +779,8 @@ private fun ShowConnectingToReader() {
         } else {
             "files/nfc_animation.json"
         },
-        repeat = true
+        repeat = true,
+        tip = if (isNfcOnly) stringResource(Res.string.presentment_activity_nfc_only_tip) else null
     )
 }
 
@@ -669,7 +788,8 @@ private fun ShowConnectingToReader() {
 private fun ShowLottieAnimation(
     message: String?,
     animationPath: String,
-    repeat: Boolean
+    repeat: Boolean,
+    tip: String? = null
 ) {
     val errorComposition by rememberLottieComposition {
         LottieCompositionSpec.JsonString(Res.readBytes(animationPath).decodeToString())
@@ -700,7 +820,18 @@ private fun ShowLottieAnimation(
             Text(
                 text = message,
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        if (tip != null) {
+            Spacer(modifier = Modifier.height(32.dp))
+            Text(
+                text = tip,
+                modifier = Modifier.fillMaxWidth(0.5f),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center
             )
         }
     }

@@ -192,4 +192,26 @@
     <string name="trust_entry_rical_is_trust_anchor">Neo tin cậy</string>
     <string name="trust_entry_rical_is_trust_anchor_true">Có</string>
     <string name="trust_entry_rical_is_trust_anchor_false">Không</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s đang yêu cầu dữ liệu này thay mặt cho một bên không xác định:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">Dữ liệu này được yêu cầu thay mặt cho một bên không xác định:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s đang yêu cầu dữ liệu này thay mặt cho %2$s:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">Dữ liệu này được yêu cầu thay mặt cho %1$s:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s đang yêu cầu dữ liệu này thay mặt cho một bên không xác định sẽ lưu trữ:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">Dữ liệu này được yêu cầu thay mặt cho một bên không xác định sẽ lưu trữ:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s đang yêu cầu dữ liệu này thay mặt cho %2$s sẽ lưu trữ:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">Dữ liệu này được yêu cầu thay mặt cho %1$s sẽ lưu trữ:</string>
+    <string name="credential_presentment_select_option">Chọn nội dung để chia sẻ</string>
+    <string name="credential_presentment_share_something_else">Chia sẻ nội dung khác…</string>
+    <string name="credential_presentment_not_sharing_any_document">Chia sẻ gì đó…</string>
+    <string name="credential_presentment_dont_return_any_document">Không chia sẻ gì cả</string>
+    <string name="credential_presentment_no_document_returned">Không có tài liệu nào được trả về</string>
+    <string name="credential_presentment_transaction_data">Bao gồm dữ liệu giao dịch:</string>
+    <string name="issuer_loading">Đang tải siêu dữ liệu của nhà phát hành...</string>
+    <string name="issuer_loading_failed">Tải siêu dữ liệu của nhà phát hành không thành công</string>
+    <string name="provisioning_select_credential">Chọn thông tin xác thực để cung cấp:</string>
+    <string name="provisioning_cancel_button">Hủy cung cấp</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">Nhập mã PIN đã được thông báo cho bạn trước đó</string>
+    <string name="provisioning_tx_code_fallback_prompt">Nhập mật khẩu đã được thông báo cho bạn trước đó</string>
+    <string name="floating_item_heading_and_date_not_set">Chưa đặt</string>
+    <string name="floating_item_heading_and_date_time_not_set">Chưa đặt</string>
 </resources>

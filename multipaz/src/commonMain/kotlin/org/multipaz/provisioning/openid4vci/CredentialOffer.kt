@@ -56,6 +56,7 @@ internal sealed class CredentialOffer {
 
 
     internal companion object: JsonParsing("Credential offer") {
+        private const val TAG = "CredentialOffer"
 
         /**
          * Parse openid4vci credential offer Url (from a deep link or Qr scan) and return
@@ -65,11 +66,13 @@ internal sealed class CredentialOffer {
             offerUri: String
         ): CredentialOffer {
             try {
+                Logger.d(TAG, "Parsing credential offer from URI: $offerUri")
                 val params = Url(offerUri).parameters
                 var credentialOfferString = params["credential_offer"]
                 if (credentialOfferString == null) {
                     val url = params["credential_offer_uri"]
                         ?: throw IllegalStateException("Neither 'credential_offer' nor 'credential_offer_uri' are given")
+                    Logger.d(TAG, "Fetching credential offer from URI: $url")
                     val response = HttpClient().get(url) {}
                     if (response.status != HttpStatusCode.OK) {
                         throw IllegalStateException("Error retrieving '$url'")
@@ -77,11 +80,12 @@ internal sealed class CredentialOffer {
                     credentialOfferString = response.readRawBytes().decodeToString()
                 }
                 val json = Json.parseToJsonElement(credentialOfferString).jsonObject
+                Logger.dJson(TAG, "Parsed credential offer", json)
                 return parseJson(json)
             } catch (err: CancellationException) {
                 throw err
             } catch (err: Exception) {
-                Logger.e("CredentialOffer", "Parsing error", err)
+                Logger.e(TAG, "Parsing error", err)
                 throw err
             }
         }

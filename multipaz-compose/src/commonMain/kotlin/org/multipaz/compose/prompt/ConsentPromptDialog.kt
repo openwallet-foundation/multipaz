@@ -32,7 +32,7 @@ fun ConsentPromptDialog(
         ConsentModalBottomSheet(
             sheetState = sheetState,
             requester = dialogParameters.requester,
-            trustMetadata = dialogParameters.trustMetadata,
+            trustedRequesterIdentity = dialogParameters.trustedRequesterIdentity,
             consentData = dialogParameters.consentData,
             preselectedDocuments = dialogParameters.preselectedDocuments,
             imageLoader = imageLoader,

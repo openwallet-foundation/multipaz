@@ -192,4 +192,26 @@
     <string name="trust_entry_rical_is_trust_anchor">ट्रस्ट एंकर</string>
     <string name="trust_entry_rical_is_trust_anchor_true">हाँ</string>
     <string name="trust_entry_rical_is_trust_anchor_false">नहीं</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s किसी अज्ञात पक्ष की ओर से इस डेटा का अनुरोध कर रहा है:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">इस डेटा का अनुरोध किसी अज्ञात पक्ष की ओर से किया गया है:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s, %2$s की ओर से इस डेटा का अनुरोध कर रहा है:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">इस डेटा का अनुरोध %1$s की ओर से किया गया है:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s किसी अज्ञात पक्ष की ओर से इस डेटा का अनुरोध कर रहा है, जो इसे संग्रहीत करेगा:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">इस डेटा का अनुरोध किसी अज्ञात पक्ष की ओर से किया गया है, जो इसे संग्रहीत करेगा:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s, %2$s की ओर से इस डेटा का अनुरोध कर रहा है, जो इसे संग्रहीत करेगा:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">इस डेटा का अनुरोध %1$s की ओर से किया गया है, जो इसे संग्रहीत करेगा:</string>
+    <string name="credential_presentment_select_option">क्या साझा करना है चुनें</string>
+    <string name="credential_presentment_share_something_else">कुछ और साझा करें…</string>
+    <string name="credential_presentment_not_sharing_any_document">कुछ साझा करें…</string>
+    <string name="credential_presentment_dont_return_any_document">कुछ भी साझा न करें</string>
+    <string name="credential_presentment_no_document_returned">कोई दस्तावेज़ वापस नहीं किया गया</string>
+    <string name="credential_presentment_transaction_data">लेनदेन डेटा शामिल है:</string>
+    <string name="issuer_loading">जारीकर्ता मेटाडेटा लोड हो रहा है...</string>
+    <string name="issuer_loading_failed">जारीकर्ता मेटाडेटा लोड करना विफल रहा</string>
+    <string name="provisioning_select_credential">प्रोविजन करने के लिए क्रेडेंशियल चुनें:</string>
+    <string name="provisioning_cancel_button">प्रोविजनिंग रद्द करें</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">वह पिन दर्ज करें जो आपको पहले बताया गया था</string>
+    <string name="provisioning_tx_code_fallback_prompt">वह पासफ्रेज़ दर्ज करें जो आपको पहले बताया गया था</string>
+    <string name="floating_item_heading_and_date_not_set">सेट नहीं</string>
+    <string name="floating_item_heading_and_date_time_not_set">सेट नहीं</string>
 </resources>

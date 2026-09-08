@@ -183,5 +183,6 @@
   "cor_description_document_number": "Un número para el COR, asignado por el Proveedor de COR.",
   "cor_description_administrative_number": "Un número asignado por el Proveedor de COR para control de auditoría u otros fines.",
   "cor_description_issuing_jurisdiction": "Código de subdivisión de país de la jurisdicción que emitió el COR, según se define en ISO 3166-2:2020, Cláusula 8. La primera parte del código DEBE ser la misma que el valor para issuing_country.",
-  "cor_description_issuing_country": "Código de país Alpha-2, según se define en ISO 3166-1, del país o territorio de la autoridad emisora."
+  "cor_description_issuing_country": "Código de país Alpha-2, según se define en ISO 3166-1, del país o territorio de la autoridad emisora.",
+  "payment_request_payment_sca_transaction": "SCA de pago con transacción de pago"
 }

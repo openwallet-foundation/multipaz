@@ -16,14 +16,14 @@ import org.multipaz.document.Document
 import org.multipaz.presentment.CredentialSelection
 import org.multipaz.presentment.ConsentData
 import org.multipaz.request.Requester
-import org.multipaz.trustmanagement.TrustMetadata
+import org.multipaz.request.TrustedRequesterIdentity
 
 /**
  * Bottom sheet used for obtaining consent when presenting one or more credentials.
  *
  * @param sheetState a [SheetState] for state.
  * @param requester the relying party which is requesting the data.
- * @param trustMetadata [TrustMetadata] conveying the level of trust in the requester, if any.
+ * @param trustedRequesterIdentity conveys the level of trust in the requester, if any.
  * @param consentData the combinations of credentials and claims that the user can select.
  * @param preselectedDocuments the list of documents the user may have preselected earlier (for
  *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
@@ -40,7 +40,7 @@ import org.multipaz.trustmanagement.TrustMetadata
 fun ConsentModalBottomSheet(
     sheetState: SheetState,
     requester: Requester,
-    trustMetadata: TrustMetadata?,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
     consentData: ConsentData,
     preselectedDocuments: List<Document>,
     imageLoader: ImageLoader?,
@@ -60,7 +60,7 @@ fun ConsentModalBottomSheet(
             modifier = (if (maxHeight != null) Modifier.heightIn(max = maxHeight) else Modifier)
                 .animateContentSize(),
             requester = requester,
-            trustMetadata = trustMetadata,
+            trustedRequesterIdentity = trustedRequesterIdentity,
             consentData = consentData,
             preselectedDocuments = preselectedDocuments,
             imageLoader = imageLoader,

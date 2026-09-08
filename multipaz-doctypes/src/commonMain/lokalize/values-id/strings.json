@@ -391,5 +391,7 @@
   "multi_request_mdl_and_photoid": "mDL DAN PhotoID",
   "multi_request_mdl_or_photoid": "mDL ATAU PhotoID",
   "age_verification_attribute_older_than_years": "Lebih dari {age} tahun",
-  "age_verification_description_older_than_years": "Indikasi apakah pemegang mDL berusia {age} tahun atau lebih"
+  "age_verification_description_older_than_years": "Indikasi apakah pemegang mDL berusia {age} tahun atau lebih",
+  "multi_request_payment_and_age_over_18": "Pembayaran dan usia di atas 18",
+  "multi_request_age_over_18_mdl_or_pid": "Usia di atas 18 melalui mDL atau PID + transaksi"
 }

@@ -28,8 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
 import kotlinx.coroutines.launch
-import org.multipaz.compose.trustmanagement.TrustEntryEditor
 import org.multipaz.compose.trustmanagement.TrustManagerModel
+import org.multipaz.testapp.ui.trustmanagement.TrustEntryEditor
 import org.multipaz.trustmanagement.TrustEntryRical
 import org.multipaz.trustmanagement.TrustEntryVical
 import org.multipaz.trustmanagement.TrustEntryX509Cert

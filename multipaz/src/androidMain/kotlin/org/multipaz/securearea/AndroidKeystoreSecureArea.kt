@@ -62,10 +62,12 @@ import java.security.KeyStore
 import java.security.KeyStoreException
 import java.security.NoSuchAlgorithmException
 import java.security.NoSuchProviderException
+import java.security.PrivateKey
 import java.security.ProviderException
 import java.security.Signature
 import java.security.SignatureException
 import java.security.UnrecoverableEntryException
+import java.security.UnrecoverableKeyException
 import java.security.cert.CertificateException
 import java.security.spec.ECGenParameterSpec
 import java.security.spec.InvalidKeySpecException
@@ -239,7 +241,12 @@ class AndroidKeystoreSecureArea private constructor(
             if (aSettings.algorithm != Algorithm.ANDROID_KEYSTORE_ATTEST_KEY) {
                 when (aSettings.algorithm.curve) {
                     EcCurve.P256 -> builder.setDigests(KeyProperties.DIGEST_SHA256)
-                    EcCurve.ED25519 -> builder.setAlgorithmParameterSpec(ECGenParameterSpec("ed25519"))
+                    EcCurve.ED25519 -> {
+                        builder.setAlgorithmParameterSpec(ECGenParameterSpec("ed25519"))
+                        // Ed25519 hashes internally; the keystore op must be authorized for
+                        // DIGEST_NONE or signing fails with "Keystore operation failed".
+                        builder.setDigests(KeyProperties.DIGEST_NONE)
+                    }
                     EcCurve.X25519 -> builder.setAlgorithmParameterSpec(ECGenParameterSpec("x25519"))
                     else -> throw IllegalArgumentException("Curve is not supported")
                 }
@@ -347,12 +354,18 @@ class AndroidKeystoreSecureArea private constructor(
         withContext(Dispatchers.IO) {
             ks.load(null)
         }
-        val entry = ks.getEntry(existingAlias, null)
+        // getKey() rather than getEntry(): getEntry() builds a PrivateKeyEntry that rejects
+        // Curve25519 keys on some devices (b/282063229); see loadKeyIgnoreKeyInvalidated.
+        val privateKey = (ks.getKey(existingAlias, null) as? PrivateKey)
             ?: throw IllegalArgumentException("A key with this alias doesn't exist")
 
         val keyInfo = try {
-            val privateKey = (entry as KeyStore.PrivateKeyEntry).privateKey
-            val factory = KeyFactory.getInstance(privateKey.algorithm, "AndroidKeyStore")
+            // "EdDSA" has no dedicated AndroidKeyStore factory; fall back to "EC" for Curve25519.
+            val factory = try {
+                KeyFactory.getInstance(privateKey.algorithm, "AndroidKeyStore")
+            } catch (e: NoSuchAlgorithmException) {
+                KeyFactory.getInstance("EC", "AndroidKeyStore")
+            }
             factory.getKeySpec(privateKey, KeyInfo::class.java)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
@@ -447,7 +460,12 @@ class AndroidKeystoreSecureArea private constructor(
         } catch (_: KeyLockedException) {
             val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
                 ?: AndroidKeystoreDefaultKeyUnlockDataProvider
-            val unlockData = unlockDataProvider.getKeyUnlockData(this, alias, unlockReason)
+            val unlockData = unlockDataProvider.getKeyUnlockData(
+                secureArea = this,
+                alias = alias,
+                algorithm = getKeyInfo(alias).algorithm,
+                unlockReason = unlockReason
+            )
             signNonInteractive(alias, dataToSign, unlockData)
         }
 
@@ -456,7 +474,7 @@ class AndroidKeystoreSecureArea private constructor(
         dataToSign: ByteArray,
         keyUnlockData: KeyUnlockData?,
     ): EcSignature {
-        val (entry, data) = loadKey(alias)
+        val (privateKey, data) = loadKey(alias)
         val decodedData = AndroidSecureAreaKeyMetadata.fromCbor(data)
         val algorithm = decodedData.algorithm
         if (keyUnlockData != null) {
@@ -476,7 +494,6 @@ class AndroidKeystoreSecureArea private constructor(
         }
 
         return try {
-            val privateKey = (entry as KeyStore.PrivateKeyEntry).privateKey
             val s = Signature.getInstance(getSignatureAlgorithmName(algorithm))
             s.initSign(privateKey)
             s.update(dataToSign)
@@ -510,7 +527,11 @@ class AndroidKeystoreSecureArea private constructor(
             } catch (_: KeyLockedException) {
                 val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
                     ?: AndroidKeystoreDefaultKeyUnlockDataProvider
-                unlockDataProvider.getKeyUnlockData(this, alias, unlockReason)
+                unlockDataProvider.getKeyUnlockData(
+                    secureArea = this,
+                    alias = alias,
+                    algorithm = getKeyInfo(alias).algorithm,
+                    unlockReason = unlockReason)
             }
         } while (true)
     }
@@ -519,9 +540,8 @@ class AndroidKeystoreSecureArea private constructor(
         alias: String,
         otherKey: EcPublicKey,
     ): ByteArray {
-        val (entry, _) = loadKey(alias)
+        val (privateKey, _) = loadKey(alias)
         return try {
-            val privateKey = (entry as KeyStore.PrivateKeyEntry).privateKey
             val ka = KeyAgreement.getInstance("ECDH", "AndroidKeyStore")
             ka.init(privateKey)
             ka.doPhase(otherKey.javaPublicKey, true)
@@ -546,26 +566,17 @@ class AndroidKeystoreSecureArea private constructor(
 
     // @throws IllegalArgumentException if the key doesn't exist.
     // @throws KeyInvalidatedException if LSKF was removed and the key is no longer available.
-    private suspend fun loadKey(alias: String): Pair<KeyStore.Entry, ByteArray> {
-        val data = storageTable.get(alias, partitionId)
-            ?: throw IllegalArgumentException("No key with given alias")
-
-        val ks = KeyStore.getInstance("AndroidKeyStore")
-        withContext(Dispatchers.IO) {
-            ks.load(null)
-        }
-        // If the LSKF is removed, all auth-bound keys are removed and the result is
-        // that KeyStore.getEntry() returns null.
-        //
-        val entry = ks.getEntry(alias, null)
-            ?: throw KeyInvalidatedException("This key is no longer available")
-
-        return Pair(entry, data.toByteArray())
+    private suspend fun loadKey(alias: String): Pair<PrivateKey, ByteArray> {
+        val (privateKey, data) = loadKeyIgnoreKeyInvalidated(alias)
+        return Pair(
+            privateKey ?: throw KeyInvalidatedException("This key is no longer available"),
+            data
+        )
     }
 
     // @throws IllegalArgumentException if the key doesn't exist.
     // @throws KeyInvalidatedException if LSKF was removed and the key is no longer available.
-    private suspend fun loadKeyIgnoreKeyInvalidated(alias: String): Pair<KeyStore.Entry?, ByteArray> {
+    private suspend fun loadKeyIgnoreKeyInvalidated(alias: String): Pair<PrivateKey?, ByteArray> {
         val data = storageTable.get(alias, partitionId)
             ?: throw IllegalArgumentException("No key with given alias")
 
@@ -573,8 +584,18 @@ class AndroidKeystoreSecureArea private constructor(
         withContext(Dispatchers.IO) {
             ks.load(null)
         }
-        val entry = ks.getEntry(alias, null)
-        return Pair(entry, data.toByteArray())
+        // Use getKey() rather than getEntry(): getEntry() builds a KeyStore.PrivateKeyEntry
+        // whose constructor rejects Curve25519 keys on some devices because the private key's
+        // algorithm name ("EdDSA") disagrees with the self-signed certificate's public-key
+        // algorithm (b/282063229). getKey() returns the PrivateKey directly and sidesteps that
+        // check. If the LSKF is removed, all auth-bound keys are removed and getKey() returns
+        // null (or throws UnrecoverableKeyException) — both mean the key is no longer available.
+        val privateKey = try {
+            ks.getKey(alias, null) as? PrivateKey
+        } catch (e: UnrecoverableKeyException) {
+            null
+        }
+        return Pair(privateKey, data.toByteArray())
     }
 
     override suspend fun getKeyInvalidated(alias: String): Boolean {
@@ -586,12 +607,37 @@ class AndroidKeystoreSecureArea private constructor(
         return false
     }
 
+    override suspend fun unlockKey(
+        alias: String,
+        unlockReason: Reason
+    ): List<KeyUnlockData> {
+        val keyInfo = getKeyInfo(alias)
+        if (keyInfo.userAuthenticationTypes.isEmpty()) {
+            return emptyList()
+        }
+        val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
+            ?: AndroidKeystoreDefaultKeyUnlockDataProvider
+        val unlockData = unlockDataProvider.getKeyUnlockData(
+            secureArea = this,
+            alias = alias,
+            algorithm = keyInfo.algorithm,
+            unlockReason = unlockReason
+        )
+        return listOf(unlockData)
+    }
+
     override suspend fun getKeyInfo(alias: String): AndroidKeystoreKeyInfo {
-        val (entry, data) = loadKeyIgnoreKeyInvalidated(alias)
+        val (privateKey, data) = loadKeyIgnoreKeyInvalidated(alias)
         return try {
-            val keyInfo = if (entry != null) {
-                val privateKey = (entry as KeyStore.PrivateKeyEntry).privateKey
-                val factory = KeyFactory.getInstance(privateKey.algorithm, "AndroidKeyStore")
+            val keyInfo = if (privateKey != null) {
+                // AndroidKeyStore exposes its KeyInfo transform under the "EC" factory for both
+                // EC and Curve25519 keys; a Curve25519 private key reports algorithm "EdDSA",
+                // which has no dedicated AndroidKeyStore factory, so fall back to "EC".
+                val factory = try {
+                    KeyFactory.getInstance(privateKey.algorithm, "AndroidKeyStore")
+                } catch (e: NoSuchAlgorithmException) {
+                    KeyFactory.getInstance("EC", "AndroidKeyStore")
+                }
                 factory.getKeySpec(privateKey, KeyInfo::class.java)
             } else {
                 null
@@ -932,11 +978,24 @@ class AndroidKeystoreSecureArea private constructor(
         }
 
         internal fun signatureFromDer(curve: EcCurve, derEncodedSignature: ByteArray): EcSignature {
+            val keySize = (curve.bitSize + 7)/8
+
+            // Curve25519 (EdDSA) signing returns a raw r||s pair from the platform, not a
+            // DER SEQUENCE, so split it directly instead of ASN.1-decoding (b/282063229).
+            if (curve == EcCurve.ED25519) {
+                check(derEncodedSignature.size == keySize * 2) {
+                    "Expected raw ${keySize * 2}-byte Ed25519 signature, got ${derEncodedSignature.size}"
+                }
+                return EcSignature(
+                    r = derEncodedSignature.copyOfRange(0, keySize),
+                    s = derEncodedSignature.copyOfRange(keySize, keySize * 2)
+                )
+            }
+
             val seq = ASN1.decode(derEncodedSignature) as ASN1Sequence
             val r = stripLeadingZeroes((seq.elements[0] as ASN1Integer).value)
             val s = stripLeadingZeroes((seq.elements[1] as ASN1Integer).value)
 
-            val keySize = (curve.bitSize + 7)/8
             check(r.size <= keySize)
             check(s.size <= keySize)
 

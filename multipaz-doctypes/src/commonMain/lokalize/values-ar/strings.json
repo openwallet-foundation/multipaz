@@ -391,5 +391,7 @@
   "multi_request_mdl_and_photoid": "mDL وهوية مصورة",
   "multi_request_mdl_or_photoid": "mDL أو هوية مصورة",
   "age_verification_attribute_older_than_years": "أكبر من {age} سنة",
-  "age_verification_description_older_than_years": "إشارة إلى ما إذا كان حامل mDL يبلغ {age} عامًا أو أكبر"
+  "age_verification_description_older_than_years": "إشارة إلى ما إذا كان حامل mDL يبلغ {age} عامًا أو أكبر",
+  "multi_request_payment_and_age_over_18": "الدفع والعمر فوق 18",
+  "multi_request_age_over_18_mdl_or_pid": "العمر فوق 18 عبر mDL أو PID + معاملة"
 }

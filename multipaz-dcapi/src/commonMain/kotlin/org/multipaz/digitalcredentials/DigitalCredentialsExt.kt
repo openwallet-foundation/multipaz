@@ -47,8 +47,9 @@ internal class DigitalCredentialsImpl : DigitalCredentials {
     override suspend fun register(
         documentStore: DocumentStore,
         documentTypeRepository: DocumentTypeRepository,
-        selectedProtocols: Set<String>
-    ) = defaultRegister(documentStore, documentTypeRepository, selectedProtocols)
+        selectedProtocols: Set<String>,
+        forceRegistration: Boolean
+    ) = defaultRegister(documentStore, documentTypeRepository, selectedProtocols, forceRegistration)
 
     override suspend fun request(request: JsonObject): JsonObject = defaultRequest(request)
 }
@@ -66,7 +67,8 @@ internal expect val defaultSupportedProtocols: Set<String>
 internal expect suspend fun defaultRegister(
     documentStore: DocumentStore,
     documentTypeRepository: DocumentTypeRepository,
-    selectedProtocols: Set<String>
+    selectedProtocols: Set<String>,
+    forceRegistration: Boolean
 )
 
 internal expect suspend fun defaultRequest(

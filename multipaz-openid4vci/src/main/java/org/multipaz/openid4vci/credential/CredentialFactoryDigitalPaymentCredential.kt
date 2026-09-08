@@ -14,6 +14,8 @@ import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
+import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
@@ -24,6 +26,7 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.truncateToWholeSeconds
+import org.multipaz.utopia.knowntypes.PingTransaction
 import kotlin.math.max
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
@@ -54,7 +57,7 @@ class CredentialFactoryDigitalPaymentCredential : CredentialFactory {
         get() = "Payment card"
 
     override val logo: String
-        get() = "card_payment_sca_v2.png"
+        get() = "card_payment_sca_v2.jpg"
 
     override suspend fun mint(
         systemOfRecordData: DataItem,
@@ -97,7 +100,17 @@ class CredentialFactoryDigitalPaymentCredential : CredentialFactory {
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = authenticationKey!!,
-            revocationStatus = revocationStatus
+            revocationStatus = revocationStatus,
+            deviceKeyAuthorizedNamespaces = listOf(
+                PaymentTransaction.openId4VpMdocResponseNamespace,
+                PingTransaction.openId4VpMdocResponseNamespace,
+            ),
+            deviceKeyAuthorizedDataElements = mapOf(
+                ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(
+                    PaymentTransaction.identifier,
+                    PingTransaction.identifier,
+                )
+            )
         )
         val taggedEncodedMso = Cbor.encode(
             Tagged(
@@ -116,7 +129,7 @@ class CredentialFactoryDigitalPaymentCredential : CredentialFactory {
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                signingKey.certChain.toDataItem()
+                signingKey.certChain.toCoseX5Chain()
             )
         )
         val encodedIssuerAuth = Cbor.encode(

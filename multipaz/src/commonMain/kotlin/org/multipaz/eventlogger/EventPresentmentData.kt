@@ -4,6 +4,7 @@ import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.presentment.CredentialSelection
 import org.multipaz.request.Requester
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.trustmanagement.TrustMetadata
 
 /**
@@ -15,7 +16,7 @@ import org.multipaz.trustmanagement.TrustMetadata
  *
  * @property requesterName the name of the requester, if available.
  * @property requesterCertChain the certificate chain of the requester if available.
- * @property trustMetadata a [TrustMetadata] or `null`.
+ * @property trustMetadata a [TrustMetadata] of the requester or `null`.
  * @property requestedDocuments list of requested documents and claims.
  */
 @CborSerializable
@@ -39,11 +40,11 @@ data class EventPresentmentData(
         fun fromPresentmentSelection(
             selection: CredentialSelection,
             requester: Requester,
-            trustMetadata: TrustMetadata?,
+            trustedRequesterIdentity: TrustedRequesterIdentity?,
         ): EventPresentmentData {
             var requesterName: String? = null
-            if (trustMetadata != null) {
-                requesterName = trustMetadata.displayName
+            if (trustedRequesterIdentity != null) {
+                requesterName = trustedRequesterIdentity.trustMetadata.displayName
             } else if (requester.isWebOrigin) {
                 requesterName = requester.origin
             }
@@ -59,8 +60,8 @@ data class EventPresentmentData(
 
             return EventPresentmentData(
                 requesterName = requesterName,
-                requesterCertChain = requester.certChain,
-                trustMetadata = trustMetadata,
+                trustMetadata = trustedRequesterIdentity?.trustMetadata,
+                requesterCertChain = trustedRequesterIdentity?.identity?.certChain,
                 requestedDocuments = requestedDocuments
             )
         }

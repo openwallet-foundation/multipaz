@@ -9,7 +9,10 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.asn1.ASN1OctetString
+import org.multipaz.asn1.OID
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.X500Name
@@ -20,6 +23,7 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.X509CertChainValidationException
 import org.multipaz.crypto.buildX509Cert
 import org.multipaz.mdoc.rical.Rical
 import org.multipaz.mdoc.rical.RicalCertificateInfo
@@ -32,9 +36,11 @@ import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.toHex
 import org.multipaz.util.truncateToWholeSeconds
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -190,7 +196,7 @@ class TrustManagerTest {
         trustManager.addX509Cert(caCertificate, TrustMetadata())
 
         trustManager.verify(listOf(dsValidInThePastCertificate)).let {
-            assertTrue(it.error!!.message!!.startsWith("Certificate is no longer valid"))
+            assertIs<X509CertChainValidationException.Expired>(it.error)
             assertFalse(it.isTrusted)
             assertEquals(3, it.trustChain!!.certificates.size)
             assertEquals(caCertificate, it.trustChain.certificates.last())
@@ -205,7 +211,7 @@ class TrustManagerTest {
         trustManager.addX509Cert(caCertificate, TrustMetadata())
 
         trustManager.verify(listOf(dsValidInTheFutureCertificate)).let {
-            assertTrue(it.error!!.message!!.startsWith("Certificate is not yet valid"))
+            assertIs<X509CertChainValidationException.NotYetValid>(it.error)
             assertFalse(it.isTrusted)
             assertEquals(3, it.trustChain!!.certificates.size)
             assertEquals(caCertificate, it.trustChain.certificates.last())
@@ -233,6 +239,20 @@ class TrustManagerTest {
         trustManager.addX509Cert(caCertificate, TrustMetadata())
 
         trustManager.verify(listOf(dsCertificate, intermediateCertificate)).let {
+            assertEquals(null, it.error)
+            assertTrue(it.isTrusted)
+            assertEquals(3, it.trustChain!!.certificates.size)
+            assertEquals(caCertificate, it.trustChain.certificates.last())
+        }
+    }
+
+    @Test
+    fun happyFlowWithChainAlreadyContainingRoot() = runTestWithSetup {
+        val trustManager = TrustManager(EphemeralStorage())
+
+        trustManager.addX509Cert(caCertificate, TrustMetadata())
+
+        trustManager.verify(listOf(dsCertificate, intermediateCertificate, caCertificate)).let {
             assertEquals(null, it.error)
             assertTrue(it.isTrusted)
             assertEquals(3, it.trustChain!!.certificates.size)
@@ -997,10 +1017,42 @@ class TrustManagerTest {
             assertEquals(ca2Certificate, it.trustChain.certificates.last())
         }
 
+        // DocType authorization checks (ISO/IEC 18013-5 clause 12.8.1)
+        trustManager.verify(
+            listOf(dsCertificate, intermediateCertificate),
+            docType = "org.iso.18013.5.1.mDL"
+        ).let {
+            assertEquals(null, it.error)
+            assertTrue(it.isTrusted)
+            assertEquals(listOf("org.iso.18013.5.1.mDL"), it.authorizedDocTypes)
+        }
+        trustManager.verify(
+            listOf(dsCertificate, intermediateCertificate),
+            docType = "com.example.unauthorized"
+        ).let {
+            assertFalse(it.isTrusted)
+            assertEquals(
+                "DocType 'com.example.unauthorized' is not authorized by VICAL for certificate '${dsCertificate.subject.name}'",
+                it.error?.message
+            )
+        }
+        trustManager.verify(listOf(ds2Certificate), docType = "org.iso.18013.5.1.mDL").let {
+            assertEquals(null, it.error)
+            assertTrue(it.isTrusted)
+            assertEquals(listOf("org.iso.18013.5.1.mDL"), it.authorizedDocTypes)
+        }
+        trustManager.verify(listOf(ds2Certificate), docType = "com.example.unauthorized").let {
+            assertFalse(it.isTrusted)
+            assertEquals(
+                "DocType 'com.example.unauthorized' is not authorized by VICAL for certificate '${ds2Certificate.subject.name}'",
+                it.error?.message
+            )
+        }
+
         // Valid in the past
         //
         trustManager.verify(listOf(dsValidInThePastCertificate, intermediateCertificate)).let {
-            assertTrue(it.error!!.message!!.startsWith("Certificate is no longer valid"))
+            assertIs<X509CertChainValidationException.Expired>(it.error)
             assertFalse(it.isTrusted)
             assertEquals(3, it.trustChain!!.certificates.size)
             assertEquals(caCertificate, it.trustChain.certificates.last())
@@ -1009,7 +1061,7 @@ class TrustManagerTest {
         // Valid in the future
         //
         trustManager.verify(listOf(dsValidInTheFutureCertificate, intermediateCertificate)).let {
-            assertTrue(it.error!!.message!!.startsWith("Certificate is not yet valid"))
+            assertIs<X509CertChainValidationException.NotYetValid>(it.error)
             assertFalse(it.isTrusted)
             assertEquals(3, it.trustChain!!.certificates.size)
             assertEquals(caCertificate, it.trustChain.certificates.last())
@@ -1192,5 +1244,801 @@ class TrustManagerTest {
         assertEquals(3, numEvents)
 
         job.cancel()
+    }
+
+    @Test
+    fun readerCertificateWithoutSki() = runTestWithSetup {
+        val key = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val cert = buildX509Cert(
+            publicKey = key.publicKey,
+            signingKey = AsymmetricKey.anonymous(key, key.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=No SKI Reader"),
+            issuer = X500Name.fromName("CN=No SKI Reader Root"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+        assertNull(cert.subjectKeyIdentifier)
+        assertNull(cert.authorityKeyIdentifier)
+
+        val trustManager = TrustManager(EphemeralStorage())
+        val result = trustManager.verify(listOf(cert))
+        assertFalse(result.isTrusted)
+        assertEquals("No trusted root certificate could not be found", result.error?.message)
+    }
+
+    @Test
+    fun readerCertificateWithSpoofedSkiRejected() = runTestWithSetup {
+        val trustedKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val trustedCert = buildX509Cert(
+            publicKey = trustedKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(trustedKey, trustedKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Trusted Reader"),
+            issuer = X500Name.fromName("CN=Trusted Reader"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        val trustManager = TrustManager(EphemeralStorage())
+        trustManager.addX509Cert(trustedCert, TrustMetadata())
+
+        // Attacker creates a separate key pair but copies the trusted certificate's SKI
+        val attackerKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val attackerCert = buildX509Cert(
+            publicKey = attackerKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(attackerKey, attackerKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=Attacker Reader"),
+            issuer = X500Name.fromName("CN=Attacker Reader"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            addExtension(
+                OID.X509_EXTENSION_SUBJECT_KEY_IDENTIFIER.oid,
+                false,
+                ASN1.encode(ASN1OctetString(trustedCert.subjectKeyIdentifier!!))
+            )
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        assertContentEquals(trustedCert.subjectKeyIdentifier, attackerCert.subjectKeyIdentifier)
+        assertNotEquals(trustedCert.ecPublicKey, attackerCert.ecPublicKey)
+
+        val result = trustManager.verify(listOf(attackerCert))
+        assertFalse(result.isTrusted)
+        assertEquals("No trusted root certificate could not be found", result.error?.message)
+    }
+
+    @Test
+    fun readerCertificateWithDifferentCertForSameKey() = runTestWithSetup {
+        val key = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val certInStore = buildX509Cert(
+            publicKey = key.publicKey,
+            signingKey = AsymmetricKey.anonymous(key, key.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Reader In Store"),
+            issuer = X500Name.fromName("CN=Reader In Store"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        val trustManager = TrustManager(EphemeralStorage())
+        trustManager.addX509Cert(certInStore, TrustMetadata())
+
+        // A different certificate (different serial number, subject name, validity) with the SAME public key
+        val presentedCert = buildX509Cert(
+            publicKey = key.publicKey,
+            signingKey = AsymmetricKey.anonymous(key, key.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=Presented Reader"),
+            issuer = X500Name.fromName("CN=Presented Reader"),
+            validFrom = now - 2.hours,
+            validUntil = now + 2.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        assertNotEquals(certInStore, presentedCert)
+        assertEquals(certInStore.ecPublicKey, presentedCert.ecPublicKey)
+        assertContentEquals(certInStore.subjectKeyIdentifier, presentedCert.subjectKeyIdentifier)
+
+        val result = trustManager.verify(listOf(presentedCert))
+        assertTrue(result.isTrusted)
+        assertNull(result.error)
+        assertEquals(1, result.trustPoints.size)
+        assertEquals(certInStore, result.trustPoints[0].certificate)
+    }
+
+    @Test
+    fun intermediateCaExpiredRejected() = runTestWithSetup {
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now().truncateToWholeSeconds()
+
+        val rootCert = buildX509Cert(
+            publicKey = rootKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Root CA"),
+            issuer = X500Name.fromName("CN=Root CA"),
+            validFrom = now - 10.hours,
+            validUntil = now + 10.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        // Intermediate CA expired in the past
+        val expiredIntermediateCert = buildX509Cert(
+            publicKey = intermediateKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=Intermediate CA"),
+            issuer = rootCert.subject,
+            validFrom = now - 10.hours,
+            validUntil = now - 2.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(rootCert)
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        val leafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(3L),
+            subject = X500Name.fromName("CN=Leaf"),
+            issuer = expiredIntermediateCert.subject,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(expiredIntermediateCert)
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        val trustManager = TrustManager(EphemeralStorage())
+        trustManager.addX509Cert(rootCert, TrustMetadata())
+
+        // By default (validateCaValidity = true), verification fails because the intermediate CA is expired
+        val resultDefault = trustManager.verify(listOf(leafCert, expiredIntermediateCert), now)
+        assertFalse(resultDefault.isTrusted)
+        assertIs<X509CertChainValidationException.Expired>(resultDefault.error)
+
+        // When validateCaValidity = false, verification succeeds
+        val resultNoCaValidity = trustManager.verify(
+            listOf(leafCert, expiredIntermediateCert),
+            now,
+            validateCaValidity = false
+        )
+        assertTrue(resultNoCaValidity.isTrusted)
+        assertNull(resultNoCaValidity.error)
+    }
+
+    @Test
+    fun intermediateCaNotCaRejected() = runTestWithSetup {
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now().truncateToWholeSeconds()
+
+        val rootCert = buildX509Cert(
+            publicKey = rootKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Root CA"),
+            issuer = X500Name.fromName("CN=Root CA"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        // Intermediate cert with basicConstraints cA = false
+        val invalidIntermediateCert = buildX509Cert(
+            publicKey = intermediateKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=Fake Intermediate"),
+            issuer = rootCert.subject,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(rootCert)
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(false, null)
+        }
+
+        val leafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(3L),
+            subject = X500Name.fromName("CN=Leaf"),
+            issuer = invalidIntermediateCert.subject,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(invalidIntermediateCert)
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        val trustManager = TrustManager(EphemeralStorage())
+        trustManager.addX509Cert(rootCert, TrustMetadata())
+
+        val result = trustManager.verify(listOf(leafCert, invalidIntermediateCert), now)
+        assertFalse(result.isTrusted)
+        assertIs<X509CertChainValidationException.BasicConstraintsNotCA>(result.error)
+    }
+
+    @Test
+    fun intermediateCaPathLengthExceededRejected() = runTestWithSetup {
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediate1Key = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediate2Key = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now().truncateToWholeSeconds()
+
+        val rootCert = buildX509Cert(
+            publicKey = rootKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Root CA"),
+            issuer = X500Name.fromName("CN=Root CA"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        // Intermediate 1 has pathLenConstraint = 0 (can only sign end-entity certs, not further CAs)
+        val intermediate1Cert = buildX509Cert(
+            publicKey = intermediate1Key.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=Intermediate 1"),
+            issuer = rootCert.subject,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(rootCert)
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, 0)
+        }
+
+        // Intermediate 2 is signed by Intermediate 1 (violating pathLenConstraint = 0 on Intermediate 1)
+        val intermediate2Cert = buildX509Cert(
+            publicKey = intermediate2Key.publicKey,
+            signingKey = AsymmetricKey.anonymous(intermediate1Key, intermediate1Key.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(3L),
+            subject = X500Name.fromName("CN=Intermediate 2"),
+            issuer = intermediate1Cert.subject,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(intermediate1Cert)
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        val leafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(intermediate2Key, intermediate2Key.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(4L),
+            subject = X500Name.fromName("CN=Leaf"),
+            issuer = intermediate2Cert.subject,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(intermediate2Cert)
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        val trustManager = TrustManager(EphemeralStorage())
+        trustManager.addX509Cert(rootCert, TrustMetadata())
+
+        val result = trustManager.verify(listOf(leafCert, intermediate2Cert, intermediate1Cert), now)
+        assertFalse(result.isTrusted)
+        assertIs<X509CertChainValidationException.BasicConstraintsPathLength>(result.error)
+    }
+
+    @Test
+    fun circularTrustPointsTerminates() = runTestWithSetup {
+        val keyA = Crypto.createEcPrivateKey(EcCurve.P256)
+        val keyB = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now().truncateToWholeSeconds()
+
+        val certBTemp = buildX509Cert(
+            publicKey = keyB.publicKey,
+            signingKey = AsymmetricKey.anonymous(keyA, keyA.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=CA B"),
+            issuer = X500Name.fromName("CN=CA A"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        // CA A is issued by CA B and has AKI pointing to CA B
+        val certA = buildX509Cert(
+            publicKey = keyA.publicKey,
+            signingKey = AsymmetricKey.anonymous(keyB, keyB.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=CA A"),
+            issuer = X500Name.fromName("CN=CA B"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(certBTemp)
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        // CA B is issued by CA A and has AKI pointing to CA A
+        val certB = buildX509Cert(
+            publicKey = keyB.publicKey,
+            signingKey = AsymmetricKey.anonymous(keyA, keyA.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=CA B"),
+            issuer = X500Name.fromName("CN=CA A"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(certA)
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        val leafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(keyA, keyA.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(3L),
+            subject = X500Name.fromName("CN=Leaf"),
+            issuer = certA.subject,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(certA)
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        val trustManager = TrustManager(EphemeralStorage())
+        trustManager.addX509Cert(certA, TrustMetadata())
+        trustManager.addX509Cert(certB, TrustMetadata())
+
+        // Verifying should terminate safely without hanging in an infinite loop
+        val result = trustManager.verify(listOf(leafCert), now)
+        assertTrue(result.isTrusted)
+        assertEquals(2, result.trustPoints.size)
+    }
+
+    @Test
+    fun intermediateCaMissingKeyUsageCertSignRejected() = runTestWithSetup {
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now().truncateToWholeSeconds()
+
+        val rootCert = buildX509Cert(
+            publicKey = rootKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Root CA"),
+            issuer = X500Name.fromName("CN=Root CA"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        // Intermediate cert without KEY_CERT_SIGN
+        val invalidIntermediateCert = buildX509Cert(
+            publicKey = intermediateKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=Intermediate CA"),
+            issuer = rootCert.subject,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(rootCert)
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            setBasicConstraints(true, null)
+        }
+
+        val leafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(3L),
+            subject = X500Name.fromName("CN=Leaf"),
+            issuer = invalidIntermediateCert.subject,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(invalidIntermediateCert)
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        val trustManager = TrustManager(EphemeralStorage())
+        trustManager.addX509Cert(rootCert, TrustMetadata())
+
+        val result = trustManager.verify(listOf(leafCert, invalidIntermediateCert), now)
+        assertFalse(result.isTrusted)
+        assertIs<X509CertChainValidationException.KeyUsageMissing>(result.error)
+    }
+
+    @Test
+    fun intermediateCaSubjectIssuerMismatchRejected() = runTestWithSetup {
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now().truncateToWholeSeconds()
+
+        val rootCert = buildX509Cert(
+            publicKey = rootKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Root CA"),
+            issuer = X500Name.fromName("CN=Root CA"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        // Intermediate cert whose issuer does NOT match root cert subject
+        val mismatchedIntermediateCert = buildX509Cert(
+            publicKey = intermediateKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=Intermediate CA"),
+            issuer = X500Name.fromName("CN=Different CA"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(rootCert)
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        val leafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(3L),
+            subject = X500Name.fromName("CN=Leaf"),
+            issuer = mismatchedIntermediateCert.subject,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(mismatchedIntermediateCert)
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        val trustManager = TrustManager(EphemeralStorage())
+        trustManager.addX509Cert(rootCert, TrustMetadata())
+
+        val result = trustManager.verify(listOf(leafCert, mismatchedIntermediateCert), now)
+        assertFalse(result.isTrusted)
+        assertIs<X509CertChainValidationException.SubjectIssuerMismatch>(result.error)
+    }
+
+    @Test
+    fun multiLevelCaChainValidation() = runTestWithSetup {
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediate1Key = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediate2Key = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now().truncateToWholeSeconds()
+
+        val rootCert = buildX509Cert(
+            publicKey = rootKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Root CA"),
+            issuer = X500Name.fromName("CN=Root CA"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, 2)
+        }
+
+        val intermediate1Cert = buildX509Cert(
+            publicKey = intermediate1Key.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=Intermediate 1"),
+            issuer = rootCert.subject,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(rootCert)
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, 1)
+        }
+
+        val intermediate2Cert = buildX509Cert(
+            publicKey = intermediate2Key.publicKey,
+            signingKey = AsymmetricKey.anonymous(intermediate1Key, intermediate1Key.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(3L),
+            subject = X500Name.fromName("CN=Intermediate 2"),
+            issuer = intermediate1Cert.subject,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(intermediate1Cert)
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, 0)
+        }
+
+        val leafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(intermediate2Key, intermediate2Key.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(4L),
+            subject = X500Name.fromName("CN=Leaf"),
+            issuer = intermediate2Cert.subject,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(intermediate2Cert)
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        val trustManager = TrustManager(EphemeralStorage())
+        trustManager.addX509Cert(rootCert, TrustMetadata())
+
+        val result = trustManager.verify(listOf(leafCert, intermediate2Cert, intermediate1Cert), now)
+        assertTrue(result.isTrusted)
+        assertNull(result.error)
+        assertEquals(1, result.trustPoints.size)
+        assertEquals(rootCert, result.trustPoints[0].certificate)
+        assertEquals(4, result.trustChain!!.certificates.size)
+    }
+
+    @Test
+    fun leafCertificateExpiredWithValidateCaValidityFalseRejected() = runTestWithSetup {
+        val rootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val intermediateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val leafKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val now = Clock.System.now().truncateToWholeSeconds()
+
+        val rootCert = buildX509Cert(
+            publicKey = rootKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Root CA"),
+            issuer = X500Name.fromName("CN=Root CA"),
+            validFrom = now - 10.hours,
+            validUntil = now + 10.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        val intermediateCert = buildX509Cert(
+            publicKey = intermediateKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rootKey, rootKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(2L),
+            subject = X500Name.fromName("CN=Intermediate CA"),
+            issuer = rootCert.subject,
+            validFrom = now - 10.hours,
+            validUntil = now + 10.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(rootCert)
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        // Leaf is expired
+        val expiredLeafCert = buildX509Cert(
+            publicKey = leafKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(intermediateKey, intermediateKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(3L),
+            subject = X500Name.fromName("CN=Leaf"),
+            issuer = intermediateCert.subject,
+            validFrom = now - 10.hours,
+            validUntil = now - 2.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setAuthorityKeyIdentifierToCertificate(intermediateCert)
+            setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+        }
+
+        val trustManager = TrustManager(EphemeralStorage())
+        trustManager.addX509Cert(rootCert, TrustMetadata())
+
+        // Even with validateCaValidity = false, an expired leaf must be rejected
+        val result = trustManager.verify(
+            listOf(expiredLeafCert, intermediateCert),
+            now,
+            validateCaValidity = false
+        )
+        assertFalse(result.isTrusted)
+        assertIs<X509CertChainValidationException.Expired>(result.error)
+    }
+
+    @Test
+    fun testIacaSubjectDnMatching() = runTest {
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val iacaKey = Crypto.createEcPrivateKey(EcCurve.P384)
+        val iacaCert = buildX509Cert(
+            publicKey = iacaKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(iacaKey, iacaKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("C=US,ST=California,CN=Test IACA"),
+            issuer = X500Name.fromName("C=US,ST=California,CN=Test IACA"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        suspend fun createDsCert(subjectName: String): X509Cert {
+            val dsKey = Crypto.createEcPrivateKey(EcCurve.P384)
+            return buildX509Cert(
+                publicKey = dsKey.publicKey,
+                signingKey = AsymmetricKey.anonymous(iacaKey, iacaKey.curve.defaultSigningAlgorithm),
+                serialNumber = ASN1Integer(1L),
+                subject = X500Name.fromName(subjectName),
+                issuer = iacaCert.subject,
+                validFrom = now - 1.hours,
+                validUntil = now + 1.hours
+            ) {
+                includeSubjectKeyIdentifier()
+                setAuthorityKeyIdentifierToCertificate(iacaCert)
+                setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            }
+        }
+
+        val trustManager = TrustManager(EphemeralStorage())
+        trustManager.addX509Cert(iacaCert, TrustMetadata())
+
+        val docType = "org.iso.18013.5.1.mDL"
+
+        // 1. Both countryName and stateOrProvinceName match -> OK
+        val dsMatching = createDsCert("C=US,ST=California,CN=Test DS Matching")
+        trustManager.verify(listOf(dsMatching), now, docType = docType).let {
+            assertTrue(it.isTrusted)
+            assertNull(it.error)
+        }
+
+        // 2. State omitted on target cert -> OK (per 12.8.3 "if this element is present in both certificates")
+        val dsStateOmitted = createDsCert("C=US,CN=Test DS State Omitted")
+        trustManager.verify(listOf(dsStateOmitted), now, docType = docType).let {
+            assertTrue(it.isTrusted)
+            assertNull(it.error)
+        }
+
+        // 3. Country mismatch -> rejected when verifying an IACA/docType chain
+        val dsCountryMismatch = createDsCert("C=CA,ST=California,CN=Test DS Country Mismatch")
+        trustManager.verify(listOf(dsCountryMismatch), now, docType = docType).let {
+            assertFalse(it.isTrusted)
+            assertEquals(
+                "Target certificate countryName 'CA' does not match IACA certificate countryName 'US'",
+                it.error?.message
+            )
+        }
+
+        // 4. State mismatch -> rejected when verifying an IACA/docType chain
+        val dsStateMismatch = createDsCert("C=US,ST=Massachusetts,CN=Test DS State Mismatch")
+        trustManager.verify(listOf(dsStateMismatch), now, docType = docType).let {
+            assertFalse(it.isTrusted)
+            assertEquals(
+                "Target certificate stateOrProvinceName 'Massachusetts' does not match IACA certificate stateOrProvinceName 'California'",
+                it.error?.message
+            )
+        }
+
+        // 5. When docType is null (e.g. reader auth where root CA is not an IACA), DN checks do not apply
+        trustManager.verify(listOf(dsCountryMismatch), now, docType = null).let {
+            assertTrue(it.isTrusted)
+            assertNull(it.error)
+        }
+    }
+
+    @Test
+    fun testReaderCaCrossBorderCertificates() = runTest {
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val readerCaKey = Crypto.createEcPrivateKey(EcCurve.P384)
+        val readerCaCert = buildX509Cert(
+            publicKey = readerCaKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(readerCaKey, readerCaKey.curve.defaultSigningAlgorithm),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("C=US,ST=Virginia,O=International Reader Authority,CN=Reader CA Root"),
+            issuer = X500Name.fromName("C=US,ST=Virginia,O=International Reader Authority,CN=Reader CA Root"),
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        ) {
+            includeSubjectKeyIdentifier()
+            setKeyUsage(setOf(X509KeyUsage.KEY_CERT_SIGN))
+            setBasicConstraints(true, null)
+        }
+
+        suspend fun createReaderCert(subjectName: String): X509Cert {
+            val readerKey = Crypto.createEcPrivateKey(EcCurve.P384)
+            return buildX509Cert(
+                publicKey = readerKey.publicKey,
+                signingKey = AsymmetricKey.anonymous(readerCaKey, readerCaKey.curve.defaultSigningAlgorithm),
+                serialNumber = ASN1Integer(1L),
+                subject = X500Name.fromName(subjectName),
+                issuer = readerCaCert.subject,
+                validFrom = now - 1.hours,
+                validUntil = now + 1.hours
+            ) {
+                includeSubjectKeyIdentifier()
+                setAuthorityKeyIdentifierToCertificate(readerCaCert)
+                setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            }
+        }
+
+        val readerTrustManager = TrustManager(EphemeralStorage())
+        readerTrustManager.addX509Cert(readerCaCert, TrustMetadata())
+
+        // A Reader CA (e.g. an international or commercial verifier authority) can legitimately
+        // issue reader certificates to organizations across different states or countries.
+        // Verifies that ISO/IEC 18013-5 12.8.3 IACA DN matching is not enforced for reader authentication.
+
+        // 1. Cross-country reader certificate (Root CA: C=US, Reader cert: C=DE)
+        val germanReaderCert = createReaderCert("C=DE,O=German Relying Party,CN=Reader Terminal DE")
+        readerTrustManager.verify(listOf(germanReaderCert), now).let {
+            assertTrue(it.isTrusted)
+            assertNull(it.error)
+            assertEquals(2, it.trustChain!!.certificates.size)
+        }
+
+        // 2. Cross-state reader certificate (Root CA: ST=Virginia, Reader cert: ST=California)
+        val caliReaderCert = createReaderCert("C=US,ST=California,O=US Relying Party,CN=Reader Terminal CA")
+        readerTrustManager.verify(listOf(caliReaderCert), now).let {
+            assertTrue(it.isTrusted)
+            assertNull(it.error)
+            assertEquals(2, it.trustChain!!.certificates.size)
+        }
     }
 }

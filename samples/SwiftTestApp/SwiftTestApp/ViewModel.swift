@@ -12,6 +12,8 @@ class ViewModel {
 
     let verticalCardListState = VerticalCardListState()
 
+    /// Pushes a destination onto the navigation stack without iOS's default horizontal slide animation.
+    /// Used for in-place transitions (such as focusing a card in `VerticalCardListScreen`).
     func push(_ destination: Destination) {
         if path.last != destination {
             var transaction = Transaction()
@@ -22,6 +24,8 @@ class ViewModel {
         }
     }
 
+    /// Pops the top destination off the navigation stack without iOS's default horizontal slide-to-right animation.
+    /// Used after in-place animations (such as card unfocus) have already completed visually.
     func popWithoutAnimation() {
         if !path.isEmpty {
             var transaction = Transaction()
@@ -54,7 +58,7 @@ class ViewModel {
         
         storage = IosStorage(
             storageFileUrl: FileManager.default.containerURL(
-                forSecurityApplicationGroupIdentifier: "group.org.multipaz.SwiftTestApp")!
+                forSecurityApplicationGroupIdentifier: Bundle.main.object(forInfoDictionaryKey: "AppGroupID") as! String)!
                 .appendingPathComponent("storage.db"),
             excludeFromBackup: true
         )
@@ -189,7 +193,7 @@ class ViewModel {
             )
         
         self.provisioningModel = ProvisioningModel(
-            documentProvisioningHandler: DocumentProvisioningHandler(
+            documentProvisioningHandler: DocumentProvisioningHandler.companion.create(
                 secureArea: secureArea,
                 documentStore: documentStore,
                 metadataHandler: nil,
@@ -207,7 +211,14 @@ class ViewModel {
                     sdJwtUserAuthDomain: "sdjwt_user_auth",
                     sdJwtNoUserAuthDomain: "sdjwt_no_user_auth",
                     sdJwtKeylessDomain: "sdjwt_keyless"
-                )
+                ),
+                selectSecureAreaFn: { appData, suggestedCreateKeySettings in
+                    print("in selectSecureAreaFn: appData=\(String(describing: appData)), algorithm=\(suggestedCreateKeySettings.algorithm)")
+                    return SelectedSecureArea(
+                        secureArea: self.secureArea,
+                        createKeySettings: suggestedCreateKeySettings
+                    )
+                }
             ),
             httpClient: HttpClient(engineFactory: Darwin()) { config in
                 config.followRedirects = false
@@ -224,18 +235,31 @@ class ViewModel {
         
         let dcApi = try! await DigitalCredentialsCompanion.shared.getDefault()
         if dcApi.registerAvailable {
-            try! await dcApi.register(
-                documentStore: documentStore,
-                documentTypeRepository: documentTypeRepository,
-                selectedProtocols: dcApi.supportedProtocols
-            )
+            // Keep in sync with samples/SwiftTestApp/SwiftTestApp/SwiftTestApp.entitlements
+            try! await documentStore.setIosMdocDoctypes(value: [
+                "eu.europa.ec.av.1",
+                "eu.europa.ec.eudi.pid.1",
+                "org.iso.18013.5.1.mDL",
+                "org.iso.23220.photoid.1",
+            ])
+            do {
+                try await dcApi.register(
+                    documentStore: documentStore,
+                    documentTypeRepository: documentTypeRepository,
+                    selectedProtocols: dcApi.supportedProtocols,
+                    forceRegistration: false
+                )
+            } catch {
+                print("Error registering with DigitalCredentials API: \(error)")
+            }
             Task {
                 for await _ in documentStore.eventFlow {
                     do {
                         try await dcApi.register(
                             documentStore: documentStore,
                             documentTypeRepository: documentTypeRepository,
-                            selectedProtocols: dcApi.supportedProtocols
+                            selectedProtocols: dcApi.supportedProtocols,
+                            forceRegistration: false
                         )
                     } catch {
                         print("Error updating DC registration: \(error)")
@@ -306,7 +330,9 @@ class ViewModel {
             cardArt: UIImage(named: cardArtResourceName)!.pngData()!.toByteString(),
             issuerLogo: nil,
             authorizationData: nil,
+            appData: nil,
             created: now.toKotlinInstant(),
+            readerIdentifiers: [],
             metadata: nil
         )
         let _ = try! await documentType.createMdocCredentialWithSampleData(
@@ -330,7 +356,10 @@ class ViewModel {
             validUntil: validUntil.toKotlinInstant().truncateToWholeSeconds(),
             expectedUpdate: nil,
             domain: "mdoc_user_auth",
-            randomProvider: KotlinRandom.companion
+            randomProvider: KotlinRandom.companion,
+            includeElement: { _, _ in KotlinBoolean(value: true) },
+            deviceKeyAuthorizedNamespaces: [],
+            deviceKeyAuthorizedDataElements: [:]
         )
         try! await document.edit(editActionFn: { editor in
             editor.provisioned = true
@@ -343,21 +372,26 @@ class ViewModel {
             documentTypeRepository: documentTypeRepository,
             zkSystemRepository: nil,
             resolveTrustFn: { requester in
-                if let certChain = requester.certChain {
+                for requesterIdentity in requester.requesterIdentities {
+                    let certChain = requesterIdentity.certChain
                     let result = try! await self.readerTrustManager.verify(
                         chain: certChain.certificates,
-                        atTime: KotlinClockCompanion().getSystem().now()
+                        atTime: KotlinClockCompanion().getSystem().now(),
+                        validateCaValidity: true
                     )
-                    if result.isTrusted {
-                        return result.trustPoints.first?.metadata
+                    if result.isTrusted && result.trustPoints.first != nil {
+                        return TrustedRequesterIdentity(
+                            identity: requesterIdentity,
+                            trustMetadata: result.trustPoints.first!.metadata
+                        )
                     }
                 }
                 return nil
             },
-            showConsentPromptFn: { requester, trustMetadata, consentData, preselectedDocuments, onDocumentsInFocus in
+            showConsentPromptFn: { requester, trustedRequesterIdentity, consentData, preselectedDocuments, onDocumentsInFocus in
                 try! await promptModelRequestConsent(
                     requester: requester,
-                    trustMetadata: trustMetadata,
+                    trustedRequesterIdentity: trustedRequesterIdentity,
                     consentData: consentData,
                     preselectedDocuments: preselectedDocuments,
                     onDocumentsInFocus: { documents in onDocumentsInFocus(documents) }

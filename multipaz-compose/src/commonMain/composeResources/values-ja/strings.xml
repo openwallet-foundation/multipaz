@@ -192,4 +192,26 @@
     <string name="trust_entry_rical_is_trust_anchor">トラストアンカー</string>
     <string name="trust_entry_rical_is_trust_anchor_true">はい</string>
     <string name="trust_entry_rical_is_trust_anchor_false">いいえ</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$sが未知の当事者の代理としてこのデータを要求しています。</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">このデータは未知の当事者の代理として要求されています。</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$sが%2$sの代理としてこのデータを要求しています。</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">このデータは%1$sの代理として要求されています。</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$sが、それを保存する未知の当事者の代理としてこのデータを要求しています。</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">このデータは、それを保存する未知の当事者の代理として要求されています。</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$sが、それを保存する%2$sの代理としてこのデータを要求しています。</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">このデータは、それを保存する%1$sの代理として要求されています。</string>
+    <string name="credential_presentment_select_option">共有する内容を選択</string>
+    <string name="credential_presentment_share_something_else">別のものを共有…</string>
+    <string name="credential_presentment_not_sharing_any_document">何か共有する…</string>
+    <string name="credential_presentment_dont_return_any_document">何も共有しない</string>
+    <string name="credential_presentment_no_document_returned">ドキュメントは返されませんでした</string>
+    <string name="credential_presentment_transaction_data">トランザクションデータが含まれます:</string>
+    <string name="issuer_loading">発行者メタデータを読み込み中…</string>
+    <string name="issuer_loading_failed">発行者メタデータの読み込みに失敗しました</string>
+    <string name="provisioning_select_credential">プロビジョニングするクレデンシャルを選択してください:</string>
+    <string name="provisioning_cancel_button">プロビジョニングをキャンセル</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">以前にお伝えしたPINを入力してください</string>
+    <string name="provisioning_tx_code_fallback_prompt">以前にお伝えしたパスフレーズを入力してください</string>
+    <string name="floating_item_heading_and_date_not_set">未設定</string>
+    <string name="floating_item_heading_and_date_time_not_set">未設定</string>
 </resources>

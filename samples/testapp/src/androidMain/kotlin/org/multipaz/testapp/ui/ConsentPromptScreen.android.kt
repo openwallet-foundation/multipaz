@@ -17,14 +17,14 @@ import org.multipaz.prompt.promptModelRequestConsent
 import org.multipaz.prompt.showBiometricPrompt
 import org.multipaz.prompt.Reason
 import org.multipaz.request.Requester
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.securearea.UserAuthenticationType as PromptUserAuthenticationType
-import org.multipaz.trustmanagement.TrustMetadata
 
 actual suspend fun launchAndroidPresentmentActivity(
     source: PresentmentSource,
     paData: AndroidPresentmentActivityData,
     requester: Requester,
-    trustMetadata: TrustMetadata?,
+    trustedRequesterIdentity: TrustedRequesterIdentity?,
     consentData: ConsentData,
     preselectedDocuments: List<Document>,
     onDocumentsInFocus: (documents: List<Document>) -> Unit
@@ -44,7 +44,7 @@ actual suspend fun launchAndroidPresentmentActivity(
             if (paData.showConsent) {
                 val selection = promptModelRequestConsent(
                     requester = requester,
-                    trustMetadata = trustMetadata,
+                    trustedRequesterIdentity = trustedRequesterIdentity,
                     consentData = consentData,
                     preselectedDocuments = paData.preselectedDocuments,
                     onDocumentsInFocus = { documents ->

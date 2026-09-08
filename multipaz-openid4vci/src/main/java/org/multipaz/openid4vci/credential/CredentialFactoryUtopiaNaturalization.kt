@@ -38,7 +38,7 @@ class CredentialFactoryUtopiaNaturalization : CredentialFactory {
         get() = "Naturalization certificate"
 
     override val logo: String
-        get() = "naturalization.png"
+        get() = "naturalization.jpg"
 
     override suspend fun mint(
         systemOfRecordData: DataItem,

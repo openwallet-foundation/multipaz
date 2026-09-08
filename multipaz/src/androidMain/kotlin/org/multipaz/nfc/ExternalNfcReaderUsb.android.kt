@@ -149,6 +149,7 @@ internal actual suspend fun ExternalNfcReaderUsb.getUsbNfcTagReader(): NfcTagRea
     }
     return NfcTagReaderUsb(
         manager = usbManager,
-        device = device
+        device = device,
+        interfaceIndex = interfaceIndex
     )
 }

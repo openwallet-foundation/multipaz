@@ -183,5 +183,6 @@
   "cor_description_document_number": "מספר עבור ה-COR, שהוקצה על ידי ספק ה-COR.",
   "cor_description_administrative_number": "מספר שהוקצה על ידי ספק ה-COR לצורך בקרת ביקורת או מטרות אחרות.",
   "cor_description_issuing_jurisdiction": "קוד חלוקת משנה של מדינה של תחום השיפוט שהנפיק את ה-COR, כפי שהוגדר ב-ISO 3166-2:2020, סעיף 8. החלק הראשון של הקוד יהיה זהה לערך עבור issuing_country.",
-  "cor_description_issuing_country": "קוד מדינה אלפא-2, כפי שהוגדר ב-ISO 3166-1, של המדינה או הטריטוריה של הרשות המנפיקה"
+  "cor_description_issuing_country": "קוד מדינה אלפא-2, כפי שהוגדר ב-ISO 3166-1, של המדינה או הטריטוריה של הרשות המנפיקה",
+  "payment_request_payment_sca_transaction": "SCA עם עסקת תשלום"
 }

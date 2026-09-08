@@ -183,5 +183,6 @@
   "cor_description_document_number": "由 COR 提供方分配的 COR 编号。",
   "cor_description_administrative_number": "由 COR 提供方分配用于审计控制或其他目的的编号。",
   "cor_description_issuing_jurisdiction": "签发 COR 的司法管辖区的国家细分代码，定义见 ISO 3166-2:2020 第 8 条。代码的第一部分应与签发国家/地区的值相同。",
-  "cor_description_issuing_country": "签发机构所属国家或地区的 Alpha-2 国家代码，定义见 ISO 3166-1。"
+  "cor_description_issuing_country": "签发机构所属国家或地区的 Alpha-2 国家代码，定义见 ISO 3166-1。",
+  "payment_request_payment_sca_transaction": "SCA支付交易"
 }

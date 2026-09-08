@@ -59,9 +59,13 @@ import kotlinx.serialization.json.Json
 import org.multipaz.compose.cards.CardCarousel
 import org.multipaz.compose.document.DocumentInfo
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.cbor.Cbor
+import org.multipaz.compose.pickers.rememberFilePicker
+import org.multipaz.mpzpass.MpzPass
+import org.multipaz.securearea.software.SoftwareUserAuthType
 import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.util.Logger
 import org.multipaz.util.Platform
@@ -108,6 +112,32 @@ fun DocumentStoreScreen(
     val showProvisioningResult = remember { mutableStateOf<AnnotatedString?>(null) }
     val userAuthenticationTimeout = remember { mutableStateOf<Duration?>(10.seconds) }
     val documentInfos = documentModel.documentInfos.collectAsState().value
+
+    val mpzPassFilePicker = rememberFilePicker(
+        types = listOf("*/*"),
+        allowMultiple = false,
+        onResult = { files ->
+            if (files.isNotEmpty()) {
+                val fileBytes = files.first().toByteArray()
+                coroutineScope.launch {
+                    try {
+                        val mpzPass = MpzPass.fromDataItem(Cbor.decode(fileBytes))
+                        val doc = documentStore.importMpzPass(
+                            mpzPass = mpzPass,
+                            isoMdocDomain = TestAppUtils.CREDENTIAL_DOMAIN_MDOC_SOFTWARE,
+                            sdJwtVcDomain = TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_SOFTWARE,
+                            keylessSdJwtVcDomain = TestAppUtils.CREDENTIAL_DOMAIN_SDJWT_KEYLESS
+                        )
+                        showToast("Imported pass '${doc.displayName ?: doc.identifier}' successfully")
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        e.printStackTrace()
+                        showToast("Error importing pass: ${e.message}")
+                    }
+                }
+            }
+        }
+    )
 
     val showDocumentCreationDialog = remember { mutableStateOf(false) }
     if (showDocumentCreationDialog.value) {
@@ -319,6 +349,13 @@ fun DocumentStoreScreen(
         }
         item {
             TextButton(onClick = {
+                mpzPassFilePicker.launch()
+            }) {
+                Text(text = "Import MpzPass")
+            }
+        }
+        item {
+            TextButton(onClick = {
                 coroutineScope.launch {
                     if (deviceKeyMacAlgorithm.value != Algorithm.UNSET && !TestAppConfiguration.platformSecureAreaHasKeyAgreement) {
                         showToast("Platform Secure Area does not have Key Agreement support. " +
@@ -368,6 +405,7 @@ fun DocumentStoreScreen(
                             SoftwareCreateKeySettings.Builder()
                                 .setAlgorithm(algorithm)
                                 .setPassphraseRequired(true, "1111", PassphraseConstraints.PIN_FOUR_DIGITS)
+                                .setUserAuthenticationRequired(true, setOf(SoftwareUserAuthType.PASSCODE, SoftwareUserAuthType.BIOMETRIC))
                                 .build()
                         },
                         dsKey = dsKey,

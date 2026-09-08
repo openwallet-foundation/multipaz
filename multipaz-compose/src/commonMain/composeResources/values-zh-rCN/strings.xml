@@ -192,4 +192,26 @@
     <string name="trust_entry_rical_is_trust_anchor">信任锚点</string>
     <string name="trust_entry_rical_is_trust_anchor_true">是</string>
     <string name="trust_entry_rical_is_trust_anchor_false">否</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s 正在代表未知方请求此数据：</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">正在代表未知方请求此数据：</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s 正在代表 %2$s 请求此数据：</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">正在代表 %1$s 请求此数据：</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s 正在代表未知方请求此数据，该方将存储此数据：</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">正在代表未知方请求此数据，该方将存储此数据：</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s 正在代表 %2$s 请求此数据，该方将存储此数据：</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">正在代表 %1$s 请求此数据，该方将存储此数据：</string>
+    <string name="credential_presentment_select_option">选择要共享的内容</string>
+    <string name="credential_presentment_share_something_else">共享其他内容…</string>
+    <string name="credential_presentment_not_sharing_any_document">分享一些内容…</string>
+    <string name="credential_presentment_dont_return_any_document">不分享任何内容</string>
+    <string name="credential_presentment_no_document_returned">未返回任何文件</string>
+    <string name="credential_presentment_transaction_data">包含交易数据：</string>
+    <string name="issuer_loading">正在加载颁发者元数据…</string>
+    <string name="issuer_loading_failed">颁发者元数据加载失败</string>
+    <string name="provisioning_select_credential">选择要配置的凭证：</string>
+    <string name="provisioning_cancel_button">取消配置</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">输入之前已告知您的PIN码</string>
+    <string name="provisioning_tx_code_fallback_prompt">输入之前已告知您的通行码</string>
+    <string name="floating_item_heading_and_date_not_set">未设置</string>
+    <string name="floating_item_heading_and_date_time_not_set">未设置</string>
 </resources>

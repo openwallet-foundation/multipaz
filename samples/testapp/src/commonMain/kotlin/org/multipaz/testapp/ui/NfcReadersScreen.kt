@@ -48,7 +48,7 @@ fun NfcReadersScreen(
                         modifier = Modifier.clickable {
                             onReaderClicked(reader.id)
                         },
-                        heading = reader.displayName,
+                        heading = reader.userDisplayName ?: reader.displayName,
                         text = "State: ${state.value}"
                     )
                 }
@@ -58,10 +58,8 @@ fun NfcReadersScreen(
         Text(
             text = AnnotatedString.fromMarkdown(
                 """
-                To use an external NFC reader connected via USB, simply plug it in. If the device is supported, a
-                prompt will appear asking for permission to use it with the app. For a list of supported devices see
-                [usb_nfc_readers.xml](https://github.com/openwallet-foundation/multipaz/blob/main/samples/testapp/src/androidMain/res/xml/usb_nfc_readers.xml)
-                file in the Multipaz GitHub repository.
+                To use an external NFC reader connected via USB, simply plug it in. Any USB smart card reader
+                supporting the standard CCID protocol (USB Class 11) will prompt for permission and be detected automatically.
             """.trimIndent().lines().joinToString(" ")
             )
         )

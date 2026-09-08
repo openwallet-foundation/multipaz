@@ -34,6 +34,8 @@ import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.Logger
+import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
+import org.multipaz.utopia.knowntypes.PingTransaction
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
@@ -64,7 +66,7 @@ class CredentialFactoryMdocPid : CredentialFactory {
         get() = "Personal ID"
 
     override val logo: String
-        get() = "card-pid.png"
+        get() = "card-pid.jpg"
 
     override suspend fun mint(
         systemOfRecordData: DataItem,
@@ -175,7 +177,15 @@ class CredentialFactoryMdocPid : CredentialFactory {
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = authenticationKey!!,
-            revocationStatus = revocationStatus
+            revocationStatus = revocationStatus,
+            deviceKeyAuthorizedNamespaces = listOf(
+                PingTransaction.openId4VpMdocResponseNamespace
+            ),
+            deviceKeyAuthorizedDataElements = mapOf(
+                ISO_18013_TRANSACTION_DATA_NAMESPACE to listOf(
+                    PingTransaction.identifier
+                )
+            )
         )
         val taggedEncodedMso = Cbor.encode(Tagged(
             Tagged.ENCODED_CBOR,
@@ -196,7 +206,7 @@ class CredentialFactoryMdocPid : CredentialFactory {
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                signingKey.certChain.toDataItem()
+                signingKey.certChain.toCoseX5Chain()
             )
         )
         val encodedIssuerAuth = Cbor.encode(

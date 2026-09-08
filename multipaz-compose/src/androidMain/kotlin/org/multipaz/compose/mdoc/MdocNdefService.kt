@@ -15,8 +15,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlin.concurrent.Volatile
 import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
@@ -308,26 +310,25 @@ abstract class MdocNdefService(
             eDeviceKey = eDeviceKey.publicKey,
             onHandoverComplete = { connectionMethods, encodedDeviceEngagement, handover ->
                 // OK, we're done with engagement and we're communicating with a bona fide ISO/IEC 18013-5:2021 reader.
-                // Start the activity and also launch a new job for handling the transaction...
+                // Let the user know and launch a new job to start the transaction.
                 //
-                //engagementComplete = true
                 vibrateSuccess()
-
-                if (settings.activityClass != null) {
-                    val intent = Intent(applicationContext, settings.activityClass)
-                    intent.addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK or
-                                Intent.FLAG_ACTIVITY_NO_HISTORY or
-                                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
-                                Intent.FLAG_ACTIVITY_NO_ANIMATION
-                    )
-                    applicationContext.startActivity(intent)
-                }
 
                 // We launch transactionJob in a new detached scope so it survives both
                 // NFC deactivation (the reader moving away) and the Service's onDestroy
                 // (as the transaction may continue over BLE and wait for UI consent).
                 transactionJob = CoroutineScope(Dispatchers.IO + settings.promptModel).launch {
+                    if (settings.activityClass != null) {
+                        val intent = Intent(applicationContext, settings.activityClass)
+                        intent.addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_NO_HISTORY or
+                                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                                    Intent.FLAG_ACTIVITY_NO_ANIMATION
+                        )
+                        applicationContext.startActivity(intent)
+                    }
+
                     val duration = Clock.System.now() - timeStarted
                     startTransaction(
                         settings = settings,
@@ -341,7 +342,7 @@ abstract class MdocNdefService(
             },
             onError = { error ->
                 // Engagement failed. This can happen if a NDEF tag reader - for example another unlocked
-                // Android device - is reading this device. So we really don't want any user-visible side-effects
+                // Android device - is reading this device. So we really don't want any user-visible side effects
                 // here such as showing an error or vibrating the phone.
                 //
                 engagementComplete = true
@@ -382,6 +383,7 @@ abstract class MdocNdefService(
         }
 
         try {
+            val preselectedDocuments = settings.presentmentModel?.documentsSelected?.value ?: emptyList()
             settings.presentmentModel?.setConnecting()
             Iso18013Presentment(
                 transport = transport,
@@ -390,6 +392,7 @@ abstract class MdocNdefService(
                 handover = handover,
                 source = settings.source,
                 keyAgreementPossible = listOf(eDeviceKey.curve),
+                preselectedDocuments = preselectedDocuments,
                 onWaitingForRequest = { settings.presentmentModel?.setWaitingForReader() },
                 onWaitingForUserInput = { settings.presentmentModel?.setWaitingForUserInput() },
                 onDocumentsInFocus = { documents ->

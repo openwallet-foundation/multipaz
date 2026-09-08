@@ -126,6 +126,12 @@ object DigitalPaymentCredential {
                 ),
                 cannedTransactionData = listOf(PaymentTransaction.sampleData)
             )
+            .addSampleRequest(
+                id = "payment_transaction_only_conf",
+                displayName = getLocalizedString(GeneratedStringKeys.PAYMENT_REQUEST_PAYMENT_SCA_TRANSACTION),
+                mdocDataElements = emptyMap(),
+                cannedTransactionData = listOf(PaymentTransaction.sampleData)
+            )
             .build()
     }
 }

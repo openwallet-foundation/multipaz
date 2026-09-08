@@ -232,4 +232,26 @@
     <string name="trust_entry_rical_is_trust_anchor">مرسى الثقة</string>
     <string name="trust_entry_rical_is_trust_anchor_true">نعم</string>
     <string name="trust_entry_rical_is_trust_anchor_false">لا</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s يطلب هذه البيانات نيابةً عن جهة غير معروفة:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">هذه البيانات مطلوبة نيابةً عن جهة غير معروفة:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s يطلب هذه البيانات نيابةً عن %2$s:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">هذه البيانات مطلوبة نيابةً عن %1$s:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s يطلب هذه البيانات نيابةً عن جهة غير معروفة ستقوم بتخزينها:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">هذه البيانات مطلوبة نيابةً عن جهة غير معروفة ستقوم بتخزينها:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s يطلب هذه البيانات نيابةً عن %2$s الذي سيقوم بتخزينها:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">هذه البيانات مطلوبة نيابةً عن %1$s الذي سيقوم بتخزينها:</string>
+    <string name="credential_presentment_select_option">اختر ما تريد مشاركته</string>
+    <string name="credential_presentment_share_something_else">مشاركة شيء آخر...</string>
+    <string name="credential_presentment_not_sharing_any_document">شارك شيئًا ما…</string>
+    <string name="credential_presentment_dont_return_any_document">لا تشارك أي شيء</string>
+    <string name="credential_presentment_no_document_returned">لم يتم إرجاع أي مستند</string>
+    <string name="credential_presentment_transaction_data">يتضمن بيانات المعاملة:</string>
+    <string name="issuer_loading">جارٍ تحميل بيانات تعريف المصدر...</string>
+    <string name="issuer_loading_failed">فشل تحميل بيانات تعريف المصدر</string>
+    <string name="provisioning_select_credential">حدد بيانات الاعتماد التي تريد توفيرها:</string>
+    <string name="provisioning_cancel_button">إلغاء التوفير</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">أدخل رقم التعريف الشخصي (PIN) الذي تم إبلاغك به مسبقًا</string>
+    <string name="provisioning_tx_code_fallback_prompt">أدخل عبارة المرور التي تم إبلاغك بها مسبقًا</string>
+    <string name="floating_item_heading_and_date_not_set">غير محدد</string>
+    <string name="floating_item_heading_and_date_time_not_set">غير محدد</string>
 </resources>

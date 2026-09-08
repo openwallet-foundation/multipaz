@@ -10,13 +10,25 @@ import kotlin.time.Instant
  * @property id an identifier for the reader.
  * @property addedAt the point in time the reader was added
  * @property displayName a human-readable name for the reader.
+ * @property userDisplayName a user-assigned custom display name for the reader, or null if not set.
  */
 @CborSerializable
 sealed class ExternalNfcReader(
     open val id: String,
     open val addedAt: Instant,
     open val displayName: String,
+    open val userDisplayName: String? = null,
 ) {
+    internal var store: ExternalNfcReaderStore?
+        get() = storeMap[id]
+        set(value) {
+            if (value != null) {
+                storeMap[id] = value
+            } else {
+                storeMap.remove(id)
+            }
+        }
+
     /**
      * Starts observing the state of a reader.
      *
@@ -40,6 +52,14 @@ sealed class ExternalNfcReader(
      */
     abstract suspend fun getNfcTagReader(): NfcTagReader
 
+    /**
+     * Sets a user-customized display name for the reader.
+     *
+     * @param userDisplayName the new user display name, or null to clear it.
+     */
+    abstract suspend fun setUserDisplayName(userDisplayName: String?)
+
     companion object {
+        private val storeMap = mutableMapOf<String, ExternalNfcReaderStore>()
     }
 }

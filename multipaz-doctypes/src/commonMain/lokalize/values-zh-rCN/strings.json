@@ -391,5 +391,7 @@
   "multi_request_mdl_and_photoid": "mDL 和 照片ID",
   "multi_request_mdl_or_photoid": "mDL 或 照片ID",
   "age_verification_attribute_older_than_years": "年满 {age} 岁",
-  "age_verification_description_older_than_years": "指示mDL持有人是否年满{age}周岁或以上"
+  "age_verification_description_older_than_years": "指示mDL持有人是否年满{age}周岁或以上",
+  "multi_request_payment_and_age_over_18": "支付和年满18岁",
+  "multi_request_age_over_18_mdl_or_pid": "通过mDL或PID及交易验证年满18岁"
 }

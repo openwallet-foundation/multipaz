@@ -82,6 +82,50 @@ class CompressionTests {
     }
 
     @Test
+    fun zlibHeaderAnyCompressionLevel() = runTest {
+        // FLEVEL, the upper two bits of the second header byte, depends on the compression level
+        // used by the producer: 0x7801 for level 1, 0x785E for 2-5, 0x789C for 6 and 0x78DA for
+        // 7-9. Level 6 is the default for java.util.zip.Deflater, Python zlib and Node zlib, so
+        // rejecting anything other than 0x78DA rejects most producers.
+        val expected = "Hello, Multipaz!".encodeToByteArray()
+        // "Hello, Multipaz!" deflated at level 6, header 0x789C.
+        val level6 = byteArrayOf(
+            120, -100, -13, 72, -51, -55, -55, -41, 81, -16, 45, -51, 41, -55, 44, 72,
+            -84, 82, 4, 0, 48, 69, 5, -72
+        )
+        // The same data at level 1, header 0x7801.
+        val level1 = byteArrayOf(
+            120, 1, -13, 72, -51, -55, -55, -41, 81, -16, 45, -51, 41, -55, 44, 72,
+            -84, 82, 4, 0, 48, 69, 5, -72
+        )
+        assertContentEquals(expected, level6.zlibInflate())
+        assertContentEquals(expected, level1.zlibInflate())
+    }
+
+    @Test
+    fun zlibHeaderRejectsInvalid() = runTest {
+        val data = byteArrayOf(42, 57, 70, 11, 17)
+        val compressed = data.zlibDeflate()
+
+        // Compression method other than DEFLATE.
+        val wrongMethod = compressed.copyOf()
+        wrongMethod[0] = 0x79
+        assertFailsWith(IllegalArgumentException::class) { wrongMethod.zlibInflate() }
+
+        // FCHECK does not make CMF*256 + FLG a multiple of 31.
+        val badCheck = compressed.copyOf()
+        badCheck[1] = (compressed[1].toInt() xor 1).toByte()
+        assertFailsWith(IllegalArgumentException::class) { badCheck.zlibInflate() }
+
+        // A preset dictionary is not supported: FDICT set, FCHECK adjusted to stay valid.
+        val presetDict = compressed.copyOf()
+        presetDict[1] = 0xBB.toByte()
+        assertFailsWith(IllegalArgumentException::class) { presetDict.zlibInflate() }
+
+        assertFailsWith(IllegalArgumentException::class) { byteArrayOf(120, -38).zlibInflate() }
+    }
+
+    @Test
     fun zlibChecksum() = runTest {
         val data = byteArrayOf(42, 57, 70, 11, 17)
         val compressed = data.zlibDeflate()

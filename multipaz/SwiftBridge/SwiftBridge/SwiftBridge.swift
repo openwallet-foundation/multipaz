@@ -89,6 +89,52 @@ import AuthenticationServices
             return nil
         }
     }
+
+    @objc(aesCbcEncrypt: : :) public class func aesCbcEncrypt(key: Data, plainText: Data, iv: Data) -> Data {
+        var outLength: Int = 0
+        let bufferSize = plainText.count + kCCBlockSizeAES128
+        var buffer = [UInt8](repeating: 0, count: bufferSize)
+        key.withUnsafeBytes { keyBytes in
+            iv.withUnsafeBytes { ivBytes in
+                plainText.withUnsafeBytes { dataBytes in
+                    CCCrypt(CCOperation(kCCEncrypt),
+                            CCAlgorithm(kCCAlgorithmAES),
+                            CCOptions(kCCOptionPKCS7Padding),
+                            keyBytes.baseAddress, key.count,
+                            ivBytes.baseAddress,
+                            dataBytes.baseAddress, plainText.count,
+                            &buffer, bufferSize,
+                            &outLength)
+                }
+            }
+        }
+        return Data(buffer.prefix(outLength))
+    }
+
+    @objc(aesCbcDecrypt: : :) public class func aesCbcDecrypt(key: Data, cipherText: Data, iv: Data) -> Data? {
+        var outLength: Int = 0
+        let bufferSize = cipherText.count
+        var buffer = [UInt8](repeating: 0, count: bufferSize)
+        var status: CCCryptorStatus = CCCryptorStatus(kCCSuccess)
+        key.withUnsafeBytes { keyBytes in
+            iv.withUnsafeBytes { ivBytes in
+                cipherText.withUnsafeBytes { dataBytes in
+                    status = CCCrypt(CCOperation(kCCDecrypt),
+                                     CCAlgorithm(kCCAlgorithmAES),
+                                     CCOptions(kCCOptionPKCS7Padding),
+                                     keyBytes.baseAddress, key.count,
+                                     ivBytes.baseAddress,
+                                     dataBytes.baseAddress, cipherText.count,
+                                     &buffer, bufferSize,
+                                     &outLength)
+                }
+            }
+        }
+        guard status == kCCSuccess, outLength < cipherText.count, outLength >= cipherText.count - kCCBlockSizeAES128 else {
+            return nil
+        }
+        return Data(buffer.prefix(outLength))
+    }
     
     static let CURVE_P256 = 1
     static let CURVE_P384 = 2
@@ -453,18 +499,44 @@ import AuthenticationServices
         return nil
     }
 
-    @objc(docRegAdd:::) public class func docRegAdd(
-     documentIdentifier: String,
-     documentType: String,
+@objc public class DocRegInfo: NSObject {
+    @objc public let documentIdentifier: String
+    @objc public let documentType: String
+    @objc public let supportedAuthorityKeyIdentifiers: [Data]
+    @objc public let supportedIssuerAuthorityKeyIdentifiers: [Data]
+    @objc public let invalidationDate: Date?
+
+    @objc public init(
+        documentIdentifier: String,
+        documentType: String,
+        supportedAuthorityKeyIdentifiers: [Data],
+        supportedIssuerAuthorityKeyIdentifiers: [Data],
+        invalidationDate: Date?
+    ) {
+        self.documentIdentifier = documentIdentifier
+        self.documentType = documentType
+        self.supportedAuthorityKeyIdentifiers = supportedAuthorityKeyIdentifiers
+        self.supportedIssuerAuthorityKeyIdentifiers = supportedIssuerAuthorityKeyIdentifiers
+        self.invalidationDate = invalidationDate
+    }
+}
+
+    @objc(docRegAdd::::::) public class func docRegAdd(
+        documentIdentifier: String,
+        documentType: String,
+        supportedAuthorityKeyIdentifiers: [Data],
+        supportedIssuerAuthorityKeyIdentifiers: [Data],
+        invalidationDate: Date?
     ) async throws -> Bool {
         if #available(iOS 26.0, *) {
             let store = IdentityDocumentProviderRegistrationStore()
 
+            // TODO: pass supportedIssuerAuthorityKeyIdentifiers once we update to depend on the iOS 27 SDK or later.
             let registration = MobileDocumentRegistration(
                 mobileDocumentType: documentType,
-                supportedAuthorityKeyIdentifiers: [],  // TODO: param
+                supportedAuthorityKeyIdentifiers: supportedAuthorityKeyIdentifiers,
                 documentIdentifier: documentIdentifier,
-                invalidationDate: nil          // TODO: param
+                invalidationDate: invalidationDate
             )
             try await store.addRegistration(registration)
             return true
@@ -486,13 +558,22 @@ import AuthenticationServices
         return 0
     }
 
-    @objc(docRegGetAll:) public class func docRegGetAll() async throws -> [String] {
+    @objc(docRegGetAll:) public class func docRegGetAll() async throws -> [DocRegInfo] {
         if #available(iOS 26.0, *) {
             let store = IdentityDocumentProviderRegistrationStore()
             let registrations = try await store.registrations
-            var ret: [String] = []
+            var ret: [DocRegInfo] = []
             for registration in registrations {
-                ret.append(registration.documentIdentifier)
+                if let mobileDocReg = registration as? MobileDocumentRegistration {
+                    // TODO: read supportedIssuerAuthorityKeyIdentifiers once we update to depend on the iOS 27 SDK or later.
+                    ret.append(DocRegInfo(
+                        documentIdentifier: mobileDocReg.documentIdentifier,
+                        documentType: mobileDocReg.mobileDocumentType,
+                        supportedAuthorityKeyIdentifiers: mobileDocReg.supportedAuthorityKeyIdentifiers,
+                        supportedIssuerAuthorityKeyIdentifiers: [],
+                        invalidationDate: mobileDocReg.invalidationDate
+                    ))
+                }
             }
             return ret
         }

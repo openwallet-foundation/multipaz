@@ -21,10 +21,14 @@ class SoftwareCreateKeySettings internal constructor(
     val subject: String?,
     validFrom: Instant?,
     validUntil: Instant?,
-    val privateKey: EcPrivateKey?
+    val privateKey: EcPrivateKey?,
+    userAuthenticationRequired: Boolean = false,
+    /** The set of user authentication types required to use the key. */
+    val userAuthenticationTypes: Set<SoftwareUserAuthType> = emptySet()
 ) : CreateKeySettings(
     algorithm = algorithm,
     nonce = buildByteString {},
+    userAuthenticationRequired = userAuthenticationRequired,
     validFrom = validFrom,
     validUntil = validUntil
 ) {
@@ -40,6 +44,8 @@ class SoftwareCreateKeySettings internal constructor(
         private var validFrom: Instant? = null
         private var validUntil: Instant? = null
         private var privateKey: EcPrivateKey? = null
+        private var userAuthenticationRequired = false
+        private var userAuthenticationTypes = setOf<SoftwareUserAuthType>()
 
         /**
          * Apply settings from configuration object.
@@ -53,6 +59,10 @@ class SoftwareCreateKeySettings internal constructor(
                 required = configuration.passphrase != null,
                 passphrase = configuration.passphrase,
                 constraints = configuration.passphraseConstraints
+            )
+            setUserAuthenticationRequired(
+                required = configuration.userAuthenticationRequired,
+                types = SoftwareUserAuthType.decodeSet(configuration.userAuthenticationTypes)
             )
         }
 
@@ -87,6 +97,31 @@ class SoftwareCreateKeySettings internal constructor(
             passphraseRequired = required
             this.passphrase = passphrase
             this.passphraseConstraints = constraints
+        }
+
+        /**
+         * Specify if user authentication is required to use the key.
+         *
+         * By default, no user authentication is required.
+         *
+         * @param required True if user authentication is required, false otherwise.
+         * @param types a combination of the flags [SoftwareUserAuthType.PASSCODE]
+         *     and [SoftwareUserAuthType.BIOMETRIC]. Cannot be empty if [required] is `true`.
+         * @return the builder.
+         */
+        fun setUserAuthenticationRequired(
+            required: Boolean,
+            types: Set<SoftwareUserAuthType>
+        ) = apply {
+            userAuthenticationRequired = required
+            if (userAuthenticationRequired) {
+                userAuthenticationTypes = types
+                check(!userAuthenticationTypes.isEmpty()) {
+                    "userAuthenticationTypes cannot be empty if user authentication is required"
+                }
+            } else {
+                userAuthenticationTypes = emptySet()
+            }
         }
 
         /**
@@ -132,7 +167,8 @@ class SoftwareCreateKeySettings internal constructor(
          */
         fun build(): SoftwareCreateKeySettings {
             return SoftwareCreateKeySettings(
-                passphraseRequired, passphrase, passphraseConstraints, algorithm, subject, validFrom, validUntil, privateKey
+                passphraseRequired, passphrase, passphraseConstraints, algorithm, subject, validFrom, validUntil, privateKey,
+                userAuthenticationRequired, userAuthenticationTypes
             )
         }
     }

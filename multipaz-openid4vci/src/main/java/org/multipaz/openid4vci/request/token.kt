@@ -62,6 +62,7 @@ suspend fun token(call: ApplicationCall) {
     val digest: ByteString?
     val parameters = call.receiveParameters()
     val grantType = parameters["grant_type"]
+    Logger.d(TAG, "Received token request for grant_type '$grantType' with parameters: $parameters")
     val id = when (grantType) {
         "authorization_code" -> {
             val code = parameters["code"]
@@ -176,13 +177,15 @@ suspend fun token(call: ApplicationCall) {
     nonces.clientAttestationNonce?.let {
         call.response.header("OAuth-Client-Attestation-Challenge", it)
     }
+    val responseJson = buildJsonObject {
+        put("access_token", accessToken)
+        put("refresh_token", refreshToken)
+        put("expires_in", expiresIn.inWholeSeconds.toInt())
+        put("token_type", "DPoP")
+    }
+    Logger.dJson(TAG, "Sending token response", responseJson)
     call.respondText(
-        text = buildJsonObject {
-                put("access_token", accessToken)
-                put("refresh_token", refreshToken)
-                put("expires_in", expiresIn.inWholeSeconds.toInt())
-                put("token_type", "DPoP")
-            }.toString(),
+        text = responseJson.toString(),
         contentType = ContentType.Application.Json
     )
 }

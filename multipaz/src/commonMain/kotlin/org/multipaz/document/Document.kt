@@ -150,6 +150,11 @@ class Document internal constructor(
     val authorizationData: ByteString? get() = data.authorizationData
 
     /**
+     * Application-specific data.
+     */
+    val appData: ByteString? get() = data.appData
+
+    /**
      * The unique identifier if this document is imported from a [org.multipaz.mpzpass.MpzPass].
      */
     val mpzPassId: String? get() = data.mpzPassId
@@ -158,6 +163,15 @@ class Document internal constructor(
      * The version of the pass if this document is imported from a [org.multipaz.mpzpass.MpzPass].
      */
     val mpzPassVersion: Long? get() = data.mpzPassVersion
+
+    /**
+     * A list of reader identifiers for reader authentication.
+     *
+     * If non-empty, the document is only accessible to readers using reader authentication
+     * and where a certificate in the x5chain for the request contains an AuthorityKeyIdentifier
+     * in this list.
+     */
+    val readerIdentifiers: List<ByteString> get() = data.readerIdentifiers ?: emptyList()
 
     /**
      * A [Tags] for storing application-specific data.
@@ -177,8 +191,10 @@ class Document internal constructor(
                     cardArt = data.cardArt,
                     issuerLogo = data.issuerLogo,
                     authorizationData = data.authorizationData,
+                    appData = data.appData,
                     mpzPassId = data.mpzPassId,
                     mpzPassVersion = data.mpzPassVersion,
+                    readerIdentifiers = data.readerIdentifiers,
                     metadata = data.metadata,
                     tagsData = if (newData.asMap.isEmpty()) {
                         null
@@ -366,7 +382,7 @@ class Document internal constructor(
     private suspend fun deleteCredentialIfInvalidated(credential: Credential) {
         try {
             if (credential.isInvalidated()) {
-                Logger.i(TAG, "Deleting invalidated credential ${credential.identifier}")
+                Logger.d(TAG, "Deleting invalidated credential ${credential.identifier}")
                 deleteCredential(credential.identifier)
             }
         } catch (err: IllegalArgumentException) {
@@ -440,8 +456,10 @@ class Document internal constructor(
                 cardArt = data.cardArt,
                 issuerLogo = data.issuerLogo,
                 authorizationData = data.authorizationData,
+                appData = data.appData,
                 mpzPassId = data.mpzPassId,
                 mpzPassVersion = data.mpzPassVersion,
+                readerIdentifiers = data.readerIdentifiers ?: emptyList(),
                 metadata = metadata,
                 tags = Tags.Editor(this@Document.tags._tags)
             )
@@ -461,8 +479,10 @@ class Document internal constructor(
                 cardArt = editor.cardArt,
                 issuerLogo = editor.issuerLogo,
                 authorizationData = editor.authorizationData,
+                appData = editor.appData,
                 mpzPassId = editor.mpzPassId,
                 mpzPassVersion = editor.mpzPassVersion,
+                readerIdentifiers = editor.readerIdentifiers.ifEmpty { null },
                 metadata = editor.metadata?.serialize(),
                 tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) }
             )
@@ -491,8 +511,10 @@ class Document internal constructor(
      * @property cardArt An image that represents this document to the user in the UI.
      * @property issuerLogo An image that represents the issuer of the document in the UI.
      * @property authorizationData Saved authorization data to refresh credentials, possibly without requiring user to re-authorize.
+     * @property appData Application-specific data.
      * @property mpzPassId The unique identifier if this document is imported from a [org.multipaz.mpzpass.MpzPass].
      * @property mpzPassVersion The version if this document is imported from a [org.multipaz.mpzpass.MpzPass].
+     * @property readerIdentifiers A list of reader identifiers for reader authentication.
      * @property metadata A [AbstractDocumentMetadata] for storing application-specific data.
      * @property tags A [Tags] for storing application-specific data.
      */
@@ -504,8 +526,10 @@ class Document internal constructor(
         var cardArt: ByteString?,
         var issuerLogo: ByteString?,
         var authorizationData: ByteString?,
+        var appData: ByteString?,
         var mpzPassId: String?,
         var mpzPassVersion: Long?,
+        var readerIdentifiers: List<ByteString> = emptyList(),
         var metadata: AbstractDocumentMetadata?,
         val tags: Tags.Editor
     )

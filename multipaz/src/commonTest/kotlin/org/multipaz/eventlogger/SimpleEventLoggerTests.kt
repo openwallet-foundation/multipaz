@@ -6,11 +6,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.multipaz.cbor.Simple
+import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
+import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.claim.MdocClaim
 import org.multipaz.documenttype.knowntypes.DrivingLicense
+import org.multipaz.mdoc.engagement.EngagementType
+import org.multipaz.mdoc.transport.NfcHybridTransportStats
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.verification.Iso18013PresentmentRecord
+import org.multipaz.verification.toDataItem
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -20,6 +27,7 @@ import kotlin.test.assertNotNull
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -509,6 +517,193 @@ class SimpleEventLoggerTests {
         assertTrue(logger.getEvents().isEmpty())
 
         job.cancel()
+    }
+
+    @Test
+    fun testOnAddEventAppendsToAppData() = runTest {
+        val fakeClock = FakeClock(Instant.fromEpochMilliseconds(1000))
+        val ephemeralStorage = EphemeralStorage(fakeClock)
+        val originalAppData = mapOf("original_key" to "original_value".toDataItem())
+        val injectedAppData = mapOf("injected_key" to "injected_value".toDataItem())
+
+        val logger = SimpleEventLogger(
+            storage = ephemeralStorage,
+            partitionId = "test-partition",
+            clock = fakeClock,
+            onAddEvent = { _ -> injectedAppData }
+        )
+
+        val eventBase = EventPresentmentIso18013Proximity(
+            identifier = "",
+            timestamp = Instant.DISTANT_PAST,
+            appData = originalAppData,
+            presentmentData = EventPresentmentData(
+                requesterName = "Test Requester",
+                requesterCertChain = null,
+                trustMetadata = null,
+                requestedDocuments = listOf(
+                    EventPresentmentDataDocument(
+                        documentId = "test-document-id",
+                        documentName = "Test Document",
+                        claims = emptyMap()
+                    )
+                ),
+            ),
+            request = Simple.NULL,
+            response = Simple.NULL,
+            sessionTranscript = Simple.NULL
+        )
+
+        val savedEvent = logger.addEvent(eventBase)
+
+        // Verify returned event contains the merged appData
+        assertNotNull(savedEvent)
+        assertEquals(2, savedEvent.appData.size)
+        assertEquals("original_value".toDataItem(), savedEvent.appData["original_key"])
+        assertEquals("injected_value".toDataItem(), savedEvent.appData["injected_key"])
+
+        // Verify storage state contains the merged appData
+        val eventsInDb = logger.getEvents()
+        assertEquals(1, eventsInDb.size)
+        assertEquals(savedEvent.appData, eventsInDb.first().appData)
+    }
+
+    @Test
+    fun testAddAndGetEventVerificationDigitalCredentials() = runTest {
+        val fakeClock = FakeClock(Instant.fromEpochMilliseconds(2000))
+        val ephemeralStorage = EphemeralStorage(fakeClock)
+        val logger = SimpleEventLogger(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
+
+        val presentmentRecord = Iso18013PresentmentRecord(
+            response = Simple.NULL,
+            sessionTranscript = Simple.NULL,
+            request = Simple.NULL,
+            eDeviceKey = null,
+            encryptionInfo = null,
+            origin = null
+        )
+
+        val event = EventVerificationDigitalCredentials(
+            identifier = "",
+            timestamp = Instant.DISTANT_PAST,
+            presentmentRecord = presentmentRecord,
+            requestJson = """{"requests": []}""",
+            responseJson = """{"response": "ok"}""",
+            durationRequestSentToResponseReceived = 350.milliseconds,
+            origin = "https://example.com",
+            appId = "com.example.app"
+        )
+
+        val savedEvent = logger.addEvent(event)
+        assertNotNull(savedEvent)
+        assertTrue(savedEvent is EventVerificationDigitalCredentials)
+        assertEquals("https://example.com", savedEvent.origin)
+        assertEquals("com.example.app", savedEvent.appId)
+        assertEquals("""{"requests": []}""", savedEvent.requestJson)
+        assertEquals("""{"response": "ok"}""", savedEvent.responseJson)
+        assertEquals(350.milliseconds, savedEvent.durationRequestSentToResponseReceived)
+
+        val eventsFromDb = logger.getEvents()
+        assertEquals(1, eventsFromDb.size)
+        val retrieved = eventsFromDb.first()
+        assertTrue(retrieved is EventVerificationDigitalCredentials)
+        assertEquals(savedEvent.identifier, retrieved.identifier)
+        assertEquals("https://example.com", retrieved.origin)
+        assertEquals("com.example.app", retrieved.appId)
+        assertEquals("""{"requests": []}""", retrieved.requestJson)
+        assertEquals("""{"response": "ok"}""", retrieved.responseJson)
+        assertEquals(350.milliseconds, retrieved.durationRequestSentToResponseReceived)
+    }
+
+    @Test
+    fun testAddAndGetEventVerificationIso18013Proximity() = runTest {
+        val fakeClock = FakeClock(Instant.fromEpochMilliseconds(3000))
+        val ephemeralStorage = EphemeralStorage(fakeClock)
+        val logger = SimpleEventLogger(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
+
+        val presentmentRecord = Iso18013PresentmentRecord(
+            response = Simple.NULL,
+            sessionTranscript = Simple.NULL,
+            request = Simple.NULL,
+            eDeviceKey = null,
+            encryptionInfo = null,
+            origin = null
+        )
+        val stats = NfcHybridTransportStats(
+            numSent = 10,
+            numSentViaNfc = 8,
+            numSentViaTransport = 2,
+            numReceived = 12,
+            numReceivedFirstOnNfc = 9,
+            numReceivedFirstOnTransport = 3,
+            nfcDisconnectedDuringTransaction = false
+        )
+
+        val event = EventVerificationIso18013Proximity(
+            identifier = "",
+            timestamp = Instant.DISTANT_PAST,
+            presentmentRecord = presentmentRecord,
+            engagementType = EngagementType.NFC_CONCURRENT_CHANNEL_ENGAGEMENT,
+            durationNfcTapToEngagement = 150.milliseconds,
+            durationEngagementReceivedToRequestSent = 50.milliseconds,
+            durationRequestSentToResponseReceived = 400.milliseconds,
+            durationScanningTime = 300.milliseconds,
+            nfcHybridTransportStats = stats
+        )
+
+        val savedEvent = logger.addEvent(event)
+        assertNotNull(savedEvent)
+        assertTrue(savedEvent is EventVerificationIso18013Proximity)
+        assertEquals(EngagementType.NFC_CONCURRENT_CHANNEL_ENGAGEMENT, savedEvent.engagementType)
+        assertEquals(150.milliseconds, savedEvent.durationNfcTapToEngagement)
+        assertEquals(50.milliseconds, savedEvent.durationEngagementReceivedToRequestSent)
+        assertEquals(400.milliseconds, savedEvent.durationRequestSentToResponseReceived)
+        assertEquals(300.milliseconds, savedEvent.durationScanningTime)
+        assertEquals(stats, savedEvent.nfcHybridTransportStats)
+
+        val eventsFromDb = logger.getEvents()
+        assertEquals(1, eventsFromDb.size)
+        val retrieved = eventsFromDb.first()
+        assertTrue(retrieved is EventVerificationIso18013Proximity)
+        assertEquals(savedEvent.identifier, retrieved.identifier)
+        assertEquals(EngagementType.NFC_CONCURRENT_CHANNEL_ENGAGEMENT, retrieved.engagementType)
+        assertEquals(150.milliseconds, retrieved.durationNfcTapToEngagement)
+        assertEquals(50.milliseconds, retrieved.durationEngagementReceivedToRequestSent)
+        assertEquals(400.milliseconds, retrieved.durationRequestSentToResponseReceived)
+        assertEquals(300.milliseconds, retrieved.durationScanningTime)
+        assertEquals(stats, retrieved.nfcHybridTransportStats)
+    }
+
+    @Test
+    fun testLegacyVerificationEventBackwardCompatibility() = runTest {
+        val presentmentRecord = Iso18013PresentmentRecord(
+            response = Simple.NULL,
+            sessionTranscript = Simple.NULL,
+            request = Simple.NULL,
+            eDeviceKey = null,
+            encryptionInfo = null,
+            origin = null
+        )
+        // Construct CBOR map with legacy typeId "Verification"
+        val legacyCbor = buildCborMap {
+            put("type", Tstr("Verification"))
+            put("identifier", Tstr("legacy-id-123"))
+            put("timestamp", Instant.fromEpochMilliseconds(5000).toDataItemDateTimeString())
+            put("appData", buildCborMap {})
+            put("presentmentRecord", presentmentRecord.toDataItem())
+            put("durationRequestSentToResponseReceived", Tstr("PT0.5S"))
+        }
+
+        val event = Event.fromDataItem(legacyCbor)
+        assertTrue(event is EventVerification)
+        assertTrue(event is EventVerificationDefault)
+        assertEquals("legacy-id-123", event.identifier)
+        assertEquals(Instant.fromEpochMilliseconds(5000), event.timestamp)
+        assertEquals(500.milliseconds, event.durationRequestSentToResponseReceived)
+
+        // Verify serializing EventVerificationDefault encodes with type "Verification"
+        val reEncoded = event.toDataItem()
+        assertEquals(Tstr("Verification"), reEncoded["type"])
     }
 
     // --- Fakes ---

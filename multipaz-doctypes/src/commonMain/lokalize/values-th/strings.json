@@ -391,5 +391,7 @@
   "multi_request_mdl_and_photoid": "mDL และ PhotoID",
   "multi_request_mdl_or_photoid": "mDL หรือ PhotoID",
   "age_verification_attribute_older_than_years": "อายุมากกว่า {age} ปี",
-  "age_verification_description_older_than_years": "ระบุว่าผู้ถือ mDL มีอายุ {age} ปีขึ้นไป"
+  "age_verification_description_older_than_years": "ระบุว่าผู้ถือ mDL มีอายุ {age} ปีขึ้นไป",
+  "multi_request_payment_and_age_over_18": "ชำระเงินและอายุ 18 ปีขึ้นไป",
+  "multi_request_age_over_18_mdl_or_pid": "อายุ 18 ปีขึ้นไป โดย mDL หรือ PID และธุรกรรม"
 }

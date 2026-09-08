@@ -40,26 +40,31 @@ extern "C" void matcher(void) {
             cJSON *protocolData = cJSON_GetObjectItem(dcRequest, "data");
 
             if (protocolValue == "openid4vp" ||
-                protocolValue == "openid4vp-v1-unsigned" ||
-                protocolValue == "openid4vp-v1-signed") {
+                    protocolValue == "openid4vp-v1-unsigned" ||
+                    protocolValue == "openid4vp-v1-signed" ||
+                    protocolValue == "openid4vp-v1-multisigned") {
 
                 auto request = OpenID4VPRequest::parseOpenID4VP(protocolData, protocolValue);
-                auto dcqlResponse = request->dclqQuery.execute(db);
+                auto dcqlResponse = request->dclqQuery.execute(db, protocolValue);
                 if (dcqlResponse.has_value()) {
                     auto combinations = dcqlResponse.value().getCredentialCombinations();
-                    for (auto const &combination: combinations) {
-                        combination.addToCredmanPicker(*request);
+                    if (!combinations.empty()) {
+                        for (auto const &combination: combinations) {
+                            combination.addToCredmanPicker(*request);
+                        }
+                        break;
                     }
                 }
-                break;
 
             } else if (protocolValue == "org.iso.mdoc" || protocolValue == "org-iso-mdoc") {
                 auto request = MdocRequest::parseMdocApi(protocolValue, protocolData);
-                auto combinations = request->getCredentialCombinations(db);
-                for (auto const& combination : combinations) {
-                    combination.addToCredmanPicker(*request);
+                auto combinations = request->getCredentialCombinations(db, protocolValue);
+                if (!combinations.empty()) {
+                    for (auto const &combination: combinations) {
+                        combination.addToCredmanPicker(*request);
+                    }
+                    break;
                 }
-                break;
             }
         }
     }

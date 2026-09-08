@@ -391,5 +391,7 @@
   "multi_request_mdl_and_photoid": "mDL EN PhotoID",
   "multi_request_mdl_or_photoid": "mDL OF PhotoID",
   "age_verification_attribute_older_than_years": "Ouder dan {age} jaar",
-  "age_verification_description_older_than_years": "Aanduiding of de mDL-houder {age} jaar of ouder is"
+  "age_verification_description_older_than_years": "Aanduiding of de mDL-houder {age} jaar of ouder is",
+  "multi_request_payment_and_age_over_18": "Betaling en leeftijd ouder dan 18",
+  "multi_request_age_over_18_mdl_or_pid": "Leeftijd ouder dan 18 via mDL of PID + transactie"
 }

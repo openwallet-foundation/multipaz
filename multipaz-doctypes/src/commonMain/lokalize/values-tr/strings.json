@@ -391,5 +391,7 @@
   "multi_request_mdl_and_photoid": "mDL VE Fotoğraflı Kimlik",
   "multi_request_mdl_or_photoid": "mDL VEYA Fotoğraflı Kimlik",
   "age_verification_attribute_older_than_years": "{age} yaşından büyük",
-  "age_verification_description_older_than_years": "mDL sahibinin {age} yaş ve üzeri olup olmadığı bilgisi"
+  "age_verification_description_older_than_years": "mDL sahibinin {age} yaş ve üzeri olup olmadığı bilgisi",
+  "multi_request_payment_and_age_over_18": "Ödeme ve 18 yaş üzeri",
+  "multi_request_age_over_18_mdl_or_pid": "mDL veya PID ile 18 yaş üzeri ve işlem"
 }

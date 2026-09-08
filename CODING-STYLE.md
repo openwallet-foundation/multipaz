@@ -60,4 +60,5 @@ with the following changes
 * **Document exceptions in KDoc:** Every function or method must explicitly document the
   exceptions it throws using the `@throws` (or `@exception`) tag in its KDoc. This ensures that
   contributors and consumers of the Multipaz library know exactly what edge cases they are
-  expected to handle.
+  expected to handle. Also use the `@Throws` annotation on the function or method since this
+  is required for error handling when consuming the API on e.g. iOS.

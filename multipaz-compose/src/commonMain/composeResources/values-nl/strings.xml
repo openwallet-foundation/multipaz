@@ -192,4 +192,26 @@
     <string name="trust_entry_rical_is_trust_anchor">Vertrouwensanker</string>
     <string name="trust_entry_rical_is_trust_anchor_true">Ja</string>
     <string name="trust_entry_rical_is_trust_anchor_false">Nee</string>
+    <string name="credential_presentment_share_with_known_requester_and_unknown_enc_target">%1$s vraagt deze gegevens aan namens een onbekende partij:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_unknown_enc_target">Deze gegevens worden aangevraagd namens een onbekende partij:</string>
+    <string name="credential_presentment_share_with_known_requester_and_known_enc_target">%1$s vraagt deze gegevens aan namens %2$s:</string>
+    <string name="credential_presentment_share_with_unknown_requester_and_known_enc_target">Deze gegevens worden aangevraagd namens %1$s:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_unknown_enc_target">%1$s vraagt deze gegevens aan namens een onbekende partij die deze zal opslaan:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_unknown_enc_target">Deze gegevens worden aangevraagd namens een onbekende partij die deze zal opslaan:</string>
+    <string name="credential_presentment_share_and_stored_by_known_requester_and_known_enc_target">%1$s vraagt deze gegevens aan namens %2$s die deze zal opslaan:</string>
+    <string name="credential_presentment_share_and_stored_by_unknown_requester_and_known_enc_target">Deze gegevens worden aangevraagd namens %1$s die deze zal opslaan:</string>
+    <string name="credential_presentment_select_option">Selecteer wat te delen</string>
+    <string name="credential_presentment_share_something_else">Deel iets anders…</string>
+    <string name="credential_presentment_not_sharing_any_document">Deel iets…</string>
+    <string name="credential_presentment_dont_return_any_document">Deel niets</string>
+    <string name="credential_presentment_no_document_returned">Geen document gedeeld</string>
+    <string name="credential_presentment_transaction_data">Inclusief transactiegegevens:</string>
+    <string name="issuer_loading">Issuer-metadata laden...</string>
+    <string name="issuer_loading_failed">Issuer-metadata laden mislukt</string>
+    <string name="provisioning_select_credential">Selecteer de legitimatie om aan te maken:</string>
+    <string name="provisioning_cancel_button">Aanmaak annuleren</string>
+    <string name="provisioning_tx_code_fallback_prompt_numeric">Voer de pincode in die eerder met u is gedeeld</string>
+    <string name="provisioning_tx_code_fallback_prompt">Voer de wachtwoordzin in die eerder met u is gedeeld</string>
+    <string name="floating_item_heading_and_date_not_set">Niet ingesteld</string>
+    <string name="floating_item_heading_and_date_time_not_set">Niet ingesteld</string>
 </resources>

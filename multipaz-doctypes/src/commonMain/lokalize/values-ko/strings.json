@@ -391,5 +391,7 @@
   "multi_request_mdl_and_photoid": "mDL 및 PhotoID",
   "multi_request_mdl_or_photoid": "mDL 또는 PhotoID",
   "age_verification_attribute_older_than_years": "만 {age}세 초과",
-  "age_verification_description_older_than_years": "mDL 소지자의 {age}세 이상 여부"
+  "age_verification_description_older_than_years": "mDL 소지자의 {age}세 이상 여부",
+  "multi_request_payment_and_age_over_18": "결제 및 18세 이상",
+  "multi_request_age_over_18_mdl_or_pid": "mDL 또는 PID를 통한 18세 이상 및 거래"
 }

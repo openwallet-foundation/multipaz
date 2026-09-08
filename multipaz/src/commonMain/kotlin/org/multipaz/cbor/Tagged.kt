@@ -83,6 +83,13 @@ class Tagged(val tagNumber: Long, val taggedItem: DataItem) : DataItem(MajorType
         const val NEGATIVE_BIGNUM = 3L
 
         /**
+         * Holds COSE MACed message with one recipient.
+         *
+         * Defined in https://www.rfc-editor.org/rfc/rfc9052.html#section-6.2
+         */
+        const val COSE_MAC0 = 17L
+
+        /**
          * Holds COSE signed message with one signer.
          *
          * Defined in https://www.rfc-editor.org/rfc/rfc9052.html#name-signing-with-one-signer

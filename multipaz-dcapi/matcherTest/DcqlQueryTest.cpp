@@ -31,7 +31,7 @@ Java_org_multipaz_presentment_MatcherDcqlQueryExecuteTest_executeDcqlQuery(
     std::string protocolValue = std::string(cJSON_GetStringValue(protocol));
     cJSON *protocolData = cJSON_GetObjectItem(request, "data");
     auto openid4vpRequest = OpenID4VPRequest::parseOpenID4VP(protocolData, protocolValue);
-    auto dcqlResponse = openid4vpRequest->dclqQuery.execute(db);
+    auto dcqlResponse = openid4vpRequest->dclqQuery.execute(db, protocolValue);
 
     std::string output;
     output.append("DcqlResponse\n");

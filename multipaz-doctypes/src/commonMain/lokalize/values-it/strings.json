@@ -391,5 +391,7 @@
   "multi_request_mdl_and_photoid": "mDL E PhotoID",
   "multi_request_mdl_or_photoid": "mDL O PhotoID",
   "age_verification_attribute_older_than_years": "Maggiore di {age} anni",
-  "age_verification_description_older_than_years": "Indicazione se il titolare della mDL ha almeno {age} anni"
+  "age_verification_description_older_than_years": "Indicazione se il titolare della mDL ha almeno {age} anni",
+  "multi_request_payment_and_age_over_18": "Pagamento ed età superiore a 18 anni",
+  "multi_request_age_over_18_mdl_or_pid": "Età superiore a 18 anni tramite mDL o PID + transazione"
 }

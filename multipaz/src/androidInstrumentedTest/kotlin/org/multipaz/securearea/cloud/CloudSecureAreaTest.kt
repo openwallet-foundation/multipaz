@@ -836,6 +836,7 @@ class CloudSecureAreaTest {
         override suspend fun getKeyUnlockData(
             secureArea: SecureArea,
             alias: String,
+            algorithm: Algorithm,
             unlockReason: Reason
         ): KeyUnlockData = keyUnlockData
     }

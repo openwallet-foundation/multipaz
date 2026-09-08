@@ -31,6 +31,7 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.X500Name
+import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
@@ -69,7 +70,11 @@ import kotlin.time.Instant
  * Creating a [DocumentStoreTestHarness] is a no-op, call [initialize] to actually
  * populate it.
  */
-class DocumentStoreTestHarness {
+class DocumentStoreTestHarness(
+    iacaCert: X509Cert? = null,
+    iacaKey: AsymmetricKey.X509Certified? = null,
+    dsKey: AsymmetricKey.X509Certified? = null,
+) {
     companion object {
         private const val TAG = "TestDocumentStore"
     }
@@ -93,8 +98,22 @@ class DocumentStoreTestHarness {
     lateinit var validFrom: Instant
     lateinit var validUntil: Instant
 
+    lateinit var iacaCert: X509Cert
+    lateinit var iacaKey: AsymmetricKey.X509Certified
     lateinit var dsKey: AsymmetricKey.X509Certified
     lateinit var readerRootKey: AsymmetricKey.X509Certified
+
+    init {
+        if (iacaCert != null) {
+            this.iacaCert = iacaCert
+        }
+        if (iacaKey != null) {
+            this.iacaKey = iacaKey
+        }
+        if (dsKey != null) {
+            this.dsKey = dsKey
+        }
+    }
 
     private val lock = Mutex()
     private var isInitialized = false
@@ -157,47 +176,52 @@ class DocumentStoreTestHarness {
         val dsValidFrom = validFrom
         val dsValidUntil = validUntil
 
-        val iacaKeyPub = EcPublicKey.fromPem(
-            """
-                    -----BEGIN PUBLIC KEY-----
-                    MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE+QDye70m2O0llPXMjVjxVZz3m5k6agT+
-                    wih+L79b7jyqUl99sbeUnpxaLD+cmB3HK3twkA7fmVJSobBc+9CDhkh3mx6n+YoH
-                    5RulaSWThWBfMyRjsfVODkosHLCDnbPV
-                    -----END PUBLIC KEY-----
-                """.trimIndent().trim(),
-        )
-        val iacaKey = EcPrivateKey.fromPem(
-            """
-                    -----BEGIN PRIVATE KEY-----
-                    MIG2AgEAMBAGByqGSM49AgEGBSuBBAAiBIGeMIGbAgEBBDCcRuzXW3pW2h9W8pu5
-                    /CSR6JSnfnZVATq+408WPoNC3LzXqJEQSMzPsI9U1q+wZ2yhZANiAAT5APJ7vSbY
-                    7SWU9cyNWPFVnPebmTpqBP7CKH4vv1vuPKpSX32xt5SenFosP5yYHccre3CQDt+Z
-                    UlKhsFz70IOGSHebHqf5igflG6VpJZOFYF8zJGOx9U4OSiwcsIOds9U=
-                    -----END PRIVATE KEY-----
-                """.trimIndent().trim(),
-            iacaKeyPub
-        )
+        if (!this::iacaCert.isInitialized) {
+            val iacaKeyPub = EcPublicKey.fromPem(
+                """
+                        -----BEGIN PUBLIC KEY-----
+                        MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE+QDye70m2O0llPXMjVjxVZz3m5k6agT+
+                        wih+L79b7jyqUl99sbeUnpxaLD+cmB3HK3twkA7fmVJSobBc+9CDhkh3mx6n+YoH
+                        5RulaSWThWBfMyRjsfVODkosHLCDnbPV
+                        -----END PUBLIC KEY-----
+                    """.trimIndent().trim(),
+            )
+            val iacaKeyPriv = EcPrivateKey.fromPem(
+                """
+                        -----BEGIN PRIVATE KEY-----
+                        MIG2AgEAMBAGByqGSM49AgEGBSuBBAAiBIGeMIGbAgEBBDCcRuzXW3pW2h9W8pu5
+                        /CSR6JSnfnZVATq+408WPoNC3LzXqJEQSMzPsI9U1q+wZ2yhZANiAAT5APJ7vSbY
+                        7SWU9cyNWPFVnPebmTpqBP7CKH4vv1vuPKpSX32xt5SenFosP5yYHccre3CQDt+Z
+                        UlKhsFz70IOGSHebHqf5igflG6VpJZOFYF8zJGOx9U4OSiwcsIOds9U=
+                        -----END PRIVATE KEY-----
+                    """.trimIndent().trim(),
+                iacaKeyPub
+            )
 
-        val iacaCert = MdocUtil.generateIacaCertificate(
-            iacaKey = AsymmetricKey.anonymous(iacaKey),
-            subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST IACA"),
-            serial = ASN1Integer.fromRandom(numBits = 128),
-            validFrom = iacaValidFrom,
-            validUntil = iacaValidUntil,
-            issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
-            crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
-        )
+            iacaCert = MdocUtil.generateIacaCertificate(
+                iacaKey = AsymmetricKey.anonymous(iacaKeyPriv),
+                subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST IACA"),
+                serial = ASN1Integer.fromRandom(numBits = 128),
+                validFrom = iacaValidFrom,
+                validUntil = iacaValidUntil,
+                issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
+                crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
+            )
+            this.iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaKeyPriv)
+        }
 
-        val dsPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
-        val dsCert = MdocUtil.generateDsCertificate(
-            iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaKey),
-            dsKey = dsPrivateKey.publicKey,
-            subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST DS"),
-            serial = ASN1Integer.fromRandom(numBits = 128),
-            validFrom = dsValidFrom,
-            validUntil = dsValidUntil,
-        )
-        dsKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert)), dsPrivateKey)
+        if (!this::dsKey.isInitialized) {
+            val dsPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
+            val dsCert = MdocUtil.generateDsCertificate(
+                iacaKey = this.iacaKey,
+                dsKey = dsPrivateKey.publicKey,
+                subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST DS"),
+                serial = ASN1Integer.fromRandom(numBits = 128),
+                validFrom = dsValidFrom,
+                validUntil = dsValidUntil,
+            )
+            dsKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(dsCert)), dsPrivateKey)
+        }
 
         val readerRootValidFrom = validFrom
         val readerRootValidUntil = validUntil
@@ -232,11 +256,17 @@ class DocumentStoreTestHarness {
     suspend fun provisionMdoc(
         displayName: String,
         docType: String,
-        data: Map<String, List<Pair<String, DataItem>>>
+        data: Map<String, List<Pair<String, DataItem>>>,
+        dsKey: AsymmetricKey.X509Certified? = null,
+        readerIdentifiers: List<ByteString> = emptyList(),
+        keyAuthorizedNamespaces: List<String> = emptyList(),
+        keyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     ): Document {
         initialize()
+        val effectiveDsKey = dsKey ?: this.dsKey
         val document = documentStore.createDocument(
-            displayName = displayName
+            displayName = displayName,
+            readerIdentifiers = readerIdentifiers,
         )
         val issuerNamespaces = buildIssuerNamespaces {
             for ((nsName, listOfClaims) in data) {
@@ -254,7 +284,9 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
-            dsKey = dsKey,
+            dsKey = effectiveDsKey,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces,
+            keyAuthorizedDataElements = keyAuthorizedDataElements,
         )
         return document
     }
@@ -262,11 +294,15 @@ class DocumentStoreTestHarness {
     suspend fun provisionSdJwtVc(
         displayName: String,
         vct: String,
-        data: List<Pair<String, JsonElement>>
+        data: List<Pair<String, JsonElement>>,
+        dsKey: AsymmetricKey.X509Certified? = null,
+        readerIdentifiers: List<ByteString> = emptyList(),
     ): Document {
         initialize()
+        val effectiveDsKey = dsKey ?: this.dsKey
         val document = documentStore.createDocument(
-            displayName = displayName
+            displayName = displayName,
+            readerIdentifiers = readerIdentifiers,
         )
         val identityAttributes = buildJsonObject {
             for ((claimName, claimValue) in data) {
@@ -280,7 +316,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
-            dsKey = dsKey,
+            dsKey = effectiveDsKey,
         )
         return document
     }
@@ -446,7 +482,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
-            dsKey = dsKey,
+            dsKey = dsKey
         )
     }
 
@@ -458,6 +494,8 @@ class DocumentStoreTestHarness {
         validFrom: Instant,
         validUntil: Instant,
         dsKey: AsymmetricKey.X509Certified,
+        keyAuthorizedNamespaces: List<String> = emptyList(),
+        keyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     ) {
         // Create authentication keys...
         val mdocCredential = MdocCredential.create(
@@ -480,6 +518,8 @@ class DocumentStoreTestHarness {
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = mdocCredential.getAttestation().publicKey,
+            deviceKeyAuthorizedNamespaces = keyAuthorizedNamespaces,
+            deviceKeyAuthorizedDataElements = keyAuthorizedDataElements,
         )
         val taggedEncodedMso = Cbor.encode(
             Tagged(

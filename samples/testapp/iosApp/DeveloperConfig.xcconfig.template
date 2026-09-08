@@ -1,3 +1,23 @@
-// Set this to ID for your XCode Development Team, without quotes
-//
+// Local Xcode signing settings. This file is intentionally gitignored.
+
+// Set this to the ID for your Xcode Development Team, without quotes.
 DEVELOPMENT_TEAM = 
+
+// Set this to a bundle identifier registered to your Apple Developer account,
+// without the DocumentProviderExtension suffix. The extension target appends
+// .DocumentProviderExtension automatically.
+LOCAL_BUNDLE_ID =
+
+// Set this to an App Group registered to your Apple Developer account. TestApp
+// and DocumentProviderExtension use the same group for shared storage.
+APP_GROUP_ID =
+
+// Set this to a bundle identifier registered to your Apple Developer account
+// for SwiftTestApp, without the IdentityDocumentProviderExtension suffix. The
+// extension target appends .IdentityDocumentProviderExtension automatically.
+SWIFT_TESTAPP_BUNDLE_ID =
+
+// Set this to an App Group registered to your Apple Developer account.
+// SwiftTestApp and IdentityDocumentProviderExtension use the same group for
+// shared storage.
+SWIFT_TESTAPP_APP_GROUP_ID =

@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.navigation.NavController
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -90,6 +91,7 @@ import org.multipaz.document.DocumentBadge
 import org.multipaz.document.DocumentBadgeColor
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.buildDocumentStore
+import org.multipaz.document.setIosMdocDoctypes
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.addKnownTypes
 import org.multipaz.eventlogger.SimpleEventLogger
@@ -107,6 +109,10 @@ import org.multipaz.prompt.promptModelSilentConsent
 import org.multipaz.provisioning.DocumentProvisioningHandler
 import org.multipaz.provisioning.ProvisioningModel
 import org.multipaz.request.Requester
+import org.multipaz.request.RequesterIdentity
+import org.multipaz.request.TrustedRequesterIdentity
+import org.multipaz.revocation.CachingRevocationChecker
+import org.multipaz.revocation.RevocationChecker
 import org.multipaz.secure_area_test_app.ui.CloudSecureAreaScreen
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.cloud.CloudSecureArea
@@ -128,6 +134,7 @@ import org.multipaz.testapp.ui.DocumentViewerScreen
 import org.multipaz.testapp.ui.EventLoggerScreen
 import org.multipaz.testapp.ui.EventViewerScreen
 import org.multipaz.testapp.ui.FloatingItemListScreen
+import org.multipaz.testapp.ui.LazyFloatingItemListScreen
 import org.multipaz.testapp.ui.GenerateMpzPassScreen
 import org.multipaz.testapp.ui.IsoMdocMultiDeviceTestingScreen
 import org.multipaz.testapp.ui.IsoMdocProximityReadingScreen
@@ -198,6 +205,8 @@ class App private constructor (val promptModel: PromptModel) {
     lateinit var documentStore: DocumentStore
     lateinit var documentModel: DocumentModel
 
+    lateinit var revocationChecker: RevocationChecker
+
     lateinit var iacaKey: AsymmetricKey.X509Certified
 
     lateinit var readerRootKey: AsymmetricKey.X509Certified
@@ -265,28 +274,37 @@ class App private constructor (val promptModel: PromptModel) {
         )
     }
 
-    suspend fun resolveTrust(requester: Requester): TrustMetadata? {
+    suspend fun resolveTrust(requester: Requester): TrustedRequesterIdentity? {
+        // Pick the first trusted
+        for (requesterIdentity in requester.requesterIdentities) {
+            val trustMetadata = resolveTrust(requesterIdentity) ?: continue
+            return TrustedRequesterIdentity(requesterIdentity, trustMetadata)
+        }
+        return null
+    }
+
+    private suspend fun resolveTrust(requesterIdentity: RequesterIdentity): TrustMetadata? {
         // If available, use dynamic metadata in Multipaz X509 extension for a Google account... Since this is
         // TestApp also trust the "Untrusted Devices" CA (production wallets would not want to do that)
-        val rootPublicKey = requester.certChain?.certificates?.last()?.ecPublicKey
+        val rootPublicKey = requesterIdentity.certChain.certificates.last().ecPublicKey
         if (rootPublicKey == MULTIPAZ_IDENTITY_READER_CERT_PUBLIC_KEY ||
             rootPublicKey == MULTIPAZ_IDENTITY_READER_CERT_UNTRUSTED_DEVICES_PUBLIC_KEY) {
-            val readerCert = requester.certChain!!.certificates.first()
+            val readerCert = requesterIdentity.certChain.certificates.first()
             readerCert.getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid)?.let { extData ->
                 MultipazExtension.fromCbor(extData).googleAccount?.let { googleAccount ->
                     if (googleAccount.emailAddress != null && googleAccount.profilePictureUri != null) {
                         return TrustMetadata(
-                            displayName = googleAccount.emailAddress,
-                            displayIconUrl = googleAccount.profilePictureUri,
-                            disclaimer = "The email and picture shown are from the requester's Google Account. " +
-                                    "This information has been verified but may not be their real identity"
-                        )
+                                displayName = googleAccount.emailAddress,
+                                displayIconUrl = googleAccount.profilePictureUri,
+                                disclaimer = "The email and picture shown are from the requester's Google Account. " +
+                                        "This information has been verified but may not be their real identity",
+                            )
                     }
                 }
             }
         }
         // Otherwise use our readerTrustManager...
-        requester.certChain?.let { certChain ->
+        requesterIdentity.certChain.let { certChain ->
             val trustResult = readerTrustManager.verify(certChain.certificates)
             if (trustResult.isTrusted) {
                 return trustResult.trustPoints.first().metadata
@@ -309,6 +327,7 @@ class App private constructor (val promptModel: PromptModel) {
                 Pair(::documentTypeRepositoryInit, "documentTypeRepositoryInit"),
                 Pair(::documentStoreInit, "documentStoreInit"),
                 Pair(::documentModelInit, "documentModelInit"),
+                Pair(::revocationCheckerInit, "revocationCheckerInit"),
                 Pair(::keyStorageInit, "keyStorageInit"),
                 Pair(::iacaInit, "iacaInit"),
                 Pair(::readerRootInit, "readerRootInit"),
@@ -391,6 +410,13 @@ class App private constructor (val promptModel: PromptModel) {
             documentStore = documentStore,
             documentTypeRepository = documentTypeRepository,
             badgeFunction = ::getBadgesForDocument
+        )
+    }
+
+    private suspend fun revocationCheckerInit() {
+        revocationChecker = CachingRevocationChecker(
+            storage = TestAppConfiguration.storage,
+            httpClient = HttpClient(TestAppConfiguration.httpClientEngineFactory)
         )
     }
 
@@ -659,7 +685,7 @@ class App private constructor (val promptModel: PromptModel) {
                     identifier = "${idCount++}",
                     metadata = TrustMetadata(
                         displayName = "Multipaz TestApp",
-                        displayIcon = ByteString(Res.readBytes("files/utopia-brewery.png")),
+                        displayIcon = ByteString(Res.readBytes("files/utopia-marketplace.png")),
                         privacyPolicyUrl = "https://apps.multipaz.org"
                     ),
                     certificate = readerRootKey.certChain.certificates.first(),
@@ -711,6 +737,28 @@ class App private constructor (val promptModel: PromptModel) {
                         privacyPolicyUrl = "https://apps.multipaz.org"
                     ),
                     certificate = MULTIPAZ_IDENTITY_READER_CERT_UNTRUSTED_DEVICES,
+                ))
+                // "secondary" verifier identity for multisigned request testing
+                add(TrustEntryX509Cert(
+                    identifier = "Secondary Verifier Identity",
+                    metadata = TrustMetadata(
+                        displayName = "Secondary Verifier Identity",
+                        privacyPolicyUrl = "https://apps.multipaz.org"
+                    ),
+                    certificate = X509Cert.fromPem("""
+                        -----BEGIN CERTIFICATE-----
+                        MIICDTCCAZOgAwIBAgIQMCloGIxTSblptvBQkKLg7zAKBggqhkjOPQQDAzAZMRcwFQYDVQQDDA5z
+                        ZWNvbmRhcnkgcm9vdDAeFw0yNjA2MjIwMjMzMjVaFw0zMTA2MjIwMjMzMjVaMBkxFzAVBgNVBAMM
+                        DnNlY29uZGFyeSByb290MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAESXo1mV/8EwV2azIIJt12vO4s
+                        9QUa5sGr1k0C9Or/0063S92gjzQWRsqs6MgO4DfxA/C4alEPnUZ0Nl0ylWXsVISY1oiWZCIzLz+4
+                        Trdt95RtZDis2pTJxvqIDSBmoShbo4GfMIGcMA4GA1UdDwEB/wQEAwIBBjASBgNVHRMBAf8ECDAG
+                        AQH/AgEAMDYGA1UdHwQvMC0wK6ApoCeGJWh0dHBzOi8vcmVhZGVyLWNhLmV4YW1wbGUuY29tL2Ny
+                        bC5jcmwwHQYDVR0OBBYEFFUcUqsC/ET2XyVpb0NO9e7RxDYaMB8GA1UdIwQYMBaAFFUcUqsC/ET2
+                        XyVpb0NO9e7RxDYaMAoGCCqGSM49BAMDA2gAMGUCMQClOf4ArIb5uNM353fjt5XMl5UlNlGDoywj
+                        c7Suz6E9PHlLsWGtqO3xDHaJGWBcd5UCMHGzTCI4qATnnFUoq6d5yDIewrUpl2NkhGbXqJvXJ9fB
+                        F7h0WtDmwDVbFBdororOhg==
+                        -----END CERTIFICATE-----
+                    """.trimIndent())
                 ))
                 // Some reader identities from the Multipaz Identity Reader as distributed from apps.multipaz.org
                 for ((displayName: String, displayIcon: ByteString?, cert: X509Cert) in listOf(
@@ -773,6 +821,15 @@ class App private constructor (val promptModel: PromptModel) {
     private suspend fun digitalCredentialsInit() {
         digitalCredentials = DigitalCredentials.getDefault()
         if (digitalCredentials.registerAvailable) {
+            // Keep in sync with samples/testapp/iosApp/TestApp/TestApp.entitlements
+            documentStore.setIosMdocDoctypes(
+                listOf(
+                    "eu.europa.ec.av.1",
+                    "eu.europa.ec.eudi.pid.1",
+                    "org.iso.18013.5.1.mDL",
+                    "org.iso.23220.photoid.1",
+                )
+            )
             try {
                 digitalCredentials.register(
                     documentStore = documentStore,
@@ -840,7 +897,8 @@ class App private constructor (val promptModel: PromptModel) {
             digitalCredentials.register(
                 documentStore = documentStore,
                 documentTypeRepository = documentTypeRepository,
-                selectedProtocols = settingsModel.dcApiProtocols.value
+                selectedProtocols = settingsModel.dcApiProtocols.value,
+                forceRegistration = true
             )
         } catch (e: Exception) {
             if (e is CancellationException) throw e
@@ -1144,7 +1202,7 @@ class App private constructor (val promptModel: PromptModel) {
                                     try {
                                         TestAppConfiguration.launchQuickAccessWallet(
                                             source = getPresentmentSource(),
-                                            initiallySelectedDocumentId = settingsModel.currentlyFocusedDocumentId.value
+                                            initiallySelectedDocumentId = null
                                         )
                                     } catch (e: Exception) {
                                         if (e is CancellationException) throw e
@@ -1251,6 +1309,8 @@ class App private constructor (val promptModel: PromptModel) {
                         val destination = backStackEntry.toRoute<CredentialViewerDestination>()
                         CredentialViewerScreen(
                             documentModel = documentModel,
+                            revocationChecker = revocationChecker,
+                            issuerTrustManager = issuerTrustManager,
                             documentId = destination.documentId,
                             credentialId = destination.credentialId,
                             showToast = ::showToast,
@@ -1689,8 +1749,7 @@ class App private constructor (val promptModel: PromptModel) {
                     }
                 ) { backStackEntry ->
                     val destination = backStackEntry.toRoute<VerticalCardListDestination>()
-                    val overrideAnim = backStackEntry.savedStateHandle.get<Boolean>("animateListTransitions")
-                    verticalCardListState.animateListTransitions = overrideAnim ?: destination.animateListTransitions
+                    val isPreviousScreenCardList = navController.previousBackStackEntry?.destination?.hasRoute<VerticalCardListDestination>() == true
 
                     // Note: VerticalCardListScreen has its own AppBar
                     VerticalCardListScreen(
@@ -1698,15 +1757,13 @@ class App private constructor (val promptModel: PromptModel) {
                         documentModel = documentModel,
                         settingsModel = settingsModel,
                         focusedDocumentId = destination.focusedDocumentId,
+                        animateListTransitions = destination.animateListTransitions,
+                        isPreviousScreenCardList = isPreviousScreenCardList,
                         state = verticalCardListState,
                         onDocumentFocused = { documentId ->
                             navController.navigate(VerticalCardListDestination(documentId, animateListTransitions = true))
                         },
-                        onDocumentUnfocused = {
-                            val previousEntry = navController.previousBackStackEntry
-                            if (previousEntry?.destination?.route?.contains("VerticalCardListDestination") == true) {
-                                previousEntry.savedStateHandle["animateListTransitions"] = true
-                            }
+                        onNavigateBack = {
                             navController.navigateUp()
                         },
                         onViewDocument = { documentId ->
@@ -1730,9 +1787,6 @@ class App private constructor (val promptModel: PromptModel) {
                                     animateListTransitions = false
                                 ))
                             }
-                        },
-                        onBackPressed = {
-                            navController.navigateUp()
                         }
                     )
                 }
@@ -1793,6 +1847,16 @@ class App private constructor (val promptModel: PromptModel) {
                 composable<FloatingItemListDestination> { backstackEntry ->
                     WithAppBar(navController, "FloatingItemList examples") {
                         FloatingItemListScreen(
+                            showToast = { message -> showToast(message) },
+                            onNavigateToLazyFloatingItemList = {
+                                navController.navigate(LazyFloatingItemListDestination)
+                            }
+                        )
+                    }
+                }
+                composable<LazyFloatingItemListDestination> { backstackEntry ->
+                    WithAppBar(navController, "LazyFloatingItemList example") {
+                        LazyFloatingItemListScreen(
                             showToast = { message -> showToast(message) },
                         )
                     }

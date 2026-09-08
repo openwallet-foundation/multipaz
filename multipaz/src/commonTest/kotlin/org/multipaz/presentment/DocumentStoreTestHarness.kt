@@ -31,6 +31,7 @@ import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
+import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
@@ -46,6 +47,7 @@ import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.prompt.promptModelSilentConsent
+import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.securearea.SecureAreaRepository
@@ -96,6 +98,8 @@ class DocumentStoreTestHarness {
     lateinit var validFrom: Instant
     lateinit var validUntil: Instant
 
+    lateinit var iacaCert: X509Cert
+    lateinit var iacaKey: AsymmetricKey.X509Certified
     lateinit var dsKey: AsymmetricKey.X509Certified
     lateinit var readerRootKey: AsymmetricKey.X509Certified
 
@@ -146,10 +150,14 @@ class DocumentStoreTestHarness {
             documentStore = documentStore,
             documentTypeRepository = documentTypeRepository,
             resolveTrustFn = { requester ->
-                requester.certChain?.let {
-                    val trustResult = readerTrustManager.verify(chain = it.certificates)
-                    if (trustResult.isTrusted) {
-                        return@SimplePresentmentSource trustResult.trustPoints.firstOrNull()?.metadata
+                for (requesterIdentity in requester.requesterIdentities) {
+                    requesterIdentity.certChain.let { certChain ->
+                        val trustResult = readerTrustManager.verify(chain = certChain.certificates)
+                        if (trustResult.isTrusted) {
+                            return@SimplePresentmentSource trustResult.trustPoints.firstOrNull()?.metadata?.let {
+                                TrustedRequesterIdentity(requesterIdentity, it)
+                            }
+                        }
                     }
                 }
                 null
@@ -192,7 +200,7 @@ class DocumentStoreTestHarness {
             iacaKeyPub
         )
 
-        val iacaCert = MdocUtil.generateIacaCertificate(
+        iacaCert = MdocUtil.generateIacaCertificate(
             iacaKey = AsymmetricKey.anonymous(iacaKey),
             subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST IACA"),
             serial = ASN1Integer.fromRandom(numBits = 128),
@@ -201,10 +209,11 @@ class DocumentStoreTestHarness {
             issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
             crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
         )
+        this.iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaKey)
 
         val dsPrivateKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val dsCert = MdocUtil.generateDsCertificate(
-            iacaKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaKey),
+            iacaKey = this.iacaKey,
             dsKey = dsPrivateKey.publicKey,
             subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST DS"),
             serial = ASN1Integer.fromRandom(numBits = 128),
@@ -232,7 +241,9 @@ class DocumentStoreTestHarness {
         isInitialized = true
     }
 
-    suspend fun provisionStandardDocuments() {
+    suspend fun provisionStandardDocuments(
+        keyAuthorizedNamespaces: List<String> = listOf()
+    ) {
         initialize()
         provisionTestDocuments(
             documentStore = documentStore,
@@ -240,17 +251,24 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
     }
 
     suspend fun provisionMdoc(
         displayName: String,
         docType: String,
-        data: Map<String, List<Pair<String, DataItem>>>
+        data: Map<String, List<Pair<String, DataItem>>>,
+        keyAuthorizedNamespaces: List<String> = listOf(),
+        keyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
+        dsKey: AsymmetricKey.X509Certified? = null,
+        readerIdentifiers: List<ByteString> = emptyList(),
     ): Document {
         initialize()
+        val effectiveDsKey = dsKey ?: this.dsKey
         val document = documentStore.createDocument(
-            displayName = displayName
+            displayName = displayName,
+            readerIdentifiers = readerIdentifiers,
         )
         val issuerNamespaces = buildIssuerNamespaces {
             for ((nsName, listOfClaims) in data) {
@@ -268,7 +286,9 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
-            dsKey = dsKey,
+            dsKey = effectiveDsKey,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces,
+            keyAuthorizedDataElements = keyAuthorizedDataElements,
         )
         return document
     }
@@ -276,11 +296,15 @@ class DocumentStoreTestHarness {
     suspend fun provisionSdJwtVc(
         displayName: String,
         vct: String,
-        data: List<Pair<String, JsonElement>>
+        data: List<Pair<String, JsonElement>>,
+        dsKey: AsymmetricKey.X509Certified? = null,
+        readerIdentifiers: List<ByteString> = emptyList(),
     ): Document {
         initialize()
+        val effectiveDsKey = dsKey ?: this.dsKey
         val document = documentStore.createDocument(
-            displayName = displayName
+            displayName = displayName,
+            readerIdentifiers = readerIdentifiers,
         )
         val identityAttributes = buildJsonObject {
             for ((claimName, claimValue) in data) {
@@ -294,7 +318,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
-            dsKey = dsKey,
+            dsKey = effectiveDsKey,
         )
         return document
     }
@@ -305,6 +329,7 @@ class DocumentStoreTestHarness {
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
+        keyAuthorizedNamespaces: List<String>
     ) {
         docMdl = provisionDocument(
             documentStore = documentStore,
@@ -316,6 +341,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
         docEuPid = provisionDocument(
             documentStore = documentStore,
@@ -333,6 +359,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
         docEuPid2 = provisionDocument(
             documentStore = documentStore,
@@ -350,6 +377,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
         docPhotoId = provisionDocument(
             documentStore = documentStore,
@@ -365,6 +393,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
         docPhotoId2 = provisionDocument(
             documentStore = documentStore,
@@ -380,6 +409,7 @@ class DocumentStoreTestHarness {
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
     }
 
@@ -393,6 +423,7 @@ class DocumentStoreTestHarness {
         signedAt: Instant,
         validFrom: Instant,
         validUntil: Instant,
+        keyAuthorizedNamespaces: List<String>
     ): Document {
         val document = documentStore.createDocument(
             displayName = displayName
@@ -407,6 +438,7 @@ class DocumentStoreTestHarness {
                 validFrom = validFrom,
                 validUntil = validUntil,
                 dsKey = dsKey,
+                keyAuthorizedNamespaces = keyAuthorizedNamespaces
             )
         }
 
@@ -433,6 +465,7 @@ class DocumentStoreTestHarness {
         validFrom: Instant,
         validUntil: Instant,
         dsKey: AsymmetricKey.X509Certified,
+        keyAuthorizedNamespaces: List<String> 
     ) {
         val issuerNamespaces = buildIssuerNamespaces {
             for ((nsName, ns) in documentType.mdocDocumentType?.namespaces!!) {
@@ -461,6 +494,7 @@ class DocumentStoreTestHarness {
             validFrom = validFrom,
             validUntil = validUntil,
             dsKey = dsKey,
+            keyAuthorizedNamespaces = keyAuthorizedNamespaces
         )
     }
 
@@ -472,6 +506,8 @@ class DocumentStoreTestHarness {
         validFrom: Instant,
         validUntil: Instant,
         dsKey: AsymmetricKey.X509Certified,
+        keyAuthorizedNamespaces: List<String>,
+        keyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
     ) {
         // Create authentication keys...
         val mdocCredential = MdocCredential.create(
@@ -494,6 +530,8 @@ class DocumentStoreTestHarness {
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
             deviceKey = mdocCredential.getAttestation().publicKey,
+            deviceKeyAuthorizedNamespaces = keyAuthorizedNamespaces,
+            deviceKeyAuthorizedDataElements = keyAuthorizedDataElements,
         )
         val taggedEncodedMso = Cbor.encode(Tagged(
             Tagged.ENCODED_CBOR,
@@ -550,7 +588,7 @@ class DocumentStoreTestHarness {
         }
 
         val identityAttributes = buildJsonObject {
-            for ((claimName, attribute) in documentType.jsonDocumentType!!.claims) {
+            for ((claimName, attribute) in documentType.jsonDocumentType.claims) {
                 // Skip sub-claims.
                 if (claimName.contains('.')) {
                     continue
@@ -571,7 +609,7 @@ class DocumentStoreTestHarness {
 
         addSdJwtVcCredentialWithData(
             document = document,
-            vct = documentType.jsonDocumentType!!.vct,
+            vct = documentType.jsonDocumentType.vct,
             identityAttributes = identityAttributes,
             signedAt = signedAt,
             validFrom = validFrom,
