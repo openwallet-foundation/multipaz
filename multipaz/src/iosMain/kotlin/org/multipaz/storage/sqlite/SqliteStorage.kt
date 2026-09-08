@@ -1,6 +1,7 @@
 package org.multipaz.storage.sqlite
 
 import androidx.sqlite.SQLiteConnection
+import androidx.sqlite.execSQL
 import org.multipaz.storage.Storage
 import org.multipaz.storage.base.BaseStorage
 import org.multipaz.storage.base.BaseStorageTable
@@ -9,6 +10,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
 import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.coroutines.CoroutineContext
 
 /**
@@ -31,8 +34,27 @@ open class SqliteStorage(
     private val connection: SQLiteConnection,
     clock: Clock = Clock.System,
     private val coroutineContext: CoroutineContext = Dispatchers.IO,
-    internal val keySize: Int = 9
+    internal val keySize: Int = 9,
+    val busyTimeout: Duration = 5.seconds
 ): BaseStorage(clock) {
+    init {
+        val busyTimeoutMs = busyTimeout.inWholeMilliseconds
+        require(busyTimeoutMs >= 0) { "busyTimeout must not be negative" }
+        connection.execSQL("PRAGMA busy_timeout = $busyTimeoutMs")
+    }
+
+    constructor(
+        connection: SQLiteConnection,
+        clock: Clock = Clock.System,
+        coroutineContext: CoroutineContext = Dispatchers.IO,
+        keySize: Int = 9
+    ): this(
+        connection = connection,
+        clock = clock,
+        coroutineContext = coroutineContext,
+        keySize = keySize,
+        busyTimeout = 5.seconds
+    )
     override suspend fun createTable(tableSpec: StorageTableSpec): BaseStorageTable {
         val table = SqliteStorageTable(this, tableSpec)
         table.init()

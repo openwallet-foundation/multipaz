@@ -1,29 +1,39 @@
 package org.multipaz.storage
 
+import androidx.sqlite.SQLiteException
 import androidx.sqlite.driver.NativeSQLiteDriver
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.execSQL
 import kotlinx.cinterop.ExperimentalForeignApi
 import org.multipaz.storage.base.BaseStorageTable
 import org.multipaz.util.toHex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.newFixedThreadPoolContext
 import kotlinx.coroutines.newSingleThreadContext
 import kotlin.test.Test
 import kotlinx.coroutines.runBlocking
 import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.decodeToString
 import kotlinx.io.bytestring.encodeToByteString
 import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.storage.ios.IosStorage
 import org.multipaz.storage.sqlite.SqliteStorage
 import platform.Foundation.NSCachesDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
+import platform.Foundation.NSURL
 import platform.Foundation.NSUserDomainMask
 import kotlin.random.Random
 import kotlin.test.BeforeTest
@@ -34,7 +44,6 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.minutes
 
 class IosStorageTest {
     @BeforeTest
@@ -533,6 +542,160 @@ class IosStorageTest {
         }
     }
 
+    @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class, ExperimentalForeignApi::class)
+    @Test
+    fun testBusyTimeout() = runBlocking {
+        val paths = NSSearchPathForDirectoriesInDomains(
+            directory = NSCachesDirectory,
+            domainMask = NSUserDomainMask,
+            expandTilde = true
+        )
+        if (paths.isEmpty()) {
+            throw IllegalStateException("No caches directory")
+        }
+        val dbPath = "${paths[0]}/testBusyTimeout_${uniqueSuffix()}.db"
+        val dbUrl = NSURL.fileURLWithPath(dbPath)
+        val fileManager = NSFileManager.defaultManager
+        if (fileManager.fileExistsAtPath(dbPath)) {
+            fileManager.removeItemAtPath(dbPath, null)
+        }
+
+        try {
+            val tableSpec = StorageTableSpec(
+                name = "TestBusy",
+                supportPartitions = false,
+                supportExpiration = false
+            )
+
+            // Verify default busy_timeout pragma is 5000ms
+            val defaultStorage = IosStorage(
+                storageFileUrl = dbUrl,
+                excludeFromBackup = false
+            )
+            assertEquals(5.seconds, defaultStorage.busyTimeout)
+            defaultStorage.withConnection { conn ->
+                conn.prepare("PRAGMA busy_timeout").use { stmt ->
+                    assertTrue(stmt.step())
+                    assertEquals(5000L, stmt.getLong(0))
+                }
+            }
+
+            // Initialize table
+            val defaultTable = defaultStorage.getTable(tableSpec)
+            defaultTable.insert("k1", "v1".encodeToByteString())
+
+            // Test 1: With busyTimeout = Duration.ZERO, a second connection encountering
+            // contention immediately throws SQLiteException (reproducing issue #1979).
+            val zeroTimeoutStorage1 = IosStorage(
+                storageFileUrl = dbUrl,
+                excludeFromBackup = false,
+                busyTimeout = Duration.ZERO
+            )
+            val zeroTimeoutStorage2 = IosStorage(
+                storageFileUrl = dbUrl,
+                excludeFromBackup = false,
+                busyTimeout = Duration.ZERO
+            )
+            val zeroTable2 = zeroTimeoutStorage2.getTable(tableSpec)
+
+            zeroTimeoutStorage1.withConnection { conn1 ->
+                conn1.execSQL("BEGIN EXCLUSIVE TRANSACTION")
+                try {
+                    // Contended read immediately fails with SQLiteException because busy_timeout is 0
+                    assertFailsWith<SQLiteException> {
+                        zeroTable2.get("k1")
+                    }
+                } finally {
+                    conn1.execSQL("ROLLBACK")
+                }
+            }
+
+            // Test 2: With default busyTimeout (5s), connection 2 waits for connection 1
+            // to release the lock and succeeds without throwing.
+            val lockHolderStorage = IosStorage(
+                storageFileUrl = dbUrl,
+                excludeFromBackup = false
+            )
+            val waitingStorage = IosStorage(
+                storageFileUrl = dbUrl,
+                excludeFromBackup = false
+            )
+            val waitingTable = waitingStorage.getTable(tableSpec)
+
+            val lockJob = launch(Dispatchers.Default) {
+                lockHolderStorage.withConnection { conn ->
+                    conn.execSQL("BEGIN EXCLUSIVE TRANSACTION")
+                    delay(200)
+                    conn.execSQL("COMMIT")
+                }
+            }
+
+            // Give lockJob a moment to acquire the exclusive lock
+            delay(50)
+
+            // Contended read: waits until lockJob commits after 200ms, then succeeds
+            val data = waitingTable.get("k1")
+            assertEquals("v1".encodeToByteString(), data)
+            lockJob.join()
+
+            // Test 3: If lock is held longer than busyTimeout, it times out and throws SQLiteException.
+            val shortTimeoutStorage = IosStorage(
+                storageFileUrl = dbUrl,
+                excludeFromBackup = false,
+                busyTimeout = 100.milliseconds
+            )
+            val shortTable = shortTimeoutStorage.getTable(tableSpec)
+
+            val longLockJob = launch(Dispatchers.Default) {
+                lockHolderStorage.withConnection { conn ->
+                    conn.execSQL("BEGIN EXCLUSIVE TRANSACTION")
+                    delay(500)
+                    conn.execSQL("COMMIT")
+                }
+            }
+
+            delay(50)
+
+            // Lock is held for 500ms, but timeout is only 100ms -> must fail
+            assertFailsWith<SQLiteException> {
+                shortTable.get("k1")
+            }
+            longLockJob.join()
+
+        } finally {
+            if (fileManager.fileExistsAtPath(dbPath)) {
+                fileManager.removeItemAtPath(dbPath, null)
+            }
+        }
+    }
+
+    @OptIn(ExperimentalForeignApi::class)
+    @Test
+    fun testSqliteStorageBusyTimeout() = runBlocking {
+        val paths = NSSearchPathForDirectoriesInDomains(
+            directory = NSCachesDirectory,
+            domainMask = NSUserDomainMask,
+            expandTilde = true
+        )
+        val dbPath = "${paths[0]}/testSqliteStorage_${uniqueSuffix()}.db"
+        val fileManager = NSFileManager.defaultManager
+        try {
+            val connection = NativeSQLiteDriver().open(dbPath)
+            val storage = SqliteStorage(connection)
+            assertEquals(5.seconds, storage.busyTimeout)
+            storage.withConnection { conn ->
+                conn.prepare("PRAGMA busy_timeout").use { stmt ->
+                    assertTrue(stmt.step())
+                    assertEquals(5000L, stmt.getLong(0))
+                }
+            }
+        } finally {
+            if (fileManager.fileExistsAtPath(dbPath)) {
+                fileManager.removeItemAtPath(dbPath, null)
+            }
+        }
+    }
+
     private fun withStorage(block: suspend CoroutineScope.(storage: Storage) -> Unit) {
         for (storage in transientStorageList) {
             runBlocking {
@@ -617,10 +780,9 @@ private fun createPersistentStorage(name: String, testClock: Clock): Storage? {
             NSFileManager.defaultManager.removeItemAtPath(dbPath, null)
         }
     }
-    return SqliteStorage(
-        connection = NativeSQLiteDriver().open(dbPath),
-        clock = testClock,
-        // native sqlite crashes when used with Dispatchers.IO
-        coroutineContext = newSingleThreadContext("DB")
+    return IosStorage(
+        storageFileUrl = NSURL.fileURLWithPath(dbPath),
+        excludeFromBackup = false,
+        clock = testClock
     )
 }
