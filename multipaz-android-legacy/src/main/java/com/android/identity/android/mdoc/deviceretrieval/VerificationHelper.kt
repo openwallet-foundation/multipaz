@@ -693,6 +693,12 @@ class VerificationHelper internal constructor(
                     reportDeviceEngagementReceived(parsedCms)
                 } catch (t: Throwable) {
                     reportError(t)
+                } finally {
+                    try {
+                        isoDep?.close()
+                    } catch (ignored: Throwable) {
+                    }
+                    nfcIsoDep = null
                 }
             }
         }
