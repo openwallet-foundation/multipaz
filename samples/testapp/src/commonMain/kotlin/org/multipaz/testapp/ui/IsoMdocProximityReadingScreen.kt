@@ -82,6 +82,9 @@ import org.multipaz.util.fromHex
 import org.multipaz.utopia.knowntypes.wellKnownMultipleDocumentRequests
 import org.multipaz.verification.VerificationSession
 import org.multipaz.eventlogger.EventVerification
+import org.multipaz.eventlogger.EventVerificationIso18013Proximity
+import org.multipaz.mdoc.engagement.EngagementType
+import org.multipaz.mdoc.engagement.toEngagementType
 import kotlin.time.Clock
 import kotlin.time.Duration
 
@@ -343,7 +346,15 @@ fun IsoMdocProximityReadingScreen(
                                 val deviceResponse = Cbor.decode(readerMostRecentDeviceResponse.value!!)
                                 val session = readerSession.value!!
                                 val presentmentRecord = session.processIso18013ProximityResponse(deviceResponse = deviceResponse)
-                                app.eventLogger.addEventAsync(EventVerification(presentmentRecord = presentmentRecord))
+                                app.eventLogger.addEventAsync(
+                                    EventVerificationIso18013Proximity(
+                                        presentmentRecord = presentmentRecord,
+                                        engagementType = EngagementType.QR_CODE,
+                                        durationEngagementReceivedToRequestSent = durationEngagementReceivedToRequestSent.value,
+                                        durationRequestSentToResponseReceived = durationRequestSentToResponseReceived.value,
+                                        durationScanningTime = readerTransport.value?.scanningTime,
+                                    )
+                                )
                                 showResponse(
                                     /* vpToken = */ null,
                                     /* deviceResponse = */ deviceResponse,
@@ -720,7 +731,17 @@ fun IsoMdocProximityReadingScreen(
                                     val deviceResponse = Cbor.decode(readerMostRecentDeviceResponse.value!!)
                                     val session = readerSession.value!!
                                     val presentmentRecord = session.processIso18013ProximityResponse(deviceResponse = deviceResponse)
-                                    app.eventLogger.addEventAsync(EventVerification(presentmentRecord = presentmentRecord))
+                                    app.eventLogger.addEventAsync(
+                                        EventVerificationIso18013Proximity(
+                                            presentmentRecord = presentmentRecord,
+                                            engagementType = scanResult.type.toEngagementType(),
+                                            durationNfcTapToEngagement = scanResult.processingDuration,
+                                            durationEngagementReceivedToRequestSent = durationEngagementReceivedToRequestSent.value,
+                                            durationRequestSentToResponseReceived = durationRequestSentToResponseReceived.value,
+                                            durationScanningTime = scanResult.transport.scanningTime,
+                                            nfcHybridTransportStats = (scanResult.transport as? NfcHybridTransportMdocReader)?.stats,
+                                        )
+                                    )
                                     showResponse(
                                         /* vpToken = */ null,
                                         /* deviceResponse = */ deviceResponse,

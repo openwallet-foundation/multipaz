@@ -27,6 +27,8 @@ import org.multipaz.eventlogger.EventProvisioningCredentialData
 import org.multipaz.eventlogger.EventProvisioningIssuerDataOpenID4VCI
 import org.multipaz.eventlogger.EventSimple
 import org.multipaz.eventlogger.EventVerification
+import org.multipaz.eventlogger.EventVerificationDigitalCredentials
+import org.multipaz.eventlogger.EventVerificationIso18013Proximity
 import org.multipaz.eventlogger.fromDataItem
 import org.multipaz.eventlogger.toDataItem
 import org.multipaz.provisioning.Display as ProvisioningDisplay
@@ -407,6 +409,8 @@ private fun react.ChildrenBuilder.renderEventHeaderSection(ev: Event, fileName: 
         is EventPresentmentIso18013Proximity -> "Presentment (ISO 18013-5 Proximity)"
         is EventPresentment -> "Presentment Event"
         is EventProvisioning -> "Provisioning Event"
+        is EventVerificationDigitalCredentials -> "Verification (W3C DC API)"
+        is EventVerificationIso18013Proximity -> "Verification (ISO 18013-5 Proximity)"
         is EventVerification -> "Verification Event"
         is EventSimple -> "Simple Event"
     }
@@ -1402,6 +1406,61 @@ private val EventVerificationBlock: FC<EventVerificationBlockProps> = FC { props
                 }
                 +if (isVerifying) "Verifying..." else "⚡ Verify Presentment Record"
             }
+        }
+
+        when (ev) {
+            is EventVerificationDigitalCredentials -> {
+                div {
+                    css { display = Display.flex; flexDirection = FlexDirection.column; gap = 6.px; marginBottom = 16.px; fontSize = 13.px }
+                    if (ev.appId != null) {
+                        div { span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"App ID: " }; span { css { color = Color("#f1f5f9") }; +ev.appId!! } }
+                    }
+                    if (ev.origin != null) {
+                        div { span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Origin: " }; span { css { color = Color("#38bdf8") }; +ev.origin!! } }
+                    }
+                    if (ev.durationRequestSentToResponseReceived != null) {
+                        div { span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Latency: " }; span { css { color = Color("#f1f5f9") }; +"${ev.durationRequestSentToResponseReceived}" } }
+                    }
+                }
+
+                TextDataBlock {
+                    title = "Request JSON"
+                    content = ev.requestJson
+                    copyLabel = "📋 Copy Request JSON"
+                }
+
+                TextDataBlock {
+                    title = "Response JSON"
+                    content = ev.responseJson
+                    copyLabel = "📋 Copy Response JSON"
+                }
+            }
+            is EventVerificationIso18013Proximity -> {
+                div {
+                    css { display = Display.flex; flexDirection = FlexDirection.column; gap = 6.px; marginBottom = 16.px; fontSize = 13.px }
+                    div { span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Engagement Channel: " }; span { css { color = Color("#38bdf8") }; +ev.engagementType.name } }
+                    if (ev.durationNfcTapToEngagement != null) {
+                        div { span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Tap to Engagement: " }; span { css { color = Color("#f1f5f9") }; +"${ev.durationNfcTapToEngagement}" } }
+                    }
+                    if (ev.durationEngagementReceivedToRequestSent != null) {
+                        div { span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Engagement to Request Sent: " }; span { css { color = Color("#f1f5f9") }; +"${ev.durationEngagementReceivedToRequestSent}" } }
+                    }
+                    if (ev.durationRequestSentToResponseReceived != null) {
+                        div { span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Request Sent to Response Received: " }; span { css { color = Color("#f1f5f9") }; +"${ev.durationRequestSentToResponseReceived}" } }
+                    }
+                    if (ev.durationScanningTime != null) {
+                        div { span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"Transport Scanning Time: " }; span { css { color = Color("#f1f5f9") }; +"${ev.durationScanningTime}" } }
+                    }
+                    if (ev.nfcHybridTransportStats != null) {
+                        val stats = ev.nfcHybridTransportStats!!
+                        div {
+                            span { css { color = Color("#94a3b8"); fontWeight = FontWeight.bold }; +"NFC Hybrid Stats: " }
+                            span { css { color = Color("#f1f5f9") }; +"Sent: ${stats.numSent} (${stats.numSentViaNfc} NFC, ${stats.numSentViaTransport} transport), Received: ${stats.numReceived} (${stats.numReceivedFirstOnNfc} NFC, ${stats.numReceivedFirstOnTransport} transport)" }
+                        }
+                    }
+                }
+            }
+            else -> {}
         }
 
         val vps = verifiedPresentations

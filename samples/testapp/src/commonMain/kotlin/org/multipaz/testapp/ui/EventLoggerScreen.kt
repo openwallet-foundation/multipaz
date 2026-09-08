@@ -53,7 +53,10 @@ import org.multipaz.eventlogger.EventPresentmentUriSchemeOpenID4VP
 import org.multipaz.eventlogger.EventProvisioning
 import org.multipaz.eventlogger.EventSimple
 import org.multipaz.eventlogger.EventVerification
+import org.multipaz.eventlogger.EventVerificationDigitalCredentials
+import org.multipaz.eventlogger.EventVerificationIso18013Proximity
 import org.multipaz.eventlogger.SimpleEventLogger
+import org.multipaz.mdoc.engagement.EngagementType
 import org.multipaz.verification.Iso18013PresentmentRecord
 import org.multipaz.verification.OpenID4VPPresentmentRecord
 import org.multipaz.compose.getOutlinedImageVector
@@ -335,11 +338,29 @@ private fun EventItemVerification(
     modifier: Modifier = Modifier
 ) {
     val eventDateTimeString = event.timestamp.toLocalDateTime(timeZone = timeZone).formatLocalized()
-    val protocol = when (event.presentmentRecord) {
-        is Iso18013PresentmentRecord -> "ISO 18013-5"
-        is OpenID4VPPresentmentRecord -> "OpenID4VP"
+    val details = when (event) {
+        is EventVerificationDigitalCredentials -> {
+            val originOrApp = event.origin ?: event.appId
+            val originPart = if (originOrApp != null) " • $originOrApp" else ""
+            "Digital Credentials$originPart"
+        }
+        is EventVerificationIso18013Proximity -> {
+            val engagement = when (event.engagementType) {
+                EngagementType.QR_CODE -> "QR Code"
+                EngagementType.NFC_STATIC_HANDOVER -> "NFC Static"
+                EngagementType.NFC_NEGOTIATED_HANDOVER -> "NFC Negotiated"
+                EngagementType.NFC_CONCURRENT_CHANNEL_ENGAGEMENT -> "NFC Concurrent Channel"
+            }
+            "ISO 18013-5 • $engagement"
+        }
+        else -> {
+            when (event.presentmentRecord) {
+                is Iso18013PresentmentRecord -> "ISO 18013-5"
+                is OpenID4VPPresentmentRecord -> "OpenID4VP"
+            }
+        }
     }
-    val text = "$eventDateTimeString • $protocol"
+    val text = "$eventDateTimeString • $details"
 
     FloatingItemText(
         modifier = modifier,
