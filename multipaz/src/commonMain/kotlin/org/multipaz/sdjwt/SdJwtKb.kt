@@ -52,14 +52,20 @@ class SdJwtKb private constructor(
     }
 
     /**
-     * Verifies a SD-JWT+KB according to Section 7.3 of the SD-JWT specification
+     * Verifies a SD-JWT+KB according to Section 7.3 of the SD-JWT specification.
+     *
+     * Note that per Section 7.3 of RFC 9901, the returned JSON object is the Processed SD-JWT
+     * Payload containing only the Issuer-signed claims (with Disclosures resolved). The
+     * device-signed claims in the Key Binding JWT (such as `nonce`, `aud`, `iat`, and any
+     * transaction response claims) are not included in this returned payload and must be
+     * retrieved separately from [jwtBody].
      *
      * @param issuerKey the issuer's key to use for verification or `null` to not perform issuer signature validation.
      * @param checkNonce a function to check that the nonce in the KB JWT is as expected.
      * @param checkAudience a function to check that the audience in the KB JWT is as expected.
      * @param checkCreationTime a function to check that the creation time in the KB JWT is as expected.
-     * @param transactionData transaction data that was sent with the request
-     * @return the processed SD-JWT payload,
+     * @param transactionData transaction data that was sent with the request.
+     * @return the processed SD-JWT payload.
      * @throws SignatureVerificationException if the issuer signature or key-binding signature failed to validate.
      * @throws IllegalStateException if [checkNonce], [checkAudience], or [checkCreationTime] returns false.
      */

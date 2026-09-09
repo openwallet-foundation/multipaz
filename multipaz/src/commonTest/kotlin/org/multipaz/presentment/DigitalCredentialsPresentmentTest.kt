@@ -1,6 +1,5 @@
 package org.multipaz.presentment
 
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
@@ -21,6 +20,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.buildJsonArray
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.ByteStringFormat
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Cdn
@@ -34,8 +34,6 @@ import org.multipaz.cbor.Uint
 import org.multipaz.cbor.addCborArray
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
-import org.multipaz.cbor.putCborArray
-import org.multipaz.cbor.toDataItem
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
@@ -53,7 +51,6 @@ import org.multipaz.documenttype.ISO_18013_TRANSACTION_DATA_NAMESPACE
 import org.multipaz.documenttype.TransactionType
 import org.multipaz.documenttype.TransactionUserInput
 import org.multipaz.documenttype.knowntypes.PaymentTransaction
-import org.multipaz.mdoc.devicesigned.DeviceAuth
 import org.multipaz.mdoc.request.DeviceRequestInfo
 import org.multipaz.mdoc.request.DocRequestInfo
 import org.multipaz.mdoc.request.DocumentSet
@@ -66,7 +63,6 @@ import org.multipaz.openid.OpenID4VP
 import org.multipaz.prompt.promptModelSilentConsent
 import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
-import org.multipaz.request.RequesterIdentity
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.trustmanagement.TrustPoint
@@ -82,6 +78,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 
 class DigitalCredentialsPresentmentTest {
     internal abstract class BooleanTransaction(
@@ -1121,6 +1118,10 @@ class DigitalCredentialsPresentmentTest {
         assertEquals(DeviceResponse.STATUS_OK, deviceResponse.status)
         assertEquals(1, deviceResponse.documents.size)
         val mdocDoc = deviceResponse.documents[0]
+        assertEquals(1, mdocDoc.transactionData.size)
+        val tx = mdocDoc.transactionData[0]
+        assertEquals(PaymentTransaction, tx.type)
+        assertEquals(payload, tx.payload)
         val txElements = mdocDoc.deviceNamespaces.data[ISO_18013_TRANSACTION_DATA_NAMESPACE]!![PaymentTransaction.identifier]!!
         assertEquals(0L, txElements["docRequestId"].asNumber)
         assertEquals(123.25, txElements["amount"].asDouble)
@@ -1329,6 +1330,10 @@ class DigitalCredentialsPresentmentTest {
         assertEquals(1, deviceResponse.otherDocuments.size)
         val otherDoc = deviceResponse.otherDocuments[0]
         assertEquals("dc+sd-jwt", otherDoc.docFormat)
+        assertEquals(1, otherDoc.transactionData.size)
+        val tx = otherDoc.transactionData[0]
+        assertEquals(PaymentTransaction, tx.type)
+        assertEquals(payload, tx.payload)
 
         // Pretty-printed entire DeviceResponse (Concise Diagnostic Notation) using LENGTH_ONLY
         val responseCdn = Cdn.encode(
@@ -1349,10 +1354,42 @@ class DigitalCredentialsPresentmentTest {
         """.trimIndent()
         assertEquals(expectedResponseCdn, responseCdn.trim())
 
-        // Pretty-printed SD-JWT KB-JWT payload (JSON)
         val decompressedData = otherDoc.data.toByteArray().zlibInflate()
         val sdJwtKb = SdJwtKb.fromCompactSerialization(decompressedData.decodeToString())
         val prettyJson = Json { prettyPrint = true }
+
+        // Pretty-printed SD-JWT payload (JSON)
+        val jwtJson = prettyJson.encodeToString(sdJwtKb.sdJwt.jwtBody)
+        val jwtIat = sdJwtKb.sdJwt.jwtBody["iat"]!!.jsonPrimitive.content
+        val jwtNbf = sdJwtKb.sdJwt.jwtBody["nbf"]!!.jsonPrimitive.content
+        val jwtExp = sdJwtKb.sdJwt.jwtBody["exp"]!!.jsonPrimitive.content
+        val jwtSd = sdJwtKb.sdJwt.jwtBody["_sd"]!!.jsonArray[0].jsonPrimitive.content
+        val jwtCnfX = sdJwtKb.sdJwt.jwtBody["cnf"]!!.jsonObject["jwk"]!!.jsonObject["x"]!!.jsonPrimitive.content
+        val jwtCnfY = sdJwtKb.sdJwt.jwtBody["cnf"]!!.jsonObject["jwk"]!!.jsonObject["y"]!!.jsonPrimitive.content
+        val expectedJwtJson = """
+            {
+                "iss": "https://example-issuer.com",
+                "vct": "org.multipaz.payment.sca.1",
+                "iat": $jwtIat,
+                "nbf": $jwtNbf,
+                "exp": $jwtExp,
+                "_sd": [
+                    "$jwtSd"
+                ],
+                "_sd_alg": "sha-256",
+                "cnf": {
+                    "jwk": {
+                        "crv": "P-256",
+                        "kty": "EC",
+                        "x": "$jwtCnfX",
+                        "y": "$jwtCnfY"
+                    }
+                }
+            }
+        """.trimIndent()
+        assertEquals(expectedJwtJson, jwtJson.trim())
+
+        // Pretty-printed SD-JWT KB-JWT payload (JSON)
         val kbJwtJson = prettyJson.encodeToString(sdJwtKb.jwtBody)
         val sdHash = sdJwtKb.jwtBody["sd_hash"]!!.jsonPrimitive.content
         val iat = sdJwtKb.jwtBody["iat"]!!.jsonPrimitive.content
@@ -1372,6 +1409,41 @@ class DigitalCredentialsPresentmentTest {
             }
         """.trimIndent()
         assertEquals(expectedKbJwtJson, kbJwtJson.trim())
+
+        val sessionTranscriptBytes = Tagged(
+            tagNumber = Tagged.ENCODED_CBOR,
+            taggedItem = Bstr(Cbor.encode(sessionTranscript))
+        )
+        val expectedNonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(sessionTranscriptBytes)).toBase64Url()
+
+        // Pretty-printed processed SD-JWT payload (JSON)
+        val processedJwt = sdJwtKb.verify(
+            issuerKey = documentStoreTestHarness.dsKey.publicKey,
+            checkNonce = { it == expectedNonce },
+            checkAudience = { it == "none" },
+            checkCreationTime = { (it - creationTime).absoluteValue < 5.minutes },
+            transactionData = otherDoc.transactionData
+        )
+        val processedJwtJson = prettyJson.encodeToString(processedJwt)
+        val expectedProcessedJwtJson = """
+            {
+                "iss": "https://example-issuer.com",
+                "vct": "org.multipaz.payment.sca.1",
+                "iat": $jwtIat,
+                "nbf": $jwtNbf,
+                "exp": $jwtExp,
+                "cnf": {
+                    "jwk": {
+                        "crv": "P-256",
+                        "kty": "EC",
+                        "x": "$jwtCnfX",
+                        "y": "$jwtCnfY"
+                    }
+                },
+                "account_id": "acc-12345"
+            }
+        """.trimIndent()
+        assertEquals(expectedProcessedJwtJson, processedJwtJson.trim())
     }
 
     @Test
