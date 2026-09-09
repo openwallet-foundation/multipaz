@@ -11,6 +11,10 @@ Significant changes since Multipaz 0.100.0 include:
 - New `custom_head_html` server setting, injected into the `<head>` of every HTML page served
   by `serveResources()`, so a deployment can restyle the built-in pages without forking their
   markup.
+- Fixed `ASN1Boolean` rejecting a BOOLEAN whose content octet is non-zero but not `0xFF`, which
+  made X.509 extension parsing fail on certificates from devices whose KeyMint emits `0x01` and
+  so broke Android key attestation on them. Such an octet now decodes as `true` per X.690 8.2.2
+  and is preserved, so decoding and re-encoding stay byte-exact.
 
 ## [0.100.0] - 2026-07-08
 Significant changes since Multipaz 0.99.0 include:

@@ -58,8 +58,20 @@ class ASN1Tests {
 
         assertEquals(ASN1Boolean(false), ASN1.decode("010100".fromHex()))
         assertEquals(ASN1Boolean(true), ASN1.decode("0101ff".fromHex()))
+
+        // X.690 8.2.2 makes any non-zero octet TRUE, and Android KeyMint emits 0x01 in the
+        // `critical` flag of X.509 extensions, so decoding has to accept it. Note that equality
+        // is semantic and ignores the octet, so it cannot catch the octet being dropped — the
+        // re-encoding below is what pins that.
+        assertEquals(ASN1Boolean(true), ASN1.decode("010101".fromHex()))
+
+        // The octet is preserved rather than normalized to 0xff, keeping decode/encode
+        // byte-exact as testCertificate() requires.
+        assertContentEquals("010101".fromHex(), ASN1.encode(ASN1.decode("010101".fromHex())!!))
+
+        // Well-formedness is still enforced: the contents are exactly one octet (X.690 8.2.1).
         assertFailsWith(IllegalArgumentException::class) {
-            assertEquals(ASN1Boolean(false), ASN1.decode("010101".fromHex()))
+            ASN1.decode("01020000".fromHex())
         }
 
         assertEquals(
@@ -73,6 +85,21 @@ class ASN1Tests {
                 ASN1Boolean(false),
             ))).trim()
         )
+    }
+
+    @Test
+    fun testBooleanNonCanonicalInExtension() {
+        // The keyUsage extension of an Android Keystore certificate whose KeyMint encodes the
+        // `critical` flag as 0x01 — SEQUENCE { OID 2.5.29.15, BOOLEAN 01, OCTET STRING }.
+        // This nested form is the one that actually failed: a certificate's extensions live in a
+        // CONTEXT_SPECIFIC [3] whose content ASN1.decode passes through untouched, so they are
+        // only decoded when accessed, via X509Signed.getExtensionsSeq().
+        val extension = "300e0603551d0f010101040403020780".fromHex()
+
+        val decoded = ASN1.decode(extension) as ASN1Sequence
+
+        assertTrue((decoded.elements[1] as ASN1Boolean).value)
+        assertContentEquals(extension, ASN1.encode(decoded))
     }
 
     @Test
