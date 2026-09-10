@@ -94,6 +94,14 @@ data class X509Cert(
                 val keyMaterial = (subjectPublicKeyInfo.elements[1] as ASN1BitString).value
                 return RsaPublicKey.fromPkcs1(keyMaterial)
             }
+            when (algorithmOid) {
+                OID.ML_DSA_44.oid -> return MlDsaPublicKey(Algorithm.ML_DSA_44, ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value))
+                OID.ML_DSA_65.oid -> return MlDsaPublicKey(Algorithm.ML_DSA_65, ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value))
+                OID.ML_DSA_87.oid -> return MlDsaPublicKey(Algorithm.ML_DSA_87, ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value))
+                OID.ML_KEM_512.oid -> return MlKemPublicKey(Algorithm.ML_KEM_512, ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value))
+                OID.ML_KEM_768.oid -> return MlKemPublicKey(Algorithm.ML_KEM_768, ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value))
+                OID.ML_KEM_1024.oid -> return MlKemPublicKey(Algorithm.ML_KEM_1024, ByteString((subjectPublicKeyInfo.elements[1] as ASN1BitString).value))
+            }
             return ecPublicKey
         }
 
@@ -382,6 +390,30 @@ data class X509Cert(
                             )
                         ),
                         publicKey.toPkcs1()
+                    )
+                }
+                is MlDsaPublicKey -> {
+                    val oid = when (publicKey.algorithm) {
+                        Algorithm.ML_DSA_44 -> OID.ML_DSA_44.oid
+                        Algorithm.ML_DSA_65 -> OID.ML_DSA_65.oid
+                        Algorithm.ML_DSA_87 -> OID.ML_DSA_87.oid
+                        else -> throw IllegalArgumentException()
+                    }
+                    Pair(
+                        ASN1Sequence(listOf(ASN1ObjectIdentifier(oid))),
+                        publicKey.encoded.toByteArray()
+                    )
+                }
+                is MlKemPublicKey -> {
+                    val oid = when (publicKey.algorithm) {
+                        Algorithm.ML_KEM_512 -> OID.ML_KEM_512.oid
+                        Algorithm.ML_KEM_768 -> OID.ML_KEM_768.oid
+                        Algorithm.ML_KEM_1024 -> OID.ML_KEM_1024.oid
+                        else -> throw IllegalArgumentException()
+                    }
+                    Pair(
+                        ASN1Sequence(listOf(ASN1ObjectIdentifier(oid))),
+                        publicKey.encoded.toByteArray()
                     )
                 }
             }

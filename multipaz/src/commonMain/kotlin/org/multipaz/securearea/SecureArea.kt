@@ -188,6 +188,40 @@ interface SecureArea {
     ): ByteArray
 
     /**
+     * Performs Key Decapsulation.
+     *
+     * Key decapsulation is only supported for KEM keys (such as ML-KEM).
+     *
+     * If the key needs unlocking before use (for example user authentication
+     * in any shape or form) and `keyUnlockData` isn't set or doesn't contain
+     * what's needed, [KeyLockedException] is thrown.
+     *
+     * @param alias the alias of the KEM key to use.
+     * @param ciphertext The encapsulated ciphertext from the sender.
+     * @param unlockReason the reason for unlocking.
+     * @return The decapsulated shared secret.
+     * @throws IllegalArgumentException if the key is not a KEM key.
+     * @throws IllegalArgumentException if there is no key with the given alias
+     * or the key wasn't created with a KEM algorithm.
+     * @throws KeyLockedException if the key needs unlocking.
+     * @throws KeyInvalidatedException if the key is no longer usable.
+     * @throws UnsupportedOperationException if this Secure Area does not support key decapsulation.
+     */
+    @Throws(
+        IllegalArgumentException::class,
+        KeyLockedException::class,
+        KeyInvalidatedException::class,
+        CancellationException::class
+    )
+    suspend fun kemDecapsulate(
+        alias: String,
+        ciphertext: ByteArray,
+        unlockReason: Reason = Reason.Unspecified
+    ): ByteArray {
+        throw UnsupportedOperationException("Key decapsulation is not supported by this SecureArea")
+    }
+
+    /**
      * Gets information about a key.
      *
      * This works even on keys that are invalidated.

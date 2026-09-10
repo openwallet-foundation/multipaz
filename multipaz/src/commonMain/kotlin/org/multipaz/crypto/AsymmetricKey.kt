@@ -42,6 +42,11 @@ sealed class AsymmetricKey {
         get() = publicKey as? RsaPublicKey
             ?: throw IllegalStateException("Key is not an RSA key")
 
+    /** Public key as [MlDsaPublicKey] */
+    val mlDsaPublicKey: MlDsaPublicKey
+        get() = publicKey as? MlDsaPublicKey
+            ?: throw IllegalStateException("Key is not an ML-DSA key")
+
     /**
      * Entity to which the key belongs; key id for named key, common name for the keys with
      * the certificate chain.
@@ -76,6 +81,22 @@ sealed class AsymmetricKey {
         sign(message) as? EcSignature ?: throw IllegalStateException("Not an EC signature")
 
     /**
+     * Convenience method to sign [message] when this is an RSA key.
+     *
+     * @throws IllegalStateException if the key is not an RSA key.
+     */
+    suspend fun signRsa(message: ByteArray): RsaSignature =
+        sign(message) as? RsaSignature ?: throw IllegalStateException("Not an RSA signature")
+
+    /**
+     * Convenience method to sign [message] when this is an ML-DSA key.
+     *
+     * @throws IllegalStateException if the key is not an ML-DSA key.
+     */
+    suspend fun signMlDsa(message: ByteArray): MlDsaSignature =
+        sign(message) as? MlDsaSignature ?: throw IllegalStateException("Not an ML-DSA signature")
+
+    /**
      * Performs Key Agreement using this key and [otherKey].
      *
      * If the key needs unlocking before use (for example user authentication
@@ -103,6 +124,8 @@ sealed class AsymmetricKey {
         when (otherKey) {
             is EcPublicKey -> keyAgreement(otherKey)
             is RsaPublicKey -> throw IllegalArgumentException("Key agreement is not supported with RSA public key")
+            is MlDsaPublicKey -> throw IllegalArgumentException("Key agreement is not supported with ML-DSA public key")
+            is MlKemPublicKey -> throw IllegalArgumentException("Key agreement is not supported with ML-KEM public key")
         }
 
     /**
@@ -125,6 +148,11 @@ sealed class AsymmetricKey {
         val rsaPrivateKey: RsaPrivateKey
             get() = privateKey as? RsaPrivateKey
                 ?: throw IllegalStateException("Key is not an RSA key")
+
+        /** Private key as [MlDsaPrivateKey] */
+        val mlDsaPrivateKey: MlDsaPrivateKey
+            get() = privateKey as? MlDsaPrivateKey
+                ?: throw IllegalStateException("Key is not an ML-DSA key")
     }
 
     /** Implemented by [AsymmetricKey] where the private key resides in [SecureArea] */
@@ -198,6 +226,8 @@ sealed class AsymmetricKey {
         override val algorithm: Algorithm = when (privateKey) {
             is EcPrivateKey -> privateKey.curve.defaultSigningAlgorithmFullySpecified
             is RsaPrivateKey -> Algorithm.RS256
+            is MlDsaPrivateKey -> privateKey.algorithm
+            is MlKemPrivateKey -> privateKey.algorithm
         }
     ): X509Certified(), Explicit {
         override val publicKey: PublicKey get() = privateKey.publicKey
@@ -212,6 +242,8 @@ sealed class AsymmetricKey {
         override val algorithm: Algorithm = when (privateKey) {
             is EcPrivateKey -> privateKey.curve.defaultSigningAlgorithmFullySpecified
             is RsaPrivateKey -> Algorithm.RS256
+            is MlDsaPrivateKey -> privateKey.algorithm
+            is MlKemPrivateKey -> privateKey.algorithm
         }
     ): Named(), Explicit {
         override val publicKey: PublicKey get() = privateKey.publicKey
@@ -225,6 +257,8 @@ sealed class AsymmetricKey {
         override val algorithm: Algorithm = when (privateKey) {
             is EcPrivateKey -> privateKey.curve.defaultSigningAlgorithmFullySpecified
             is RsaPrivateKey -> Algorithm.RS256
+            is MlDsaPrivateKey -> privateKey.algorithm
+            is MlKemPrivateKey -> privateKey.algorithm
         }
     ): Anonymous(), Explicit {
         override val publicKey: PublicKey get() = privateKey.publicKey
@@ -294,6 +328,8 @@ sealed class AsymmetricKey {
             when (val priv = explicit.privateKey) {
                 is EcPrivateKey -> Crypto.keyAgreement(key = priv, otherKey = otherKey)
                 is RsaPrivateKey -> throw UnsupportedOperationException("RSA keys do not support key agreement")
+                is MlDsaPrivateKey -> throw UnsupportedOperationException("ML-DSA keys do not support key agreement")
+                is MlKemPrivateKey -> throw UnsupportedOperationException("ML-KEM keys do not support key agreement")
             }
 
         private suspend fun keyAgreement(
@@ -411,6 +447,8 @@ sealed class AsymmetricKey {
             algorithm: Algorithm = when (privateKey) {
                 is EcPrivateKey -> privateKey.curve.defaultSigningAlgorithmFullySpecified
                 is RsaPrivateKey -> Algorithm.RS256
+                is MlDsaPrivateKey -> privateKey.algorithm
+                is MlKemPrivateKey -> privateKey.algorithm
             }
         ): AsymmetricKey = AnonymousExplicit(privateKey, algorithm)
 
@@ -433,6 +471,10 @@ sealed class AsymmetricKey {
                     Algorithm.PS256, Algorithm.PS384, Algorithm.PS512
                 ) ->
                     AnonymousExplicit(Crypto.createRsaPrivateKey(keySizeBits), algorithm)
+                algorithm in listOf(Algorithm.ML_DSA_44, Algorithm.ML_DSA_65, Algorithm.ML_DSA_87) ->
+                    AnonymousExplicit(Crypto.createMlDsaPrivateKey(algorithm), algorithm)
+                algorithm in listOf(Algorithm.ML_KEM_512, Algorithm.ML_KEM_768, Algorithm.ML_KEM_1024) ->
+                    AnonymousExplicit(Crypto.createMlKemPrivateKey(algorithm), algorithm)
                 else ->
                     AnonymousExplicit(Crypto.createEcPrivateKey(algorithm.curve!!), algorithm)
             }

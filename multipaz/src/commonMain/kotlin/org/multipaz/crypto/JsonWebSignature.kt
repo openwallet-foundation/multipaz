@@ -133,6 +133,16 @@ object JsonWebSignature {
                         signature = signature
                     )
                 }
+                is MlDsaPublicKey -> {
+                    val signature = MlDsaSignature(signatureStr.fromBase64Url())
+                    Crypto.checkSignature(
+                        publicKey = publicKey,
+                        message = toBeVerified,
+                        algorithm = algorithm,
+                        signature = signature
+                    )
+                }
+                is MlKemPublicKey -> throw IllegalArgumentException("Cannot verify signature with ML-KEM key")
             }
         } catch (e: SerializationException) {
             throw IllegalArgumentException("Malformed JWS", e)

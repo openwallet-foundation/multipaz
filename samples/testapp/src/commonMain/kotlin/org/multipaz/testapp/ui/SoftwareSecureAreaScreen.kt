@@ -13,6 +13,8 @@ import androidx.compose.ui.unit.sp
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.MlDsaSignature
+import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.crypto.RsaSignature
 import org.multipaz.prompt.PromptModel
 import org.multipaz.securearea.KeyLockedException
@@ -69,8 +71,12 @@ fun SoftwareSecureAreaScreen(
                     "- Passphrase & User Auth"
                 ),
             )) {
-                // For brevity, only do passphrase / user auth for P-256 Signature, P-256 Key Agreement, and RSA-2048
-                if (algorithm.curve != EcCurve.P256 && algorithm != Algorithm.RS256_2048) {
+                // For brevity, only do passphrase / user auth for P-256 Signature, P-256 Key Agreement, RSA-2048, ML-DSA-44, and ML-KEM-768
+                if (algorithm.curve != EcCurve.P256 &&
+                    algorithm != Algorithm.RS256_2048 &&
+                    algorithm != Algorithm.ML_DSA_44 &&
+                    algorithm != Algorithm.ML_KEM_768
+                ) {
                     if (passphraseRequired || userAuthTypes.isNotEmpty()) {
                         continue
                     }
@@ -170,6 +176,7 @@ private suspend fun swTestUnguarded(
             val sigInfo = when (signature) {
                 is EcSignature -> "r=${signature.r.toHex()} s=${signature.s.toHex()}"
                 is RsaSignature -> "sig=${signature.signature.toHex()}"
+                is MlDsaSignature -> "sig=${signature.signature.toHex()}"
             }
             Logger.d(
                 TAG,
@@ -177,7 +184,32 @@ private suspend fun swTestUnguarded(
             )
             showToast("Signed in (${t1 - t0})")
         } catch (e: KeyLockedException) {
-            e.printStackTrace();
+            e.printStackTrace()
+            showToast("${e.message}")
+        }
+    } else if (algorithm.isKeyEncapsulation) {
+        val keyInfo = softwareSecureArea.getKeyInfo("testKey")
+        val kemResult = Crypto.kemEncapsulate(keyInfo.publicKey as MlKemPublicKey)
+        try {
+            val t0 = Clock.System.now()
+            val sharedSecret = softwareSecureArea.kemDecapsulate(
+                "testKey",
+                kemResult.ciphertext,
+                unlockReason,
+            )
+            val t1 = Clock.System.now()
+            Logger.dHex(
+                TAG,
+                "Decapsulated shared secret",
+                sharedSecret
+            )
+            if (kemResult.sharedSecret.contentEquals(sharedSecret)) {
+                showToast("KEM in (${t1 - t0})")
+            } else {
+                showToast("KEM failed: secret mismatch")
+            }
+        } catch (e: KeyLockedException) {
+            e.printStackTrace()
             showToast("${e.message}")
         }
     } else {
@@ -193,10 +225,11 @@ private suspend fun swTestUnguarded(
             Logger.dHex(
                 TAG,
                 "Calculated ECDH",
-                Zab)
+                Zab
+            )
             showToast("ECDH in (${t1 - t0})")
         } catch (e: KeyLockedException) {
-            e.printStackTrace();
+            e.printStackTrace()
             showToast("${e.message}")
         }
     }

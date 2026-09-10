@@ -54,6 +54,7 @@ import org.multipaz.context.applicationContext
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.MlDsaSignature
 import org.multipaz.crypto.RsaSignature
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.javaX509Certificate
@@ -152,6 +153,32 @@ actual fun AndroidKeystoreSecureAreaScreen(
                         text = buttonText, fontSize = 15.sp
                     )
                 }
+            }
+        }
+
+        item {
+            TextButton(onClick = {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    coroutineScope.launch {
+                        val t0 = Clock.System.now()
+                        try {
+                            androidKeystoreCapabilities.testKeyAttestationsAndMlDsaSigning(useStrongBox = false)
+                            val durationMsec = (Clock.System.now() - t0).inWholeMilliseconds
+                            showToast("ML-DSA sanity check passed ($durationMsec msec)")
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+                            val durationMsec = (Clock.System.now() - t0).inWholeMilliseconds
+                            e.printStackTrace()
+                            showToast("ML-DSA sanity check failed ($durationMsec msec): ${e.message}")
+                        }
+                    }
+                } else {
+                    showToast("This is only available on API 28 or later, you are running API ${Build.VERSION.SDK_INT}")
+                }
+            }) {
+                Text(
+                    text = "ML-DSA Sanity Check", fontSize = 15.sp
+                )
             }
         }
 
@@ -311,6 +338,34 @@ actual fun AndroidKeystoreSecureAreaScreen(
             }
         }
 
+        item {
+            TextButton(onClick = {
+                coroutineScope.launch {
+                    try {
+                        val attestation = aksAttestation(
+                            useStrongBox = false,
+                            useAttestKey = false,
+                            algorithm = Algorithm.ML_DSA_65
+                        )
+                        Logger.d(TAG, "attestation: $attestation")
+                        withContext(Dispatchers.Main) {
+                            onViewCertificate(Cbor.encode(attestation.certChain!!.toDataItem()).toBase64Url())
+                        }
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        e.printStackTrace()
+                        showToast("${e.message}")
+                    }
+                }
+            })
+            {
+                Text(
+                    text = "ML-DSA-65 Attestation",
+                    fontSize = 15.sp
+                )
+            }
+        }
+
         for ((strongBox, strongBoxDesc) in arrayOf(
             Pair(false, ""), Pair(true, "StrongBox ")
         )) {
@@ -323,6 +378,8 @@ actual fun AndroidKeystoreSecureAreaScreen(
                 Algorithm.PS256_2048,
                 Algorithm.RS256_4096,
                 Algorithm.PS256_4096,
+                Algorithm.ML_DSA_65,
+                Algorithm.ML_DSA_87,
             )) {
                 val AUTH_NONE = setOf<UserAuthenticationType>()
                 val AUTH_LSKF_OR_BIOMETRIC = setOf(
@@ -338,8 +395,11 @@ actual fun AndroidKeystoreSecureAreaScreen(
                     Triple(AUTH_BIOMETRIC_ONLY, 0L, "- Auth (Biometric Only)"),
                     Triple(AUTH_LSKF_OR_BIOMETRIC, -1L, "- Auth (No Confirmation)"),
                 )) {
-                    val allowsAuth = algorithm.curve == EcCurve.P256 || algorithm.curve == EcCurve.ED25519 || algorithm == Algorithm.RS256_2048
-                    // For brevity, only do auth for P-256 Sign, Ed25519, and RS256_2048
+                    val allowsAuth = algorithm.curve == EcCurve.P256 ||
+                            algorithm.curve == EcCurve.ED25519 ||
+                            algorithm == Algorithm.RS256_2048 ||
+                            algorithm == Algorithm.ML_DSA_65
+                    // For brevity, only do auth for P-256 Sign, Ed25519, RS256_2048, and ML-DSA-65
                     if (!allowsAuth && userAuthType != AUTH_NONE) {
                         continue
                     }
@@ -451,7 +511,8 @@ fun ShowCapabilitiesDialog(capabilities: AndroidKeystoreSecureArea.Capabilities,
                     Text(
                         text = "Attest Key support (TEE): ${capabilities.attestKeySupported}\n" +
                                 "Key Agreement support (TEE): ${capabilities.keyAgreementSupported}\n" +
-                                "Curve 25519 support (TEE): ${capabilities.curve25519Supported}",
+                                "Curve 25519 support (TEE): ${capabilities.curve25519Supported}\n" +
+                                "ML-DSA support (TEE): ${capabilities.mlDsaSupported}",
                         modifier = Modifier.padding(8.dp),
                         textAlign = TextAlign.Start,
                         style = MaterialTheme.typography.bodyMedium
@@ -460,7 +521,8 @@ fun ShowCapabilitiesDialog(capabilities: AndroidKeystoreSecureArea.Capabilities,
                         text = "StrongBox Available: ${capabilities.strongBoxSupported}\n" +
                                 "Attest Key support (StrongBox): ${capabilities.strongBoxAttestKeySupported}\n" +
                                 "Key Agreement support (StrongBox): ${capabilities.strongBoxKeyAgreementSupported}\n" +
-                                "Curve 25519 support (StrongBox): ${capabilities.strongBoxCurve25519Supported}",
+                                "Curve 25519 support (StrongBox): ${capabilities.strongBoxCurve25519Supported}\n" +
+                                "ML-DSA support (StrongBox): ${capabilities.strongBoxMlDsaSupported}",
                         modifier = Modifier.padding(8.dp),
                         textAlign = TextAlign.Start,
                         style = MaterialTheme.typography.bodyMedium
@@ -718,12 +780,17 @@ private suspend fun aksTestUnguarded(
         val sigDesc = when (signature) {
             is EcSignature -> "r=${signature.r.toHex()} s=${signature.s.toHex()}"
             is RsaSignature -> "bytes=${signature.signature.toHex()}"
+            is MlDsaSignature -> "bytes=${signature.signature.toHex()}"
         }
         Logger.d(
             TAG,
             "Made signature with key $sigDesc",
         )
-        val sigTypeStr = if (signature is EcSignature) "EC" else "RSA"
+        val sigTypeStr = when (signature) {
+            is EcSignature -> "EC"
+            is RsaSignature -> "RSA"
+            is MlDsaSignature -> "ML-DSA"
+        }
         showToast("$sigTypeStr signature in (${t1 - t0} msec)")
     } else {
         val otherKeyPairForEcdh = Crypto.createEcPrivateKey(algorithm.curve!!)

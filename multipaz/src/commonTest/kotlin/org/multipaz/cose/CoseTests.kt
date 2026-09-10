@@ -380,6 +380,57 @@ class CoseTests {
         }
     }
 
+    private fun coseSign1_SigningKey_MlDsa_helper(algorithm: Algorithm) = runTest {
+        if (algorithm !in Crypto.supportedMlDsaAlgorithms) {
+            return@runTest
+        }
+        val storage = EphemeralStorage()
+        val sa = SoftwareSecureArea.create(storage)
+
+        sa.createKey("testKey", CreateKeySettings(algorithm))
+        val message = "Hello ML-DSA in COSE".encodeToByteArray()
+
+        val coseSignNoExplicitHeaderSet = Cose.coseSign1Sign(
+            signingKey = AsymmetricKey.anonymous(
+                secureArea = sa,
+                alias = "testKey"
+            ),
+            message = message,
+            includeMessageInPayload = true,
+            protectedHeaders = mapOf(),
+            unprotectedHeaders = mapOf()
+        )
+        Cose.coseSign1Check(
+            sa.getKeyInfo("testKey").publicKey,
+            null,
+            coseSignNoExplicitHeaderSet,
+            algorithm
+        )
+        assertEquals(
+            algorithm.coseAlgorithmIdentifier,
+            coseSignNoExplicitHeaderSet.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]!!.asNumber.toInt()
+        )
+
+        val coseSignDetached = Cose.coseSign1Sign(
+            signingKey = AsymmetricKey.anonymous(sa, "testKey"),
+            message = message,
+            includeMessageInPayload = false,
+            protectedHeaders = mapOf(),
+            unprotectedHeaders = mapOf(),
+        )
+        assertNull(coseSignDetached.payload)
+        Cose.coseSign1Check(
+            sa.getKeyInfo("testKey").publicKey,
+            message,
+            coseSignDetached,
+            algorithm
+        )
+    }
+
+    @Test fun coseSign1_SigningKey_ML_DSA_44() = coseSign1_SigningKey_MlDsa_helper(Algorithm.ML_DSA_44)
+    @Test fun coseSign1_SigningKey_ML_DSA_65() = coseSign1_SigningKey_MlDsa_helper(Algorithm.ML_DSA_65)
+    @Test fun coseSign1_SigningKey_ML_DSA_87() = coseSign1_SigningKey_MlDsa_helper(Algorithm.ML_DSA_87)
+
     @Test
     fun coseSign1X5Chain() = runTest {
         // This is a test vector from ISO/IEC 18013-5:2021 Annex D.5.2 Issuer data authentication

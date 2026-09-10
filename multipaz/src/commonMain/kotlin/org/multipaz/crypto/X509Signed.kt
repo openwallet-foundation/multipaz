@@ -93,6 +93,15 @@ sealed class X509Signed() {
                     RsaSignature(signature)
                 )
             }
+            is MlDsaPublicKey -> {
+                Crypto.checkSignature(
+                    publicKey,
+                    tbsCertificate,
+                    signatureAlgorithm,
+                    MlDsaSignature(signature)
+                )
+            }
+            is MlKemPublicKey -> throw IllegalArgumentException("Cannot verify signature with ML-KEM key")
         }
     }
 
@@ -149,6 +158,9 @@ sealed class X509Signed() {
                 OID.SIGNATURE_RS256.oid -> Algorithm.RS256
                 OID.SIGNATURE_RS384.oid -> Algorithm.RS384
                 OID.SIGNATURE_RS512.oid -> Algorithm.RS512
+                OID.ML_DSA_44.oid -> Algorithm.ML_DSA_44
+                OID.ML_DSA_65.oid -> Algorithm.ML_DSA_65
+                OID.ML_DSA_87.oid -> Algorithm.ML_DSA_87
                 else -> throw IllegalArgumentException(
                     "Unexpected algorithm OID $signatureAlgorithmOid")
             }
@@ -383,6 +395,7 @@ sealed class X509SignedBuilder<BuilderT: X509SignedBuilder<BuilderT>>(
             Algorithm.RS256, Algorithm.RS256_2048, Algorithm.RS256_3072, Algorithm.RS256_4096,
             Algorithm.RS384, Algorithm.RS384_3072, Algorithm.RS384_4096,
             Algorithm.RS512, Algorithm.RS512_4096 -> signature.toDerEncoded()
+            Algorithm.ML_DSA_44, Algorithm.ML_DSA_65, Algorithm.ML_DSA_87 -> signature.toCoseEncoded()
             else -> throw IllegalArgumentException("Unsupported signature algorithm ${signingKey.algorithm}")
         }
         return ASN1Sequence(listOf(
@@ -402,6 +415,9 @@ sealed class X509SignedBuilder<BuilderT: X509SignedBuilder<BuilderT>>(
 
         internal fun Algorithm.getSignatureAlgorithmSeq(signingKeyCurve: EcCurve?): ASN1Sequence {
             return when (this) {
+                Algorithm.ML_DSA_44 -> ASN1Sequence(listOf(ASN1ObjectIdentifier(OID.ML_DSA_44.oid)))
+                Algorithm.ML_DSA_65 -> ASN1Sequence(listOf(ASN1ObjectIdentifier(OID.ML_DSA_65.oid)))
+                Algorithm.ML_DSA_87 -> ASN1Sequence(listOf(ASN1ObjectIdentifier(OID.ML_DSA_87.oid)))
                 Algorithm.RS256, Algorithm.RS256_2048, Algorithm.RS256_3072, Algorithm.RS256_4096 -> ASN1Sequence(listOf(
                     ASN1ObjectIdentifier(OID.SIGNATURE_RS256.oid),
                     ASN1Null()

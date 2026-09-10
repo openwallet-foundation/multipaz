@@ -9,6 +9,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.MlDsaSignature
+import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.securearea.KeyUnlockDataProvider
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.SecureArea
@@ -110,6 +113,48 @@ actual fun SecureEnclaveSecureAreaScreen(showToast: (message: String) -> Unit) {
                     showToast) },
                 content = { Text("P-256 Key Agreement - Auth (Passcode OR Biometrics)") }
             )
+            TextButton(
+                onClick = { seTest(Algorithm.ML_DSA_65,
+                    setOf(),
+                    coroutineScope,
+                    showToast) },
+                content = { Text("ML-DSA-65 Signature") }
+            )
+            TextButton(
+                onClick = { seTest(Algorithm.ML_DSA_65,
+                    setOf(SecureEnclaveUserAuthType.USER_PRESENCE),
+                    coroutineScope,
+                    showToast) },
+                content = { Text("ML-DSA-65 Signature - Auth (User Presence)") }
+            )
+            TextButton(
+                onClick = { seTest(Algorithm.ML_DSA_87,
+                    setOf(),
+                    coroutineScope,
+                    showToast) },
+                content = { Text("ML-DSA-87 Signature") }
+            )
+            TextButton(
+                onClick = { seTest(Algorithm.ML_KEM_768,
+                    setOf(),
+                    coroutineScope,
+                    showToast) },
+                content = { Text("ML-KEM-768 Decapsulation") }
+            )
+            TextButton(
+                onClick = { seTest(Algorithm.ML_KEM_768,
+                    setOf(SecureEnclaveUserAuthType.USER_PRESENCE),
+                    coroutineScope,
+                    showToast) },
+                content = { Text("ML-KEM-768 Decapsulation - Auth (User Presence)") }
+            )
+            TextButton(
+                onClick = { seTest(Algorithm.ML_KEM_1024,
+                    setOf(),
+                    coroutineScope,
+                    showToast) },
+                content = { Text("ML-KEM-1024 Decapsulation") }
+            )
         }
 
     }
@@ -165,12 +210,27 @@ private suspend fun seTestUnguarded(
             )
         }
         val t1 = Clock.System.now()
-        Logger.d(
-            TAG,
-            "Made signature with key " +
-                    "r=${signature.r.toHex()} s=${signature.s.toHex()}",
-        )
+        val signatureDesc = when (signature) {
+            is EcSignature -> "r=${signature.r.toHex()} s=${signature.s.toHex()}"
+            is MlDsaSignature -> "signature=${signature.signature.toHex()}"
+            else -> "signature=$signature"
+        }
+        Logger.d(TAG, "Made signature with key $signatureDesc")
         showToast("Signed (${t1 - t0})")
+    } else if (algorithm.isKeyEncapsulation) {
+        val keyInfo = secureEnclaveSecureArea.getKeyInfo("testKey")
+        val kemResult = Crypto.kemEncapsulate(keyInfo.publicKey as MlKemPublicKey)
+        val t0 = Clock.System.now()
+        val sharedSecret = withContext(TestKeyUnlockDataProvider(keyUnlockData)) {
+            secureEnclaveSecureArea.kemDecapsulate(
+                "testKey",
+                kemResult.ciphertext,
+            )
+        }
+        val t1 = Clock.System.now()
+        check(sharedSecret.contentEquals(kemResult.sharedSecret))
+        Logger.dHex(TAG, "Decapsulated shared secret ", sharedSecret)
+        showToast("Decapsulated (${t1 - t0})")
     } else {
         val otherKeyPairForEcdh = Crypto.createEcPrivateKey(EcCurve.P256)
         val t0 = Clock.System.now()

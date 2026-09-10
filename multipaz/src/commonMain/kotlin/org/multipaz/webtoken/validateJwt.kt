@@ -14,6 +14,9 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.MlDsaPublicKey
+import org.multipaz.crypto.MlDsaSignature
+import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.RsaPublicKey
 import org.multipaz.crypto.RsaSignature
@@ -229,6 +232,15 @@ suspend fun validateJwt(
                     signature = RsaSignature(signatureBytes)
                 )
             }
+            is MlDsaPublicKey -> {
+                Crypto.checkSignature(
+                    publicKey = key,
+                    message = message.encodeToByteArray(),
+                    algorithm = algorithm ?: key.algorithm,
+                    signature = MlDsaSignature(signatureBytes)
+                )
+            }
+            is MlKemPublicKey -> throw IllegalArgumentException("Cannot verify signature with ML-KEM key")
         }
     } catch (e: SignatureVerificationException) {
         throw IllegalArgumentException("$jwtName: invalid JWT signature", e)

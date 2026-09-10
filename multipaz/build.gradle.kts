@@ -89,6 +89,8 @@ kotlin {
                         else it.toString()
                     }
                     interopTask.dependsOn(":multipaz:SwiftBridge:build${capitalizedPlatform}")
+                    interopTask.inputs.file("$rootDir/multipaz/SwiftBridge/build/Release-$platform/include/SwiftBridge/SwiftBridge-Swift.h")
+                    interopTask.inputs.file("$rootDir/multipaz/SwiftBridge/build/Release-$platform/libSwiftBridge.a")
                 }
 
                 it.binaries.all {
