@@ -456,7 +456,7 @@ class DocumentType private constructor(
             expectedUpdate = null,
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
-            deviceKey = mdocCredential.getAttestation().publicKey,
+            deviceKey = mdocCredential.getAttestation().ecPublicKey,
             deviceKeyAuthorizedNamespaces = deviceKeyAuthorizedNamespaces,
             deviceKeyAuthorizedDataElements = deviceKeyAuthorizedDataElements,
         )

@@ -26,6 +26,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
@@ -380,7 +381,7 @@ class ProvisioningModelTest {
     fun refreshRetryAfterFailureWithNewChallenge() = runTest {
         var currentChallenge = "challenge_1"
         var failRefresh = false
-        val attestedPublicKeys = mutableListOf<List<EcPublicKey>>()
+        val attestedPublicKeys = mutableListOf<List<PublicKey>>()
 
         val client = object : TestProvisioningClient(
             keyBindingChallengeHook = { currentChallenge }
@@ -495,7 +496,7 @@ class ProvisioningModelTest {
             return generateTestMDoc(
                 docType = DOCTYPE,
                 credentialIds = pending.map { it.credentialId },
-                publicKeys = pending.map { it.keyAttestation.publicKey }
+                publicKeys = pending.map { it.keyAttestation.ecPublicKey }
             ).also {
                 pending.clear()
             }

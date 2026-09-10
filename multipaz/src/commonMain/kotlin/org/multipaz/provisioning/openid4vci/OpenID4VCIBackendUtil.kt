@@ -5,7 +5,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.provisioning.CredentialKeyAttestation
 import org.multipaz.webtoken.buildJwt
@@ -68,7 +68,7 @@ object OpenID4VCIBackendUtil {
         signingKey: AsymmetricKey,
         clientId: String,
         attestationIssuer: String,
-        attestedKey: EcPublicKey,
+        attestedKey: PublicKey,
         nonce: String?,
         walletName: String?,
         walletLink: String?

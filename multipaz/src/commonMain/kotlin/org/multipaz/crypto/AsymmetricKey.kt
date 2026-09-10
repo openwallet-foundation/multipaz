@@ -425,9 +425,13 @@ sealed class AsymmetricKey {
             algorithm: Algorithm = Algorithm.ESP256,
             keySizeBits: Int = 2048
         ): AsymmetricKey =
-            when (algorithm) {
-                Algorithm.RS256, Algorithm.RS384, Algorithm.RS512,
-                Algorithm.PS256, Algorithm.PS384, Algorithm.PS512 ->
+            when {
+                algorithm.keySizeBits != null ->
+                    AnonymousExplicit(Crypto.createRsaPrivateKey(algorithm.keySizeBits!!), algorithm)
+                algorithm in listOf(
+                    Algorithm.RS256, Algorithm.RS384, Algorithm.RS512,
+                    Algorithm.PS256, Algorithm.PS384, Algorithm.PS512
+                ) ->
                     AnonymousExplicit(Crypto.createRsaPrivateKey(keySizeBits), algorithm)
                 else ->
                     AnonymousExplicit(Crypto.createEcPrivateKey(algorithm.curve!!), algorithm)

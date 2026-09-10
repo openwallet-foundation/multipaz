@@ -155,13 +155,13 @@ actual object Crypto {
         algorithm: Algorithm,
         signature: RsaSignature
     ) {
-        val algName = when (algorithm) {
-            Algorithm.RS256 -> "RS256"
-            Algorithm.RS384 -> "RS384"
-            Algorithm.RS512 -> "RS512"
-            Algorithm.PS256 -> "PS256"
-            Algorithm.PS384 -> "PS384"
-            Algorithm.PS512 -> "PS512"
+        val algName = when (algorithm.joseAlgorithmIdentifier) {
+            "RS256" -> "RS256"
+            "RS384" -> "RS384"
+            "RS512" -> "RS512"
+            "PS256" -> "PS256"
+            "PS384" -> "PS384"
+            "PS512" -> "PS512"
             else -> throw IllegalArgumentException("Unsupported RSA algorithm $algorithm")
         }
         val verified = SwiftBridge.rsaVerifySignature(
@@ -219,13 +219,13 @@ actual object Crypto {
         signatureAlgorithm: Algorithm,
         message: ByteArray
     ): RsaSignature {
-        val algName = when (signatureAlgorithm) {
-            Algorithm.RS256 -> "RS256"
-            Algorithm.RS384 -> "RS384"
-            Algorithm.RS512 -> "RS512"
-            Algorithm.PS256 -> "PS256"
-            Algorithm.PS384 -> "PS384"
-            Algorithm.PS512 -> "PS512"
+        val algName = when (signatureAlgorithm.joseAlgorithmIdentifier) {
+            "RS256" -> "RS256"
+            "RS384" -> "RS384"
+            "RS512" -> "RS512"
+            "PS256" -> "PS256"
+            "PS384" -> "PS384"
+            "PS512" -> "PS512"
             else -> throw IllegalArgumentException("Unsupported RSA signing algorithm $signatureAlgorithm")
         }
         val signature = SwiftBridge.rsaSign(

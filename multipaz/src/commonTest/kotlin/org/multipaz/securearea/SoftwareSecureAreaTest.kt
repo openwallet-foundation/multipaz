@@ -18,6 +18,9 @@ package org.multipaz.securearea
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.RsaPublicKey
+import org.multipaz.crypto.RsaSignature
+import org.multipaz.crypto.checkSignature
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareKeyUnlockData
 import org.multipaz.securearea.software.SoftwareSecureArea
@@ -184,7 +187,7 @@ class SoftwareSecureAreaTest {
         }
 
         // ...now do it from the perspective of the other side...
-        val theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.publicKey)
+        val theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.ecPublicKey)
 
         // ... finally, check that both sides compute the same shared secret.
         assertContentEquals(theirSharedSecret, ourSharedSecret)
@@ -345,6 +348,116 @@ class SoftwareSecureAreaTest {
     }
 
     @Test
+    fun testRsaKeySigningAllAlgorithms() = runTest {
+        val storage = EphemeralStorage()
+        val ks = SoftwareSecureArea.create(storage)
+
+        val algorithms = Algorithm.entries.filter {
+            it.fullySpecified && it.isSigning && it.keySizeBits != null
+        }
+        for (algorithm in algorithms) {
+            val keyAlias = "testKey_${algorithm.name}"
+            ks.createKey(
+                keyAlias,
+                SoftwareCreateKeySettings.Builder()
+                    .setAlgorithm(algorithm)
+                    .build()
+            )
+            val keyInfo = ks.getKeyInfo(keyAlias)
+            assertNotNull(keyInfo)
+            assertEquals(algorithm, keyInfo.algorithm)
+            assertNull(keyInfo.publicKey.curve)
+            assertTrue(keyInfo.publicKey is RsaPublicKey)
+            val rsaPublicKey = keyInfo.publicKey as RsaPublicKey
+            assertEquals(algorithm.keySizeBits, rsaPublicKey.modulus.size * 8)
+            assertFalse(keyInfo.isPassphraseProtected)
+            assertNull(keyInfo.passphraseConstraints)
+            val dataToSign = byteArrayOf(4, 5, 6)
+            val signature = try {
+                ks.sign(keyAlias, dataToSign)
+            } catch (e: KeyLockedException) {
+                throw AssertionError(e)
+            }
+            assertTrue(signature is RsaSignature)
+            Crypto.checkSignature(
+                keyInfo.publicKey,
+                dataToSign,
+                algorithm,
+                signature
+            )
+        }
+    }
+
+    @Test
+    fun testRsaPassphraseProtectedKey() = runTest {
+        val storage = EphemeralStorage()
+        val ks = SoftwareSecureArea.create(storage)
+        val passphrase = "SecretPassword123"
+        ks.createKey(
+            "testKey",
+            SoftwareCreateKeySettings.Builder()
+                .setAlgorithm(Algorithm.RS256_2048)
+                .setPassphraseRequired(true, passphrase, null)
+                .build()
+        )
+        val keyInfo = ks.getKeyInfo("testKey")
+        assertNotNull(keyInfo)
+        assertTrue(keyInfo.isPassphraseProtected)
+
+        val dataToSign = byteArrayOf(4, 5, 6)
+        try {
+            ks.sign("testKey", dataToSign)
+            fail("Should have thrown KeyLockedException")
+        } catch (e: KeyLockedException) {
+            // Expected
+        }
+
+        try {
+            withContext(MockKeyUnlockDataProvider(passphrase = "wrong")) {
+                ks.sign("testKey", dataToSign)
+            }
+            fail("Should have thrown KeyLockedException")
+        } catch (e: KeyLockedException) {
+            // Expected
+        }
+
+        val signature = withContext(MockKeyUnlockDataProvider(passphrase = passphrase)) {
+            ks.sign("testKey", dataToSign)
+        }
+        Crypto.checkSignature(
+            keyInfo.publicKey,
+            dataToSign,
+            Algorithm.RS256_2048,
+            signature
+        )
+    }
+
+    @Test
+    fun testRsaKeyPersistence() = runTest {
+        val storage = EphemeralStorage()
+        val ks1 = SoftwareSecureArea.create(storage)
+        ks1.createKey(
+            "testKey",
+            SoftwareCreateKeySettings.Builder()
+                .setAlgorithm(Algorithm.RS256_2048)
+                .build()
+        )
+        val ks2 = SoftwareSecureArea.create(storage)
+        val keyInfo = ks2.getKeyInfo("testKey")
+        assertNotNull(keyInfo)
+        assertEquals(Algorithm.RS256_2048, keyInfo.algorithm)
+        assertTrue(keyInfo.publicKey is RsaPublicKey)
+        val dataToSign = byteArrayOf(1, 2, 3)
+        val signature = ks2.sign("testKey", dataToSign)
+        Crypto.checkSignature(
+            keyInfo.publicKey,
+            dataToSign,
+            Algorithm.RS256_2048,
+            signature
+        )
+    }
+
+    @Test
     fun testEcKeyEcdhAllCurves() = runTest {
         val storage = EphemeralStorage()
         val ks = SoftwareSecureArea.create(storage)
@@ -380,7 +493,7 @@ class SoftwareSecureAreaTest {
             }
 
             // ...now do it from the perspective of the other side...
-            var theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.publicKey)
+            var theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.ecPublicKey)
 
             // ... finally, check that both sides compute the same shared secret.
             assertContentEquals(theirSharedSecret, ourSharedSecret)

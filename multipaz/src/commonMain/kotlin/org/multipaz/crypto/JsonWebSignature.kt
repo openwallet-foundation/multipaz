@@ -91,7 +91,7 @@ object JsonWebSignature {
             dataToSign = toBeSigned,
             unlockReason = unlockReason
         )
-        val signatureStr = (signature.r + signature.s).toBase64Url()
+        val signatureStr = signature.toCoseEncoded().toBase64Url()
         return "$headerStr.$bodyStr.$signatureStr"
     }
 

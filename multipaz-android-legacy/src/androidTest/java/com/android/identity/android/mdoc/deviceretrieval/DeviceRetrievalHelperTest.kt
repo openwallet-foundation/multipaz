@@ -155,7 +155,7 @@ class DeviceRetrievalHelperTest {
         val msoGenerator = MobileSecurityObjectGenerator(
             Algorithm.SHA256,
             MDL_DOCTYPE,
-            mdocCredential.getAttestation().publicKey
+            mdocCredential.getAttestation().ecPublicKey
         )
         msoGenerator.setValidityInfo(timeSigned, timeValidityBegin, timeValidityEnd, null)
         val issuerNameSpaces = generateIssuerNameSpaces(

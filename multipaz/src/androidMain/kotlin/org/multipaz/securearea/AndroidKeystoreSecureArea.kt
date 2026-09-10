@@ -31,8 +31,11 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.RsaSignature
+import org.multipaz.crypto.Signature
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.crypto.checkSignature
 import org.multipaz.crypto.javaPublicKey
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
@@ -64,7 +67,7 @@ import java.security.NoSuchAlgorithmException
 import java.security.NoSuchProviderException
 import java.security.PrivateKey
 import java.security.ProviderException
-import java.security.Signature
+import java.security.Signature as JavaSignature
 import java.security.SignatureException
 import java.security.UnrecoverableEntryException
 import java.security.UnrecoverableKeyException
@@ -128,7 +131,19 @@ class AndroidKeystoreSecureArea private constructor(
 
     private val supportedAlgorithms_: List<Algorithm> by lazy {
         val algorithms = mutableListOf(
-            Algorithm.ESP256
+            Algorithm.ESP256,
+            Algorithm.RS256_2048,
+            Algorithm.RS256_3072,
+            Algorithm.RS256_4096,
+            Algorithm.RS384_3072,
+            Algorithm.RS384_4096,
+            Algorithm.RS512_4096,
+            Algorithm.PS256_2048,
+            Algorithm.PS256_3072,
+            Algorithm.PS256_4096,
+            Algorithm.PS384_3072,
+            Algorithm.PS384_4096,
+            Algorithm.PS512_4096,
         )
         val capabilities = Capabilities()
         if (capabilities.curve25519Supported) {
@@ -194,8 +209,10 @@ class AndroidKeystoreSecureArea private constructor(
         }
 
         try {
+            val isRsa = aSettings.algorithm.keySizeBits != null
             val kpg = KeyPairGenerator.getInstance(
-                KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore"
+                if (isRsa) KeyProperties.KEY_ALGORITHM_RSA else KeyProperties.KEY_ALGORITHM_EC,
+                "AndroidKeyStore"
             )
             var purposes = 0
             if (aSettings.algorithm == Algorithm.ANDROID_KEYSTORE_ATTEST_KEY) {
@@ -239,16 +256,37 @@ class AndroidKeystoreSecureArea private constructor(
             }
             val builder = KeyGenParameterSpec.Builder(newKeyAlias, purposes)
             if (aSettings.algorithm != Algorithm.ANDROID_KEYSTORE_ATTEST_KEY) {
-                when (aSettings.algorithm.curve) {
-                    EcCurve.P256 -> builder.setDigests(KeyProperties.DIGEST_SHA256)
-                    EcCurve.ED25519 -> {
-                        builder.setAlgorithmParameterSpec(ECGenParameterSpec("ed25519"))
-                        // Ed25519 hashes internally; the keystore op must be authorized for
-                        // DIGEST_NONE or signing fails with "Keystore operation failed".
-                        builder.setDigests(KeyProperties.DIGEST_NONE)
+                if (isRsa) {
+                    builder.setKeySize(aSettings.algorithm.keySizeBits!!)
+                    val digest = when (aSettings.algorithm.hashAlgorithm) {
+                        Algorithm.SHA256 -> KeyProperties.DIGEST_SHA256
+                        Algorithm.SHA384 -> KeyProperties.DIGEST_SHA384
+                        Algorithm.SHA512 -> KeyProperties.DIGEST_SHA512
+                        else -> throw IllegalArgumentException("Unsupported hash algorithm ${aSettings.algorithm.hashAlgorithm}")
                     }
-                    EcCurve.X25519 -> builder.setAlgorithmParameterSpec(ECGenParameterSpec("x25519"))
-                    else -> throw IllegalArgumentException("Curve is not supported")
+                    builder.setDigests(digest)
+                    val padding = when (aSettings.algorithm) {
+                        Algorithm.RS256_2048, Algorithm.RS256_3072, Algorithm.RS256_4096,
+                        Algorithm.RS384_3072, Algorithm.RS384_4096,
+                        Algorithm.RS512_4096 -> KeyProperties.SIGNATURE_PADDING_RSA_PKCS1
+                        Algorithm.PS256_2048, Algorithm.PS256_3072, Algorithm.PS256_4096,
+                        Algorithm.PS384_3072, Algorithm.PS384_4096,
+                        Algorithm.PS512_4096 -> KeyProperties.SIGNATURE_PADDING_RSA_PSS
+                        else -> throw IllegalArgumentException("Unsupported RSA algorithm ${aSettings.algorithm}")
+                    }
+                    builder.setSignaturePaddings(padding)
+                } else {
+                    when (aSettings.algorithm.curve) {
+                        EcCurve.P256 -> builder.setDigests(KeyProperties.DIGEST_SHA256)
+                        EcCurve.ED25519 -> {
+                            builder.setAlgorithmParameterSpec(ECGenParameterSpec("ed25519"))
+                            // Ed25519 hashes internally; the keystore op must be authorized for
+                            // DIGEST_NONE or signing fails with "Keystore operation failed".
+                            builder.setDigests(KeyProperties.DIGEST_NONE)
+                        }
+                        EcCurve.X25519 -> builder.setAlgorithmParameterSpec(ECGenParameterSpec("x25519"))
+                        else -> throw IllegalArgumentException("Curve is not supported")
+                    }
                 }
             }
             if (aSettings.userAuthenticationRequired) {
@@ -392,12 +430,23 @@ class AndroidKeystoreSecureArea private constructor(
         }
 
         // algorithm
-        val ksPurposes = keyInfo.purposes
-        if (ksPurposes and KeyProperties.PURPOSE_SIGN != 0) {
-            settingsBuilder.setAlgorithm(Algorithm.ESP256)
-        }
-        if (ksPurposes and KeyProperties.PURPOSE_AGREE_KEY != 0) {
-            settingsBuilder.setAlgorithm(Algorithm.ECDH_P256)
+        if (privateKey.algorithm == "RSA") {
+            val keySize = keyInfo.keySize
+            val isPss = keyInfo.signaturePaddings.contains(KeyProperties.SIGNATURE_PADDING_RSA_PSS)
+            val alg = when (keySize) {
+                3072 -> if (isPss) Algorithm.PS256_3072 else Algorithm.RS256_3072
+                4096 -> if (isPss) Algorithm.PS256_4096 else Algorithm.RS256_4096
+                else -> if (isPss) Algorithm.PS256_2048 else Algorithm.RS256_2048
+            }
+            settingsBuilder.setAlgorithm(alg)
+        } else {
+            val ksPurposes = keyInfo.purposes
+            if (ksPurposes and KeyProperties.PURPOSE_SIGN != 0) {
+                settingsBuilder.setAlgorithm(Algorithm.ESP256)
+            }
+            if (ksPurposes and KeyProperties.PURPOSE_AGREE_KEY != 0) {
+                settingsBuilder.setAlgorithm(Algorithm.ECDH_P256)
+            }
         }
 
         // useStrongBox
@@ -454,7 +503,7 @@ class AndroidKeystoreSecureArea private constructor(
         alias: String,
         dataToSign: ByteArray,
         unlockReason: Reason
-    ): EcSignature =
+    ): Signature =
         try {
             signNonInteractive(alias, dataToSign, null)
         } catch (_: KeyLockedException) {
@@ -473,7 +522,7 @@ class AndroidKeystoreSecureArea private constructor(
         alias: String,
         dataToSign: ByteArray,
         keyUnlockData: KeyUnlockData?,
-    ): EcSignature {
+    ): Signature {
         val (privateKey, data) = loadKey(alias)
         val decodedData = AndroidSecureAreaKeyMetadata.fromCbor(data)
         val algorithm = decodedData.algorithm
@@ -485,8 +534,12 @@ class AndroidKeystoreSecureArea private constructor(
             if (unlockData.signature != null) {
                 return try {
                     unlockData.signature!!.update(dataToSign)
-                    val derEncodedSignature = unlockData.signature!!.sign()
-                    signatureFromDer(algorithm.curve!!, derEncodedSignature)
+                    val signatureBytes = unlockData.signature!!.sign()
+                    if (algorithm.curve != null) {
+                        signatureFromDer(algorithm.curve!!, signatureBytes)
+                    } else {
+                        RsaSignature(signatureBytes)
+                    }
                 } catch (e: SignatureException) {
                     throw IllegalStateException(e.message, e)
                 }
@@ -494,11 +547,15 @@ class AndroidKeystoreSecureArea private constructor(
         }
 
         return try {
-            val s = Signature.getInstance(getSignatureAlgorithmName(algorithm))
+            val s = JavaSignature.getInstance(getSignatureAlgorithmName(algorithm))
             s.initSign(privateKey)
             s.update(dataToSign)
-            val derEncodedSignature = s.sign()
-            signatureFromDer(algorithm.curve!!, derEncodedSignature)
+            val signatureBytes = s.sign()
+            if (algorithm.curve != null) {
+                signatureFromDer(algorithm.curve!!, signatureBytes)
+            } else {
+                RsaSignature(signatureBytes)
+            }
         } catch (e: UserNotAuthenticatedException) {
             throw KeyLockedException("User not authenticated", e)
         } catch (e: SignatureException) {
@@ -663,7 +720,7 @@ class AndroidKeystoreSecureArea private constructor(
             } else {
                 keyMetadata.attestation
             }
-            val publicKey = attestationCertChain.certificates.first().ecPublicKey
+            val publicKey = attestationCertChain.certificates.first().publicKey
 
             val userAuthenticationTypes = mutableSetOf<UserAuthenticationType>()
             if (keyInfo != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -964,6 +1021,12 @@ class AndroidKeystoreSecureArea private constructor(
                 Algorithm.ES512, Algorithm.ESP512, Algorithm.ESB512 -> "SHA512withECDSA"
                 Algorithm.ED25519 -> "Ed25519"
                 Algorithm.EDDSA -> "Ed25519"
+                Algorithm.RS256, Algorithm.RS256_2048, Algorithm.RS256_3072, Algorithm.RS256_4096 -> "SHA256withRSA"
+                Algorithm.RS384, Algorithm.RS384_3072, Algorithm.RS384_4096 -> "SHA384withRSA"
+                Algorithm.RS512, Algorithm.RS512_4096 -> "SHA512withRSA"
+                Algorithm.PS256, Algorithm.PS256_2048, Algorithm.PS256_3072, Algorithm.PS256_4096 -> "SHA256withRSA/PSS"
+                Algorithm.PS384, Algorithm.PS384_3072, Algorithm.PS384_4096 -> "SHA384withRSA/PSS"
+                Algorithm.PS512, Algorithm.PS512_4096 -> "SHA512withRSA/PSS"
                 else -> throw IllegalArgumentException(
                     "Unsupported signing algorithm with id $signatureAlgorithm"
                 )

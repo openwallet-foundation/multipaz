@@ -27,7 +27,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  */
 @CborSerializationImplemented(schemaId = "elQPzwBQGz5CU2YDTAgAa5l5sTHdJrxubfMWHJcHjHU")
 sealed class EcPublicKey(
-    open val curve: EcCurve
+    open override val curve: EcCurve
 ) : PublicKey() {
 
     /**

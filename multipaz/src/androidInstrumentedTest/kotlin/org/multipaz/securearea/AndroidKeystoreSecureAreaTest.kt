@@ -38,6 +38,7 @@ import org.junit.Test
 import java.io.IOException
 import kotlin.time.Instant.Companion.fromEpochMilliseconds
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.crypto.checkSignature
 import org.multipaz.device.AndroidKeystoreSecurityLevel
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.milliseconds
@@ -410,7 +411,7 @@ class AndroidKeystoreSecureAreaTest {
         }
 
         // ...now do it from the perspective of the other side...
-        val theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.publicKey)
+        val theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.ecPublicKey)
 
         // ... finally, check that both sides compute the same shared secret.
         Assert.assertArrayEquals(theirSharedSecret, ourSharedSecret)
@@ -455,7 +456,7 @@ class AndroidKeystoreSecureAreaTest {
         }
 
         // ...now do it from the perspective of the other side...
-        val theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.publicKey)
+        val theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.ecPublicKey)
 
         // ... finally, check that both sides compute the same shared secret.
         Assert.assertArrayEquals(theirSharedSecret, ourSharedSecret)

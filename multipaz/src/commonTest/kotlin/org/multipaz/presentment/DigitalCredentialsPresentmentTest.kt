@@ -41,6 +41,9 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.JsonWebEncryption
+import org.multipaz.crypto.PrivateKey
+import org.multipaz.crypto.PublicKey
+import org.multipaz.crypto.RsaPublicKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
@@ -65,6 +68,7 @@ import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.sdjwt.SdJwtKb
+import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.trustmanagement.TrustPoint
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
@@ -77,6 +81,8 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 
@@ -371,7 +377,8 @@ class DigitalCredentialsPresentmentTest {
         signRequest: Boolean,
         encryptionKey: EcPrivateKey?,
         dcql: JsonObject,
-        transactionData: List<String>
+        transactionData: List<String>,
+        signRequestWithRsa: Boolean = false,
     ): TestOpenID4VPResponse {
         val presentmentSource = SimplePresentmentSource(
             documentStore = documentStoreTestHarness.documentStore,
@@ -385,7 +392,11 @@ class DigitalCredentialsPresentmentTest {
         val nonce = Random.nextBytes(16).toBase64Url()
 
         val readerAuthKey = if (signRequest) {
-            val key = Crypto.createEcPrivateKey(EcCurve.P256)
+            val key: PrivateKey = if (signRequestWithRsa) {
+                Crypto.createRsaPrivateKey(2048)
+            } else {
+                Crypto.createEcPrivateKey(EcCurve.P256)
+            }
             val readerRootCerts = documentStoreTestHarness.readerRootKey.certChain.certificates
             val cert = MdocUtil.generateReaderCertificate(
                 readerRootKey = documentStoreTestHarness.readerRootKey,
@@ -419,6 +430,18 @@ class DigitalCredentialsPresentmentTest {
             dcqlQuery = dcql,
             jsonTransactionData = transactionData
         )
+
+        if (signRequest) {
+            val reqJws = request["request"]!!.jsonPrimitive.content
+            val reqHeader = Json.decodeFromString<JsonObject>(
+                reqJws.split('.')[0].fromBase64Url().decodeToString()
+            )
+            if (signRequestWithRsa) {
+                assertEquals("RS256", reqHeader["alg"]?.jsonPrimitive?.content)
+            } else {
+                assertEquals("ES256", reqHeader["alg"]?.jsonPrimitive?.content)
+            }
+        }
 
         val protocol = when (version) {
             OpenID4VP.Version.DRAFT_24 -> "openid4vp"
@@ -599,14 +622,17 @@ class DigitalCredentialsPresentmentTest {
         dcql: String,
         transactionData: List<String>,
         expectedSdJwtResponse: String,
-        expectedKbJwtResponse: String?
-    ) {
+        expectedKbJwtResponse: String?,
+        signRequestWithRsa: Boolean = false,
+        issuerKey: PublicKey = documentStoreTestHarness.dsKey.publicKey,
+    ): SdJwtKb {
         val response = testOpenID4VP(
             version = version,
             signRequest = signRequest,
             encryptionKey = encryptionKey,
             dcql = Json.decodeFromString(JsonObject.serializer(), dcql),
-            transactionData = transactionData
+            transactionData = transactionData,
+            signRequestWithRsa = signRequestWithRsa,
         )
         assertEquals(1, response.vpToken.keys.size)
         val credId = response.vpToken.keys.first()
@@ -618,7 +644,7 @@ class DigitalCredentialsPresentmentTest {
             if (signRequest) CLIENT_ID else "web-origin:$ORIGIN"
         }
         val processedJwt = sdJwtKb.verify(
-            issuerKey = documentStoreTestHarness.dsKey.publicKey,
+            issuerKey = issuerKey,
             checkNonce = { nonce -> nonce == response.nonce },
             checkAudience = { audience ->
                     expectedAudience == audience
@@ -652,6 +678,7 @@ class DigitalCredentialsPresentmentTest {
                 }.encodeToString(kbJwt)
             )
         }
+        return sdJwtKb
     }
 
     suspend fun test_OID4VP_mDL(
@@ -823,6 +850,106 @@ class DigitalCredentialsPresentmentTest {
                 """.trimIndent().trim(),
             expectedKbJwtResponse = null
         )
+    }
+
+    suspend fun test_OID4VP_SDJWT_RSA(
+        versionDraftNumber: Int,
+    ) {
+        val version = when (versionDraftNumber) {
+            24 -> OpenID4VP.Version.DRAFT_24
+            29 -> OpenID4VP.Version.DRAFT_29
+            else -> throw IllegalArgumentException("Unknown draft number")
+        }
+
+        // 1. Create an RSA Document Signing (DS) key pair and certificate
+        val rsaDsPrivateKey = Crypto.createRsaPrivateKey(2048)
+        val rsaDsCert = MdocUtil.generateDsCertificate(
+            iacaKey = documentStoreTestHarness.iacaKey,
+            dsKey = rsaDsPrivateKey.publicKey,
+            subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST RSA DS"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = documentStoreTestHarness.validFrom,
+            validUntil = documentStoreTestHarness.validUntil
+        )
+        val rsaDsKey = AsymmetricKey.X509CertifiedExplicit(
+            certChain = X509CertChain(listOf(rsaDsCert)),
+            privateKey = rsaDsPrivateKey,
+            algorithm = Algorithm.RS256
+        )
+
+        // 2. Provision an SD-JWT VC credential with RSA device key binding and RSA issuer signing
+        val vct = "urn:eudi:pid:rsa:1"
+        documentStoreTestHarness.provisionSdJwtVc(
+            displayName = "EU PID (RSA)",
+            vct = vct,
+            data = listOf(
+                Pair("age_over_18", JsonPrimitive(true)),
+                Pair("family_name", JsonPrimitive("Mustermann")),
+                Pair("given_name", JsonPrimitive("Erika")),
+            ),
+            dsKey = rsaDsKey,
+            createKeySettings = SoftwareCreateKeySettings.Builder()
+                .setAlgorithm(Algorithm.RS256_2048)
+                .build()
+        )
+
+        // 3. Present over OpenID4VP with RSA-signed request (verifier authentication)
+        val sdJwtKb = test_OpenID4VP_sdJwt(
+            version = version,
+            signRequest = true,
+            signRequestWithRsa = true,
+            issuerKey = rsaDsPrivateKey.publicKey,
+            encryptionKey = null,
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "pid_rsa",
+                          "format": "dc+sd-jwt",
+                          "meta": { "vct_values": [ "$vct" ] },
+                          "claims": [
+                            { "path": ["age_over_18"] },
+                            { "path": ["given_name"] },
+                            { "path": ["family_name"] }
+                    ]}]}                
+                """.trimIndent().trim(),
+            transactionData = listOf(),
+            expectedSdJwtResponse =
+                """
+                    {
+                      "iss": "https://example-issuer.com",
+                      "vct": "$vct",
+                      "age_over_18": true,
+                      "family_name": "Mustermann",
+                      "given_name": "Erika"
+                    }
+                """.trimIndent().trim(),
+            expectedKbJwtResponse = null
+        )
+
+        // 4. Assert RSA specifics:
+        // Device key in SD-JWT cnf claim is RSA
+        val kbKey = sdJwtKb.sdJwt.kbKey
+        assertNotNull(kbKey)
+        assertTrue(kbKey is RsaPublicKey)
+
+        // Issuer key is RSA
+        assertTrue(rsaDsPrivateKey.publicKey is RsaPublicKey)
+
+        // Verify SD-JWT JWS header used RS256
+        val sdJwtCompact = sdJwtKb.compactSerialization.substringBefore('~')
+        val sdJwtHeader = Json.decodeFromString<JsonObject>(
+            sdJwtCompact.split('.')[0].fromBase64Url().decodeToString()
+        )
+        assertEquals("RS256", sdJwtHeader["alg"]?.jsonPrimitive?.content)
+
+        // Verify KB-JWT header used RS256 and typ kb+jwt
+        val kbJwtCompact = sdJwtKb.compactSerialization.substringAfterLast('~')
+        val kbJwtHeader = Json.decodeFromString<JsonObject>(
+            kbJwtCompact.split('.')[0].fromBase64Url().decodeToString()
+        )
+        assertEquals("RS256", kbJwtHeader["alg"]?.jsonPrimitive?.content)
+        assertEquals("kb+jwt", kbJwtHeader["typ"]?.jsonPrimitive?.content)
     }
 
     suspend fun test_OID4VP_SDJWT_withTransaction(
@@ -1008,6 +1135,7 @@ class DigitalCredentialsPresentmentTest {
     @Test fun OID4VP_29_NoSignedRequest_EncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(29, false, true) }
     @Test fun OID4VP_29_SignedRequest_NoEncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(29, true, false) }
     @Test fun OID4VP_29_SignedRequest_EncryptedResponse_SDJWT() = runTestWithSetup { test_OID4VP_SDJWT(29, true, true) }
+    @Test fun OID4VP_29_SignedRequest_NoEncryptedResponse_SDJWT_RSA() = runTestWithSetup { test_OID4VP_SDJWT_RSA(29) }
 
     @Test fun OID4VP_29_NoSignedRequest_NoEncryptedResponse_SDJWT_withTransaction() = runTestWithSetup { test_OID4VP_SDJWT_withTransaction(29, false, false) }
     @Test fun OID4VP_29_NoSignedRequest_EncryptedResponse_SDJWT_withTransaction() = runTestWithSetup { test_OID4VP_SDJWT_withTransaction(29, false, true) }

@@ -12,6 +12,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.RsaSignature
 import org.multipaz.prompt.PromptModel
 import org.multipaz.securearea.KeyLockedException
 import org.multipaz.securearea.PassphraseConstraints
@@ -67,10 +69,10 @@ fun SoftwareSecureAreaScreen(
                     "- Passphrase & User Auth"
                 ),
             )) {
-                // For brevity, only do passphrase / user auth for P-256 Signature and P-256 Key Agreement
-                if (algorithm.curve!! != EcCurve.P256) {
+                // For brevity, only do passphrase / user auth for P-256 Signature, P-256 Key Agreement, and RSA-2048
+                if (algorithm.curve != EcCurve.P256 && algorithm != Algorithm.RS256_2048) {
                     if (passphraseRequired || userAuthTypes.isNotEmpty()) {
-                        continue;
+                        continue
                     }
                 }
 
@@ -165,10 +167,13 @@ private suspend fun swTestUnguarded(
                 unlockReason,
             )
             val t1 = Clock.System.now()
+            val sigInfo = when (signature) {
+                is EcSignature -> "r=${signature.r.toHex()} s=${signature.s.toHex()}"
+                is RsaSignature -> "sig=${signature.signature.toHex()}"
+            }
             Logger.d(
                 TAG,
-                "Made signature in " +
-                        "r=${signature.r.toHex()} s=${signature.s.toHex()}"
+                "Made signature: $sigInfo"
             )
             showToast("Signed in (${t1 - t0})")
         } catch (e: KeyLockedException) {

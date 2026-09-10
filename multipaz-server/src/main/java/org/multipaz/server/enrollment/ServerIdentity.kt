@@ -426,7 +426,7 @@ suspend fun generateServerIdentityLeafCertificate(
         signingKey = signingKey,
         serialNumber = IssuedCertificateData.recordIssuedCertificate(
             serverIdentity = serverIdentity,
-            publicKey = enrollmentRequest.keyAttestation.publicKey,
+            publicKey = enrollmentRequest.keyAttestation.ecPublicKey,
             subject = subject,
             expiration = expiration
         ),

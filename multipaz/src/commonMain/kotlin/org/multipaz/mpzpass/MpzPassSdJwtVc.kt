@@ -3,6 +3,7 @@ package org.multipaz.mpzpass
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.PrivateKey
 
 /**
  * Represents the SD-JWT VC specific data within an MpzPass container.
@@ -13,9 +14,15 @@ import org.multipaz.crypto.EcPrivateKey
  */
 data class MpzPassSdJwtVc(
     val vct: String,
-    val deviceKeyPrivate: EcPrivateKey?,
+    val deviceKeyPrivate: PrivateKey?,
     val compactSerialization: String
 ) {
+    /**
+     * The EC private key used for key-binding, or null if the key is not an EC key or not key-bound.
+     */
+    val ecDeviceKeyPrivate: EcPrivateKey?
+        get() = deviceKeyPrivate as? EcPrivateKey
+
     /**
      * Serializes this [MpzPassSdJwtVc] instance into a CBOR map [DataItem].
      *
@@ -38,7 +45,7 @@ data class MpzPassSdJwtVc(
         @Throws(IllegalArgumentException::class)
         fun fromDataItem(dataItem: DataItem): MpzPassSdJwtVc {
             val vct = dataItem["vct"].asTstr
-            val deviceKeyPrivate = dataItem.getOrNull("deviceKeyPrivate")?.asCoseKey?.ecPrivateKey
+            val deviceKeyPrivate = dataItem.getOrNull("deviceKeyPrivate")?.asCoseKey?.privateKey
             val compactSerialization = dataItem["compactSerialization"].asTstr
             return MpzPassSdJwtVc(
                 vct = vct,

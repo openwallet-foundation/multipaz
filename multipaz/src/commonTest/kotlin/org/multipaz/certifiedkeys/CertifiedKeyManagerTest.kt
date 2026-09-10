@@ -50,7 +50,7 @@ class CertifiedKeyManagerTest {
             val validUntil = atTime + jitterUntil + validFor
             val readerCert = MdocUtil.generateReaderCertificate(
                 readerRootKey = readerRootKey,
-                readerKey = readerKey.publicKey,
+                readerKey = readerKey.ecPublicKey,
                 subject = X500Name.fromName("CN=Reader Key"),
                 dnsName = "example.com",
                 serial = ASN1Integer.fromRandom(numBits = 128, random = random),
@@ -307,7 +307,7 @@ class CertifiedKeyManagerTest {
                 testData.certifyKeysNumCalled += 1
                 val readerCert = MdocUtil.generateReaderCertificate(
                     readerRootKey = readerRootKeyCertified,
-                    readerKey = keyAttestation.publicKey,
+                    readerKey = keyAttestation.ecPublicKey,
                     subject = X500Name.fromName("CN=Single Reader Key"),
                     dnsName = "example.com",
                     serial = ASN1Integer.fromRandom(numBits = 128),

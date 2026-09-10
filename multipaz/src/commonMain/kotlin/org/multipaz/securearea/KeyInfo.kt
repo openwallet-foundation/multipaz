@@ -2,6 +2,7 @@ package org.multipaz.securearea
 
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 
 /**
  * Class with information about a key.
@@ -17,6 +18,13 @@ import org.multipaz.crypto.EcPublicKey
 open class KeyInfo protected constructor(
     val alias: String,
     val algorithm: Algorithm,
-    val publicKey: EcPublicKey,
+    val publicKey: PublicKey,
     val attestation: KeyAttestation
-)
+) {
+    /**
+     * The public key as an [EcPublicKey] if it is an EC key.
+     *
+     * @throws ClassCastException if the key is not an [EcPublicKey].
+     */
+    val ecPublicKey: EcPublicKey get() = publicKey as EcPublicKey
+}

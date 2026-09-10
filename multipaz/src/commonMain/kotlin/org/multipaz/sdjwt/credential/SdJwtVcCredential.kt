@@ -52,7 +52,7 @@ interface SdJwtVcCredential {
         // if the future goal is to support (offline) proximity presentment).
         val x5c = sdJwt.x5c
             ?: throw IllegalStateException("Only X509-certified keys are supported in SD-JWT")
-        val issuerKey = x5c.certificates.first().ecPublicKey
+        val issuerKey = x5c.certificates.first().publicKey
         val processedJwt = sdJwt.verify(issuerKey)
 
         // By design, we only include the top-level claims.

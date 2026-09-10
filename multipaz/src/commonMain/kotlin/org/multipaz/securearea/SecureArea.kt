@@ -18,7 +18,7 @@ package org.multipaz.securearea
 import kotlinx.coroutines.CancellationException
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.Signature
 import org.multipaz.prompt.Reason
 
 /**
@@ -65,7 +65,7 @@ interface SecureArea {
     /**
      * Creates a new key.
      *
-     * This creates an Elliptic Curve key-pair where the private part of the key
+     * This creates an asymmetric key-pair where the private part of the key
      * is never exposed to the user of this interface.
      *
      * The public part of the key is available in [KeyInfo.publicKey] and specific
@@ -79,7 +79,7 @@ interface SecureArea {
      *     a new unique alias is generated automatically
      * @param createKeySettings A [CreateKeySettings] object.
      * @throws IllegalArgumentException if the underlying Secure Area Implementation
-     * does not support the requested creation settings, for example the EC curve to use.
+     * does not support the requested creation settings, for example the algorithm or curve to use.
      * @return a [KeyInfo] with information about the key.
      */
     @Throws(
@@ -100,7 +100,7 @@ interface SecureArea {
      * @param numKeys number of keys to create.
      * @param createKeySettings the settings for the keys to create.
      * @throws IllegalArgumentException if the underlying Secure Area Implementation
-     * does not support the requested creation settings, for example the EC curve to use.
+     * does not support the requested creation settings, for example the algorithm or curve to use.
      */
     @Throws(
         IllegalArgumentException::class,
@@ -122,7 +122,7 @@ interface SecureArea {
      *
      * If the key to delete doesn't exist, this is a no-op.
      *
-     * @param alias The alias of the EC key to delete.
+     * @param alias The alias of the key to delete.
      */
     suspend fun deleteKey(alias: String)
 
@@ -134,12 +134,12 @@ interface SecureArea {
      * what's needed, [KeyLockedException] is thrown. Signature algorithm must be specified at key
      * creation time using [CreateKeySettings.algorithm].
      *
-     * @param alias The alias of the EC key to sign with.
+     * @param alias The alias of the key to sign with.
      * @param dataToSign the data to sign.
      * @param unlockReason the reason for unlocking.
      * @return the signature.
      * @throws IllegalArgumentException if there is no key with the given alias
-     * or the key wasn't created with purpose [KeyPurpose.SIGN].
+     * or the key wasn't created with a signing algorithm.
      * @throws IllegalArgumentException if the signature algorithm isn’t compatible with the key.
      * @throws KeyLockedException if the key needs unlocking.
      * @throws KeyInvalidatedException if the key is no longer usable.
@@ -154,10 +154,12 @@ interface SecureArea {
         alias: String,
         dataToSign: ByteArray,
         unlockReason: Reason = Reason.Unspecified
-    ): EcSignature
+    ): Signature
 
     /**
      * Performs Key Agreement.
+     *
+     * Key agreement is only supported for EC keys.
      *
      * If the key needs unlocking before use (for example user authentication
      * in any shape or form) and `keyUnlockData` isn't set or doesn't contain
@@ -167,9 +169,9 @@ interface SecureArea {
      * @param otherKey The public EC key from the other party
      * @param unlockReason the reason for unlocking.
      * @return The shared secret.
-     * @throws IllegalArgumentException if the other key isn't the same curve.
+     * @throws IllegalArgumentException if the key is not an EC key or the other key isn't the same curve.
      * @throws IllegalArgumentException if there is no key with the given alias
-     * or the key wasn't created with purpose [KeyPurpose.AGREE_KEY].
+     * or the key wasn't created with a key agreement algorithm.
      * @throws KeyLockedException if the key needs unlocking.
      * @throws KeyInvalidatedException if the key is no longer usable.
      */
@@ -190,7 +192,7 @@ interface SecureArea {
      *
      * This works even on keys that are invalidated.
      *
-     * @param alias the alias of the EC key to use.
+     * @param alias the alias of the key to use.
      * @return a [KeyInfo] object.
      * @throws IllegalArgumentException if there is no key with the given alias.
      */
@@ -200,7 +202,7 @@ interface SecureArea {
     /**
      * Checks whether the key has been invalidated.
      *
-     * @param alias the alias of the EC key to check for.
+     * @param alias the alias of the key to check for.
      * @return `true` if the key has been invalidated, `false` otherwise.
      * @throws IllegalArgumentException if there is no key with the given alias.
      */

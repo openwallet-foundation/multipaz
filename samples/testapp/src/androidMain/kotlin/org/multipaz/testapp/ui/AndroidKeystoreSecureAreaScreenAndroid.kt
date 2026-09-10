@@ -53,6 +53,8 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.context.applicationContext
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.RsaSignature
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.javaX509Certificate
 import org.multipaz.prompt.PromptModel
@@ -253,6 +255,62 @@ actual fun AndroidKeystoreSecureAreaScreen(
             }
         }
 
+        item {
+            TextButton(onClick = {
+                coroutineScope.launch {
+                    try {
+                        val attestation = aksAttestation(
+                            useStrongBox = false,
+                            useAttestKey = false,
+                            algorithm = Algorithm.RS256_2048
+                        )
+                        Logger.d(TAG, "attestation: $attestation")
+                        withContext(Dispatchers.Main) {
+                            onViewCertificate(Cbor.encode(attestation.certChain!!.toDataItem()).toBase64Url())
+                        }
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        e.printStackTrace()
+                        showToast("${e.message}")
+                    }
+                }
+            })
+            {
+                Text(
+                    text = "RSA Attestation",
+                    fontSize = 15.sp
+                )
+            }
+        }
+
+        item {
+            TextButton(onClick = {
+                coroutineScope.launch {
+                    try {
+                        val attestation = aksAttestation(
+                            useStrongBox = true,
+                            useAttestKey = false,
+                            algorithm = Algorithm.RS256_2048
+                        )
+                        Logger.d(TAG, "attestation: $attestation")
+                        withContext(Dispatchers.Main) {
+                            onViewCertificate(Cbor.encode(attestation.certChain!!.toDataItem()).toBase64Url())
+                        }
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        e.printStackTrace()
+                        showToast("${e.message}")
+                    }
+                }
+            })
+            {
+                Text(
+                    text = "RSA StrongBox Attestation",
+                    fontSize = 15.sp
+                )
+            }
+        }
+
         for ((strongBox, strongBoxDesc) in arrayOf(
             Pair(false, ""), Pair(true, "StrongBox ")
         )) {
@@ -261,6 +319,10 @@ actual fun AndroidKeystoreSecureAreaScreen(
                 Algorithm.ED25519,
                 Algorithm.ECDH_P256,
                 Algorithm.ECDH_X25519,
+                Algorithm.RS256_2048,
+                Algorithm.PS256_2048,
+                Algorithm.RS256_4096,
+                Algorithm.PS256_4096,
             )) {
                 val AUTH_NONE = setOf<UserAuthenticationType>()
                 val AUTH_LSKF_OR_BIOMETRIC = setOf(
@@ -276,9 +338,9 @@ actual fun AndroidKeystoreSecureAreaScreen(
                     Triple(AUTH_BIOMETRIC_ONLY, 0L, "- Auth (Biometric Only)"),
                     Triple(AUTH_LSKF_OR_BIOMETRIC, -1L, "- Auth (No Confirmation)"),
                 )) {
-                    val curveMatch = algorithm.curve!! == EcCurve.P256 || algorithm.curve!! == EcCurve.ED25519
-                    // For brevity, Only do auth for P-256 Sign and Mac
-                    if (!curveMatch && userAuthType != AUTH_NONE) {
+                    val allowsAuth = algorithm.curve == EcCurve.P256 || algorithm.curve == EcCurve.ED25519 || algorithm == Algorithm.RS256_2048
+                    // For brevity, only do auth for P-256 Sign, Ed25519, and RS256_2048
+                    if (!allowsAuth && userAuthType != AUTH_NONE) {
                         continue
                     }
 
@@ -562,7 +624,8 @@ private fun getFeatureVersionKeystore(appContext: Context, useStrongbox: Boolean
 
 private suspend fun aksAttestation(
     useStrongBox: Boolean,
-    useAttestKey: Boolean
+    useAttestKey: Boolean,
+    algorithm: Algorithm = Algorithm.ESP256
 ): KeyAttestation {
     val now = Clock.System.now()
     val thirtyDaysFromNow = now + 30.days
@@ -584,6 +647,7 @@ private suspend fun aksAttestation(
     androidKeystoreSecureArea.createKey(
         "testKey",
         AndroidKeystoreCreateKeySettings.Builder("Challenge".encodeToByteString())
+            .setAlgorithm(algorithm)
             .setUserAuthenticationRequired(
                 true, 10.seconds,
                 setOf(UserAuthenticationType.LSKF, UserAuthenticationType.BIOMETRIC)
@@ -651,12 +715,16 @@ private suspend fun aksTestUnguarded(
             )
         )
         val t1 = System.currentTimeMillis()
+        val sigDesc = when (signature) {
+            is EcSignature -> "r=${signature.r.toHex()} s=${signature.s.toHex()}"
+            is RsaSignature -> "bytes=${signature.signature.toHex()}"
+        }
         Logger.d(
             TAG,
-            "Made signature with key " +
-                    "r=${signature.r.toHex()} s=${signature.s.toHex()}",
+            "Made signature with key $sigDesc",
         )
-        showToast("EC signature in (${t1 - t0} msec)")
+        val sigTypeStr = if (signature is EcSignature) "EC" else "RSA"
+        showToast("$sigTypeStr signature in (${t1 - t0} msec)")
     } else {
         val otherKeyPairForEcdh = Crypto.createEcPrivateKey(algorithm.curve!!)
         val t0 = System.currentTimeMillis()

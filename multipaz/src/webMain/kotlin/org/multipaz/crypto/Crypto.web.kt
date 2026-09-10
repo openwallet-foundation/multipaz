@@ -359,13 +359,13 @@ actual object Crypto {
         algorithm: Algorithm,
         signature: RsaSignature
     ) {
-        val (name, hashName, saltLength) = when (algorithm) {
-            Algorithm.RS256 -> Triple("RSASSA-PKCS1-v1_5", "SHA-256", 0)
-            Algorithm.RS384 -> Triple("RSASSA-PKCS1-v1_5", "SHA-384", 0)
-            Algorithm.RS512 -> Triple("RSASSA-PKCS1-v1_5", "SHA-512", 0)
-            Algorithm.PS256 -> Triple("RSA-PSS", "SHA-256", 32)
-            Algorithm.PS384 -> Triple("RSA-PSS", "SHA-384", 48)
-            Algorithm.PS512 -> Triple("RSA-PSS", "SHA-512", 64)
+        val (name, hashName, saltLength) = when (algorithm.joseAlgorithmIdentifier) {
+            "RS256" -> Triple("RSASSA-PKCS1-v1_5", "SHA-256", 0)
+            "RS384" -> Triple("RSASSA-PKCS1-v1_5", "SHA-384", 0)
+            "RS512" -> Triple("RSASSA-PKCS1-v1_5", "SHA-512", 0)
+            "PS256" -> Triple("RSA-PSS", "SHA-256", 32)
+            "PS384" -> Triple("RSA-PSS", "SHA-384", 48)
+            "PS512" -> Triple("RSA-PSS", "SHA-512", 64)
             else -> throw IllegalArgumentException("Unsupported RSA algorithm $algorithm")
         }
         val importedKey = crypto.subtle.importKey(
@@ -575,13 +575,13 @@ actual object Crypto {
         signatureAlgorithm: Algorithm,
         message: ByteArray
     ): RsaSignature {
-        val (name, hashName, saltLength) = when (signatureAlgorithm) {
-            Algorithm.RS256 -> Triple("RSASSA-PKCS1-v1_5", "SHA-256", 0)
-            Algorithm.RS384 -> Triple("RSASSA-PKCS1-v1_5", "SHA-384", 0)
-            Algorithm.RS512 -> Triple("RSASSA-PKCS1-v1_5", "SHA-512", 0)
-            Algorithm.PS256 -> Triple("RSA-PSS", "SHA-256", 32)
-            Algorithm.PS384 -> Triple("RSA-PSS", "SHA-384", 48)
-            Algorithm.PS512 -> Triple("RSA-PSS", "SHA-512", 64)
+        val (name, hashName, saltLength) = when (signatureAlgorithm.joseAlgorithmIdentifier) {
+            "RS256" -> Triple("RSASSA-PKCS1-v1_5", "SHA-256", 0)
+            "RS384" -> Triple("RSASSA-PKCS1-v1_5", "SHA-384", 0)
+            "RS512" -> Triple("RSASSA-PKCS1-v1_5", "SHA-512", 0)
+            "PS256" -> Triple("RSA-PSS", "SHA-256", 32)
+            "PS384" -> Triple("RSA-PSS", "SHA-384", 48)
+            "PS512" -> Triple("RSA-PSS", "SHA-512", 64)
             else -> throw IllegalArgumentException("Unsupported RSA signing algorithm $signatureAlgorithm")
         }
         val importedKey = crypto.subtle.importKey(

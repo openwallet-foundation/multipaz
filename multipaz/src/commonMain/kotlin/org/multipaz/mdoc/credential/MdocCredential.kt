@@ -27,6 +27,7 @@ import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.cose.CoseSign1
 import org.multipaz.cose.toCoseLabel
 import org.multipaz.credential.SecureAreaBoundCredential
+import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
 import org.multipaz.documenttype.DocumentTypeRepository
@@ -323,7 +324,7 @@ class MdocCredential : SecureAreaBoundCredential {
             readerIdentifiers = document.readerIdentifiers,
             isoMdoc = listOf(MpzPassIsoMdoc(
                 docType = docType,
-                deviceKeyPrivate = deviceKeyPrivate,
+                deviceKeyPrivate = deviceKeyPrivate as EcPrivateKey,
                 issuerNamespaces = issuerNamespaces,
                 issuerAuth = issuerAuth
             ))
