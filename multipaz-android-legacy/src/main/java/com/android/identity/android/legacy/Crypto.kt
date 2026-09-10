@@ -46,6 +46,11 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  *
  * This object contains various cryptographic primitives and is a wrapper to a platform-
  * specific crypto library.
+ *
+ * For post-quantum cryptography algorithms (ML-DSA and ML-KEM) to work on the JVM or
+ * Android, the `bcprov` package (`org.bouncycastle:bcprov-jdk18on`) must be present on the
+ * classpath. It is consumed via reflection to avoid pulling in a large dependency into the
+ * core SDK.
  */
 @Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
 object Crypto {

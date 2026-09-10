@@ -161,10 +161,7 @@ import AuthenticationServices
     static let ACCESS_CONTROL_BIOMETRY_ANY = 4
     static let ACCESS_CONTROL_USER_PRESENCE = 8
     
-    @objc(secureEnclaveCreateEcPrivateKey: :) public class func secureEnclaveCreateEcPrivateKey(isForKeyAgreement: Bool, accessControlCreateFlags: Int) -> Array<Data> {
-        
-        let authContext = LAContext()
-        
+    private class func createAccessControl(accessControlCreateFlags: Int) -> SecAccessControl? {
         var flags = SecAccessControlCreateFlags([.privateKeyUsage])
         if (accessControlCreateFlags & ACCESS_CONTROL_DEVICE_PASSCODE != 0) {
             flags.insert(.devicePasscode)
@@ -177,12 +174,17 @@ import AuthenticationServices
         }
         
         var error: Unmanaged<CFError>?
-        guard let accessControl = SecAccessControlCreateWithFlags(
+        return SecAccessControlCreateWithFlags(
             kCFAllocatorDefault,
             kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
             flags,
             &error
-        ) else {
+        )
+    }
+
+    @objc(secureEnclaveCreateEcPrivateKey: :) public class func secureEnclaveCreateEcPrivateKey(isForKeyAgreement: Bool, accessControlCreateFlags: Int) -> Array<Data> {
+        let authContext = LAContext()
+        guard let accessControl = createAccessControl(accessControlCreateFlags: accessControlCreateFlags) else {
             return []
         }
         
@@ -232,6 +234,119 @@ import AuthenticationServices
         } catch {
             return nil
         }
+    }
+
+    @objc(secureEnclaveCreateMlDsaPrivateKey: :) public class func secureEnclaveCreateMlDsaPrivateKey(
+        algorithm: String, accessControlCreateFlags: Int) -> Array<Data> {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            let authContext = LAContext()
+            guard let accessControl = createAccessControl(accessControlCreateFlags: accessControlCreateFlags) else {
+                return []
+            }
+            if algorithm == "ML-DSA-65" {
+                guard let key = try? SecureEnclave.MLDSA65.PrivateKey(
+                    accessControl: accessControl,
+                    authenticationContext: authContext
+                ) else {
+                    return []
+                }
+                return [key.dataRepresentation, key.publicKey.rawRepresentation]
+            } else if algorithm == "ML-DSA-87" {
+                guard let key = try? SecureEnclave.MLDSA87.PrivateKey(
+                    accessControl: accessControl,
+                    authenticationContext: authContext
+                ) else {
+                    return []
+                }
+                return [key.dataRepresentation, key.publicKey.rawRepresentation]
+            }
+        }
+        return []
+    }
+
+    @objc(secureEnclaveMlDsaSign: : : :) public class func secureEnclaveMlDsaSign(
+        algorithm: String, keyBlob: Data, dataToSign: Data, authContext: LAContext?) -> Data? {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            if algorithm == "ML-DSA-65" {
+                guard let key = try? SecureEnclave.MLDSA65.PrivateKey(
+                    dataRepresentation: keyBlob,
+                    authenticationContext: authContext
+                ) else {
+                    return nil
+                }
+                return try? key.signature(for: dataToSign)
+            } else if algorithm == "ML-DSA-87" {
+                guard let key = try? SecureEnclave.MLDSA87.PrivateKey(
+                    dataRepresentation: keyBlob,
+                    authenticationContext: authContext
+                ) else {
+                    return nil
+                }
+                return try? key.signature(for: dataToSign)
+            }
+        }
+        return nil
+    }
+
+    @objc(secureEnclaveCreateMlKemPrivateKey: :) public class func secureEnclaveCreateMlKemPrivateKey(
+        algorithm: String, accessControlCreateFlags: Int) -> Array<Data> {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            let authContext = LAContext()
+            guard let accessControl = createAccessControl(accessControlCreateFlags: accessControlCreateFlags) else {
+                return []
+            }
+            if algorithm == "ML-KEM-768" {
+                guard let key = try? SecureEnclave.MLKEM768.PrivateKey(
+                    accessControl: accessControl,
+                    authenticationContext: authContext
+                ) else {
+                    return []
+                }
+                return [key.dataRepresentation, key.publicKey.rawRepresentation]
+            } else if algorithm == "ML-KEM-1024" {
+                guard let key = try? SecureEnclave.MLKEM1024.PrivateKey(
+                    accessControl: accessControl,
+                    authenticationContext: authContext
+                ) else {
+                    return []
+                }
+                return [key.dataRepresentation, key.publicKey.rawRepresentation]
+            }
+        }
+        return []
+    }
+
+    @objc(secureEnclaveMlKemDecapsulate: : : :) public class func secureEnclaveMlKemDecapsulate(
+        algorithm: String, keyBlob: Data, ciphertext: Data, authContext: LAContext?) -> Data? {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            if algorithm == "ML-KEM-768" {
+                guard let key = try? SecureEnclave.MLKEM768.PrivateKey(
+                    dataRepresentation: keyBlob,
+                    authenticationContext: authContext
+                ),
+                let sharedSecret = try? key.decapsulate(ciphertext) else {
+                    return nil
+                }
+                return sharedSecret.withUnsafeBytes { Data($0) }
+            } else if algorithm == "ML-KEM-1024" {
+                guard let key = try? SecureEnclave.MLKEM1024.PrivateKey(
+                    dataRepresentation: keyBlob,
+                    authenticationContext: authContext
+                ),
+                let sharedSecret = try? key.decapsulate(ciphertext) else {
+                    return nil
+                }
+                return sharedSecret.withUnsafeBytes { Data($0) }
+            }
+        }
+        return nil
+    }
+
+    @objc(secureEnclaveIsPqcSupported) public class func secureEnclaveIsPqcSupported() -> Bool {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            return true
+        }
+        return false
     }
 
     @objc(ecPublicKeyToPem: :) public class func ecPublicKeyToPem(curve: Int, rawRepresentation: Data) -> String? {
@@ -476,6 +591,106 @@ import AuthenticationServices
         }
         let data = SecKeyCopyExternalRepresentation(key!, nil)
         return data as Data?
+    }
+
+    @objc(mldsaCreatePrivateKey:) public class func mldsaCreatePrivateKey(algorithm: String) -> Array<Data> {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            if algorithm == "ML-DSA-65" {
+                if let key = try? MLDSA65.PrivateKey() {
+                    return [key.seedRepresentation, key.publicKey.rawRepresentation]
+                }
+            } else if algorithm == "ML-DSA-87" {
+                if let key = try? MLDSA87.PrivateKey() {
+                    return [key.seedRepresentation, key.publicKey.rawRepresentation]
+                }
+            }
+        }
+        return []
+    }
+
+    @objc(mldsaSign::::) public class func mldsaSign(algorithm: String, seed: Data, pubKey: Data, message: Data) -> Data? {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            if algorithm == "ML-DSA-65" {
+                if let pub = try? MLDSA65.PublicKey(rawRepresentation: pubKey),
+                   let priv = try? MLDSA65.PrivateKey(seedRepresentation: seed, publicKey: pub) {
+                    return try? priv.signature(for: message)
+                }
+            } else if algorithm == "ML-DSA-87" {
+                if let pub = try? MLDSA87.PublicKey(rawRepresentation: pubKey),
+                   let priv = try? MLDSA87.PrivateKey(seedRepresentation: seed, publicKey: pub) {
+                    return try? priv.signature(for: message)
+                }
+            }
+        }
+        return nil
+    }
+
+    @objc(mldsaVerifySignature::::) public class func mldsaVerifySignature(algorithm: String, pubKey: Data, message: Data, signature: Data) -> Bool {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            if algorithm == "ML-DSA-65" {
+                if let pub = try? MLDSA65.PublicKey(rawRepresentation: pubKey) {
+                    return pub.isValidSignature(signature, for: message)
+                }
+            } else if algorithm == "ML-DSA-87" {
+                if let pub = try? MLDSA87.PublicKey(rawRepresentation: pubKey) {
+                    return pub.isValidSignature(signature, for: message)
+                }
+            }
+        }
+        return false
+    }
+
+    @objc(mlkemCreatePrivateKey:) public class func mlkemCreatePrivateKey(algorithm: String) -> Array<Data> {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            if algorithm == "ML-KEM-768" {
+                if let key = try? MLKEM768.PrivateKey() {
+                    return [key.seedRepresentation, key.publicKey.rawRepresentation]
+                }
+            } else if algorithm == "ML-KEM-1024" {
+                if let key = try? MLKEM1024.PrivateKey() {
+                    return [key.seedRepresentation, key.publicKey.rawRepresentation]
+                }
+            }
+        }
+        return []
+    }
+
+    @objc(mlkemEncapsulate::) public class func mlkemEncapsulate(algorithm: String, pubKey: Data) -> Array<Data>? {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            if algorithm == "ML-KEM-768" {
+                if let pub = try? MLKEM768.PublicKey(rawRepresentation: pubKey),
+                   let res = try? pub.encapsulate() {
+                    let secretData = res.sharedSecret.withUnsafeBytes { Data($0) }
+                    return [secretData, res.encapsulated]
+                }
+            } else if algorithm == "ML-KEM-1024" {
+                if let pub = try? MLKEM1024.PublicKey(rawRepresentation: pubKey),
+                   let res = try? pub.encapsulate() {
+                    let secretData = res.sharedSecret.withUnsafeBytes { Data($0) }
+                    return [secretData, res.encapsulated]
+                }
+            }
+        }
+        return nil
+    }
+
+    @objc(mlkemDecapsulate::::) public class func mlkemDecapsulate(algorithm: String, seed: Data, pubKey: Data, ciphertext: Data) -> Data? {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            if algorithm == "ML-KEM-768" {
+                if let pub = try? MLKEM768.PublicKey(rawRepresentation: pubKey),
+                   let priv = try? MLKEM768.PrivateKey(seedRepresentation: seed, publicKey: pub),
+                   let secret = try? priv.decapsulate(ciphertext) {
+                    return secret.withUnsafeBytes { Data($0) }
+                }
+            } else if algorithm == "ML-KEM-1024" {
+                if let pub = try? MLKEM1024.PublicKey(rawRepresentation: pubKey),
+                   let priv = try? MLKEM1024.PrivateKey(seedRepresentation: seed, publicKey: pub),
+                   let secret = try? priv.decapsulate(ciphertext) {
+                    return secret.withUnsafeBytes { Data($0) }
+                }
+            }
+        }
+        return nil
     }
     
     @objc(generateDeviceAttestation::) public class func generateDeviceAttestation(

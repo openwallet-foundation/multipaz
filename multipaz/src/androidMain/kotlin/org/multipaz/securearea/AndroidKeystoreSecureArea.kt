@@ -31,6 +31,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.MlDsaSignature
 import org.multipaz.crypto.RsaSignature
 import org.multipaz.crypto.Signature
 import org.multipaz.crypto.X509Cert
@@ -155,6 +156,10 @@ class AndroidKeystoreSecureArea private constructor(
                 algorithms.add(Algorithm.ECDH_X25519)
             }
         }
+        if (capabilities.mlDsaSupported) {
+            algorithms.add(Algorithm.ML_DSA_65)
+            algorithms.add(Algorithm.ML_DSA_87)
+        }
         algorithms
     }
 
@@ -210,8 +215,19 @@ class AndroidKeystoreSecureArea private constructor(
 
         try {
             val isRsa = aSettings.algorithm.keySizeBits != null
+            val isMlDsa = aSettings.algorithm.isMlDsa
+            val kpgAlgorithm = when {
+                isMlDsa -> when (aSettings.algorithm) {
+                    Algorithm.ML_DSA_44 -> "ML-DSA-44"
+                    Algorithm.ML_DSA_65 -> "ML-DSA-65"
+                    Algorithm.ML_DSA_87 -> "ML-DSA-87"
+                    else -> throw IllegalArgumentException("Unsupported ML-DSA algorithm ${aSettings.algorithm}")
+                }
+                isRsa -> KeyProperties.KEY_ALGORITHM_RSA
+                else -> KeyProperties.KEY_ALGORITHM_EC
+            }
             val kpg = KeyPairGenerator.getInstance(
-                if (isRsa) KeyProperties.KEY_ALGORITHM_RSA else KeyProperties.KEY_ALGORITHM_EC,
+                kpgAlgorithm,
                 "AndroidKeyStore"
             )
             var purposes = 0
@@ -253,6 +269,17 @@ class AndroidKeystoreSecureArea private constructor(
                         }
                     }
                 }
+                if (isMlDsa) {
+                    if (aSettings.useStrongBox) {
+                        require(keymintSbFeatureLevel >= 500) {
+                            "ML-DSA not supported on this StrongBox KeyMint version"
+                        }
+                    } else {
+                        require(keymintTeeFeatureLevel >= 500) {
+                            "ML-DSA not supported on this KeyMint version"
+                        }
+                    }
+                }
             }
             val builder = KeyGenParameterSpec.Builder(newKeyAlias, purposes)
             if (aSettings.algorithm != Algorithm.ANDROID_KEYSTORE_ATTEST_KEY) {
@@ -275,6 +302,8 @@ class AndroidKeystoreSecureArea private constructor(
                         else -> throw IllegalArgumentException("Unsupported RSA algorithm ${aSettings.algorithm}")
                     }
                     builder.setSignaturePaddings(padding)
+                } else if (isMlDsa) {
+                    builder.setDigests(KeyProperties.DIGEST_NONE)
                 } else {
                     when (aSettings.algorithm.curve) {
                         EcCurve.P256 -> builder.setDigests(KeyProperties.DIGEST_SHA256)
@@ -439,6 +468,12 @@ class AndroidKeystoreSecureArea private constructor(
                 else -> if (isPss) Algorithm.PS256_2048 else Algorithm.RS256_2048
             }
             settingsBuilder.setAlgorithm(alg)
+        } else if (privateKey.algorithm == "ML-DSA-65") {
+            settingsBuilder.setAlgorithm(Algorithm.ML_DSA_65)
+        } else if (privateKey.algorithm == "ML-DSA-87") {
+            settingsBuilder.setAlgorithm(Algorithm.ML_DSA_87)
+        } else if (privateKey.algorithm == "ML-DSA-44") {
+            settingsBuilder.setAlgorithm(Algorithm.ML_DSA_44)
         } else {
             val ksPurposes = keyInfo.purposes
             if (ksPurposes and KeyProperties.PURPOSE_SIGN != 0) {
@@ -476,7 +511,7 @@ class AndroidKeystoreSecureArea private constructor(
             userAuthenticationTypes
         )
         saveKeyMetadata(existingAlias, settingsBuilder.build(), X509CertChain(attestationCerts))
-        Logger.d(TAG, "EC existing key with alias '$existingAlias' created")
+        Logger.d(TAG, "Existing key with alias '$existingAlias' created")
     }
 
     override suspend fun deleteKey(alias: String) {
@@ -537,6 +572,8 @@ class AndroidKeystoreSecureArea private constructor(
                     val signatureBytes = unlockData.signature!!.sign()
                     if (algorithm.curve != null) {
                         signatureFromDer(algorithm.curve!!, signatureBytes)
+                    } else if (algorithm.isMlDsa) {
+                        MlDsaSignature(signatureBytes)
                     } else {
                         RsaSignature(signatureBytes)
                     }
@@ -553,6 +590,8 @@ class AndroidKeystoreSecureArea private constructor(
             val signatureBytes = s.sign()
             if (algorithm.curve != null) {
                 signatureFromDer(algorithm.curve!!, signatureBytes)
+            } else if (algorithm.isMlDsa) {
+                MlDsaSignature(signatureBytes)
             } else {
                 RsaSignature(signatureBytes)
             }
@@ -867,6 +906,22 @@ class AndroidKeystoreSecureArea private constructor(
             get() = sbFeatureLevel >= 200
 
         /**
+         * Whether ML-DSA is supported.
+         *
+         * This is only supported in KeyMint 5.0 (version 500) and higher.
+         */
+        val mlDsaSupported: Boolean
+            get() = teeFeatureLevel >= 500
+
+        /**
+         * Whether StrongBox ML-DSA is supported.
+         *
+         * This is only supported in StrongBox KeyMint 5.0 (version 500) and higher.
+         */
+        val strongBoxMlDsaSupported: Boolean
+            get() = sbFeatureLevel >= 500
+
+        /**
          * Tests if the implementation properly supports key attestations and ECDSA signatures with Curve P-256.
          *
          * Key attestations and ECDSA signatures with Curve P-256 are used for ISO mdoc credentials
@@ -985,6 +1040,112 @@ class AndroidKeystoreSecureArea private constructor(
                 }
             }
         }
+        /**
+         * Tests if the implementation properly supports key attestations and ML-DSA signatures with ML-DSA-65.
+         *
+         * @param useStrongBox `false` to test normal TEE implementation, `true` to test StrongBox.
+         * @throws IllegalArgumentException if [useStrongBox] is `true` but [strongBoxMlDsaSupported] is `false`,
+         *   or if [useStrongBox] is `false` but [mlDsaSupported] is `false`.
+         * @throws IllegalStateException if one of the checks fail.
+         */
+        @RequiresApi(Build.VERSION_CODES.P)
+        suspend fun testKeyAttestationsAndMlDsaSigning(
+            useStrongBox: Boolean
+        ) {
+            if (useStrongBox) {
+                require(strongBoxMlDsaSupported) { "testStrongBox is true but device does not support StrongBox ML-DSA" }
+            } else {
+                require(mlDsaSupported) { "Device does not support ML-DSA" }
+            }
+            val storage = EphemeralStorage()
+            val secureArea = create(storage = storage)
+            var keyAliasToCleanUp: String? = null
+            try {
+                val attestationChallenge = "Challenge".encodeToByteString()
+                val keyInfo = try {
+                    secureArea.createKey(
+                        alias = null,
+                        createKeySettings = buildAndroidKeystoreCreateKeySettings(attestationChallenge) {
+                            setAlgorithm(Algorithm.ML_DSA_65)
+                            setUseStrongBox(useStrongBox)
+                        }
+                    )
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    throw IllegalStateException("Error creating key: ${e.message}", e)
+                }
+                keyAliasToCleanUp = keyInfo.alias
+
+                val signatureCertificateDigests = mutableSetOf<ByteString>()
+                val pkg = applicationContext.packageManager
+                    .getPackageInfo(applicationContext.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+
+                val si = pkg.signingInfo!!
+                val signersToUse = if (si.hasMultipleSigners()) {
+                    si.apkContentsSigners.toList()
+                } else {
+                    si.signingCertificateHistory.toList()
+                }
+                signersToUse.forEach { signatureInfo ->
+                    signatureCertificateDigests.add(
+                        ByteString(Crypto.digest(Algorithm.SHA256, signatureInfo.toByteArray()))
+                    )
+                }
+
+                try {
+                    validateAndroidKeyAttestation(
+                        chain = keyInfo.attestation.certChain!!,
+                        challenge = attestationChallenge,
+                        requireGmsAttestation = true,
+                        requireVerifiedBootGreen = true,
+                        requireKeyMintSecurityLevel = if (useStrongBox) {
+                            AndroidKeystoreSecurityLevel.STRONG_BOX
+                        } else {
+                            AndroidKeystoreSecurityLevel.TRUSTED_ENVIRONMENT
+                        },
+                        requireAppSignatureCertificateDigests = signatureCertificateDigests,
+                        requireAppPackages = setOf(pkg.packageName)
+                    )
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    throw IllegalStateException("Error validating attestation: ${e.message}", e)
+                }
+
+                for (messageLen in listOf(16, 64, 256, 1024, 4 * 1024, 64 * 1024, 128 * 1024)) {
+                    val message = Random.Default.nextBytes(messageLen)
+                    val signature = try {
+                        secureArea.sign(
+                            alias = keyInfo.alias,
+                            dataToSign = message,
+                            unlockReason = Reason.Unspecified
+                        )
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        throw IllegalStateException("Error signing message of $messageLen bytes", e)
+                    }
+                    try {
+                        Crypto.checkSignature(
+                            publicKey = keyInfo.publicKey,
+                            message = message,
+                            algorithm = Algorithm.ML_DSA_65,
+                            signature = signature
+                        )
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        throw IllegalStateException("Error verifying signature for message of $messageLen bytes", e)
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                throw IllegalStateException("Test failed: ${e.message}", e)
+            } finally {
+                if (keyAliasToCleanUp != null) {
+                    withContext(context = NonCancellable) {
+                        secureArea.deleteKey(keyAliasToCleanUp)
+                    }
+                }
+            }
+        }
     }
 
     companion object {
@@ -1027,6 +1188,9 @@ class AndroidKeystoreSecureArea private constructor(
                 Algorithm.PS256, Algorithm.PS256_2048, Algorithm.PS256_3072, Algorithm.PS256_4096 -> "SHA256withRSA/PSS"
                 Algorithm.PS384, Algorithm.PS384_3072, Algorithm.PS384_4096 -> "SHA384withRSA/PSS"
                 Algorithm.PS512, Algorithm.PS512_4096 -> "SHA512withRSA/PSS"
+                Algorithm.ML_DSA_44 -> "ML-DSA-44"
+                Algorithm.ML_DSA_65 -> "ML-DSA-65"
+                Algorithm.ML_DSA_87 -> "ML-DSA-87"
                 else -> throw IllegalArgumentException(
                     "Unsupported signing algorithm with id $signatureAlgorithm"
                 )

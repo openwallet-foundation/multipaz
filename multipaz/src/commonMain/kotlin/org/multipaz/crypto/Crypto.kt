@@ -5,8 +5,12 @@ package org.multipaz.crypto
 /**
  * Cryptographic support routines.
  *
- * This object contains various cryptographic primitives and is a wrapper to a platform-
- * specific crypto library.
+ * This object contains various cryptographic primitives and is a wrapper to a platform-specific crypto library.
+ *
+ * For post-quantum cryptography algorithms (ML-DSA and ML-KEM) to work on the JVM or
+ * Android, the `bcprov` package (`org.bouncycastle:bcprov-jdk18on`) must be present on the
+ * classpath. It is consumed via reflection to avoid pulling in a large dependency into the
+ * core SDK.
  */
 expect object Crypto {
 
@@ -18,9 +22,26 @@ expect object Crypto {
     /**
      * The encryption algorithms supported by the platform.
      *
-     * This is a subset of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM].
+     * This is a subset of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM],
+     * [Algorithm.A128CBC], [Algorithm.A192CBC], [Algorithm.A256CBC].
      */
     val supportedEncryptionAlgorithms: Set<Algorithm>
+
+    /**
+     * The ML-DSA algorithms supported by the platform.
+     *
+     * On JVM and Android, this requires the `bcprov` package (`org.bouncycastle:bcprov-jdk18on`)
+     * on the classpath, which is consumed via reflection. If not present, this set is empty.
+     */
+    val supportedMlDsaAlgorithms: Set<Algorithm>
+
+    /**
+     * The ML-KEM algorithms supported by the platform.
+     *
+     * On JVM and Android, this requires the `bcprov` package (`org.bouncycastle:bcprov-jdk18on`)
+     * on the classpath, which is consumed via reflection. If not present, this set is empty.
+     */
+    val supportedMlKemAlgorithms: Set<Algorithm>
 
     /**
      * A human-readable description of the underlying library used.
@@ -132,6 +153,23 @@ expect object Crypto {
     )
 
     /**
+     * Checks signature validity for an ML-DSA key.
+     *
+     * @param publicKey the public key the signature was made with.
+     * @param message the data that was signed.
+     * @param algorithm the signature algorithm to use.
+     * @param signature the signature.
+     * @throws SignatureVerificationException if the signature check fails.
+     * @throws IllegalArgumentException if an error occurred during the check, for example if data is malformed.
+     */
+    suspend fun checkSignature(
+        publicKey: MlDsaPublicKey,
+        message: ByteArray,
+        algorithm: Algorithm,
+        signature: MlDsaSignature
+    )
+
+    /**
      * Creates an EC private key.
      *
      * @param curve the curve to use.
@@ -147,6 +185,26 @@ expect object Crypto {
     suspend fun createRsaPrivateKey(
         keySizeBits: Int = 2048
     ): RsaPrivateKey
+
+    /**
+     * Creates an ML-DSA private key.
+     *
+     * @param algorithm the ML-DSA algorithm to use ([Algorithm.ML_DSA_44], [Algorithm.ML_DSA_65], or [Algorithm.ML_DSA_87]).
+     * @return the newly created private key.
+     */
+    suspend fun createMlDsaPrivateKey(
+        algorithm: Algorithm = Algorithm.ML_DSA_65
+    ): MlDsaPrivateKey
+
+    /**
+     * Creates an ML-KEM private key.
+     *
+     * @param algorithm the ML-KEM algorithm to use ([Algorithm.ML_KEM_512], [Algorithm.ML_KEM_768], or [Algorithm.ML_KEM_1024]).
+     * @return the newly created private key.
+     */
+    suspend fun createMlKemPrivateKey(
+        algorithm: Algorithm = Algorithm.ML_KEM_768
+    ): MlKemPrivateKey
 
     /**
      * Signs data with a key.
@@ -180,6 +238,42 @@ expect object Crypto {
     ): RsaSignature
 
     /**
+     * Signs data with an ML-DSA key.
+     *
+     * @param key the key to sign with.
+     * @param signatureAlgorithm the signature algorithm to use.
+     * @param message the data to sign.
+     * @return the signature.
+     */
+    suspend fun sign(
+        key: MlDsaPrivateKey,
+        signatureAlgorithm: Algorithm,
+        message: ByteArray
+    ): MlDsaSignature
+
+    /**
+     * Encapsulates a shared secret using an ML-KEM recipient public key.
+     *
+     * @param recipientPublicKey the public key of the recipient.
+     * @return the [KemResult] containing the generated shared secret and ciphertext.
+     */
+    suspend fun kemEncapsulate(
+        recipientPublicKey: MlKemPublicKey
+    ): KemResult
+
+    /**
+     * Decapsulates a shared secret using an ML-KEM private key and ciphertext.
+     *
+     * @param key the recipient private key.
+     * @param ciphertext the ciphertext produced by encapsulation.
+     * @return the decapsulated shared secret.
+     */
+    suspend fun kemDecapsulate(
+        key: MlKemPrivateKey,
+        ciphertext: ByteArray
+    ): ByteArray
+
+    /**
      * Performs Key Agreement.
      *
      * @param key the key to use for key agreement.
@@ -202,6 +296,7 @@ expect object Crypto {
 }
 
 
+
 /**
  * Signs data with a private key.
  *
@@ -217,6 +312,8 @@ suspend fun Crypto.sign(
 ): Signature = when (key) {
     is EcPrivateKey -> sign(key, signatureAlgorithm, message)
     is RsaPrivateKey -> sign(key, signatureAlgorithm, message)
+    is MlDsaPrivateKey -> sign(key, signatureAlgorithm, message)
+    is MlKemPrivateKey -> throw IllegalArgumentException("Cannot sign with ML-KEM key")
 }
 
 /**
@@ -238,5 +335,7 @@ suspend fun Crypto.checkSignature(
     when (publicKey) {
         is EcPublicKey -> checkSignature(publicKey, message, algorithm, signature as EcSignature)
         is RsaPublicKey -> checkSignature(publicKey, message, algorithm, signature as RsaSignature)
+        is MlDsaPublicKey -> checkSignature(publicKey, message, algorithm, signature as MlDsaSignature)
+        is MlKemPublicKey -> throw IllegalArgumentException("Cannot verify signature with ML-KEM key")
     }
 }

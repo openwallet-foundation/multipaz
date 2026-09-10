@@ -39,6 +39,8 @@ import org.multipaz.compose.datetime.formattedDateTime
 import org.multipaz.compose.decodeImage
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.MlDsaPublicKey
+import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.crypto.RsaPublicKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentAttributeType
@@ -286,6 +288,8 @@ private suspend fun parseResponse(
                 val mdocDsKeyDesc = when (val pk = vp.documentSignerCertChain.certificates.first().publicKey) {
                     is EcPublicKey -> pk.curve.name
                     is RsaPublicKey -> "RSA (${pk.modulus.size * 8} bits)"
+                    is MlDsaPublicKey -> pk.algorithm.name
+                    is MlKemPublicKey -> pk.algorithm.name
                 }
                 lines.add(Line("Issuer DS key", ValueText(mdocDsKeyDesc)))
                 val trustResult =
@@ -336,6 +340,8 @@ private suspend fun parseResponse(
                 val sdJwtDsKeyDesc = when (val pk = vp.documentSignerCertChain.certificates.first().publicKey) {
                     is EcPublicKey -> pk.curve.name
                     is RsaPublicKey -> "RSA (${pk.modulus.size * 8} bits)"
+                    is MlDsaPublicKey -> pk.algorithm.name
+                    is MlKemPublicKey -> pk.algorithm.name
                 }
                 lines.add(Line("Issuer DS key", ValueText(sdJwtDsKeyDesc)))
                 val trustResult =

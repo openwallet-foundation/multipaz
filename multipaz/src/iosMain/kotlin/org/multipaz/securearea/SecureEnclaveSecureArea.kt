@@ -1,15 +1,20 @@
 package org.multipaz.securearea
 
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.MlDsaPublicKey
+import org.multipaz.crypto.MlDsaSignature
+import org.multipaz.crypto.MlKemPublicKey
+import org.multipaz.crypto.PublicKey
+import org.multipaz.crypto.Signature
+import org.multipaz.prompt.Reason
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
-import kotlinx.io.bytestring.ByteString
-import org.multipaz.prompt.Reason
 import org.multipaz.util.Logger
 import org.multipaz.util.isRunningOnSimulator
 import kotlin.coroutines.coroutineContext
@@ -18,7 +23,9 @@ import kotlin.coroutines.coroutineContext
  * An implementation of [SecureArea] using the Apple Secure Enclave.
  *
  * This implementation uses [CryptoKit](https://developer.apple.com/documentation/cryptokit/secureenclave)
- * and only supports [EcCurve.P256]. Keys can optionally be protected by user authentication
+ * and supports [Algorithm.ESP256] and [Algorithm.ECDH_P256], and starting with iOS 26, post-quantum
+ * algorithms [Algorithm.ML_DSA_65], [Algorithm.ML_DSA_87], [Algorithm.ML_KEM_768], and
+ * [Algorithm.ML_KEM_1024]. Keys can optionally be protected by user authentication
  * which can be specified using [SecureEnclaveUserAuthType] and [SecureEnclaveCreateKeySettings].
  *
  * Note that this platform automatically displays authentication dialogs when a key is used (if
@@ -70,7 +77,16 @@ class SecureEnclaveSecureArea private constructor(
         get() = "Secure Enclave Secure Area"
 
     override val supportedAlgorithms: List<Algorithm>
-        get() = listOf(Algorithm.ESP256, Algorithm.ECDH_P256)
+        get() {
+            val list = mutableListOf(Algorithm.ESP256, Algorithm.ECDH_P256)
+            if (Crypto.secureEnclaveIsPqcSupported) {
+                list.add(Algorithm.ML_DSA_65)
+                list.add(Algorithm.ML_DSA_87)
+                list.add(Algorithm.ML_KEM_768)
+                list.add(Algorithm.ML_KEM_1024)
+            }
+            return list
+        }
 
     override suspend fun createKey(alias: String?, createKeySettings: CreateKeySettings): KeyInfo {
         if (alias != null) {
@@ -78,8 +94,9 @@ class SecureEnclaveSecureArea private constructor(
             storageTable.delete(alias, partitionId)
         }
 
-        // Signing and Key Agreemnt with P-256 is the only thing that'll work.
-        check(createKeySettings.algorithm == Algorithm.ESP256 || createKeySettings.algorithm == Algorithm.ECDH_P256)
+        require(createKeySettings.algorithm in supportedAlgorithms) {
+            "Algorithm ${createKeySettings.algorithm} is not supported"
+        }
 
         val settings = if (createKeySettings is SecureEnclaveCreateKeySettings) {
             createKeySettings
@@ -113,11 +130,27 @@ class SecureEnclaveSecureArea private constructor(
                 accessControlCreateFlags = 0L
             }
         }
-        val (keyBlob, pubKey) = Crypto.secureEnclaveCreateEcPrivateKey(
-            settings.algorithm,
-            accessControlCreateFlags
-        )
-        //Logger.d(TAG, "EC key with alias '$alias' created")
+        val (keyBlob, pubKey) = when (settings.algorithm) {
+            Algorithm.ESP256, Algorithm.ECDH_P256 -> {
+                Crypto.secureEnclaveCreateEcPrivateKey(
+                    settings.algorithm,
+                    accessControlCreateFlags
+                )
+            }
+            Algorithm.ML_DSA_65, Algorithm.ML_DSA_87 -> {
+                Crypto.secureEnclaveCreateMlDsaPrivateKey(
+                    settings.algorithm,
+                    accessControlCreateFlags
+                )
+            }
+            Algorithm.ML_KEM_768, Algorithm.ML_KEM_1024 -> {
+                Crypto.secureEnclaveCreateMlKemPrivateKey(
+                    settings.algorithm,
+                    accessControlCreateFlags
+                )
+            }
+            else -> throw IllegalArgumentException("Unsupported algorithm ${settings.algorithm}")
+        }
         val newAlias = insertKey(alias, settings, keyBlob, pubKey)
         return getKeyInfo(newAlias)
     }
@@ -126,7 +159,7 @@ class SecureEnclaveSecureArea private constructor(
         alias: String?,
         settings: SecureEnclaveCreateKeySettings,
         keyBlob: ByteArray,
-        publicKey: EcPublicKey,
+        publicKey: PublicKey,
     ): String {
         val keyMetadata = SecureEnclaveAreaKeyMetadata(
             algorithm = settings.algorithm,
@@ -151,7 +184,8 @@ class SecureEnclaveSecureArea private constructor(
             keyMetadata.algorithm,
             keyMetadata.publicKey,
             keyMetadata.userAuthenticationRequired,
-            userAuthenticationTypes)
+            userAuthenticationTypes
+        )
 
         return Pair(keyMetadata.keyBlob.toByteArray(), keyInfo)
     }
@@ -164,7 +198,7 @@ class SecureEnclaveSecureArea private constructor(
         alias: String,
         dataToSign: ByteArray,
         unlockReason: Reason
-    ): EcSignature {
+    ): Signature {
         val (keyBlob, keyInfo) = loadKey(alias)
         check(keyInfo.algorithm.isSigning)
         val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
@@ -183,7 +217,13 @@ class SecureEnclaveSecureArea private constructor(
             null
         }
         check(unlockData is SecureEnclaveKeyUnlockData?)
-        return Crypto.secureEnclaveEcSign(keyBlob, dataToSign, unlockData)
+        return when (keyInfo.algorithm) {
+            Algorithm.ESP256 -> Crypto.secureEnclaveEcSign(keyBlob, dataToSign, unlockData)
+            Algorithm.ML_DSA_65, Algorithm.ML_DSA_87 -> {
+                Crypto.secureEnclaveMlDsaSign(keyInfo.algorithm, keyBlob, dataToSign, unlockData)
+            }
+            else -> throw IllegalStateException("Unexpected signing algorithm ${keyInfo.algorithm}")
+        }
     }
 
     override suspend fun keyAgreement(
@@ -211,6 +251,34 @@ class SecureEnclaveSecureArea private constructor(
         }
         check(unlockData is SecureEnclaveKeyUnlockData?)
         return Crypto.secureEnclaveEcKeyAgreement(keyBlob, otherKey, unlockData)
+    }
+
+    override suspend fun kemDecapsulate(
+        alias: String,
+        ciphertext: ByteArray,
+        unlockReason: Reason
+    ): ByteArray {
+        val (keyBlob, keyInfo) = loadKey(alias)
+        check(keyInfo.algorithm.isKeyEncapsulation)
+        val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]
+            ?: SecureEnclaveDefaultKeyUnlockDataProvider
+        val unlockData = if (keyInfo.isUserAuthenticationRequired) {
+            unlockDataProvider.getKeyUnlockData(
+                secureArea = this,
+                alias = alias,
+                algorithm = getKeyInfo(alias).algorithm,
+                unlockReason = unlockReason
+            )
+        } else {
+            null
+        }
+        check(unlockData is SecureEnclaveKeyUnlockData?)
+        return Crypto.secureEnclaveMlKemDecapsulate(
+            keyInfo.algorithm,
+            keyBlob,
+            ciphertext,
+            unlockData
+        )
     }
 
     override suspend fun getKeyInfo(alias: String): SecureEnclaveKeyInfo {

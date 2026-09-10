@@ -1,6 +1,7 @@
 package org.multipaz.crypto
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.ASN1ObjectIdentifier
@@ -8,6 +9,7 @@ import org.multipaz.asn1.ASN1OctetString
 import org.multipaz.asn1.ASN1Sequence
 import java.security.GeneralSecurityException
 import java.security.KeyPairGenerator
+import java.security.SecureRandom
 import java.security.MessageDigest
 import java.security.Security
 import java.security.Signature
@@ -29,6 +31,11 @@ import javax.crypto.spec.SecretKeySpec
  *
  * This object contains various cryptographic primitives and is a wrapper to a platform-
  * specific crypto library.
+ *
+ * For post-quantum cryptography algorithms (ML-DSA and ML-KEM) to work on the JVM or
+ * Android, the `bcprov` package (`org.bouncycastle:bcprov-jdk18on`) must be present on the
+ * classpath. It is consumed via reflection to avoid pulling in a large dependency into the
+ * core SDK.
  */
 @Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
 actual object Crypto {
@@ -73,6 +80,40 @@ actual object Crypto {
         Algorithm.A192CBC,
         Algorithm.A256CBC
     )
+
+    /**
+     * The ML-DSA algorithms supported by the platform.
+     *
+     * Requires the `bcprov` package (`org.bouncycastle:bcprov-jdk18on`) on the classpath,
+     * which is consumed via reflection. If not present, this returns an empty set.
+     */
+    actual val supportedMlDsaAlgorithms: Set<Algorithm>
+        get() = if (BouncyCastlePqc.isAvailable) {
+            setOf(
+                Algorithm.ML_DSA_44,
+                Algorithm.ML_DSA_65,
+                Algorithm.ML_DSA_87
+            )
+        } else {
+            emptySet()
+        }
+
+    /**
+     * The ML-KEM algorithms supported by the platform.
+     *
+     * Requires the `bcprov` package (`org.bouncycastle:bcprov-jdk18on`) on the classpath,
+     * which is consumed via reflection. If not present, this returns an empty set.
+     */
+    actual val supportedMlKemAlgorithms: Set<Algorithm>
+        get() = if (BouncyCastlePqc.isAvailable) {
+            setOf(
+                Algorithm.ML_KEM_512,
+                Algorithm.ML_KEM_768,
+                Algorithm.ML_KEM_1024
+            )
+        } else {
+            emptySet()
+        }
 
     actual val provider: String
         get() {
@@ -337,6 +378,21 @@ actual object Crypto {
         }
     }
 
+    actual suspend fun checkSignature(
+        publicKey: MlDsaPublicKey,
+        message: ByteArray,
+        algorithm: Algorithm,
+        signature: MlDsaSignature
+    ) {
+        require(algorithm == publicKey.algorithm) {
+            "Signature algorithm $algorithm doesn't match key algorithm ${publicKey.algorithm}"
+        }
+        if (!BouncyCastlePqc.isAvailable) {
+            throw UnsupportedOperationException("ML-DSA is not supported in the current environment")
+        }
+        BouncyCastlePqc.checkSignature(publicKey, message, algorithm, signature)
+    }
+
     internal fun fixupEcDsaPrivateKeyMaterial(curve: EcCurve, d: ByteArray): ByteArray {
         // Looks like the generated key material isn't always the right number of bytes
         // which causes problems for unit tests encoding the private key material. Adjust
@@ -441,6 +497,24 @@ actual object Crypto {
             dq = stripLeadingZero(priv.primeExponentQ.toByteArray()),
             qInv = stripLeadingZero(priv.crtCoefficient.toByteArray())
         )
+    }
+
+    actual suspend fun createMlDsaPrivateKey(
+        algorithm: Algorithm
+    ): MlDsaPrivateKey {
+        if (!BouncyCastlePqc.isAvailable) {
+            throw UnsupportedOperationException("ML-DSA is not supported in the current environment")
+        }
+        return BouncyCastlePqc.createMlDsaPrivateKey(algorithm)
+    }
+
+    actual suspend fun createMlKemPrivateKey(
+        algorithm: Algorithm
+    ): MlKemPrivateKey {
+        if (!BouncyCastlePqc.isAvailable) {
+            throw UnsupportedOperationException("ML-KEM is not supported in the current environment")
+        }
+        return BouncyCastlePqc.createMlKemPrivateKey(algorithm)
     }
 
     /**
@@ -554,6 +628,39 @@ actual object Crypto {
             throw IllegalStateException("Unexpected Exception", e)
         }
         return RsaSignature(signatureBytes)
+    }
+
+    actual suspend fun sign(
+        key: MlDsaPrivateKey,
+        signatureAlgorithm: Algorithm,
+        message: ByteArray
+    ): MlDsaSignature {
+        require(signatureAlgorithm == key.algorithm) {
+            "Signature algorithm $signatureAlgorithm doesn't match key algorithm ${key.algorithm}"
+        }
+        if (!BouncyCastlePqc.isAvailable) {
+            throw UnsupportedOperationException("ML-DSA is not supported in the current environment")
+        }
+        return BouncyCastlePqc.sign(key, signatureAlgorithm, message)
+    }
+
+    actual suspend fun kemEncapsulate(
+        recipientPublicKey: MlKemPublicKey
+    ): KemResult {
+        if (!BouncyCastlePqc.isAvailable) {
+            throw UnsupportedOperationException("ML-KEM is not supported in the current environment")
+        }
+        return BouncyCastlePqc.kemEncapsulate(recipientPublicKey)
+    }
+
+    actual suspend fun kemDecapsulate(
+        key: MlKemPrivateKey,
+        ciphertext: ByteArray
+    ): ByteArray {
+        if (!BouncyCastlePqc.isAvailable) {
+            throw UnsupportedOperationException("ML-KEM is not supported in the current environment")
+        }
+        return BouncyCastlePqc.kemDecapsulate(key, ciphertext)
     }
 
     /**

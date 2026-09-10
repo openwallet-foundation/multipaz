@@ -13,6 +13,7 @@ import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseKey
 import org.multipaz.cose.CoseLabel
+import org.multipaz.cose.toCoseLabel
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -92,6 +93,16 @@ sealed class PublicKey {
                 OID.RSA_ENCRYPTION.oid -> {
                     RsaPublicKey.fromSubjectPublicKeyInfo(encoded)
                 }
+                OID.ML_DSA_44.oid,
+                OID.ML_DSA_65.oid,
+                OID.ML_DSA_87.oid -> {
+                    MlDsaPublicKey.fromSubjectPublicKeyInfo(encoded)
+                }
+                OID.ML_KEM_512.oid,
+                OID.ML_KEM_768.oid,
+                OID.ML_KEM_1024.oid -> {
+                    MlKemPublicKey.fromSubjectPublicKeyInfo(encoded)
+                }
                 OID.EC_PUBLIC_KEY.oid,
                 "1.3.101.110",
                 "1.3.101.111",
@@ -118,6 +129,24 @@ sealed class PublicKey {
                 Cose.COSE_KEY_TYPE_RSA.toDataItem() -> {
                     RsaPublicKey.fromCoseKey(coseKey)
                 }
+                Cose.COSE_KEY_TYPE_AKP.toDataItem() -> {
+                    val algNum = coseKey.labels[Cose.COSE_KEY_ALG.toCoseLabel]?.asNumber?.toInt()
+                    val alg = algNum?.let { Algorithm.fromCoseAlgorithmIdentifier(it) }
+                    if (alg != null && alg.isSigning) {
+                        MlDsaPublicKey.fromCoseKey(coseKey)
+                    } else if (alg != null && alg.isKeyEncapsulation) {
+                        MlKemPublicKey.fromCoseKey(coseKey)
+                    } else {
+                        val pubSize = coseKey.labels[Cose.COSE_KEY_PARAM_PUB_KEY.toCoseLabel]?.asBstr?.size ?: 0
+                        if (pubSize in listOf(1312, 1952, 2592)) {
+                            MlDsaPublicKey.fromCoseKey(coseKey)
+                        } else if (pubSize in listOf(800, 1184, 1568)) {
+                            MlKemPublicKey.fromCoseKey(coseKey)
+                        } else {
+                            throw IllegalArgumentException("Cannot determine AKP key type for size $pubSize")
+                        }
+                    }
+                }
                 else -> {
                     throw IllegalArgumentException("Unknown key type ${coseKey.keyType}")
                 }
@@ -134,6 +163,16 @@ sealed class PublicKey {
             return when (val kty = jwk["kty"]?.jsonPrimitive?.content) {
                 "OKP", "EC" -> EcPublicKey.fromJwk(jwk)
                 "RSA" -> RsaPublicKey.fromJwk(jwk)
+                "AKP" -> {
+                    val alg = jwk["alg"]?.jsonPrimitive?.content
+                    if (alg?.startsWith("ML-DSA") == true) {
+                        MlDsaPublicKey.fromJwk(jwk)
+                    } else if (alg?.startsWith("ML-KEM") == true) {
+                        MlKemPublicKey.fromJwk(jwk)
+                    } else {
+                        throw IllegalArgumentException("Unsupported AKP algorithm $alg")
+                    }
+                }
                 else -> throw IllegalArgumentException("Unsupported key type $kty")
             }
         }

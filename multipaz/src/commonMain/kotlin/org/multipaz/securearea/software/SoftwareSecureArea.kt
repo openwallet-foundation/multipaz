@@ -21,6 +21,8 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.MlDsaPrivateKey
+import org.multipaz.crypto.MlKemPrivateKey
 import org.multipaz.crypto.PrivateKey
 import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.RsaPrivateKey
@@ -70,7 +72,9 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         Algorithm.entries.filter {
             it.fullySpecified && (
                 (it.curve != null && Crypto.supportedCurves.contains(it.curve)) ||
-                (it.keySizeBits != null && it.isSigning)
+                (it.keySizeBits != null && it.isSigning) ||
+                (it in Crypto.supportedMlDsaAlgorithms) ||
+                (it in Crypto.supportedMlKemAlgorithms)
             )
         }
     }
@@ -111,6 +115,10 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         try {
             val privateKey = settings.privateKey ?: if (settings.algorithm.curve != null) {
                 Crypto.createEcPrivateKey(settings.algorithm.curve!!)
+            } else if (settings.algorithm in listOf(Algorithm.ML_DSA_44, Algorithm.ML_DSA_65, Algorithm.ML_DSA_87)) {
+                Crypto.createMlDsaPrivateKey(settings.algorithm)
+            } else if (settings.algorithm in listOf(Algorithm.ML_KEM_512, Algorithm.ML_KEM_768, Algorithm.ML_KEM_1024)) {
+                Crypto.createMlKemPrivateKey(settings.algorithm)
             } else {
                 Crypto.createRsaPrivateKey(settings.algorithm.keySizeBits ?: 2048)
             }
@@ -282,6 +290,8 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         return when (val privateKey = keyData.privateKey) {
             is EcPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
             is RsaPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
+            is MlDsaPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
+            is MlKemPrivateKey -> throw IllegalArgumentException("Cannot sign with ML-KEM key")
         }
     }
 
@@ -307,6 +317,30 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         val privateKey = keyData.privateKey as? EcPrivateKey
             ?: throw IllegalArgumentException("Key is not an EC key")
         return Crypto.keyAgreement(privateKey, otherKey)
+    }
+
+    override suspend fun kemDecapsulate(
+        alias: String,
+        ciphertext: ByteArray,
+        unlockReason: Reason
+    ): ByteArray {
+        return interactionHelper(
+            alias,
+            unlockReason,
+            op = { unlockData -> kemDecapsulateNonInteractive(alias, ciphertext, unlockData) }
+        )
+    }
+
+    private suspend fun kemDecapsulateNonInteractive(
+        alias: String,
+        ciphertext: ByteArray,
+        keyUnlockData: KeyUnlockData?
+    ): ByteArray {
+        val keyData = loadKey(alias, keyUnlockData)
+        require(keyData.algorithm.isKeyEncapsulation) { "Key algorithm is not for Key Encapsulation" }
+        val privateKey = keyData.privateKey as? MlKemPrivateKey
+            ?: throw IllegalArgumentException("Key is not an ML-KEM key")
+        return Crypto.kemDecapsulate(privateKey, ciphertext)
     }
 
     override suspend fun getKeyInfo(alias: String): SoftwareKeyInfo {
@@ -412,7 +446,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         }
     }
 
-    @CborSerializable(schemaHash = "zZXZ5_iLFLRPTb2bsazbBfkZvu1QrPcljd8gHvBs07U")
+    @CborSerializable(schemaHash = "ZQhm_YwMdgsTBNuJjP_Zv5HQL2dKaVLwMRH96nxpf8Q")
     internal data class KeyMetadata(
         val algorithm: Algorithm,
         val passphraseRequired: Boolean,

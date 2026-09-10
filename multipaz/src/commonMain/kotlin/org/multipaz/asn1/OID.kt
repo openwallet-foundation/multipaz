@@ -72,6 +72,24 @@ enum class OID(
     /** Edwards-curve Digital Signature Algorithm (EdDSA) Ed448. */
     ED448("1.3.101.113", "Edwards-curve Digital Signature Algorithm (EdDSA) Ed448"),
 
+    /** ML-DSA-44 post-quantum signature algorithm (FIPS 204). */
+    ML_DSA_44("2.16.840.1.101.3.4.3.17", "ML-DSA-44 post-quantum signature algorithm"),
+
+    /** ML-DSA-65 post-quantum signature algorithm (FIPS 204). */
+    ML_DSA_65("2.16.840.1.101.3.4.3.18", "ML-DSA-65 post-quantum signature algorithm"),
+
+    /** ML-DSA-87 post-quantum signature algorithm (FIPS 204). */
+    ML_DSA_87("2.16.840.1.101.3.4.3.19", "ML-DSA-87 post-quantum signature algorithm"),
+
+    /** ML-KEM-512 post-quantum key encapsulation mechanism (FIPS 203). */
+    ML_KEM_512("2.16.840.1.101.3.4.4.1", "ML-KEM-512 post-quantum key encapsulation mechanism"),
+
+    /** ML-KEM-768 post-quantum key encapsulation mechanism (FIPS 203). */
+    ML_KEM_768("2.16.840.1.101.3.4.4.2", "ML-KEM-768 post-quantum key encapsulation mechanism"),
+
+    /** ML-KEM-1024 post-quantum key encapsulation mechanism (FIPS 203). */
+    ML_KEM_1024("2.16.840.1.101.3.4.4.3", "ML-KEM-1024 post-quantum key encapsulation mechanism"),
+
     /** commonName (X.520 DN component). */
     COMMON_NAME("2.5.4.3", "commonName (X.520 DN component)"),
 

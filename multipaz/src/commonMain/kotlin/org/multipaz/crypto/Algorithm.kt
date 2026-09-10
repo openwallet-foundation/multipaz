@@ -27,6 +27,7 @@ import kotlin.enums.enumEntries
  * @param hashAlgorithm the hash algorithm in the algorithm or `null` if not applicable or not a fully specified algorithm.
  * @param isSigning `true` if the algorithm is for signing, `false` if not applicable or not a fully specified algorithm.
  * @param isKeyAgreement `true` if the algorithm is for key agreement, `false` if not applicable or not a fully specified algorithm.
+ * @param isKeyEncapsulation `true` if the algorithm is for key encapsulation, `false` if not applicable or not a fully specified algorithm.
  * @param keySizeBits the RSA key size in bits or `null` if not applicable or not a fully specified algorithm.
  * @param description A human readable description of the algorithm.
  */
@@ -39,6 +40,7 @@ enum class Algorithm(
     val hashAlgorithm: Algorithm? = null,
     val isSigning: Boolean = false,
     val isKeyAgreement: Boolean = false,
+    val isKeyEncapsulation: Boolean = false,
     val keySizeBits: Int? = null,
     val description: String,
 ) {
@@ -157,12 +159,12 @@ enum class Algorithm(
         curve = EcCurve.P256, hashAlgorithm = SHA256, isSigning = true),
 
     /** ECDSA using P-384 curve and SHA-384 */
-    ESP384(coseAlgorithmIdentifier = -48, joseAlgorithmIdentifier = "ES384", fullySpecified = true,
+    ESP384(coseAlgorithmIdentifier = -51, joseAlgorithmIdentifier = "ES384", fullySpecified = true,
         description = "ECDSA using P-384 curve and SHA-384",
         curve = EcCurve.P384, hashAlgorithm = SHA384, isSigning = true),
 
     /** ECDSA using P-521 curve and SHA-512 */
-    ESP512(coseAlgorithmIdentifier = -49, joseAlgorithmIdentifier = "ES512", fullySpecified = true,
+    ESP512(coseAlgorithmIdentifier = -52, joseAlgorithmIdentifier = "ES512", fullySpecified = true,
         description = "ECDSA using P-521 curve and SHA-512",
         curve = EcCurve.P521, hashAlgorithm = SHA512, isSigning = true),
 
@@ -187,12 +189,12 @@ enum class Algorithm(
         curve = EcCurve.BRAINPOOLP512R1, hashAlgorithm = SHA512, isSigning = true),
 
     /** EdDSA using Ed25519 curve */
-    ED25519(coseAlgorithmIdentifier = -50, joseAlgorithmIdentifier = "Ed25519", fullySpecified = true,
+    ED25519(coseAlgorithmIdentifier = -19, joseAlgorithmIdentifier = "Ed25519", fullySpecified = true,
         description = "EdDSA using Ed25519 curve",
         curve = EcCurve.ED25519, isSigning = true),
 
     /** EdDSA using Ed448 curve */
-    ED448(coseAlgorithmIdentifier = -51, joseAlgorithmIdentifier = "Ed448", fullySpecified = true,
+    ED448(coseAlgorithmIdentifier = -53, joseAlgorithmIdentifier = "Ed448", fullySpecified = true,
         description = "EdDSA using Ed448 curve",
         curve = EcCurve.ED448, isSigning = true),
 
@@ -306,7 +308,45 @@ enum class Algorithm(
         description = "RSASSA-PSS using SHA-512, MGF1 with SHA-512, and 4096-bit key",
         hashAlgorithm = SHA512, isSigning = true, keySizeBits = 4096),
 
+    /** ML-DSA-44 post-quantum digital signature algorithm (FIPS 204). */
+    ML_DSA_44(coseAlgorithmIdentifier = -48, joseAlgorithmIdentifier = "ML-DSA-44", fullySpecified = true,
+        description = "ML-DSA-44", isSigning = true),
+
+    /** ML-DSA-65 post-quantum digital signature algorithm (FIPS 204). */
+    ML_DSA_65(coseAlgorithmIdentifier = -49, joseAlgorithmIdentifier = "ML-DSA-65", fullySpecified = true,
+        description = "ML-DSA-65", isSigning = true),
+
+    /** ML-DSA-87 post-quantum digital signature algorithm (FIPS 204). */
+    ML_DSA_87(coseAlgorithmIdentifier = -50, joseAlgorithmIdentifier = "ML-DSA-87", fullySpecified = true,
+        description = "ML-DSA-87", isSigning = true),
+
+    /** ML-KEM-512 post-quantum key encapsulation mechanism (FIPS 203). */
+    ML_KEM_512(coseAlgorithmIdentifier = null, joseAlgorithmIdentifier = "ML-KEM-512", fullySpecified = true,
+        description = "ML-KEM-512", isKeyEncapsulation = true),
+
+    /** ML-KEM-768 post-quantum key encapsulation mechanism (FIPS 203). */
+    ML_KEM_768(coseAlgorithmIdentifier = null, joseAlgorithmIdentifier = "ML-KEM-768", fullySpecified = true,
+        description = "ML-KEM-768", isKeyEncapsulation = true),
+
+    /** ML-KEM-1024 post-quantum key encapsulation mechanism (FIPS 203). */
+    ML_KEM_1024(coseAlgorithmIdentifier = null, joseAlgorithmIdentifier = "ML-KEM-1024", fullySpecified = true,
+        description = "ML-KEM-1024", isKeyEncapsulation = true),
+
     ;
+
+    /** Whether this is an ML-DSA post-quantum signature algorithm. */
+    val isMlDsa: Boolean
+        get() = when (this) {
+            ML_DSA_44, ML_DSA_65, ML_DSA_87 -> true
+            else -> false
+        }
+
+    /** Whether this is an ML-KEM post-quantum key encapsulation mechanism algorithm. */
+    val isMlKem: Boolean
+        get() = when (this) {
+            ML_KEM_512, ML_KEM_768, ML_KEM_1024 -> true
+            else -> false
+        }
 
     companion object {
         private val coseIdentifierToAlgorithm: Map<Int, Algorithm> by lazy {

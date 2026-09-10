@@ -1,7 +1,7 @@
 package org.multipaz.securearea
 
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 
 /**
  * Secure Enclave specific class for information about a key.
@@ -9,7 +9,7 @@ import org.multipaz.crypto.EcPublicKey
 class SecureEnclaveKeyInfo internal constructor(
     alias: String,
     algorithm: Algorithm,
-    publicKey: EcPublicKey,
+    publicKey: PublicKey,
 
     /**
      * Whether the user authentication is required to use the key.

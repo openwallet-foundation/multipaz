@@ -7,7 +7,7 @@ import org.multipaz.crypto.X509CertChain
 // TODO: move this class to Android source tree once annotation processors can work across
 // multiple source trees
 @CborSerializable(
-    schemaHash = "9_juhYRU47gEfpzWskbMum_kAH0GHIGhQgbR9gYWP88"
+    schemaHash = "4SRduheQu9HVr-fFNL9j8ORU1tkCoELebcFOoUbzkAk"
 )
 internal data class AndroidSecureAreaKeyMetadata(
     val algorithm: Algorithm,

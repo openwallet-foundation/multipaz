@@ -10,6 +10,9 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.MlDsaPublicKey
+import org.multipaz.crypto.MlDsaSignature
+import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.RsaPublicKey
 import org.multipaz.crypto.RsaSignature
@@ -40,6 +43,13 @@ object Cose {
      * Reference: https://www.iana.org/assignments/cose/cose.xhtml#key-common-parameters
      */
     const val COSE_KEY_KID: Long = 2
+
+    /**
+     * The COSE Key common parameter for the key algorithm (int / tstr).
+     *
+     * Reference: https://www.iana.org/assignments/cose/cose.xhtml#key-common-parameters
+     */
+    const val COSE_KEY_ALG: Long = 3
 
     /**
      * The COSE Key type parameter for the EC curve (int / tstr).
@@ -149,6 +159,27 @@ object Cose {
     const val COSE_KEY_PARAM_QINV: Long = -8
 
     /**
+     * The COSE Key Type for Algorithm Key Pair (AKP).
+     *
+     * Reference: RFC 9964 section 4.1
+     */
+    const val COSE_KEY_TYPE_AKP: Long = 7
+
+    /**
+     * The COSE Key type parameter for AKP public key (bstr).
+     *
+     * Reference: RFC 9964 section 4.1
+     */
+    const val COSE_KEY_PARAM_PUB_KEY: Long = -1
+
+    /**
+     * The COSE Key type parameter for AKP private key (bstr).
+     *
+     * Reference: RFC 9964 section 4.1
+     */
+    const val COSE_KEY_PARAM_PRIV_KEY: Long = -2
+
+    /**
      * The COSE label for conveying an algorithm.
      *
      * Reference: https://www.iana.org/assignments/cose/cose.xhtml#header-parameters
@@ -250,6 +281,17 @@ object Cose {
                     signatureAlgorithm,
                     RsaSignature(signature.signature)
                 )
+            }
+            is MlDsaPublicKey -> {
+                Crypto.checkSignature(
+                    publicKey,
+                    toBeSigned,
+                    signatureAlgorithm,
+                    MlDsaSignature(signature.signature)
+                )
+            }
+            is MlKemPublicKey -> {
+                throw IllegalArgumentException("Cannot verify signature with ML-KEM key")
             }
         }
     }
