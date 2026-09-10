@@ -115,11 +115,38 @@ expect object Crypto {
     )
 
     /**
+     * Checks signature validity for an RSA key.
+     *
+     * @param publicKey the public key the signature was made with.
+     * @param message the data that was signed.
+     * @param algorithm the signature algorithm to use.
+     * @param signature the signature.
+     * @throws SignatureVerificationException if the signature check fails.
+     * @throws IllegalArgumentException if an error occurred during the check, for example if data is malformed.
+     */
+    suspend fun checkSignature(
+        publicKey: RsaPublicKey,
+        message: ByteArray,
+        algorithm: Algorithm,
+        signature: RsaSignature
+    )
+
+    /**
      * Creates an EC private key.
      *
      * @param curve the curve to use.
      */
     suspend fun createEcPrivateKey(curve: EcCurve): EcPrivateKey
+
+    /**
+     * Creates an RSA private key.
+     *
+     * @param keySizeBits the key size in bits (typically 2048, 3072, or 4096).
+     * @return the newly created private key.
+     */
+    suspend fun createRsaPrivateKey(
+        keySizeBits: Int = 2048
+    ): RsaPrivateKey
 
     /**
      * Signs data with a key.
@@ -137,6 +164,20 @@ expect object Crypto {
         signatureAlgorithm: Algorithm,
         message: ByteArray
     ): EcSignature
+
+    /**
+     * Signs data with an RSA key.
+     *
+     * @param key the key to sign with.
+     * @param signatureAlgorithm the signature algorithm to use.
+     * @param message the data to sign.
+     * @return the signature.
+     */
+    suspend fun sign(
+        key: RsaPrivateKey,
+        signatureAlgorithm: Algorithm,
+        message: ByteArray
+    ): RsaSignature
 
     /**
      * Performs Key Agreement.
@@ -158,4 +199,44 @@ expect object Crypto {
      * TODO: replace with non-platform specific code
      */
     internal suspend fun validateCertChainSignatures(certChain: X509CertChain): Boolean
+}
+
+
+/**
+ * Signs data with a private key.
+ *
+ * @param key the private key to sign with.
+ * @param signatureAlgorithm the signature algorithm to use.
+ * @param message the data to sign.
+ * @return the signature.
+ */
+suspend fun Crypto.sign(
+    key: PrivateKey,
+    signatureAlgorithm: Algorithm,
+    message: ByteArray
+): Signature = when (key) {
+    is EcPrivateKey -> sign(key, signatureAlgorithm, message)
+    is RsaPrivateKey -> sign(key, signatureAlgorithm, message)
+}
+
+/**
+ * Checks signature validity for a generic [PublicKey] and [Signature].
+ *
+ * @param publicKey the public key the signature was made with.
+ * @param message the data that was signed.
+ * @param algorithm the signature algorithm to use.
+ * @param signature the signature.
+ * @throws SignatureVerificationException if the signature check fails.
+ * @throws IllegalArgumentException if an error occurred during the check, for example if data is malformed.
+ */
+suspend fun Crypto.checkSignature(
+    publicKey: PublicKey,
+    message: ByteArray,
+    algorithm: Algorithm,
+    signature: Signature
+) {
+    when (publicKey) {
+        is EcPublicKey -> checkSignature(publicKey, message, algorithm, signature as EcSignature)
+        is RsaPublicKey -> checkSignature(publicKey, message, algorithm, signature as RsaSignature)
+    }
 }

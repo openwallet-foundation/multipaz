@@ -275,7 +275,7 @@ object Hpke {
                 suiteId = getKemSuiteId(cipherSuite),
                 kdf = kdf,
                 dh = dhSum,
-                kemContext = kemContext + authKey.publicKey.serialize(),
+                kemContext = kemContext + authKey.ecPublicKey.serialize(),
                 length = kdf.nh
             )
         } else if (authKeyPub != null) {
@@ -666,7 +666,7 @@ object Hpke {
         }
 
         val dh = receiverPrivateKey.keyAgreement(encapsulatedPublicKey)
-        val kemContext = encapsulatedKey + receiverPrivateKey.publicKey.serialize()
+        val kemContext = encapsulatedKey + receiverPrivateKey.ecPublicKey.serialize()
         val context = calcContext(
             mode = mode,
             cipherSuite = cipherSuite,

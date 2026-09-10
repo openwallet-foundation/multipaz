@@ -1740,7 +1740,7 @@ private suspend fun handleGetDataAppendSdJwt(
         try {
             var receivedAudience = ""
             val processedJwt = sdJwtKb.verify(
-                issuerKey = issuerCert.ecPublicKey,
+                issuerKey = issuerCert.publicKey,
                 checkNonce = { nonce -> true },
                 checkAudience = { audience -> receivedAudience = audience; true },
                 checkCreationTime = { creationTime -> true },
@@ -1759,7 +1759,7 @@ private suspend fun handleGetDataAppendSdJwt(
         }
     } else if (issuerCert != null) {
         try {
-            val processedJwt = sdJwt.verify(issuerCert.ecPublicKey)
+            val processedJwt = sdJwt.verify(issuerCert.publicKey)
             for ((claimName, claimValue) in processedJwt) {
                 val claimValueStr = prettyJson.encodeToString(claimValue)
                 lines.add(ResultLine(claimName, claimValueStr))

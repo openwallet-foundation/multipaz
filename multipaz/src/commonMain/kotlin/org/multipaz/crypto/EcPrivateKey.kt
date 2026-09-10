@@ -33,7 +33,7 @@ import kotlin.io.encoding.Base64
 sealed class EcPrivateKey(
     open val curve: EcCurve,
     open val d: ByteArray,
-) {
+) : PrivateKey() {
 
     /**
      * Creates a [CoseKey] object for the key.
@@ -44,14 +44,14 @@ sealed class EcPrivateKey(
      *
      * @param additionalLabels additional labels to include.
      */
-    abstract fun toCoseKey(additionalLabels: Map<CoseLabel, DataItem> = emptyMap()): CoseKey
+    abstract override fun toCoseKey(additionalLabels: Map<CoseLabel, DataItem>): CoseKey
 
     /**
      * Encode this key in PEM format
      *
      * @return a PEM encoded string.
      */
-    fun toPem(): String {
+    override fun toPem(): String {
         // Generates this according to https://datatracker.ietf.org/doc/html/rfc5208
         //
         val privateKey = when (this) {
@@ -93,8 +93,6 @@ sealed class EcPrivateKey(
         return sb.toString()
     }
 
-    fun toDataItem(): DataItem = toCoseKey().toDataItem()
-
     /**
      * Encodes the private key as a JSON Web Key according to
      * [RFC 7517](https://datatracker.ietf.org/doc/html/rfc7517).
@@ -105,14 +103,14 @@ sealed class EcPrivateKey(
      * @param additionalClaims additional claims to include or `null`.
      * @return a JSON Web Key.
      */
-    abstract fun toJwk(
-        additionalClaims: JsonObject? = null
+    abstract override fun toJwk(
+        additionalClaims: JsonObject?
     ): JsonObject
 
     /**
      * The public part of the key.
      */
-    abstract val publicKey: EcPublicKey
+    abstract override val publicKey: EcPublicKey
 
     companion object {
         /**

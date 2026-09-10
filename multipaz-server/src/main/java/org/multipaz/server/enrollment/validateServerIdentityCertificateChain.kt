@@ -53,7 +53,7 @@ suspend fun validateServerIdentityCertificateChain(
             if (rootCert.issuer != rootCert.subject) {
                 throw IllegalStateException("Root certificate issuer/subject mismatch")
             }
-            rootCert.verify(rootCert.ecPublicKey)
+            rootCert.verify(rootCert.publicKey)
             basicCertificateChainValidator(fullChain, instant)
             return true
         }

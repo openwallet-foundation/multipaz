@@ -127,6 +127,18 @@ enum class Algorithm(
     RS512(coseAlgorithmIdentifier = -259, joseAlgorithmIdentifier = "RS512",
         description = "RSASSA-PKCS1-v1_5 using SHA-512"),
 
+    /** RSASSA-PSS using SHA-256 and MGF1 with SHA-256 */
+    PS256(coseAlgorithmIdentifier = -37, joseAlgorithmIdentifier = "PS256",
+        description = "RSASSA-PSS using SHA-256 and MGF1 with SHA-256"),
+
+    /** RSASSA-PSS using SHA-384 and MGF1 with SHA-384 */
+    PS384(coseAlgorithmIdentifier = -38, joseAlgorithmIdentifier = "PS384",
+        description = "RSASSA-PSS using SHA-384 and MGF1 with SHA-384"),
+
+    /** RSASSA-PSS using SHA-512 and MGF1 with SHA-512 */
+    PS512(coseAlgorithmIdentifier = -39, joseAlgorithmIdentifier = "PS512",
+        description = "RSASSA-PSS using SHA-512 and MGF1 with SHA-512"),
+
     // Fully-specified algorithms start here, see also
     //  https://datatracker.ietf.org/doc/draft-ietf-jose-fully-specified-algorithms/
     //

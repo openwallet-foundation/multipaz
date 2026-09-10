@@ -6,6 +6,7 @@ import org.multipaz.asn1.ASN1BitString
 import org.multipaz.asn1.ASN1Boolean
 import org.multipaz.asn1.ASN1Encoding
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.asn1.ASN1Null
 import org.multipaz.asn1.ASN1Object
 import org.multipaz.asn1.ASN1ObjectIdentifier
 import org.multipaz.asn1.ASN1OctetString
@@ -60,27 +61,49 @@ sealed class X509Signed() {
      * @param publicKey the key to check the signature with.
      * @throws SignatureVerificationException if the signature check fails.
      */
-    suspend fun verify(publicKey: EcPublicKey) {
-        val ecSignature = when (signatureAlgorithm) {
-            Algorithm.ES256, Algorithm.ESP256, Algorithm.ESB256,
-            Algorithm.ES384, Algorithm.ESP384, Algorithm.ESB384, Algorithm.ESB320,
-            Algorithm.ES512 -> {
-                EcSignature.fromDerEncoded(publicKey.curve.bitSize, signature)
+    suspend fun verify(publicKey: PublicKey) {
+        when (publicKey) {
+            is EcPublicKey -> {
+                val ecSignature = when (signatureAlgorithm) {
+                    Algorithm.ES256, Algorithm.ESP256, Algorithm.ESB256,
+                    Algorithm.ES384, Algorithm.ESP384, Algorithm.ESB384, Algorithm.ESB320,
+                    Algorithm.ES512 -> {
+                        EcSignature.fromDerEncoded(publicKey.curve.bitSize, signature)
+                    }
+                    Algorithm.EDDSA, Algorithm.ED25519, Algorithm.ED448 -> {
+                        val len = signature.size
+                        val r = signature.sliceArray(IntRange(0, len/2 - 1))
+                        val s = signature.sliceArray(IntRange(len/2, len - 1))
+                        EcSignature(r, s)
+                    }
+                    else -> throw IllegalArgumentException("Unsupported algorithm $signatureAlgorithm")
+                }
+                Crypto.checkSignature(
+                    publicKey,
+                    tbsCertificate,
+                    signatureAlgorithm,
+                    ecSignature
+                )
             }
-            Algorithm.EDDSA, Algorithm.ED25519, Algorithm.ED448 -> {
-                val len = signature.size
-                val r = signature.sliceArray(IntRange(0, len/2 - 1))
-                val s = signature.sliceArray(IntRange(len/2, len - 1))
-                EcSignature(r, s)
+            is RsaPublicKey -> {
+                Crypto.checkSignature(
+                    publicKey,
+                    tbsCertificate,
+                    signatureAlgorithm,
+                    RsaSignature(signature)
+                )
             }
-            else -> throw IllegalArgumentException("Unsupported algorithm $signatureAlgorithm")
         }
-        Crypto.checkSignature(
-            publicKey,
-            tbsCertificate,
-            signatureAlgorithm,
-            ecSignature
-        )
+    }
+
+    /**
+     * Checks if the certificate or CRL was signed with a given key.
+     *
+     * @param publicKey the key to check the signature with.
+     * @throws SignatureVerificationException if the signature check fails.
+     */
+    suspend fun verify(publicKey: EcPublicKey) {
+        verify(publicKey as PublicKey)
     }
 
     protected val parsed: ASN1Sequence by lazy {
@@ -312,7 +335,7 @@ sealed class X509SignedBuilder<BuilderT: X509SignedBuilder<BuilderT>>(
      */
     protected suspend fun buildASN1(): ASN1Sequence {
         val signatureAlgorithmSeq =
-            signingKey.algorithm.getSignatureAlgorithmSeq(signingKey.publicKey.curve)
+            signingKey.algorithm.getSignatureAlgorithmSeq((signingKey.publicKey as? EcPublicKey)?.curve)
 
         val tbsList = mutableListOf<ASN1Object>()
 
@@ -356,7 +379,8 @@ sealed class X509SignedBuilder<BuilderT: X509SignedBuilder<BuilderT>>(
             Algorithm.ES256, Algorithm.ESP256, Algorithm.ESB256,
             Algorithm.ES384, Algorithm.ESP384, Algorithm.ESB384, Algorithm.ESB320,
             Algorithm.ES512, Algorithm.ESP512, Algorithm.ESB512 -> signature.toDerEncoded()
-            Algorithm.EDDSA, Algorithm.ED25519, Algorithm.ED448 -> signature.r + signature.s
+            Algorithm.EDDSA, Algorithm.ED25519, Algorithm.ED448 -> signature.toCoseEncoded()
+            Algorithm.RS256, Algorithm.RS384, Algorithm.RS512 -> signature.toDerEncoded()
             else -> throw IllegalArgumentException("Unsupported signature algorithm ${signingKey.algorithm}")
         }
         return ASN1Sequence(listOf(
@@ -374,24 +398,39 @@ sealed class X509SignedBuilder<BuilderT: X509SignedBuilder<BuilderT>>(
     companion object {
         private const val TAG = "X509SignedBuilder"
 
-        internal fun Algorithm.getSignatureAlgorithmSeq(signingKeyCurve: EcCurve): ASN1Sequence {
-            val signatureAlgorithmOid = when (this) {
-                Algorithm.ES256, Algorithm.ESP256, Algorithm.ESB256 -> "1.2.840.10045.4.3.2"
-                Algorithm.ES384, Algorithm.ESP384, Algorithm.ESB384, Algorithm.ESB320 -> "1.2.840.10045.4.3.3"
-                Algorithm.ES512, Algorithm.ESP512, Algorithm.ESB512 -> "1.2.840.10045.4.3.4"
+        internal fun Algorithm.getSignatureAlgorithmSeq(signingKeyCurve: EcCurve?): ASN1Sequence {
+            return when (this) {
+                Algorithm.RS256 -> ASN1Sequence(listOf(
+                    ASN1ObjectIdentifier(OID.SIGNATURE_RS256.oid),
+                    ASN1Null()
+                ))
+                Algorithm.RS384 -> ASN1Sequence(listOf(
+                    ASN1ObjectIdentifier(OID.SIGNATURE_RS384.oid),
+                    ASN1Null()
+                ))
+                Algorithm.RS512 -> ASN1Sequence(listOf(
+                    ASN1ObjectIdentifier(OID.SIGNATURE_RS512.oid),
+                    ASN1Null()
+                ))
+                Algorithm.ES256, Algorithm.ESP256, Algorithm.ESB256 ->
+                    ASN1Sequence(listOf(ASN1ObjectIdentifier("1.2.840.10045.4.3.2")))
+                Algorithm.ES384, Algorithm.ESP384, Algorithm.ESB384, Algorithm.ESB320 ->
+                    ASN1Sequence(listOf(ASN1ObjectIdentifier("1.2.840.10045.4.3.3")))
+                Algorithm.ES512, Algorithm.ESP512, Algorithm.ESB512 ->
+                    ASN1Sequence(listOf(ASN1ObjectIdentifier("1.2.840.10045.4.3.4")))
                 Algorithm.EDDSA, Algorithm.ED25519, Algorithm.ED448 -> {
-                    when (signingKeyCurve) {
+                    val signatureAlgorithmOid = when (signingKeyCurve) {
                         EcCurve.ED25519 -> "1.3.101.112"
                         EcCurve.ED448 -> "1.3.101.113"
                         else -> throw IllegalArgumentException(
                             "Unsupported curve $signingKeyCurve for $this")
                     }
+                    ASN1Sequence(listOf(ASN1ObjectIdentifier(signatureAlgorithmOid)))
                 }
                 else -> {
                     throw IllegalArgumentException("Unsupported signature algorithm $this")
                 }
             }
-            return ASN1Sequence(listOf(ASN1ObjectIdentifier(signatureAlgorithmOid)))
         }
 
         internal fun EcCurve.getCurveAlgorithmSeq(): ASN1Sequence {

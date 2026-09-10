@@ -197,7 +197,7 @@ data class MpzPass(
 
                     if (!disableSignatureVerification) {
                         Cose.coseSign1Check(
-                            publicKey = certChain.certificates.first().ecPublicKey,
+                            publicKey = certChain.certificates.first().publicKey,
                             detachedData = null,
                             signature = cose,
                             signatureAlgorithm = alg

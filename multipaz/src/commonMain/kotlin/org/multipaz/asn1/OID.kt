@@ -45,6 +45,12 @@ enum class OID(
     /** ECDSA coupled with SHA-512. */
     SIGNATURE_ECDSA_SHA512("1.2.840.10045.4.3.4", "ECDSA coupled with SHA-512"),
 
+    /** RSA encryption. */
+    RSA_ENCRYPTION("1.2.840.113549.1.1.1", "RSA encryption"),
+
+    /** RSASSA-PSS signature algorithm. */
+    SIGNATURE_RSASSA_PSS("1.2.840.113549.1.1.10", "RSASSA-PSS signature algorithm"),
+
     /** PKCS #1 v1.5 signature algorithm with SHA256 and RSA. */
     SIGNATURE_RS256("1.2.840.113549.1.1.11", "PKCS #1 v1.5 signature algorithm with SHA256 and RSA"),
 

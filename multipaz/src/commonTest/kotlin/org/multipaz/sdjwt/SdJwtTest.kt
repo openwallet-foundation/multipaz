@@ -20,6 +20,8 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.RsaPublicKey
+import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.sdjwt.DisclosureMetadata.Companion.listOfArrayDisclosures
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
@@ -28,6 +30,7 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class SdJwtTest {
     companion object {
@@ -1368,7 +1371,7 @@ class SdJwtTest {
             compactSerialization =
                 "eyJ4NWMiOlsiTUlJQzR6Q0NBb21nQXdJQkFnSUJEakFLQmdncWhrak9QUVFEQWpCak1Rc3dDUVlEVlFRR0V3SkVSVEVQTUEwR0ExVUVCd3dHUW1WeWJHbHVNUjB3R3dZRFZRUUtEQlJDZFc1a1pYTmtjblZqYTJWeVpXa2dSMjFpU0RFS01BZ0dBMVVFQ3d3QlNURVlNQllHQTFVRUF3d1BTVVIxYm1sdmJpQlVaWE4wSUVOQk1CNFhEVEkxTURFeU56RTFOVGswTWxvWERUSTJNRE13TXpFMU5UazBNbG93VGpFTE1Ba0dBMVVFQmhNQ1JFVXhIVEFiQmdOVkJBb01GRUoxYm1SbGMyUnlkV05yWlhKbGFTQkhiV0pJTVFvd0NBWURWUVFMREFGSk1SUXdFZ1lEVlFRRERBdFVaWE4wSUVsemMzVmxjakJaTUJNR0J5cUdTTTQ5QWdFR0NDcUdTTTQ5QXdFSEEwSUFCR2NFN0pPVU92VUwwYmZ0eXdzSEc0UWJKcDZ3c0ZhZ3E4NUpScmlXbUxzS1pjc1haS0I0QU52cW1YcUxocjJYN0JnS2ExOERCSEw3bllTMk9ONXlHdVdqZ2dGQk1JSUJQVEFkQmdOVkhRNEVGZ1FVNlR3dDV5eWNmMWpLOE1GQlpRbU5JbWR2Y3M0d0RBWURWUjBUQVFIL0JBSXdBREFPQmdOVkhROEJBZjhFQkFNQ0I0QXdnZHdHQTFVZEVRU0IxRENCMFlJVFpHVnRieTVpWkhJdGNISnZkRzkwZVhCbGM0WTBhSFIwY0hNNkx5OWtaVzF2TG1Ka2NpMXdjbTkwYjNSNWNHVnpMMmx6YzNWbGNpOTFibWwyWlhKemFYUjVibVYwZDI5eWE0WW1hSFIwY0hNNkx5OWtaVzF2TG1Ka2NpMXdjbTkwYjNSNWNHVnpMMmx6YzNWbGNpOXdhV1NHTEdoMGRIQnpPaTh2WkdWdGJ5NWlaSEl0Y0hKdmRHOTBlWEJsY3k5cGMzTjFaWEl2WW5WdVpHVnpZVzEwaGk1b2RIUndjem92TDJSbGJXOHVZbVJ5TFhCeWIzUnZkSGx3WlhNdmFYTnpkV1Z5TDJGeVltVnBkR2RsWW1WeU1COEdBMVVkSXdRWU1CYUFGRStXNno3YWpUdW1leCtZY0Zib05yVmVDMnRSTUFvR0NDcUdTTTQ5QkFNQ0EwZ0FNRVVDSUFHVDE4RTRRdThhT012MWI5V1dYMmlNM2drWlRSck14MlB4RzRxYTREeWhBaUVBeFVTTmUrdVNzTkJCSXh3b2I2K0RKMnVjN21USnp5aGlJQ2ZaR0J4MjNPOD0iLCJNSUlDTFRDQ0FkU2dBd0lCQWdJVU1ZVUhoR0Q5aFUvYzBFbzZtVzhyamplSit0MHdDZ1lJS29aSXpqMEVBd0l3WXpFTE1Ba0dBMVVFQmhNQ1JFVXhEekFOQmdOVkJBY01Ca0psY214cGJqRWRNQnNHQTFVRUNnd1VRblZ1WkdWelpISjFZMnRsY21WcElFZHRZa2d4Q2pBSUJnTlZCQXNNQVVreEdEQVdCZ05WQkFNTUQwbEVkVzVwYjI0Z1ZHVnpkQ0JEUVRBZUZ3MHlNekEzTVRNd09USTFNamhhRncwek16QTNNVEF3T1RJMU1qaGFNR014Q3pBSkJnTlZCQVlUQWtSRk1ROHdEUVlEVlFRSERBWkNaWEpzYVc0eEhUQWJCZ05WQkFvTUZFSjFibVJsYzJSeWRXTnJaWEpsYVNCSGJXSklNUW93Q0FZRFZRUUxEQUZKTVJnd0ZnWURWUVFEREE5SlJIVnVhVzl1SUZSbGMzUWdRMEV3V1RBVEJnY3Foa2pPUFFJQkJnZ3Foa2pPUFFNQkJ3TkNBQVNFSHo4WWpyRnlUTkhHTHZPMTRFQXhtOXloOGJLT2drVXpZV2NDMWN2ckpuNUpnSFlITXhaYk5NTzEzRWgwRXIyNzM4UVFPZ2VSb1pNSVRhb2RrZk5TbzJZd1pEQWRCZ05WSFE0RUZnUVVUNWJyUHRxTk82WjdINWh3VnVnMnRWNExhMUV3SHdZRFZSMGpCQmd3Rm9BVVQ1YnJQdHFOTzZaN0g1aHdWdWcydFY0TGExRXdFZ1lEVlIwVEFRSC9CQWd3QmdFQi93SUJBREFPQmdOVkhROEJBZjhFQkFNQ0FZWXdDZ1lJS29aSXpqMEVBd0lEUndBd1JBSWdZMERlcmRDeHQ0ekdQWW44eU5yRHhJV0NKSHB6cTRCZGpkc1ZOMm8xR1JVQ0lCMEtBN2JHMUZWQjFJaUs4ZDU3UUFMK1BHOVg1bGRLRzdFa29BbWhXVktlIl0sImtpZCI6ImJjMGRlZGE0NTU1NGVjYzNlZTQzNjA5YmEyMDc4MzIwMWY5NGEwOTYiLCJ0eXAiOiJkYytzZC1qd3QiLCJhbGciOiJFUzI1NiJ9.eyJfc2QiOlsiODQ5T1hCSnktcHZfNTk4UVhWcVFmVEp3X0tIdjlzOGdna25VMzBVaDZjayIsIlB6cTRsLUdBU2tlTV9kM09tS1lnQ0tUelU4T1FlNjZZbnFKal9XcUtPTGMiLCJiX3FLZXRVT3ppRXdPRl9LYVEyR0xoNXo5d2huYUVjNmtFdEFDdHlqSnZ3IiwiakVhd1FHRUVjU2RJWDRWbUtRS0J1dHQxRWJPVGc0QS1wcXJVbXlvOHFsRSIsImphSUpMSDc5MTYySVEydmZONTRBZ011VWxCNmx0OV80N1NsczlwUDUtQWsiLCJubEl4OXQxOXlrcEkxSm1pTF9mcmV4X0xVTnpMcEFUYXVZX0VXd09ES2ljIiwicDlXbTQxLUNsTy1acXNSVnNucnNUc3JlUGpoWGRqMnJUbFdJa2dqOUNsMCIsInZqZVFoSmJfU1J6NXY3TjY0NEd1bkczTkZQRURRY3RLZFQwN215ZjVLRzgiXSwidmN0IjoidXJuOmV1ZGk6cGlkOjEiLCJfc2RfYWxnIjoic2hhLTI1NiIsImlzcyI6Imh0dHBzOi8vZGVtby5iZHItcHJvdG90eXBlcy9pc3N1ZXIvcGlkIiwiY25mIjp7Imp3ayI6eyJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IjRsbElYWVpJLVIzSWppMm5wRDAwWmdZc3gtQmtKamY4bnFSeFVrRndDUTAiLCJ5IjoiVlRBMFdRSFo1el96NDJvQ2RFWHdCakYxblpUdHdyUnBYODNMazgweTE0ZyJ9fSwiZXhwIjoxNzUzNzg3NjY1LCJpYXQiOjE3NDYwMTE2NjUsImFnZV9lcXVhbF9vcl9vdmVyIjp7Il9zZCI6WyI4c2ZoOFJPaHlRV00tcmR6el9pb2xBYnZZY21ncFdjRHFNdUVSWnZ0NTFjIiwiVkFvc0czU2ZYb0hmUFVWTmgtaGlCRlNIbnl4MWRoM1FzZm9xcURwcS1aRSJdfX0.5KKKPiTNxNDzagKzYnaolyRciOZgOHFwub33BUWetUt8UatNQcX3nc87lRR6X1hzFY3p5gKWyP0BAtTX_mZyGA~WyIwSmRWenhqT1BmcGdETU9KOUNSWkxRIiwiZmFtaWx5X25hbWUiLCJNVVNURVJNQU5OIl0~WyI5UWFPdGVra193ZmxzZkFheFRNWVp3IiwiZ2l2ZW5fbmFtZSIsIkVSSUtBIl0~WyJQMzVoUEtIWlZ0bTVacnp3MTMwV0RBIiwiYmlydGhkYXRlIiwiMjAwNi0wMi0yOCJd~WyJXeExqYVZ2eHozem1NUkl6bm1SbVRBIiwiY291bnRyeSIsIkJFUkxJTiJd~WyJWdjM4ZVM3YTB1aXJCbWEydDAwaDh3IiwibG9jYWxpdHkiLCJCRVJMSU4iXQ~WyJNVGVhZVZkVmVKa243Tm1GOFNSdU53IiwicmVnaW9uIiwiQkVSTElOIl0~WyJRSkt6WktUVldqaHo4dFhuVWFGZTJBIiwicGxhY2Vfb2ZfYmlydGgiLHsiX3NkIjpbIjVMNkJiUGIxU2tGSWdvQUZ6VXFzRGJqeHVzN3V0RFVPUHgwZ3FadXVLYmMiLCJIanBVd3pjcXNCeEgtUFdmRnJqc2x0UzVmM3pWUExGU1liZjNPYUZ1OGprIiwiTmtkTEJzX180M0ROSDNKd09UNll2UDhxbUc1em9OMDJBbHZNbmJTcDF6byJdfV0~WyJlVm9qMTRPQ1pPN0VaYVZGcHQybTRRIiwibmF0aW9uYWxpdGllcyIsW11d~WyJUbTVITUY0cmhhY0ltNV91WGxKbkhnIiwiZGF0ZV9vZl9leHBpcnkiLCIyMDI2LTEyLTMxIl0~WyIxTURKcDhZV193Qnp1QktNa0hKSExBIiwiMTgiLHRydWVd~WyI5QVRkUldEdGVuVnNiMF85MWRueENnIiwiMjEiLGZhbHNlXQ~WyJmMFItM0xSMzA0bG45WXVKeVlnUGRRIiwiaXNzdWluZ19hdXRob3JpdHkiLCJERSJd~WyJhQlpCd3hyT1Rjd0JZemVDeDRlenpRIiwiaXNzdWluZ19jb3VudHJ5IiwiREUiXQ~"
         )
-        val embeddedIssuerKey = sdJwt.x5c!!.certificates.first().ecPublicKey
+        val embeddedIssuerKey = sdJwt.x5c!!.certificates.first().publicKey
         assertEquals(
             """
                 {
@@ -2860,6 +2863,112 @@ class SdJwtTest {
                     checkCreationTime = { creationTime_ -> creationTime_ == creationTime }
                 ))
         )
+    }
+
+    @Test
+    fun testPresentRsa() = runTest {
+        val issuerKey = Crypto.createRsaPrivateKey(2048)
+        val kbKey = Crypto.createRsaPrivateKey(2048)
+        val sdJwt = SdJwt.create(
+            issuerKey = AsymmetricKey.anonymous(issuerKey, Algorithm.RS256),
+            kbKey = kbKey.publicKey,
+            random = Random(0),
+            claims = Json.parseToJsonElement(
+                """
+                    {
+                      "given_name": "Erika",
+                      "family_name": "Mustermann",
+                      "age_birth_year": 1963,
+                      "age_equal_or_over": {
+                        "12": true,
+                        "14": true,
+                        "16": true,
+                        "18": true,
+                        "21": true,
+                        "65": false
+                      },
+                      "nationalities": [
+                        "DE",
+                        "US",
+                        "DK"
+                      ]
+                    }                    
+                """.trimIndent().trim()
+            ).jsonObject,
+            nonSdClaims = Json.parseToJsonElement(
+                """
+                   {
+                     "vct": "urn:eudi:pid:de:1",
+                     "iss": "https://pid-issuer.bund.de.example"
+                   }                    
+                """.trimIndent().trim()
+            ).jsonObject,
+        )
+
+        assertEquals(kbKey.publicKey, sdJwt.kbKey)
+        assertTrue(sdJwt.kbKey is RsaPublicKey)
+
+        val nonce = Random.nextBytes(16).toHex()
+        val creationTime =
+            Instant.fromEpochSeconds(Clock.System.now().toEpochMilliseconds() / 1000L)
+        val sdJwtKb = sdJwt
+            .filter(
+                listOf(
+                    JsonArray(listOf(JsonPrimitive("given_name"))),
+                    JsonArray(listOf(JsonPrimitive("age_equal_or_over"), JsonPrimitive("18"))),
+                    JsonArray(listOf(JsonPrimitive("nationalities"))),
+                    JsonArray(listOf(JsonPrimitive("age_birth_year"))),
+                )
+            )
+            .present(
+                signingKey = AsymmetricKey.anonymous(kbKey, Algorithm.RS256),
+                nonce = nonce,
+                audience = "https://verifier.example.org",
+                creationTime = creationTime
+            )
+        assertEquals(
+            """
+                {
+                  "vct": "urn:eudi:pid:de:1",
+                  "iss": "https://pid-issuer.bund.de.example",
+                  "cnf": {
+                    "jwk": {
+                      "e": "${kbKey.publicKey.publicExponent.toBase64Url()}",
+                      "kty": "RSA",
+                      "n": "${kbKey.publicKey.modulus.toBase64Url()}"
+                    }
+                  },
+                  "given_name": "Erika",
+                  "age_birth_year": 1963,
+                  "age_equal_or_over": {
+                    "18": true
+                  },
+                  "nationalities": [
+                    "DE",
+                    "US",
+                    "DK"
+                  ]
+                }
+            """.trimIndent().trim(),
+            prettyJson.encodeToString(
+                sdJwtKb.verify(
+                    issuerKey = issuerKey.publicKey,
+                    checkNonce = { nonce_ -> nonce_ == nonce },
+                    checkAudience = { audience_ -> audience_ == "https://verifier.example.org" },
+                    checkCreationTime = { creationTime_ -> creationTime_ == creationTime }
+                ))
+        )
+
+        // Negative test: wrong issuer key fails verification
+        val wrongIssuerKey = Crypto.createRsaPrivateKey(2048)
+        assertFailsWith<SignatureVerificationException> {
+            sdJwtKb.verify(
+                issuerKey = wrongIssuerKey.publicKey,
+                checkNonce = { nonce_ -> nonce_ == nonce },
+                checkAudience = { audience_ -> audience_ == "https://verifier.example.org" },
+                checkCreationTime = { creationTime_ -> creationTime_ == creationTime }
+            )
+        }
     }
 
     @Test

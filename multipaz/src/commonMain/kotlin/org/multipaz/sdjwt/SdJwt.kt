@@ -23,7 +23,7 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
@@ -119,8 +119,8 @@ class SdJwt private constructor(
     }
 
     /** The value of the `cnf` claim in the issuer-signed JWT, if present. */
-    val kbKey: EcPublicKey? by lazy {
-        jwtBody["cnf"]?.jsonObject["jwk"]?.jsonObject?.let { EcPublicKey.fromJwk(it) }
+    val kbKey: PublicKey? by lazy {
+        jwtBody["cnf"]?.jsonObject["jwk"]?.jsonObject?.let { PublicKey.fromJwk(it) }
     }
 
     val revocationStatus: RevocationStatus? by lazy {
@@ -145,7 +145,7 @@ class SdJwt private constructor(
      * @throws SignatureVerificationException if the issuer signature or key-binding signature failed to validate.
      */
     suspend fun verify(
-        issuerKey: EcPublicKey? = null,
+        issuerKey: PublicKey? = null,
     ): JsonObject {
         // TODO: make sure we perform all checks in Section 7.1
         if (issuerKey != null) {
@@ -424,7 +424,7 @@ class SdJwt private constructor(
          */
         suspend fun createFromMetadata(
             issuerKey: AsymmetricKey,
-            kbKey: EcPublicKey?,
+            kbKey: PublicKey?,
             claims: String,
             digestAlgorithm: Algorithm = Algorithm.SHA256,
             random: Random = Random.Default,
@@ -462,7 +462,7 @@ class SdJwt private constructor(
          */
         suspend fun createFromMetadata(
             issuerKey: AsymmetricKey,
-            kbKey: EcPublicKey?,
+            kbKey: PublicKey?,
             claims: JsonObject,
             digestAlgorithm: Algorithm = Algorithm.SHA256,
             random: Random = Random.Default,
@@ -609,7 +609,7 @@ class SdJwt private constructor(
          */
         suspend fun create(
             issuerKey: AsymmetricKey,
-            kbKey: EcPublicKey?,
+            kbKey: PublicKey?,
             claims: String,
             nonSdClaims: String,
             digestAlgorithm: Algorithm = Algorithm.SHA256,
@@ -650,7 +650,7 @@ class SdJwt private constructor(
          */
         suspend fun create(
             issuerKey: AsymmetricKey,
-            kbKey: EcPublicKey?,
+            kbKey: PublicKey?,
             claims: JsonObject,
             nonSdClaims: JsonObject,
             digestAlgorithm: Algorithm = Algorithm.SHA256,

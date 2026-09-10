@@ -31,6 +31,60 @@ class JsonWebSignatureTests {
     @Test fun roundTrip_ED25519() = roundtrip(EcCurve.ED25519)
     @Test fun roundTrip_ED448() = roundtrip(EcCurve.ED448)
 
+    @Test fun roundTrip_RS256() = roundtripRsa(Algorithm.RS256)
+    @Test fun roundTrip_RS384() = roundtripRsa(Algorithm.RS384)
+    @Test fun roundTrip_RS512() = roundtripRsa(Algorithm.RS512)
+    @Test fun roundTrip_PS256() = roundtripRsa(Algorithm.PS256)
+    @Test fun roundTrip_PS384() = roundtripRsa(Algorithm.PS384)
+    @Test fun roundTrip_PS512() = roundtripRsa(Algorithm.PS512)
+
+    fun roundtripRsa(algorithm: Algorithm) = runTest {
+        val privateKey = Crypto.createRsaPrivateKey(2048)
+        val now = Clock.System.now().truncateToWholeSeconds()
+        val signingKeyCert = X509Cert.Builder(
+            publicKey = privateKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(privateKey, Algorithm.RS256),
+            serialNumber = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=Test RSA Key"),
+            issuer = X500Name.fromName("CN=Test RSA Key"),
+            validFrom = now,
+            validUntil = now + 1.days
+        ).includeSubjectKeyIdentifier()
+            .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
+            .build()
+        val signingKey = AsymmetricKey.X509CertifiedExplicit(
+            privateKey = privateKey,
+            certChain = X509CertChain(listOf(signingKeyCert)),
+            algorithm = algorithm
+        )
+
+        val jwt = buildJwt(
+            key = signingKey,
+            type = "oauth-authz-req+jwt",
+        ) {
+            put("vp_token", buildJsonObject {
+                put("credential", buildJsonObject {
+                    put("foo", JsonPrimitive("blah"))
+                })
+            })
+        }
+
+        JsonWebSignature.verify(jwt, signingKey.publicKey)
+
+        val body = validateJwt(
+            jwt = jwt,
+            jwtName = "test jwt",
+            publicKey = signingKey.publicKey,
+            checks = mapOf(
+                WebTokenCheck.TYP to "oauth-authz-req+jwt"
+            )
+        )
+        assertEquals(
+            expected = "blah",
+            actual = body["vp_token"]!!.jsonObject["credential"]!!.jsonObject["foo"]!!.jsonPrimitive.content
+        )
+    }
+
     fun roundtrip(curve: EcCurve) = runTest {
         // TODO: use assumeTrue() when available in kotlin-test
         if (!Crypto.supportedCurves.contains(curve)) {

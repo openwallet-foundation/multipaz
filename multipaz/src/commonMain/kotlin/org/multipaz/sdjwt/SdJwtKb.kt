@@ -11,7 +11,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.presentment.TransactionData
@@ -70,7 +70,7 @@ class SdJwtKb private constructor(
      * @throws IllegalStateException if [checkNonce], [checkAudience], or [checkCreationTime] returns false.
      */
     suspend fun verify(
-        issuerKey: EcPublicKey? = null,
+        issuerKey: PublicKey? = null,
         checkNonce: (nonce: String) -> Boolean = { true },
         checkAudience: (audience: String) -> Boolean = { true },
         checkCreationTime: (creationTime: Instant) -> Boolean = { true },

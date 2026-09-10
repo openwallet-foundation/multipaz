@@ -16,7 +16,6 @@ import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcSignature
 import org.multipaz.crypto.Hpke
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.crypto.X509CertChain
@@ -177,7 +176,7 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
         val jws = Json.parseToJsonElement(signedRequest.jsonPrimitive.content)
         val info = JsonWebSignature.getInfo(jws.jsonPrimitive.content)
         check(info.x5c != null) { "x5c missing in JWS" }
-        JsonWebSignature.verify(jws.jsonPrimitive.content, info.x5c.certificates.first().ecPublicKey)
+        JsonWebSignature.verify(jws.jsonPrimitive.content, info.x5c.certificates.first().publicKey)
         val clientId = (info.claimsSet["client_id"] as? JsonPrimitive)?.content
             ?: throw IllegalArgumentException("'client_id' is not given in the request")
         requesterIdentities.add(OpenID4VPRequesterIdentity(info.x5c, clientId))
@@ -197,15 +196,7 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
                 continue
             }
             val x5c = X509CertChain.fromX5c(headerObj["x5c"]!!)
-            val toBeVerified = "$header.$payload".encodeToByteArray()
-            val ecSignature = EcSignature.fromCoseEncoded(signature.fromBase64Url())
-            val algorithm = Algorithm.fromJoseAlgorithmIdentifier(headerObj["alg"]!!.jsonPrimitive.content)
-            Crypto.checkSignature(
-                publicKey = x5c.certificates.first().ecPublicKey,
-                message = toBeVerified,
-                algorithm = algorithm,
-                signature = ecSignature
-            )
+            JsonWebSignature.verify("$header.$payload.$signature", x5c.certificates.first().publicKey)
             val clientId = (headerObj["client_id"] as? JsonPrimitive)?.content
                 ?: throw IllegalArgumentException("'client_id' is not given in the request")
             requesterIdentities.add(OpenID4VPRequesterIdentity(x5c, clientId))

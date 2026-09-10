@@ -14,6 +14,9 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.PublicKey
+import org.multipaz.crypto.RsaPublicKey
+import org.multipaz.crypto.RsaSignature
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
@@ -83,7 +86,7 @@ import kotlin.time.Instant
 suspend fun validateJwt(
     jwt: String,
     jwtName: String,
-    publicKey: EcPublicKey? = null,
+    publicKey: PublicKey? = null,
     checks: Map<WebTokenCheck, String> = mapOf(),
     maxValidity: Duration = 10.hours,
     certificateChainValidator: (suspend (chain: X509CertChain, atTime: Instant) -> Boolean)? = null,
@@ -162,7 +165,7 @@ suspend fun validateJwt(
             if (publicKey != null) {
                 certificateChain.certificates.last().verify(publicKey)
             }
-            certificateChain.certificates.first().ecPublicKey
+            certificateChain.certificates.first().publicKey
         }
     } else {
         val issuer = body["iss"]?.jsonPrimitive?.content
@@ -191,7 +194,7 @@ suspend fun validateJwt(
                     throw InvalidRequestException("$jwtName: signature check failed: ${err.message}")
                 }
             }
-            first.ecPublicKey
+            first.publicKey
         } else {
             val kid = header["kid"]?.jsonPrimitive?.content
                 ?: throw InvalidRequestException(
@@ -205,15 +208,28 @@ suspend fun validateJwt(
         }
     }
 
-    val signature = EcSignature.fromCoseEncoded(parts[2].fromBase64Url())
     try {
         val message = jwt.take(jwt.length - parts[2].length - 1)
-        Crypto.checkSignature(
-            publicKey = key,
-            message = message.encodeToByteArray(),
-            algorithm = algorithm ?: key.curve.defaultSigningAlgorithmFullySpecified,
-            signature = signature
-        )
+        val signatureBytes = parts[2].fromBase64Url()
+        when (key) {
+            is EcPublicKey -> {
+                val signature = EcSignature.fromCoseEncoded(signatureBytes)
+                Crypto.checkSignature(
+                    publicKey = key,
+                    message = message.encodeToByteArray(),
+                    algorithm = algorithm ?: key.curve.defaultSigningAlgorithmFullySpecified,
+                    signature = signature
+                )
+            }
+            is RsaPublicKey -> {
+                Crypto.checkSignature(
+                    publicKey = key,
+                    message = message.encodeToByteArray(),
+                    algorithm = algorithm ?: Algorithm.RS256,
+                    signature = RsaSignature(signatureBytes)
+                )
+            }
+        }
     } catch (e: SignatureVerificationException) {
         throw IllegalArgumentException("$jwtName: invalid JWT signature", e)
     }
@@ -248,13 +264,13 @@ suspend fun validateJwt(
 }
 
 private val keyCacheLock = Mutex()
-private val keyCache = mutableMapOf<String, EcPublicKey>()
+private val keyCache = mutableMapOf<String, PublicKey>()
 private var cachedConfiguration: Configuration? = null
 
 internal suspend fun caPublicKey(
     issuer: String,
     caName: String
-): EcPublicKey {
+): PublicKey {
     val configuration = BackendEnvironment.getInterface(Configuration::class)
         ?: throw IllegalStateException("Configuration is required for WebTokenCheck.TRUST")
     val caPath = "$caName:$issuer"
@@ -269,9 +285,9 @@ internal suspend fun caPublicKey(
             }
             when (ca) {
                 is JsonPrimitive ->
-                    X509Cert(ByteString(ca.jsonPrimitive.content.fromBase64())).ecPublicKey
+                    X509Cert(ByteString(ca.jsonPrimitive.content.fromBase64())).publicKey
                 is JsonObject ->
-                    EcPublicKey.fromJwk(ca)
+                    PublicKey.fromJwk(ca)
                 else -> {
                     throw InvalidRequestException("CA not registered: $caPath")
                 }

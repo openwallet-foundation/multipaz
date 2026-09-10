@@ -133,7 +133,7 @@ data class SignedVical(
 
             if (!disableSignatureVerification) {
                 Cose.coseSign1Check(
-                    certChain.certificates.first().ecPublicKey,
+                    certChain.certificates.first().publicKey,
                     null,
                     signature,
                     signatureAlgorithm

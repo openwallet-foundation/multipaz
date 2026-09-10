@@ -379,7 +379,7 @@ class DeviceResponseGeneratorTest {
                     NameSpacedData.Builder().build(),
                     mdocCredentialMac.secureArea,
                     mdocCredentialMac.alias,
-                    eReaderKey.publicKey,
+                    eReaderKey.ecPublicKey,
                     Reason.Unspecified
                 )
                 .generate()

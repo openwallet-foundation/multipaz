@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.EcPublicKey
 import org.multipaz.util.toBase64Url
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -112,11 +113,10 @@ private suspend fun buildPayload(
 }.toString().encodeToByteArray().toBase64Url()
 
 private fun AsymmetricKey.addToJwtHeader(header: JsonObjectBuilder) {
-    header.put(
-        key = "alg",
-        value = algorithm.joseAlgorithmIdentifier ?:
-            publicKey.curve.defaultSigningAlgorithmFullySpecified.joseAlgorithmIdentifier
-    )
+    val alg = algorithm.joseAlgorithmIdentifier
+        ?: (publicKey as? EcPublicKey)?.curve?.defaultSigningAlgorithmFullySpecified?.joseAlgorithmIdentifier
+        ?: throw IllegalArgumentException("Algorithm has no JOSE algorithm identifier: $algorithm")
+    header.put(key = "alg", value = alg)
     when (this) {
         is AsymmetricKey.X509CertifiedSecureAreaBased,
         is AsymmetricKey.X509CertifiedExplicit -> header.put("x5c", certChain.toX5c(excludeRoot = true))

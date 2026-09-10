@@ -11,7 +11,7 @@ import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.cose.CoseTextLabel
 import org.multipaz.cose.toCoseLabel
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.rpc.backend.BackendEnvironment
@@ -75,7 +75,7 @@ import kotlin.time.Instant
 suspend fun validateCwt(
     cwt: ByteArray,
     cwtName: String,
-    publicKey: EcPublicKey?,
+    publicKey: PublicKey? = null,
     checks: Map<WebTokenCheck, String> = mapOf(),
     maxValidity: Duration = 10.hours,
     certificateChainValidator: (suspend (chain: X509CertChain, atTime: Instant) -> Boolean)? = null,
@@ -161,7 +161,7 @@ suspend fun validateCwt(
             if (publicKey != null) {
                 certificateChain.certificates.last().verify(publicKey)
             }
-            certificateChain.certificates.first().ecPublicKey
+            certificateChain.certificates.first().publicKey
         }
     } else {
         val issuer = body[WebTokenClaim.Iss]
@@ -190,7 +190,7 @@ suspend fun validateCwt(
                     throw InvalidRequestException("$cwtName: signature check failed: ${err.message}")
                 }
             }
-            first.ecPublicKey
+            first.publicKey
         } else {
             val kid = sign1.protectedHeaders[Cose.COSE_LABEL_KID.toCoseLabel]?.asBstr?.decodeToString()
                 ?: sign1.unprotectedHeaders[Cose.COSE_LABEL_KID.toCoseLabel]?.asBstr?.decodeToString()

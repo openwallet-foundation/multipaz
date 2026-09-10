@@ -56,7 +56,7 @@ class RpcAuthInspectorSignature(
         }
         try {
             Cose.coseSign1Check(
-                publicKey = cert.ecPublicKey,
+                publicKey = cert.publicKey,
                 detachedData = null,
                 signature = sign1,
                 signatureAlgorithm = Algorithm.fromCoseAlgorithmIdentifier(algId)

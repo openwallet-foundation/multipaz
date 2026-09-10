@@ -370,6 +370,101 @@ import AuthenticationServices
         }
     }
 
+    @objc(rsaCreatePrivateKey:) public class func rsaCreatePrivateKey(keySizeBits: Int) -> Array<Data> {
+        let attributes: [String: Any] = [
+            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
+            kSecAttrKeySizeInBits as String: keySizeBits
+        ]
+        var error: Unmanaged<CFError>?
+        guard let privateKey = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else {
+            return []
+        }
+        guard let publicKey = SecKeyCopyPublicKey(privateKey) else {
+            return []
+        }
+        guard let privData = SecKeyCopyExternalRepresentation(privateKey, &error) as Data?,
+              let pubData = SecKeyCopyExternalRepresentation(publicKey, &error) as Data? else {
+            return []
+        }
+        return [privData, pubData]
+    }
+
+    @objc(rsaSign: : :) public class func rsaSign(
+        privateKeyPkcs1: Data,
+        algorithm: String,
+        dataToSign: Data
+    ) -> Data? {
+        let attributes: [String: Any] = [
+            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
+            kSecAttrKeyClass as String: kSecAttrKeyClassPrivate
+        ]
+        var error: Unmanaged<CFError>?
+        guard let privateKey = SecKeyCreateWithData(privateKeyPkcs1 as CFData, attributes as CFDictionary, &error) else {
+            return nil
+        }
+        let secKeyAlgorithm: SecKeyAlgorithm
+        switch algorithm {
+        case "RS256":
+            secKeyAlgorithm = .rsaSignatureMessagePKCS1v15SHA256
+        case "RS384":
+            secKeyAlgorithm = .rsaSignatureMessagePKCS1v15SHA384
+        case "RS512":
+            secKeyAlgorithm = .rsaSignatureMessagePKCS1v15SHA512
+        case "PS256":
+            secKeyAlgorithm = .rsaSignatureMessagePSSSHA256
+        case "PS384":
+            secKeyAlgorithm = .rsaSignatureMessagePSSSHA384
+        case "PS512":
+            secKeyAlgorithm = .rsaSignatureMessagePSSSHA512
+        default:
+            return nil
+        }
+        guard SecKeyIsAlgorithmSupported(privateKey, .sign, secKeyAlgorithm) else {
+            return nil
+        }
+        guard let signature = SecKeyCreateSignature(privateKey, secKeyAlgorithm, dataToSign as CFData, &error) else {
+            return nil
+        }
+        return signature as Data
+    }
+
+    @objc(rsaVerifySignature: : : :) public class func rsaVerifySignature(
+        publicKeyPkcs1: Data,
+        algorithm: String,
+        dataThatWasSigned: Data,
+        signature: Data
+    ) -> Bool {
+        let attributes: [String: Any] = [
+            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
+            kSecAttrKeyClass as String: kSecAttrKeyClassPublic
+        ]
+        var error: Unmanaged<CFError>?
+        guard let publicKey = SecKeyCreateWithData(publicKeyPkcs1 as CFData, attributes as CFDictionary, &error) else {
+            return false
+        }
+        let secKeyAlgorithm: SecKeyAlgorithm
+        switch algorithm {
+        case "RS256":
+            secKeyAlgorithm = .rsaSignatureMessagePKCS1v15SHA256
+        case "RS384":
+            secKeyAlgorithm = .rsaSignatureMessagePKCS1v15SHA384
+        case "RS512":
+            secKeyAlgorithm = .rsaSignatureMessagePKCS1v15SHA512
+        case "PS256":
+            secKeyAlgorithm = .rsaSignatureMessagePSSSHA256
+        case "PS384":
+            secKeyAlgorithm = .rsaSignatureMessagePSSSHA384
+        case "PS512":
+            secKeyAlgorithm = .rsaSignatureMessagePSSSHA512
+        default:
+            return false
+        }
+        guard SecKeyIsAlgorithmSupported(publicKey, .verify, secKeyAlgorithm) else {
+            return false
+        }
+        return SecKeyVerifySignature(publicKey, secKeyAlgorithm, dataThatWasSigned as CFData, signature as CFData, &error)
+    }
+
     @objc(x509CertGetKey:) public class func x509CertGetKey(encodedX509Cert: Data) -> Data? {
         let certificate = SecCertificateCreateWithData(nil, encodedX509Cert as CFData)
         if (certificate == nil) {
@@ -460,6 +555,10 @@ import AuthenticationServices
             algorithm = SecKeyAlgorithm.ecdsaSignatureMessageX962SHA512
         case "1.2.840.113549.1.1.11":
             algorithm = SecKeyAlgorithm.rsaSignatureMessagePKCS1v15SHA256
+        case "1.2.840.113549.1.1.12":
+            algorithm = SecKeyAlgorithm.rsaSignatureMessagePKCS1v15SHA384
+        case "1.2.840.113549.1.1.13":
+            algorithm = SecKeyAlgorithm.rsaSignatureMessagePKCS1v15SHA512
         default:
             return NSError(domain: "org.multipaz", code: 2, userInfo: [
                 "message": "unknown signature algorithm: " + signatureAlgorithmOid

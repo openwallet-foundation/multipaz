@@ -19,8 +19,8 @@ import org.multipaz.util.toHex
 data class EcSignature(
     val r: ByteArray,
     val s: ByteArray
-) {
-    fun toCoseEncoded() = r + s
+) : Signature {
+    override fun toCoseEncoded() = r + s
 
     fun toDataItem(): DataItem {
         return buildCborMap {
@@ -47,7 +47,7 @@ data class EcSignature(
         return result
     }
 
-    fun toDerEncoded(): ByteArray {
+    override fun toDerEncoded(): ByteArray {
         // r and s are both encoded without a sign but ASN1Integer uses a sign. So we need
         // to insert zeroes as needed...
         val rS = stripLeadingZeroes(r)
