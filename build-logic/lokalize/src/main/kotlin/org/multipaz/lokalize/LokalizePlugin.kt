@@ -29,13 +29,15 @@ import java.io.File
  *     defaultLocale = "en"
  *     targetLocales = listOf("es", "fr", "de")
  *     failOnMissing = true
- *     llmApiKey.set("your-api-key") // or use LOKALIZE_API_KEY env var
  *     llmProvider.set(LLMProvider.GOOGLE)  // or OPENAI, ANTHROPIC
  *     llModel.set(LLmModel.GEMINI2_5_FLASH_LITE)  // see LLmModel enum for all options
  *     resourcesDir.set("src/commonMain/composeResources") // optional: custom path
  *     outputFormat.set(OutputFormat.XML) // or JSON for web/desktop projects
  * }
  * ```
+ *
+ * The translation API key is intentionally absent from that DSL; see [translationApiKey]
+ * for where `lokalizeFix` reads it from.
  *
  * Output formats:
  * - XML: Android strings.xml format with values/values-locale folders
@@ -81,12 +83,6 @@ class LokalizePlugin : Plugin<Project> {
             add("lokalizeWorker", "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
         }
 
-        ext.llmApiKey.convention(target.providers.environmentVariable("LOKALIZE_API_KEY")
-            .orElse(target.providers.environmentVariable("KOOG_API_KEY"))
-            .orElse(target.providers.environmentVariable("OPENAI_API_KEY"))
-            .orElse(target.providers.environmentVariable("GOOGLE_API_KEY"))
-            .orElse(target.providers.environmentVariable("ANTHROPIC_API_KEY")))
-
         ext.llmProvider.convention(LLMProvider.GOOGLE)
         ext.llModel.convention(LLmModel.GEMINI2_5_FLASH_LITE)
         ext.resourcesDir.convention("src/commonMain/composeResources")
@@ -127,7 +123,7 @@ class LokalizePlugin : Plugin<Project> {
             task.group = "lokalize"
 
             // Wire extension values to task inputs lazily
-            task.llmApiKey.convention(ext.llmApiKey)
+            task.llmApiKey.convention(translationApiKey(target))
             task.llmProvider.convention(ext.llmProvider)
             task.llModel.convention(ext.llModel)
             task.resourcesDir.convention(ext.resourcesDir)
@@ -238,3 +234,24 @@ class LokalizePlugin : Plugin<Project> {
         target.tasks.named("check").configure { it.dependsOn(verifyTask) }
     }
 }
+
+/**
+ * Resolves the API key used by `lokalizeFix`, in order: `LOKALIZE_API_KEY`, `KOOG_API_KEY`,
+ * `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY` from the environment, then the
+ * `lokalizeApiKey` Gradle property.
+ *
+ * The Gradle property exists so the key can live in `~/.gradle/gradle.properties`, outside
+ * any repository. Note that the root `gradle.properties` here is checked in, so it is not a
+ * safe place for one.
+ *
+ * There is deliberately no `llmApiKey` extension property to assign. A `set()` call outranks
+ * this lookup, so a key - or worse, a placeholder - assigned in a build script silently wins
+ * and gets sent to the provider verbatim, which is what broke translations in issue #2003.
+ */
+private fun translationApiKey(target: Project): Provider<String> =
+    target.providers.environmentVariable("LOKALIZE_API_KEY")
+        .orElse(target.providers.environmentVariable("KOOG_API_KEY"))
+        .orElse(target.providers.environmentVariable("OPENAI_API_KEY"))
+        .orElse(target.providers.environmentVariable("GOOGLE_API_KEY"))
+        .orElse(target.providers.environmentVariable("ANTHROPIC_API_KEY"))
+        .orElse(target.providers.gradleProperty("lokalizeApiKey"))

@@ -18,9 +18,6 @@ abstract class LokalizeExtension @Inject constructor(objects: ObjectFactory) {
     /** Whether to fail the build when missing translations are detected */
     var failOnMissing: Boolean = true
 
-    /** API key for AI translation (can also use LOKALIZE_API_KEY env var) */
-    val llmApiKey: Property<String> = objects.property(String::class.java)
-
     /** LLM provider to use for translation (OpenAI, Google, Anthropic) */
     val llmProvider: Property<LLMProvider> = objects.property(LLMProvider::class.java)
 

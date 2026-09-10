@@ -16,6 +16,10 @@ tasks.withType<KotlinCompile>().configureEach {
     }
 }
 
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+}
+
 group = "org.multipaz.util.lokalize"
 version = "0.1.0"
 

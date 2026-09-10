@@ -12,7 +12,10 @@ class ResourceScannerTest {
     @Test
     fun `scan should extract simple strings`(@TempDir tempDir: File) {
         // Given
-        val xmlFile = File(tempDir, "strings.xml")
+        // The scanner derives the locale from the parent directory name, so the file has to
+        // sit in a `values` directory for it to report the base locale.
+        val valuesDir = File(tempDir, "values").apply { mkdirs() }
+        val xmlFile = File(valuesDir, "strings.xml")
         xmlFile.writeText("""
             <?xml version="1.0" encoding="utf-8"?>
             <resources>

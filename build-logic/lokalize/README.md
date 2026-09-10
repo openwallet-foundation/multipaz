@@ -49,10 +49,10 @@ lokalize {
     // Resource format: XML (Android strings.xml) or JSON
     outputFormat.set(OutputFormat.JSON)
     
-    // Optional: Configure AI translation
-    llmApiKey.set("your-api-key") // Or use environment variable
+    // Optional: Configure AI translation.
+    // Note there is no API key setting here - see "Set up your API key" below.
     llmProvider.set(LLMProvider.GOOGLE)  // GOOGLE, OPENAI, or ANTHROPIC
-    llModel.set(LLmModel.GEMINI2_0_FLASH)
+    llModel.set(LLmModel.GEMINI2_5_FLASH)
     
     // Optional: Custom resources directory.
     // For Kotlin Multiplatform JSON projects, prefer a path that is NOT a
@@ -72,16 +72,46 @@ lokalize {
 
 ### Step 3: Set up your API key (for AI translation)
 
-Option 1 - Environment variable (recommended):
+Only `lokalizeFix` needs a key; `lokalizeCheck` and the generator tasks do not.
+
+**There is no `llmApiKey` setting in the `lokalize { }` block, by design.** The key is a
+secret, and a build script that can assign one is a build script that will eventually have
+one committed to it. The plugin resolves it itself, using the first of these that is set:
+
+1. `LOKALIZE_API_KEY` environment variable (preferred)
+2. `KOOG_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY` environment
+   variables, in that order
+3. the `lokalizeApiKey` Gradle property
+
+Option 1 - environment variable (recommended):
 ```bash
 export LOKALIZE_API_KEY="your-api-key"
+./gradlew :multipaz-compose:lokalizeFix
 ```
 
-Option 2 - `local.properties` file:
+Option 2 - Gradle property in `~/.gradle/gradle.properties`, which lives outside the
+repository:
 ```properties
-lokalize.api.key=your-api-key
-lokalize.provider=GOOGLE
-lokalize.model=GEMINI2_0_FLASH
+lokalizeApiKey=your-api-key
+```
+
+> **Do not** put the key in this repository's `gradle.properties` - that file is checked in.
+> `local.properties` is git-ignored but is *not* read by this plugin.
+
+If no key is found, `lokalizeFix` does not fail. It warns and copies the base locale text
+verbatim into every target locale, so a run without a key produces resources that look
+complete but are untranslated. Check the log for `No API key found` before committing.
+
+#### The key is written to disk while the task runs
+
+`lokalizeFix` forks a worker process and passes it parameters through a file, so your key
+is written **in cleartext** to
+`<module>/build/lokalize/translations/translation_input_<locale>.json`, one file per locale,
+and stays there after the build. `build/` is git-ignored so it cannot be committed, but if
+you have used a real key, remove them afterwards:
+
+```bash
+find . -name 'translation_input_*.json' -delete
 ```
 
 ## Tasks
@@ -173,9 +203,8 @@ val languages = GeneratedTranslations.allLanguages
 | `targetLocales` | `List<String>` | `[]` | Locales to validate/translate |
 | `failOnMissing` | `Boolean` | `true` | Fail build on missing translations |
 | `outputFormat` | `OutputFormat` | `XML` | Resource format (XML or JSON) |
-| `llmApiKey` | `Property<String>` | Environment lookup | API key for translation |
 | `llmProvider` | `LLMProvider` | `GOOGLE` | LLM provider to use |
-| `llModel` | `LLmModel` | `GEMINI2_0_FLASH` | Specific model |
+| `llModel` | `LLmModel` | `GEMINI2_5_FLASH_LITE` | Specific model |
 | `resourcesDir` | `Property<String>` | `"src/commonMain/composeResources"` | Resources base path |
 | `generatedTranslationsPackageName` | `Property<String>` | `"org.multipaz.doctypes.generated"` | Package for the generated `GeneratedTranslations` and per-language `Strings_*` files |
 | `stringKeysPackageName` | `Property<String>` | `"org.multipaz.doctypes.localization"` | Package for the generated `GeneratedStringKeys` object |
@@ -228,10 +257,11 @@ JSON format is recommended when:
 ### Google (Gemini)
 
 Available models:
-- `GEMINI2_0_FLASH` - Fast, efficient (recommended)
-- `GEMINI2_0_FLASH_LITE` - Most efficient for low-latency
+- `GEMINI2_5_FLASH` - Balance of speed and capability (recommended)
+- `GEMINI2_5_FLASH_LITE` - Most efficient for low-latency; the plugin default
 - `GEMINI2_5_PRO` - Advanced capabilities
-- `GEMINI2_5_FLASH` - Balance of speed and capability
+- `GEMINI3_PRO_PREVIEW` - Advanced reasoning, preview
+- `GEMINI3_FLASH_PREVIEW` - Pro-level intelligence at Flash speed, preview
 
 ### OpenAI
 
@@ -345,6 +375,28 @@ If you see `429 Too Many Requests`:
 - Claude has different rate limits per tier
 - Check your API key's tier status
 
+### Authentication Errors
+
+`Translation failed for locale '<locale>'` followed by `API key not valid`, `401` or `403`
+means the key never reached the provider, or was rejected. Check, in order:
+
+- Is `LOKALIZE_API_KEY` exported in the shell that runs Gradle? Confirm with
+  `echo ${LOKALIZE_API_KEY:+set}`.
+- Does something assign the key in a build script? Nothing should - `lokalize { }` exposes no
+  key setting, and a `set()` call on the underlying property outranks the environment lookup
+  and is sent to the provider verbatim. This is what caused issue #2003, where a placeholder
+  `"API_KEY"` was hardcoded in the convention plugin and every run failed with
+  `400 API_KEY_INVALID`.
+- Is the key valid for the provider you selected? A Gemini key will not work with
+  `llmProvider.set(LLMProvider.OPENAI)`. Verify a Google key independently with:
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}\n' \
+    "https://generativelanguage.googleapis.com/v1beta/models?key=$LOKALIZE_API_KEY"
+  ```
+
+The failure message includes the provider's own error and the exception chain, and the
+worker prints the full stack trace, so read those before guessing.
+
 ### Missing Translations Not Detected
 
 Ensure your resource directory structure follows standard conventions:
@@ -390,9 +442,14 @@ If `generateMultipazStrings` is skipped:
    - Cultural context
    - UI space constraints
 
-3. **Use environment variables for API keys**: Don't commit API keys to version control
+3. **Keep API keys out of the repository**: pass them by environment variable, never by
+   editing a build script. The `lokalize { }` block has no key setting for this reason.
    ```bash
    export LOKALIZE_API_KEY="your-key"
+   ```
+   After a run with a real key, clear the worker input files it leaves behind:
+   ```bash
+   find . -name 'translation_input_*.json' -delete
    ```
 
 4. **Run check before commit**: Add to pre-commit hooks:
