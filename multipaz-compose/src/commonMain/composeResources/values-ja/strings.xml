@@ -214,4 +214,6 @@
     <string name="provisioning_tx_code_fallback_prompt">以前にお伝えしたパスフレーズを入力してください</string>
     <string name="floating_item_heading_and_date_not_set">未設定</string>
     <string name="floating_item_heading_and_date_time_not_set">未設定</string>
+    <string name="presentment_activity_removed_too_fast">共有完了前にデバイスが離されました</string>
+    <string name="presentment_activity_nfc_only_tip">すべてのデータが転送されるまで、リーダーにかざし続けてください</string>
 </resources>

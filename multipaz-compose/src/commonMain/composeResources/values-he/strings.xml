@@ -230,4 +230,6 @@
     <string name="provisioning_tx_code_fallback_prompt">הזן את מילת הקוד שנמסרה לך בעבר</string>
     <string name="floating_item_heading_and_date_not_set">לא מוגדר</string>
     <string name="floating_item_heading_and_date_time_not_set">לא מוגדר</string>
+    <string name="presentment_activity_removed_too_fast">ההתקן הוסר לפני שהשיתוף הושלם.</string>
+    <string name="presentment_activity_nfc_only_tip">החזק צמוד לקורא עד שכל הנתונים יועברו.</string>
 </resources>

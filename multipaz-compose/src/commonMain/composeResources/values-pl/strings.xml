@@ -234,4 +234,6 @@
     <string name="provisioning_tx_code_fallback_prompt">Wprowadź hasło, które zostało wcześniej Tobie przekazane</string>
     <string name="floating_item_heading_and_date_not_set">Nie ustawiono</string>
     <string name="floating_item_heading_and_date_time_not_set">Nie ustawiono</string>
+    <string name="presentment_activity_removed_too_fast">Urządzenie zostało odłączone przed zakończeniem udostępniania</string>
+    <string name="presentment_activity_nfc_only_tip">Trzymaj blisko czytnika, aż wszystkie dane zostaną przesłane</string>
 </resources>

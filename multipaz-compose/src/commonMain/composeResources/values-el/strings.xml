@@ -214,4 +214,6 @@
     <string name="provisioning_tx_code_fallback_prompt">Εισαγάγετε τον κωδικό πρόσβασης που σας κοινοποιήθηκε προηγουμένως</string>
     <string name="floating_item_heading_and_date_not_set">Δεν έχει οριστεί</string>
     <string name="floating_item_heading_and_date_time_not_set">Δεν έχει οριστεί</string>
+    <string name="presentment_activity_removed_too_fast">Η συσκευή απομακρύνθηκε πριν ολοκληρωθεί η κοινοποίηση</string>
+    <string name="presentment_activity_nfc_only_tip">Κρατήστε το κοντά στον αναγνώστη μέχρι να μεταφερθούν όλα τα δεδομένα</string>
 </resources>

@@ -214,4 +214,6 @@
     <string name="provisioning_tx_code_fallback_prompt">वह पासफ्रेज़ दर्ज करें जो आपको पहले बताया गया था</string>
     <string name="floating_item_heading_and_date_not_set">सेट नहीं</string>
     <string name="floating_item_heading_and_date_time_not_set">सेट नहीं</string>
+    <string name="presentment_activity_removed_too_fast">साझाकरण पूर्ण होने से पहले डिवाइस हटा दिया गया था</string>
+    <string name="presentment_activity_nfc_only_tip">सारा डेटा ट्रांसफर होने तक रीडर के पास रखें</string>
 </resources>

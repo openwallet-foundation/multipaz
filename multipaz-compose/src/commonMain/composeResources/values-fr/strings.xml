@@ -214,4 +214,6 @@
     <string name="provisioning_tx_code_fallback_prompt">Saisissez la phrase secrète qui vous a été communiquée précédemment</string>
     <string name="floating_item_heading_and_date_not_set">Non défini</string>
     <string name="floating_item_heading_and_date_time_not_set">Non défini</string>
+    <string name="presentment_activity_removed_too_fast">L'appareil a été retiré avant la fin du partage</string>
+    <string name="presentment_activity_nfc_only_tip">Maintenez à proximité du lecteur jusqu'à ce que toutes les données soient transférées</string>
 </resources>

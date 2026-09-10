@@ -234,4 +234,6 @@
     <string name="provisioning_tx_code_fallback_prompt">Введіть парольну фразу, яку було вам раніше повідомлено</string>
     <string name="floating_item_heading_and_date_not_set">Не встановлено</string>
     <string name="floating_item_heading_and_date_time_not_set">Не встановлено</string>
+    <string name="presentment_activity_removed_too_fast">Пристрій було прибрано до завершення обміну</string>
+    <string name="presentment_activity_nfc_only_tip">Тримайте близько до зчитувача, доки всі дані не будуть передані</string>
 </resources>

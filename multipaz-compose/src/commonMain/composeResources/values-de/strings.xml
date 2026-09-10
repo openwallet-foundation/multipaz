@@ -214,4 +214,6 @@
     <string name="provisioning_tx_code_fallback_prompt">Geben Sie die Ihnen zuvor mitgeteilte Passphrase ein</string>
     <string name="floating_item_heading_and_date_not_set">Nicht festgelegt</string>
     <string name="floating_item_heading_and_date_time_not_set">Nicht festgelegt</string>
+    <string name="presentment_activity_removed_too_fast">Gerät wurde entfernt, bevor die Freigabe abgeschlossen war</string>
+    <string name="presentment_activity_nfc_only_tip">Halten Sie es nah an das Lesegerät, bis alle Daten übertragen sind</string>
 </resources>

@@ -214,4 +214,6 @@
     <string name="provisioning_tx_code_fallback_prompt">输入之前已告知您的通行码</string>
     <string name="floating_item_heading_and_date_not_set">未设置</string>
     <string name="floating_item_heading_and_date_time_not_set">未设置</string>
+    <string name="presentment_activity_removed_too_fast">设备在共享完成前已移开</string>
+    <string name="presentment_activity_nfc_only_tip">请靠近读卡器，直到所有数据传输完成</string>
 </resources>
