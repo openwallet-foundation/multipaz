@@ -3,6 +3,8 @@ package org.multipaz.crypto
 import js.array.jsArrayOf
 import js.buffer.toByteArray
 import js.objects.unsafeJso
+import js.typedarrays.Uint8Array
+import js.typedarrays.toUint8Array
 import kotlinx.browser.window
 import kotlinx.coroutines.CancellationException
 import org.multipaz.asn1.ASN1
@@ -40,6 +42,7 @@ import web.crypto.sign
 import web.crypto.spki
 import web.crypto.verify
 import kotlin.js.ExperimentalWasmJsInterop
+import kotlin.js.JsAny
 import kotlin.js.JsException
 import kotlin.js.toJsString
 import kotlin.js.unsafeCast
@@ -47,6 +50,20 @@ import kotlin.js.unsafeCast
 external interface XdhKeyDeriveParams : web.crypto.Algorithm {
     override var name: String
     var public: CryptoKey
+}
+
+@OptIn(ExperimentalWasmJsInterop::class)
+external interface RsaHashedKeyGenParams : web.crypto.Algorithm {
+    override var name: String
+    var modulusLength: Int
+    var publicExponent: Uint8Array<*>
+    var hash: JsAny
+}
+
+@OptIn(ExperimentalWasmJsInterop::class)
+external interface RsaPssParams : web.crypto.Algorithm {
+    override var name: String
+    var saltLength: Int
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
@@ -336,6 +353,53 @@ actual object Crypto {
     }
 
     @OptIn(ExperimentalWasmJsInterop::class)
+    actual suspend fun checkSignature(
+        publicKey: RsaPublicKey,
+        message: ByteArray,
+        algorithm: Algorithm,
+        signature: RsaSignature
+    ) {
+        val (name, hashName, saltLength) = when (algorithm) {
+            Algorithm.RS256 -> Triple("RSASSA-PKCS1-v1_5", "SHA-256", 0)
+            Algorithm.RS384 -> Triple("RSASSA-PKCS1-v1_5", "SHA-384", 0)
+            Algorithm.RS512 -> Triple("RSASSA-PKCS1-v1_5", "SHA-512", 0)
+            Algorithm.PS256 -> Triple("RSA-PSS", "SHA-256", 32)
+            Algorithm.PS384 -> Triple("RSA-PSS", "SHA-384", 48)
+            Algorithm.PS512 -> Triple("RSA-PSS", "SHA-512", 64)
+            else -> throw IllegalArgumentException("Unsupported RSA algorithm $algorithm")
+        }
+        val importedKey = crypto.subtle.importKey(
+            format = KeyFormat.Companion.spki,
+            keyData = publicKey.toSubjectPublicKeyInfo().toBufferSource(),
+            algorithm = unsafeJso<RsaHashedImportParams> {
+                this.name = name
+                hash = hashName.toJsString()
+            },
+            extractable = false,
+            keyUsages = jsArrayOf(KeyUsage.verify)
+        )
+        val verificationAlgorithm: web.crypto.Algorithm = if (name == "RSA-PSS") {
+            unsafeJso<RsaPssParams> {
+                this.name = name
+                this.saltLength = saltLength
+            }
+        } else {
+            unsafeJso<web.crypto.Algorithm> {
+                this.name = name
+            }
+        }
+        if (!crypto.subtle.verify(
+                algorithm = verificationAlgorithm,
+                key = importedKey,
+                signature = signature.signature.toBufferSource(),
+                data = message.toBufferSource(),
+            )
+        ) {
+            throw SignatureVerificationException("Signature verification failed")
+        }
+    }
+
+    @OptIn(ExperimentalWasmJsInterop::class)
     actual suspend fun createEcPrivateKey(curve: EcCurve): EcPrivateKey {
         when (curve) {
             EcCurve.P256,
@@ -417,6 +481,30 @@ actual object Crypto {
         }
     }
 
+    @OptIn(ExperimentalWasmJsInterop::class)
+    actual suspend fun createRsaPrivateKey(keySizeBits: Int): RsaPrivateKey {
+        val key = crypto.subtle.generateKey(
+            algorithm = unsafeJso<RsaHashedKeyGenParams> {
+                name = "RSASSA-PKCS1-v1_5"
+                modulusLength = keySizeBits
+                publicExponent = byteArrayOf(1, 0, 1).toUint8Array()
+                hash = "SHA-256".toJsString()
+            },
+            extractable = true,
+            keyUsages = jsArrayOf(KeyUsage.sign, KeyUsage.verify)
+        ).unsafeCast<CryptoKeyPair>()
+        val pkcs8Bytes = crypto.subtle.exportKey(
+            format = "pkcs8".toJsString().unsafeCast<KeyFormat>(),
+            key = key.privateKey
+        ).unsafeCast<js.buffer.ArrayBufferLike>().toByteArray()
+        val spkiBytes = crypto.subtle.exportKey(
+            format = KeyFormat.Companion.spki,
+            key = key.publicKey
+        ).toByteArray()
+        val pubKey = RsaPublicKey.fromSubjectPublicKeyInfo(spkiBytes)
+        return RsaPrivateKey.fromPrivateKeyInfo(pkcs8Bytes, pubKey)
+    }
+
     actual suspend fun sign(
         key: EcPrivateKey,
         signatureAlgorithm: Algorithm,
@@ -479,6 +567,50 @@ actual object Crypto {
         val r = signature.sliceArray(IntRange(0, len/2 - 1))
         val s = signature.sliceArray(IntRange(len/2, len - 1))
         return EcSignature(r, s)
+    }
+
+    @OptIn(ExperimentalWasmJsInterop::class)
+    actual suspend fun sign(
+        key: RsaPrivateKey,
+        signatureAlgorithm: Algorithm,
+        message: ByteArray
+    ): RsaSignature {
+        val (name, hashName, saltLength) = when (signatureAlgorithm) {
+            Algorithm.RS256 -> Triple("RSASSA-PKCS1-v1_5", "SHA-256", 0)
+            Algorithm.RS384 -> Triple("RSASSA-PKCS1-v1_5", "SHA-384", 0)
+            Algorithm.RS512 -> Triple("RSASSA-PKCS1-v1_5", "SHA-512", 0)
+            Algorithm.PS256 -> Triple("RSA-PSS", "SHA-256", 32)
+            Algorithm.PS384 -> Triple("RSA-PSS", "SHA-384", 48)
+            Algorithm.PS512 -> Triple("RSA-PSS", "SHA-512", 64)
+            else -> throw IllegalArgumentException("Unsupported RSA signing algorithm $signatureAlgorithm")
+        }
+        val importedKey = crypto.subtle.importKey(
+            format = "pkcs8".toJsString().unsafeCast<KeyFormat>(),
+            keyData = key.toPrivateKeyInfo().toBufferSource(),
+            algorithm = unsafeJso<RsaHashedImportParams> {
+                this.name = name
+                hash = hashName.toJsString()
+            },
+            extractable = false,
+            keyUsages = jsArrayOf(KeyUsage.sign)
+        )
+        val signingAlgorithm: web.crypto.Algorithm = if (name == "RSA-PSS") {
+            unsafeJso<RsaPssParams> {
+                this.name = name
+                this.saltLength = saltLength
+            }
+        } else {
+            unsafeJso<web.crypto.Algorithm> {
+                this.name = name
+            }
+        }
+        return RsaSignature(
+            crypto.subtle.sign(
+                algorithm = signingAlgorithm,
+                key = importedKey,
+                data = message.toBufferSource()
+            ).toByteArray()
+        )
     }
 
     actual suspend fun keyAgreement(

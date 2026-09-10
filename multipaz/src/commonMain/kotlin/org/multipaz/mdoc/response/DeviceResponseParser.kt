@@ -148,7 +148,7 @@ class DeviceResponseParser(
                 ]!!.asNumber.toInt()
             )
             val issuerSignedAuthenticated = if (issuerAuthorityCertChain.certificates.size > 0) {
-                val documentSigningKey = issuerAuthorityCertChain.certificates[0].ecPublicKey
+                val documentSigningKey = issuerAuthorityCertChain.certificates[0].publicKey
                  try {
                     Cose.coseSign1Check(
                         documentSigningKey,

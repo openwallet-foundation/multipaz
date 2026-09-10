@@ -73,7 +73,7 @@ data class OtherDocument(
         val expectedNonce = Crypto.digest(Algorithm.SHA256, Cbor.encode(sessionTranscriptBytes)).toBase64Url()
 
         sdJwtKb.verify(
-            issuerKey = issuerCertChain.certificates.first().ecPublicKey,
+            issuerKey = issuerCertChain.certificates.first().publicKey,
             checkNonce = { nonce ->
                 expectedNonce == nonce
             },

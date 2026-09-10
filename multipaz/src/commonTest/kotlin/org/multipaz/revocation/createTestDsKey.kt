@@ -40,7 +40,7 @@ suspend fun createTestDsKey(): AsymmetricKey.X509Certified {
     val dsRawKey = AsymmetricKey.ephemeral() as AnonymousExplicit
     val dsCert = MdocUtil.generateDsCertificate(
         iacaKey = iacaKey,
-        dsKey = dsRawKey.publicKey,
+        dsKey = dsRawKey.ecPublicKey,
         subject = X500Name.fromName("C=US,CN=DS test key"),
         serial = ASN1Integer.fromRandom(128),
         validFrom = validFrom,

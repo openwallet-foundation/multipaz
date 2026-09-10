@@ -287,7 +287,7 @@ class VerificationSessionTest {
             .jsonObject["request"]!!.jsonPrimitive.content
         val jwsInfo = JsonWebSignature.getInfo(signedJwt)
         val requesterCertChain = assertNotNull(jwsInfo.x5c, "expected x5c in signed request")
-        JsonWebSignature.verify(signedJwt, requesterCertChain.certificates.first().ecPublicKey)
+        JsonWebSignature.verify(signedJwt, requesterCertChain.certificates.first().publicKey)
 
         // Wallet-side: generate the response from the harness's test credential.
         val responseObject = OpenID4VP.generateResponse(

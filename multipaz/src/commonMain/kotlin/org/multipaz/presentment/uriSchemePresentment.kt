@@ -119,7 +119,7 @@ suspend fun uriSchemePresentment(
         certChain = info.x5c!!,
         clientId = requestObject["client_id"]!!.jsonPrimitive.content
     )
-    JsonWebSignature.verify(reqJwt, requesterIdentity.certChain.certificates.first().ecPublicKey)
+    JsonWebSignature.verify(reqJwt, requesterIdentity.certChain.certificates.first().publicKey)
     check(info.type == "oauth-authz-req+jwt")
 
     val responseUri = requestObject["response_uri"]?.jsonPrimitive?.content

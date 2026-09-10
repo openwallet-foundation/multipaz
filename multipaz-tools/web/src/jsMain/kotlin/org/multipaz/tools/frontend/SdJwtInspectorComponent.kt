@@ -53,7 +53,7 @@ val SdJwtInspectorComponent = FC {
     var parseError by useState("")
 
     suspend fun calculateProcessedPayload(sdjwt: SdJwt): JsonObject? {
-        val issuerKey = sdjwt.x5c?.certificates?.firstOrNull()?.ecPublicKey
+        val issuerKey = sdjwt.x5c?.certificates?.firstOrNull()?.publicKey
         return try {
             sdjwt.verify(issuerKey = issuerKey)
         } catch (e: Throwable) {

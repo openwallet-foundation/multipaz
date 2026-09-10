@@ -12,7 +12,11 @@ import java.security.MessageDigest
 import java.security.Security
 import java.security.Signature
 import java.security.interfaces.ECPrivateKey
+import java.security.interfaces.RSAPrivateCrtKey
+import java.security.interfaces.RSAPublicKey
 import java.security.spec.ECGenParameterSpec
+import java.security.spec.MGF1ParameterSpec
+import java.security.spec.PSSParameterSpec
 import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
 import javax.crypto.Mac
@@ -299,6 +303,40 @@ actual object Crypto {
         }
     }
 
+    actual suspend fun checkSignature(
+        publicKey: RsaPublicKey,
+        message: ByteArray,
+        algorithm: Algorithm,
+        signature: RsaSignature
+    ) {
+        val (signatureAlgorithm, pssParameterSpec) = when (algorithm) {
+            Algorithm.RS256 -> Pair("SHA256withRSA", null)
+            Algorithm.RS384 -> Pair("SHA384withRSA", null)
+            Algorithm.RS512 -> Pair("SHA512withRSA", null)
+            Algorithm.PS256 -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 32, 1))
+            Algorithm.PS384 -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-384", "MGF1", MGF1ParameterSpec.SHA384, 48, 1))
+            Algorithm.PS512 -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-512", "MGF1", MGF1ParameterSpec.SHA512, 64, 1))
+            else -> throw IllegalArgumentException("Unsupported RSA algorithm $algorithm")
+        }
+
+        val verified = try {
+            Signature.getInstance(signatureAlgorithm).run {
+                initVerify(publicKey.javaPublicKey)
+                if (pssParameterSpec != null) {
+                    setParameter(pssParameterSpec)
+                }
+                update(message)
+                verify(signature.signature)
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            throw IllegalArgumentException("Error occurred verifying signature", e)
+        }
+        if (!verified) {
+            throw SignatureVerificationException("Signature verification failed")
+        }
+    }
+
     internal fun fixupEcDsaPrivateKeyMaterial(curve: EcCurve, d: ByteArray): ByteArray {
         // Looks like the generated key material isn't always the right number of bytes
         // which causes problems for unit tests encoding the private key material. Adjust
@@ -384,6 +422,27 @@ actual object Crypto {
             }
         }
 
+    actual suspend fun createRsaPrivateKey(keySizeBits: Int): RsaPrivateKey {
+        val kpg = KeyPairGenerator.getInstance("RSA")
+        kpg.initialize(keySizeBits)
+        val keyPair = kpg.generateKeyPair()
+        val priv = keyPair.private as RSAPrivateCrtKey
+        val pub = keyPair.public as RSAPublicKey
+        val rsaPub = RsaPublicKey(
+            modulus = stripLeadingZero(pub.modulus.toByteArray()),
+            publicExponent = stripLeadingZero(pub.publicExponent.toByteArray())
+        )
+        return RsaPrivateKey(
+            publicKey = rsaPub,
+            privateExponent = stripLeadingZero(priv.privateExponent.toByteArray()),
+            p = stripLeadingZero(priv.primeP.toByteArray()),
+            q = stripLeadingZero(priv.primeQ.toByteArray()),
+            dp = stripLeadingZero(priv.primeExponentP.toByteArray()),
+            dq = stripLeadingZero(priv.primeExponentQ.toByteArray()),
+            qInv = stripLeadingZero(priv.crtCoefficient.toByteArray())
+        )
+    }
+
     /**
      * Signs data with a key.
      *
@@ -465,6 +524,36 @@ actual object Crypto {
         EcCurve.X448 -> {
             throw IllegalStateException("Key with curve ${key.curve} does not support signing")
         }
+    }
+
+    actual suspend fun sign(
+        key: RsaPrivateKey,
+        signatureAlgorithm: Algorithm,
+        message: ByteArray
+    ): RsaSignature {
+        val (signatureAlgorithmName, pssParameterSpec) = when (signatureAlgorithm) {
+            Algorithm.RS256 -> Pair("SHA256withRSA", null)
+            Algorithm.RS384 -> Pair("SHA384withRSA", null)
+            Algorithm.RS512 -> Pair("SHA512withRSA", null)
+            Algorithm.PS256 -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 32, 1))
+            Algorithm.PS384 -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-384", "MGF1", MGF1ParameterSpec.SHA384, 48, 1))
+            Algorithm.PS512 -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-512", "MGF1", MGF1ParameterSpec.SHA512, 64, 1))
+            else -> throw IllegalArgumentException("Unsupported RSA signing algorithm $signatureAlgorithm")
+        }
+        val signatureBytes = try {
+            Signature.getInstance(signatureAlgorithmName).run {
+                initSign(key.javaPrivateKey)
+                if (pssParameterSpec != null) {
+                    setParameter(pssParameterSpec)
+                }
+                update(message)
+                sign()
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            throw IllegalStateException("Unexpected Exception", e)
+        }
+        return RsaSignature(signatureBytes)
     }
 
     /**

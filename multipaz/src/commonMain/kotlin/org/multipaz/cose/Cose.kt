@@ -10,6 +10,9 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.PublicKey
+import org.multipaz.crypto.RsaPublicKey
+import org.multipaz.crypto.RsaSignature
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.securearea.KeyUnlockData
@@ -83,6 +86,69 @@ object Cose {
     const val COSE_KEY_TYPE_EC2: Long = 2
 
     /**
+     * The COSE Key Type for RSA.
+     *
+     * Reference: https://datatracker.ietf.org/doc/html/rfc8230#section-4
+     */
+    const val COSE_KEY_TYPE_RSA: Long = 3
+
+    /**
+     * The COSE Key type parameter for RSA modulus n (bstr).
+     *
+     * Reference: https://datatracker.ietf.org/doc/html/rfc8230#section-4
+     */
+    const val COSE_KEY_PARAM_N: Long = -1
+
+    /**
+     * The COSE Key type parameter for RSA public exponent e (bstr).
+     *
+     * Reference: https://datatracker.ietf.org/doc/html/rfc8230#section-4
+     */
+    const val COSE_KEY_PARAM_E: Long = -2
+
+    /**
+     * The COSE Key type parameter for RSA private exponent d (bstr).
+     *
+     * Reference: https://datatracker.ietf.org/doc/html/rfc8230#section-4
+     */
+    const val COSE_KEY_PARAM_D_RSA: Long = -3
+
+    /**
+     * The COSE Key type parameter for RSA prime factor p (bstr).
+     *
+     * Reference: https://datatracker.ietf.org/doc/html/rfc8230#section-4
+     */
+    const val COSE_KEY_PARAM_P: Long = -4
+
+    /**
+     * The COSE Key type parameter for RSA prime factor q (bstr).
+     *
+     * Reference: https://datatracker.ietf.org/doc/html/rfc8230#section-4
+     */
+    const val COSE_KEY_PARAM_Q: Long = -5
+
+    /**
+     * The COSE Key type parameter for RSA dP (bstr).
+     *
+     * Reference: https://datatracker.ietf.org/doc/html/rfc8230#section-4
+     */
+    const val COSE_KEY_PARAM_DP: Long = -6
+
+    /**
+     * The COSE Key type parameter for RSA dQ (bstr).
+     *
+     * Reference: https://datatracker.ietf.org/doc/html/rfc8230#section-4
+     */
+    const val COSE_KEY_PARAM_DQ: Long = -7
+
+    /**
+     * The COSE Key type parameter for RSA qInv (bstr).
+     *
+     * Reference: https://datatracker.ietf.org/doc/html/rfc8230#section-4
+     */
+    const val COSE_KEY_PARAM_QINV: Long = -8
+
+    /**
      * The COSE label for conveying an algorithm.
      *
      * Reference: https://www.iana.org/assignments/cose/cose.xhtml#header-parameters
@@ -145,7 +211,7 @@ object Cose {
      * @throws SignatureVerificationException if the signature check fails.
      */
     suspend fun coseSign1Check(
-        publicKey: EcPublicKey,
+        publicKey: PublicKey,
         detachedData: ByteArray?,
         signature: CoseSign1,
         signatureAlgorithm: Algorithm
@@ -168,11 +234,24 @@ object Cose {
             encodedProtectedHeaders = encodedProtectedHeaders,
             dataToBeSigned = detachedData ?: signature.payload!!
         )
-        Crypto.checkSignature(
-            publicKey,
-            toBeSigned,
-            signatureAlgorithm,
-            EcSignature.fromCoseEncoded(signature.signature))
+        when (publicKey) {
+            is EcPublicKey -> {
+                Crypto.checkSignature(
+                    publicKey,
+                    toBeSigned,
+                    signatureAlgorithm,
+                    EcSignature.fromCoseEncoded(signature.signature)
+                )
+            }
+            is RsaPublicKey -> {
+                Crypto.checkSignature(
+                    publicKey,
+                    toBeSigned,
+                    signatureAlgorithm,
+                    RsaSignature(signature.signature)
+                )
+            }
+        }
     }
 
     /**
@@ -195,8 +274,8 @@ object Cose {
         signingKey: AsymmetricKey,
         message: ByteArray,
         includeMessageInPayload: Boolean,
-        protectedHeaders: Map<CoseLabel, DataItem>,
-        unprotectedHeaders: Map<CoseLabel, DataItem>,
+        protectedHeaders: Map<CoseLabel, DataItem> = mapOf(),
+        unprotectedHeaders: Map<CoseLabel, DataItem> = mapOf(),
     ): CoseSign1 {
         val adjustedProtectedHeaders = mutableMapOf<CoseLabel, DataItem>()
         adjustedProtectedHeaders.putAll(protectedHeaders)

@@ -28,7 +28,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 @CborSerializationImplemented(schemaId = "elQPzwBQGz5CU2YDTAgAa5l5sTHdJrxubfMWHJcHjHU")
 sealed class EcPublicKey(
     open val curve: EcCurve
-) {
+) : PublicKey() {
 
     /**
      * Creates a [CoseKey] object for the key.
@@ -39,14 +39,14 @@ sealed class EcPublicKey(
      *
      * @param additionalLabels additional labels to include.
      */
-    abstract fun toCoseKey(additionalLabels: Map<CoseLabel, DataItem> = emptyMap()): CoseKey
+    abstract override fun toCoseKey(additionalLabels: Map<CoseLabel, DataItem>): CoseKey
 
     /**
      * Encode this key in PEM format
      *
      * @return a PEM encoded string.
      */
-    fun toPem(): String {
+    override fun toPem(): String {
         val subjectPublicKey = when (this) {
             is EcPublicKeyDoubleCoordinate -> {
                 asUncompressedPointEncoding
@@ -76,8 +76,8 @@ sealed class EcPublicKey(
      * @param additionalClaims additional claims to include or `null`.
      * @return a JSON Web Key.
      */
-    abstract suspend fun toJwk(
-        additionalClaims: JsonObject? = null,
+    abstract override suspend fun toJwk(
+        additionalClaims: JsonObject?,
     ): JsonObject
 
     /**
@@ -87,9 +87,7 @@ sealed class EcPublicKey(
      *
      * @param digestAlgorithm the digest algorithm to use for creating the thumbprint.
      */
-    abstract suspend fun toJwkThumbprint(digestAlgorithm: Algorithm): ByteString
-
-    fun toDataItem(): DataItem = toCoseKey().toDataItem()
+    abstract override suspend fun toJwkThumbprint(digestAlgorithm: Algorithm): ByteString
 
     companion object {
         /**

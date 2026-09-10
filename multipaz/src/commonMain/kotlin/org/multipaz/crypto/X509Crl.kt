@@ -92,7 +92,7 @@ data class X509Crl(override val encoded: ByteString): X509Signed() {
 
         override suspend fun buildTbs(tbsList: MutableList<ASN1Object>) {
             val signatureAlgorithmSeq =
-                signingKey.algorithm.getSignatureAlgorithmSeq(signingKey.publicKey.curve)
+                signingKey.algorithm.getSignatureAlgorithmSeq((signingKey.publicKey as? EcPublicKey)?.curve)
 
             if (thisUpdate.nanosecondsOfSecond != 0) {
                 Logger.w(TAG, "Truncating fractional seconds of thisUpdate")

@@ -139,7 +139,7 @@ data class DeviceRequest private constructor(
                     )
                     certChain.validate()
                     Cose.coseSign1Check(
-                        publicKey = certChain.certificates.first().ecPublicKey,
+                        publicKey = certChain.certificates.first().publicKey,
                         detachedData = readerAuthenticationAllBytes,
                         signature = readerAuthAllSignature,
                         signatureAlgorithm = alg
@@ -166,7 +166,7 @@ data class DeviceRequest private constructor(
                     val readerAuthenticationBytes =
                         Cbor.encode(Tagged(Tagged.ENCODED_CBOR, Bstr(Cbor.encode(readerAuthentication))))
                     Cose.coseSign1Check(
-                        publicKey = docRequest.readerAuthCertChain!!.certificates.first().ecPublicKey,
+                        publicKey = docRequest.readerAuthCertChain!!.certificates.first().publicKey,
                         detachedData = readerAuthenticationBytes,
                         signature = docRequest.readerAuth_,
                         signatureAlgorithm = docRequest.readerAuthAlgorithm!!

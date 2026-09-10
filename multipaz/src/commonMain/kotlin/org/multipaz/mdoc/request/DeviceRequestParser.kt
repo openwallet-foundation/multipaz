@@ -139,7 +139,7 @@ class DeviceRequestParser(
                         )
                         readerCertChain = readerCertChainDataItem!!.asX509CertChain
                         readerAuthenticated = try {
-                            val readerKey = readerCertChain!!.certificates[0].ecPublicKey
+                            val readerKey = readerCertChain!!.certificates[0].publicKey
                             val encodedReaderAuthentication = Cbor.encode(
                                 buildCborArray {
                                     add("ReaderAuthentication")

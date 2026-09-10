@@ -38,6 +38,8 @@ import org.multipaz.claim.organizeByNamespace
 import org.multipaz.compose.datetime.formattedDateTime
 import org.multipaz.compose.decodeImage
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.RsaPublicKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentAttributeType
 import org.multipaz.documenttype.DocumentTypeRepository
@@ -281,7 +283,11 @@ private suspend fun parseResponse(
             is MdocVerifiedPresentation -> {
                 lines.add(Line("Credential format", ValueText("ISO mdoc")))
                 lines.add(Line("DocType", ValueText(vp.docType)))
-                lines.add(Line("Issuer DS curve", ValueText(vp.documentSignerCertChain.certificates.first().ecPublicKey.curve.name)))
+                val mdocDsKeyDesc = when (val pk = vp.documentSignerCertChain.certificates.first().publicKey) {
+                    is EcPublicKey -> pk.curve.name
+                    is RsaPublicKey -> "RSA (${pk.modulus.size * 8} bits)"
+                }
+                lines.add(Line("Issuer DS key", ValueText(mdocDsKeyDesc)))
                 val trustResult =
                     issuerTrustManager.verify(vp.documentSignerCertChain.certificates, now)
                 if (trustResult.isTrusted) {
@@ -327,7 +333,11 @@ private suspend fun parseResponse(
             is JsonVerifiedPresentation -> {
                 lines.add(Line("Credential format", ValueText("IETF SD-JWT VC")))
                 lines.add(Line("Verifiable Credential Type", ValueText(vp.vct)))
-                lines.add(Line("Issuer DS curve", ValueText(vp.documentSignerCertChain.certificates.first().ecPublicKey.curve.name)))
+                val sdJwtDsKeyDesc = when (val pk = vp.documentSignerCertChain.certificates.first().publicKey) {
+                    is EcPublicKey -> pk.curve.name
+                    is RsaPublicKey -> "RSA (${pk.modulus.size * 8} bits)"
+                }
+                lines.add(Line("Issuer DS key", ValueText(sdJwtDsKeyDesc)))
                 val trustResult =
                     issuerTrustManager.verify(vp.documentSignerCertChain.certificates, now)
                 if (trustResult.isTrusted) {

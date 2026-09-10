@@ -105,7 +105,7 @@ object JsonWebSignature {
      */
     suspend fun verify(
         jws: String,
-        publicKey: EcPublicKey
+        publicKey: PublicKey
     ) {
         try {
             val splits = jws.split(".")
@@ -113,14 +113,27 @@ object JsonWebSignature {
             val (headerStr, bodyStr, signatureStr) = splits
             val headerObj = Json.decodeFromString(JsonObject.serializer(), headerStr.fromBase64Url().decodeToString())
             val toBeVerified = "$headerStr.$bodyStr".encodeToByteArray()
-            val signature = EcSignature.fromCoseEncoded(signatureStr.fromBase64Url())
             val algorithm = Algorithm.fromJoseAlgorithmIdentifier(headerObj["alg"]!!.jsonPrimitive.content)
-            Crypto.checkSignature(
-                publicKey = publicKey,
-                message = toBeVerified,
-                algorithm = algorithm,
-                signature = signature
-            )
+            when (publicKey) {
+                is EcPublicKey -> {
+                    val signature = EcSignature.fromCoseEncoded(signatureStr.fromBase64Url())
+                    Crypto.checkSignature(
+                        publicKey = publicKey,
+                        message = toBeVerified,
+                        algorithm = algorithm,
+                        signature = signature
+                    )
+                }
+                is RsaPublicKey -> {
+                    val signature = RsaSignature(signatureStr.fromBase64Url())
+                    Crypto.checkSignature(
+                        publicKey = publicKey,
+                        message = toBeVerified,
+                        algorithm = algorithm,
+                        signature = signature
+                    )
+                }
+            }
         } catch (e: SerializationException) {
             throw IllegalArgumentException("Malformed JWS", e)
         }

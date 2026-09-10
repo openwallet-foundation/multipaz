@@ -149,6 +149,32 @@ actual object Crypto {
         }
     }
 
+    actual suspend fun checkSignature(
+        publicKey: RsaPublicKey,
+        message: ByteArray,
+        algorithm: Algorithm,
+        signature: RsaSignature
+    ) {
+        val algName = when (algorithm) {
+            Algorithm.RS256 -> "RS256"
+            Algorithm.RS384 -> "RS384"
+            Algorithm.RS512 -> "RS512"
+            Algorithm.PS256 -> "PS256"
+            Algorithm.PS384 -> "PS384"
+            Algorithm.PS512 -> "PS512"
+            else -> throw IllegalArgumentException("Unsupported RSA algorithm $algorithm")
+        }
+        val verified = SwiftBridge.rsaVerifySignature(
+            publicKey.toPkcs1().toNSData(),
+            algName,
+            message.toNSData(),
+            signature.signature.toNSData()
+        )
+        if (!verified) {
+            throw SignatureVerificationException("Signature verification failed")
+        }
+    }
+
     actual suspend fun createEcPrivateKey(curve: EcCurve): EcPrivateKey {
         val ret = SwiftBridge.createEcPrivateKey(curve.coseCurveIdentifier.toLong())
         if (ret.isEmpty()) {
@@ -159,6 +185,17 @@ actual object Crypto {
         val x = pubKeyBytes.sliceArray(IntRange(0, pubKeyBytes.size/2 - 1))
         val y = pubKeyBytes.sliceArray(IntRange(pubKeyBytes.size/2, pubKeyBytes.size - 1))
         return EcPrivateKeyDoubleCoordinate(curve, privKeyBytes, x, y)
+    }
+
+    actual suspend fun createRsaPrivateKey(keySizeBits: Int): RsaPrivateKey {
+        val ret = SwiftBridge.rsaCreatePrivateKey(keySizeBits.toLong())
+        if (ret.isEmpty()) {
+            throw IllegalStateException("Failed to generate RSA key")
+        }
+        val privKeyBytes = (ret[0] as NSData).toByteArray()
+        val pubKeyBytes = (ret[1] as NSData).toByteArray()
+        val pubKey = RsaPublicKey.fromPkcs1(pubKeyBytes)
+        return RsaPrivateKey.fromPkcs1(privKeyBytes, pubKey)
     }
 
     actual suspend fun sign(
@@ -175,6 +212,28 @@ actual object Crypto {
         val r = rawSignature.sliceArray(IntRange(0, rawSignature.size/2 - 1))
         val s = rawSignature.sliceArray(IntRange(rawSignature.size/2, rawSignature.size - 1))
         return EcSignature(r, s)
+    }
+
+    actual suspend fun sign(
+        key: RsaPrivateKey,
+        signatureAlgorithm: Algorithm,
+        message: ByteArray
+    ): RsaSignature {
+        val algName = when (signatureAlgorithm) {
+            Algorithm.RS256 -> "RS256"
+            Algorithm.RS384 -> "RS384"
+            Algorithm.RS512 -> "RS512"
+            Algorithm.PS256 -> "PS256"
+            Algorithm.PS384 -> "PS384"
+            Algorithm.PS512 -> "PS512"
+            else -> throw IllegalArgumentException("Unsupported RSA signing algorithm $signatureAlgorithm")
+        }
+        val signature = SwiftBridge.rsaSign(
+            key.toPkcs1().toNSData(),
+            algName,
+            message.toNSData()
+        )?.toByteArray() ?: throw IllegalStateException("RSA signing failed")
+        return RsaSignature(signature)
     }
 
     actual suspend fun keyAgreement(

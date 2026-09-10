@@ -68,7 +68,7 @@ internal object TrustManagerUtil {
      */
     suspend fun verifySignature(certificate: X509Cert, caCertificate: X509Cert) =
         try {
-            certificate.verify(caCertificate.ecPublicKey)
+            certificate.verify(caCertificate.publicKey)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             throw IllegalStateException(
@@ -143,7 +143,7 @@ internal object TrustManagerUtil {
             if (chain.size == 1) {
                 val cert = chain[0]
                 val trustPoint = cert.subjectKeyIdentifier?.toHex()?.let { skiToTrustPoint[it] }
-                if (trustPoint != null && cert.ecPublicKey == trustPoint.certificate.ecPublicKey) {
+                if (trustPoint != null && cert.publicKey == trustPoint.certificate.publicKey) {
                     try {
                         checkValidity(cert, atTime)
                         if (isSelfSigned(cert)) {

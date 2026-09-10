@@ -133,7 +133,7 @@ class MdocDocument(
                 CoseNumberLabel(Cose.COSE_LABEL_ALG)
             ]!!.asNumber.toInt()
         )
-        val documentSigningKey = issuerAuthorityCertChain.certificates[0].ecPublicKey
+        val documentSigningKey = issuerAuthorityCertChain.certificates[0].publicKey
         try {
             Cose.coseSign1Check(
                 documentSigningKey,

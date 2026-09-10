@@ -134,6 +134,36 @@ class X509CertTests {
         }
     }
 
+    @Test
+    fun testPublicKey() {
+        // Check that publicKey extracts the correct key for all certificates in the chain,
+        // including both EC and RSA keys.
+        for (n in IntRange(0, androidKeyCertChain.certificates.size - 1)) {
+            val cert = androidKeyCertChain.certificates[n]
+            val publicKey = cert.publicKey
+            when (n) {
+                0, 1, 2, 3 -> {
+                    assertTrue(publicKey is EcPublicKey)
+                    assertEquals(cert.ecPublicKey, publicKey)
+                    val ecKey = publicKey as EcPublicKeyDoubleCoordinate
+                    assertEquals(
+                        androidKeyCertChainKeysRaw[n],
+                        (ecKey.x + ecKey.y).toHex()
+                    )
+                }
+                4 -> {
+                    assertTrue(publicKey is RsaPublicKey)
+                    val rsaKey = publicKey as RsaPublicKey
+                    assertEquals(4096 / 8, rsaKey.modulus.size)
+                    assertEquals(listOf<Byte>(1, 0, 1), rsaKey.publicExponent.toList())
+                    assertFailsWith<IllegalStateException> {
+                        cert.ecPublicKey
+                    }
+                }
+            }
+        }
+    }
+
     // Checks that X509Cert.verify() works with certificates created by X509Cert.Builder
     private fun testCertSignedWithCurve(curve: EcCurve) = runTest {
         if (!Crypto.supportedCurves.contains(curve)) {
@@ -169,6 +199,7 @@ class X509CertTests {
         assertEquals(cert.validityNotBefore, now - 1.hours)
         assertEquals(cert.validityNotAfter, now + 1.hours)
         assertEquals(cert.subject, subject)
+        assertEquals(cert.publicKey, key.publicKey)
         assertEquals(cert.ecPublicKey, key.publicKey)
         assertEquals(
             setOf(
@@ -216,6 +247,35 @@ class X509CertTests {
     @Test fun testCertSignedWithCurve_BRAINPOOLP512R1() = testCertSignedWithCurve(EcCurve.BRAINPOOLP512R1)
     @Test fun testCertSignedWithCurve_ED25519() = testCertSignedWithCurve(EcCurve.ED25519)
     @Test fun testCertSignedWithCurve_ED448() = testCertSignedWithCurve(EcCurve.ED448)
+
+    @Test
+    fun testCertWithRsaPublicKey() = runTest {
+        val rsaKey = Crypto.createRsaPrivateKey(2048)
+        val now = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
+        val serialNumber = ASN1Integer(1)
+        val subject = X500Name.fromName("CN=RsaCert")
+        val issuer = X500Name.fromName("CN=RsaCert")
+        val cert = X509Cert.Builder(
+            publicKey = rsaKey.publicKey,
+            signingKey = AsymmetricKey.anonymous(rsaKey, Algorithm.RS256),
+            serialNumber = serialNumber,
+            subject = subject,
+            issuer = issuer,
+            validFrom = now - 1.hours,
+            validUntil = now + 1.hours
+        )
+            .includeSubjectKeyIdentifier()
+            .build()
+
+        cert.verify(rsaKey.publicKey)
+
+        assertEquals(Algorithm.RS256, cert.signatureAlgorithm)
+        assertEquals(rsaKey.publicKey, cert.publicKey)
+        assertTrue(cert.publicKey is RsaPublicKey)
+        assertFailsWith<IllegalStateException> {
+            cert.ecPublicKey
+        }
+    }
 
     @Test
     fun testKeyUsageEncoding() {
