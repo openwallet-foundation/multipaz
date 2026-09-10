@@ -5,16 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.101.0] - Expected September 2026
+## [0.101.0] - 2026-09-10
 Significant changes since Multipaz 0.100.0 include:
-- [To be written]
-- New `custom_head_html` server setting, injected into the `<head>` of every HTML page served
-  by `serveResources()`, so a deployment can restyle the built-in pages without forking their
-  markup.
-- Fixed `ASN1Boolean` rejecting a BOOLEAN whose content octet is non-zero but not `0xFF`, which
-  made X.509 extension parsing fail on certificates from devices whose KeyMint emits `0x01` and
-  so broke Android key attestation on them. Such an octet now decodes as `true` per X.690 8.2.2
-  and is preserved, so decoding and re-encoding stay byte-exact.
+
+- Multipaz Web Developer Tools: Introduced https://tools.multipaz.org, a web-based developer suite featuring decoders, inspectors, and generators for ISO mdoc, SD-JWT VC, CBOR/CDN, X.509 certificates, PKCS#12 files, `.mpzpass` containers, `.mpzevent` files, and an ISO 18013-7 Annex C / W3C Digital Credentials verifier with Longfellow ZKP support.
+- Concise Diagnostic Notation (CDN): Full parser and generator support for Concise Diagnostic Notation according to `draft-ietf-cbor-edn-literals`, including application extensions, formatted diagnostics in `Logger.cbor()`, and web-based interactive conversion.
+- PKCS#12 container support: Implemented multiplatform encoding and decoding of PKCS#12 (`.p12` / `.pfx`) key and certificate files according to RFC 7292, with PBES2 (AES-CBC and HMAC-SHA-256) password encryption and AES-CBC cipher support in `Crypto` across JVM, iOS, and Web Crypto.
+- Transaction data architecture rework: Completely decoupled and refactored transaction data handling across presentation protocols (ISO/IEC 18013-5 and OpenID4VP) and credential formats (ISO mdoc and SD-JWT VC), adding typed Kotlin transaction models, element-level device key authorization enforcement in the MSO, tipping support, and updated consent prompts in Compose and SwiftUI.
+- Reader and issuer identifiers (AKI): Added comprehensive support for reader identifiers and issuer identifiers using Authority Key Identifiers across ISO/IEC 18013-5 Second Edition, OpenID4VP `trusted_authorities`, Android Credential Manager matcher (WebAssembly engine), iOS document registration, and verifier reader endpoints.
+- MpzPass format enhancements: Extended the `.mpzpass` format and tools to support digitally signed pass containers (`COSE_Sign1`), shareable pass configuration, reader identifiers, and user authentication requirements for software keys.
+- Presentment lifecycle and multi-tap NFCv2: Factored presentment into three discrete phases (consent, authentication/key unlocking, response generation) with `SecureArea.unlockKey()` and `PreloadedKeyUnlockDataProvider` to support pre-unlocking keys before tapping. Added wallet-side and reader-side support for NFCv2 multi-tap presentment and continuous scanning on NFC-only engagements.
+- Multi-document presentment: Added support in presentment UI and `PresentmentActivity` for presenting credentials from multiple documents simultaneously with card stacking.
+- ISO/IEC 18013-5 Second Edition inspection checks: Implemented second-edition inspection procedure checks in verifier, including verifying Document Signer certificate validity against `signedAt` and `validUntil`, matching leaf and IACA country/state names, verifying VICAL authorized doctypes, and validating element-level device key authorizations for `DeviceSigned` elements per clause 9.3.3.4.
+- DeviceRequest version 1.0 support: Support for version 1.0 lenient claim matching versus version 1.1 strict matching in `DeviceRequest` and Credman matcher, configurable via the verifier server.
+- Excluded root certificates from COSE `x5chain`: Updated MSO `issuerAuth` and reader authentication COSE `x5chain` headers to exclude root CA certificates per RFC 9360 and ISO/IEC 18013-5.
+- SD-JWT VC format identifier update: Updated the document format string for SD-JWT VC credentials from `"sd-jwt+kb"` to `"dc+sd-jwt"` across the SDK, matcher, and verifier to match latest specifications.
+- Certified key pool abstraction: Added `CertifiedKeyManager` for managing pools of pre-certified keys across secure areas.
+- Revocation checking enhancements: Added high-level `RevocationChecker` API and `CachingRevocationChecker` implementation, exposed `revocationStatus` on `VerifiedPresentation`, and improved expiration handling for revocation data.
+- Hardened certificate path validation: Hardened `X509CertChain.validate()` and trust managers, supporting bypassing CA validity interval checks for hardware key attestation chains, handling missing SKI, and preventing circular trust paths.
+- Unified card list layout engine: Extracted mathematical layout and interaction state models (`CardListLayoutCalculator` and `VerticalCardListModel`) into the core KMP library, eliminating layout jumps and unifying card list behaviors across Compose and SwiftUI.
+- Document display ordering: Added `DocumentModel` API to query and configure document display order across Compose and SwiftUI.
+- Provisioning and refresh improvements: Added Secure Area selection and custom application data support during provisioning, ensured cleanup of uncertified pending credentials on error, avoided unnecessary network requests during credential refresh, and switched card art assets to JPEG format for significantly reduced payload sizes.
+- SQLite busy timeout: Configured a default 5-second busy timeout on SQLite storage on iOS to eliminate database lock contention failures across app processes and extensions.
+- Verification event telemetry: Expanded `EventVerification` into specialized types (`EventVerificationDigitalCredentials` and `EventVerificationIso18013Proximity`) capturing complete protocol context, phase timings, scanning durations, and transport metrics.
+- Default log sanitization: Audited logging across libraries to eliminate PII from default log levels, and added a configurable debug logging toggle.
+- New `custom_head_html` server setting: Injected into the `<head>` of every HTML page served by `serveResources()`, so a deployment can restyle built-in pages without forking markup.
+- Direct Ktor `ApplicationCall` access: Allowed server handlers to directly access the underlying Ktor `ApplicationCall`.
+- Fixed `ASN1Boolean` decoding: Decodes non-zero, non-`0xFF` content octets as `true` per X.690 8.2.2 while preserving the raw octet for byte-exact re-encoding, fixing Android key attestation parsing on certain KeyMint implementations.
+- Removed `Package.swift` and provide guidance for how to best consume the Multipaz SDK on iOS.
 
 ## [0.100.0] - 2026-07-08
 Significant changes since Multipaz 0.99.0 include:
