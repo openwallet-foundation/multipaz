@@ -59,15 +59,39 @@ usually every 4-8 weeks. Releases up until and including 0.97.0 can be found on 
 is used. At this time we're in pre-1.0 territory but we expect to hit 1.0 around
 late 2026 or early 2027.
 
-We are also making Multipaz available as a [Swift package](https://github.com/openwallet-foundation/multipaz/blob/main/Package.swift)
-which includes the `multipaz`, `multipaz-doctypes`,
-`multipaz-longfellow`, and `multipaz-swiftui` libraries. This is built using
-[SKIE](https://skie.touchlab.co/). Be careful relying on this as Swift/Kotlin interop technology
-might change in the near future with e.g. [Swift Export](https://kotlinlang.org/docs/native-swift-export.html).
-
 At this point both API interfaces and data stored on disk are subject to change
 but we expect to provide stability guarantees post 1.0. We only expect minor changes
 for example conversion from `ByteArray` to `ByteString` and similar things.
+
+### Consuming on iOS
+
+Multipaz is published as Kotlin Multiplatform libraries rather than a pre-packaged
+Swift package or standalone XCFramework. Consuming iOS and Swift projects are
+better off building the XCFramework themselves using Gradle for several key reasons:
+
+1. **Customizable SKIE and compiler settings**: When building your own XCFramework,
+   you can tune [SKIE](https://skie.touchlab.co/) settings (such as Swift Coroutines
+   and Flow interop, enum wrapping, and suspend function transformations) and
+   Kotlin/Native compiler configurations (such as minimum iOS deployment targets,
+   linker flags, and optimization levels) to suit your project's specific requirements.
+2. **Avoiding the "diamond dependency" problem**: In Kotlin/Native, dynamic linking
+   between separate Kotlin frameworks is not supported on Apple platforms. Every
+   compiled framework bundles its own copy of the Kotlin/Native runtime and its
+   dependencies. If an iOS app links a pre-built Multipaz XCFramework and also includes
+   another Kotlin Multiplatform framework (such as the app's own shared Kotlin code
+   or a third-party Kotlin library), the resulting binary contains duplicate Kotlin
+   runtimes and symbols. This leads to duplicate symbol linker collisions and runtime
+   crashes. Furthermore, Kotlin objects cannot be shared across the two framework
+   boundaries because the types exist in separate module namespaces and runtimes.
+   Consequently, projects that combine Multipaz with their own Kotlin code are forced
+   to compile all Kotlin code together into a single umbrella XCFramework.
+
+To see how to structure this in practice, see the `shared` module in the
+[Multipaz Wallet](https://github.com/openwallet-foundation/multipaz-wallet/) repository.
+The `shared` module includes the Multipaz dependencies via Gradle, incorporates
+wallet-specific Kotlin code, configures SKIE, and builds a single unified XCFramework
+that the iOS application links against.
+
 
 ### Snapshot Builds
 
