@@ -2,6 +2,7 @@ package org.multipaz.securearea
 
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.X509CertChain
 
 /**
@@ -19,8 +20,15 @@ import org.multipaz.crypto.X509CertChain
  */
 @CborSerializable
 data class KeyAttestation(
-    val publicKey: EcPublicKey,
+    val publicKey: PublicKey,
     val certChain: X509CertChain?
 ) {
+    /**
+     * The public key as an [EcPublicKey] if it is an EC key.
+     *
+     * @throws ClassCastException if the key is not an [EcPublicKey].
+     */
+    val ecPublicKey: EcPublicKey get() = publicKey as EcPublicKey
+
     companion object
 }

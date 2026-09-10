@@ -399,7 +399,7 @@ open class CloudSecureArea protected constructor(
             val request1 = E2EESetupRequest1(
                 eDeviceKey = eDeviceKey.publicKey.toCoseKey(),
                 deviceNonce = deviceNonce,
-                signature = signature,
+                signature = signature as EcSignature,
                 deviceAssertion = deviceAssertion,
                 serverState = response0.serverState
             )
@@ -781,7 +781,7 @@ open class CloudSecureArea protected constructor(
             dataToSign = dataToSignLocally,
         )
         val request1 = SignRequest1(
-            signatureLocal,
+            signatureLocal as EcSignature,
             (keyUnlockData as? CloudKeyUnlockData)?.passphrase,
             response0.serverState
         )
@@ -859,7 +859,7 @@ open class CloudSecureArea protected constructor(
             dataToSign = dataToSignLocally,
         )
         val request1 = KeyAgreementRequest1(
-            signatureLocal,
+            signatureLocal as EcSignature,
             (keyUnlockData as? CloudKeyUnlockData)?.passphrase,
             response0.serverState
         )
@@ -982,7 +982,7 @@ open class CloudSecureArea protected constructor(
     }
 
     @CborSerializable(
-        schemaHash = "OrCfz8kNdFI4aTJcQpKSPW49S4RoSozn0OpLutsTktU"
+        schemaHash = "_rZvX2P9u7fBzNq5C0HVJ2PpLI_1cdBOp-ix-mKBp9Q"
     )
     internal data class KeyMetadata(
         val algorithm: Algorithm,

@@ -1,7 +1,7 @@
 package org.multipaz.securearea
 
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.PublicKey
 import kotlin.time.Duration
 import kotlin.time.Instant
 
@@ -11,7 +11,7 @@ import kotlin.time.Instant
 class AndroidKeystoreKeyInfo internal constructor(
     alias: String,
     algorithm: Algorithm,
-    publicKey: EcPublicKey,
+    publicKey: PublicKey,
     attestation: KeyAttestation,
 
     /**

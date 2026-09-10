@@ -309,13 +309,13 @@ actual object Crypto {
         algorithm: Algorithm,
         signature: RsaSignature
     ) {
-        val (signatureAlgorithm, pssParameterSpec) = when (algorithm) {
-            Algorithm.RS256 -> Pair("SHA256withRSA", null)
-            Algorithm.RS384 -> Pair("SHA384withRSA", null)
-            Algorithm.RS512 -> Pair("SHA512withRSA", null)
-            Algorithm.PS256 -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 32, 1))
-            Algorithm.PS384 -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-384", "MGF1", MGF1ParameterSpec.SHA384, 48, 1))
-            Algorithm.PS512 -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-512", "MGF1", MGF1ParameterSpec.SHA512, 64, 1))
+        val (signatureAlgorithm, pssParameterSpec) = when (algorithm.joseAlgorithmIdentifier) {
+            "RS256" -> Pair("SHA256withRSA", null)
+            "RS384" -> Pair("SHA384withRSA", null)
+            "RS512" -> Pair("SHA512withRSA", null)
+            "PS256" -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 32, 1))
+            "PS384" -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-384", "MGF1", MGF1ParameterSpec.SHA384, 48, 1))
+            "PS512" -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-512", "MGF1", MGF1ParameterSpec.SHA512, 64, 1))
             else -> throw IllegalArgumentException("Unsupported RSA algorithm $algorithm")
         }
 
@@ -531,13 +531,13 @@ actual object Crypto {
         signatureAlgorithm: Algorithm,
         message: ByteArray
     ): RsaSignature {
-        val (signatureAlgorithmName, pssParameterSpec) = when (signatureAlgorithm) {
-            Algorithm.RS256 -> Pair("SHA256withRSA", null)
-            Algorithm.RS384 -> Pair("SHA384withRSA", null)
-            Algorithm.RS512 -> Pair("SHA512withRSA", null)
-            Algorithm.PS256 -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 32, 1))
-            Algorithm.PS384 -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-384", "MGF1", MGF1ParameterSpec.SHA384, 48, 1))
-            Algorithm.PS512 -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-512", "MGF1", MGF1ParameterSpec.SHA512, 64, 1))
+        val (signatureAlgorithmName, pssParameterSpec) = when (signatureAlgorithm.joseAlgorithmIdentifier) {
+            "RS256" -> Pair("SHA256withRSA", null)
+            "RS384" -> Pair("SHA384withRSA", null)
+            "RS512" -> Pair("SHA512withRSA", null)
+            "PS256" -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 32, 1))
+            "PS384" -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-384", "MGF1", MGF1ParameterSpec.SHA384, 48, 1))
+            "PS512" -> Pair("RSASSA-PSS", PSSParameterSpec("SHA-512", "MGF1", MGF1ParameterSpec.SHA512, 64, 1))
             else -> throw IllegalArgumentException("Unsupported RSA signing algorithm $signatureAlgorithm")
         }
         val signatureBytes = try {

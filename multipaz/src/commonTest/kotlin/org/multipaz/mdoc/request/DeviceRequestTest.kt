@@ -197,7 +197,7 @@ class DeviceRequestTest {
                 )
                 val readerCert = MdocUtil.generateReaderCertificate(
                     readerRootKey = readerRootSigningKey,
-                    readerKey = readerKeyInfo.publicKey,
+                    readerKey = readerKeyInfo.ecPublicKey,
                     subject = X500Name.fromName("CN=TEST Reader Certificate,C=XG-US,ST=MA"),
                     dnsName = "localhost",
                     serial = ASN1Integer(1),

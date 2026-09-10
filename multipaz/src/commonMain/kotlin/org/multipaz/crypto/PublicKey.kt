@@ -63,6 +63,13 @@ sealed class PublicKey {
      */
     fun toDataItem(): DataItem = toCoseKey().toDataItem()
 
+    /**
+     * The [EcCurve] for this key if it is an elliptic curve key, or `null` if not an EC key.
+     */
+    open val curve: EcCurve?
+        get() = null
+
+
     companion object {
         /**
          * Creates a [PublicKey] from a PEM encoded string.

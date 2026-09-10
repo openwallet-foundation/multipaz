@@ -21,7 +21,10 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.PrivateKey
+import org.multipaz.crypto.PublicKey
+import org.multipaz.crypto.RsaPrivateKey
+import org.multipaz.crypto.Signature
 import org.multipaz.prompt.requestPassphrase
 import org.multipaz.securearea.KeyAttestation
 import org.multipaz.securearea.KeyLockedException
@@ -45,7 +48,7 @@ import org.multipaz.securearea.KeyInfo
 import kotlin.random.Random
 
 /**
- * An implementation of [SecureArea] in software.
+ * An implementation of [SecureArea] that creates and uses software keys.
  *
  * This implementation supports all the curves and algorithms defined by [SecureArea]
  * and also supports passphrase-protected keys. Key material is stored using the
@@ -65,7 +68,10 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
 
     private val supportedAlgorithms_: List<Algorithm> by lazy {
         Algorithm.entries.filter {
-            it.fullySpecified && it.curve != null && Crypto.supportedCurves.contains(it.curve)
+            it.fullySpecified && (
+                (it.curve != null && Crypto.supportedCurves.contains(it.curve)) ||
+                (it.keySizeBits != null && it.isSigning)
+            )
         }
     }
 
@@ -103,7 +109,11 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
             builder.build()
         }
         try {
-            val privateKey = settings.privateKey ?: Crypto.createEcPrivateKey(settings.algorithm.curve!!)
+            val privateKey = settings.privateKey ?: if (settings.algorithm.curve != null) {
+                Crypto.createEcPrivateKey(settings.algorithm.curve!!)
+            } else {
+                Crypto.createRsaPrivateKey(settings.algorithm.keySizeBits ?: 2048)
+            }
             val encodedPublicKey = Cbor.encode(privateKey.publicKey.toCoseKey().toDataItem())
             val keyMetadata = if (settings.passphraseRequired) {
                 val secretKey = derivePrivateKeyEncryptionKey(encodedPublicKey, settings.passphrase!!)
@@ -170,7 +180,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
 
     private data class KeyData(
         val algorithm: Algorithm,
-        val privateKey: EcPrivateKey,
+        val privateKey: PrivateKey,
     )
 
     private suspend fun loadKey(
@@ -207,7 +217,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
                 if (e is CancellationException) throw e
                 throw KeyLockedException("Error decrypting private key - wrong passphrase?", e)
             }
-            EcPrivateKey.fromDataItem(Cbor.decode(encodedPrivateKey))
+            PrivateKey.fromDataItem(Cbor.decode(encodedPrivateKey))
         } else {
             keyMetadata.privateKey!!
         }
@@ -225,7 +235,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
     suspend fun getPrivateKey(
         alias: String,
         keyUnlockData: KeyUnlockData?
-    ): EcPrivateKey = loadKey(alias, keyUnlockData).privateKey
+    ): PrivateKey = loadKey(alias, keyUnlockData).privateKey
 
     private suspend fun<T> interactionHelper(
         alias: String,
@@ -254,7 +264,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         alias: String,
         dataToSign: ByteArray,
         unlockReason: Reason
-    ): EcSignature {
+    ): Signature {
         return interactionHelper(
             alias,
             unlockReason,
@@ -266,10 +276,13 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         alias: String,
         dataToSign: ByteArray,
         keyUnlockData: KeyUnlockData?
-    ): EcSignature {
+    ): Signature {
         val keyData = loadKey(alias, keyUnlockData)
         require(keyData.algorithm.isSigning) { "Key algorithm is not for Signing" }
-        return Crypto.sign(keyData.privateKey, keyData.algorithm, dataToSign)
+        return when (val privateKey = keyData.privateKey) {
+            is EcPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
+            is RsaPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
+        }
     }
 
     override suspend fun keyAgreement(
@@ -291,14 +304,16 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
     ): ByteArray {
         val keyData = loadKey(alias, keyUnlockData)
         require(keyData.algorithm.isKeyAgreement) { "Key algorithm is not for Key Agreement" }
-        return Crypto.keyAgreement(keyData.privateKey, otherKey)
+        val privateKey = keyData.privateKey as? EcPrivateKey
+            ?: throw IllegalArgumentException("Key is not an EC key")
+        return Crypto.keyAgreement(privateKey, otherKey)
     }
 
     override suspend fun getKeyInfo(alias: String): SoftwareKeyInfo {
         val data = storageTable.get(alias)
             ?: throw IllegalArgumentException("No key with the given alias '$alias'")
         val keyMetadata = KeyMetadata.fromCbor(data.toByteArray())
-        val publicKey = EcPublicKey.fromDataItem(Cbor.decode(keyMetadata.encodedPublicKey.toByteArray()))
+        val publicKey = PublicKey.fromDataItem(Cbor.decode(keyMetadata.encodedPublicKey.toByteArray()))
         return SoftwareKeyInfo(
             alias,
             publicKey,
@@ -397,11 +412,11 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         }
     }
 
-    @CborSerializable(schemaHash = "CJiBUxgov8My3mLMIIy_WVnmkPtpNzuFeBdWlQS6RAY")
+    @CborSerializable(schemaHash = "zZXZ5_iLFLRPTb2bsazbBfkZvu1QrPcljd8gHvBs07U")
     internal data class KeyMetadata(
         val algorithm: Algorithm,
         val passphraseRequired: Boolean,
-        val privateKey: EcPrivateKey?,
+        val privateKey: PrivateKey?,
         val encryptedPrivateKey: ByteString?,
         val encryptedPrivateKeyIv: ByteString?,
         val encodedPublicKey: ByteString,  // store as encoded CoseKey

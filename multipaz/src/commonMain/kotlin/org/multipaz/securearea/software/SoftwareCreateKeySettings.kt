@@ -6,7 +6,7 @@ import org.multipaz.securearea.PassphraseConstraints
 import org.multipaz.securearea.config.SecureAreaConfigurationSoftware
 import kotlin.time.Instant;
 import kotlinx.io.bytestring.buildByteString
-import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.PrivateKey
 
 /**
  * Class used to indicate key creation settings for software-backed keys.
@@ -21,7 +21,7 @@ class SoftwareCreateKeySettings internal constructor(
     val subject: String?,
     validFrom: Instant?,
     validUntil: Instant?,
-    val privateKey: EcPrivateKey?,
+    val privateKey: PrivateKey?,
     userAuthenticationRequired: Boolean = false,
     /** The set of user authentication types required to use the key. */
     val userAuthenticationTypes: Set<SoftwareUserAuthType> = emptySet()
@@ -43,7 +43,7 @@ class SoftwareCreateKeySettings internal constructor(
         private var subject: String? = null
         private var validFrom: Instant? = null
         private var validUntil: Instant? = null
-        private var privateKey: EcPrivateKey? = null
+        private var privateKey: PrivateKey? = null
         private var userAuthenticationRequired = false
         private var userAuthenticationTypes = setOf<SoftwareUserAuthType>()
 
@@ -155,7 +155,7 @@ class SoftwareCreateKeySettings internal constructor(
          * @return the builder.
          */
         fun setPrivateKey(
-            privateKey: EcPrivateKey
+            privateKey: PrivateKey
         ) = apply {
             this.privateKey = privateKey
         }

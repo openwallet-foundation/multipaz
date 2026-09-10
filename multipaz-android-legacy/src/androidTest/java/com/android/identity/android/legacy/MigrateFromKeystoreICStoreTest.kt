@@ -29,6 +29,7 @@ import org.multipaz.cbor.DiagnosticOption
 import org.multipaz.context.initializeApplication
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.EcSignature
 import org.multipaz.crypto.toEcPublicKey
 import org.multipaz.storage.android.AndroidStorage
 import kotlinx.coroutines.runBlocking
@@ -161,7 +162,7 @@ class MigrateFromKeystoreICStoreTest {
         val ecSignature = aksSecureArea.sign(
             credentialKeyAlias,
             dataToSign
-        )
+        ) as EcSignature
         val ecCredentialKeyPublic = credentialKeyPublic.toEcPublicKey(EcCurve.P256)
         checkSignature(
             ecCredentialKeyPublic,

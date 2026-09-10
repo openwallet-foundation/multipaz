@@ -3,6 +3,7 @@ package org.multipaz.securearea
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.EcSignature
 import org.multipaz.prompt.Reason
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareKeyUnlockData
@@ -48,11 +49,11 @@ class PreloadedKeyUnlockDataProviderTest {
 
         withContext(preloadedProvider) {
             // sign key1 using preloaded provider
-            val sig1 = sa.sign("key1", byteArrayOf(1, 2, 3))
+            val sig1 = sa.sign("key1", byteArrayOf(1, 2, 3)) as EcSignature
             assertEquals(32, sig1.r.size)
 
             // sign key2 using preloaded provider
-            val sig2 = sa.sign("key2", byteArrayOf(4, 5, 6))
+            val sig2 = sa.sign("key2", byteArrayOf(4, 5, 6)) as EcSignature
             assertEquals(32, sig2.r.size)
         }
     }
@@ -105,7 +106,7 @@ class PreloadedKeyUnlockDataProviderTest {
             .build(fallbackProvider = fallbackProvider)
 
         withContext(preloadedProvider) {
-            val sig = sa.sign("key1", byteArrayOf(1, 2, 3))
+            val sig = sa.sign("key1", byteArrayOf(1, 2, 3)) as EcSignature
             assertEquals(32, sig.r.size)
         }
     }

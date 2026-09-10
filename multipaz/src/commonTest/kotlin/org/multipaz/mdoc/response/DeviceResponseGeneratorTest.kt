@@ -164,7 +164,7 @@ class DeviceResponseGeneratorTest {
             val msoGenerator = MobileSecurityObjectGenerator(
                 Algorithm.SHA256,
                 DOC_TYPE,
-                mdocCredential.getAttestation().publicKey
+                mdocCredential.getAttestation().ecPublicKey
             )
             msoGenerator.setValidityInfo(timeSigned, timeValidityBegin, timeValidityEnd, null)
             msoGenerator.setDeviceKeyAuthorizedNameSpaces(listOf("ns1", "ns3", "ns4"))

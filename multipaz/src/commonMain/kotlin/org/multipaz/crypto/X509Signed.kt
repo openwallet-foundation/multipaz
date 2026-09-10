@@ -380,7 +380,9 @@ sealed class X509SignedBuilder<BuilderT: X509SignedBuilder<BuilderT>>(
             Algorithm.ES384, Algorithm.ESP384, Algorithm.ESB384, Algorithm.ESB320,
             Algorithm.ES512, Algorithm.ESP512, Algorithm.ESB512 -> signature.toDerEncoded()
             Algorithm.EDDSA, Algorithm.ED25519, Algorithm.ED448 -> signature.toCoseEncoded()
-            Algorithm.RS256, Algorithm.RS384, Algorithm.RS512 -> signature.toDerEncoded()
+            Algorithm.RS256, Algorithm.RS256_2048, Algorithm.RS256_3072, Algorithm.RS256_4096,
+            Algorithm.RS384, Algorithm.RS384_3072, Algorithm.RS384_4096,
+            Algorithm.RS512, Algorithm.RS512_4096 -> signature.toDerEncoded()
             else -> throw IllegalArgumentException("Unsupported signature algorithm ${signingKey.algorithm}")
         }
         return ASN1Sequence(listOf(
@@ -400,15 +402,15 @@ sealed class X509SignedBuilder<BuilderT: X509SignedBuilder<BuilderT>>(
 
         internal fun Algorithm.getSignatureAlgorithmSeq(signingKeyCurve: EcCurve?): ASN1Sequence {
             return when (this) {
-                Algorithm.RS256 -> ASN1Sequence(listOf(
+                Algorithm.RS256, Algorithm.RS256_2048, Algorithm.RS256_3072, Algorithm.RS256_4096 -> ASN1Sequence(listOf(
                     ASN1ObjectIdentifier(OID.SIGNATURE_RS256.oid),
                     ASN1Null()
                 ))
-                Algorithm.RS384 -> ASN1Sequence(listOf(
+                Algorithm.RS384, Algorithm.RS384_3072, Algorithm.RS384_4096 -> ASN1Sequence(listOf(
                     ASN1ObjectIdentifier(OID.SIGNATURE_RS384.oid),
                     ASN1Null()
                 ))
-                Algorithm.RS512 -> ASN1Sequence(listOf(
+                Algorithm.RS512, Algorithm.RS512_4096 -> ASN1Sequence(listOf(
                     ASN1ObjectIdentifier(OID.SIGNATURE_RS512.oid),
                     ASN1Null()
                 ))

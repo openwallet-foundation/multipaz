@@ -187,7 +187,7 @@ class DeviceRequestGeneratorTest {
                 privateKey = readerRootKey,
                 certChain = X509CertChain(listOf(readerRootCert)),
             ),
-            readerKey = testKeyInfo.publicKey,
+            readerKey = testKeyInfo.ecPublicKey,
             subject = X500Name.fromName("CN=TEST Reader Certificate,C=XG-US,ST=MA"),
             dnsName = "localhost",
             serial = ASN1Integer(1),

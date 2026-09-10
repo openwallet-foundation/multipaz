@@ -143,7 +143,7 @@ data class DeviceAttestationSoftware(
             return DeviceAttestationResult(
                 deviceAttestationId = keyInfo.alias,
                 deviceAttestation = DeviceAttestationSoftware(
-                    publicKey = keyInfo.publicKey,
+                    publicKey = keyInfo.ecPublicKey,
                     proofOfSecret = secret?.let {
                         calculateProofOfSecret(
                             secret = it,

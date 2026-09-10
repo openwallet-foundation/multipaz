@@ -27,6 +27,7 @@ import kotlin.enums.enumEntries
  * @param hashAlgorithm the hash algorithm in the algorithm or `null` if not applicable or not a fully specified algorithm.
  * @param isSigning `true` if the algorithm is for signing, `false` if not applicable or not a fully specified algorithm.
  * @param isKeyAgreement `true` if the algorithm is for key agreement, `false` if not applicable or not a fully specified algorithm.
+ * @param keySizeBits the RSA key size in bits or `null` if not applicable or not a fully specified algorithm.
  * @param description A human readable description of the algorithm.
  */
 enum class Algorithm(
@@ -38,6 +39,7 @@ enum class Algorithm(
     val hashAlgorithm: Algorithm? = null,
     val isSigning: Boolean = false,
     val isKeyAgreement: Boolean = false,
+    val keySizeBits: Int? = null,
     val description: String,
 ) {
     /** Used to indicate the algorithm is unset.  */
@@ -117,27 +119,33 @@ enum class Algorithm(
 
     /** RSASSA-PKCS1-v1_5 using SHA-256 */
     RS256(coseAlgorithmIdentifier = -257, joseAlgorithmIdentifier = "RS256",
-        description = "RSASSA-PKCS1-v1_5 using SHA-256"),
+        description = "RSASSA-PKCS1-v1_5 using SHA-256",
+        isSigning = true, hashAlgorithm = SHA256),
 
     /** RSASSA-PKCS1-v1_5 using SHA-384 */
     RS384(coseAlgorithmIdentifier = -258, joseAlgorithmIdentifier = "RS384",
-        description = "RSASSA-PKCS1-v1_5 using SHA-384"),
+        description = "RSASSA-PKCS1-v1_5 using SHA-384",
+        isSigning = true, hashAlgorithm = SHA384),
 
     /** RSASSA-PKCS1-v1_5 using SHA-512 */
     RS512(coseAlgorithmIdentifier = -259, joseAlgorithmIdentifier = "RS512",
-        description = "RSASSA-PKCS1-v1_5 using SHA-512"),
+        description = "RSASSA-PKCS1-v1_5 using SHA-512",
+        isSigning = true, hashAlgorithm = SHA512),
 
     /** RSASSA-PSS using SHA-256 and MGF1 with SHA-256 */
     PS256(coseAlgorithmIdentifier = -37, joseAlgorithmIdentifier = "PS256",
-        description = "RSASSA-PSS using SHA-256 and MGF1 with SHA-256"),
+        description = "RSASSA-PSS using SHA-256 and MGF1 with SHA-256",
+        isSigning = true, hashAlgorithm = SHA256),
 
     /** RSASSA-PSS using SHA-384 and MGF1 with SHA-384 */
     PS384(coseAlgorithmIdentifier = -38, joseAlgorithmIdentifier = "PS384",
-        description = "RSASSA-PSS using SHA-384 and MGF1 with SHA-384"),
+        description = "RSASSA-PSS using SHA-384 and MGF1 with SHA-384",
+        isSigning = true, hashAlgorithm = SHA384),
 
     /** RSASSA-PSS using SHA-512 and MGF1 with SHA-512 */
     PS512(coseAlgorithmIdentifier = -39, joseAlgorithmIdentifier = "PS512",
-        description = "RSASSA-PSS using SHA-512 and MGF1 with SHA-512"),
+        description = "RSASSA-PSS using SHA-512 and MGF1 with SHA-512",
+        isSigning = true, hashAlgorithm = SHA512),
 
     // Fully-specified algorithms start here, see also
     //  https://datatracker.ietf.org/doc/draft-ietf-jose-fully-specified-algorithms/
@@ -236,7 +244,67 @@ enum class Algorithm(
     ANDROID_KEYSTORE_ATTEST_KEY(
         description = "Android Keystore Attest Key",
         fullySpecified = true
-    )
+    ),
+
+    /** RSASSA-PKCS1-v1_5 using SHA-256 and 2048-bit key */
+    RS256_2048(coseAlgorithmIdentifier = -257, joseAlgorithmIdentifier = "RS256", fullySpecified = true,
+        description = "RSASSA-PKCS1-v1_5 using SHA-256 and 2048-bit key",
+        hashAlgorithm = SHA256, isSigning = true, keySizeBits = 2048),
+
+    /** RSASSA-PKCS1-v1_5 using SHA-256 and 3072-bit key */
+    RS256_3072(coseAlgorithmIdentifier = -257, joseAlgorithmIdentifier = "RS256", fullySpecified = true,
+        description = "RSASSA-PKCS1-v1_5 using SHA-256 and 3072-bit key",
+        hashAlgorithm = SHA256, isSigning = true, keySizeBits = 3072),
+
+    /** RSASSA-PKCS1-v1_5 using SHA-256 and 4096-bit key */
+    RS256_4096(coseAlgorithmIdentifier = -257, joseAlgorithmIdentifier = "RS256", fullySpecified = true,
+        description = "RSASSA-PKCS1-v1_5 using SHA-256 and 4096-bit key",
+        hashAlgorithm = SHA256, isSigning = true, keySizeBits = 4096),
+
+    /** RSASSA-PKCS1-v1_5 using SHA-384 and 3072-bit key */
+    RS384_3072(coseAlgorithmIdentifier = -258, joseAlgorithmIdentifier = "RS384", fullySpecified = true,
+        description = "RSASSA-PKCS1-v1_5 using SHA-384 and 3072-bit key",
+        hashAlgorithm = SHA384, isSigning = true, keySizeBits = 3072),
+
+    /** RSASSA-PKCS1-v1_5 using SHA-384 and 4096-bit key */
+    RS384_4096(coseAlgorithmIdentifier = -258, joseAlgorithmIdentifier = "RS384", fullySpecified = true,
+        description = "RSASSA-PKCS1-v1_5 using SHA-384 and 4096-bit key",
+        hashAlgorithm = SHA384, isSigning = true, keySizeBits = 4096),
+
+    /** RSASSA-PKCS1-v1_5 using SHA-512 and 4096-bit key */
+    RS512_4096(coseAlgorithmIdentifier = -259, joseAlgorithmIdentifier = "RS512", fullySpecified = true,
+        description = "RSASSA-PKCS1-v1_5 using SHA-512 and 4096-bit key",
+        hashAlgorithm = SHA512, isSigning = true, keySizeBits = 4096),
+
+    /** RSASSA-PSS using SHA-256, MGF1 with SHA-256, and 2048-bit key */
+    PS256_2048(coseAlgorithmIdentifier = -37, joseAlgorithmIdentifier = "PS256", fullySpecified = true,
+        description = "RSASSA-PSS using SHA-256, MGF1 with SHA-256, and 2048-bit key",
+        hashAlgorithm = SHA256, isSigning = true, keySizeBits = 2048),
+
+    /** RSASSA-PSS using SHA-256, MGF1 with SHA-256, and 3072-bit key */
+    PS256_3072(coseAlgorithmIdentifier = -37, joseAlgorithmIdentifier = "PS256", fullySpecified = true,
+        description = "RSASSA-PSS using SHA-256, MGF1 with SHA-256, and 3072-bit key",
+        hashAlgorithm = SHA256, isSigning = true, keySizeBits = 3072),
+
+    /** RSASSA-PSS using SHA-256, MGF1 with SHA-256, and 4096-bit key */
+    PS256_4096(coseAlgorithmIdentifier = -37, joseAlgorithmIdentifier = "PS256", fullySpecified = true,
+        description = "RSASSA-PSS using SHA-256, MGF1 with SHA-256, and 4096-bit key",
+        hashAlgorithm = SHA256, isSigning = true, keySizeBits = 4096),
+
+    /** RSASSA-PSS using SHA-384, MGF1 with SHA-384, and 3072-bit key */
+    PS384_3072(coseAlgorithmIdentifier = -38, joseAlgorithmIdentifier = "PS384", fullySpecified = true,
+        description = "RSASSA-PSS using SHA-384, MGF1 with SHA-384, and 3072-bit key",
+        hashAlgorithm = SHA384, isSigning = true, keySizeBits = 3072),
+
+    /** RSASSA-PSS using SHA-384, MGF1 with SHA-384, and 4096-bit key */
+    PS384_4096(coseAlgorithmIdentifier = -38, joseAlgorithmIdentifier = "PS384", fullySpecified = true,
+        description = "RSASSA-PSS using SHA-384, MGF1 with SHA-384, and 4096-bit key",
+        hashAlgorithm = SHA384, isSigning = true, keySizeBits = 4096),
+
+    /** RSASSA-PSS using SHA-512, MGF1 with SHA-512, and 4096-bit key */
+    PS512_4096(coseAlgorithmIdentifier = -39, joseAlgorithmIdentifier = "PS512", fullySpecified = true,
+        description = "RSASSA-PSS using SHA-512, MGF1 with SHA-512, and 4096-bit key",
+        hashAlgorithm = SHA512, isSigning = true, keySizeBits = 4096),
 
     ;
 
@@ -244,7 +312,7 @@ enum class Algorithm(
         private val coseIdentifierToAlgorithm: Map<Int, Algorithm> by lazy {
             buildMap {
                 enumEntries<Algorithm>().forEach {
-                    if (it.coseAlgorithmIdentifier != null) {
+                    if (it.coseAlgorithmIdentifier != null && !containsKey(it.coseAlgorithmIdentifier)) {
                         put(it.coseAlgorithmIdentifier, it)
                     }
                 }
@@ -254,7 +322,7 @@ enum class Algorithm(
         private val joseIdentifierToAlgorithm: Map<String, Algorithm> by lazy {
             buildMap {
                 enumEntries<Algorithm>().forEach {
-                    if (it.joseAlgorithmIdentifier != null) {
+                    if (it.joseAlgorithmIdentifier != null && !containsKey(it.joseAlgorithmIdentifier)) {
                         put(it.joseAlgorithmIdentifier, it)
                     }
                 }

@@ -50,6 +50,7 @@ import org.multipaz.prompt.promptModelSilentConsent
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
@@ -299,6 +300,7 @@ class DocumentStoreTestHarness {
         data: List<Pair<String, JsonElement>>,
         dsKey: AsymmetricKey.X509Certified? = null,
         readerIdentifiers: List<ByteString> = emptyList(),
+        createKeySettings: CreateKeySettings? = null,
     ): Document {
         initialize()
         val effectiveDsKey = dsKey ?: this.dsKey
@@ -319,6 +321,7 @@ class DocumentStoreTestHarness {
             validFrom = validFrom,
             validUntil = validUntil,
             dsKey = effectiveDsKey,
+            createKeySettings = createKeySettings,
         )
         return document
     }
@@ -529,7 +532,7 @@ class DocumentStoreTestHarness {
             expectedUpdate = null,
             digestAlgorithm = Algorithm.SHA256,
             valueDigests = issuerNamespaces.getValueDigests(Algorithm.SHA256),
-            deviceKey = mdocCredential.getAttestation().publicKey,
+            deviceKey = mdocCredential.getAttestation().ecPublicKey,
             deviceKeyAuthorizedNamespaces = keyAuthorizedNamespaces,
             deviceKeyAuthorizedDataElements = keyAuthorizedDataElements,
         )
@@ -626,6 +629,7 @@ class DocumentStoreTestHarness {
         validFrom: Instant,
         validUntil: Instant,
         dsKey: AsymmetricKey.X509Certified,
+        createKeySettings: CreateKeySettings? = null,
     ) {
         val credential = KeyBoundSdJwtVcCredential.create(
             document = document,
@@ -633,7 +637,7 @@ class DocumentStoreTestHarness {
             domain = "sdjwt",
             secureArea = softwareSecureArea,
             vct = vct,
-            createKeySettings = SoftwareCreateKeySettings.Builder().build()
+            createKeySettings = createKeySettings ?: SoftwareCreateKeySettings.Builder().build()
         )
 
         val sdJwt = SdJwt.create(
