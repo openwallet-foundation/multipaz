@@ -41,11 +41,13 @@ import org.junit.Test
 import org.multipaz.certext.CloudKeyAttestation
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.JsonWebSignature
+import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.util.fromBase64Url
 import org.multipaz.certext.MultipazExtension
 import org.multipaz.certext.fromCbor
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.buildX509Cert
+import org.multipaz.crypto.checkSignature
 import org.multipaz.device.AndroidKeystoreSecurityLevel
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.KeyUnlockDataProvider
@@ -241,15 +243,23 @@ class CloudSecureAreaTest {
         val validFrom = referenceTime
         val validUntil = validFrom + 30.days
         for (algorithm in csa.supportedAlgorithms) {
-            if (!Crypto.supportedCurves.contains(algorithm.curve!!)) {
+            if (algorithm.curve != null && !Crypto.supportedCurves.contains(algorithm.curve)) {
                 println("Curve ${algorithm.curve} not supported on platform")
                 continue
             }
+            if (algorithm.isMlDsa && algorithm !in Crypto.supportedMlDsaAlgorithms) {
+                println("ML-DSA algorithm $algorithm not supported on platform")
+                continue
+            }
+            if (algorithm.isMlKem && algorithm !in Crypto.supportedMlKemAlgorithms) {
+                println("ML-KEM algorithm $algorithm not supported on platform")
+                continue
+            }
 
-            val expectedKeyUsage = if (algorithm.isSigning) {
-                setOf(X509KeyUsage.DIGITAL_SIGNATURE)
-            } else {
-                setOf(X509KeyUsage.KEY_AGREEMENT)
+            val expectedKeyUsage = when {
+                algorithm.isSigning -> setOf(X509KeyUsage.DIGITAL_SIGNATURE)
+                algorithm.isKeyEncapsulation -> setOf(X509KeyUsage.KEY_ENCIPHERMENT)
+                else -> setOf(X509KeyUsage.KEY_AGREEMENT)
             }
             val challenge = ByteString(1, 2, 3)
             val tests = mapOf(
@@ -546,10 +556,41 @@ class CloudSecureAreaTest {
         }
 
         // ...now do it from the perspective of the other side...
-        val theirSharedSecret = Crypto.keyAgreement(otherKeyPair, keyInfo.publicKey)
+        val theirSharedSecret = Crypto.keyAgreement(otherKeyPair, keyInfo.ecPublicKey)
 
         // ... finally, check that both sides compute the same shared secret.
         Assert.assertArrayEquals(theirSharedSecret, ourSharedSecret)
+    }
+
+    @Test
+    fun testKemDecapsulation() = runTest {
+        if (Algorithm.ML_KEM_768 !in Crypto.supportedMlKemAlgorithms) {
+            return@runTest
+        }
+        val csa = LoopbackCloudSecureArea(
+            EphemeralStorage().getTable(tableSpec),
+            null
+        )
+        csa.initialize()
+        csa.register(
+            "",
+            PassphraseConstraints.NONE) { true }
+        val settings = CloudCreateKeySettings.Builder(ByteString(1, 2, 3))
+            .setAlgorithm(Algorithm.ML_KEM_768)
+            .build()
+        csa.createKey("testKey", settings)
+        val keyInfo = csa.getKeyInfo("testKey")
+        Assert.assertNotNull(keyInfo)
+        Assert.assertTrue(keyInfo.attestation.certChain!!.certificates.isNotEmpty())
+        Assert.assertEquals(Algorithm.ML_KEM_768, keyInfo.algorithm)
+
+        val kemResult = Crypto.kemEncapsulate(keyInfo.publicKey as MlKemPublicKey)
+        val decapsulatedSecret = try {
+            csa.kemDecapsulate("testKey", kemResult.ciphertext)
+        } catch (e: KeyLockedException) {
+            throw AssertionError(e)
+        }
+        Assert.assertArrayEquals(kemResult.sharedSecret, decapsulatedSecret)
     }
 
     @Test
@@ -671,6 +712,30 @@ class CloudSecureAreaTest {
                 } else {
                     withContext(MockKeyUnlockDataProvider(unlockData)) {
                         csa.keyAgreement(alias, otherKey.publicKey)
+                    }
+                }
+        })
+    }
+
+    @Test
+    fun testWrongPassphraseDelay_kemDecapsulation() = runTest {
+        if (Algorithm.ML_KEM_768 !in Crypto.supportedMlKemAlgorithms) {
+            return@runTest
+        }
+        var ciphertext: ByteArray? = null
+        testWrongPassphraseDelayHelper(
+            algorithm = Algorithm.ML_KEM_768,
+            useKey = { alias, csa, unlockData ->
+                if (ciphertext == null) {
+                    val keyInfo = csa.getKeyInfo(alias)
+                    val kemResult = Crypto.kemEncapsulate(keyInfo.publicKey as MlKemPublicKey)
+                    ciphertext = kemResult.ciphertext
+                }
+                if (unlockData == null) {
+                    csa.kemDecapsulate(alias, ciphertext!!)
+                } else {
+                    withContext(MockKeyUnlockDataProvider(unlockData)) {
+                        csa.kemDecapsulate(alias, ciphertext!!)
                     }
                 }
         })
