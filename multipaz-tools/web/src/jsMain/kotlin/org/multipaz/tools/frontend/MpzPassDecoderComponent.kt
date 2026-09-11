@@ -21,6 +21,10 @@ import org.multipaz.cbor.MajorType
 import org.multipaz.cbor.Tagged
 import org.multipaz.cose.CoseSign1
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.PrivateKey
+import org.multipaz.crypto.RsaPrivateKey
+import org.multipaz.crypto.MlDsaPrivateKey
+import org.multipaz.crypto.MlKemPrivateKey
 import org.multipaz.mdoc.mso.MobileSecurityObject
 import org.multipaz.mpzpass.MpzPass
 import org.multipaz.mpzpass.MpzPassIsoMdoc
@@ -61,7 +65,7 @@ import web.html.InputType
 
 external interface KeyViewProps : Props {
     var title: String
-    var privateKey: EcPrivateKey
+    var privateKey: PrivateKey
 }
 
 val KeyViewComponent = FC<KeyViewProps> { props ->
@@ -172,13 +176,25 @@ val KeyViewComponent = FC<KeyViewProps> { props ->
 
         div {
             css { display = Display.flex; gap = 16.px; fontSize = 13.px; flexWrap = FlexWrap.wrap; marginBottom = 8.px }
-            div {
-                span { css { color = Color("#64748b") }; +"Curve: " }
-                span { css { color = Color("#38bdf8"); fontWeight = FontWeight.bold }; +props.privateKey.curve.name }
+            val curve = (props.privateKey as? EcPrivateKey)?.curve
+            if (curve != null) {
+                div {
+                    span { css { color = Color("#64748b") }; +"Curve: " }
+                    span { css { color = Color("#38bdf8"); fontWeight = FontWeight.bold }; +curve.name }
+                }
             }
             div {
                 span { css { color = Color("#64748b") }; +"Type: " }
-                span { css { color = Color("#cbd5e1") }; +"EC Private Key (${keyFormat.uppercase()})" }
+                span {
+                    css { color = Color("#cbd5e1") }
+                    val keyTypeStr = when (props.privateKey) {
+                        is EcPrivateKey -> "EC Private Key"
+                        is RsaPrivateKey -> "RSA Private Key"
+                        is MlDsaPrivateKey -> "ML-DSA Private Key"
+                        is MlKemPrivateKey -> "ML-KEM Private Key"
+                    }
+                    +"$keyTypeStr (${keyFormat.uppercase()})"
+                }
             }
         }
 

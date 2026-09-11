@@ -38,6 +38,7 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.PrivateKey
 import org.multipaz.crypto.Pkcs12
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
@@ -338,7 +339,7 @@ val MpzPassCreatorComponent = FC {
                 } else {
                     val iacaCert = X509Cert.fromPem(customIacaCertPem.trim())
                     val dsCert = X509Cert.fromPem(customDsCertPem.trim())
-                    val dsPrivateKey = EcPrivateKey.fromPem(customDsPrivateKeyPem.trim(), dsCert.ecPublicKey)
+                    val dsPrivateKey = PrivateKey.fromPem(customDsPrivateKeyPem.trim(), dsCert.publicKey)
                     AsymmetricKey.X509CertifiedExplicit(
                         certChain = X509CertChain(listOf(dsCert, iacaCert)),
                         privateKey = dsPrivateKey
@@ -437,7 +438,7 @@ val MpzPassCreatorComponent = FC {
                         passIssuerCertChain = X509CertChain(listOf(cert))
                     } else {
                         val passCert = X509Cert.fromPem(customPassCertPem.trim())
-                        val passPrivKey = EcPrivateKey.fromPem(customPassPrivateKeyPem.trim(), passCert.ecPublicKey)
+                        val passPrivKey = PrivateKey.fromPem(customPassPrivateKeyPem.trim(), passCert.publicKey)
                         passSigningKey = AsymmetricKey.anonymous(passPrivKey)
                         passIssuerCertChain = X509CertChain(listOf(passCert))
                     }
@@ -483,6 +484,7 @@ val MpzPassCreatorComponent = FC {
                 anchor.href = blobUrl
                 val currentDateTime = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
                 val monthStr = (currentDateTime.month.ordinal + 1).toString().padStart(2, '0')
+                @Suppress("DEPRECATION")
                 val dayStr = currentDateTime.dayOfMonth.toString().padStart(2, '0')
                 val hourStr = currentDateTime.hour.toString().padStart(2, '0')
                 val minuteStr = currentDateTime.minute.toString().padStart(2, '0')
