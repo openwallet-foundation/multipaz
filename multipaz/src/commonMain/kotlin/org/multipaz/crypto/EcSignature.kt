@@ -22,7 +22,7 @@ data class EcSignature(
 ) : Signature {
     override fun toCoseEncoded() = r + s
 
-    fun toDataItem(): DataItem {
+    override fun toDataItem(): DataItem {
         return buildCborMap {
             put("r", r)
             put("s", s)

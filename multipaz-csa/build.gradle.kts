@@ -26,5 +26,8 @@ dependencies {
     ksp(project(":multipaz-cbor-rpc"))
 
     testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.bouncy.castle.bcprov)
+    testImplementation(libs.bouncy.castle.bcpkix)
 }
 
