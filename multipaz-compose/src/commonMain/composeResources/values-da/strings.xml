@@ -212,4 +212,6 @@
     <string name="provisioning_tx_code_fallback_prompt">Indtast den adgangskode, der tidligere blev meddelt dig</string>
     <string name="floating_item_heading_and_date_not_set">Ikke angivet</string>
     <string name="floating_item_heading_and_date_time_not_set">Ikke angivet</string>
+    <string name="presentment_activity_removed_too_fast">Enheden blev fjernet, før delingen blev afsluttet</string>
+    <string name="presentment_activity_nfc_only_tip">Hold tæt på læseren, indtil alle data er overført</string>
 </resources>

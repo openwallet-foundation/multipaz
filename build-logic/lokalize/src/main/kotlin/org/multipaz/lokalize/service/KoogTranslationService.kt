@@ -38,8 +38,15 @@ class KoogTranslationService(
  */
 private sealed class TranslationResult {
     data class Success(val translations: Map<String, String>) : TranslationResult()
-    data class RateLimited(val partialResults: Map<String, String>) : TranslationResult()
-    data class Failed(val fallback: Map<String, String>) : TranslationResult()
+    data class RateLimited(
+        val partialResults: Map<String, String>,
+        val cause: Throwable
+    ) : TranslationResult()
+
+    data class Failed(
+        val fallback: Map<String, String>,
+        val cause: Throwable
+    ) : TranslationResult()
 }
 
 /**
@@ -83,13 +90,16 @@ private class BatchTranslator(
                     throw RuntimeException(
                         "API rate limit exceeded for locale '$targetLocale'. " +
                                 "${result.partialResults.size}/${batch.keys.size} translations completed. " +
-                                "Get a new API key or wait 24h for quota reset."
+                                "Get a new API key or wait 24h for quota reset.",
+                        result.cause
                     )
                 }
 
                 is TranslationResult.Failed -> {
                     throw RuntimeException(
-                        "Translation failed for locale '$targetLocale': ${batch.keys.joinToString()}"
+                        "Translation failed for locale '$targetLocale': " +
+                                "${batch.keys.joinToString()} - ${describe(result.cause)}",
+                        result.cause
                     )
                 }
             }
@@ -137,15 +147,26 @@ private class BatchTranslator(
     }
 
     private fun handleError(e: Exception, batch: TranslationBatch): TranslationResult {
-        val isRateLimit = e.message?.let { msg ->
-            msg.contains("429") || msg.contains("RESOURCE_EXHAUSTED") || msg.contains("quota")
-        } ?: false
-
         return when {
-            isRateLimit -> TranslationResult.RateLimited(batch.fallback())
-            else -> TranslationResult.Failed(batch.fallback())
+            isRateLimit(e) -> TranslationResult.RateLimited(batch.fallback(), e)
+            else -> TranslationResult.Failed(batch.fallback(), e)
         }
     }
+
+    /**
+     * Detects quota/rate-limit errors anywhere in the exception chain.
+     *
+     * Koog wraps transport errors, so the HTTP status only shows up on a nested cause and
+     * checking just [Throwable.message] misclassifies quota errors as generic failures.
+     */
+    private fun isRateLimit(e: Throwable): Boolean =
+        e.causeChain().any { throwable ->
+            val msg = throwable.message ?: return@any false
+            msg.contains("429") ||
+                    msg.contains("RESOURCE_EXHAUSTED") ||
+                    msg.contains("quota") ||
+                    msg.contains("limit: 0")
+        }
 
     private suspend fun addDelayIfNeeded(currentIndex: Int, totalBatches: Int) {
         if (currentIndex >= totalBatches - 1) return
@@ -246,3 +267,30 @@ private object ResultParser {
         } ?: fallback
     }
 }
+
+/** Upper bound on how far [causeChain] walks, so a cyclic chain cannot spin forever. */
+private const val MAX_CAUSE_DEPTH = 10
+
+/**
+ * Returns this throwable followed by its causes, stopping at [MAX_CAUSE_DEPTH] or a repeat.
+ */
+private fun Throwable.causeChain(): List<Throwable> {
+    val chain = mutableListOf<Throwable>()
+    var current: Throwable? = this
+    while (current != null && current !in chain && chain.size < MAX_CAUSE_DEPTH) {
+        chain.add(current)
+        current = current.cause
+    }
+    return chain
+}
+
+/**
+ * Renders a throwable and its causes on one line.
+ *
+ * The worker process reports failures via the exception message, so without this the
+ * underlying provider error (HTTP status, API explanation) never reaches Gradle's output.
+ */
+private fun describe(e: Throwable): String =
+    e.causeChain().joinToString(" <- ") { throwable ->
+        "${throwable::class.simpleName}: ${throwable.message ?: "(no message)"}"
+    }

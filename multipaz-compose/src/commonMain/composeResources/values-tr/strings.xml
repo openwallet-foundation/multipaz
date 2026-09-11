@@ -214,4 +214,6 @@
     <string name="provisioning_tx_code_fallback_prompt">Size önceden iletilen parolayı girin</string>
     <string name="floating_item_heading_and_date_not_set">Ayarlanmadı</string>
     <string name="floating_item_heading_and_date_time_not_set">Ayarlanmadı</string>
+    <string name="presentment_activity_removed_too_fast">Cihaz paylaşım tamamlanmadan uzaklaştırıldı.</string>
+    <string name="presentment_activity_nfc_only_tip">Tüm veriler aktarılana kadar okuyucuya yakın tutun.</string>
 </resources>

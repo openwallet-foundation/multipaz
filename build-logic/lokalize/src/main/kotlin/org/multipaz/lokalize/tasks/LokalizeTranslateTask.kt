@@ -41,7 +41,16 @@ abstract class LokalizeTranslateTask @Inject constructor(
     @get:Internal
     abstract val extension: Property<LokalizeExtension>
 
-    @get:Input
+    /**
+     * Translation API key, supplied by the plugin from the environment or the
+     * `lokalizeApiKey` Gradle property.
+     *
+     * Marked [Internal] rather than [Input] on purpose: task inputs are fingerprinted and
+     * persisted in Gradle's task-state and configuration-cache files and can surface in build
+     * scans, so a secret does not belong there. Nothing is lost by excluding it, because this
+     * task declares `outputs.upToDateWhen { false }` and therefore always re-runs.
+     */
+    @get:Internal
     abstract val llmApiKey: Property<String>
 
     @get:Input
@@ -76,7 +85,11 @@ abstract class LokalizeTranslateTask @Inject constructor(
     @TaskAction
     fun run() {
         val apiKey = llmApiKey.orNull ?: run {
-                logger.warn("No API key configured - will use fallback mode (copying base text)")
+                logger.warn(
+                    "No API key found - set LOKALIZE_API_KEY (or the lokalizeApiKey Gradle " +
+                        "property). Falling back to copying the base locale text verbatim " +
+                        "into every target locale, which produces untranslated resources."
+                )
                 ""
             }
 

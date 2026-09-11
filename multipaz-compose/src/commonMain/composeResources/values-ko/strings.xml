@@ -214,4 +214,6 @@
     <string name="provisioning_tx_code_fallback_prompt">이전에 전달된 암호를 입력하세요</string>
     <string name="floating_item_heading_and_date_not_set">미설정</string>
     <string name="floating_item_heading_and_date_time_not_set">미설정</string>
+    <string name="presentment_activity_removed_too_fast">공유가 완료되기 전에 기기가 멀어졌습니다.</string>
+    <string name="presentment_activity_nfc_only_tip">모든 데이터가 전송될 때까지 리더기에 가까이 대세요.</string>
 </resources>

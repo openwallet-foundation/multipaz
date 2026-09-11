@@ -222,4 +222,6 @@
     <string name="provisioning_tx_code_fallback_prompt">Zadejte heslovou frázi, která vám byla dříve sdělena</string>
     <string name="floating_item_heading_and_date_not_set">Nenastaveno</string>
     <string name="floating_item_heading_and_date_time_not_set">Nenastaveno</string>
+    <string name="presentment_activity_removed_too_fast">Zařízení bylo odebráno před dokončením sdílení</string>
+    <string name="presentment_activity_nfc_only_tip">Přidržte u čtečky, dokud se nepřenesou všechna data</string>
 </resources>

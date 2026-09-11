@@ -214,4 +214,6 @@
     <string name="provisioning_tx_code_fallback_prompt">Voer de wachtwoordzin in die eerder met u is gedeeld</string>
     <string name="floating_item_heading_and_date_not_set">Niet ingesteld</string>
     <string name="floating_item_heading_and_date_time_not_set">Niet ingesteld</string>
+    <string name="presentment_activity_removed_too_fast">Apparaat is verwijderd voordat het delen was voltooid</string>
+    <string name="presentment_activity_nfc_only_tip">Houd dicht bij de lezer totdat alle gegevens zijn overgedragen</string>
 </resources>

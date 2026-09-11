@@ -206,4 +206,6 @@
     <string name="provisioning_tx_code_fallback_prompt">ป้อนรหัสผ่านที่คุณได้รับแจ้งก่อนหน้านี้</string>
     <string name="floating_item_heading_and_date_not_set">ไม่ได้ตั้งค่า</string>
     <string name="floating_item_heading_and_date_time_not_set">ไม่ได้ตั้งค่า</string>
+    <string name="presentment_activity_removed_too_fast">อุปกรณ์ถูกนำออกก่อนการแชร์เสร็จสมบูรณ์</string>
+    <string name="presentment_activity_nfc_only_tip">ถือให้อยู่ใกล้กับเครื่องอ่านจนกว่าข้อมูลทั้งหมดจะถูกถ่ายโอน</string>
 </resources>

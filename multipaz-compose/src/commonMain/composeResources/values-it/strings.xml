@@ -214,4 +214,6 @@
     <string name="provisioning_tx_code_fallback_prompt">Inserisci la passphrase che ti è stata comunicata in precedenza</string>
     <string name="floating_item_heading_and_date_not_set">Non impostato</string>
     <string name="floating_item_heading_and_date_time_not_set">Non impostato</string>
+    <string name="presentment_activity_removed_too_fast">Il dispositivo è stato rimosso prima del completamento della condivisione</string>
+    <string name="presentment_activity_nfc_only_tip">Mantieni vicino al lettore fino al completo trasferimento dei dati</string>
 </resources>

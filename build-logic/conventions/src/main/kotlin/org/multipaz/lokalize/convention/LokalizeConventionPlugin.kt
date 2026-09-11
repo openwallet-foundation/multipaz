@@ -4,7 +4,6 @@ import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.multipaz.lokalize.util.LLMProvider
 import org.multipaz.lokalize.util.LLmModel
-import org.multipaz.lokalize.util.OutputFormat
 
 /**
  * Convention plugin for Lokalize configuration.
@@ -44,7 +43,6 @@ class LokalizeConventionPlugin : Plugin<Project> {
 
             ext.llmProvider.set(LLMProvider.GOOGLE)
             ext.llModel.set(LLmModel.GEMINI2_5_FLASH)
-            ext.llmApiKey.set("API_KEY")
         }
     }
 }

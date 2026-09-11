@@ -214,4 +214,6 @@
     <string name="provisioning_tx_code_fallback_prompt">Masukkan frasa sandi yang sebelumnya telah dikomunikasikan kepada Anda</string>
     <string name="floating_item_heading_and_date_not_set">Belum diatur</string>
     <string name="floating_item_heading_and_date_time_not_set">Belum diatur</string>
+    <string name="presentment_activity_removed_too_fast">Perangkat dilepaskan sebelum berbagi selesai</string>
+    <string name="presentment_activity_nfc_only_tip">Dekatkan ke pembaca hingga semua data ditransfer</string>
 </resources>
