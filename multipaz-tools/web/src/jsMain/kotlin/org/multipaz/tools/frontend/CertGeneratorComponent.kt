@@ -31,12 +31,24 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
+import org.multipaz.crypto.EcPublicKeyOkp
+import org.multipaz.crypto.PrivateKey
+import org.multipaz.crypto.PublicKey
+import org.multipaz.crypto.RsaPrivateKey
+import org.multipaz.crypto.RsaPublicKey
+import org.multipaz.crypto.MlDsaPrivateKey
+import org.multipaz.crypto.MlDsaPublicKey
+import org.multipaz.crypto.MlKemPrivateKey
+import org.multipaz.crypto.MlKemPublicKey
+import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Pkcs12
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509KeyUsage
 import org.multipaz.crypto.AsymmetricKey
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Object
 import org.multipaz.asn1.ASN1Boolean
@@ -65,7 +77,11 @@ val CertGeneratorComponent = FC {
     var subjectDn by useState("CN=Test Identity,O=Multipaz,C=ZZ")
     var serialNumber by useState("1")
     var validityDays by useState("1200")
+    var keyFamily by useState(KeyFamily.EC)
     var curve by useState(EcCurve.P256)
+    var rsaKeySize by useState(2048)
+    var mlDsaAlgorithm by useState(Algorithm.ML_DSA_65)
+    var mlKemAlgorithm by useState(Algorithm.ML_KEM_768)
     var useCustomKey by useState(false)
     var customPrivateKeyPem by useState("")
 
@@ -100,7 +116,7 @@ val CertGeneratorComponent = FC {
     // Outputs
     var generatedCertPem by useState("")
     var generatedPrivateKeyPem by useState("")
-    var generatedKeyObj by useState<EcPrivateKey?>(null)
+    var generatedKeyObj by useState<PrivateKey?>(null)
     var generatedCertChainObj by useState<X509CertChain?>(null)
     var copyCertSuccess by useState(false)
     var copyKeySuccess by useState(false)
@@ -355,7 +371,7 @@ val CertGeneratorComponent = FC {
             div {
                 label {
                     css { display = Display.block; fontWeight = FontWeight.bold; marginBottom = 6.px; color = Color("#cbd5e1") }
-                    +"Cryptographic Curve:"
+                    +"Key Family:"
                 }
                 select {
                     css {
@@ -365,13 +381,126 @@ val CertGeneratorComponent = FC {
                         border = Border(1.px, LineStyle.solid, Color("#475569"))
                         borderRadius = 6.px
                         color = Color("#f1f5f9")
+                        marginBottom = 12.px
                     }
-                    value = curve.name
-                    onChange = { curve = EcCurve.valueOf(it.target.value) }
-                    Crypto.supportedCurves.sortedBy { it.name }.forEach { c ->
+                    value = keyFamily.name
+                    onChange = { keyFamily = KeyFamily.valueOf(it.target.value) }
+                    val families = if (activeSubTab == "generic") {
+                        listOf(KeyFamily.EC, KeyFamily.RSA, KeyFamily.ML_DSA, KeyFamily.ML_KEM)
+                    } else {
+                        listOf(KeyFamily.EC, KeyFamily.RSA, KeyFamily.ML_DSA)
+                    }
+                    families.forEach { f ->
                         option {
-                            value = c.name
-                            +c.name
+                            value = f.name
+                            +f.displayName
+                        }
+                    }
+                }
+
+                when (keyFamily) {
+                    KeyFamily.EC -> {
+                        label {
+                            css { display = Display.block; fontWeight = FontWeight.bold; marginBottom = 6.px; color = Color("#cbd5e1") }
+                            +"Cryptographic Curve:"
+                        }
+                        select {
+                            css {
+                                width = 100.pct
+                                padding = 10.px
+                                background = Color("#0f172a")
+                                border = Border(1.px, LineStyle.solid, Color("#475569"))
+                                borderRadius = 6.px
+                                color = Color("#f1f5f9")
+                            }
+                            value = curve.name
+                            onChange = { curve = EcCurve.valueOf(it.target.value) }
+                            Crypto.supportedCurves.sortedBy { it.name }.forEach { c ->
+                                option {
+                                    value = c.name
+                                    +c.name
+                                }
+                            }
+                        }
+                    }
+                    KeyFamily.RSA -> {
+                        label {
+                            css { display = Display.block; fontWeight = FontWeight.bold; marginBottom = 6.px; color = Color("#cbd5e1") }
+                            +"RSA Key Size:"
+                        }
+                        select {
+                            css {
+                                width = 100.pct
+                                padding = 10.px
+                                background = Color("#0f172a")
+                                border = Border(1.px, LineStyle.solid, Color("#475569"))
+                                borderRadius = 6.px
+                                color = Color("#f1f5f9")
+                            }
+                            value = rsaKeySize.toString()
+                            onChange = { rsaKeySize = it.target.value.toInt() }
+                            listOf(2048, 3072, 4096).forEach { s ->
+                                option {
+                                    value = s.toString()
+                                    +"$s bits"
+                                }
+                            }
+                        }
+                    }
+                    KeyFamily.ML_DSA -> {
+                        label {
+                            css { display = Display.block; fontWeight = FontWeight.bold; marginBottom = 6.px; color = Color("#cbd5e1") }
+                            +"ML-DSA Parameter Set:"
+                        }
+                        select {
+                            css {
+                                width = 100.pct
+                                padding = 10.px
+                                background = Color("#0f172a")
+                                border = Border(1.px, LineStyle.solid, Color("#475569"))
+                                borderRadius = 6.px
+                                color = Color("#f1f5f9")
+                            }
+                            value = mlDsaAlgorithm.name
+                            onChange = { mlDsaAlgorithm = Algorithm.valueOf(it.target.value) }
+                            listOf(
+                                Algorithm.ML_DSA_44 to "ML-DSA-44",
+                                Algorithm.ML_DSA_65 to "ML-DSA-65",
+                                Algorithm.ML_DSA_87 to "ML-DSA-87"
+                            ).forEach { (a, text) ->
+                                option {
+                                    value = a.name
+                                    +text
+                                }
+                            }
+                        }
+                    }
+                    KeyFamily.ML_KEM -> {
+                        label {
+                            css { display = Display.block; fontWeight = FontWeight.bold; marginBottom = 6.px; color = Color("#cbd5e1") }
+                            +"ML-KEM Parameter Set:"
+                        }
+                        select {
+                            css {
+                                width = 100.pct
+                                padding = 10.px
+                                background = Color("#0f172a")
+                                border = Border(1.px, LineStyle.solid, Color("#475569"))
+                                borderRadius = 6.px
+                                color = Color("#f1f5f9")
+                            }
+                            value = mlKemAlgorithm.name
+                            onChange = { mlKemAlgorithm = Algorithm.valueOf(it.target.value) }
+                            listOf(
+                                Algorithm.ML_KEM_512 to "ML-KEM-512",
+                                Algorithm.ML_KEM_768 to "ML-KEM-768",
+                                Algorithm.ML_KEM_1024 to "ML-KEM-1024"
+                            ).forEach { (a, text) ->
+                                option {
+                                    value = a.name
+                                    +text
+                                }
+                            }
                         }
                     }
                 }
@@ -1225,7 +1354,7 @@ val CertGeneratorComponent = FC {
                         val expiration = now + validityDays.trim().toInt().days
 
                         // Generate or parse certificate's public/private key pair
-                        val certKey = if (useCustomKey) {
+                        val certKey: PrivateKey = if (useCustomKey) {
                             if (customPrivateKeyPem.trim().isEmpty()) {
                                 throw IllegalArgumentException("Custom Private Key PEM is empty.")
                             }
@@ -1233,7 +1362,12 @@ val CertGeneratorComponent = FC {
                             generatedPrivateKeyPem = ""
                             parsedPair.first
                         } else {
-                            val generatedKey = Crypto.createEcPrivateKey(curve)
+                            val generatedKey: PrivateKey = when (keyFamily) {
+                                KeyFamily.EC -> Crypto.createEcPrivateKey(curve)
+                                KeyFamily.RSA -> Crypto.createRsaPrivateKey(rsaKeySize)
+                                KeyFamily.ML_DSA -> Crypto.createMlDsaPrivateKey(mlDsaAlgorithm)
+                                KeyFamily.ML_KEM -> Crypto.createMlKemPrivateKey(mlKemAlgorithm)
+                            }
                             generatedPrivateKeyPem = generatedKey.toPem()
                             generatedKey
                         }
@@ -1265,7 +1399,7 @@ val CertGeneratorComponent = FC {
                                     throw IllegalArgumentException("Signing IACA Private Key and Certificate are required.")
                                 }
                                 val iacaCert = X509Cert.fromPem(signingCertPem.trim())
-                                val iacaPriv = EcPrivateKey.fromPem(signingKeyPem.trim(), iacaCert.ecPublicKey)
+                                val iacaPriv = PrivateKey.fromPem(signingKeyPem.trim(), iacaCert.publicKey)
                                 val certifiedKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaPriv)
                                 MdocUtil.generateDsCertificate(
                                     iacaKey = certifiedKey,
@@ -1281,7 +1415,7 @@ val CertGeneratorComponent = FC {
                                     throw IllegalArgumentException("Signing Reader Root Private Key and Certificate are required.")
                                 }
                                 val rootCert = X509Cert.fromPem(signingCertPem.trim())
-                                val rootPriv = EcPrivateKey.fromPem(signingKeyPem.trim(), rootCert.ecPublicKey)
+                                val rootPriv = PrivateKey.fromPem(signingKeyPem.trim(), rootCert.publicKey)
                                 val certifiedKey = AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(rootCert)), rootPriv)
                                 MdocUtil.generateReaderCertificate(
                                     readerRootKey = certifiedKey,
@@ -1299,7 +1433,7 @@ val CertGeneratorComponent = FC {
                                         throw IllegalArgumentException("Signing CA Private Key and Certificate are required.")
                                     }
                                     val parentCert = X509Cert.fromPem(genericSigningCertPem.trim())
-                                    val parentPrivKey = parsePrivateKeyAndPublicKey(genericSigningKeyPem.trim()).first
+                                    val parentPrivKey = parsePrivateKeyAndPublicKey(genericSigningKeyPem.trim(), parentCert.publicKey).first
                                     AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(parentCert)), parentPrivKey)
                                 } else {
                                     AsymmetricKey.AnonymousExplicit(certKey)
@@ -1628,29 +1762,31 @@ val CertGeneratorComponent = FC {
                 }
 
                 // PKCS#12 Export Button
-                div {
-                    css {
-                        display = Display.flex
-                        justifyContent = JustifyContent.flexStart
-                        gap = 12.px
-                    }
-                    button {
+                if (generatedKeyObj is EcPrivateKey) {
+                    div {
                         css {
                             display = Display.flex
-                            alignItems = AlignItems.center
-                            gap = 8.px
-                            padding = Padding(10.px, 20.px)
-                            background = Color("#2563eb")
-                            border = None.none
-                            borderRadius = 8.px
-                            color = Color("#ffffff")
-                            fontSize = 14.px
-                            fontWeight = FontWeight.bold
-                            cursor = Cursor.pointer
-                            hover { background = Color("#1d4ed8") }
+                            justifyContent = JustifyContent.flexStart
+                            gap = 12.px
                         }
-                        onClick = { isExportModalOpen = true }
-                        +"💾 Export PKCS#12 (.p12)"
+                        button {
+                            css {
+                                display = Display.flex
+                                alignItems = AlignItems.center
+                                gap = 8.px
+                                padding = Padding(10.px, 20.px)
+                                background = Color("#2563eb")
+                                border = None.none
+                                borderRadius = 8.px
+                                color = Color("#ffffff")
+                                fontSize = 14.px
+                                fontWeight = FontWeight.bold
+                                cursor = Cursor.pointer
+                                hover { background = Color("#1d4ed8") }
+                            }
+                            onClick = { isExportModalOpen = true }
+                            +"💾 Export PKCS#12 (.p12)"
+                        }
                     }
                 }
             }
@@ -1659,7 +1795,7 @@ val CertGeneratorComponent = FC {
         Pkcs12ExportModalComponent {
             isOpen = isExportModalOpen
             onClose = { isExportModalOpen = false }
-            privateKey = generatedKeyObj
+            privateKey = generatedKeyObj as? EcPrivateKey
             certChain = generatedCertChainObj
             defaultFileName = defaultExportFileName
         }
@@ -1719,12 +1855,12 @@ private fun decodeHex(hex: String): ByteArray {
     return result
 }
 
-private fun parsePrivateKeyAndPublicKey(input: String): Pair<EcPrivateKey, EcPublicKey> {
+private fun parsePrivateKeyAndPublicKey(input: String, expectedPublicKey: PublicKey? = null): Pair<PrivateKey, PublicKey> {
     val trimmed = input.trim()
     if (trimmed.startsWith("{")) {
         try {
             val json = Json.parseToJsonElement(trimmed).jsonObject
-            val privKey = EcPrivateKey.fromJwk(json)
+            val privKey = PrivateKey.fromJwk(json)
             val pubKey = privKey.publicKey
             return Pair(privKey, pubKey)
         } catch (e: Throwable) {
@@ -1732,50 +1868,50 @@ private fun parsePrivateKeyAndPublicKey(input: String): Pair<EcPrivateKey, EcPub
         }
     }
 
-    // PEM parsing
-    val encoded = Base64.Mime.decode(trimmed
-        .replace("-----BEGIN PRIVATE KEY-----", "")
-        .replace("-----END PRIVATE KEY-----", "")
-        .replace("-----BEGIN EC PRIVATE KEY-----", "")
-        .replace("-----END EC PRIVATE KEY-----", "")
-        .trim())
-    
+    if (expectedPublicKey != null) {
+        val privKey = PrivateKey.fromPem(trimmed, expectedPublicKey)
+        return Pair(privKey, expectedPublicKey)
+    }
+
+    // Try RSA if it has RSA header or OID
+    if (trimmed.contains("-----BEGIN RSA PRIVATE KEY-----")) {
+        val privKey = RsaPrivateKey.fromPem(trimmed)
+        return Pair(privKey, privKey.publicKey)
+    }
+
+    val encoded = Base64.Mime.decode(
+        trimmed
+            .replace("-----BEGIN PRIVATE KEY-----", "")
+            .replace("-----END PRIVATE KEY-----", "")
+            .replace("-----BEGIN EC PRIVATE KEY-----", "")
+            .replace("-----END EC PRIVATE KEY-----", "")
+            .trim()
+    )
+
     val rootObj = ASN1.decode(encoded) as ASN1Sequence
+    val privateKeyAlgorithm = (if (rootObj.elements.size > 1 && rootObj.elements[1] is ASN1Sequence) rootObj.elements[1] else null) as? ASN1Sequence
+    val algorithmOid = (privateKeyAlgorithm?.elements?.getOrNull(0) as? ASN1ObjectIdentifier)?.oid
+
+    if (algorithmOid == OID.RSA_ENCRYPTION.oid) {
+        val privKey = RsaPrivateKey.fromPem(trimmed)
+        return Pair(privKey, privKey.publicKey)
+    }
+
     val privateKeySeq = if (rootObj.elements.size > 2 && rootObj.elements[2] is ASN1OctetString) {
         val octetString = rootObj.elements[2] as ASN1OctetString
-        ASN1.decode(octetString.value) as ASN1Sequence
+        try {
+            ASN1.decode(octetString.value) as? ASN1Sequence ?: rootObj
+        } catch (e: Throwable) {
+            rootObj
+        }
     } else {
         rootObj
     }
 
-    val privateKeyInfo = rootObj
-    val privateKeyAlgorithm = privateKeyInfo.elements[1] as ASN1Sequence
-    val algorithm = privateKeyAlgorithm.elements[0] as ASN1ObjectIdentifier
-    val curve = when (algorithm.oid) {
-        OID.EC_PUBLIC_KEY.oid -> {
-            val ecCurveString = privateKeyAlgorithm.elements[1] as ASN1ObjectIdentifier
-            when (ecCurveString.oid) {
-                "1.2.840.10045.3.1.7" -> EcCurve.P256
-                "1.3.132.0.34" -> EcCurve.P384
-                "1.3.132.0.35" -> EcCurve.P521
-                "1.3.36.3.3.2.8.1.1.7" -> EcCurve.BRAINPOOLP256R1
-                "1.3.36.3.3.2.8.1.1.9" -> EcCurve.BRAINPOOLP320R1
-                "1.3.36.3.3.2.8.1.1.11" -> EcCurve.BRAINPOOLP384R1
-                "1.3.36.3.3.2.8.1.1.13" -> EcCurve.BRAINPOOLP512R1
-                else -> throw IllegalStateException("Unexpected curve OID ${ecCurveString.oid}")
-            }
-        }
-        "1.3.101.110" -> EcCurve.X25519
-        "1.3.101.111" -> EcCurve.X448
-        "1.3.101.112" -> EcCurve.ED25519
-        "1.3.101.113" -> EcCurve.ED448
-        else -> throw IllegalStateException("Unexpected OID ${algorithm.oid}")
-    }
-
     var publicKeyBitString: ByteArray? = null
-    for (element in privateKeySeq.elements) {
+    for (element in (rootObj.elements + privateKeySeq.elements)) {
         if (element is ASN1TaggedObject && element.tag == 1) {
-            val decodedBitString = ASN1.decode(element.content)
+            val decodedBitString = try { ASN1.decode(element.content) } catch (e: Throwable) { null }
             if (decodedBitString is ASN1BitString) {
                 publicKeyBitString = decodedBitString.value
             } else if (decodedBitString is ASN1OctetString) {
@@ -1787,30 +1923,85 @@ private fun parsePrivateKeyAndPublicKey(input: String): Pair<EcPrivateKey, EcPub
         }
     }
 
-    if (publicKeyBitString == null) {
-        throw IllegalArgumentException("The private key PEM does not contain the optional public key structure. Please use a private key PEM containing the public key (SEC1/PKCS#8 with embedded public key).")
+    if (algorithmOid == OID.EC_PUBLIC_KEY.oid || algorithmOid?.startsWith("1.3.101.") == true || trimmed.contains("EC PRIVATE KEY")) {
+        val curve = when (algorithmOid) {
+            OID.EC_PUBLIC_KEY.oid -> {
+                val ecCurveString = privateKeyAlgorithm?.elements?.getOrNull(1) as? ASN1ObjectIdentifier
+                when (ecCurveString?.oid) {
+                    "1.2.840.10045.3.1.7" -> EcCurve.P256
+                    "1.3.132.0.34" -> EcCurve.P384
+                    "1.3.132.0.35" -> EcCurve.P521
+                    "1.3.36.3.3.2.8.1.1.7" -> EcCurve.BRAINPOOLP256R1
+                    "1.3.36.3.3.2.8.1.1.9" -> EcCurve.BRAINPOOLP320R1
+                    "1.3.36.3.3.2.8.1.1.11" -> EcCurve.BRAINPOOLP384R1
+                    "1.3.36.3.3.2.8.1.1.13" -> EcCurve.BRAINPOOLP512R1
+                    else -> throw IllegalStateException("Unexpected curve OID ${ecCurveString?.oid}")
+                }
+            }
+            "1.3.101.110" -> EcCurve.X25519
+            "1.3.101.111" -> EcCurve.X448
+            "1.3.101.112" -> EcCurve.ED25519
+            "1.3.101.113" -> EcCurve.ED448
+            else -> throw IllegalStateException("Unexpected OID $algorithmOid")
+        }
+
+        if (publicKeyBitString == null) {
+            throw IllegalArgumentException("The EC private key PEM does not contain the optional public key structure. Please use JWK format or a PEM containing the public key.")
+        }
+
+        val pubKey = when (curve) {
+            EcCurve.P256,
+            EcCurve.P384,
+            EcCurve.P521,
+            EcCurve.BRAINPOOLP256R1,
+            EcCurve.BRAINPOOLP320R1,
+            EcCurve.BRAINPOOLP384R1,
+            EcCurve.BRAINPOOLP512R1 -> {
+                EcPublicKeyDoubleCoordinate.fromUncompressedPointEncoding(curve, publicKeyBitString)
+            }
+            EcCurve.ED25519,
+            EcCurve.X25519,
+            EcCurve.ED448,
+            EcCurve.X448 -> {
+                EcPublicKeyOkp(curve, publicKeyBitString)
+            }
+        }
+
+        val privKey = EcPrivateKey.fromPem(trimmed, pubKey)
+        return Pair(privKey, pubKey)
     }
 
-    val pubKey = when (curve) {
-        EcCurve.P256,
-        EcCurve.P384,
-        EcCurve.P521,
-        EcCurve.BRAINPOOLP256R1,
-        EcCurve.BRAINPOOLP320R1,
-        EcCurve.BRAINPOOLP384R1,
-        EcCurve.BRAINPOOLP512R1 -> {
-            org.multipaz.crypto.EcPublicKeyDoubleCoordinate.fromUncompressedPointEncoding(curve, publicKeyBitString)
+    if (algorithmOid in listOf(OID.ML_DSA_44.oid, OID.ML_DSA_65.oid, OID.ML_DSA_87.oid)) {
+        val alg = when (algorithmOid) {
+            OID.ML_DSA_44.oid -> Algorithm.ML_DSA_44
+            OID.ML_DSA_65.oid -> Algorithm.ML_DSA_65
+            OID.ML_DSA_87.oid -> Algorithm.ML_DSA_87
+            else -> throw IllegalStateException()
         }
-        EcCurve.ED25519,
-        EcCurve.X25519,
-        EcCurve.ED448,
-        EcCurve.X448 -> {
-            org.multipaz.crypto.EcPublicKeyOkp(curve, publicKeyBitString)
+        if (publicKeyBitString == null) {
+            throw IllegalArgumentException("The ML-DSA private key PEM does not contain the public key. Please use JWK format.")
         }
+        val pubKey = MlDsaPublicKey(alg, ByteString(publicKeyBitString))
+        val privKey = MlDsaPrivateKey.fromPem(trimmed, pubKey)
+        return Pair(privKey, pubKey)
     }
 
-    val privKey = EcPrivateKey.fromPem(trimmed, pubKey)
-    return Pair(privKey, pubKey)
+    if (algorithmOid in listOf(OID.ML_KEM_512.oid, OID.ML_KEM_768.oid, OID.ML_KEM_1024.oid)) {
+        val alg = when (algorithmOid) {
+            OID.ML_KEM_512.oid -> Algorithm.ML_KEM_512
+            OID.ML_KEM_768.oid -> Algorithm.ML_KEM_768
+            OID.ML_KEM_1024.oid -> Algorithm.ML_KEM_1024
+            else -> throw IllegalStateException()
+        }
+        if (publicKeyBitString == null) {
+            throw IllegalArgumentException("The ML-KEM private key PEM does not contain the public key. Please use JWK format.")
+        }
+        val pubKey = MlKemPublicKey(alg, ByteString(publicKeyBitString))
+        val privKey = MlKemPrivateKey.fromPem(trimmed, pubKey)
+        return Pair(privKey, pubKey)
+    }
+
+    throw IllegalArgumentException("Unsupported private key format or algorithm: $algorithmOid")
 }
 
 data class CustomExtItem(val oid: String, val isCritical: Boolean, val hexData: String)

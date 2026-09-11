@@ -28,9 +28,13 @@ import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.X509Cert
+import org.multipaz.crypto.PublicKey
+import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import org.multipaz.crypto.EcPublicKeyOkp
-import org.multipaz.util.toHex
+import org.multipaz.crypto.RsaPublicKey
+import org.multipaz.crypto.MlDsaPublicKey
+import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Boolean
 import org.multipaz.asn1.ASN1Integer
@@ -366,11 +370,36 @@ val X509ParserComponent = FC {
                                 +"X.509 v${cert.version + 1}"
                             }
                         }
+
+                        div {
+                            css {
+                                display = Display.flex
+                                flexDirection = FlexDirection.column
+                                gap = 6.px
+                            }
+                            span { 
+                                css { 
+                                    color = Color("#64748b")
+                                    fontWeight = FontWeight.bold
+                                    fontSize = 12.px
+                                    textTransform = TextTransform.uppercase 
+                                }
+                                +"Signature Algorithm"
+                            }
+                            span { 
+                                css { 
+                                    color = Color("#f1f5f9")
+                                    fontSize = 14.px 
+                                }
+                                val sigAlg = try { cert.signatureAlgorithm.name } catch (e: Throwable) { cert.signatureAlgorithmOid }
+                                +"$sigAlg (${cert.signatureAlgorithmOid})"
+                            }
+                        }
                     }
 
                     // Card 3: Cryptographic Public Key Info
-                    val ecKey = try {
-                        cert.ecPublicKey
+                    val parsedPublicKey = try {
+                        cert.publicKey
                     } catch (e: Throwable) {
                         null
                     }
@@ -397,113 +426,404 @@ val X509ParserComponent = FC {
                             +"Subject Public Key Info"
                         }
 
-                        if (ecKey != null) {
-                            div {
-                                css {
-                                    display = Display.grid
-                                    gridTemplateColumns = "repeat(2, 1fr)".unsafeCast<GridTemplateColumns>()
-                                    gap = 20.px
-                                }
+                        when (parsedPublicKey) {
+                            is EcPublicKey -> {
                                 div {
                                     css {
-                                        display = Display.flex
-                                        flexDirection = FlexDirection.column
-                                        gap = 4.px
+                                        display = Display.grid
+                                        gridTemplateColumns = "repeat(2, 1fr)".unsafeCast<GridTemplateColumns>()
+                                        gap = 20.px
                                     }
-                                    span { 
-                                        css { 
-                                            color = Color("#64748b")
-                                            fontWeight = FontWeight.bold
-                                            fontSize = 12.px
-                                            textTransform = TextTransform.uppercase 
+                                    div {
+                                        css {
+                                            display = Display.flex
+                                            flexDirection = FlexDirection.column
+                                            gap = 4.px
                                         }
-                                        +"Key Type"
+                                        span { 
+                                            css { 
+                                                color = Color("#64748b")
+                                                fontWeight = FontWeight.bold
+                                                fontSize = 12.px
+                                                textTransform = TextTransform.uppercase 
+                                            }
+                                            +"Key Type"
+                                        }
+                                        span { 
+                                            css { 
+                                                color = Color("#f1f5f9")
+                                                fontSize = 14.px 
+                                            }
+                                            +"Elliptic Curve Public Key (EC)"
+                                        }
                                     }
-                                    span { 
-                                        css { 
-                                            color = Color("#f1f5f9")
-                                            fontSize = 14.px 
+                                    div {
+                                        css {
+                                            display = Display.flex
+                                            flexDirection = FlexDirection.column
+                                            gap = 4.px
                                         }
-                                        +"Elliptic Curve Public Key (EC)"
+                                        span { 
+                                            css { 
+                                                color = Color("#64748b")
+                                                fontWeight = FontWeight.bold
+                                                fontSize = 12.px
+                                                textTransform = TextTransform.uppercase 
+                                            }
+                                            +"Curve Name"
+                                        }
+                                        span { 
+                                            css { 
+                                                color = Color("#38bdf8")
+                                                fontSize = 14.px
+                                                fontWeight = FontWeight.bold 
+                                            }
+                                            +parsedPublicKey.curve.name
+                                        }
                                     }
                                 }
-                                div {
-                                    css {
-                                        display = Display.flex
-                                        flexDirection = FlexDirection.column
-                                        gap = 4.px
-                                    }
-                                    span { 
-                                        css { 
-                                            color = Color("#64748b")
-                                            fontWeight = FontWeight.bold
-                                            fontSize = 12.px
-                                            textTransform = TextTransform.uppercase 
-                                        }
-                                        +"Curve Name"
-                                    }
-                                    span { 
-                                        css { 
-                                            color = Color("#38bdf8")
-                                            fontSize = 14.px
-                                            fontWeight = FontWeight.bold 
-                                        }
-                                        +ecKey.curve.name
-                                    }
+                                
+                                val coordsString = when (parsedPublicKey) {
+                                    is EcPublicKeyDoubleCoordinate -> "X: ${parsedPublicKey.x.toHex()}\nY: ${parsedPublicKey.y.toHex()}"
+                                    is EcPublicKeyOkp -> "X: ${parsedPublicKey.x.toHex()}"
                                 }
-                            }
-                            
-                            val coordsString = when (ecKey) {
-                                is EcPublicKeyDoubleCoordinate -> "X: ${ecKey.x.toHex()}\nY: ${ecKey.y.toHex()}"
-                                is EcPublicKeyOkp -> "X: ${ecKey.x.toHex()}"
-                            }
 
-                            div {
-                                css {
-                                    display = Display.flex
-                                    flexDirection = FlexDirection.column
-                                    gap = 4.px
-                                }
-                                span { 
-                                    css { 
-                                        color = Color("#64748b")
-                                        fontWeight = FontWeight.bold
-                                        fontSize = 12.px
-                                        textTransform = TextTransform.uppercase 
-                                    }
-                                    +"Public Key Coordinates"
-                                }
-                                pre {
+                                div {
                                     css {
-                                        background = Color("#1e293b")
-                                        padding = 16.px
-                                        borderRadius = 8.px
-                                        fontFamily = FontFamily.monospace
-                                        fontSize = 12.px
-                                        color = Color("#94a3b8")
-                                        marginTop = 8.px
-                                        overflowX = "auto".unsafeCast<Overflow>()
-                                        border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                        display = Display.flex
+                                        flexDirection = FlexDirection.column
+                                        gap = 4.px
                                     }
-                                    +coordsString
+                                    span { 
+                                        css { 
+                                            color = Color("#64748b")
+                                            fontWeight = FontWeight.bold
+                                            fontSize = 12.px
+                                            textTransform = TextTransform.uppercase 
+                                        }
+                                        +"Public Key Coordinates"
+                                    }
+                                    pre {
+                                        css {
+                                            background = Color("#1e293b")
+                                            padding = 16.px
+                                            borderRadius = 8.px
+                                            fontFamily = FontFamily.monospace
+                                            fontSize = 12.px
+                                            color = Color("#94a3b8")
+                                            marginTop = 8.px
+                                            overflowX = "auto".unsafeCast<Overflow>()
+                                            border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                        }
+                                        +coordsString
+                                    }
                                 }
                             }
-                        } else {
-                            div {
-                                css {
-                                    display = Display.flex
-                                    alignItems = AlignItems.center
-                                    gap = 12.px
-                                    color = Color("#ef4444")
-                                    borderTop = Border(1.px, LineStyle.solid, Color("#334155"))
-                                    paddingTop = 16.px
-                                }
-                                span {
+                            is RsaPublicKey -> {
+                                div {
                                     css {
-                                        fontWeight = FontWeight.bold
-                                        fontSize = 14.px
+                                        display = Display.grid
+                                        gridTemplateColumns = "repeat(2, 1fr)".unsafeCast<GridTemplateColumns>()
+                                        gap = 20.px
                                     }
-                                    +"Non-EC key or unsupported Elliptic Curve format"
+                                    div {
+                                        css {
+                                            display = Display.flex
+                                            flexDirection = FlexDirection.column
+                                            gap = 4.px
+                                        }
+                                        span { 
+                                            css { 
+                                                color = Color("#64748b")
+                                                fontWeight = FontWeight.bold
+                                                fontSize = 12.px
+                                                textTransform = TextTransform.uppercase 
+                                            }
+                                            +"Key Type"
+                                        }
+                                        span { 
+                                            css { 
+                                                color = Color("#f1f5f9")
+                                                fontSize = 14.px 
+                                            }
+                                            +"RSA Public Key"
+                                        }
+                                    }
+                                    div {
+                                        css {
+                                            display = Display.flex
+                                            flexDirection = FlexDirection.column
+                                            gap = 4.px
+                                        }
+                                        span { 
+                                            css { 
+                                                color = Color("#64748b")
+                                                fontWeight = FontWeight.bold
+                                                fontSize = 12.px
+                                                textTransform = TextTransform.uppercase 
+                                            }
+                                            +"Key Size"
+                                        }
+                                        span { 
+                                            css { 
+                                                color = Color("#38bdf8")
+                                                fontSize = 14.px
+                                                fontWeight = FontWeight.bold 
+                                            }
+                                            +"${parsedPublicKey.modulus.size * 8} bits"
+                                        }
+                                    }
+                                }
+                                div {
+                                    css {
+                                        display = Display.flex
+                                        flexDirection = FlexDirection.column
+                                        gap = 4.px
+                                    }
+                                    span { 
+                                        css { 
+                                            color = Color("#64748b")
+                                            fontWeight = FontWeight.bold
+                                            fontSize = 12.px
+                                            textTransform = TextTransform.uppercase 
+                                        }
+                                        +"Modulus (n)"
+                                    }
+                                    pre {
+                                        css {
+                                            background = Color("#1e293b")
+                                            padding = 16.px
+                                            borderRadius = 8.px
+                                            fontFamily = FontFamily.monospace
+                                            fontSize = 12.px
+                                            color = Color("#94a3b8")
+                                            marginTop = 8.px
+                                            overflowX = "auto".unsafeCast<Overflow>()
+                                            border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                        }
+                                        +parsedPublicKey.modulus.toHex()
+                                    }
+                                }
+                                div {
+                                    css {
+                                        display = Display.flex
+                                        flexDirection = FlexDirection.column
+                                        gap = 4.px
+                                    }
+                                    span { 
+                                        css { 
+                                            color = Color("#64748b")
+                                            fontWeight = FontWeight.bold
+                                            fontSize = 12.px
+                                            textTransform = TextTransform.uppercase 
+                                        }
+                                        +"Public Exponent (e)"
+                                    }
+                                    pre {
+                                        css {
+                                            background = Color("#1e293b")
+                                            padding = 16.px
+                                            borderRadius = 8.px
+                                            fontFamily = FontFamily.monospace
+                                            fontSize = 12.px
+                                            color = Color("#94a3b8")
+                                            marginTop = 8.px
+                                            overflowX = "auto".unsafeCast<Overflow>()
+                                            border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                        }
+                                        +parsedPublicKey.publicExponent.toHex()
+                                    }
+                                }
+                            }
+                            is MlDsaPublicKey -> {
+                                div {
+                                    css {
+                                        display = Display.grid
+                                        gridTemplateColumns = "repeat(2, 1fr)".unsafeCast<GridTemplateColumns>()
+                                        gap = 20.px
+                                    }
+                                    div {
+                                        css {
+                                            display = Display.flex
+                                            flexDirection = FlexDirection.column
+                                            gap = 4.px
+                                        }
+                                        span { 
+                                            css { 
+                                                color = Color("#64748b")
+                                                fontWeight = FontWeight.bold
+                                                fontSize = 12.px
+                                                textTransform = TextTransform.uppercase 
+                                            }
+                                            +"Key Type"
+                                        }
+                                        span { 
+                                            css { 
+                                                color = Color("#f1f5f9")
+                                                fontSize = 14.px 
+                                            }
+                                            +"ML-DSA (${parsedPublicKey.algorithm.name})"
+                                        }
+                                    }
+                                    div {
+                                        css {
+                                            display = Display.flex
+                                            flexDirection = FlexDirection.column
+                                            gap = 4.px
+                                        }
+                                        span { 
+                                            css { 
+                                                color = Color("#64748b")
+                                                fontWeight = FontWeight.bold
+                                                fontSize = 12.px
+                                                textTransform = TextTransform.uppercase 
+                                            }
+                                            +"Key Size"
+                                        }
+                                        span { 
+                                            css { 
+                                                color = Color("#38bdf8")
+                                                fontSize = 14.px
+                                                fontWeight = FontWeight.bold 
+                                            }
+                                            +"${parsedPublicKey.encoded.size} bytes"
+                                        }
+                                    }
+                                }
+                                div {
+                                    css {
+                                        display = Display.flex
+                                        flexDirection = FlexDirection.column
+                                        gap = 4.px
+                                    }
+                                    span { 
+                                        css { 
+                                            color = Color("#64748b")
+                                            fontWeight = FontWeight.bold
+                                            fontSize = 12.px
+                                            textTransform = TextTransform.uppercase 
+                                        }
+                                        +"Public Key Bytes"
+                                    }
+                                    pre {
+                                        css {
+                                            background = Color("#1e293b")
+                                            padding = 16.px
+                                            borderRadius = 8.px
+                                            fontFamily = FontFamily.monospace
+                                            fontSize = 12.px
+                                            color = Color("#94a3b8")
+                                            marginTop = 8.px
+                                            overflowX = "auto".unsafeCast<Overflow>()
+                                            border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                        }
+                                        +parsedPublicKey.encoded.toHex()
+                                    }
+                                }
+                            }
+                            is MlKemPublicKey -> {
+                                div {
+                                    css {
+                                        display = Display.grid
+                                        gridTemplateColumns = "repeat(2, 1fr)".unsafeCast<GridTemplateColumns>()
+                                        gap = 20.px
+                                    }
+                                    div {
+                                        css {
+                                            display = Display.flex
+                                            flexDirection = FlexDirection.column
+                                            gap = 4.px
+                                        }
+                                        span { 
+                                            css { 
+                                                color = Color("#64748b")
+                                                fontWeight = FontWeight.bold
+                                                fontSize = 12.px
+                                                textTransform = TextTransform.uppercase 
+                                            }
+                                            +"Key Type"
+                                        }
+                                        span { 
+                                            css { 
+                                                color = Color("#f1f5f9")
+                                                fontSize = 14.px 
+                                            }
+                                            +"ML-KEM (${parsedPublicKey.algorithm.name})"
+                                        }
+                                    }
+                                    div {
+                                        css {
+                                            display = Display.flex
+                                            flexDirection = FlexDirection.column
+                                            gap = 4.px
+                                        }
+                                        span { 
+                                            css { 
+                                                color = Color("#64748b")
+                                                fontWeight = FontWeight.bold
+                                                fontSize = 12.px
+                                                textTransform = TextTransform.uppercase 
+                                            }
+                                            +"Key Size"
+                                        }
+                                        span { 
+                                            css { 
+                                                color = Color("#38bdf8")
+                                                fontSize = 14.px
+                                                fontWeight = FontWeight.bold 
+                                            }
+                                            +"${parsedPublicKey.encoded.size} bytes"
+                                        }
+                                    }
+                                }
+                                div {
+                                    css {
+                                        display = Display.flex
+                                        flexDirection = FlexDirection.column
+                                        gap = 4.px
+                                    }
+                                    span { 
+                                        css { 
+                                            color = Color("#64748b")
+                                            fontWeight = FontWeight.bold
+                                            fontSize = 12.px
+                                            textTransform = TextTransform.uppercase 
+                                        }
+                                        +"Encapsulation Key Bytes"
+                                    }
+                                    pre {
+                                        css {
+                                            background = Color("#1e293b")
+                                            padding = 16.px
+                                            borderRadius = 8.px
+                                            fontFamily = FontFamily.monospace
+                                            fontSize = 12.px
+                                            color = Color("#94a3b8")
+                                            marginTop = 8.px
+                                            overflowX = "auto".unsafeCast<Overflow>()
+                                            border = Border(1.px, LineStyle.solid, Color("#334155"))
+                                        }
+                                        +parsedPublicKey.encoded.toHex()
+                                    }
+                                }
+                            }
+                            else -> {
+                                div {
+                                    css {
+                                        display = Display.flex
+                                        alignItems = AlignItems.center
+                                        gap = 12.px
+                                        color = Color("#ef4444")
+                                        borderTop = Border(1.px, LineStyle.solid, Color("#334155"))
+                                        paddingTop = 16.px
+                                    }
+                                    span {
+                                        css {
+                                            fontWeight = FontWeight.bold
+                                            fontSize = 14.px
+                                        }
+                                        +"Unsupported public key format"
+                                    }
                                 }
                             }
                         }

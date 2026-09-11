@@ -17,17 +17,33 @@ import web.cssom.*
 import kotlinx.browser.window
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
+import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.PrivateKey
+import org.multipaz.crypto.RsaPrivateKey
+import org.multipaz.crypto.MlDsaPrivateKey
+import org.multipaz.crypto.MlKemPrivateKey
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Cdn
 import org.multipaz.cbor.CdnGeneratorOptions
 import org.multipaz.util.toHex
 
+enum class KeyFamily(val displayName: String) {
+    EC("Elliptic Curve (EC)"),
+    RSA("RSA"),
+    ML_DSA("ML-DSA (Post-Quantum Signature)"),
+    ML_KEM("ML-KEM (Post-Quantum Key Encapsulation)")
+}
+
 val KeyGeneratorComponent = FC {
+    var selectedFamily by useState(KeyFamily.EC)
     var selectedCurve by useState(EcCurve.P256)
-    var generatedPrivateKey by useState<EcPrivateKey?>(null)
+    var selectedRsaKeySize by useState(2048)
+    var selectedMlDsaAlgorithm by useState(Algorithm.ML_DSA_65)
+    var selectedMlKemAlgorithm by useState(Algorithm.ML_KEM_768)
+    var generatedPrivateKey by useState<PrivateKey?>(null)
     var isGenerating by useState(false)
     var privateKeyTab by useState("jwk")
     var publicKeyTab by useState("jwk")
@@ -60,7 +76,7 @@ val KeyGeneratorComponent = FC {
                 margin = Margin(0.px, 0.px, 16.px, 0.px)
                 color = Color("#f8fafc")
             }
-            +"EC Key Pair Generator"
+            +"Key Pair Generator"
         }
 
         p {
@@ -68,54 +84,226 @@ val KeyGeneratorComponent = FC {
                 color = Color("#94a3b8")
                 marginBottom = 24.px
             }
-            +"Generate secure Elliptic Curve public/private key pairs directly in your browser. Select your preferred curve below."
+            +"Generate secure Elliptic Curve, RSA, and Post-Quantum (ML-DSA / ML-KEM) key pairs directly in your browser."
         }
 
         div {
             css {
                 display = Display.flex
                 flexDirection = FlexDirection.column
-                gap = 8.px
+                gap = 16.px
                 marginBottom = 24.px
                 maxWidth = 400.px
             }
 
-            label {
+            div {
                 css {
-                    fontWeight = FontWeight.bold
-                    color = Color("#cbd5e1")
+                    display = Display.flex
+                    flexDirection = FlexDirection.column
+                    gap = 8.px
                 }
-                +"Select Elliptic Curve:"
+
+                label {
+                    css {
+                        fontWeight = FontWeight.bold
+                        color = Color("#cbd5e1")
+                    }
+                    +"Select Key Family:"
+                }
+
+                select {
+                    css {
+                        padding = 12.px
+                        background = Color("#0f172a")
+                        border = Border(1.px, LineStyle.solid, Color("#475569"))
+                        borderRadius = 8.px
+                        color = Color("#f1f5f9")
+                        fontSize = 15.px
+                    }
+                    value = selectedFamily.name
+                    onChange = {
+                        val familyVal = KeyFamily.valueOf(it.target.value)
+                        selectedFamily = familyVal
+                    }
+                    KeyFamily.entries.forEach { family ->
+                        option {
+                            value = family.name
+                            +family.displayName
+                        }
+                    }
+                }
             }
 
-            select {
-                css {
-                    padding = 12.px
-                    background = Color("#0f172a")
-                    border = Border(1.px, LineStyle.solid, Color("#475569"))
-                    borderRadius = 8.px
-                    color = Color("#f1f5f9")
-                    fontSize = 15.px
-                }
-                value = selectedCurve.name
-                onChange = {
-                    val curveVal = EcCurve.valueOf(it.target.value)
-                    selectedCurve = curveVal
-                }
-                Crypto.supportedCurves.sortedBy { it.name }.forEach { curve ->
-                    option {
-                        value = curve.name
-                        val labelText = when (curve) {
-                            EcCurve.P256 -> "P-256 (secp256r1)"
-                            EcCurve.P384 -> "P-384 (secp384r1)"
-                            EcCurve.P521 -> "P-521 (secp521r1)"
-                            EcCurve.ED25519 -> "Ed25519 (EdDSA)"
-                            EcCurve.X25519 -> "X25519 (ECDH)"
-                            EcCurve.ED448 -> "Ed448 (EdDSA)"
-                            EcCurve.X448 -> "X448 (ECDH)"
-                            else -> curve.name
+            when (selectedFamily) {
+                KeyFamily.EC -> {
+                    div {
+                        css {
+                            display = Display.flex
+                            flexDirection = FlexDirection.column
+                            gap = 8.px
                         }
-                        +labelText
+
+                        label {
+                            css {
+                                fontWeight = FontWeight.bold
+                                color = Color("#cbd5e1")
+                            }
+                            +"Select Elliptic Curve:"
+                        }
+
+                        select {
+                            css {
+                                padding = 12.px
+                                background = Color("#0f172a")
+                                border = Border(1.px, LineStyle.solid, Color("#475569"))
+                                borderRadius = 8.px
+                                color = Color("#f1f5f9")
+                                fontSize = 15.px
+                            }
+                            value = selectedCurve.name
+                            onChange = {
+                                val curveVal = EcCurve.valueOf(it.target.value)
+                                selectedCurve = curveVal
+                            }
+                            Crypto.supportedCurves.sortedBy { it.name }.forEach { curve ->
+                                option {
+                                    value = curve.name
+                                    val labelText = when (curve) {
+                                        EcCurve.P256 -> "P-256 (secp256r1)"
+                                        EcCurve.P384 -> "P-384 (secp384r1)"
+                                        EcCurve.P521 -> "P-521 (secp521r1)"
+                                        EcCurve.ED25519 -> "Ed25519 (EdDSA)"
+                                        EcCurve.X25519 -> "X25519 (ECDH)"
+                                        EcCurve.ED448 -> "Ed448 (EdDSA)"
+                                        EcCurve.X448 -> "X448 (ECDH)"
+                                        else -> curve.name
+                                    }
+                                    +labelText
+                                }
+                            }
+                        }
+                    }
+                }
+                KeyFamily.RSA -> {
+                    div {
+                        css {
+                            display = Display.flex
+                            flexDirection = FlexDirection.column
+                            gap = 8.px
+                        }
+
+                        label {
+                            css {
+                                fontWeight = FontWeight.bold
+                                color = Color("#cbd5e1")
+                            }
+                            +"Select RSA Key Size:"
+                        }
+
+                        select {
+                            css {
+                                padding = 12.px
+                                background = Color("#0f172a")
+                                border = Border(1.px, LineStyle.solid, Color("#475569"))
+                                borderRadius = 8.px
+                                color = Color("#f1f5f9")
+                                fontSize = 15.px
+                            }
+                            value = selectedRsaKeySize.toString()
+                            onChange = {
+                                selectedRsaKeySize = it.target.value.toInt()
+                            }
+                            listOf(2048, 3072, 4096).forEach { size ->
+                                option {
+                                    value = size.toString()
+                                    +"$size bits"
+                                }
+                            }
+                        }
+                    }
+                }
+                KeyFamily.ML_DSA -> {
+                    div {
+                        css {
+                            display = Display.flex
+                            flexDirection = FlexDirection.column
+                            gap = 8.px
+                        }
+
+                        label {
+                            css {
+                                fontWeight = FontWeight.bold
+                                color = Color("#cbd5e1")
+                            }
+                            +"Select ML-DSA Parameter Set:"
+                        }
+
+                        select {
+                            css {
+                                padding = 12.px
+                                background = Color("#0f172a")
+                                border = Border(1.px, LineStyle.solid, Color("#475569"))
+                                borderRadius = 8.px
+                                color = Color("#f1f5f9")
+                                fontSize = 15.px
+                            }
+                            value = selectedMlDsaAlgorithm.name
+                            onChange = {
+                                selectedMlDsaAlgorithm = Algorithm.valueOf(it.target.value)
+                            }
+                            listOf(
+                                Algorithm.ML_DSA_44 to "ML-DSA-44 (NIST Security Category 2)",
+                                Algorithm.ML_DSA_65 to "ML-DSA-65 (NIST Security Category 3)",
+                                Algorithm.ML_DSA_87 to "ML-DSA-87 (NIST Security Category 5)"
+                            ).forEach { (alg, labelText) ->
+                                option {
+                                    value = alg.name
+                                    +labelText
+                                }
+                            }
+                        }
+                    }
+                }
+                KeyFamily.ML_KEM -> {
+                    div {
+                        css {
+                            display = Display.flex
+                            flexDirection = FlexDirection.column
+                            gap = 8.px
+                        }
+
+                        label {
+                            css {
+                                fontWeight = FontWeight.bold
+                                color = Color("#cbd5e1")
+                            }
+                            +"Select ML-KEM Parameter Set:"
+                        }
+
+                        select {
+                            css {
+                                padding = 12.px
+                                background = Color("#0f172a")
+                                border = Border(1.px, LineStyle.solid, Color("#475569"))
+                                borderRadius = 8.px
+                                color = Color("#f1f5f9")
+                                fontSize = 15.px
+                            }
+                            value = selectedMlKemAlgorithm.name
+                            onChange = {
+                                selectedMlKemAlgorithm = Algorithm.valueOf(it.target.value)
+                            }
+                            listOf(
+                                Algorithm.ML_KEM_512 to "ML-KEM-512 (NIST Security Category 1)",
+                                Algorithm.ML_KEM_768 to "ML-KEM-768 (NIST Security Category 3)",
+                                Algorithm.ML_KEM_1024 to "ML-KEM-1024 (NIST Security Category 5)"
+                            ).forEach { (alg, labelText) ->
+                                option {
+                                    value = alg.name
+                                    +labelText
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -147,7 +335,12 @@ val KeyGeneratorComponent = FC {
                     try {
                         generateError = ""
                         generatedPrivateKey = null
-                        val key = Crypto.createEcPrivateKey(selectedCurve)
+                        val key: PrivateKey = when (selectedFamily) {
+                            KeyFamily.EC -> Crypto.createEcPrivateKey(selectedCurve)
+                            KeyFamily.RSA -> Crypto.createRsaPrivateKey(selectedRsaKeySize)
+                            KeyFamily.ML_DSA -> Crypto.createMlDsaPrivateKey(selectedMlDsaAlgorithm)
+                            KeyFamily.ML_KEM -> Crypto.createMlKemPrivateKey(selectedMlKemAlgorithm)
+                        }
                         generatedPrivateKey = key
                         
                         val jwkPrivate = key.toJwk()
@@ -168,7 +361,7 @@ val KeyGeneratorComponent = FC {
                         copyPrivateKeySuccess = false
                         copyPublicKeySuccess = false
                     } catch (e: Throwable) {
-                        generateError = "Error generating key for curve ${selectedCurve.name}: " + (e.message ?: "Unsupported by current browser")
+                        generateError = "Error generating key: " + (e.message ?: "Unsupported by current environment")
                     } finally {
                         isGenerating = false
                     }
@@ -205,7 +398,7 @@ val KeyGeneratorComponent = FC {
                     gap = 24.px
                 }
 
-                // Curve Details Card
+                // Key Details Card
                 div {
                     css {
                         background = Color("#0f172a")
@@ -219,7 +412,7 @@ val KeyGeneratorComponent = FC {
                             fontSize = 1.2.rem
                             color = Color("#f1f5f9")
                         }
-                        +"Curve Information"
+                        +"Key Information"
                     }
                     div {
                         css {
@@ -228,20 +421,72 @@ val KeyGeneratorComponent = FC {
                             gap = 16.px
                         }
                         div {
-                            span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"CURVE NAME" }
-                            span { css { color = Color("#38bdf8"); fontWeight = FontWeight.bold } ; +selectedCurve.name }
+                            span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"KEY FAMILY" }
+                            span { css { color = Color("#38bdf8"); fontWeight = FontWeight.bold } ; +selectedFamily.displayName }
                         }
-                        div {
-                            span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"KEY SIZE" }
-                            span { css { color = Color("#f1f5f9") } ; +"${selectedCurve.bitSize} bits" }
-                        }
-                        div {
-                            span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"SIGNING" }
-                            span { css { color = Color(if (selectedCurve.supportsSigning) "#10b981" else "#ef4444") } ; +(if (selectedCurve.supportsSigning) "Supported" else "Not Supported") }
-                        }
-                        div {
-                            span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"KEY AGREEMENT" }
-                            span { css { color = Color(if (selectedCurve.supportsKeyAgreement) "#10b981" else "#ef4444") } ; +(if (selectedCurve.supportsKeyAgreement) "Supported" else "Not Supported") }
+                        when (privateKey) {
+                            is EcPrivateKey -> {
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"CURVE NAME" }
+                                    span { css { color = Color("#f1f5f9") } ; +privateKey.curve.name }
+                                }
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"KEY SIZE" }
+                                    span { css { color = Color("#f1f5f9") } ; +"${privateKey.curve.bitSize} bits" }
+                                }
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"CAPABILITIES" }
+                                    span {
+                                        css { color = Color("#10b981") }
+                                        val caps = mutableListOf<String>()
+                                        if (privateKey.curve.supportsSigning) caps.add("Signing")
+                                        if (privateKey.curve.supportsKeyAgreement) caps.add("Key Agreement")
+                                        +caps.joinToString(", ")
+                                    }
+                                }
+                            }
+                            is RsaPrivateKey -> {
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"KEY TYPE" }
+                                    span { css { color = Color("#f1f5f9") } ; +"RSASSA / RSA-PSS" }
+                                }
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"KEY SIZE" }
+                                    span { css { color = Color("#f1f5f9") } ; +"${privateKey.publicKey.modulus.size * 8} bits" }
+                                }
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"CAPABILITIES" }
+                                    span { css { color = Color("#10b981") } ; +"Signing, Encryption" }
+                                }
+                            }
+                            is MlDsaPrivateKey -> {
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"ALGORITHM" }
+                                    span { css { color = Color("#f1f5f9") } ; +"${privateKey.algorithm.name} (FIPS 204)" }
+                                }
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"PUBLIC KEY SIZE" }
+                                    span { css { color = Color("#f1f5f9") } ; +"${privateKey.publicKey.encoded.size} bytes" }
+                                }
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"CAPABILITIES" }
+                                    span { css { color = Color("#10b981") } ; +"Post-Quantum Signing" }
+                                }
+                            }
+                            is MlKemPrivateKey -> {
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"ALGORITHM" }
+                                    span { css { color = Color("#f1f5f9") } ; +"${privateKey.algorithm.name} (FIPS 203)" }
+                                }
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"PUBLIC KEY SIZE" }
+                                    span { css { color = Color("#f1f5f9") } ; +"${privateKey.publicKey.encoded.size} bytes" }
+                                }
+                                div {
+                                    span { css { display = Display.block; color = Color("#64748b"); fontSize = 11.px; fontWeight = FontWeight.bold } ; +"CAPABILITIES" }
+                                    span { css { color = Color("#10b981") } ; +"Post-Quantum Key Encapsulation" }
+                                }
+                            }
                         }
                     }
                 }
