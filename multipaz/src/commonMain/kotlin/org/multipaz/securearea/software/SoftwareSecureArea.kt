@@ -27,6 +27,7 @@ import org.multipaz.crypto.PrivateKey
 import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.RsaPrivateKey
 import org.multipaz.crypto.Signature
+import org.multipaz.crypto.secureZero
 import org.multipaz.prompt.requestPassphrase
 import org.multipaz.securearea.KeyAttestation
 import org.multipaz.securearea.KeyLockedException
@@ -224,8 +225,15 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 throw KeyLockedException("Error decrypting private key - wrong passphrase?", e)
+            } finally {
+                secretKey.secureZero()
             }
-            PrivateKey.fromDataItem(Cbor.decode(encodedPrivateKey))
+            val parsedKey = try {
+                PrivateKey.fromDataItem(Cbor.decode(encodedPrivateKey))
+            } finally {
+                encodedPrivateKey.secureZero()
+            }
+            parsedKey
         } else {
             keyMetadata.privateKey!!
         }
@@ -286,12 +294,14 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         keyUnlockData: KeyUnlockData?
     ): Signature {
         val keyData = loadKey(alias, keyUnlockData)
-        require(keyData.algorithm.isSigning) { "Key algorithm is not for Signing" }
-        return when (val privateKey = keyData.privateKey) {
-            is EcPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
-            is RsaPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
-            is MlDsaPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
-            is MlKemPrivateKey -> throw IllegalArgumentException("Cannot sign with ML-KEM key")
+        return keyData.privateKey.use { privateKey ->
+            require(keyData.algorithm.isSigning) { "Key algorithm is not for Signing" }
+            when (privateKey) {
+                is EcPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
+                is RsaPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
+                is MlDsaPrivateKey -> Crypto.sign(privateKey, keyData.algorithm, dataToSign)
+                is MlKemPrivateKey -> throw IllegalArgumentException("Cannot sign with ML-KEM key")
+            }
         }
     }
 
@@ -313,10 +323,12 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         keyUnlockData: KeyUnlockData?
     ): ByteArray {
         val keyData = loadKey(alias, keyUnlockData)
-        require(keyData.algorithm.isKeyAgreement) { "Key algorithm is not for Key Agreement" }
-        val privateKey = keyData.privateKey as? EcPrivateKey
-            ?: throw IllegalArgumentException("Key is not an EC key")
-        return Crypto.keyAgreement(privateKey, otherKey)
+        return keyData.privateKey.use { privateKey ->
+            require(keyData.algorithm.isKeyAgreement) { "Key algorithm is not for Key Agreement" }
+            val ecPrivateKey = privateKey as? EcPrivateKey
+                ?: throw IllegalArgumentException("Key is not an EC key")
+            Crypto.keyAgreement(ecPrivateKey, otherKey)
+        }
     }
 
     override suspend fun kemDecapsulate(
@@ -337,10 +349,12 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         keyUnlockData: KeyUnlockData?
     ): ByteArray {
         val keyData = loadKey(alias, keyUnlockData)
-        require(keyData.algorithm.isKeyEncapsulation) { "Key algorithm is not for Key Encapsulation" }
-        val privateKey = keyData.privateKey as? MlKemPrivateKey
-            ?: throw IllegalArgumentException("Key is not an ML-KEM key")
-        return Crypto.kemDecapsulate(privateKey, ciphertext)
+        return keyData.privateKey.use { privateKey ->
+            require(keyData.algorithm.isKeyEncapsulation) { "Key algorithm is not for Key Encapsulation" }
+            val mlKemPrivateKey = privateKey as? MlKemPrivateKey
+                ?: throw IllegalArgumentException("Key is not an ML-KEM key")
+            Crypto.kemDecapsulate(mlKemPrivateKey, ciphertext)
+        }
     }
 
     override suspend fun getKeyInfo(alias: String): SoftwareKeyInfo {

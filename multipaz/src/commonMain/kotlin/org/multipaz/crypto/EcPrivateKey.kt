@@ -32,8 +32,37 @@ import kotlin.io.encoding.Base64
 @CborSerializationImplemented(schemaId = "SKWtVGTV5zyQis4cbfJ9Llls7qIMkcth6Fb3jnTael8")
 sealed class EcPrivateKey(
     open val curve: EcCurve,
-    open val d: ByteArray,
+    d: ByteArray,
 ) : PrivateKey() {
+
+    private val _d: ByteArray = d.copyOf()
+
+    private var _isDestroyed: Boolean = false
+    final override val isDestroyed: Boolean
+        get() = _isDestroyed
+
+    private val disposer = KeyDisposer.register(this) {
+        _d.secureZero()
+    }
+
+    /**
+     * The private scalar (d) of the key.
+     *
+     * @throws IllegalStateException if this key has been destroyed.
+     */
+    open val d: ByteArray
+        get() {
+            checkNotDestroyed()
+            return _d
+        }
+
+    final override fun close() {
+        if (!_isDestroyed) {
+            _isDestroyed = true
+            _d.secureZero()
+            disposer.dispose()
+        }
+    }
 
     /**
      * Creates a [CoseKey] object for the key.
@@ -52,6 +81,7 @@ sealed class EcPrivateKey(
      * @return a PEM encoded string.
      */
     override fun toPem(): String {
+        checkNotDestroyed()
         // Generates this according to https://datatracker.ietf.org/doc/html/rfc5208
         //
         val privateKey = when (this) {
