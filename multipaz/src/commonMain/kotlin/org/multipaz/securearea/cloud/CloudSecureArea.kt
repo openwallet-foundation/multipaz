@@ -30,6 +30,7 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
+import org.multipaz.crypto.SecretKey
 import org.multipaz.crypto.Signature
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509Cert
@@ -131,8 +132,8 @@ open class CloudSecureArea protected constructor(
     val serverUrl: String,
     httpClientEngineFactory: HttpClientEngineFactory<*>
 ) : SecureArea {
-    private var skDevice: ByteArray? = null
-    private var skCloud: ByteArray? = null
+    private var skDevice: SecretKey? = null
+    private var skCloud: SecretKey? = null
     private var e2eeContext: ByteArray? = null
     private var encryptedCounter = 0
     private var decryptedCounter = 0
@@ -350,7 +351,10 @@ open class CloudSecureArea protected constructor(
         deviceAttestationId = null
         cloudBindingKey = null
         registrationContext = null
+        skDevice?.close()
         skDevice = null
+        skCloud?.close()
+        skCloud = null
     }
 
     private suspend fun validateCloudBindingKeyAttestation(
@@ -445,20 +449,24 @@ open class CloudSecureArea protected constructor(
                     }
                 )
             )
-            skDevice = Hkdf.deriveKey(
-                Algorithm.HMAC_SHA256,
-                zab,
-                salt,
-                "SKDevice".encodeToByteArray(),
-                32
-            )
-            skCloud = Hkdf.deriveKey(
-                Algorithm.HMAC_SHA256,
-                zab,
-                salt,
-                "SKCloud".encodeToByteArray(),
-                32
-            )
+            skDevice?.close()
+            skCloud?.close()
+            zab.use {
+                skDevice = Hkdf.deriveKey(
+                    Algorithm.HMAC_SHA256,
+                    it,
+                    salt,
+                    "SKDevice".encodeToByteArray(),
+                    32
+                )
+                skCloud = Hkdf.deriveKey(
+                    Algorithm.HMAC_SHA256,
+                    it,
+                    salt,
+                    "SKCloud".encodeToByteArray(),
+                    32
+                )
+            }
             e2eeContext = response1.serverState
             encryptedCounter = 1
             decryptedCounter = 1

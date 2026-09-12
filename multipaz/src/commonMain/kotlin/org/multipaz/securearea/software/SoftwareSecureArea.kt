@@ -26,6 +26,7 @@ import org.multipaz.crypto.MlKemPrivateKey
 import org.multipaz.crypto.PrivateKey
 import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.RsaPrivateKey
+import org.multipaz.crypto.SecretKey
 import org.multipaz.crypto.Signature
 import org.multipaz.crypto.secureZero
 import org.multipaz.prompt.requestPassphrase
@@ -128,12 +129,17 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
                 val secretKey = derivePrivateKeyEncryptionKey(encodedPublicKey, settings.passphrase!!)
                 val cleartextPrivateKey = Cbor.encode(privateKey.toCoseKey().toDataItem())
                 val iv = Random.Default.nextBytes(12)
-                val encryptedPrivateKey = Crypto.encrypt(
-                    Algorithm.A256GCM,
-                    secretKey,
-                    iv,
-                    cleartextPrivateKey
-                )
+                val encryptedPrivateKey = try {
+                    Crypto.encrypt(
+                        Algorithm.A256GCM,
+                        secretKey,
+                        iv,
+                        cleartextPrivateKey
+                    )
+                } finally {
+                    secretKey.close()
+                    cleartextPrivateKey.secureZero()
+                }
                 KeyMetadata(
                     algorithm = settings.algorithm,
                     passphraseRequired = true,
@@ -172,15 +178,20 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
     private suspend fun derivePrivateKeyEncryptionKey(
         encodedPublicKey: ByteArray,
         passphrase: String
-    ): ByteArray {
+    ): SecretKey {
         val info = "ICPrivateKeyEncryption1".encodeToByteArray()
-        return Hkdf.deriveKey(
-            Algorithm.HMAC_SHA256,
-            passphrase.encodeToByteArray(),
-            encodedPublicKey,
-            info,
-            32
-        )
+        val ikm = passphrase.encodeToByteArray()
+        return try {
+            Hkdf.deriveKey(
+                Algorithm.HMAC_SHA256,
+                SecretKey(ikm),
+                encodedPublicKey,
+                info,
+                32
+            )
+        } finally {
+            ikm.secureZero()
+        }
     }
 
     override suspend fun deleteKey(alias: String) {
@@ -226,7 +237,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
                 if (e is CancellationException) throw e
                 throw KeyLockedException("Error decrypting private key - wrong passphrase?", e)
             } finally {
-                secretKey.secureZero()
+                secretKey.close()
             }
             val parsedKey = try {
                 PrivateKey.fromDataItem(Cbor.decode(encodedPrivateKey))
@@ -327,7 +338,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
             require(keyData.algorithm.isKeyAgreement) { "Key algorithm is not for Key Agreement" }
             val ecPrivateKey = privateKey as? EcPrivateKey
                 ?: throw IllegalArgumentException("Key is not an EC key")
-            Crypto.keyAgreement(ecPrivateKey, otherKey)
+            Crypto.keyAgreement(ecPrivateKey, otherKey).use { it.encoded }
         }
     }
 
@@ -353,7 +364,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
             require(keyData.algorithm.isKeyEncapsulation) { "Key algorithm is not for Key Encapsulation" }
             val mlKemPrivateKey = privateKey as? MlKemPrivateKey
                 ?: throw IllegalArgumentException("Key is not an ML-KEM key")
-            Crypto.kemDecapsulate(mlKemPrivateKey, ciphertext)
+            Crypto.kemDecapsulate(mlKemPrivateKey, ciphertext).use { it.encoded }
         }
     }
 

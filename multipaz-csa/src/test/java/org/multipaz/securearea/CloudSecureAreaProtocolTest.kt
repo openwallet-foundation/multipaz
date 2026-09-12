@@ -242,8 +242,10 @@ class CloudSecureAreaProtocolTest {
                     }
                 )
             )
-            skDevice = Hkdf.deriveKey(Algorithm.HMAC_SHA256, zab, salt, "SKDevice".toByteArray(), 32)
-            skCloud = Hkdf.deriveKey(Algorithm.HMAC_SHA256, zab, salt, "SKCloud".toByteArray(), 32)
+            zab.use {
+                skDevice = Hkdf.deriveKey(Algorithm.HMAC_SHA256, it, salt, "SKDevice".toByteArray(), 32).use { key -> key.encoded }
+                skCloud = Hkdf.deriveKey(Algorithm.HMAC_SHA256, it, salt, "SKCloud".toByteArray(), 32).use { key -> key.encoded }
+            }
             e2eeContext = e2eeResp1.serverState
             clientEncryptedCounter = 1
             clientDecryptedCounter = 1
@@ -422,7 +424,8 @@ class CloudSecureAreaProtocolTest {
             val decapsResp = client.kemDecapsulate(keyHandle, kemResult.ciphertext)
             assertEquals(CloudSecureAreaProtocol.RESULT_OK, decapsResp.result)
             assertNotNull(decapsResp.sharedSecret)
-            assertArrayEquals(kemResult.sharedSecret, decapsResp.sharedSecret)
+            assertArrayEquals(kemResult.sharedSecret.encoded, decapsResp.sharedSecret)
+            kemResult.close()
         }
     }
 
@@ -447,7 +450,8 @@ class CloudSecureAreaProtocolTest {
             // Correct passphrase
             val correctResp = client.kemDecapsulate(kemKeyHandle, kemResult.ciphertext, "correctPassphrase")
             assertEquals(CloudSecureAreaProtocol.RESULT_OK, correctResp.result)
-            assertArrayEquals(kemResult.sharedSecret, correctResp.sharedSecret)
+            assertArrayEquals(kemResult.sharedSecret.encoded, correctResp.sharedSecret)
+            kemResult.close()
 
             // Test lockout: 3 failed attempts
             serverTime = Instant.fromEpochMilliseconds(1000)

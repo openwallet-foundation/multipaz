@@ -58,6 +58,7 @@ class EcPrivateKeyTests {
                     signatureFromOtherKey
                 )
             }
+            otherPrivateKey.close()
         }
 
         if (keyAgreement) {
@@ -66,7 +67,10 @@ class EcPrivateKeyTests {
             // TODO: add test-cases with vectors to check correctness. This just checks
             //  that no exception is thrown and the operation completes, not that the
             //  Zab value is correct.
+            Zab.close()
+            otherKey.close()
         }
+        privateKey.close()
     }
 
     @Test fun createAndCheck_P256() = createAndCheck(EcCurve.P256)

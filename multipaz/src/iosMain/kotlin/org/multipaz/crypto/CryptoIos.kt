@@ -64,35 +64,38 @@ actual object Crypto {
 
     actual suspend fun mac(
         algorithm: Algorithm,
-        key: ByteArray,
+        key: SecretKey,
         message: ByteArray
     ): ByteArray {
+        key.checkNotDestroyed()
         return when (algorithm) {
-            Algorithm.HMAC_INSECURE_SHA1 -> SwiftBridge.hmacSha1(key.toNSData(), message.toNSData()).toByteArray()
-            Algorithm.HMAC_SHA256 -> SwiftBridge.hmacSha256(key.toNSData(), message.toNSData()).toByteArray()
-            Algorithm.HMAC_SHA384 -> SwiftBridge.hmacSha384(key.toNSData(), message.toNSData()).toByteArray()
-            Algorithm.HMAC_SHA512 -> SwiftBridge.hmacSha512(key.toNSData(), message.toNSData()).toByteArray()
+            Algorithm.HMAC_INSECURE_SHA1 -> SwiftBridge.hmacSha1(key.data.toNSData(), message.toNSData()).toByteArray()
+            Algorithm.HMAC_SHA256 -> SwiftBridge.hmacSha256(key.data.toNSData(), message.toNSData()).toByteArray()
+            Algorithm.HMAC_SHA384 -> SwiftBridge.hmacSha384(key.data.toNSData(), message.toNSData()).toByteArray()
+            Algorithm.HMAC_SHA512 -> SwiftBridge.hmacSha512(key.data.toNSData(), message.toNSData()).toByteArray()
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
     }
 
     actual suspend fun encrypt(
         algorithm: Algorithm,
-        key: ByteArray,
+        key: SecretKey,
         nonce: ByteArray,
         messagePlaintext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
+        key.checkNotDestroyed()
+        val rawKey = key.data
         when (algorithm) {
-            Algorithm.A128GCM, Algorithm.A128CBC -> require(key.size == 16) { "Key size must be 16 bytes" }
-            Algorithm.A192GCM, Algorithm.A192CBC -> require(key.size == 24) { "Key size must be 24 bytes" }
-            Algorithm.A256GCM, Algorithm.A256CBC -> require(key.size == 32) { "Key size must be 32 bytes" }
+            Algorithm.A128GCM, Algorithm.A128CBC -> require(rawKey.size == 16) { "Key size must be 16 bytes" }
+            Algorithm.A192GCM, Algorithm.A192CBC -> require(rawKey.size == 24) { "Key size must be 24 bytes" }
+            Algorithm.A256GCM, Algorithm.A256CBC -> require(rawKey.size == 32) { "Key size must be 32 bytes" }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
         return when (algorithm) {
             Algorithm.A128GCM, Algorithm.A192GCM, Algorithm.A256GCM -> {
                 SwiftBridge.aesGcmEncrypt(
-                    key.toNSData(),
+                    rawKey.toNSData(),
                     messagePlaintext.toNSData(),
                     nonce.toNSData(),
                     aad?.toNSData()
@@ -100,7 +103,7 @@ actual object Crypto {
             }
             Algorithm.A128CBC, Algorithm.A192CBC, Algorithm.A256CBC -> {
                 SwiftBridge.aesCbcEncrypt(
-                    key.toNSData(),
+                    rawKey.toNSData(),
                     messagePlaintext.toNSData(),
                     nonce.toNSData()
                 ).toByteArray()
@@ -111,18 +114,20 @@ actual object Crypto {
 
     actual suspend fun decrypt(
         algorithm: Algorithm,
-        key: ByteArray,
+        key: SecretKey,
         nonce: ByteArray,
         messageCiphertext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
+        key.checkNotDestroyed()
+        val rawKey = key.data
         return when (algorithm) {
             Algorithm.A128GCM, Algorithm.A192GCM, Algorithm.A256GCM -> {
                 val ctLen = messageCiphertext.size
                 val ct = messageCiphertext.sliceArray(IntRange(0, ctLen - 16 - 1))
                 val tag = messageCiphertext.sliceArray(IntRange(ctLen - 16, ctLen - 1))
                 SwiftBridge.aesGcmDecrypt(
-                    key.toNSData(),
+                    rawKey.toNSData(),
                     ct.toNSData(),
                     tag.toNSData(),
                     nonce.toNSData(),
@@ -131,7 +136,7 @@ actual object Crypto {
             }
             Algorithm.A128CBC, Algorithm.A192CBC, Algorithm.A256CBC -> {
                 SwiftBridge.aesCbcDecrypt(
-                    key.toNSData(),
+                    rawKey.toNSData(),
                     messageCiphertext.toNSData(),
                     nonce.toNSData()
                 )?.toByteArray() ?: throw IllegalStateException("Decryption failed")
@@ -139,6 +144,28 @@ actual object Crypto {
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
     }
+
+    actual suspend fun mac(
+        algorithm: Algorithm,
+        key: ByteArray,
+        message: ByteArray
+    ): ByteArray = SecretKey(key).use { mac(algorithm, it, message) }
+
+    actual suspend fun encrypt(
+        algorithm: Algorithm,
+        key: ByteArray,
+        nonce: ByteArray,
+        messagePlaintext: ByteArray,
+        aad: ByteArray?
+    ): ByteArray = SecretKey(key).use { encrypt(algorithm, it, nonce, messagePlaintext, aad) }
+
+    actual suspend fun decrypt(
+        algorithm: Algorithm,
+        key: ByteArray,
+        nonce: ByteArray,
+        messageCiphertext: ByteArray,
+        aad: ByteArray?
+    ): ByteArray = SecretKey(key).use { decrypt(algorithm, it, nonce, messageCiphertext, aad) }
 
     actual suspend fun checkSignature(
         publicKey: EcPublicKey,
@@ -346,40 +373,48 @@ actual object Crypto {
         ) ?: throw IllegalStateException("ML-KEM encapsulation failed (requires iOS 26+)")
         val secret = (ret[0] as NSData).toByteArray()
         val ciphertext = (ret[1] as NSData).toByteArray()
-        return KemResult(sharedSecret = secret, ciphertext = ciphertext)
+        val secretKey = SecretKey(secret)
+        secret.secureZero()
+        return KemResult(sharedSecret = secretKey, ciphertext = ciphertext)
     }
 
     actual suspend fun kemDecapsulate(
         key: MlKemPrivateKey,
         ciphertext: ByteArray
-    ): ByteArray {
+    ): SecretKey {
         val algName = when (key.algorithm) {
             Algorithm.ML_KEM_768 -> "ML-KEM-768"
             Algorithm.ML_KEM_1024 -> "ML-KEM-1024"
             else -> throw IllegalArgumentException("Unsupported ML-KEM algorithm ${key.algorithm}")
         }
-        return SwiftBridge.mlkemDecapsulate(
+        val secret = SwiftBridge.mlkemDecapsulate(
             algName,
             key.encoded.toByteArray().toNSData(),
             key.publicKey.encoded.toByteArray().toNSData(),
             ciphertext.toNSData()
         )?.toByteArray() ?: throw IllegalStateException("ML-KEM decapsulation failed (requires iOS 26+)")
+        val secretKey = SecretKey(secret)
+        secret.secureZero()
+        return secretKey
     }
 
     actual suspend fun keyAgreement(
         key: EcPrivateKey,
         otherKey: EcPublicKey
-    ): ByteArray {
+    ): SecretKey {
         require(otherKey.curve == key.curve) { "Other key for ECDH is not ${key.curve.name}" }
         val otherKeyRaw = when (otherKey) {
             is EcPublicKeyDoubleCoordinate -> otherKey.x + otherKey.y
             is EcPublicKeyOkp -> otherKey.x
         }
-        return SwiftBridge.ecKeyAgreement(
+        val secret = SwiftBridge.ecKeyAgreement(
             key.curve.coseCurveIdentifier.toLong(),
             key.d.toNSData(),
             otherKeyRaw.toNSData()
         )?.toByteArray() ?: throw UnsupportedOperationException("Curve is not supported")
+        val secretKey = SecretKey(secret)
+        secret.secureZero()
+        return secretKey
     }
 
     internal fun secureEnclaveCreateEcPrivateKey(

@@ -69,17 +69,17 @@ object JsonWebEncryption {
         }
         val protectedHeaderB64 = Json.encodeToString(protectedHeader).encodeToByteArray().toBase64Url()
 
-        val sharedSecret = Crypto.keyAgreement(senderEphemeralKey, recipientPublicKey)
-
         val algId = encAlg.joseAlgorithmIdentifier!!.toByteArray()
-        val contentEncryptionKey = concatKDF(
-            sharedSecretZ = ByteString(sharedSecret),
-            keyDataLenBits = keyDataLenBits,
-            algorithmId = buildByteString { appendInt32(algId.size); append(algId) },
-            partyUInfo =  buildByteString { apu?.let { appendInt32(it.size); append(it) } },
-            partyVInfo =  buildByteString { apv?.let { appendInt32(it.size); append(it) } },
-            suppPubInfo = buildByteString { appendInt32(keyDataLenBits) }
-        )
+        val contentEncryptionKey = Crypto.keyAgreement(senderEphemeralKey, recipientPublicKey).use { sharedSecret ->
+            concatKDF(
+                sharedSecretZ = sharedSecret,
+                keyDataLenBits = keyDataLenBits,
+                algorithmId = buildByteString { appendInt32(algId.size); append(algId) },
+                partyUInfo =  buildByteString { apu?.let { appendInt32(it.size); append(it) } },
+                partyVInfo =  buildByteString { apv?.let { appendInt32(it.size); append(it) } },
+                suppPubInfo = buildByteString { appendInt32(keyDataLenBits) }
+            )
+        }
         // 96 bits (12 bytes) is a recommended IV size, but AndroidOpenSSL provider requires
         // it, so just go with that recommendation.
         val nonce = random.nextBytes(12)
@@ -89,13 +89,15 @@ object JsonWebEncryption {
         } else {
             uncompressed
         }
-        val cipherTextWithTag = Crypto.encrypt(
-            algorithm = encAlg,
-            key = contentEncryptionKey,
-            nonce = nonce,
-            messagePlaintext = messageToEncrypt,
-            aad = protectedHeaderB64.toByteArray(),
-        )
+        val cipherTextWithTag = contentEncryptionKey.use { cek ->
+            Crypto.encrypt(
+                algorithm = encAlg,
+                key = cek,
+                nonce = nonce,
+                messagePlaintext = messageToEncrypt,
+                aad = protectedHeaderB64.toByteArray(),
+            )
+        }
         // Auth tag is a single block which is always 16 bytes long for AES, irrespective of
         // the key length.
         val cipherText = cipherTextWithTag.copyOfRange(0, cipherTextWithTag.size - 16)
@@ -136,24 +138,29 @@ object JsonWebEncryption {
         val apu = ByteString(protectedHeader["apu"]?.jsonPrimitive?.content?.fromBase64Url() ?: byteArrayOf())
         val apv = ByteString(protectedHeader["apv"]?.jsonPrimitive?.content?.fromBase64Url() ?: byteArrayOf())
 
-        val sharedSecret = recipientKey.keyAgreement(senderEphemeralKey)
+        val sharedSecretBytes = recipientKey.keyAgreement(senderEphemeralKey)
 
         val algId = encAlg.joseAlgorithmIdentifier!!.toByteArray()
-        val contentEncryptionKey = concatKDF(
-            sharedSecretZ = ByteString(sharedSecret),
-            keyDataLenBits = keyDataLenBits,
-            algorithmId = buildByteString { appendInt32(algId.size); append(algId) },
-            partyUInfo =  buildByteString { appendInt32(apu.size); append(apu) },
-            partyVInfo =  buildByteString { appendInt32(apv.size); append(apv) },
-            suppPubInfo = buildByteString { appendInt32(keyDataLenBits) }
-        )
-        val clearText = Crypto.decrypt(
-            algorithm = encAlg,
-            key = contentEncryptionKey,
-            nonce = ivB64.fromBase64Url(),
-            aad = protectedHeaderB64.toByteArray(),
-            messageCiphertext = cipherTextB64.fromBase64Url() + authenticationTagB64.fromBase64Url()
-        )
+        val contentEncryptionKey = SecretKey(sharedSecretBytes).use { sharedSecret ->
+            sharedSecretBytes.secureZero()
+            concatKDF(
+                sharedSecretZ = sharedSecret,
+                keyDataLenBits = keyDataLenBits,
+                algorithmId = buildByteString { appendInt32(algId.size); append(algId) },
+                partyUInfo =  buildByteString { appendInt32(apu.size); append(apu) },
+                partyVInfo =  buildByteString { appendInt32(apv.size); append(apv) },
+                suppPubInfo = buildByteString { appendInt32(keyDataLenBits) }
+            )
+        }
+        val clearText = contentEncryptionKey.use { cek ->
+            Crypto.decrypt(
+                algorithm = encAlg,
+                key = cek,
+                nonce = ivB64.fromBase64Url(),
+                aad = protectedHeaderB64.toByteArray(),
+                messageCiphertext = cipherTextB64.fromBase64Url() + authenticationTagB64.fromBase64Url()
+            )
+        }
 
         val compressionAlgorithm = protectedHeader["zip"]?.jsonPrimitive?.content
         if (compressionAlgorithm == null) {
@@ -178,35 +185,43 @@ object JsonWebEncryption {
      * For ECDH-ES, this KDF is used to derive the KEK for AES Key Wrap.
      */
     internal suspend fun concatKDF(
-        sharedSecretZ: ByteString,
+        sharedSecretZ: SecretKey,
         keyDataLenBits: Int, // Desired output key length in bits (e.g., 128, 192, 256 for AES Key Wrap)
         algorithmId: ByteString,
         partyUInfo: ByteString,
         partyVInfo: ByteString,
         suppPubInfo: ByteString // e.g., keyDataLenBits as a 32-bit big-endian integer
-    ): ByteArray {
+    ): SecretKey {
         val keyDataLenBytes = keyDataLenBits / 8
         val reps = ceil(keyDataLenBytes.toDouble() / 32.0).toInt() // Assuming SHA-256 (32 bytes output)
         var round = 1
 
-        var derivedKeySize = 0
-        val derivedKey = buildByteString {
-            while (derivedKeySize < keyDataLenBytes && round <= reps) {
-                val toDigest = buildByteString {
-                    appendInt32(round)
-                    append(sharedSecretZ)
-                    append(algorithmId)
-                    append(partyUInfo)
-                    append(partyVInfo)
-                    append(suppPubInfo)
+        val ssBytes = sharedSecretZ.encoded
+        try {
+            val derivedKey = buildByteString {
+                var derivedKeySize = 0
+                while (derivedKeySize < keyDataLenBytes && round <= reps) {
+                    val toDigest = buildByteString {
+                        appendInt32(round)
+                        append(ssBytes)
+                        append(algorithmId)
+                        append(partyUInfo)
+                        append(partyVInfo)
+                        append(suppPubInfo)
+                    }
+                    // SuppPrivInfo is omitted for ECDH-ES+AxxxKW as per RFC 7518
+                    append(Crypto.digest(Algorithm.SHA256, toDigest.toByteArray()))
+                    derivedKeySize += 32
+                    round++
                 }
-                // SuppPrivInfo is omitted for ECDH-ES+AxxxKW as per RFC 7518
-                append(Crypto.digest(Algorithm.SHA256, toDigest.toByteArray()))
-                derivedKeySize += 32
-                round++
             }
+            val keyBytes = derivedKey.toByteArray(startIndex = 0, endIndex = keyDataLenBytes)
+            val result = SecretKey(keyBytes)
+            keyBytes.secureZero()
+            return result
+        } finally {
+            ssBytes.secureZero()
         }
-        return derivedKey.toByteArray(startIndex = 0, endIndex = keyDataLenBytes)
     }
 
 }

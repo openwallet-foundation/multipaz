@@ -73,6 +73,15 @@ expect object Crypto {
      */
     suspend fun mac(
         algorithm: Algorithm,
+        key: SecretKey,
+        message: ByteArray
+    ): ByteArray
+
+    /**
+     * Message authentication code function accepting a raw byte array key.
+     */
+    suspend fun mac(
+        algorithm: Algorithm,
         key: ByteArray,
         message: ByteArray
     ): ByteArray
@@ -88,6 +97,17 @@ expect object Crypto {
      * @param aad additional authenticated data or `null` (not used for CBC mode).
      * @return the cipher text with the tag appended for GCM, or padded for CBC.
      * @throws IllegalArgumentException if the given algorithm is not supported.
+     */
+    suspend fun encrypt(
+        algorithm: Algorithm,
+        key: SecretKey,
+        nonce: ByteArray,
+        messagePlaintext: ByteArray,
+        aad: ByteArray? = null
+    ): ByteArray
+
+    /**
+     * Message encryption function accepting a raw byte array key.
      */
     suspend fun encrypt(
         algorithm: Algorithm,
@@ -109,6 +129,17 @@ expect object Crypto {
      * @return the plaintext.
      * @throws IllegalArgumentException if the given algorithm is not supported.
      * @throws IllegalStateException if decryption fails
+     */
+    suspend fun decrypt(
+        algorithm: Algorithm,
+        key: SecretKey,
+        nonce: ByteArray,
+        messageCiphertext: ByteArray,
+        aad: ByteArray? = null
+    ): ByteArray
+
+    /**
+     * Message decryption function accepting a raw byte array key.
      */
     suspend fun decrypt(
         algorithm: Algorithm,
@@ -266,24 +297,24 @@ expect object Crypto {
      *
      * @param key the recipient private key.
      * @param ciphertext the ciphertext produced by encapsulation.
-     * @return the decapsulated shared secret.
+     * @return the decapsulated shared secret as a [SecretKey].
      */
     suspend fun kemDecapsulate(
         key: MlKemPrivateKey,
         ciphertext: ByteArray
-    ): ByteArray
+    ): SecretKey
 
     /**
      * Performs Key Agreement.
      *
      * @param key the key to use for key agreement.
      * @param otherKey the key from the other party.
-     * @return the shared secret.
+     * @return the shared secret as a [SecretKey].
      */
     suspend fun keyAgreement(
         key: EcPrivateKey,
         otherKey: EcPublicKey
-    ): ByteArray
+    ): SecretKey
 
     /**
      * Validate that each certificate in the chain is signed by the next one.
@@ -294,7 +325,6 @@ expect object Crypto {
      */
     internal suspend fun validateCertChainSignatures(certChain: X509CertChain): Boolean
 }
-
 
 
 /**

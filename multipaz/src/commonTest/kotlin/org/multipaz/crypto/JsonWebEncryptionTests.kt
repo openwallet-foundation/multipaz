@@ -152,24 +152,26 @@ class JsonWebEncryptionTests {
             // from the example.
             //
             "9e56d91d817135d372834283bf84269cfb316ea3da806a48f6daa7798cfe90c4",
-            sharedSecret.toHex()
+            sharedSecret.encoded.toHex()
         )
 
         val algId = Algorithm.A128GCM.joseAlgorithmIdentifier!!.encodeToByteString()
         val apu = "Alice".encodeToByteString()
         val apv = "Bob".encodeToByteString()
         val contentEncryptionKey = JsonWebEncryption.concatKDF(
-            sharedSecretZ = ByteString(sharedSecret),
+            sharedSecretZ = sharedSecret,
             keyDataLenBits = 128,
             algorithmId = buildByteString { appendInt32(algId.size); append(algId) },
             partyUInfo =  buildByteString { appendInt32(apu.size); append(apu) },
             partyVInfo =  buildByteString { appendInt32(apv.size); append(apv) },
             suppPubInfo = buildByteString { appendInt32(128) }
         )
+        sharedSecret.close()
         assertEquals(
             "VqqN6vgjbSBcIijNcacQGg",
-            contentEncryptionKey.toBase64Url()
+            contentEncryptionKey.encoded.toBase64Url()
         )
+        contentEncryptionKey.close()
 
     }
 }

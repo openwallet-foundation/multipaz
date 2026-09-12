@@ -517,11 +517,12 @@ private suspend fun csaTestUnguarded(
             "Decapsulated shared secret",
             sharedSecret
         )
-        if (kemResult.sharedSecret.contentEquals(sharedSecret)) {
+        if (kemResult.sharedSecret.encoded.contentEquals(sharedSecret)) {
             showToast("KEM in (${t1 - t0})")
         } else {
             showToast("KEM failed: secret mismatch")
         }
+        kemResult.close()
     } else {
         val otherKeyPairForEcdh = Crypto.createEcPrivateKey(algorithm.curve!!)
         val t0 = Clock.System.now()

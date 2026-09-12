@@ -169,9 +169,10 @@ actual object Crypto {
      */
     actual suspend fun mac(
         algorithm: Algorithm,
-        key: ByteArray,
+        key: SecretKey,
         message: ByteArray
     ): ByteArray {
+        key.checkNotDestroyed()
         val algName = when (algorithm) {
             Algorithm.HMAC_INSECURE_SHA1 -> "HmacSha1"
             Algorithm.HMAC_SHA256 -> "HmacSha256"
@@ -182,13 +183,20 @@ actual object Crypto {
             }
         }
 
-        val effectiveKey = if (key.isEmpty()) ByteArray(1) else key
+        val rawKey = key.data
+        val effectiveKey = if (rawKey.isEmpty()) ByteArray(1) else rawKey
         return Mac.getInstance(algName).run {
             init(SecretKeySpec(effectiveKey, ""))
             update(message)
             doFinal()
         }
     }
+
+    actual suspend fun mac(
+        algorithm: Algorithm,
+        key: ByteArray,
+        message: ByteArray
+    ): ByteArray = SecretKey(key).use { mac(algorithm, it, message) }
 
     /**
      * Message encryption.
@@ -203,28 +211,30 @@ actual object Crypto {
      */
     actual suspend fun encrypt(
         algorithm: Algorithm,
-        key: ByteArray,
+        key: SecretKey,
         nonce: ByteArray,
         messagePlaintext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
+        key.checkNotDestroyed()
+        val rawKey = key.data
         when (algorithm) {
-            Algorithm.A128GCM, Algorithm.A128CBC -> require(key.size == 16) { "Key size must be 16 bytes" }
-            Algorithm.A192GCM, Algorithm.A192CBC -> require(key.size == 24) { "Key size must be 24 bytes" }
-            Algorithm.A256GCM, Algorithm.A256CBC -> require(key.size == 32) { "Key size must be 32 bytes" }
+            Algorithm.A128GCM, Algorithm.A128CBC -> require(rawKey.size == 16) { "Key size must be 16 bytes" }
+            Algorithm.A192GCM, Algorithm.A192CBC -> require(rawKey.size == 24) { "Key size must be 24 bytes" }
+            Algorithm.A256GCM, Algorithm.A256CBC -> require(rawKey.size == 32) { "Key size must be 32 bytes" }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
         return when (algorithm) {
             Algorithm.A128GCM, Algorithm.A192GCM, Algorithm.A256GCM -> {
                 Cipher.getInstance("AES/GCM/NoPadding").run {
-                    init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce))
+                    init(Cipher.ENCRYPT_MODE, SecretKeySpec(rawKey, "AES"), GCMParameterSpec(128, nonce))
                     aad?.let { updateAAD(it) }
                     doFinal(messagePlaintext)
                 }
             }
             Algorithm.A128CBC, Algorithm.A192CBC, Algorithm.A256CBC -> {
                 Cipher.getInstance("AES/CBC/PKCS5Padding").run {
-                    init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(nonce))
+                    init(Cipher.ENCRYPT_MODE, SecretKeySpec(rawKey, "AES"), IvParameterSpec(nonce))
                     doFinal(messagePlaintext)
                 }
             }
@@ -246,18 +256,20 @@ actual object Crypto {
      */
     actual suspend fun decrypt(
         algorithm: Algorithm,
-        key: ByteArray,
+        key: SecretKey,
         nonce: ByteArray,
         messageCiphertext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
+        key.checkNotDestroyed()
+        val rawKey = key.data
         when (algorithm) {
             Algorithm.A128GCM, Algorithm.A192GCM, Algorithm.A256GCM -> {
                 return try {
                     Cipher.getInstance("AES/GCM/NoPadding").run {
                         init(
                             Cipher.DECRYPT_MODE,
-                            SecretKeySpec(key, "AES"),
+                            SecretKeySpec(rawKey, "AES"),
                             GCMParameterSpec(128, nonce)
                         )
                         aad?.let { updateAAD(it) }
@@ -265,27 +277,39 @@ actual object Crypto {
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
-                    throw IllegalStateException("Error decrypting", e)
+                    throw IllegalStateException("Decryption failed", e)
                 }
             }
             Algorithm.A128CBC, Algorithm.A192CBC, Algorithm.A256CBC -> {
                 return try {
                     Cipher.getInstance("AES/CBC/PKCS5Padding").run {
-                        init(
-                            Cipher.DECRYPT_MODE,
-                            SecretKeySpec(key, "AES"),
-                            IvParameterSpec(nonce)
-                        )
+                        init(Cipher.DECRYPT_MODE, SecretKeySpec(rawKey, "AES"), IvParameterSpec(nonce))
                         doFinal(messageCiphertext)
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
-                    throw IllegalStateException("Error decrypting", e)
+                    throw IllegalStateException("Decryption failed", e)
                 }
             }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
     }
+
+    actual suspend fun encrypt(
+        algorithm: Algorithm,
+        key: ByteArray,
+        nonce: ByteArray,
+        messagePlaintext: ByteArray,
+        aad: ByteArray?
+    ): ByteArray = SecretKey(key).use { encrypt(algorithm, it, nonce, messagePlaintext, aad) }
+
+    actual suspend fun decrypt(
+        algorithm: Algorithm,
+        key: ByteArray,
+        nonce: ByteArray,
+        messageCiphertext: ByteArray,
+        aad: ByteArray?
+    ): ByteArray = SecretKey(key).use { decrypt(algorithm, it, nonce, messageCiphertext, aad) }
 
     /**
      * Checks signature validity.
@@ -656,7 +680,7 @@ actual object Crypto {
     actual suspend fun kemDecapsulate(
         key: MlKemPrivateKey,
         ciphertext: ByteArray
-    ): ByteArray {
+    ): SecretKey {
         if (!BouncyCastlePqc.isAvailable) {
             throw UnsupportedOperationException("ML-KEM is not supported in the current environment")
         }
@@ -672,8 +696,8 @@ actual object Crypto {
     actual suspend fun keyAgreement(
         key: EcPrivateKey,
         otherKey: EcPublicKey
-    ): ByteArray =
-        when (key.curve) {
+    ): SecretKey {
+        val secretBytes = when (key.curve) {
             EcCurve.P256,
             EcCurve.P384,
             EcCurve.P521,
@@ -724,6 +748,10 @@ actual object Crypto {
                 }
             }
         }
+        val secretKey = SecretKey(secretBytes)
+        secretBytes.secureZero()
+        return secretKey
+    }
 
     internal actual suspend fun validateCertChainSignatures(certChain: X509CertChain): Boolean {
         val javaCerts = certChain.javaX509Certificates

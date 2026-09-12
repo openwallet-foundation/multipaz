@@ -517,7 +517,7 @@ object Hpke {
         pskId: ByteArray?,
         authKey: AsymmetricKey?
     ): Encrypter {
-        val dh = Crypto.keyAgreement(encapsulatedKey, receiverPublicKey)
+        val dh = Crypto.keyAgreement(encapsulatedKey, receiverPublicKey).use { it.encoded }
         val enc = encapsulatedKey.publicKey.serialize()
         val kemContext = enc + receiverPublicKey.serialize()
 
@@ -535,19 +535,23 @@ object Hpke {
             }
         }
 
-        val context = calcContext(
-            mode = mode,
-            cipherSuite = cipherSuite,
-            dh = dh,
-            info = info,
-            kemContext = kemContext,
-            receiverKey = null,
-            receiverKeyPub = receiverPublicKey,
-            psk = psk,
-            pskId = pskId,
-            authKey = authKey,
-            authKeyPub = null,
-        )
+        val context = try {
+            calcContext(
+                mode = mode,
+                cipherSuite = cipherSuite,
+                dh = dh,
+                info = info,
+                kemContext = kemContext,
+                receiverKey = null,
+                receiverKeyPub = receiverPublicKey,
+                psk = psk,
+                pskId = pskId,
+                authKey = authKey,
+                authKeyPub = null,
+            )
+        } finally {
+            dh.secureZero()
+        }
 
         return Encrypter(
             encapsulatedKey = ByteString(enc),

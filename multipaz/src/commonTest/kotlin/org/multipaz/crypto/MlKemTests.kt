@@ -12,6 +12,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
@@ -47,19 +48,26 @@ class MlKemTests {
 
             // Decapsulate
             val decapsulatedSecret = Crypto.kemDecapsulate(privKey, kemResult.ciphertext)
-            assertContentEquals(kemResult.sharedSecret, decapsulatedSecret)
+            assertEquals(kemResult.sharedSecret, decapsulatedSecret)
 
             // Negative test 1: decapsulate with another private key (implicit rejection in ML-KEM)
             val otherPrivKey = Crypto.createMlKemPrivateKey(alg)
             val otherDecapsulatedSecret = Crypto.kemDecapsulate(otherPrivKey, kemResult.ciphertext)
-            assertFalse(kemResult.sharedSecret.contentEquals(otherDecapsulatedSecret))
+            assertNotEquals(kemResult.sharedSecret, otherDecapsulatedSecret)
 
             // Negative test 2: decapsulate tampered ciphertext (implicit rejection in ML-KEM)
             val tamperedCiphertext = kemResult.ciphertext.copyOf()
             tamperedCiphertext[tamperedCiphertext.size - 1] =
                 (tamperedCiphertext[tamperedCiphertext.size - 1].toInt() xor 0x01).toByte()
             val tamperedDecapsulatedSecret = Crypto.kemDecapsulate(privKey, tamperedCiphertext)
-            assertFalse(kemResult.sharedSecret.contentEquals(tamperedDecapsulatedSecret))
+            assertNotEquals(kemResult.sharedSecret, tamperedDecapsulatedSecret)
+
+            kemResult.close()
+            decapsulatedSecret.close()
+            otherDecapsulatedSecret.close()
+            tamperedDecapsulatedSecret.close()
+            privKey.close()
+            otherPrivKey.close()
         }
     }
 
@@ -205,7 +213,8 @@ class MlKemTests {
             assertEquals(32, kemResult.sharedSecret.size)
 
             val decapsulatedSecret = ks.kemDecapsulate(alias, kemResult.ciphertext)
-            assertContentEquals(kemResult.sharedSecret, decapsulatedSecret)
+            assertContentEquals(kemResult.sharedSecret.encoded, decapsulatedSecret)
+            kemResult.close()
         }
     }
 }

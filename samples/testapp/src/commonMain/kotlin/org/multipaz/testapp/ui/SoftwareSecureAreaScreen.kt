@@ -203,7 +203,7 @@ private suspend fun swTestUnguarded(
                 "Decapsulated shared secret",
                 sharedSecret
             )
-            if (kemResult.sharedSecret.contentEquals(sharedSecret)) {
+            if (kemResult.sharedSecret.encoded.contentEquals(sharedSecret)) {
                 showToast("KEM in (${t1 - t0})")
             } else {
                 showToast("KEM failed: secret mismatch")
@@ -211,6 +211,8 @@ private suspend fun swTestUnguarded(
         } catch (e: KeyLockedException) {
             e.printStackTrace()
             showToast("${e.message}")
+        } finally {
+            kemResult.close()
         }
     } else {
         val otherKeyPairForEcdh = Crypto.createEcPrivateKey(algorithm.curve!!)
