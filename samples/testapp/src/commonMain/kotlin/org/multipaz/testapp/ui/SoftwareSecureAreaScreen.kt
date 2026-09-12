@@ -215,24 +215,25 @@ private suspend fun swTestUnguarded(
             kemResult.close()
         }
     } else {
-        val otherKeyPairForEcdh = Crypto.createEcPrivateKey(algorithm.curve!!)
-        try {
-            val t0 = Clock.System.now()
-            val Zab = softwareSecureArea.keyAgreement(
-                "testKey",
-                otherKeyPairForEcdh.publicKey,
-                unlockReason,
-            )
-            val t1 = Clock.System.now()
-            Logger.dHex(
-                TAG,
-                "Calculated ECDH",
-                Zab
-            )
-            showToast("ECDH in (${t1 - t0})")
-        } catch (e: KeyLockedException) {
-            e.printStackTrace()
-            showToast("${e.message}")
+        Crypto.createEcPrivateKey(algorithm.curve!!).use { otherKeyPairForEcdh ->
+            try {
+                val t0 = Clock.System.now()
+                val Zab = softwareSecureArea.keyAgreement(
+                    "testKey",
+                    otherKeyPairForEcdh.publicKey,
+                    unlockReason,
+                )
+                val t1 = Clock.System.now()
+                Logger.dHex(
+                    TAG,
+                    "Calculated ECDH",
+                    Zab
+                )
+                showToast("ECDH in (${t1 - t0})")
+            } catch (e: KeyLockedException) {
+                e.printStackTrace()
+                showToast("${e.message}")
+            }
         }
     }
 }

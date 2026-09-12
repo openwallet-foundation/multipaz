@@ -467,16 +467,17 @@ object Hpke {
         pskId: ByteArray? = null,
         authKey: AsymmetricKey? = null
     ): Encrypter {
-        val encapsulatedPublicKey = Crypto.createEcPrivateKey(cipherSuite.kem.curve)
-        return getEncrypterInternal(
-            cipherSuite = cipherSuite,
-            receiverPublicKey = receiverPublicKey,
-            info = info,
-            encapsulatedKey = encapsulatedPublicKey,
-            psk = psk,
-            pskId = pskId,
-            authKey = authKey
-        )
+        return Crypto.createEcPrivateKey(cipherSuite.kem.curve).use { encapsulatedPublicKey ->
+            getEncrypterInternal(
+                cipherSuite = cipherSuite,
+                receiverPublicKey = receiverPublicKey,
+                info = info,
+                encapsulatedKey = encapsulatedPublicKey,
+                psk = psk,
+                pskId = pskId,
+                authKey = authKey
+            )
+        }
     }
 
     internal fun EcPublicKey.serialize(): ByteArray {

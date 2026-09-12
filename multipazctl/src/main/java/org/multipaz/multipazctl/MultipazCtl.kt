@@ -77,63 +77,63 @@ object MultipazCtl {
         val curveName = getArg(args, "curve", "P-384")
         val curve = EcCurve.fromJwkName(curveName)
 
-        val iacaKey = Crypto.createEcPrivateKey(curve)
-
-        val issuerAltNameUrl = getArg(args,
-            "issuer_alt_name_url",
-            "https://issuer.example.com/website"
-        )
-
-        val crlUrl = getArg(
-            args,
-            "crl_url",
-            "https://issuer.example.com/crl.crl"
-        )
-
-        val serial = ASN1Integer.fromRandom(128)
-
-        val iacaCertificate = runBlocking {
-            MdocUtil.generateIacaCertificate(
-                AsymmetricKey.anonymous(iacaKey),
-                subjectAndIssuer,
-                serial,
-                validFrom,
-                validUntil,
-                issuerAltNameUrl,
-                crlUrl
+        Crypto.createEcPrivateKey(curve).use { iacaKey ->
+            val issuerAltNameUrl = getArg(args,
+                "issuer_alt_name_url",
+                "https://issuer.example.com/website"
             )
-        }
 
-        val iacaCrl = runBlocking {
-            buildX509Crl(
-                signingKey = AsymmetricKey.anonymous(iacaKey),
-                issuer = subjectAndIssuer,
-                thisUpdate = validFrom,
-                nextUpdate = null
-            ) {
-                // empty
+            val crlUrl = getArg(
+                args,
+                "crl_url",
+                "https://issuer.example.com/crl.crl"
+            )
+
+            val serial = ASN1Integer.fromRandom(128)
+
+            val iacaCertificate = runBlocking {
+                MdocUtil.generateIacaCertificate(
+                    AsymmetricKey.anonymous(iacaKey),
+                    subjectAndIssuer,
+                    serial,
+                    validFrom,
+                    validUntil,
+                    issuerAltNameUrl,
+                    crlUrl
+                )
             }
-        }
 
-        println("- Generated self-signed IACA cert and private key with curve $curve")
+            val iacaCrl = runBlocking {
+                buildX509Crl(
+                    signingKey = AsymmetricKey.anonymous(iacaKey),
+                    issuer = subjectAndIssuer,
+                    thisUpdate = validFrom,
+                    nextUpdate = null
+                ) {
+                    // empty
+                }
+            }
 
-        File(privateKeyOutputFilename).outputStream().bufferedWriter().let {
-            it.write(iacaKey.toPem())
-            it.close()
-        }
-        println("- Wrote private key to $privateKeyOutputFilename")
+            println("- Generated self-signed IACA cert and private key with curve $curve")
 
-        File(certificateOutputFilename).outputStream().bufferedWriter().let {
-            it.write(iacaCertificate.toPem())
-            it.close()
-        }
-        println("- Wrote IACA cert to $certificateOutputFilename")
+            File(privateKeyOutputFilename).outputStream().bufferedWriter().let {
+                it.write(iacaKey.toPem())
+                it.close()
+            }
+            println("- Wrote private key to $privateKeyOutputFilename")
 
-        File(crlOutputFilename).outputStream().bufferedWriter().let {
-            it.write(iacaCrl.toPem())
-            it.close()
+            File(certificateOutputFilename).outputStream().bufferedWriter().let {
+                it.write(iacaCertificate.toPem())
+                it.close()
+            }
+            println("- Wrote IACA cert to $certificateOutputFilename")
+
+            File(crlOutputFilename).outputStream().bufferedWriter().let {
+                it.write(iacaCrl.toPem())
+                it.close()
+            }
+            println("- Wrote IACA CRL to $crlOutputFilename")
         }
-        println("- Wrote IACA CRL to $crlOutputFilename")
     }
 
     suspend fun generateDs(args: Array<String>) {
@@ -149,74 +149,76 @@ object MultipazCtl {
             String(File(iacaPrivateKeyFilename).readBytes(), StandardCharsets.US_ASCII),
             iacaCert.ecPublicKey)
 
-        val certificateOutputFilename =
-            getArg(args, "out_certificate", "ds_certificate.pem")
-        val privateKeyOutputFilename =
-            getArg(args, "out_private_key", "ds_private_key.pem")
-        val jwkOutputFilename =
-            getArg(args, "out_jwk", "ds_jwk.json")
+        iacaPrivateKey.use {
+            val certificateOutputFilename =
+                getArg(args, "out_certificate", "ds_certificate.pem")
+            val privateKeyOutputFilename =
+                getArg(args, "out_private_key", "ds_private_key.pem")
+            val jwkOutputFilename =
+                getArg(args, "out_jwk", "ds_jwk.json")
 
-        // Requirements for the IACA certificate is defined in ISO/IEC 18013-5:2021 Annex B
+            // Requirements for the IACA certificate is defined in ISO/IEC 18013-5:2021 Annex B
 
-        val subject = X500Name.fromName(
-            getArg(args, "subject", "CN=OWF Multipaz TEST DS,C=US")
-        )
-
-        val validityInYears = getArg(args, "validity_in_years", "1").toInt()
-        val now = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
-        val validFrom = now
-        val validUntil = now.plus(DateTimePeriod(years = validityInYears), TimeZone.currentSystemDefault())
-
-        val curveName = getArg(args, "curve", "P-256")
-        val curve = EcCurve.fromJwkName(curveName)
-
-        val dsKey = Crypto.createEcPrivateKey(curve)
-
-        val serial = ASN1Integer.fromRandom(128)
-
-        val dsCertificate = runBlocking {
-            MdocUtil.generateDsCertificate(
-                AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaPrivateKey),
-                dsKey.publicKey,
-                subject,
-                serial,
-                validFrom,
-                validUntil
+            val subject = X500Name.fromName(
+                getArg(args, "subject", "CN=OWF Multipaz TEST DS,C=US")
             )
+
+            val validityInYears = getArg(args, "validity_in_years", "1").toInt()
+            val now = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
+            val validFrom = now
+            val validUntil = now.plus(DateTimePeriod(years = validityInYears), TimeZone.currentSystemDefault())
+
+            val curveName = getArg(args, "curve", "P-256")
+            val curve = EcCurve.fromJwkName(curveName)
+
+            Crypto.createEcPrivateKey(curve).use { dsKey ->
+                val serial = ASN1Integer.fromRandom(128)
+
+                val dsCertificate = runBlocking {
+                    MdocUtil.generateDsCertificate(
+                        AsymmetricKey.X509CertifiedExplicit(X509CertChain(listOf(iacaCert)), iacaPrivateKey),
+                        dsKey.publicKey,
+                        subject,
+                        serial,
+                        validFrom,
+                        validUntil
+                    )
+                }
+
+                println("- Generated DS cert and private key with curve $curve")
+
+                println("- Loaded IACA cert from $iacaCertificateFilename")
+                println("- Loaded IACA private key from $iacaPrivateKeyFilename")
+
+                File(privateKeyOutputFilename).outputStream().bufferedWriter().let {
+                    it.write(dsKey.toPem())
+                    it.close()
+                }
+                println("- Wrote DS private key to $privateKeyOutputFilename")
+
+                File(certificateOutputFilename).outputStream().bufferedWriter().let {
+                    it.write(dsCertificate.toPem())
+                    it.close()
+                }
+                println("- Wrote DS cert to $certificateOutputFilename")
+
+                File(jwkOutputFilename).outputStream().bufferedWriter().let {
+                    val json = dsKey.toJwk(buildJsonObject {
+                        put(
+                            key = "x5c",
+                            element = X509CertChain(
+                                certificates = listOf(dsCertificate, iacaCert)
+                            ).toX5c(excludeRoot = false)
+                        )
+                    })
+                    it.write(Json {
+                        prettyPrint = true
+                    }.encodeToString(json))
+                    it.close()
+                }
+                println("- Wrote DS cert and key to $jwkOutputFilename")
+            }
         }
-
-        println("- Generated DS cert and private key with curve $curve")
-
-        println("- Loaded IACA cert from $iacaCertificateFilename")
-        println("- Loaded IACA private key from $iacaPrivateKeyFilename")
-
-        File(privateKeyOutputFilename).outputStream().bufferedWriter().let {
-            it.write(dsKey.toPem())
-            it.close()
-        }
-        println("- Wrote DS private key to $privateKeyOutputFilename")
-
-        File(certificateOutputFilename).outputStream().bufferedWriter().let {
-            it.write(dsCertificate.toPem())
-            it.close()
-        }
-        println("- Wrote DS cert to $certificateOutputFilename")
-
-        File(jwkOutputFilename).outputStream().bufferedWriter().let {
-            val json = dsKey.toJwk(buildJsonObject {
-                put(
-                    key = "x5c",
-                    element = X509CertChain(
-                        certificates = listOf(dsCertificate, iacaCert)
-                    ).toX5c(excludeRoot = false)
-                )
-            })
-            it.write(Json {
-                prettyPrint = true
-            }.encodeToString(json))
-            it.close()
-        }
-        println("- Wrote DS cert and key to $jwkOutputFilename")
     }
 
     suspend fun generateReaderRoot(args: Array<String>) {
@@ -242,52 +244,52 @@ object MultipazCtl {
             "https://reader-ca.example.com/crl.crl"
         )
 
-        val readerRootKey = Crypto.createEcPrivateKey(curve)
-
-        val readerRootCertificate = runBlocking {
-            MdocUtil.generateReaderRootCertificate(
-                readerRootKey = AsymmetricKey.anonymous(readerRootKey),
-                subject = subjectAndIssuer,
-                serial = serial,
-                validFrom = validFrom,
-                validUntil = validUntil,
-                crlUrl = crlUrl
-            )
-        }
-
-        val readerRootCrl = runBlocking {
-            buildX509Crl(
-                signingKey = AsymmetricKey.anonymous(readerRootKey),
-                issuer = subjectAndIssuer,
-                thisUpdate = validFrom,
-                nextUpdate = null,
-            ) {
-                // empty
+        Crypto.createEcPrivateKey(curve).use { readerRootKey ->
+            val readerRootCertificate = runBlocking {
+                MdocUtil.generateReaderRootCertificate(
+                    readerRootKey = AsymmetricKey.anonymous(readerRootKey),
+                    subject = subjectAndIssuer,
+                    serial = serial,
+                    validFrom = validFrom,
+                    validUntil = validUntil,
+                    crlUrl = crlUrl
+                )
             }
-        }
 
-        println("- Generated self-signed reader root cert and private key with curve $curve")
+            val readerRootCrl = runBlocking {
+                buildX509Crl(
+                    signingKey = AsymmetricKey.anonymous(readerRootKey),
+                    issuer = subjectAndIssuer,
+                    thisUpdate = validFrom,
+                    nextUpdate = null,
+                ) {
+                    // empty
+                }
+            }
 
-        val certificateOutputFilename = getArg(args, "out_certificate", "reader_root_certificate.pem")
-        val privateKeyOutputFilename = getArg(args, "out_private_key", "reader_root_private_key.pem")
-        val crlOutputFilename = getArg(args, "out_crl", "reader_root_crl.pem")
-        File(privateKeyOutputFilename).writer().let {
-            it.write(readerRootKey.toPem())
-            it.close()
-        }
-        println("- Wrote reader root private key to $privateKeyOutputFilename")
+            println("- Generated self-signed reader root cert and private key with curve $curve")
 
-        File(certificateOutputFilename).writer().let {
-            it.write(readerRootCertificate.toPem())
-            it.close()
-        }
-        println("- Wrote reader root cert to $certificateOutputFilename")
+            val certificateOutputFilename = getArg(args, "out_certificate", "reader_root_certificate.pem")
+            val privateKeyOutputFilename = getArg(args, "out_private_key", "reader_root_private_key.pem")
+            val crlOutputFilename = getArg(args, "out_crl", "reader_root_crl.pem")
+            File(privateKeyOutputFilename).writer().let {
+                it.write(readerRootKey.toPem())
+                it.close()
+            }
+            println("- Wrote reader root private key to $privateKeyOutputFilename")
 
-        File(crlOutputFilename).writer().let {
-            it.write(readerRootCrl.toPem())
-            it.close()
+            File(certificateOutputFilename).writer().let {
+                it.write(readerRootCertificate.toPem())
+                it.close()
+            }
+            println("- Wrote reader root cert to $certificateOutputFilename")
+
+            File(crlOutputFilename).writer().let {
+                it.write(readerRootCrl.toPem())
+                it.close()
+            }
+            println("- Wrote reader root CRL to $crlOutputFilename")
         }
-        println("- Wrote reader root CRL to $crlOutputFilename")
     }
 
     suspend fun generateReaderCert(args: Array<String>) {
@@ -303,79 +305,81 @@ object MultipazCtl {
             String(File(readerRootPrivateKeyFilename).readBytes(), StandardCharsets.US_ASCII),
             readerRootCert.ecPublicKey)
 
-        val certificateOutputFilename =
-            getArg(args, "out_certificate", "reader_certificate.pem")
-        val privateKeyOutputFilename =
-            getArg(args, "out_private_key", "reader_private_key.pem")
-        val dnsName = getArg(args, "dns_name", "localhost")
-        val jwkOutputFilename =
-            getArg(args, "out_jwk", "ds_jwk.json")
+        readerRootPrivateKey.use {
+            val certificateOutputFilename =
+                getArg(args, "out_certificate", "reader_certificate.pem")
+            val privateKeyOutputFilename =
+                getArg(args, "out_private_key", "reader_private_key.pem")
+            val dnsName = getArg(args, "dns_name", "localhost")
+            val jwkOutputFilename =
+                getArg(args, "out_jwk", "ds_jwk.json")
 
-        // Requirements for the Reader Root certificate is defined in ISO/IEC 18013-5:2021 Annex B
+            // Requirements for the Reader Root certificate is defined in ISO/IEC 18013-5:2021 Annex B
 
-        val subject = X500Name.fromName(
-            getArg(args, "subject", "CN=OWF Multipaz TEST Reader,C=US")
-        )
-
-        val validityInYears = getArg(args, "validity_in_years", "1").toInt()
-        val now = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
-        val validFrom = now
-        val validUntil = now.plus(DateTimePeriod(years = validityInYears), TimeZone.currentSystemDefault())
-
-        val curveName = getArg(args, "curve", "P-256")
-        val curve = EcCurve.fromJwkName(curveName)
-
-        val readerKey = Crypto.createEcPrivateKey(curve)
-
-        val serial = ASN1Integer.fromRandom(128)
-
-        val readerCertificate = runBlocking {
-            MdocUtil.generateReaderCertificate(
-                readerRootKey = AsymmetricKey.X509CertifiedExplicit(
-                    certChain = X509CertChain(listOf(readerRootCert)),
-                    privateKey = readerRootPrivateKey
-                ),
-                readerKey = readerKey.publicKey,
-                subject = subject,
-                dnsName = dnsName.ifEmpty { null },
-                serial = serial,
-                validFrom = validFrom,
-                validUntil = validUntil
+            val subject = X500Name.fromName(
+                getArg(args, "subject", "CN=OWF Multipaz TEST Reader,C=US")
             )
+
+            val validityInYears = getArg(args, "validity_in_years", "1").toInt()
+            val now = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
+            val validFrom = now
+            val validUntil = now.plus(DateTimePeriod(years = validityInYears), TimeZone.currentSystemDefault())
+
+            val curveName = getArg(args, "curve", "P-256")
+            val curve = EcCurve.fromJwkName(curveName)
+
+            Crypto.createEcPrivateKey(curve).use { readerKey ->
+                val serial = ASN1Integer.fromRandom(128)
+
+                val readerCertificate = runBlocking {
+                    MdocUtil.generateReaderCertificate(
+                        readerRootKey = AsymmetricKey.X509CertifiedExplicit(
+                            certChain = X509CertChain(listOf(readerRootCert)),
+                            privateKey = readerRootPrivateKey
+                        ),
+                        readerKey = readerKey.publicKey,
+                        subject = subject,
+                        dnsName = dnsName.ifEmpty { null },
+                        serial = serial,
+                        validFrom = validFrom,
+                        validUntil = validUntil
+                    )
+                }
+
+                println("- Generated Reader cert and private key with curve $curve")
+
+                println("- Loaded reader root cert from $readerRootCertificateFilename")
+                println("- Loaded reader root private key from $readerRootPrivateKeyFilename")
+
+                File(privateKeyOutputFilename).outputStream().bufferedWriter().let {
+                    it.write(readerKey.toPem())
+                    it.close()
+                }
+                println("- Wrote reader private key to $privateKeyOutputFilename")
+
+                File(certificateOutputFilename).outputStream().bufferedWriter().let {
+                    it.write(readerCertificate.toPem())
+                    it.close()
+                }
+                println("- Wrote reader cert to $certificateOutputFilename")
+
+                File(jwkOutputFilename).outputStream().bufferedWriter().let {
+                    val json = readerKey.toJwk(buildJsonObject {
+                        put(
+                            key = "x5c",
+                            element = X509CertChain(
+                                certificates = listOf(readerCertificate, readerRootCert)
+                            ).toX5c(excludeRoot = false)
+                        )
+                    })
+                    it.write(Json {
+                        prettyPrint = true
+                    }.encodeToString(json))
+                    it.close()
+                }
+                println("- Wrote reader cert and key to $jwkOutputFilename")
+            }
         }
-
-        println("- Generated Reader cert and private key with curve $curve")
-
-        println("- Loaded reader root cert from $readerRootCertificateFilename")
-        println("- Loaded reader root private key from $readerRootPrivateKeyFilename")
-
-        File(privateKeyOutputFilename).outputStream().bufferedWriter().let {
-            it.write(readerKey.toPem())
-            it.close()
-        }
-        println("- Wrote reader private key to $privateKeyOutputFilename")
-
-        File(certificateOutputFilename).outputStream().bufferedWriter().let {
-            it.write(readerCertificate.toPem())
-            it.close()
-        }
-        println("- Wrote reader cert to $certificateOutputFilename")
-
-        File(jwkOutputFilename).outputStream().bufferedWriter().let {
-            val json = readerKey.toJwk(buildJsonObject {
-                put(
-                    key = "x5c",
-                    element = X509CertChain(
-                        certificates = listOf(readerCertificate, readerRootCert)
-                    ).toX5c(excludeRoot = false)
-                )
-            })
-            it.write(Json {
-                prettyPrint = true
-            }.encodeToString(json))
-            it.close()
-        }
-        println("- Wrote reader cert and key to $jwkOutputFilename")
     }
 
     fun printJwk(args: Array<String>) {
@@ -392,16 +396,18 @@ object MultipazCtl {
             String(File(privateKeyFilename).readBytes(), StandardCharsets.US_ASCII),
             certificate.ecPublicKey)
 
-        println("- Loaded cert from $certificateFilename")
-        println("- Loaded private key from $privateKeyFilename")
-        println("")
+        privateKey.use {
+            println("- Loaded cert from $certificateFilename")
+            println("- Loaded private key from $privateKeyFilename")
+            println("")
 
-        val json = buildJsonObject {
-            put("jwk", privateKey.toJwk())
-            put("x5c", X509CertChain(listOf(certificate)).toX5c(excludeRoot = false))
+            val json = buildJsonObject {
+                put("jwk", privateKey.toJwk())
+                put("x5c", X509CertChain(listOf(certificate)).toX5c(excludeRoot = false))
+            }
+            println(jsonPrettyPrint.encodeToString(json))
+            println("")
         }
-        println(jsonPrettyPrint.encodeToString(json))
-        println("")
     }
 
     fun usage(args: Array<String>) {

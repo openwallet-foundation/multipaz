@@ -233,20 +233,22 @@ private suspend fun seTestUnguarded(
         Logger.dHex(TAG, "Decapsulated shared secret ", sharedSecret)
         showToast("Decapsulated (${t1 - t0})")
     } else {
-        val otherKeyPairForEcdh = Crypto.createEcPrivateKey(EcCurve.P256)
-        val t0 = Clock.System.now()
-        val Zab = withContext(TestKeyUnlockDataProvider(keyUnlockData)) {
-            secureEnclaveSecureArea.keyAgreement(
-                "testKey",
-                otherKeyPairForEcdh.publicKey,
+        Crypto.createEcPrivateKey(EcCurve.P256).use { otherKeyPairForEcdh ->
+            val t0 = Clock.System.now()
+            val Zab = withContext(TestKeyUnlockDataProvider(keyUnlockData)) {
+                secureEnclaveSecureArea.keyAgreement(
+                    "testKey",
+                    otherKeyPairForEcdh.publicKey,
+                )
+            }
+            val t1 = Clock.System.now()
+            Logger.dHex(
+                TAG,
+                "Calculated ECDH ",
+                Zab
             )
+            showToast("ECDH (${t1 - t0})")
         }
-        val t1 = Clock.System.now()
-        Logger.dHex(
-            TAG,
-            "Calculated ECDH ",
-            Zab)
-        showToast("ECDH (${t1 - t0})")
     }
 }
 

@@ -394,52 +394,53 @@ open class CloudSecureArea protected constructor(
             response = communicate(serverUrl, request0.toCbor())
             val response0 = CloudSecureAreaProtocol.Command.fromCbor(response) as E2EESetupResponse0
             val deviceNonce = Random.Default.nextBytes(32)
-            val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
-            val dataToSign = Cbor.encode(
-                buildCborArray {
-                    add(eDeviceKey.publicKey.toCoseKey().toDataItem())
-                    add(response0.cloudNonce)
-                    add(deviceNonce)
-                }
-            )
-            val signature = platformSecureArea.sign(
-                "DeviceBindingKey",
-                dataToSign
-            )
-            val deviceAssertion = DeviceCheck.generateAssertion(
-                secureArea = platformSecureArea,
-                deviceAttestationId = deviceAttestationId!!,
-                assertion = AssertionNonce(ByteString(response0.cloudNonce))
-            )
-            val request1 = E2EESetupRequest1(
-                eDeviceKey = eDeviceKey.publicKey.toCoseKey(),
-                deviceNonce = deviceNonce,
-                signature = signature as EcSignature,
-                deviceAssertion = deviceAssertion,
-                serverState = response0.serverState
-            )
-            response = communicate(serverUrl, request1.toCbor())
-            val response1 = CloudSecureAreaProtocol.Command.fromCbor(response) as E2EESetupResponse1
-            val dataSignedByTheCloud = Cbor.encode(
-                buildCborArray {
-                    add(response1.eCloudKey.toDataItem())
-                    add(response0.cloudNonce)
-                    add(deviceNonce)
-                }
-            )
-            try {
-                Crypto.checkSignature(
-                    cloudBindingKey!!,
-                    dataSignedByTheCloud,
-                    Algorithm.ES256,
-                    response1.signature
+            val (zab, response1) = Crypto.createEcPrivateKey(EcCurve.P256).use { eDeviceKey ->
+                val dataToSign = Cbor.encode(
+                    buildCborArray {
+                        add(eDeviceKey.publicKey.toCoseKey().toDataItem())
+                        add(response0.cloudNonce)
+                        add(deviceNonce)
+                    }
                 )
-            } catch(e: SignatureVerificationException) {
-                throw CloudException("Error verifying signature", e)
-            }
+                val signature = platformSecureArea.sign(
+                    "DeviceBindingKey",
+                    dataToSign
+                )
+                val deviceAssertion = DeviceCheck.generateAssertion(
+                    secureArea = platformSecureArea,
+                    deviceAttestationId = deviceAttestationId!!,
+                    assertion = AssertionNonce(ByteString(response0.cloudNonce))
+                )
+                val request1 = E2EESetupRequest1(
+                    eDeviceKey = eDeviceKey.publicKey.toCoseKey(),
+                    deviceNonce = deviceNonce,
+                    signature = signature as EcSignature,
+                    deviceAssertion = deviceAssertion,
+                    serverState = response0.serverState
+                )
+                response = communicate(serverUrl, request1.toCbor())
+                val response1 = CloudSecureAreaProtocol.Command.fromCbor(response) as E2EESetupResponse1
+                val dataSignedByTheCloud = Cbor.encode(
+                    buildCborArray {
+                        add(response1.eCloudKey.toDataItem())
+                        add(response0.cloudNonce)
+                        add(deviceNonce)
+                    }
+                )
+                try {
+                    Crypto.checkSignature(
+                        cloudBindingKey!!,
+                        dataSignedByTheCloud,
+                        Algorithm.ES256,
+                        response1.signature
+                    )
+                } catch(e: SignatureVerificationException) {
+                    throw CloudException("Error verifying signature", e)
+                }
 
-            // Now we can derive SKDevice and SKCloud
-            val zab = Crypto.keyAgreement(eDeviceKey, response1.eCloudKey.ecPublicKey)
+                // Now we can derive SKDevice and SKCloud
+                Pair(Crypto.keyAgreement(eDeviceKey, response1.eCloudKey.ecPublicKey), response1)
+            }
             val salt = Crypto.digest(
                 Algorithm.SHA256,
                 Cbor.encode(

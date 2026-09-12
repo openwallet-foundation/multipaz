@@ -54,55 +54,55 @@ object JsonWebEncryption {
             else -> throw IllegalArgumentException("encAlg $encAlg not supported")
         }
 
-        val senderEphemeralKey = Crypto.createEcPrivateKey(recipientPublicKey.curve)
-
-        val protectedHeader = buildJsonObject {
-            put("alg", "ECDH-ES")
-            put("enc", encAlg.joseAlgorithmIdentifier)
-            apu?.let { put("apu", it.toByteArray().toBase64Url()) }
-            apv?.let { put("apv", it.toByteArray().toBase64Url()) }
-            put("epk", senderEphemeralKey.publicKey.toJwk())
-            kid?.let { put("kid", it) }
-            if (compressionLevel != null) {
-                put("zip", "DEF")
+        return Crypto.createEcPrivateKey(recipientPublicKey.curve).use { senderEphemeralKey ->
+            val protectedHeader = buildJsonObject {
+                put("alg", "ECDH-ES")
+                put("enc", encAlg.joseAlgorithmIdentifier)
+                apu?.let { put("apu", it.toByteArray().toBase64Url()) }
+                apv?.let { put("apv", it.toByteArray().toBase64Url()) }
+                put("epk", senderEphemeralKey.publicKey.toJwk())
+                kid?.let { put("kid", it) }
+                if (compressionLevel != null) {
+                    put("zip", "DEF")
+                }
             }
-        }
-        val protectedHeaderB64 = Json.encodeToString(protectedHeader).encodeToByteArray().toBase64Url()
+            val protectedHeaderB64 = Json.encodeToString(protectedHeader).encodeToByteArray().toBase64Url()
 
-        val algId = encAlg.joseAlgorithmIdentifier!!.toByteArray()
-        val contentEncryptionKey = Crypto.keyAgreement(senderEphemeralKey, recipientPublicKey).use { sharedSecret ->
-            concatKDF(
-                sharedSecretZ = sharedSecret,
-                keyDataLenBits = keyDataLenBits,
-                algorithmId = buildByteString { appendInt32(algId.size); append(algId) },
-                partyUInfo =  buildByteString { apu?.let { appendInt32(it.size); append(it) } },
-                partyVInfo =  buildByteString { apv?.let { appendInt32(it.size); append(it) } },
-                suppPubInfo = buildByteString { appendInt32(keyDataLenBits) }
-            )
+            val algId = encAlg.joseAlgorithmIdentifier!!.toByteArray()
+            val contentEncryptionKey = Crypto.keyAgreement(senderEphemeralKey, recipientPublicKey).use { sharedSecret ->
+                concatKDF(
+                    sharedSecretZ = sharedSecret,
+                    keyDataLenBits = keyDataLenBits,
+                    algorithmId = buildByteString { appendInt32(algId.size); append(algId) },
+                    partyUInfo =  buildByteString { apu?.let { appendInt32(it.size); append(it) } },
+                    partyVInfo =  buildByteString { apv?.let { appendInt32(it.size); append(it) } },
+                    suppPubInfo = buildByteString { appendInt32(keyDataLenBits) }
+                )
+            }
+            // 96 bits (12 bytes) is a recommended IV size, but AndroidOpenSSL provider requires
+            // it, so just go with that recommendation.
+            val nonce = random.nextBytes(12)
+            val uncompressed = Json.encodeToString(claimsSet).encodeToByteArray()
+            val messageToEncrypt = if (compressionLevel != null) {
+                uncompressed.deflate(compressionLevel)
+            } else {
+                uncompressed
+            }
+            val cipherTextWithTag = contentEncryptionKey.use { cek ->
+                Crypto.encrypt(
+                    algorithm = encAlg,
+                    key = cek,
+                    nonce = nonce,
+                    messagePlaintext = messageToEncrypt,
+                    aad = protectedHeaderB64.toByteArray(),
+                )
+            }
+            // Auth tag is a single block which is always 16 bytes long for AES, irrespective of
+            // the key length.
+            val cipherText = cipherTextWithTag.copyOfRange(0, cipherTextWithTag.size - 16)
+            val authTag = cipherTextWithTag.copyOfRange(cipherTextWithTag.size - 16, cipherTextWithTag.size)
+            protectedHeaderB64 + "." + "." + nonce.toBase64Url() + "." + cipherText.toBase64Url() + "." + authTag.toBase64Url()
         }
-        // 96 bits (12 bytes) is a recommended IV size, but AndroidOpenSSL provider requires
-        // it, so just go with that recommendation.
-        val nonce = random.nextBytes(12)
-        val uncompressed = Json.encodeToString(claimsSet).encodeToByteArray()
-        val messageToEncrypt = if (compressionLevel != null) {
-            uncompressed.deflate(compressionLevel)
-        } else {
-            uncompressed
-        }
-        val cipherTextWithTag = contentEncryptionKey.use { cek ->
-            Crypto.encrypt(
-                algorithm = encAlg,
-                key = cek,
-                nonce = nonce,
-                messagePlaintext = messageToEncrypt,
-                aad = protectedHeaderB64.toByteArray(),
-            )
-        }
-        // Auth tag is a single block which is always 16 bytes long for AES, irrespective of
-        // the key length.
-        val cipherText = cipherTextWithTag.copyOfRange(0, cipherTextWithTag.size - 16)
-        val authTag = cipherTextWithTag.copyOfRange(cipherTextWithTag.size - 16, cipherTextWithTag.size)
-        return protectedHeaderB64 + "." + "." + nonce.toBase64Url() + "." + cipherText.toBase64Url() + "." + authTag.toBase64Url()
     }
 
     /**

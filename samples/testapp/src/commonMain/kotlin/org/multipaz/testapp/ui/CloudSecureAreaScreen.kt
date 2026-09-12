@@ -524,18 +524,19 @@ private suspend fun csaTestUnguarded(
         }
         kemResult.close()
     } else {
-        val otherKeyPairForEcdh = Crypto.createEcPrivateKey(algorithm.curve!!)
-        val t0 = Clock.System.now()
-        val Zab = cloudSecureArea!!.keyAgreement(
-            "testKey",
-            otherKeyPairForEcdh.publicKey
-        )
-        val t1 = Clock.System.now()
-        Logger.dHex(
-            TAG,
-            "Calculated ECDH",
-            Zab
-        )
-        showToast("ECDH in (${t1 - t0})")
+        Crypto.createEcPrivateKey(algorithm.curve!!).use { otherKeyPairForEcdh ->
+            val t0 = Clock.System.now()
+            val Zab = cloudSecureArea!!.keyAgreement(
+                "testKey",
+                otherKeyPairForEcdh.publicKey
+            )
+            val t1 = Clock.System.now()
+            Logger.dHex(
+                TAG,
+                "Calculated ECDH",
+                Zab
+            )
+            showToast("ECDH in (${t1 - t0})")
+        }
     }
 }

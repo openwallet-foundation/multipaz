@@ -245,7 +245,11 @@ data class Session(
     var readerEngagementEncodedBase64: String? = null,
     var annexAMessageCounter: Int = 0,
     var annexADeviceEngagementEncodedBase64: String? = null,
-) {
+) : AutoCloseable {
+    override fun close() {
+        encryptionKey.close()
+    }
+
     companion object
 }
 
@@ -595,8 +599,9 @@ private suspend fun handleDcBegin(
             contentType = ContentType.Application.Json,
             text = json.encodeToString(beginResponse)
         )
+    } finally {
+        session.close()
     }
-
 }
 
 private suspend fun handleDcBeginRawDcql(
@@ -633,50 +638,52 @@ private suspend fun handleDcBeginRawDcql(
         issuerIdentifiers = issuerIdentifiers,
     )
 
-    val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
-    val sessionId = verifierSessionTable.insert(
-        key = null,
-        data = ByteString(session.toCbor()),
-        expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
-    )
-
-    val readerAuthKey = getReaderIdentity()
-
-    val rawDcqlJson = Json.decodeFromString(JsonObject.serializer(), request.rawDcql)
-    val dcqlToUse = VerificationUtil.injectIssuerIdentifiersIntoDcql(rawDcqlJson, session.issuerIdentifiers)
-
-    val dcRequestString = calcDcRequestStringOpenID4VPforDCQL(
-        version = version,
-        session = session,
-        nonce = session.nonce,
-        readerPublicKey = session.encryptionKey.publicKey as EcPublicKeyDoubleCoordinate,
-        readerAuthKey = readerAuthKey,
-        signRequest = request.signRequest,
-        encryptResponse = request.encryptResponse,
-        dcql = dcqlToUse,
-        responseMode = OpenID4VP.ResponseMode.DC_API,
-        responseUri = null
-    )
-    Logger.i(TAG, "dcRequestString: $dcRequestString")
-    val json = Json { ignoreUnknownKeys = true }
-    val responseString = json.encodeToString(
-        DCBeginResponse(
-            sessionId = sessionId,
-            dcRequestProtocol = when (version) {
-                OpenID4VP.Version.DRAFT_24 -> "openidvp"
-                OpenID4VP.Version.DRAFT_29 -> {
-                    if (request.signRequest) "openid4vp-v1-signed" else "openid4vp-v1-unsigned"
-                }
-            },
-            dcRequestString = dcRequestString,
-            dcRequestProtocol2 = null,
-            dcRequestString2 = null
+    session.use {
+        val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
+        val sessionId = verifierSessionTable.insert(
+            key = null,
+            data = ByteString(session.toCbor()),
+            expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
         )
-    )
-    call.respondText(
-        contentType = ContentType.Application.Json,
-        text = responseString
-    )
+
+        val readerAuthKey = getReaderIdentity()
+
+        val rawDcqlJson = Json.decodeFromString(JsonObject.serializer(), request.rawDcql)
+        val dcqlToUse = VerificationUtil.injectIssuerIdentifiersIntoDcql(rawDcqlJson, session.issuerIdentifiers)
+
+        val dcRequestString = calcDcRequestStringOpenID4VPforDCQL(
+            version = version,
+            session = session,
+            nonce = session.nonce,
+            readerPublicKey = session.encryptionKey.publicKey as EcPublicKeyDoubleCoordinate,
+            readerAuthKey = readerAuthKey,
+            signRequest = request.signRequest,
+            encryptResponse = request.encryptResponse,
+            dcql = dcqlToUse,
+            responseMode = OpenID4VP.ResponseMode.DC_API,
+            responseUri = null
+        )
+        Logger.i(TAG, "dcRequestString: $dcRequestString")
+        val json = Json { ignoreUnknownKeys = true }
+        val responseString = json.encodeToString(
+            DCBeginResponse(
+                sessionId = sessionId,
+                dcRequestProtocol = when (version) {
+                    OpenID4VP.Version.DRAFT_24 -> "openidvp"
+                    OpenID4VP.Version.DRAFT_29 -> {
+                        if (request.signRequest) "openid4vp-v1-signed" else "openid4vp-v1-unsigned"
+                    }
+                },
+                dcRequestString = dcRequestString,
+                dcRequestProtocol2 = null,
+                dcRequestString2 = null
+            )
+        )
+        call.respondText(
+            contentType = ContentType.Application.Json,
+            text = responseString
+        )
+    }
 }
 
 private suspend fun handleAnnexAGetData(
@@ -692,29 +699,33 @@ private suspend fun handleAnnexAGetData(
         val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
         val encodedSession = verifierSessionTable.get(request.sessionId)
             ?: throw InvalidRequestException("No session for sessionId ${request.sessionId}")
-        val session = Session.fromCbor(encodedSession.toByteArray())
-        val timeWaiting = Clock.System.now() - requestStartedAt
-        if (timeWaiting > 30.seconds) {
-            throw IllegalStateException("Timed out waiting for response")
-        }
-        if (session.deviceResponses.isEmpty()) {
-            delay(0.5.seconds)
-            continue
-        }
-        val deviceResponse = session.deviceResponses.first()
-        if (deviceResponse.isEmpty()) {
-            throw IllegalStateException("Something went wrong")
-        }
+        val done = Session.fromCbor(encodedSession.toByteArray()).use { session ->
+            val timeWaiting = Clock.System.now() - requestStartedAt
+            if (timeWaiting > 30.seconds) {
+                throw IllegalStateException("Timed out waiting for response")
+            }
+            if (session.deviceResponses.isEmpty()) {
+                return@use false
+            }
+            val deviceResponse = session.deviceResponses.first()
+            if (deviceResponse.isEmpty()) {
+                throw IllegalStateException("Something went wrong")
+            }
 
-        val pages = mutableListOf<ResultPage>()
-        pages.addAll(handleGetDataMdoc(session, null))
+            val pages = mutableListOf<ResultPage>()
+            pages.addAll(handleGetDataMdoc(session, null))
 
-        val json = Json { ignoreUnknownKeys = true }
-        call.respondText(
-            contentType = ContentType.Application.Json,
-            text = json.encodeToString(OpenID4VPResultData(pages))
-        )
-        break
+            val json = Json { ignoreUnknownKeys = true }
+            call.respondText(
+                contentType = ContentType.Application.Json,
+                text = json.encodeToString(OpenID4VPResultData(pages))
+            )
+            true
+        }
+        if (done) {
+            break
+        }
+        delay(0.5.seconds)
     } while (true)
 }
 
@@ -728,36 +739,36 @@ private suspend fun handleDcGetData(
     val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
     val encodedSession = verifierSessionTable.get(request.sessionId)
         ?: throw InvalidRequestException("No session for sessionId ${request.sessionId}")
-    val session = Session.fromCbor(encodedSession.toByteArray())
+    Session.fromCbor(encodedSession.toByteArray()).use { session ->
+        //Logger.i(TAG, "Data received from WC3 DC API: protocol=${request.credentialProtocol} data=${request.credentialResponse}")
 
-    //Logger.i(TAG, "Data received from WC3 DC API: protocol=${request.credentialProtocol} data=${request.credentialResponse}")
-
-    when (request.credentialProtocol) {
-        "openid4vp" -> handleDcGetDataOpenID4VP(24, session, request.credentialResponse)
-        "openid4vp-v1-signed", "openid4vp-v1-unsigned" -> handleDcGetDataOpenID4VP(29, session, request.credentialResponse)
-        "org-iso-mdoc" -> handleDcGetDataMdocApi(session, request.credentialResponse)
-        else -> throw IllegalArgumentException("unsupported protocol ${request.credentialProtocol}")
-    }
-
-    val pages = mutableListOf<ResultPage>()
-    if (session.deviceResponses.size > 0) {
-        pages.addAll(handleGetDataMdoc(session, request.credentialProtocol))
-    }
-
-    if (session.verifiablePresentations.size > 0) {
-        val clientIdToUse = if (session.signRequest) {
-            "x509_san_dns:${session.host}"
-        } else {
-            "web-origin:${session.origin}"
+        when (request.credentialProtocol) {
+            "openid4vp" -> handleDcGetDataOpenID4VP(24, session, request.credentialResponse)
+            "openid4vp-v1-signed", "openid4vp-v1-unsigned" -> handleDcGetDataOpenID4VP(29, session, request.credentialResponse)
+            "org-iso-mdoc" -> handleDcGetDataMdocApi(session, request.credentialResponse)
+            else -> throw IllegalArgumentException("unsupported protocol ${request.credentialProtocol}")
         }
-        pages.addAll(handleGetDataSdJwt(session, request.credentialProtocol, clientIdToUse))
-    }
 
-    val json = Json { ignoreUnknownKeys = true }
-    call.respondText(
-        contentType = ContentType.Application.Json,
-        text = json.encodeToString(OpenID4VPResultData(pages))
-    )
+        val pages = mutableListOf<ResultPage>()
+        if (session.deviceResponses.size > 0) {
+            pages.addAll(handleGetDataMdoc(session, request.credentialProtocol))
+        }
+
+        if (session.verifiablePresentations.size > 0) {
+            val clientIdToUse = if (session.signRequest) {
+                "x509_san_dns:${session.host}"
+            } else {
+                "web-origin:${session.origin}"
+            }
+            pages.addAll(handleGetDataSdJwt(session, request.credentialProtocol, clientIdToUse))
+        }
+
+        val json = Json { ignoreUnknownKeys = true }
+        call.respondText(
+            contentType = ContentType.Application.Json,
+            text = json.encodeToString(OpenID4VPResultData(pages))
+        )
+    }
 }
 
 private suspend fun handleDcGetDataMdocApi(
@@ -978,22 +989,24 @@ private suspend fun handleAnnexABegin(
         issuerIdentifiers = issuerIdentifiers,
         deviceRequestVersion = request.deviceRequestVersion,
     )
-    val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
-    verifierSessionTable.insert(
-        key = sessionId,
-        data = ByteString(session.toCbor()),
-        expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
-    )
+    session.use {
+        val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
+        verifierSessionTable.insert(
+            key = sessionId,
+            data = ByteString(session.toCbor()),
+            expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
+        )
 
-    val uri = "mdoc://" + readerEngagementEncodedBase64
-    val json = Json { ignoreUnknownKeys = true }
-    call.respondText(
-        text = json.encodeToString(AnnexABeginResponse(
-            uri = uri,
-            sessionId = sessionId
-        )),
-        contentType = ContentType.Application.Json
-    )
+        val uri = "mdoc://" + readerEngagementEncodedBase64
+        val json = Json { ignoreUnknownKeys = true }
+        call.respondText(
+            text = json.encodeToString(AnnexABeginResponse(
+                uri = uri,
+                sessionId = sessionId
+            )),
+            contentType = ContentType.Application.Json
+        )
+    }
 }
 
 @OptIn(ExperimentalEncodingApi::class)
@@ -1006,154 +1019,154 @@ private suspend fun handleAnnexARequest(
     val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
     val encodedSession = verifierSessionTable.get(sessionId)
         ?: throw InvalidRequestException("No session for sessionId $sessionId")
-    val session = Session.fromCbor(encodedSession.toByteArray())
+    Session.fromCbor(encodedSession.toByteArray()).use { session ->
+        if (session.annexAMessageCounter == 0) {
+            // Expect DeviceEngagementMessage, send SessionEstablishment
+            val deviceEngagementMessageEncoded = requestData
+            Logger.iHex(TAG, "requestData", requestData)
+            val deviceEngagementBytesEncoded =
+                Cbor.decode(deviceEngagementMessageEncoded).get("deviceEngagementBytes")
+            val deviceEngagementEncoded = deviceEngagementBytesEncoded.asTagged.asBstr
 
-    if (session.annexAMessageCounter == 0) {
-        // Expect DeviceEngagementMessage, send SessionEstablishment
-        val deviceEngagementMessageEncoded = requestData
-        Logger.iHex(TAG, "requestData", requestData)
-        val deviceEngagementBytesEncoded =
-            Cbor.decode(deviceEngagementMessageEncoded).get("deviceEngagementBytes")
-        val deviceEngagementEncoded = deviceEngagementBytesEncoded.asTagged.asBstr
-
-        session.annexADeviceEngagementEncodedBase64 = deviceEngagementEncoded.toBase64Url()
-        val deviceEngagement = DeviceEngagement.fromDataItem(
-            Cbor.decode(session.annexADeviceEngagementEncodedBase64!!.fromBase64Url())
-        )
-        val deviceEngagementBytesDataItem = Tagged(
-            tagNumber = Tagged.ENCODED_CBOR,
-            taggedItem = Bstr(Cbor.encode(deviceEngagement.toDataItem()))
-        )
-        val readerEngagement = DeviceEngagement.fromDataItem(Cbor.decode(
-            session.readerEngagementEncodedBase64!!.fromBase64Url()
-        ))
-        val engagementToApp = Bstr(
-            Crypto.digest(Algorithm.SHA256, Cbor.encode(
-                Tagged(
-                    tagNumber = Tagged.ENCODED_CBOR,
-                    taggedItem = Bstr(session.readerEngagementEncodedBase64!!.fromBase64Url())
-                ))
+            session.annexADeviceEngagementEncodedBase64 = deviceEngagementEncoded.toBase64Url()
+            val deviceEngagement = DeviceEngagement.fromDataItem(
+                Cbor.decode(session.annexADeviceEngagementEncodedBase64!!.fromBase64Url())
             )
-        )
-        val sessionTranscript = buildCborArray {
-            add(deviceEngagementBytesDataItem)
-            add(Cbor.decode(readerEngagement.eDeviceKeyBytes.toByteArray()))
-            add(engagementToApp)
-        }
-        session.sessionTranscript = Cbor.encode(sessionTranscript)
-
-        val readerAuthKey = getReaderIdentity()
-
-        val deviceRequest = AnnexACalcRequest(
-            requestFormat = session.requestFormat,
-            requestDocType = session.requestDocType,
-            requestId = session.requestId,
-            multiDocumentRequestId = session.multiDocumentRequestId,
-            rawDcql = session.rawDcql,
-            readerAuthKey = readerAuthKey,
-            sessionTranscript = sessionTranscript,
-            issuerIdentifiers = session.issuerIdentifiers,
-            deviceRequestVersion = session.deviceRequestVersion,
-        )
-
-        val sessionEncryption = SessionEncryption(
-            role = MdocRole.MDOC_READER,
-            eSelfKey = session.encryptionKey,
-            remotePublicKey = deviceEngagement.eDeviceKey,
-            encodedSessionTranscript = Cbor.encode(sessionTranscript)
-        )
-        sessionEncryption.setSendSessionEstablishment(false)
-        val sessionDataMessage = sessionEncryption.encryptMessage(
-            messagePlaintext = Cbor.encode(deviceRequest.toDataItem()),
-            statusCode = null
-        )
-        session.annexAMessageCounter += 1
-        call.respondBytes(
-            bytes = sessionDataMessage,
-            contentType = ContentType.Application.Cbor
-        )
-    } else if (session.annexAMessageCounter == 1) {
-        // Expect SessionData, send SessionData
-
-        val deviceEngagement = DeviceEngagement.fromDataItem(
-            Cbor.decode(session.annexADeviceEngagementEncodedBase64!!.fromBase64Url())
-        )
-        val deviceEngagementBytesDataItem = Tagged(
-            tagNumber = Tagged.ENCODED_CBOR,
-            taggedItem = Bstr(Cbor.encode(deviceEngagement.toDataItem()))
-        )
-        val readerEngagement = DeviceEngagement.fromDataItem(Cbor.decode(
-            session.readerEngagementEncodedBase64!!.fromBase64Url()
-        ))
-        val engagementToApp = Bstr(
-            Crypto.digest(Algorithm.SHA256, Cbor.encode(
-                Tagged(
-                    tagNumber = Tagged.ENCODED_CBOR,
-                    taggedItem = Bstr(session.readerEngagementEncodedBase64!!.fromBase64Url())
-                ))
+            val deviceEngagementBytesDataItem = Tagged(
+                tagNumber = Tagged.ENCODED_CBOR,
+                taggedItem = Bstr(Cbor.encode(deviceEngagement.toDataItem()))
             )
-        )
-        val sessionTranscript = buildCborArray {
-            add(deviceEngagementBytesDataItem)
-            add(Cbor.decode(readerEngagement.eDeviceKeyBytes.toByteArray()))
-            add(engagementToApp)
-        }
-
-        val sessionEncryption = SessionEncryption(
-            role = MdocRole.MDOC_READER,
-            eSelfKey = session.encryptionKey,
-            remotePublicKey = deviceEngagement.eDeviceKey,
-            encodedSessionTranscript = Cbor.encode(sessionTranscript)
-        )
-        sessionEncryption.setSendSessionEstablishment(false)
-        sessionEncryption.setEncryptionCounters(
-            decryptedCounter = session.annexAMessageCounter,
-            encryptedCounter = session.annexAMessageCounter
-        )
-        val (sessionDataMessage, statusCode) = sessionEncryption.decryptMessage(
-            messageData = requestData
-        )
-        if (sessionDataMessage != null) {
-            session.deviceResponses.add(sessionDataMessage)
-        } else if (statusCode != null) {
-            Logger.e(TAG, "Unexpected status code $statusCode")
-            if (session.deviceResponses.isNotEmpty()) {
-                session.deviceResponses.add(byteArrayOf())
+            val readerEngagement = DeviceEngagement.fromDataItem(Cbor.decode(
+                session.readerEngagementEncodedBase64!!.fromBase64Url()
+            ))
+            val engagementToApp = Bstr(
+                Crypto.digest(Algorithm.SHA256, Cbor.encode(
+                    Tagged(
+                        tagNumber = Tagged.ENCODED_CBOR,
+                        taggedItem = Bstr(session.readerEngagementEncodedBase64!!.fromBase64Url())
+                    ))
+                )
+            )
+            val sessionTranscript = buildCborArray {
+                add(deviceEngagementBytesDataItem)
+                add(Cbor.decode(readerEngagement.eDeviceKeyBytes.toByteArray()))
+                add(engagementToApp)
             }
+            session.sessionTranscript = Cbor.encode(sessionTranscript)
+
+            val readerAuthKey = getReaderIdentity()
+
+            val deviceRequest = AnnexACalcRequest(
+                requestFormat = session.requestFormat,
+                requestDocType = session.requestDocType,
+                requestId = session.requestId,
+                multiDocumentRequestId = session.multiDocumentRequestId,
+                rawDcql = session.rawDcql,
+                readerAuthKey = readerAuthKey,
+                sessionTranscript = sessionTranscript,
+                issuerIdentifiers = session.issuerIdentifiers,
+                deviceRequestVersion = session.deviceRequestVersion,
+            )
+
+            val sessionEncryption = SessionEncryption(
+                role = MdocRole.MDOC_READER,
+                eSelfKey = session.encryptionKey,
+                remotePublicKey = deviceEngagement.eDeviceKey,
+                encodedSessionTranscript = Cbor.encode(sessionTranscript)
+            )
+            sessionEncryption.setSendSessionEstablishment(false)
+            val sessionDataMessage = sessionEncryption.encryptMessage(
+                messagePlaintext = Cbor.encode(deviceRequest.toDataItem()),
+                statusCode = null
+            )
+            session.annexAMessageCounter += 1
+            call.respondBytes(
+                bytes = sessionDataMessage,
+                contentType = ContentType.Application.Cbor
+            )
+        } else if (session.annexAMessageCounter == 1) {
+            // Expect SessionData, send SessionData
+
+            val deviceEngagement = DeviceEngagement.fromDataItem(
+                Cbor.decode(session.annexADeviceEngagementEncodedBase64!!.fromBase64Url())
+            )
+            val deviceEngagementBytesDataItem = Tagged(
+                tagNumber = Tagged.ENCODED_CBOR,
+                taggedItem = Bstr(Cbor.encode(deviceEngagement.toDataItem()))
+            )
+            val readerEngagement = DeviceEngagement.fromDataItem(Cbor.decode(
+                session.readerEngagementEncodedBase64!!.fromBase64Url()
+            ))
+            val engagementToApp = Bstr(
+                Crypto.digest(Algorithm.SHA256, Cbor.encode(
+                    Tagged(
+                        tagNumber = Tagged.ENCODED_CBOR,
+                        taggedItem = Bstr(session.readerEngagementEncodedBase64!!.fromBase64Url())
+                    ))
+                )
+            )
+            val sessionTranscript = buildCborArray {
+                add(deviceEngagementBytesDataItem)
+                add(Cbor.decode(readerEngagement.eDeviceKeyBytes.toByteArray()))
+                add(engagementToApp)
+            }
+
+            val sessionEncryption = SessionEncryption(
+                role = MdocRole.MDOC_READER,
+                eSelfKey = session.encryptionKey,
+                remotePublicKey = deviceEngagement.eDeviceKey,
+                encodedSessionTranscript = Cbor.encode(sessionTranscript)
+            )
+            sessionEncryption.setSendSessionEstablishment(false)
+            sessionEncryption.setEncryptionCounters(
+                decryptedCounter = session.annexAMessageCounter,
+                encryptedCounter = session.annexAMessageCounter
+            )
+            val (sessionDataMessage, statusCode) = sessionEncryption.decryptMessage(
+                messageData = requestData
+            )
+            if (sessionDataMessage != null) {
+                session.deviceResponses.add(sessionDataMessage)
+            } else if (statusCode != null) {
+                Logger.e(TAG, "Unexpected status code $statusCode")
+                if (session.deviceResponses.isNotEmpty()) {
+                    session.deviceResponses.add(byteArrayOf())
+                }
+            } else {
+                Logger.e(TAG, "Unexpected empty status code and empty message")
+                if (session.deviceResponses.isNotEmpty()) {
+                    session.deviceResponses.add(byteArrayOf())
+                }
+            }
+
+            // In either case, terminate the session
+            val replySessionDataMessage = SessionEncryption.encodeStatus(
+                Constants.SESSION_DATA_STATUS_SESSION_TERMINATION
+            )
+            session.annexAMessageCounter += 1
+            call.respondBytes(
+                bytes = replySessionDataMessage,
+                contentType = ContentType.Application.Cbor
+            )
         } else {
-            Logger.e(TAG, "Unexpected empty status code and empty message")
-            if (session.deviceResponses.isNotEmpty()) {
-                session.deviceResponses.add(byteArrayOf())
-            }
+            // annexAMessageCounter >= 2
+            Logger.e(TAG, "Unexpected annexAMessageCounter")
+            val replySessionDataMessage = SessionEncryption.encodeStatus(
+                Constants.SESSION_DATA_STATUS_SESSION_TERMINATION
+            )
+            session.annexAMessageCounter += 1
+            call.respondBytes(
+                bytes = replySessionDataMessage,
+                contentType = ContentType.Application.Cbor
+            )
         }
 
-        // In either case, terminate the session
-        val replySessionDataMessage = SessionEncryption.encodeStatus(
-            Constants.SESSION_DATA_STATUS_SESSION_TERMINATION
-        )
-        session.annexAMessageCounter += 1
-        call.respondBytes(
-            bytes = replySessionDataMessage,
-            contentType = ContentType.Application.Cbor
-        )
-    } else {
-        // annexAMessageCounter >= 2
-        Logger.e(TAG, "Unexpected annexAMessageCounter")
-        val replySessionDataMessage = SessionEncryption.encodeStatus(
-            Constants.SESSION_DATA_STATUS_SESSION_TERMINATION
-        )
-        session.annexAMessageCounter += 1
-        call.respondBytes(
-            bytes = replySessionDataMessage,
-            contentType = ContentType.Application.Cbor
+        verifierSessionTable.update(
+            key = sessionId,
+            data = ByteString(session.toCbor()),
+            expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
         )
     }
-
-    verifierSessionTable.update(
-        key = sessionId,
-        data = ByteString(session.toCbor()),
-        expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
-    )
 }
 
 private suspend fun handleOpenID4VPBegin(
@@ -1193,31 +1206,33 @@ private suspend fun handleOpenID4VPBegin(
         encryptResponse = request.encryptResponse,
         issuerIdentifiers = issuerIdentifiers,
     )
-    val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
-    val baseUrl = BackendEnvironment.getBaseUrl()
-    val clientId = clientId()
-    val sessionId = verifierSessionTable.insert(
-        key = null,
-        data = ByteString(session.toCbor()),
-        expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
-    )
+    session.use {
+        val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
+        val baseUrl = BackendEnvironment.getBaseUrl()
+        val clientId = clientId()
+        val sessionId = verifierSessionTable.insert(
+            key = null,
+            data = ByteString(session.toCbor()),
+            expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
+        )
 
-    val uriScheme = when (session.protocol) {
-        Protocol.URI_SCHEME_OPENID4VP_29 -> request.scheme + "://"
-        else -> throw InvalidRequestException("Unknown protocol '$session.protocol'")
+        val uriScheme = when (session.protocol) {
+            Protocol.URI_SCHEME_OPENID4VP_29 -> request.scheme + "://"
+            else -> throw InvalidRequestException("Unknown protocol '$session.protocol'")
+        }
+        val requestUri = baseUrl + "/verifier/openid4vpRequest?sessionId=${sessionId}"
+        val uri = uriScheme +
+                "?client_id=" + URLEncoder.encode(clientId, Charsets.UTF_8) +
+                "&request_uri=" + URLEncoder.encode(requestUri, Charsets.UTF_8)
+
+        val json = Json { ignoreUnknownKeys = true }
+        val responseString = json.encodeToString(OpenID4VPBeginResponse(uri))
+        Logger.i(TAG, "Sending handleOpenID4VPBegin response: $responseString")
+        call.respondText(
+            text = responseString,
+            contentType = ContentType.Application.Json
+        )
     }
-    val requestUri = baseUrl + "/verifier/openid4vpRequest?sessionId=${sessionId}"
-    val uri = uriScheme +
-            "?client_id=" + URLEncoder.encode(clientId, Charsets.UTF_8) +
-            "&request_uri=" + URLEncoder.encode(requestUri, Charsets.UTF_8)
-
-    val json = Json { ignoreUnknownKeys = true }
-    val responseString = json.encodeToString(OpenID4VPBeginResponse(uri))
-    Logger.i(TAG, "Sending handleOpenID4VPBegin response: $responseString")
-    call.respondText(
-        text = responseString,
-        contentType = ContentType.Application.Json
-    )
 }
 
 @OptIn(ExperimentalEncodingApi::class)
@@ -1229,59 +1244,59 @@ private suspend fun handleOpenID4VPRequest(
     val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
     val encodedSession = verifierSessionTable.get(sessionId)
         ?: throw InvalidRequestException("No session for sessionId $sessionId")
-    val session = Session.fromCbor(encodedSession.toByteArray())
-    val baseUrl = BackendEnvironment.getBaseUrl()
+    Session.fromCbor(encodedSession.toByteArray()).use { session ->
+        val baseUrl = BackendEnvironment.getBaseUrl()
 
-    val readerAuthKey = getReaderIdentity()
+        val readerAuthKey = getReaderIdentity()
 
-    var request: SingleDocumentCannedRequest? = null
+        var request: SingleDocumentCannedRequest? = null
 
-    // We'll need responseUri later (to calculate sessionTranscript)
-    val responseUri = baseUrl + "/verifier/openid4vpResponse?sessionId=${sessionId}"
+        // We'll need responseUri later (to calculate sessionTranscript)
+        val responseUri = baseUrl + "/verifier/openid4vpResponse?sessionId=${sessionId}"
 
-    val rawDcql = if (session.rawDcql.isNotEmpty()) {
-        session.rawDcql
-    } else if (session.multiDocumentRequestId.isNotEmpty()) {
-        wellKnownMultipleDocumentRequests.find { it.id == session.multiDocumentRequestId }!!.dcqlString
-    } else {
-        request = lookupWellknownRequest(session.requestFormat, session.requestDocType, session.requestId)
-        null
-    }
-    val requestString = calcDcRequestStringOpenID4VP(
-        version = OpenID4VP.Version.DRAFT_29,
-        documentTypeRepository = documentTypeRepo,
-        format = session.requestFormat,
-        session = session,
-        rawDcql = rawDcql,
-        request = request,
-        nonce = session.nonce,
-        origin = session.origin,
-        readerKey =  session.encryptionKey,
-        readerPublicKey = session.encryptionKey.publicKey as EcPublicKeyDoubleCoordinate,
-        readerAuthKey = readerAuthKey,
-        signRequest = session.signRequest,
-        encryptResponse = session.encryptResponse,
-        responseMode = OpenID4VP.ResponseMode.DIRECT_POST,
-        responseUri = responseUri
-    )
-    val requestObject = Json.decodeFromString<JsonObject>(requestString)
-    val signedRequestCs = requestObject["request"]!!.jsonPrimitive.content
-    Logger.i(TAG, "signedRequestCs: $signedRequestCs")
-
-    call.respondText(
-        contentType = OAUTH_AUTHZ_REQ_JWT,
-        text = signedRequestCs
-    )
-
-    session.responseUri = responseUri
-    runBlocking {
-        verifierSessionTable.update(
-            key = sessionId,
-            data = ByteString(session.toCbor()),
-            expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
+        val rawDcql = if (session.rawDcql.isNotEmpty()) {
+            session.rawDcql
+        } else if (session.multiDocumentRequestId.isNotEmpty()) {
+            wellKnownMultipleDocumentRequests.find { it.id == session.multiDocumentRequestId }!!.dcqlString
+        } else {
+            request = lookupWellknownRequest(session.requestFormat, session.requestDocType, session.requestId)
+            null
+        }
+        val requestString = calcDcRequestStringOpenID4VP(
+            version = OpenID4VP.Version.DRAFT_29,
+            documentTypeRepository = documentTypeRepo,
+            format = session.requestFormat,
+            session = session,
+            rawDcql = rawDcql,
+            request = request,
+            nonce = session.nonce,
+            origin = session.origin,
+            readerKey =  session.encryptionKey,
+            readerPublicKey = session.encryptionKey.publicKey as EcPublicKeyDoubleCoordinate,
+            readerAuthKey = readerAuthKey,
+            signRequest = session.signRequest,
+            encryptResponse = session.encryptResponse,
+            responseMode = OpenID4VP.ResponseMode.DIRECT_POST,
+            responseUri = responseUri
         )
-    }
+        val requestObject = Json.decodeFromString<JsonObject>(requestString)
+        val signedRequestCs = requestObject["request"]!!.jsonPrimitive.content
+        Logger.i(TAG, "signedRequestCs: $signedRequestCs")
 
+        call.respondText(
+            contentType = OAUTH_AUTHZ_REQ_JWT,
+            text = signedRequestCs
+        )
+
+        session.responseUri = responseUri
+        runBlocking {
+            verifierSessionTable.update(
+                key = sessionId,
+                data = ByteString(session.toCbor()),
+                expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
+            )
+        }
+    }
 }
 
 private suspend fun handleOpenID4VPResponse(
@@ -1293,105 +1308,105 @@ private suspend fun handleOpenID4VPResponse(
     val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
     val encodedSession = verifierSessionTable.get(sessionId)
         ?: throw InvalidRequestException("No session for sessionId $sessionId")
-    val session = Session.fromCbor(encodedSession.toByteArray())
+    Session.fromCbor(encodedSession.toByteArray()).use { session ->
+        val responseString = requestData.decodeToString()
+        //Logger.i(TAG, "responseString $responseString")
 
-    val responseString = requestData.decodeToString()
-    //Logger.i(TAG, "responseString $responseString")
+        val kvPairs = mutableMapOf<String, String>()
+        for (part in responseString.split("&")) {
+            val parts = part.split("=", limit = 2)
+            kvPairs[parts[0]] = parts[1]
+        }
 
-    val kvPairs = mutableMapOf<String, String>()
-    for (part in responseString.split("&")) {
-        val parts = part.split("=", limit = 2)
-        kvPairs[parts[0]] = parts[1]
-    }
+        val responseJwtCs = kvPairs["response"]!!
+        val splits = responseJwtCs.split(".")
+        val responseObj = if (splits.size == 3) {
+            // Unsecured JWT
+            Json.decodeFromString(JsonObject.serializer(), splits[1].fromBase64Url().decodeToString())
+        } else {
+            session.responseWasEncrypted = true
+            JsonWebEncryption.decrypt(
+                encryptedJwt = responseJwtCs,
+                recipientKey = AsymmetricKey.anonymous(
+                    privateKey = session.encryptionKey,
+                    algorithm = session.encryptionKey.curve.defaultKeyAgreementAlgorithm
+                )
+            )
+        }
+        //Logger.iJson(TAG, "responseObj", responseObj)
 
-    val responseJwtCs = kvPairs["response"]!!
-    val splits = responseJwtCs.split(".")
-    val responseObj = if (splits.size == 3) {
-        // Unsecured JWT
-        Json.decodeFromString(JsonObject.serializer(), splits[1].fromBase64Url().decodeToString())
-    } else {
-        session.responseWasEncrypted = true
-        JsonWebEncryption.decrypt(
-            encryptedJwt = responseJwtCs,
-            recipientKey = AsymmetricKey.anonymous(
-                privateKey = session.encryptionKey,
-                algorithm = session.encryptionKey.curve.defaultKeyAgreementAlgorithm
+        // We only support a simple cred so...
+        val vpToken = responseObj["vp_token"]!!.jsonObject
+        val vpTokenForCred = vpToken.values.first().jsonArray.first().jsonPrimitive.content
+
+        // This is a total hack but in case of Raw DCQL we actually don't really
+        // know what was requested. This heuristic to determine if the token is
+        // for an ISO mdoc or IETF SD-JWT VC works for now...
+        //
+        val isMdoc = try {
+            val decodedCbor = Cbor.decode(vpTokenForCred.fromBase64Url())
+            true
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            false
+        }
+        Logger.i(TAG, "isMdoc: $isMdoc")
+
+        if (isMdoc) {
+            val effectiveClientId = if (session.signRequest) {
+                "x509_san_dns:${session.host}"
+            } else {
+                "web-origin:${session.origin}"
+            }
+            val jwkThumbprint = session.encryptionKey.publicKey.toJwkThumbprint(Algorithm.SHA256).toByteArray()
+            val handoverInfo = Cbor.encode(
+                buildCborArray {
+                    add("x509_san_dns:${session.host}")
+                    add(session.nonce.toByteArray().toBase64Url())
+                    if (session.encryptResponse) {
+                        add(jwkThumbprint)
+                    } else {
+                        add(Simple.NULL)
+                    }
+                    add(session.responseUri!!)
+                }
+            )
+            val handoverInfoDigest = Crypto.digest(Algorithm.SHA256, handoverInfo)
+            session.sessionTranscript = Cbor.encode(
+                buildCborArray {
+                    add(Simple.NULL) // DeviceEngagementBytes
+                    add(Simple.NULL) // EReaderKeyBytes
+                    addCborArray {
+                        add("OpenID4VPHandover")
+                        add(handoverInfoDigest)
+                    }
+                }
+            )
+            Logger.iCbor(TAG, "handoverInfo", handoverInfo)
+            Logger.iCbor(TAG, "sessionTranscript", session.sessionTranscript!!)
+            session.deviceResponses.add(vpTokenForCred.fromBase64Url())
+        } else {
+            session.verifiablePresentations.add(vpTokenForCred)
+        }
+
+        // Save `deviceResponse` and `sessionTranscript`, for later
+        verifierSessionTable.update(
+            key = sessionId,
+            data = ByteString(session.toCbor()),
+            expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
+        )
+
+        val baseUrl = BackendEnvironment.getBaseUrl()
+        val redirectUri = baseUrl + "/verifier_redirect.html?sessionId=${sessionId}"
+        call.respondText(
+            contentType = ContentType.Application.Json,
+            text = prettyJson.encodeToString(
+                buildJsonObject {
+                    put("redirect_uri", redirectUri)
+                }
             )
         )
     }
-    //Logger.iJson(TAG, "responseObj", responseObj)
-
-    // We only support a simple cred so...
-    val vpToken = responseObj["vp_token"]!!.jsonObject
-    val vpTokenForCred = vpToken.values.first().jsonArray.first().jsonPrimitive.content
-
-    // This is a total hack but in case of Raw DCQL we actually don't really
-    // know what was requested. This heuristic to determine if the token is
-    // for an ISO mdoc or IETF SD-JWT VC works for now...
-    //
-    val isMdoc = try {
-        val decodedCbor = Cbor.decode(vpTokenForCred.fromBase64Url())
-        true
-    } catch (e: Exception) {
-        if (e is CancellationException) throw e
-        false
-    }
-    Logger.i(TAG, "isMdoc: $isMdoc")
-
-    if (isMdoc) {
-        val effectiveClientId = if (session.signRequest) {
-            "x509_san_dns:${session.host}"
-        } else {
-            "web-origin:${session.origin}"
-        }
-        val jwkThumbprint = session.encryptionKey.publicKey.toJwkThumbprint(Algorithm.SHA256).toByteArray()
-        val handoverInfo = Cbor.encode(
-            buildCborArray {
-                add("x509_san_dns:${session.host}")
-                add(session.nonce.toByteArray().toBase64Url())
-                if (session.encryptResponse) {
-                    add(jwkThumbprint)
-                } else {
-                    add(Simple.NULL)
-                }
-                add(session.responseUri!!)
-            }
-        )
-        val handoverInfoDigest = Crypto.digest(Algorithm.SHA256, handoverInfo)
-        session.sessionTranscript = Cbor.encode(
-            buildCborArray {
-                add(Simple.NULL) // DeviceEngagementBytes
-                add(Simple.NULL) // EReaderKeyBytes
-                addCborArray {
-                    add("OpenID4VPHandover")
-                    add(handoverInfoDigest)
-                }
-            }
-        )
-        Logger.iCbor(TAG, "handoverInfo", handoverInfo)
-        Logger.iCbor(TAG, "sessionTranscript", session.sessionTranscript!!)
-        session.deviceResponses.add(vpTokenForCred.fromBase64Url())
-    } else {
-        session.verifiablePresentations.add(vpTokenForCred)
-    }
-
-    // Save `deviceResponse` and `sessionTranscript`, for later
-    verifierSessionTable.update(
-        key = sessionId,
-        data = ByteString(session.toCbor()),
-        expiration = Clock.System.now() + SESSION_EXPIRATION_INTERVAL
-    )
-
-    val baseUrl = BackendEnvironment.getBaseUrl()
-    val redirectUri = baseUrl + "/verifier_redirect.html?sessionId=${sessionId}"
-    call.respondText(
-        contentType = ContentType.Application.Json,
-        text = prettyJson.encodeToString(
-            buildJsonObject {
-                put("redirect_uri", redirectUri)
-            }
-        )
-    )
 }
 
 private suspend fun handleOpenID4VPGetData(
@@ -1404,21 +1419,21 @@ private suspend fun handleOpenID4VPGetData(
     val verifierSessionTable = BackendEnvironment.getTable(verifierSessionTableSpec)
     val encodedSession = verifierSessionTable.get(request.sessionId)
         ?: throw InvalidRequestException("No session for sessionId ${request.sessionId}")
-    val session = Session.fromCbor(encodedSession.toByteArray())
+    Session.fromCbor(encodedSession.toByteArray()).use { session ->
+        val pages = if (session.deviceResponses.isNotEmpty()) {
+            handleGetDataMdoc(session, null)
+        } else if (session.verifiablePresentations.isNotEmpty()) {
+            handleGetDataSdJwt(session, null, clientId())
+        } else {
+            throw IllegalStateException("Invalid format ${session.requestFormat}")
+        }
 
-    val pages = if (session.deviceResponses.isNotEmpty()) {
-        handleGetDataMdoc(session, null)
-    } else if (session.verifiablePresentations.isNotEmpty()) {
-        handleGetDataSdJwt(session, null, clientId())
-    } else {
-        throw IllegalStateException("Invalid format ${session.requestFormat}")
+        val json = Json { ignoreUnknownKeys = true }
+        call.respondText(
+            contentType = ContentType.Application.Json,
+            text = json.encodeToString(OpenID4VPResultData(pages))
+        )
     }
-
-    val json = Json { ignoreUnknownKeys = true }
-    call.respondText(
-        contentType = ContentType.Application.Json,
-        text = json.encodeToString(OpenID4VPResultData(pages))
-    )
 }
 
 
