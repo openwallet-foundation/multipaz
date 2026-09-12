@@ -140,6 +140,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
                     secretKey.close()
                     cleartextPrivateKey.secureZero()
                 }
+                privateKey.close()
                 KeyMetadata(
                     algorithm = settings.algorithm,
                     passphraseRequired = true,

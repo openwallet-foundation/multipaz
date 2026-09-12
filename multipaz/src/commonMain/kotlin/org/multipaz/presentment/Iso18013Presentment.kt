@@ -306,6 +306,8 @@ suspend fun Iso18013Presentment(
                 Logger.w(TAG, "Caught error while sending session-termination", e)
             }
         }
+        sessionEncryption?.close()
+        engagementParams.value.eDeviceKey.close()
         Logger.i(TAG, "Closing transport")
         transport.close()
     }

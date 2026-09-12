@@ -57,7 +57,11 @@ class Openid4VpVerifierModel(
     val nonce: ByteString = ByteString(Random.nextBytes(15)),
     val ephemeralPrivateKey: EcPrivateKey,
     val requestedFormats: MutableMap<String, String> = mutableMapOf()
-) {
+) : AutoCloseable {
+
+    override fun close() {
+        ephemeralPrivateKey.close()
+    }
     /**
      * Creates an Openid4VP presentation request for credentials (typically just one) in
      * [requests] parameter.
@@ -156,13 +160,17 @@ class Openid4VpVerifierModel(
         responseUri: String,
         response: String
     ): Map<String, Presentation> {
-        val decrypted = JsonWebEncryption.decrypt(
-            encryptedJwt = response,
-            recipientKey = AsymmetricKey.anonymous(
-                privateKey = ephemeralPrivateKey,
-                algorithm = ephemeralPrivateKey.curve.defaultKeyAgreementAlgorithm
+        val decrypted = try {
+            JsonWebEncryption.decrypt(
+                encryptedJwt = response,
+                recipientKey = AsymmetricKey.anonymous(
+                    privateKey = ephemeralPrivateKey,
+                    algorithm = ephemeralPrivateKey.curve.defaultKeyAgreementAlgorithm
+                )
             )
-        )
+        } finally {
+            ephemeralPrivateKey.close()
+        }
         val header = Json.parseToJsonElement(
             response.substring(0, response.indexOf('.')).fromBase64Url().decodeToString()
         ).jsonObject

@@ -93,12 +93,13 @@ val ConverterApp = FC<MultipazProps> { props ->
                     isComputing = true
                     try {
                         val cert = X509Cert.fromPem(certificate)
-                        val key = EcPrivateKey.fromPem(privateKey, cert.ecPublicKey)
-                        val json = key.toJwk(buildJsonObject {
-                            putJsonArray("x5c") {
-                                add(cert.encoded.toByteArray().toBase64())
-                            }
-                        })
+                        val json = EcPrivateKey.fromPem(privateKey, cert.ecPublicKey).use { key ->
+                            key.toJwk(buildJsonObject {
+                                putJsonArray("x5c") {
+                                    add(cert.encoded.toByteArray().toBase64())
+                                }
+                            })
+                        }
                         jwk = Json { prettyPrint = true }.encodeToString(json)
                     } catch (e: Exception) {
                         jwk = e.message ?: "Unknown error"

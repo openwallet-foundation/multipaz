@@ -301,12 +301,12 @@ val MpzPassCreatorComponent = FC {
         isGenerating = true
         statusMessage = "Generating pass keys, MSO, and certificates..."
         mainScope.launch {
+            var dsCertifiedKey: AsymmetricKey.X509Certified? = null
+            var passSigningKey: AsymmetricKey? = null
+            val isoMdocList = mutableListOf<MpzPassIsoMdoc>()
             try {
-                // 1. Device Key
-                val deviceKeyPrivate = Crypto.createEcPrivateKey(EcCurve.P256)
-
-                // 2. Issuer Signing Keys & Certificates (IACA + DS)
-                val dsCertifiedKey: AsymmetricKey.X509Certified = if (certMode == "auto") {
+                // 1. Issuer Signing Keys & Certificates (IACA + DS)
+                dsCertifiedKey = if (certMode == "auto") {
                     val now = Clock.System.now().truncateToWholeSeconds()
                     val iacaKey = Crypto.createEcPrivateKey(EcCurve.P256)
                     val iacaCert = MdocUtil.generateIacaCertificate(
@@ -332,6 +332,7 @@ val MpzPassCreatorComponent = FC {
                         validFrom = now,
                         validUntil = now + 365.days
                     )
+                    iacaKey.close()
                     AsymmetricKey.X509CertifiedExplicit(
                         certChain = X509CertChain(listOf(dsCert, iacaCert)),
                         privateKey = dsPrivateKey
@@ -364,7 +365,6 @@ val MpzPassCreatorComponent = FC {
 
                 // 4. Generate ISO mDoc Credentials (based on credentialCount)
                 val count = (credentialCountStr.toIntOrNull() ?: 1).coerceAtLeast(1)
-                val isoMdocList = mutableListOf<MpzPassIsoMdoc>()
 
                 val protectedHeaders = mapOf<CoseLabel, DataItem>(
                     Cose.COSE_LABEL_ALG.toCoseLabel to Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
@@ -419,7 +419,6 @@ val MpzPassCreatorComponent = FC {
                 }
 
                 // 6. Pass Envelope Signature
-                var passSigningKey: AsymmetricKey? = null
                 var passIssuerCertChain: X509CertChain? = null
                 if (passSignatureMode != "none") {
                     if (passSignatureMode == "auto") {
@@ -499,6 +498,9 @@ val MpzPassCreatorComponent = FC {
             } catch (e: Throwable) {
                 statusMessage = "Error generating pass: ${e.message ?: e.toString()}"
             } finally {
+                dsCertifiedKey?.close()
+                passSigningKey?.close()
+                isoMdocList.forEach { it.deviceKeyPrivate.close() }
                 isGenerating = false
             }
         }

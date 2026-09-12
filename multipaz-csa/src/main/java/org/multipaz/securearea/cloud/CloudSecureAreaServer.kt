@@ -270,6 +270,7 @@ class CloudSecureAreaServer(
             ) + cloudRootAttestationKey.certChain.certificates
         )
         state.cloudBindingKey = cloudBindingKey.toCoseKey()
+        cloudBindingKey.close()
         val response1 = RegisterResponse1(
             cloudBindingKeyAttestation,
             state.encrypt()
@@ -346,6 +347,8 @@ class CloudSecureAreaServer(
 
         // Also derive SKDevice and SKCloud, and stash in state since we're going to need this later
         val zab = Crypto.keyAgreement(eCloudKey, request1.eDeviceKey.ecPublicKey)
+        val eCloudKeyPublicCose = eCloudKey.publicKey.toCoseKey()
+        eCloudKey.close()
         val salt = Crypto.digest(Algorithm.SHA256,
             Cbor.encode(
                 buildCborArray {
@@ -374,7 +377,7 @@ class CloudSecureAreaServer(
         state.decryptedCounter = 1
         state.derivationTimestamp = System.currentTimeMillis()
         val response1 = E2EESetupResponse1(
-            eCloudKey.publicKey.toCoseKey(),
+            eCloudKeyPublicCose,
             signature,
             state.encrypt()
         )

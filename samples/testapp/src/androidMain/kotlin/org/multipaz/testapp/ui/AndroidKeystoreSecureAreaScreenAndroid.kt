@@ -793,22 +793,24 @@ private suspend fun aksTestUnguarded(
         }
         showToast("$sigTypeStr signature in (${t1 - t0} msec)")
     } else {
-        val otherKeyPairForEcdh = Crypto.createEcPrivateKey(algorithm.curve!!)
-        val t0 = System.currentTimeMillis()
-        val Zab = androidKeystoreSecureArea.keyAgreement(
-            "testKey",
-            otherKeyPairForEcdh.publicKey,
-            unlockReason = Reason.HumanReadable(
-                title = "Test prompt title",
-                subtitle = "Test prompt subtitle",
-                requireConfirmation = biometricConfirmationRequired
+        Crypto.createEcPrivateKey(algorithm.curve!!).use { otherKeyPairForEcdh ->
+            val t0 = System.currentTimeMillis()
+            val Zab = androidKeystoreSecureArea.keyAgreement(
+                "testKey",
+                otherKeyPairForEcdh.publicKey,
+                unlockReason = Reason.HumanReadable(
+                    title = "Test prompt title",
+                    subtitle = "Test prompt subtitle",
+                    requireConfirmation = biometricConfirmationRequired
+                )
             )
-        )
-        val t1 = System.currentTimeMillis()
-        Logger.dHex(
-            TAG,
-            "Calculated ECDH",
-            Zab)
-        showToast("ECDH in (${t1 - t0} msec)")
+            val t1 = System.currentTimeMillis()
+            Logger.dHex(
+                TAG,
+                "Calculated ECDH",
+                Zab
+            )
+            showToast("ECDH in (${t1 - t0} msec)")
+        }
     }
 }
