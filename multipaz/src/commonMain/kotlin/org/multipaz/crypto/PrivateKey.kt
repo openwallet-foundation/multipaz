@@ -21,7 +21,30 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  * An asymmetric private key.
  */
 @CborSerializationImplemented(schemaId = "")
-sealed class PrivateKey {
+sealed class PrivateKey : AutoCloseable {
+
+    /**
+     * `true` if this key has been closed/destroyed, `false` otherwise.
+     */
+    abstract val isDestroyed: Boolean
+
+    /**
+     * Securely zeroes out the private key material in memory and marks this key as destroyed.
+     * Subsequent cryptographic operations or property accesses on this instance will throw [IllegalStateException].
+     */
+    abstract override fun close()
+
+    /**
+     * Cryptographic alias for [close].
+     */
+    fun destroy() = close()
+
+    /**
+     * Throws [IllegalStateException] if this key has already been destroyed.
+     */
+    protected fun checkNotDestroyed() {
+        check(!isDestroyed) { "PrivateKey has already been destroyed." }
+    }
 
     /**
      * Creates a [CoseKey] object for the key.

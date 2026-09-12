@@ -10,6 +10,7 @@ import org.multipaz.cose.CoseKey
 import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.toCoseLabel
 import org.multipaz.util.toBase64Url
+import org.multipaz.util.toHex
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
@@ -19,13 +20,14 @@ import kotlin.collections.iterator
  *
  * @param x the X coordinate of the public key.
  */
-data class EcPrivateKeyOkp(
+class EcPrivateKeyOkp(
     override val curve: EcCurve,
-    override val d: ByteArray,
+    d: ByteArray,
     val x: ByteArray
 ): EcPrivateKey(curve, d) {
 
     override fun toCoseKey(additionalLabels: Map<CoseLabel, DataItem>): CoseKey {
+        checkNotDestroyed()
         return CoseKey(mapOf(
             Pair(Cose.COSE_KEY_KTY.toCoseLabel, Cose.COSE_KEY_TYPE_OKP.toDataItem()),
             Pair(Cose.COSE_KEY_PARAM_CRV.toCoseLabel, curve.coseCurveIdentifier.toDataItem()),
@@ -36,6 +38,7 @@ data class EcPrivateKeyOkp(
     override fun toJwk(
         additionalClaims: JsonObject?,
     ): JsonObject {
+        checkNotDestroyed()
         return buildJsonObject {
             put("kty", "OKP")
             put("crv", curve.jwkName)
@@ -52,6 +55,9 @@ data class EcPrivateKeyOkp(
     override val publicKey: EcPublicKey
         get() = EcPublicKeyOkp(curve, x)
 
+    override fun toString(): String =
+        "EcPrivateKeyOkp(curve=$curve, x=${x.toHex()})"
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || this::class != other::class) return false
@@ -59,6 +65,9 @@ data class EcPrivateKeyOkp(
         other as EcPrivateKeyOkp
 
         if (curve != other.curve) return false
+        if (isDestroyed || other.isDestroyed) {
+            return isDestroyed == other.isDestroyed
+        }
         if (!d.contentEquals(other.d)) return false
         if (!x.contentEquals(other.x)) return false
 
@@ -67,7 +76,9 @@ data class EcPrivateKeyOkp(
 
     override fun hashCode(): Int {
         var result = curve.hashCode()
-        result = 31 * result + d.contentHashCode()
+        if (!isDestroyed) {
+            result = 31 * result + d.contentHashCode()
+        }
         result = 31 * result + x.contentHashCode()
         return result
     }

@@ -35,15 +35,70 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  * @param qInv the CRT coefficient (inverse of q) mod p (optional).
  */
 @CborSerializationImplemented(schemaId = "")
-data class RsaPrivateKey(
+class RsaPrivateKey(
     override val publicKey: RsaPublicKey,
-    val privateExponent: ByteArray,
-    val p: ByteArray? = null,
-    val q: ByteArray? = null,
-    val dp: ByteArray? = null,
-    val dq: ByteArray? = null,
-    val qInv: ByteArray? = null
+    privateExponent: ByteArray,
+    p: ByteArray? = null,
+    q: ByteArray? = null,
+    dp: ByteArray? = null,
+    dq: ByteArray? = null,
+    qInv: ByteArray? = null
 ) : PrivateKey() {
+
+    private val _privateExponent: ByteArray = privateExponent.copyOf()
+    private val _p: ByteArray? = p?.copyOf()
+    private val _q: ByteArray? = q?.copyOf()
+    private val _dp: ByteArray? = dp?.copyOf()
+    private val _dq: ByteArray? = dq?.copyOf()
+    private val _qInv: ByteArray? = qInv?.copyOf()
+
+    private var _isDestroyed: Boolean = false
+    override val isDestroyed: Boolean get() = _isDestroyed
+
+    private val disposer = KeyDisposer.register(this) {
+        _privateExponent.secureZero()
+        _p?.secureZero()
+        _q?.secureZero()
+        _dp?.secureZero()
+        _dq?.secureZero()
+        _qInv?.secureZero()
+    }
+
+    val privateExponent: ByteArray
+        get() {
+            checkNotDestroyed()
+            return _privateExponent
+        }
+
+    val p: ByteArray?
+        get() {
+            checkNotDestroyed()
+            return _p
+        }
+
+    val q: ByteArray?
+        get() {
+            checkNotDestroyed()
+            return _q
+        }
+
+    val dp: ByteArray?
+        get() {
+            checkNotDestroyed()
+            return _dp
+        }
+
+    val dq: ByteArray?
+        get() {
+            checkNotDestroyed()
+            return _dq
+        }
+
+    val qInv: ByteArray?
+        get() {
+            checkNotDestroyed()
+            return _qInv
+        }
 
     constructor(
         modulus: ByteArray,
@@ -64,6 +119,19 @@ data class RsaPrivateKey(
         qInv = qInv
     )
 
+    override fun close() {
+        if (!_isDestroyed) {
+            _isDestroyed = true
+            _privateExponent.secureZero()
+            _p?.secureZero()
+            _q?.secureZero()
+            _dp?.secureZero()
+            _dq?.secureZero()
+            _qInv?.secureZero()
+            disposer.dispose()
+        }
+    }
+
     /**
      * The modulus (n) of the public key as an unsigned big-endian byte array.
      */
@@ -80,6 +148,7 @@ data class RsaPrivateKey(
     val d: ByteArray get() = privateExponent
 
     override fun toCoseKey(additionalLabels: Map<CoseLabel, DataItem>): CoseKey {
+        checkNotDestroyed()
         val labels = mutableMapOf<CoseLabel, DataItem>(
             Cose.COSE_KEY_KTY.toCoseLabel to Cose.COSE_KEY_TYPE_RSA.toDataItem(),
             Cose.COSE_KEY_PARAM_N.toCoseLabel to modulus.toDataItem(),
@@ -97,8 +166,9 @@ data class RsaPrivateKey(
         return CoseKey(labels)
     }
 
-    override fun toJwk(additionalClaims: JsonObject?): JsonObject =
-        buildJsonObject {
+    override fun toJwk(additionalClaims: JsonObject?): JsonObject {
+        checkNotDestroyed()
+        return buildJsonObject {
             put("kty", "RSA")
             put("n", modulus.toBase64Url())
             put("e", publicExponent.toBase64Url())
@@ -114,12 +184,14 @@ data class RsaPrivateKey(
                 }
             }
         }
+    }
 
     /**
      * Encode this private key as a DER-encoded PKCS#1 RSAPrivateKey sequence.
      * Requires CRT parameters to be present.
      */
     fun toPkcs1(): ByteArray {
+        checkNotDestroyed()
         val prime1 = p ?: throw IllegalStateException("CRT parameter 'p' is required for PKCS#1 encoding")
         val prime2 = q ?: throw IllegalStateException("CRT parameter 'q' is required for PKCS#1 encoding")
         val exp1 = dp ?: throw IllegalStateException("CRT parameter 'dp' is required for PKCS#1 encoding")
@@ -146,29 +218,35 @@ data class RsaPrivateKey(
     /**
      * Encode this private key as a DER-encoded PKCS#8 PrivateKeyInfo sequence.
      */
-    fun toPrivateKeyInfo(): ByteArray = ASN1.encode(
-        ASN1Sequence(
-            listOf(
-                ASN1Integer(0L),
-                ASN1Sequence(
-                    listOf(
-                        ASN1ObjectIdentifier(OID.RSA_ENCRYPTION.oid),
-                        ASN1Null()
-                    )
-                ),
-                ASN1OctetString(toPkcs1())
+    fun toPrivateKeyInfo(): ByteArray {
+        checkNotDestroyed()
+        return ASN1.encode(
+            ASN1Sequence(
+                listOf(
+                    ASN1Integer(0L),
+                    ASN1Sequence(
+                        listOf(
+                            ASN1ObjectIdentifier(OID.RSA_ENCRYPTION.oid),
+                            ASN1Null()
+                        )
+                    ),
+                    ASN1OctetString(toPkcs1())
+                )
             )
         )
-    )
+    }
 
     @OptIn(ExperimentalEncodingApi::class)
     override fun toPem(): String {
+        checkNotDestroyed()
         val sb = StringBuilder()
         sb.append("-----BEGIN PRIVATE KEY-----\n")
         sb.append(Base64.Mime.encode(toPrivateKeyInfo()))
         sb.append("\n-----END PRIVATE KEY-----\n")
         return sb.toString()
     }
+
+    override fun toString(): String = "RsaPrivateKey(publicKey=$publicKey)"
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -177,6 +255,9 @@ data class RsaPrivateKey(
         other as RsaPrivateKey
 
         if (publicKey != other.publicKey) return false
+        if (isDestroyed || other.isDestroyed) {
+            return isDestroyed == other.isDestroyed
+        }
         if (!privateExponent.contentEquals(other.privateExponent)) return false
         if (p != null) {
             if (other.p == null || !p.contentEquals(other.p)) return false
@@ -191,11 +272,14 @@ data class RsaPrivateKey(
 
     override fun hashCode(): Int {
         var result = publicKey.hashCode()
-        result = 31 * result + privateExponent.contentHashCode()
-        result = 31 * result + (p?.contentHashCode() ?: 0)
-        result = 31 * result + (q?.contentHashCode() ?: 0)
+        if (!isDestroyed) {
+            result = 31 * result + privateExponent.contentHashCode()
+            result = 31 * result + (p?.contentHashCode() ?: 0)
+            result = 31 * result + (q?.contentHashCode() ?: 0)
+        }
         return result
     }
+
 
     companion object {
         /**

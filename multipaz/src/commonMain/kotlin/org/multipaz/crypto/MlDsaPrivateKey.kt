@@ -31,11 +31,38 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  * @param publicKey the corresponding public key.
  */
 @CborSerializationImplemented(schemaId = "")
-data class MlDsaPrivateKey(
+class MlDsaPrivateKey(
     val algorithm: Algorithm,
-    val encoded: ByteString,
+    encoded: ByteArray,
     override val publicKey: MlDsaPublicKey
 ) : PrivateKey() {
+
+    constructor(
+        algorithm: Algorithm,
+        encoded: ByteString,
+        publicKey: MlDsaPublicKey
+    ) : this(algorithm, encoded.toByteArray(), publicKey)
+
+    private val _encoded: ByteArray = encoded.copyOf()
+
+    private var _isDestroyed: Boolean = false
+    override val isDestroyed: Boolean get() = _isDestroyed
+
+    private val disposer = KeyDisposer.register(this) {
+        _encoded.secureZero()
+    }
+
+    val encoded: ByteString
+        get() {
+            checkNotDestroyed()
+            return ByteString(_encoded)
+        }
+
+    val encodedKeyMaterial: ByteArray
+        get() {
+            checkNotDestroyed()
+            return _encoded
+        }
 
     init {
         require(algorithm in listOf(Algorithm.ML_DSA_44, Algorithm.ML_DSA_65, Algorithm.ML_DSA_87)) {
@@ -46,33 +73,46 @@ data class MlDsaPrivateKey(
         }
     }
 
-    override fun toCoseKey(additionalLabels: Map<CoseLabel, DataItem>): CoseKey =
-        CoseKey(
+    override fun close() {
+        if (!_isDestroyed) {
+            _isDestroyed = true
+            _encoded.secureZero()
+            disposer.dispose()
+        }
+    }
+
+    override fun toCoseKey(additionalLabels: Map<CoseLabel, DataItem>): CoseKey {
+        checkNotDestroyed()
+        return CoseKey(
             mapOf(
                 Pair(Cose.COSE_KEY_KTY.toCoseLabel, Cose.COSE_KEY_TYPE_AKP.toDataItem()),
                 Pair(Cose.COSE_KEY_ALG.toCoseLabel, algorithm.coseAlgorithmIdentifier!!.toDataItem()),
                 Pair(Cose.COSE_KEY_PARAM_PUB_KEY.toCoseLabel, publicKey.encoded.toByteArray().toDataItem()),
-                Pair(Cose.COSE_KEY_PARAM_PRIV_KEY.toCoseLabel, encoded.toByteArray().toDataItem()),
+                Pair(Cose.COSE_KEY_PARAM_PRIV_KEY.toCoseLabel, _encoded.toDataItem()),
             ) + additionalLabels
         )
+    }
 
-    override fun toJwk(additionalClaims: JsonObject?): JsonObject =
-        buildJsonObject {
+    override fun toJwk(additionalClaims: JsonObject?): JsonObject {
+        checkNotDestroyed()
+        return buildJsonObject {
             put("kty", "AKP")
             put("alg", algorithm.joseAlgorithmIdentifier!!)
             put("pub", publicKey.encoded.toByteArray().toBase64Url())
-            put("priv", encoded.toByteArray().toBase64Url())
+            put("priv", _encoded.toBase64Url())
             if (additionalClaims != null) {
                 for ((k, v) in additionalClaims) {
                     put(k, v)
                 }
             }
         }
+    }
 
     /**
      * Encodes this private key as a DER-encoded PKCS#8 OneAsymmetricKey sequence.
      */
     fun toPkcs8(): ByteArray {
+        checkNotDestroyed()
         val oid = when (algorithm) {
             Algorithm.ML_DSA_44 -> OID.ML_DSA_44.oid
             Algorithm.ML_DSA_65 -> OID.ML_DSA_65.oid
@@ -84,7 +124,7 @@ data class MlDsaPrivateKey(
                 listOf(
                     ASN1Integer(0),
                     ASN1Sequence(listOf(ASN1ObjectIdentifier(oid))),
-                    ASN1OctetString(encoded.toByteArray())
+                    ASN1OctetString(_encoded)
                 )
             )
         )
@@ -92,6 +132,7 @@ data class MlDsaPrivateKey(
 
     @OptIn(ExperimentalEncodingApi::class)
     override fun toPem(): String {
+        checkNotDestroyed()
         val sb = StringBuilder()
         sb.append("-----BEGIN PRIVATE KEY-----\n")
         sb.append(Base64.Mime.encode(toPkcs8()))
@@ -103,6 +144,31 @@ data class MlDsaPrivateKey(
      * Encodes this private key as a DER-encoded PKCS#8 OneAsymmetricKey (PrivateKeyInfo) sequence.
      */
     fun toPrivateKeyInfo(): ByteArray = toPkcs8()
+
+    override fun toString(): String = "MlDsaPrivateKey(algorithm=$algorithm, publicKey=$publicKey)"
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other == null || this::class != other::class) return false
+
+        other as MlDsaPrivateKey
+
+        if (algorithm != other.algorithm) return false
+        if (publicKey != other.publicKey) return false
+        if (isDestroyed || other.isDestroyed) {
+            return isDestroyed == other.isDestroyed
+        }
+        return _encoded.contentEquals(other._encoded)
+    }
+
+    override fun hashCode(): Int {
+        var result = algorithm.hashCode()
+        result = 31 * result + publicKey.hashCode()
+        if (!isDestroyed) {
+            result = 31 * result + _encoded.contentHashCode()
+        }
+        return result
+    }
 
     companion object {
         /**

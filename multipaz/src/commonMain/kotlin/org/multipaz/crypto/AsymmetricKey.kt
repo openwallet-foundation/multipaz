@@ -26,11 +26,20 @@ import org.multipaz.securearea.SecureAreaRepository
  * Although strictly speaking not a signing operation, [AsymmetricKey] can also be used for
  * key exchange operation, provided it was created with that capability.
  */
-sealed class AsymmetricKey {
+sealed class AsymmetricKey : AutoCloseable {
     /** Signature algorithm */
     abstract val algorithm: Algorithm
     /** Public key that corresponds to the private key used for signing */
     abstract val publicKey: PublicKey
+
+    /**
+     * Closes the key, zeroing any underlying private key material if this is an explicit key.
+     */
+    override fun close() {
+        if (this is Explicit) {
+            privateKey.close()
+        }
+    }
 
     /** Public key as [EcPublicKey] */
     val ecPublicKey: EcPublicKey

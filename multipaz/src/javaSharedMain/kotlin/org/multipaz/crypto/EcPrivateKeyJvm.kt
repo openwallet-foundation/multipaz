@@ -43,7 +43,9 @@ fun PrivateKey.toEcPrivateKey(publicKey: PublicKey, curve: EcCurve): EcPrivateKe
     }
 
 val EcPrivateKey.javaPrivateKey: PrivateKey
-    get() = when (this.curve) {
+    get() {
+        check(!isDestroyed) { "PrivateKey has already been destroyed" }
+        return when (this.curve) {
         EcCurve.P256,
         EcCurve.P384,
         EcCurve.P521,
@@ -74,6 +76,5 @@ val EcPrivateKey.javaPrivateKey: PrivateKey
             val spec = PKCS8EncodedKeySpec(generatePrivateKeyInfo(OID.X448.oid, this.d))
             KeyFactory.getInstance("X448").generatePrivate(spec)
         }
-
-
     }
+}

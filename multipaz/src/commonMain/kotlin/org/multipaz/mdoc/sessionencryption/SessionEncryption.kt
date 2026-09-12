@@ -25,6 +25,7 @@ import org.multipaz.crypto.EcPublicKey
 import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.Hkdf
+import org.multipaz.crypto.secureZero
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.Logger
 
@@ -55,7 +56,8 @@ class SessionEncryption(
     private val remotePublicKey: EcPublicKey,
     private val encodedSessionTranscript: ByteArray,
     private val insertSequenceNumbers: Boolean = false
-) {
+) : AutoCloseable {
+    private val eSelfPublicKey: EcPublicKey = eSelfKey.publicKey
     private var sessionEstablishmentSent = false
     private lateinit var skRemote: ByteArray
     private lateinit var skSelf: ByteArray
@@ -65,6 +67,16 @@ class SessionEncryption(
     private var sendSessionEstablishment = true
 
     private var initialized: Boolean = false
+
+    override fun close() {
+        if (::skSelf.isInitialized) {
+            skSelf.secureZero()
+        }
+        if (::skRemote.isInitialized) {
+            skRemote.secureZero()
+        }
+        eSelfKey.close()
+    }
 
     /**
      * Returns the next sequence number that will be used.
@@ -88,10 +100,17 @@ class SessionEncryption(
         val sharedSecret = Crypto.keyAgreement(eSelfKey, remotePublicKey)
         val sessionTranscriptBytes = Cbor.encode(Tagged(24, Bstr(encodedSessionTranscript)))
         val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
-        var info = "SKDevice".encodeToByteArray()
-        val deviceSK = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
-        info = "SKReader".encodeToByteArray()
-        val readerSK = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
+        val deviceSK: ByteArray
+        val readerSK: ByteArray
+        try {
+            var info = "SKDevice".encodeToByteArray()
+            deviceSK = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
+            info = "SKReader".encodeToByteArray()
+            readerSK = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
+        } finally {
+            sharedSecret.secureZero()
+            eSelfKey.close()
+        }
         if (role == MdocRole.MDOC) {
             skSelf = deviceSK
             skRemote = readerSK
@@ -179,7 +198,7 @@ class SessionEncryption(
 
         val messageData = Cbor.encode(buildCborMap {
             if (!sessionEstablishmentSent && sendSessionEstablishment && role == MdocRole.MDOC_READER) {
-                var eReaderKey = eSelfKey.publicKey
+                val eReaderKey = eSelfPublicKey
                 putTaggedEncodedCbor("eReaderKey", Cbor.encode(eReaderKey.toCoseKey().toDataItem()))
                 checkNotNull(messageCiphertext) { "Data cannot be empty in initial message" }
             }

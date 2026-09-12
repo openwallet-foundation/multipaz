@@ -10,6 +10,7 @@ import java.security.PrivateKey as JavaPrivateKey
 
 val RsaPrivateKey.javaPrivateKey: RSAPrivateKey
     get() {
+        check(!isDestroyed) { "PrivateKey has already been destroyed" }
         val kf = KeyFactory.getInstance("RSA")
         return if (p != null && q != null && dp != null && dq != null && qInv != null) {
             val spec = RSAPrivateCrtKeySpec(
