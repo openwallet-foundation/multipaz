@@ -559,7 +559,9 @@ class CloudSecureAreaTest {
         val theirSharedSecret = Crypto.keyAgreement(otherKeyPair, keyInfo.ecPublicKey)
 
         // ... finally, check that both sides compute the same shared secret.
-        Assert.assertArrayEquals(theirSharedSecret, ourSharedSecret)
+        Assert.assertArrayEquals(theirSharedSecret.encoded, ourSharedSecret)
+        theirSharedSecret.close()
+        otherKeyPair.close()
     }
 
     @Test
@@ -590,7 +592,8 @@ class CloudSecureAreaTest {
         } catch (e: KeyLockedException) {
             throw AssertionError(e)
         }
-        Assert.assertArrayEquals(kemResult.sharedSecret, decapsulatedSecret)
+        Assert.assertArrayEquals(kemResult.sharedSecret.encoded, decapsulatedSecret)
+        kemResult.close()
     }
 
     @Test

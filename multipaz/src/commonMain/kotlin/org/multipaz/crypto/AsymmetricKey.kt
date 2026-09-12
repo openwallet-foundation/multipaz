@@ -335,7 +335,7 @@ sealed class AsymmetricKey : AutoCloseable {
 
         private suspend fun keyAgreement(explicit: Explicit, otherKey: EcPublicKey): ByteArray =
             when (val priv = explicit.privateKey) {
-                is EcPrivateKey -> Crypto.keyAgreement(key = priv, otherKey = otherKey)
+                is EcPrivateKey -> Crypto.keyAgreement(key = priv, otherKey = otherKey).use { it.encoded }
                 is RsaPrivateKey -> throw UnsupportedOperationException("RSA keys do not support key agreement")
                 is MlDsaPrivateKey -> throw UnsupportedOperationException("ML-DSA keys do not support key agreement")
                 is MlKemPrivateKey -> throw UnsupportedOperationException("ML-KEM keys do not support key agreement")

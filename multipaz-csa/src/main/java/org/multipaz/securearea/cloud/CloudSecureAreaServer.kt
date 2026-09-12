@@ -354,20 +354,22 @@ class CloudSecureAreaServer(
                 }
             )
         )
-        state.skDevice = Hkdf.deriveKey(
-            Algorithm.HMAC_SHA256,
-            zab,
-            salt,
-            "SKDevice".toByteArray(),
-            32
-        )
-        state.skCloud = Hkdf.deriveKey(
-            Algorithm.HMAC_SHA256,
-            zab,
-            salt,
-            "SKCloud".toByteArray(),
-            32
-        )
+        zab.use {
+            state.skDevice = Hkdf.deriveKey(
+                Algorithm.HMAC_SHA256,
+                it,
+                salt,
+                "SKDevice".toByteArray(),
+                32
+            ).use { key -> key.encoded }
+            state.skCloud = Hkdf.deriveKey(
+                Algorithm.HMAC_SHA256,
+                it,
+                salt,
+                "SKCloud".toByteArray(),
+                32
+            ).use { key -> key.encoded }
+        }
         state.encryptedCounter = 1
         state.decryptedCounter = 1
         state.derivationTimestamp = System.currentTimeMillis()

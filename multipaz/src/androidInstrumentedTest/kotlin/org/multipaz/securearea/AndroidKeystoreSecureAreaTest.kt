@@ -414,7 +414,9 @@ class AndroidKeystoreSecureAreaTest {
         val theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.ecPublicKey)
 
         // ... finally, check that both sides compute the same shared secret.
-        Assert.assertArrayEquals(theirSharedSecret, ourSharedSecret)
+        Assert.assertArrayEquals(theirSharedSecret.encoded, ourSharedSecret)
+        theirSharedSecret.close()
+        otherKey.close()
     }
 
     // Curve 25519 on Android is currently broken, see b/282063229 for details. Ignore test for now.
@@ -459,7 +461,9 @@ class AndroidKeystoreSecureAreaTest {
         val theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.ecPublicKey)
 
         // ... finally, check that both sides compute the same shared secret.
-        Assert.assertArrayEquals(theirSharedSecret, ourSharedSecret)
+        Assert.assertArrayEquals(theirSharedSecret.encoded, ourSharedSecret)
+        theirSharedSecret.close()
+        otherKey.close()
     }
 
     @Test

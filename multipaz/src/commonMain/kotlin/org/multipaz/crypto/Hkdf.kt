@@ -78,6 +78,52 @@ object Hkdf {
     }
 
     /**
+     * The "extract" part of HKDF with [SecretKey] input key material.
+     *
+     * @param algorithm the KDF algorithm to use e.g. [Algorithm.HMAC_SHA256].
+     * @param ikm input key material as a [SecretKey].
+     * @param salt optional salt value (a non-secret random value).
+     * @return a pseudorandom key as a [SecretKey].
+     */
+    suspend fun extract(
+        algorithm: Algorithm,
+        ikm: SecretKey,
+        salt: ByteArray?
+    ): SecretKey {
+        ikm.checkNotDestroyed()
+        val prkBytes = Crypto.mac(
+            algorithm = algorithm,
+            key = salt ?: ByteArray(getHashLen(algorithm)),
+            message = ikm.data
+        )
+        val prk = SecretKey(prkBytes)
+        prkBytes.secureZero()
+        return prk
+    }
+
+    /**
+     * The "expand" part of HKDF with [SecretKey] pseudorandom key.
+     *
+     * @param algorithm the KDF algorithm to use e.g. [Algorithm.HMAC_SHA256].
+     * @param prk a pseudorandom key as a [SecretKey].
+     * @param info context and application specific information (can be zero-length).
+     * @param length length of output keying material in octets.
+     * @return output keying material as a [SecretKey].
+     */
+    suspend fun expand(
+        algorithm: Algorithm,
+        prk: SecretKey,
+        info: ByteArray,
+        length: Int
+    ): SecretKey {
+        prk.checkNotDestroyed()
+        val okmBytes = expand(algorithm, prk.data, info, length)
+        val okm = SecretKey(okmBytes)
+        okmBytes.secureZero()
+        return okm
+    }
+
+    /**
      * Derives a symmetric encryption key according to HKDF as defined by
      * [RFC 5869](https://datatracker.ietf.org/doc/html/rfc5869).
      *
@@ -95,15 +141,42 @@ object Hkdf {
         info: ByteArray,
         length: Int
     ): ByteArray {
-        return expand(
+        val prk = extract(
             algorithm = algorithm,
-            prk = extract(
-                algorithm = algorithm,
-                ikm = ikm,
-                salt = salt
-            ),
+            ikm = ikm,
+            salt = salt
+        )
+        val okm = expand(
+            algorithm = algorithm,
+            prk = prk,
             info = info,
             length = length
         )
+        prk.secureZero()
+        return okm
+    }
+
+    /**
+     * Derives a symmetric encryption key according to HKDF as defined by
+     * [RFC 5869](https://datatracker.ietf.org/doc/html/rfc5869), taking and
+     * returning a [SecretKey].
+     *
+     * @param algorithm the KDF algorithm to use e.g. [Algorithm.HMAC_SHA256].
+     * @param ikm input key material as a [SecretKey].
+     * @param salt optional salt value (a non-secret random value).
+     * @param info context and application specific information (can be zero-length).
+     * @param length length of output keying material in octets.
+     * @return output keying material of [length] octets as a [SecretKey].
+     */
+    suspend fun deriveKey(
+        algorithm: Algorithm,
+        ikm: SecretKey,
+        salt: ByteArray?,
+        info: ByteArray,
+        length: Int
+    ): SecretKey {
+        ikm.checkNotDestroyed()
+        val prk = extract(algorithm, ikm, salt)
+        return prk.use { expand(algorithm, it, info, length) }
     }
 }

@@ -229,9 +229,10 @@ actual object Crypto {
 
     actual suspend fun mac(
         algorithm: Algorithm,
-        key: ByteArray,
+        key: SecretKey,
         message: ByteArray
     ): ByteArray {
+        key.checkNotDestroyed()
         val hashAlgName = when (algorithm) {
             Algorithm.HMAC_INSECURE_SHA1 -> "SHA-1"
             Algorithm.HMAC_SHA256 -> "SHA-256"
@@ -239,7 +240,8 @@ actual object Crypto {
             Algorithm.HMAC_SHA512 -> "SHA-512"
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
-        val effectiveKey = if (key.isEmpty()) byteArrayOf(0) else key
+        val rawKey = key.data
+        val effectiveKey = if (rawKey.isEmpty()) byteArrayOf(0) else rawKey
         val hmacKey = crypto.subtle.importKey(
             format = KeyFormat.Companion.raw,
             keyData = effectiveKey.toBufferSource(),
@@ -261,15 +263,17 @@ actual object Crypto {
 
     actual suspend fun encrypt(
         algorithm: Algorithm,
-        key: ByteArray,
+        key: SecretKey,
         nonce: ByteArray,
         messagePlaintext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
+        key.checkNotDestroyed()
+        val rawKey = key.data
         when (algorithm) {
-            Algorithm.A128GCM, Algorithm.A128CBC -> require(key.size == 16) { "Key size must be 16 bytes" }
-            Algorithm.A192GCM, Algorithm.A192CBC -> require(key.size == 24) { "Key size must be 24 bytes" }
-            Algorithm.A256GCM, Algorithm.A256CBC -> require(key.size == 32) { "Key size must be 32 bytes" }
+            Algorithm.A128GCM, Algorithm.A128CBC -> require(rawKey.size == 16) { "Key size must be 16 bytes" }
+            Algorithm.A192GCM, Algorithm.A192CBC -> require(rawKey.size == 24) { "Key size must be 24 bytes" }
+            Algorithm.A256GCM, Algorithm.A256CBC -> require(rawKey.size == 32) { "Key size must be 32 bytes" }
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
         val (webAlgorithm, webImportAlgorithm) = when (algorithm) {
@@ -293,7 +297,7 @@ actual object Crypto {
         }
         val cryptoKey = crypto.subtle.importKey(
             format = KeyFormat.Companion.raw,
-            keyData = key.toBufferSource(),
+            keyData = rawKey.toBufferSource(),
             algorithm = webImportAlgorithm,
             extractable = false,
             keyUsages = jsArrayOf(KeyUsage.encrypt)
@@ -308,11 +312,13 @@ actual object Crypto {
     @OptIn(ExperimentalWasmJsInterop::class)
     actual suspend fun decrypt(
         algorithm: Algorithm,
-        key: ByteArray,
+        key: SecretKey,
         nonce: ByteArray,
         messageCiphertext: ByteArray,
         aad: ByteArray?
     ): ByteArray {
+        key.checkNotDestroyed()
+        val rawKey = key.data
         val (webAlgorithm, webImportAlgorithm) = when (algorithm) {
             Algorithm.A128GCM, Algorithm.A192GCM, Algorithm.A256GCM -> {
                 val params = unsafeJso<AesGcmParams> {
@@ -334,7 +340,7 @@ actual object Crypto {
         }
         val cryptoKey = crypto.subtle.importKey(
             format = KeyFormat.Companion.raw,
-            keyData = key.toBufferSource(),
+            keyData = rawKey.toBufferSource(),
             algorithm = webImportAlgorithm,
             extractable = false,
             keyUsages = jsArrayOf(KeyUsage.decrypt)
@@ -352,6 +358,28 @@ actual object Crypto {
             throw IllegalStateException("Error decrypting", e)
         }
     }
+
+    actual suspend fun mac(
+        algorithm: Algorithm,
+        key: ByteArray,
+        message: ByteArray
+    ): ByteArray = SecretKey(key).use { mac(algorithm, it, message) }
+
+    actual suspend fun encrypt(
+        algorithm: Algorithm,
+        key: ByteArray,
+        nonce: ByteArray,
+        messagePlaintext: ByteArray,
+        aad: ByteArray?
+    ): ByteArray = SecretKey(key).use { encrypt(algorithm, it, nonce, messagePlaintext, aad) }
+
+    actual suspend fun decrypt(
+        algorithm: Algorithm,
+        key: ByteArray,
+        nonce: ByteArray,
+        messageCiphertext: ByteArray,
+        aad: ByteArray?
+    ): ByteArray = SecretKey(key).use { decrypt(algorithm, it, nonce, messageCiphertext, aad) }
 
     @OptIn(ExperimentalWasmJsInterop::class)
     actual suspend fun checkSignature(
@@ -919,8 +947,11 @@ actual object Crypto {
         }
         val alg = unsafeJso<web.crypto.Algorithm> { this.name = algName }
         val encapBits = subtleEncapsulateBitsAsync(crypto.subtle, alg, importedKey).await()
+        val sharedSecretBytes = encapBits.sharedKey.toByteArray()
+        val secretKey = SecretKey(sharedSecretBytes)
+        sharedSecretBytes.secureZero()
         return KemResult(
-            sharedSecret = encapBits.sharedKey.toByteArray(),
+            sharedSecret = secretKey,
             ciphertext = encapBits.ciphertext.toByteArray()
         )
     }
@@ -929,7 +960,7 @@ actual object Crypto {
     actual suspend fun kemDecapsulate(
         key: MlKemPrivateKey,
         ciphertext: ByteArray
-    ): ByteArray {
+    ): SecretKey {
         val algName = when (key.algorithm) {
             Algorithm.ML_KEM_512 -> "ML-KEM-512"
             Algorithm.ML_KEM_768 -> "ML-KEM-768"
@@ -977,15 +1008,18 @@ actual object Crypto {
         }
         val alg = unsafeJso<web.crypto.Algorithm> { this.name = algName }
         val sharedKeyBuf = subtleDecapsulateBitsAsync(crypto.subtle, alg, importedKey, ciphertext.toBufferSource()).await()
-        return sharedKeyBuf.toByteArray()
+        val sharedKeyBytes = sharedKeyBuf.toByteArray()
+        val secretKey = SecretKey(sharedKeyBytes)
+        sharedKeyBytes.secureZero()
+        return secretKey
     }
 
     actual suspend fun keyAgreement(
         key: EcPrivateKey,
         otherKey: EcPublicKey
-    ): ByteArray {
+    ): SecretKey {
         require(otherKey.curve == key.curve) { "Other key for ECDH is not ${key.curve.name}" }
-        return when (key.curve) {
+        val secretBytes = when (key.curve) {
             EcCurve.P256,
             EcCurve.P384,
             EcCurve.P521,
@@ -1051,6 +1085,9 @@ actual object Crypto {
                 throw IllegalStateException("Key with curve ${key.curve} does not support key-agreement")
             }
         }
+        val secretKey = SecretKey(secretBytes)
+        secretBytes.secureZero()
+        return secretKey
     }
 
     @OptIn(ExperimentalWasmJsInterop::class)

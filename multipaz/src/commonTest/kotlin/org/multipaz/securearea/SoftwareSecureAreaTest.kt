@@ -190,7 +190,9 @@ class SoftwareSecureAreaTest {
         val theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.ecPublicKey)
 
         // ... finally, check that both sides compute the same shared secret.
-        assertContentEquals(theirSharedSecret, ourSharedSecret)
+        assertContentEquals(theirSharedSecret.encoded, ourSharedSecret)
+        theirSharedSecret.close()
+        otherKey.close()
     }
 
     @Test
@@ -493,10 +495,12 @@ class SoftwareSecureAreaTest {
             }
 
             // ...now do it from the perspective of the other side...
-            var theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.ecPublicKey)
+            val theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.ecPublicKey)
 
             // ... finally, check that both sides compute the same shared secret.
-            assertContentEquals(theirSharedSecret, ourSharedSecret)
+            assertContentEquals(theirSharedSecret.encoded, ourSharedSecret)
+            theirSharedSecret.close()
+            otherKey.close()
         }
     }
 

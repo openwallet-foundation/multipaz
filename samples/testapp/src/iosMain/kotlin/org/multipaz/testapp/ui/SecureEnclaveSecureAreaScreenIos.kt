@@ -228,7 +228,8 @@ private suspend fun seTestUnguarded(
             )
         }
         val t1 = Clock.System.now()
-        check(sharedSecret.contentEquals(kemResult.sharedSecret))
+        check(sharedSecret.contentEquals(kemResult.sharedSecret.encoded))
+        kemResult.close()
         Logger.dHex(TAG, "Decapsulated shared secret ", sharedSecret)
         showToast("Decapsulated (${t1 - t0})")
     } else {

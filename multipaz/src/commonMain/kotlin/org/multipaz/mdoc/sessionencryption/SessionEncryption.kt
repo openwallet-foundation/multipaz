@@ -25,16 +25,13 @@ import org.multipaz.crypto.EcPublicKey
 import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.Hkdf
-import org.multipaz.crypto.secureZero
+import org.multipaz.crypto.SecretKey
 import org.multipaz.mdoc.role.MdocRole
 import org.multipaz.util.Logger
 
 private const val TAG = "SessionEncryption"
 
 /**
- * Helper class for implementing session encryption according to ISO/IEC 18013-5:2021
- * section 9.1.1 Session encryption.
- *
  * The `DeviceEngagement` and `Handover` CBOR referenced in the
  * parameters below must conform to the CDDL in ISO 18013-5.
  *
@@ -59,8 +56,8 @@ class SessionEncryption(
 ) : AutoCloseable {
     private val eSelfPublicKey: EcPublicKey = eSelfKey.publicKey
     private var sessionEstablishmentSent = false
-    private lateinit var skRemote: ByteArray
-    private lateinit var skSelf: ByteArray
+    private lateinit var skRemote: SecretKey
+    private lateinit var skSelf: SecretKey
     private var nextSequenceNumber_ = 0
     private var decryptedCounter = 1
     private var encryptedCounter = 1
@@ -70,10 +67,10 @@ class SessionEncryption(
 
     override fun close() {
         if (::skSelf.isInitialized) {
-            skSelf.secureZero()
+            skSelf.close()
         }
         if (::skRemote.isInitialized) {
-            skRemote.secureZero()
+            skRemote.close()
         }
         eSelfKey.close()
     }
@@ -100,15 +97,15 @@ class SessionEncryption(
         val sharedSecret = Crypto.keyAgreement(eSelfKey, remotePublicKey)
         val sessionTranscriptBytes = Cbor.encode(Tagged(24, Bstr(encodedSessionTranscript)))
         val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
-        val deviceSK: ByteArray
-        val readerSK: ByteArray
+        val deviceSK: SecretKey
+        val readerSK: SecretKey
         try {
             var info = "SKDevice".encodeToByteArray()
             deviceSK = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
             info = "SKReader".encodeToByteArray()
             readerSK = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
         } finally {
-            sharedSecret.secureZero()
+            sharedSecret.close()
             eSelfKey.close()
         }
         if (role == MdocRole.MDOC) {

@@ -58,7 +58,7 @@ class MlDsaPrivateKey(
             return ByteString(_encoded)
         }
 
-    val encodedKeyMaterial: ByteArray
+    internal val encodedKeyMaterial: ByteArray
         get() {
             checkNotDestroyed()
             return _encoded
