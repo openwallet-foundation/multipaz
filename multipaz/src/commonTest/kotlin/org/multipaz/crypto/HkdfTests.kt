@@ -24,25 +24,25 @@ class HkdfTests {
     )
 
     private suspend fun testAgainstTestVector(t: TestVector) {
-        assertContentEquals(
-            t.prkHex.fromHex(),
+        SecretKey(t.ikmHex.fromHex()).use { ikm ->
             Hkdf.extract(
                 algorithm = t.alg,
-                ikm = t.ikmHex.fromHex(),
+                ikm = ikm,
                 salt = t.saltHex?.fromHex()
-            )
-        )
+            ).use { prk ->
+                assertContentEquals(t.prkHex.fromHex(), prk.encoded)
+            }
 
-        assertContentEquals(
-            t.okmHex.fromHex(),
             Hkdf.deriveKey(
                 algorithm = t.alg,
-                ikm = t.ikmHex.fromHex(),
+                ikm = ikm,
                 salt = t.saltHex?.fromHex(),
                 info = t.infoHex.fromHex(),
                 length = t.length
-            )
-        )
+            ).use { okm ->
+                assertContentEquals(t.okmHex.fromHex(), okm.encoded)
+            }
+        }
     }
 
     @Test

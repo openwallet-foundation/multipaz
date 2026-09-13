@@ -83,7 +83,10 @@ data class Pkcs12(
             iterationCount = iterations,
             keyLength = 32
         )
-        val encryptedKey = Crypto.encrypt(Algorithm.A256CBC, derivedKey, keyIv, privateKeyInfoDer)
+        val encryptedKey = SecretKey(derivedKey).use {
+            Crypto.encrypt(Algorithm.A256CBC, it, keyIv, privateKeyInfoDer)
+        }
+        derivedKey.secureZero()
         val encryptedKeyInfo = ASN1Sequence(listOf(
             buildPbes2AlgorithmIdentifier(keySalt, iterations, Algorithm.HMAC_SHA256, keyIv, 32),
             ASN1OctetString(encryptedKey)
@@ -148,7 +151,10 @@ data class Pkcs12(
             iterationCount = iterations,
             keyLength = 32
         )
-        val encryptedCerts = Crypto.encrypt(Algorithm.A256CBC, derivedCertKey, certIv, certsSafeContentsDer)
+        val encryptedCerts = SecretKey(derivedCertKey).use {
+            Crypto.encrypt(Algorithm.A256CBC, it, certIv, certsSafeContentsDer)
+        }
+        derivedCertKey.secureZero()
 
         val encryptedContentInfo = ASN1Sequence(listOf(
             ASN1ObjectIdentifier(OID.PKCS7_DATA.oid),
@@ -198,7 +204,10 @@ data class Pkcs12(
             keyLength = 32,
             algorithm = Algorithm.SHA256
         )
-        val macValue = Crypto.mac(Algorithm.HMAC_SHA256, macKey, authSafeOctets)
+        val macValue = SecretKey(macKey).use {
+            Crypto.mac(Algorithm.HMAC_SHA256, it, authSafeOctets)
+        }
+        macKey.secureZero()
         val macData = ASN1Sequence(listOf(
             ASN1Sequence(listOf(
                 ASN1Sequence(listOf(
@@ -407,7 +416,10 @@ data class Pkcs12(
                 keyLength = keyLen,
                 algorithm = hashAlgorithm
             )
-            val computedMac = Crypto.mac(hmacAlgorithm, derivedMacKey, authSafeOctets)
+            val computedMac = SecretKey(derivedMacKey).use {
+                Crypto.mac(hmacAlgorithm, it, authSafeOctets)
+            }
+            derivedMacKey.secureZero()
 
             if (!computedMac.contentEquals(expectedMac)) {
                 throw Pkcs12WrongPassphraseException("MAC verification failed: wrong passphrase or corrupted PKCS#12 file")
@@ -550,10 +562,14 @@ data class Pkcs12(
             }
 
             return try {
-                Crypto.decrypt(encAlgorithm, key, iv, ciphertext)
+                SecretKey(key).use { secretKey ->
+                    Crypto.decrypt(encAlgorithm, secretKey, iv, ciphertext)
+                }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 throw Pkcs12WrongPassphraseException("Failed to decrypt PBES2 ciphertext", e)
+            } finally {
+                key.secureZero()
             }
         }
 

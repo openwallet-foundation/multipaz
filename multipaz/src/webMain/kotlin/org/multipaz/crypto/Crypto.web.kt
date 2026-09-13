@@ -359,28 +359,6 @@ actual object Crypto {
         }
     }
 
-    actual suspend fun mac(
-        algorithm: Algorithm,
-        key: ByteArray,
-        message: ByteArray
-    ): ByteArray = SecretKey(key).use { mac(algorithm, it, message) }
-
-    actual suspend fun encrypt(
-        algorithm: Algorithm,
-        key: ByteArray,
-        nonce: ByteArray,
-        messagePlaintext: ByteArray,
-        aad: ByteArray?
-    ): ByteArray = SecretKey(key).use { encrypt(algorithm, it, nonce, messagePlaintext, aad) }
-
-    actual suspend fun decrypt(
-        algorithm: Algorithm,
-        key: ByteArray,
-        nonce: ByteArray,
-        messageCiphertext: ByteArray,
-        aad: ByteArray?
-    ): ByteArray = SecretKey(key).use { decrypt(algorithm, it, nonce, messageCiphertext, aad) }
-
     @OptIn(ExperimentalWasmJsInterop::class)
     actual suspend fun checkSignature(
         publicKey: EcPublicKey,
@@ -948,10 +926,10 @@ actual object Crypto {
         val alg = unsafeJso<web.crypto.Algorithm> { this.name = algName }
         val encapBits = subtleEncapsulateBitsAsync(crypto.subtle, alg, importedKey).await()
         val sharedSecretBytes = encapBits.sharedKey.toByteArray()
-        val secretKey = SecretKey(sharedSecretBytes)
+        val sharedSecret = SecureByteString(sharedSecretBytes)
         sharedSecretBytes.secureZero()
         return KemResult(
-            sharedSecret = secretKey,
+            sharedSecret = sharedSecret,
             ciphertext = encapBits.ciphertext.toByteArray()
         )
     }
@@ -960,7 +938,7 @@ actual object Crypto {
     actual suspend fun kemDecapsulate(
         key: MlKemPrivateKey,
         ciphertext: ByteArray
-    ): SecretKey {
+    ): SecureByteString {
         val algName = when (key.algorithm) {
             Algorithm.ML_KEM_512 -> "ML-KEM-512"
             Algorithm.ML_KEM_768 -> "ML-KEM-768"
@@ -1009,15 +987,15 @@ actual object Crypto {
         val alg = unsafeJso<web.crypto.Algorithm> { this.name = algName }
         val sharedKeyBuf = subtleDecapsulateBitsAsync(crypto.subtle, alg, importedKey, ciphertext.toBufferSource()).await()
         val sharedKeyBytes = sharedKeyBuf.toByteArray()
-        val secretKey = SecretKey(sharedKeyBytes)
+        val sharedSecret = SecureByteString(sharedKeyBytes)
         sharedKeyBytes.secureZero()
-        return secretKey
+        return sharedSecret
     }
 
     actual suspend fun keyAgreement(
         key: EcPrivateKey,
         otherKey: EcPublicKey
-    ): SecretKey {
+    ): SecureByteString {
         require(otherKey.curve == key.curve) { "Other key for ECDH is not ${key.curve.name}" }
         val secretBytes = when (key.curve) {
             EcCurve.P256,
@@ -1085,9 +1063,9 @@ actual object Crypto {
                 throw IllegalStateException("Key with curve ${key.curve} does not support key-agreement")
             }
         }
-        val secretKey = SecretKey(secretBytes)
+        val sharedSecret = SecureByteString(secretBytes)
         secretBytes.secureZero()
-        return secretKey
+        return sharedSecret
     }
 
     @OptIn(ExperimentalWasmJsInterop::class)

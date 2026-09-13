@@ -228,9 +228,11 @@ private suspend fun seTestUnguarded(
             )
         }
         val t1 = Clock.System.now()
-        check(sharedSecret.contentEquals(kemResult.sharedSecret.encoded))
+        sharedSecret.use {
+            check(it.encoded.contentEquals(kemResult.sharedSecret.encoded))
+            Logger.dHex(TAG, "Decapsulated shared secret ", it.encoded)
+        }
         kemResult.close()
-        Logger.dHex(TAG, "Decapsulated shared secret ", sharedSecret)
         showToast("Decapsulated (${t1 - t0})")
     } else {
         Crypto.createEcPrivateKey(EcCurve.P256).use { otherKeyPairForEcdh ->
@@ -242,11 +244,13 @@ private suspend fun seTestUnguarded(
                 )
             }
             val t1 = Clock.System.now()
-            Logger.dHex(
-                TAG,
-                "Calculated ECDH ",
-                Zab
-            )
+            Zab.use {
+                Logger.dHex(
+                    TAG,
+                    "Calculated ECDH ",
+                    it.encoded
+                )
+            }
             showToast("ECDH (${t1 - t0})")
         }
     }

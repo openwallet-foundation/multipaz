@@ -574,7 +574,6 @@
     <ID>UndocumentedPublicProperty:ASN1TimeTag.kt$ASN1TimeTag$GENERALIZED_TIME : ASN1TimeTag</ID>
     <ID>UndocumentedPublicProperty:ASN1TimeTag.kt$ASN1TimeTag$UTC_TIME : ASN1TimeTag</ID>
     <ID>UndocumentedPublicProperty:ASN1TimeTag.kt$ASN1TimeTag$val tag: Int</ID>
-    <ID>UndocumentedPublicProperty:AesGcmCipher.kt$AesGcmCipher$val key: ByteArray</ID>
     <ID>UndocumentedPublicProperty:Algorithm.kt$Algorithm$ANDROID_KEYSTORE_ATTEST_KEY : Algorithm</ID>
     <ID>UndocumentedPublicProperty:AndroidAttestationExtensionParser.kt$AndroidAttestationExtensionParser$val applicationPackages: List&lt;String></ID>
     <ID>UndocumentedPublicProperty:AndroidAttestationExtensionParser.kt$AndroidAttestationExtensionParser$val applicationSignatureDigests: List&lt;ByteString></ID>

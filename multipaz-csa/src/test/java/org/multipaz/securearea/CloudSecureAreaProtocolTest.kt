@@ -27,6 +27,7 @@ import org.multipaz.crypto.MlDsaSignature
 import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.crypto.RsaPublicKey
 import org.multipaz.crypto.RsaSignature
+import org.multipaz.crypto.SecretKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
@@ -169,12 +170,17 @@ class CloudSecureAreaProtocolTest {
     private class CsaClient(
         val server: CloudSecureAreaServer,
         val passphrase: String
-    ) {
+    ) : AutoCloseable {
         var e2eeContext: ByteArray? = null
-        var skDevice: ByteArray? = null
-        var skCloud: ByteArray? = null
+        var skDevice: SecretKey? = null
+        var skCloud: SecretKey? = null
         var clientEncryptedCounter = 1
         var clientDecryptedCounter = 1
+
+        override fun close() {
+            skDevice?.close()
+            skCloud?.close()
+        }
 
         suspend fun registerAndSetupE2EE() {
             val regReq0 = RegisterRequest0("1.0")
@@ -243,8 +249,8 @@ class CloudSecureAreaProtocolTest {
                 )
             )
             zab.use {
-                skDevice = Hkdf.deriveKey(Algorithm.HMAC_SHA256, it, salt, "SKDevice".toByteArray(), 32).use { key -> key.encoded }
-                skCloud = Hkdf.deriveKey(Algorithm.HMAC_SHA256, it, salt, "SKCloud".toByteArray(), 32).use { key -> key.encoded }
+                skDevice = Hkdf.deriveKey(Algorithm.HMAC_SHA256, it, salt, "SKDevice".toByteArray(), 32)
+                skCloud = Hkdf.deriveKey(Algorithm.HMAC_SHA256, it, salt, "SKCloud".toByteArray(), 32)
             }
             e2eeContext = e2eeResp1.serverState
             clientEncryptedCounter = 1

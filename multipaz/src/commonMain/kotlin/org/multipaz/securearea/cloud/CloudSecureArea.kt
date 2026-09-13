@@ -31,8 +31,10 @@ import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
 import org.multipaz.crypto.SecretKey
+import org.multipaz.crypto.SecureByteString
 import org.multipaz.crypto.Signature
 import org.multipaz.crypto.SignatureVerificationException
+import org.multipaz.crypto.secureZero
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.device.AssertionNonce
@@ -845,7 +847,7 @@ open class CloudSecureArea protected constructor(
         alias: String,
         otherKey: EcPublicKey,
         unlockReason: Reason
-    ): ByteArray {
+    ): SecureByteString {
         return interactionHelper(
             alias,
             unlockReason,
@@ -857,7 +859,7 @@ open class CloudSecureArea protected constructor(
         alias: String,
         otherKey: EcPublicKey,
         keyUnlockData: KeyUnlockData?
-    ): ByteArray {
+    ): SecureByteString {
         var zab: ByteArray? = null
         val keyContext = storageTable.get(key = alias, partitionId = identifier)
         setupE2EE(false)
@@ -916,14 +918,19 @@ open class CloudSecureArea protected constructor(
                 else -> throw CloudException("Unexpected result ${response1.result}")
             }
         } while (tryAgain)
-        return zab!!
+        val rawZab = zab!!
+        try {
+            return SecureByteString(rawZab)
+        } finally {
+            rawZab.secureZero()
+        }
     }
 
     override suspend fun kemDecapsulate(
         alias: String,
         ciphertext: ByteArray,
         unlockReason: Reason
-    ): ByteArray {
+    ): SecureByteString {
         return interactionHelper(
             alias,
             unlockReason,
@@ -935,7 +942,7 @@ open class CloudSecureArea protected constructor(
         alias: String,
         ciphertext: ByteArray,
         keyUnlockData: KeyUnlockData?
-    ): ByteArray {
+    ): SecureByteString {
         var sharedSecret: ByteArray? = null
         val keyContext = storageTable.get(key = alias, partitionId = identifier)
         setupE2EE(false)
@@ -994,7 +1001,12 @@ open class CloudSecureArea protected constructor(
                 else -> throw CloudException("Unexpected result ${response1.result}")
             }
         } while (tryAgain)
-        return sharedSecret!!
+        val rawSecret = sharedSecret!!
+        try {
+            return SecureByteString(rawSecret)
+        } finally {
+            rawSecret.secureZero()
+        }
     }
 
     private suspend fun checkPassphrase(

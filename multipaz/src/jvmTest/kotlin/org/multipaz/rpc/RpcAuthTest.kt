@@ -8,6 +8,7 @@ import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.SecretKey
 import org.multipaz.rpc.annotation.RpcInterface
 import org.multipaz.rpc.annotation.RpcMethod
 import org.multipaz.rpc.annotation.RpcState
@@ -77,7 +78,7 @@ class TestRpcAuthIssuer(private val valid: Boolean): RpcAuthIssuer {
 private fun buildDispatcher(): RpcDispatcherLocal {
     val builder = RpcDispatcherLocal.Builder()
     TestState.register(builder)
-    val cipher = AesGcmCipher(Random.Default.nextBytes(16))
+    val cipher = AesGcmCipher(SecretKey(Random.Default.nextBytes(16)))
     val environment = BackendEnvironment.EMPTY
     return builder.build(environment, cipher, RpcExceptionMap.Builder().build())
 }

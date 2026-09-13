@@ -151,6 +151,7 @@ class JsonWebEncryptionTests {
             //
             // from the example.
             //
+            //
             "9e56d91d817135d372834283bf84269cfb316ea3da806a48f6daa7798cfe90c4",
             sharedSecret.encoded.toHex()
         )

@@ -2,6 +2,8 @@
 
 package org.multipaz.crypto
 
+import kotlin.coroutines.cancellation.CancellationException
+
 /**
  * Cryptographic support routines.
  *
@@ -78,15 +80,6 @@ expect object Crypto {
     ): ByteArray
 
     /**
-     * Message authentication code function accepting a raw byte array key.
-     */
-    suspend fun mac(
-        algorithm: Algorithm,
-        key: ByteArray,
-        message: ByteArray
-    ): ByteArray
-
-    /**
      * Message encryption.
      *
      * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], [Algorithm.A256GCM],
@@ -101,17 +94,6 @@ expect object Crypto {
     suspend fun encrypt(
         algorithm: Algorithm,
         key: SecretKey,
-        nonce: ByteArray,
-        messagePlaintext: ByteArray,
-        aad: ByteArray? = null
-    ): ByteArray
-
-    /**
-     * Message encryption function accepting a raw byte array key.
-     */
-    suspend fun encrypt(
-        algorithm: Algorithm,
-        key: ByteArray,
         nonce: ByteArray,
         messagePlaintext: ByteArray,
         aad: ByteArray? = null
@@ -133,17 +115,6 @@ expect object Crypto {
     suspend fun decrypt(
         algorithm: Algorithm,
         key: SecretKey,
-        nonce: ByteArray,
-        messageCiphertext: ByteArray,
-        aad: ByteArray? = null
-    ): ByteArray
-
-    /**
-     * Message decryption function accepting a raw byte array key.
-     */
-    suspend fun decrypt(
-        algorithm: Algorithm,
-        key: ByteArray,
         nonce: ByteArray,
         messageCiphertext: ByteArray,
         aad: ByteArray? = null
@@ -297,24 +268,24 @@ expect object Crypto {
      *
      * @param key the recipient private key.
      * @param ciphertext the ciphertext produced by encapsulation.
-     * @return the decapsulated shared secret as a [SecretKey].
+     * @return the decapsulated shared secret as a [SecureByteString].
      */
     suspend fun kemDecapsulate(
         key: MlKemPrivateKey,
         ciphertext: ByteArray
-    ): SecretKey
+    ): SecureByteString
 
     /**
      * Performs Key Agreement.
      *
      * @param key the key to use for key agreement.
      * @param otherKey the key from the other party.
-     * @return the shared secret as a [SecretKey].
+     * @return the shared secret as a [SecureByteString].
      */
     suspend fun keyAgreement(
         key: EcPrivateKey,
         otherKey: EcPublicKey
-    ): SecretKey
+    ): SecureByteString
 
     /**
      * Validate that each certificate in the chain is signed by the next one.
@@ -334,7 +305,12 @@ expect object Crypto {
  * @param signatureAlgorithm the signature algorithm to use.
  * @param message the data to sign.
  * @return the signature.
+ * @throws IllegalArgumentException if the key cannot sign or algorithm is incompatible.
  */
+@Throws(
+    IllegalArgumentException::class,
+    CancellationException::class
+)
 suspend fun Crypto.sign(
     key: PrivateKey,
     signatureAlgorithm: Algorithm,
@@ -356,6 +332,11 @@ suspend fun Crypto.sign(
  * @throws SignatureVerificationException if the signature check fails.
  * @throws IllegalArgumentException if an error occurred during the check, for example if data is malformed.
  */
+@Throws(
+    SignatureVerificationException::class,
+    IllegalArgumentException::class,
+    CancellationException::class
+)
 suspend fun Crypto.checkSignature(
     publicKey: PublicKey,
     message: ByteArray,

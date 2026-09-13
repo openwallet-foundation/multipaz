@@ -18,6 +18,7 @@ import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.Hkdf
+import org.multipaz.crypto.SecretKey
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.TransactionType
@@ -198,24 +199,26 @@ class MdocDocument(
                 if (eReaderKey == null) {
                     throw IllegalArgumentException("Device authentication is MAC but eReaderKey was not set")
                 }
-                val sharedSecret = eReaderKey.keyAgreement(mso.deviceKey)
                 val sessionTranscriptBytes = Cbor.encode(Tagged(
                     Tagged.ENCODED_CBOR,
                     Bstr(Cbor.encode(sessionTranscript)))
                 )
                 val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
                 val info = "EMacKey".encodeToByteArray()
-                val eMacKey = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
-                val expectedTag = Cose.coseMac0(
-                    algorithm = Algorithm.HMAC_SHA256,
-                    key = eMacKey,
-                    message = deviceAuthenticationBytes,
-                    includeMessageInPayload = false,
-                    protectedHeaders = mapOf(
-                        CoseNumberLabel(Cose.COSE_LABEL_ALG) to Algorithm.HMAC_SHA256.coseAlgorithmIdentifier!!.toDataItem()
-                    ),
-                    unprotectedHeaders = mapOf()
-                ).tag
+                val expectedTag = eReaderKey.keyAgreement(mso.deviceKey).use { sharedSecretKey ->
+                    Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecretKey, salt, info, 32).use { eMacKey ->
+                        Cose.coseMac0(
+                            algorithm = Algorithm.HMAC_SHA256,
+                            key = eMacKey,
+                            message = deviceAuthenticationBytes,
+                            includeMessageInPayload = false,
+                            protectedHeaders = mapOf(
+                                CoseNumberLabel(Cose.COSE_LABEL_ALG) to Algorithm.HMAC_SHA256.coseAlgorithmIdentifier!!.toDataItem()
+                            ),
+                            unprotectedHeaders = mapOf()
+                        ).tag
+                    }
+                }
                 if (!(expectedTag contentEquals deviceAuth.mac.tag)) {
                     throw IllegalStateException("Device authentication MAC failed to verify")
                 }
@@ -394,26 +397,28 @@ class MdocDocument(
                 if (eReaderKey == null) {
                     throw IllegalStateException("Trying to add a document with MACing but eReaderKey not specified")
                 }
-                val sharedSecret = deviceKey.keyAgreement(eReaderKey)
                 val sessionTranscriptBytes = Cbor.encode(
                     Tagged(Tagged.ENCODED_CBOR, Bstr(encodedSessionTranscript))
                 )
                 val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
                 val info = "EMacKey".encodeToByteArray()
-                val eMacKey = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
-                val deviceMac = Cose.coseMac0(
-                    algorithm = Algorithm.HMAC_SHA256,
-                    key = eMacKey,
-                    message = deviceAuthenticationBytes,
-                    includeMessageInPayload = false,
-                    protectedHeaders = mapOf(
-                        Pair(
-                            CoseNumberLabel(Cose.COSE_LABEL_ALG),
-                            Algorithm.HMAC_SHA256.coseAlgorithmIdentifier!!.toDataItem()
+                val deviceMac = deviceKey.keyAgreement(eReaderKey).use { sharedSecretKey ->
+                    Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecretKey, salt, info, 32).use { eMacKey ->
+                        Cose.coseMac0(
+                            algorithm = Algorithm.HMAC_SHA256,
+                            key = eMacKey,
+                            message = deviceAuthenticationBytes,
+                            includeMessageInPayload = false,
+                            protectedHeaders = mapOf(
+                                Pair(
+                                    CoseNumberLabel(Cose.COSE_LABEL_ALG),
+                                    Algorithm.HMAC_SHA256.coseAlgorithmIdentifier!!.toDataItem()
+                                )
+                            ),
+                            unprotectedHeaders = mapOf()
                         )
-                    ),
-                    unprotectedHeaders = mapOf()
-                )
+                    }
+                }
                 DeviceAuth.Mac(deviceMac)
             } else {
                 // Make sure we're not using fully-specified algorithms

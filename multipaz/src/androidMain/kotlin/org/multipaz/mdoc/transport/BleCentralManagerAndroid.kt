@@ -44,6 +44,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.io.bytestring.buildByteString
 import org.multipaz.crypto.Hkdf
+import org.multipaz.crypto.SecretKey
 import org.multipaz.util.appendByteArray
 import org.multipaz.util.appendUInt32
 import org.multipaz.util.getUInt32
@@ -616,7 +617,9 @@ internal class BleCentralManagerAndroid : BleCentralManager {
         val ikm = Cbor.encode(Tagged(24, Bstr(Cbor.encode(eSenderKey.toCoseKey().toDataItem()))))
         val info = "BLEIdent".encodeToByteArray()
         val salt = null
-        expectedIdentValue = Hkdf.deriveKey(Algorithm.HMAC_SHA256, ikm, salt, info, 16)
+        expectedIdentValue = SecretKey(ikm).use {
+            Hkdf.deriveKey(Algorithm.HMAC_SHA256, it, salt, info, 16).use { key -> key.encoded }
+        }
 
         suspendCancellableCoroutine<Boolean> { continuation ->
             setWaitCondition(WaitState.GET_READER_IDENT, continuation)

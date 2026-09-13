@@ -18,6 +18,7 @@ import org.multipaz.crypto.RsaPublicKey
 import org.multipaz.crypto.RsaSignature
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.SecretKey
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.prompt.Reason
 import org.multipaz.securearea.SecureArea
@@ -478,7 +479,7 @@ object Cose {
      * in the protected header.
      *
      * @param algorithm the algorithm to use, e.g. [Algorithm.HMAC_SHA256].
-     * @param key the bytes of the symmetric key to use.
+     * @param key the symmetric key to use.
      * @param message the message.
      * @param includeMessageInPayload whether to include the message in the payload.
      * @param protectedHeaders the protected headers to include.
@@ -486,7 +487,7 @@ object Cose {
      */
     suspend fun coseMac0(
         algorithm: Algorithm,
-        key: ByteArray,
+        key: SecretKey,
         message: ByteArray,
         includeMessageInPayload: Boolean,
         protectedHeaders: Map<CoseLabel, DataItem>,

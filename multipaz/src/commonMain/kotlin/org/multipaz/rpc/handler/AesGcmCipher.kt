@@ -2,12 +2,17 @@ package org.multipaz.rpc.handler
 
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.SecretKey
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlin.random.Random
 
 /** SimpleCipher implementation for AES/GCM with 128/192/256 bit keys. */
-class AesGcmCipher(val key: ByteArray) : SimpleCipher {
-    private val alg = when (key.size) {
+class AesGcmCipher(
+    /** The secret key used for encryption and decryption. */
+    val secretKey: SecretKey
+) : SimpleCipher, AutoCloseable {
+
+    private val alg = when (secretKey.size) {
         16 -> Algorithm.A128GCM
         24 -> Algorithm.A192GCM
         32 -> Algorithm.A256GCM
@@ -18,7 +23,7 @@ class AesGcmCipher(val key: ByteArray) : SimpleCipher {
         val ciphertext = ByteStringBuilder()
         val iv = Random.Default.nextBytes(12)
         ciphertext.append(iv)
-        ciphertext.append(Crypto.encrypt(alg, key, iv, plaintext))
+        ciphertext.append(Crypto.encrypt(alg, secretKey, iv, plaintext))
         return ciphertext.toByteString().toByteArray()
     }
 
@@ -31,11 +36,15 @@ class AesGcmCipher(val key: ByteArray) : SimpleCipher {
         ciphertext.copyInto(iv, endIndex = iv.size)
         try {
             return Crypto.decrypt(
-                alg, key, iv,
+                alg, secretKey, iv,
                 ciphertext.sliceArray(iv.size..ciphertext.lastIndex)
             )
         } catch (ex: IllegalStateException) {
             throw SimpleCipher.DataTamperedException()
         }
+    }
+
+    override fun close() {
+        secretKey.close()
     }
 }

@@ -18,6 +18,8 @@ package org.multipaz.securearea
 import kotlinx.coroutines.CancellationException
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
+import org.multipaz.crypto.SecretKey
+import org.multipaz.crypto.SecureByteString
 import org.multipaz.crypto.Signature
 import org.multipaz.prompt.Reason
 
@@ -124,6 +126,7 @@ interface SecureArea {
      *
      * @param alias The alias of the key to delete.
      */
+    @Throws(CancellationException::class)
     suspend fun deleteKey(alias: String)
 
     /**
@@ -185,7 +188,7 @@ interface SecureArea {
         alias: String,
         otherKey: EcPublicKey,
         unlockReason: Reason = Reason.Unspecified
-    ): ByteArray
+    ): SecureByteString
 
     /**
      * Performs Key Decapsulation.
@@ -199,7 +202,7 @@ interface SecureArea {
      * @param alias the alias of the KEM key to use.
      * @param ciphertext The encapsulated ciphertext from the sender.
      * @param unlockReason the reason for unlocking.
-     * @return The decapsulated shared secret.
+     * @return The decapsulated shared secret as a [SecureByteString].
      * @throws IllegalArgumentException if the key is not a KEM key.
      * @throws IllegalArgumentException if there is no key with the given alias
      * or the key wasn't created with a KEM algorithm.
@@ -211,13 +214,14 @@ interface SecureArea {
         IllegalArgumentException::class,
         KeyLockedException::class,
         KeyInvalidatedException::class,
+        UnsupportedOperationException::class,
         CancellationException::class
     )
     suspend fun kemDecapsulate(
         alias: String,
         ciphertext: ByteArray,
         unlockReason: Reason = Reason.Unspecified
-    ): ByteArray {
+    ): SecureByteString {
         throw UnsupportedOperationException("Key decapsulation is not supported by this SecureArea")
     }
 

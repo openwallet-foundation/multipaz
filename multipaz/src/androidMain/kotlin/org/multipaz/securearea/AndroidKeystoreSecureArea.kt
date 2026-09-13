@@ -33,7 +33,10 @@ import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
 import org.multipaz.crypto.MlDsaSignature
 import org.multipaz.crypto.RsaSignature
+import org.multipaz.crypto.SecretKey
+import org.multipaz.crypto.SecureByteString
 import org.multipaz.crypto.Signature
+import org.multipaz.crypto.secureZero
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.checkSignature
@@ -616,7 +619,7 @@ class AndroidKeystoreSecureArea private constructor(
         alias: String,
         otherKey: EcPublicKey,
         unlockReason: Reason
-    ): ByteArray {
+    ): SecureByteString {
         do {
             try {
                 return keyAgreementNonInteractive(alias, otherKey)
@@ -635,13 +638,18 @@ class AndroidKeystoreSecureArea private constructor(
     private suspend fun keyAgreementNonInteractive(
         alias: String,
         otherKey: EcPublicKey,
-    ): ByteArray {
+    ): SecureByteString {
         val (privateKey, _) = loadKey(alias)
         return try {
             val ka = KeyAgreement.getInstance("ECDH", "AndroidKeyStore")
             ka.init(privateKey)
             ka.doPhase(otherKey.javaPublicKey, true)
-            ka.generateSecret()
+            val rawSecret = ka.generateSecret()
+            try {
+                SecureByteString(rawSecret)
+            } finally {
+                rawSecret.secureZero()
+            }
         } catch (e: UserNotAuthenticatedException) {
             throw KeyLockedException("User not authenticated", e)
         } catch (e: ProviderException) {

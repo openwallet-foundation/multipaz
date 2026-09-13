@@ -559,7 +559,8 @@ class CloudSecureAreaTest {
         val theirSharedSecret = Crypto.keyAgreement(otherKeyPair, keyInfo.ecPublicKey)
 
         // ... finally, check that both sides compute the same shared secret.
-        Assert.assertArrayEquals(theirSharedSecret.encoded, ourSharedSecret)
+        Assert.assertArrayEquals(theirSharedSecret.encoded, ourSharedSecret.encoded)
+        ourSharedSecret.close()
         theirSharedSecret.close()
         otherKeyPair.close()
     }
@@ -592,7 +593,8 @@ class CloudSecureAreaTest {
         } catch (e: KeyLockedException) {
             throw AssertionError(e)
         }
-        Assert.assertArrayEquals(kemResult.sharedSecret.encoded, decapsulatedSecret)
+        Assert.assertArrayEquals(kemResult.sharedSecret.encoded, decapsulatedSecret.encoded)
+        decapsulatedSecret.close()
         kemResult.close()
     }
 
@@ -710,13 +712,14 @@ class CloudSecureAreaTest {
         testWrongPassphraseDelayHelper(
             algorithm = Algorithm.ECDH_P256,
             useKey = { alias, csa, unlockData ->
-                if (unlockData == null) {
+                val secretKey = if (unlockData == null) {
                     csa.keyAgreement(alias, otherKey.publicKey)
                 } else {
                     withContext(MockKeyUnlockDataProvider(unlockData)) {
                         csa.keyAgreement(alias, otherKey.publicKey)
                     }
                 }
+                secretKey.close()
         })
     }
 
@@ -734,13 +737,14 @@ class CloudSecureAreaTest {
                     val kemResult = Crypto.kemEncapsulate(keyInfo.publicKey as MlKemPublicKey)
                     ciphertext = kemResult.ciphertext
                 }
-                if (unlockData == null) {
+                val secretKey = if (unlockData == null) {
                     csa.kemDecapsulate(alias, ciphertext!!)
                 } else {
                     withContext(MockKeyUnlockDataProvider(unlockData)) {
                         csa.kemDecapsulate(alias, ciphertext!!)
                     }
                 }
+                secretKey.close()
         })
     }
 

@@ -805,11 +805,13 @@ private suspend fun aksTestUnguarded(
                 )
             )
             val t1 = System.currentTimeMillis()
-            Logger.dHex(
-                TAG,
-                "Calculated ECDH",
-                Zab
-            )
+            Zab.use {
+                Logger.dHex(
+                    TAG,
+                    "Calculated ECDH",
+                    it.encoded
+                )
+            }
             showToast("ECDH in (${t1 - t0} msec)")
         }
     }

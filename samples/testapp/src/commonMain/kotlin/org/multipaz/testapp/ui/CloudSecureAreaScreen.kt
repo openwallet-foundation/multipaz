@@ -512,15 +512,17 @@ private suspend fun csaTestUnguarded(
             kemResult.ciphertext
         )
         val t1 = Clock.System.now()
-        Logger.dHex(
-            TAG,
-            "Decapsulated shared secret",
-            sharedSecret
-        )
-        if (kemResult.sharedSecret.encoded.contentEquals(sharedSecret)) {
-            showToast("KEM in (${t1 - t0})")
-        } else {
-            showToast("KEM failed: secret mismatch")
+        sharedSecret.use {
+            Logger.dHex(
+                TAG,
+                "Decapsulated shared secret",
+                it.encoded
+            )
+            if (kemResult.sharedSecret.encoded.contentEquals(it.encoded)) {
+                showToast("KEM in (${t1 - t0})")
+            } else {
+                showToast("KEM failed: secret mismatch")
+            }
         }
         kemResult.close()
     } else {
@@ -531,11 +533,13 @@ private suspend fun csaTestUnguarded(
                 otherKeyPairForEcdh.publicKey
             )
             val t1 = Clock.System.now()
-            Logger.dHex(
-                TAG,
-                "Calculated ECDH",
-                Zab
-            )
+            Zab.use {
+                Logger.dHex(
+                    TAG,
+                    "Calculated ECDH",
+                    it.encoded
+                )
+            }
             showToast("ECDH in (${t1 - t0})")
         }
     }

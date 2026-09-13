@@ -38,6 +38,7 @@ import kotlin.time.Instant
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.crypto.Hkdf
+import org.multipaz.crypto.SecretKey
 import org.multipaz.crypto.SignatureVerificationException
 import org.multipaz.mdoc.zkp.ZkDocument
 
@@ -288,24 +289,26 @@ class DeviceResponseParser(
                         "Neither deviceSignature nor deviceMac in deviceAuth"
                     )
                 val tagInResponse = deviceMacDataItem.asCoseMac0.tag
-                val sharedSecret = eReaderKey!!.keyAgreement(deviceKey)
                 val sessionTranscriptBytes = Cbor.encode(Tagged(24, Bstr(encodedSessionTranscript)))
                 val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
                 val info = "EMacKey".encodeToByteArray()
-                val eMacKey = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
-                val expectedTag = Cose.coseMac0(
-                    Algorithm.HMAC_SHA256,
-                    eMacKey,
-                    deviceAuthenticationBytes,
-                    false,
-                    mapOf(
-                        Pair(
-                            CoseNumberLabel(Cose.COSE_LABEL_ALG),
-                            Algorithm.HMAC_SHA256.coseAlgorithmIdentifier!!.toDataItem()
-                        )
-                    ),
-                    mapOf()
-                ).tag
+                val expectedTag = eReaderKey!!.keyAgreement(deviceKey).use { sharedSecret ->
+                    Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32).use { eMacKey ->
+                        Cose.coseMac0(
+                            Algorithm.HMAC_SHA256,
+                            eMacKey,
+                            deviceAuthenticationBytes,
+                            false,
+                            mapOf(
+                                Pair(
+                                    CoseNumberLabel(Cose.COSE_LABEL_ALG),
+                                    Algorithm.HMAC_SHA256.coseAlgorithmIdentifier!!.toDataItem()
+                                )
+                            ),
+                            mapOf()
+                        ).tag
+                    }
+                }
                 deviceSignedAuthenticated = expectedTag contentEquals tagInResponse
                 if (deviceSignedAuthenticated) {
                     Logger.d(TAG, "Verified DeviceSigned using MAC")

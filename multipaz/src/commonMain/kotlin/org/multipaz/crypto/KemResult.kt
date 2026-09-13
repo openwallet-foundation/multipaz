@@ -3,18 +3,13 @@ package org.multipaz.crypto
 /**
  * Result of a Key Encapsulation Mechanism (KEM) encapsulation operation.
  *
- * @property sharedSecret the shared secret as a [SecretKey].
+ * @property sharedSecret the shared secret as a [SecureByteString].
  * @property ciphertext the encapsulated ciphertext to be sent to the recipient.
  */
 class KemResult(
-    val sharedSecret: SecretKey,
+    val sharedSecret: SecureByteString,
     val ciphertext: ByteArray
 ) : AutoCloseable {
-
-    constructor(
-        sharedSecret: ByteArray,
-        ciphertext: ByteArray
-    ) : this(SecretKey(sharedSecret), ciphertext)
 
     override fun close() {
         sharedSecret.close()

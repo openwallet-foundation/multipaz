@@ -62,3 +62,62 @@ with the following changes
   contributors and consumers of the Multipaz library know exactly what edge cases they are
   expected to handle. Also use the `@Throws` annotation on the function or method since this
   is required for error handling when consuming the API on e.g. iOS.
+
+## Cryptography and Sensitive Information
+
+* **Never use raw `ByteArray` for keys in public APIs:** Cryptographic keys must never be represented as raw
+  `ByteArray` in public APIs. Symmetric cipher/MAC keys must use `SecretKey` (which inherits from `SecureByteString`),
+  and asymmetric private keys must use `PrivateKey` (or its specific subclasses such as `EcPrivateKey`, `RsaPrivateKey`, etc.).
+  Key agreement functions (`Crypto.keyAgreement`, `SecureArea.keyAgreement`, `AsymmetricKey.keyAgreement`) and KEM decapsulation
+  (`Crypto.kemDecapsulate`, `SecureArea.kemDecapsulate`) must return `SecureByteString` (representing the raw shared secret)
+  rather than raw `ByteArray` or `SecretKey`. Key derivation functions (`Hkdf.deriveKey`) accept `SecureByteString` as input
+  keying material and return `SecretKey`. Do not add convenience overloads taking `ByteArray` for keys to public APIs
+  (`Crypto.encrypt`, `Crypto.mac`, `Hkdf.deriveKey`, `Cose.coseMac0`, etc.).
+
+* **Always clear memory using `AutoCloseable` / `use`:** `SecureByteString` (and its subclass `SecretKey`), as well as
+  `PrivateKey`, implement `AutoCloseable` (with `close()` and alias `destroy()`). Whenever keys, shared secrets, or
+  sensitive byte strings are created or used ephemerally, wrap them in Kotlin's `.use {}` block to ensure that the
+  sensitive material is wiped from memory as soon as execution leaves the block, even if an exception or coroutine
+  cancellation occurs:
+  ```kotlin
+  SecretKey(keyBytes).use { secretKey ->
+      Crypto.encrypt(Algorithm.A128GCM, secretKey, nonce, plaintext)
+  }
+  ```
+  Or chaining directly with `keyAgreement()`:
+  ```kotlin
+  keyAgreement(otherPublicKey).use { sharedSecret ->
+      Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32).use { derivedKey ->
+          // Use derivedKey
+      }
+  }
+  ```
+  If an object or service retains sensitive material long-term, the enclosing class should itself implement `AutoCloseable`
+  and destroy the data when closed.
+
+* **Explicitly zero raw byte arrays with `secureZero()`:** If raw key material or sensitive secrets exist in a `ByteArray`
+  (e.g., read from storage, decrypted from a network payload, or derived before wrapping into `SecretKey` or `SecureByteString`),
+  you must explicitly clear it using `ByteArray.secureZero()` in a `finally` block:
+  ```kotlin
+  val rawKeyBytes = readKeyFromStorage()
+  try {
+      SecretKey(rawKeyBytes).use { secretKey ->
+          // Use secretKey
+      }
+  } finally {
+      rawKeyBytes.secureZero()
+  }
+  ```
+  **Never use `ByteArray.fill(0)`:** Standard array fills can be optimized away by the compiler or JVM/native JIT
+  (dead store elimination). Always call `ByteArray.secureZero()`, which uses platform-specific primitives that
+  guarantee memory writes are not eliminated.
+
+* **Zero defensive copies returned by `encoded` or `toByteArray()`:** The `SecureByteString.encoded` / `toByteArray()`
+  property returns a defensive copy of the underlying bytes. The caller is responsible for calling `secureZero()` on
+  that copy once it is no longer needed. Internal SDK code should avoid `encoded` where possible, utilizing internal
+  direct accessors or keeping the data within `SecureByteString`/`SecretKey`.
+
+* **Avoid string representations of secrets:** Secrets (passwords, PINs, raw keys) should never be held in immutable
+  `String` objects where they cannot be wiped from memory. Prefer `ByteArray` or `CharSequence` buffers that can be
+  zeroed out immediately after use.
+

@@ -192,12 +192,6 @@ actual object Crypto {
         }
     }
 
-    actual suspend fun mac(
-        algorithm: Algorithm,
-        key: ByteArray,
-        message: ByteArray
-    ): ByteArray = SecretKey(key).use { mac(algorithm, it, message) }
-
     /**
      * Message encryption.
      *
@@ -294,22 +288,6 @@ actual object Crypto {
             else -> throw IllegalArgumentException("Unsupported algorithm $algorithm")
         }
     }
-
-    actual suspend fun encrypt(
-        algorithm: Algorithm,
-        key: ByteArray,
-        nonce: ByteArray,
-        messagePlaintext: ByteArray,
-        aad: ByteArray?
-    ): ByteArray = SecretKey(key).use { encrypt(algorithm, it, nonce, messagePlaintext, aad) }
-
-    actual suspend fun decrypt(
-        algorithm: Algorithm,
-        key: ByteArray,
-        nonce: ByteArray,
-        messageCiphertext: ByteArray,
-        aad: ByteArray?
-    ): ByteArray = SecretKey(key).use { decrypt(algorithm, it, nonce, messageCiphertext, aad) }
 
     /**
      * Checks signature validity.
@@ -680,7 +658,7 @@ actual object Crypto {
     actual suspend fun kemDecapsulate(
         key: MlKemPrivateKey,
         ciphertext: ByteArray
-    ): SecretKey {
+    ): SecureByteString {
         if (!BouncyCastlePqc.isAvailable) {
             throw UnsupportedOperationException("ML-KEM is not supported in the current environment")
         }
@@ -696,7 +674,7 @@ actual object Crypto {
     actual suspend fun keyAgreement(
         key: EcPrivateKey,
         otherKey: EcPublicKey
-    ): SecretKey {
+    ): SecureByteString {
         val secretBytes = when (key.curve) {
             EcCurve.P256,
             EcCurve.P384,
@@ -748,9 +726,9 @@ actual object Crypto {
                 }
             }
         }
-        val secretKey = SecretKey(secretBytes)
+        val sharedSecret = SecureByteString(secretBytes)
         secretBytes.secureZero()
-        return secretKey
+        return sharedSecret
     }
 
     internal actual suspend fun validateCertChainSignatures(certChain: X509CertChain): Boolean {

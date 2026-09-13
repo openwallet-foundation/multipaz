@@ -145,28 +145,6 @@ actual object Crypto {
         }
     }
 
-    actual suspend fun mac(
-        algorithm: Algorithm,
-        key: ByteArray,
-        message: ByteArray
-    ): ByteArray = SecretKey(key).use { mac(algorithm, it, message) }
-
-    actual suspend fun encrypt(
-        algorithm: Algorithm,
-        key: ByteArray,
-        nonce: ByteArray,
-        messagePlaintext: ByteArray,
-        aad: ByteArray?
-    ): ByteArray = SecretKey(key).use { encrypt(algorithm, it, nonce, messagePlaintext, aad) }
-
-    actual suspend fun decrypt(
-        algorithm: Algorithm,
-        key: ByteArray,
-        nonce: ByteArray,
-        messageCiphertext: ByteArray,
-        aad: ByteArray?
-    ): ByteArray = SecretKey(key).use { decrypt(algorithm, it, nonce, messageCiphertext, aad) }
-
     actual suspend fun checkSignature(
         publicKey: EcPublicKey,
         message: ByteArray,
@@ -373,15 +351,15 @@ actual object Crypto {
         ) ?: throw IllegalStateException("ML-KEM encapsulation failed (requires iOS 26+)")
         val secret = (ret[0] as NSData).toByteArray()
         val ciphertext = (ret[1] as NSData).toByteArray()
-        val secretKey = SecretKey(secret)
+        val sharedSecret = SecureByteString(secret)
         secret.secureZero()
-        return KemResult(sharedSecret = secretKey, ciphertext = ciphertext)
+        return KemResult(sharedSecret = sharedSecret, ciphertext = ciphertext)
     }
 
     actual suspend fun kemDecapsulate(
         key: MlKemPrivateKey,
         ciphertext: ByteArray
-    ): SecretKey {
+    ): SecureByteString {
         val algName = when (key.algorithm) {
             Algorithm.ML_KEM_768 -> "ML-KEM-768"
             Algorithm.ML_KEM_1024 -> "ML-KEM-1024"
@@ -393,15 +371,15 @@ actual object Crypto {
             key.publicKey.encoded.toByteArray().toNSData(),
             ciphertext.toNSData()
         )?.toByteArray() ?: throw IllegalStateException("ML-KEM decapsulation failed (requires iOS 26+)")
-        val secretKey = SecretKey(secret)
+        val sharedSecret = SecureByteString(secret)
         secret.secureZero()
-        return secretKey
+        return sharedSecret
     }
 
     actual suspend fun keyAgreement(
         key: EcPrivateKey,
         otherKey: EcPublicKey
-    ): SecretKey {
+    ): SecureByteString {
         require(otherKey.curve == key.curve) { "Other key for ECDH is not ${key.curve.name}" }
         val otherKeyRaw = when (otherKey) {
             is EcPublicKeyDoubleCoordinate -> otherKey.x + otherKey.y
@@ -412,9 +390,9 @@ actual object Crypto {
             key.d.toNSData(),
             otherKeyRaw.toNSData()
         )?.toByteArray() ?: throw UnsupportedOperationException("Curve is not supported")
-        val secretKey = SecretKey(secret)
+        val sharedSecret = SecureByteString(secret)
         secret.secureZero()
-        return secretKey
+        return sharedSecret
     }
 
     internal fun secureEnclaveCreateEcPrivateKey(
@@ -456,16 +434,21 @@ actual object Crypto {
         keyBlob: ByteArray,
         otherKey: EcPublicKey,
         keyUnlockData: SecureEnclaveKeyUnlockData?
-    ): ByteArray {
+    ): SecureByteString {
         val otherKeyRaw = when (otherKey) {
             is EcPublicKeyDoubleCoordinate -> otherKey.x + otherKey.y
             is EcPublicKeyOkp -> otherKey.x
         }
-        return SwiftBridge.secureEnclaveEcKeyAgreement(
+        val raw = SwiftBridge.secureEnclaveEcKeyAgreement(
             keyBlob.toNSData(),
             otherKeyRaw.toNSData(),
             keyUnlockData?.authenticationContext as objcnames.classes.LAContext?
         )?.toByteArray() ?: throw KeyLockedException("Unable to unlock key")
+        try {
+            return SecureByteString(raw)
+        } finally {
+            raw.secureZero()
+        }
     }
 
     internal val secureEnclaveIsPqcSupported: Boolean
@@ -540,18 +523,23 @@ actual object Crypto {
         keyBlob: ByteArray,
         ciphertext: ByteArray,
         keyUnlockData: SecureEnclaveKeyUnlockData?
-    ): ByteArray {
+    ): SecureByteString {
         val algName = when (algorithm) {
             Algorithm.ML_KEM_768 -> "ML-KEM-768"
             Algorithm.ML_KEM_1024 -> "ML-KEM-1024"
             else -> throw IllegalArgumentException("Unsupported ML-KEM algorithm $algorithm")
         }
-        return SwiftBridge.secureEnclaveMlKemDecapsulate(
+        val raw = SwiftBridge.secureEnclaveMlKemDecapsulate(
             algName,
             keyBlob.toNSData(),
             ciphertext.toNSData(),
             keyUnlockData?.authenticationContext as objcnames.classes.LAContext?
         )?.toByteArray() ?: throw KeyLockedException("Unable to unlock key")
+        try {
+            return SecureByteString(raw)
+        } finally {
+            raw.secureZero()
+        }
     }
 
     internal actual suspend fun validateCertChainSignatures(certChain: X509CertChain): Boolean {

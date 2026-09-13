@@ -20,6 +20,8 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.RsaPublicKey
 import org.multipaz.crypto.RsaSignature
+import org.multipaz.crypto.SecretKey
+import org.multipaz.crypto.SecureByteString
 import org.multipaz.crypto.checkSignature
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareKeyUnlockData
@@ -176,7 +178,7 @@ class SoftwareSecureAreaTest {
         assertNull(keyInfo.passphraseConstraints)
 
         // First do the ECDH from the perspective of our side...
-        val ourSharedSecret: ByteArray
+        val ourSharedSecret: SecureByteString
         ourSharedSecret = try {
             ks.keyAgreement(
                 "testKey",
@@ -190,7 +192,8 @@ class SoftwareSecureAreaTest {
         val theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.ecPublicKey)
 
         // ... finally, check that both sides compute the same shared secret.
-        assertContentEquals(theirSharedSecret.encoded, ourSharedSecret)
+        assertContentEquals(theirSharedSecret.encoded, ourSharedSecret.encoded)
+        ourSharedSecret.close()
         theirSharedSecret.close()
         otherKey.close()
     }
@@ -484,7 +487,7 @@ class SoftwareSecureAreaTest {
             assertNull(keyInfo.passphraseConstraints)
 
             // First do the ECDH from the perspective of our side...
-            var ourSharedSecret: ByteArray
+            val ourSharedSecret: SecureByteString
             ourSharedSecret = try {
                 ks.keyAgreement(
                     "testKey",
@@ -498,7 +501,8 @@ class SoftwareSecureAreaTest {
             val theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.ecPublicKey)
 
             // ... finally, check that both sides compute the same shared secret.
-            assertContentEquals(theirSharedSecret.encoded, ourSharedSecret)
+            assertContentEquals(theirSharedSecret.encoded, ourSharedSecret.encoded)
+            ourSharedSecret.close()
             theirSharedSecret.close()
             otherKey.close()
         }

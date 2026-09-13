@@ -194,7 +194,9 @@ object Hpke {
     ): ByteArray {
         val labelBytes = label.encodeToByteArray()
         val labeledIkm = "HPKE-v1".encodeToByteArray() + suiteId + labelBytes + ikm
-        return Hkdf.extract(kdf.alg, labeledIkm, salt)
+        return SecretKey(labeledIkm).use {
+            Hkdf.extract(kdf.alg, it, salt).use { prk -> prk.encoded }
+        }
     }
 
     private suspend fun labeledExpand(
@@ -208,7 +210,9 @@ object Hpke {
         val labelBytes = label.encodeToByteArray()
         val lengthBytes = buildByteString { appendInt16(length) }.toByteArray()
         val labeledInfo = lengthBytes + "HPKE-v1".encodeToByteArray() + suiteId + labelBytes + info
-        return Hkdf.expand(kdf.alg, prk, labeledInfo, length)
+        return SecretKey(prk).use {
+            Hkdf.expand(kdf.alg, it, labeledInfo, length).use { okm -> okm.encoded }
+        }
     }
 
     private suspend fun extractAndExpand(
@@ -238,7 +242,7 @@ object Hpke {
 
     internal data class HpkeContext(
         val cipherSuite: CipherSuite,
-        val key: ByteArray,
+        val key: SecretKey,
         val baseNonce: ByteArray,
         val exporterSecret: ByteArray
     )
@@ -270,23 +274,31 @@ object Hpke {
         val kdf = getKdfFromKem(cipherSuite.kem)
 
         val sharedSecret = if (authKey != null) {
-            val dhSum = dh + authKey.keyAgreement(receiverKeyPub!!)
-            extractAndExpand(
-                suiteId = getKemSuiteId(cipherSuite),
-                kdf = kdf,
-                dh = dhSum,
-                kemContext = kemContext + authKey.ecPublicKey.serialize(),
-                length = kdf.nh
-            )
+            val dhSum = authKey.keyAgreement(receiverKeyPub!!).use { dh + it.encoded }
+            try {
+                extractAndExpand(
+                    suiteId = getKemSuiteId(cipherSuite),
+                    kdf = kdf,
+                    dh = dhSum,
+                    kemContext = kemContext + authKey.ecPublicKey.serialize(),
+                    length = kdf.nh
+                )
+            } finally {
+                dhSum.secureZero()
+            }
         } else if (authKeyPub != null) {
-            val dhSum = dh + receiverKey!!.keyAgreement(authKeyPub)
-            extractAndExpand(
-                suiteId = getKemSuiteId(cipherSuite),
-                kdf = kdf,
-                dh = dhSum,
-                kemContext = kemContext + authKeyPub.serialize(),
-                length = kdf.nh
-            )
+            val dhSum = receiverKey!!.keyAgreement(authKeyPub).use { dh + it.encoded }
+            try {
+                extractAndExpand(
+                    suiteId = getKemSuiteId(cipherSuite),
+                    kdf = kdf,
+                    dh = dhSum,
+                    kemContext = kemContext + authKeyPub.serialize(),
+                    length = kdf.nh
+                )
+            } finally {
+                dhSum.secureZero()
+            }
         } else {
             extractAndExpand(
                 suiteId = getKemSuiteId(cipherSuite),
@@ -326,7 +338,7 @@ object Hpke {
         )
         //println("secret: ${secret.toHex()}")
 
-        val key = labeledExpand(
+        val keyBytes = labeledExpand(
             suiteId = getHpkeSuiteId(cipherSuite),
             kdf = cipherSuite.kdf,
             prk = secret,
@@ -334,6 +346,8 @@ object Hpke {
             info = keyScheduleContext,
             length = cipherSuite.aead.nk
         )
+        val key = SecretKey(keyBytes)
+        keyBytes.secureZero()
         //println("key: ${key.toHex()}")
 
         val baseNonce = labeledExpand(
@@ -379,8 +393,12 @@ object Hpke {
     data class Encrypter internal constructor(
         val encapsulatedKey: ByteString,
         private val hpkeContext: HpkeContext
-    ) {
+    ) : AutoCloseable {
         internal var seq: Long = 0
+
+        override fun close() {
+            hpkeContext.key.close()
+        }
 
         /**
          * Encrypts a message to the receiver.
@@ -572,8 +590,12 @@ object Hpke {
     @ConsistentCopyVisibility
     data class Decrypter internal constructor(
         private val hpkeContext: HpkeContext
-    ) {
+    ) : AutoCloseable {
         internal var seq: Long = 0
+
+        override fun close() {
+            hpkeContext.key.close()
+        }
 
         /**
          * Decrypts an encrypted message from the sender.
@@ -670,24 +692,28 @@ object Hpke {
             }
         }
 
-        val dh = receiverPrivateKey.keyAgreement(encapsulatedPublicKey)
-        val kemContext = encapsulatedKey + receiverPrivateKey.ecPublicKey.serialize()
-        val context = calcContext(
-            mode = mode,
-            cipherSuite = cipherSuite,
-            dh = dh,
-            info = info,
-            kemContext = kemContext,
-            receiverKey = receiverPrivateKey,
-            receiverKeyPub = null,
-            psk = psk,
-            pskId = pskId,
-            authKey = null,
-            authKeyPub = authKey,
-        )
+        val dh = receiverPrivateKey.keyAgreement(encapsulatedPublicKey).use { it.encoded }
+        try {
+            val kemContext = encapsulatedKey + receiverPrivateKey.ecPublicKey.serialize()
+            val context = calcContext(
+                mode = mode,
+                cipherSuite = cipherSuite,
+                dh = dh,
+                info = info,
+                kemContext = kemContext,
+                receiverKey = receiverPrivateKey,
+                receiverKeyPub = null,
+                psk = psk,
+                pskId = pskId,
+                authKey = null,
+                authKeyPub = authKey,
+            )
 
-        return Decrypter(
-            hpkeContext = context
-        )
+            return Decrypter(
+                hpkeContext = context
+            )
+        } finally {
+            dh.secureZero()
+        }
     }
 }

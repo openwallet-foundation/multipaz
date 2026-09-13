@@ -264,10 +264,10 @@ internal object BouncyCastlePqc {
         val result = mlkemGeneratorGenerateEncapsulatedMethod.invoke(generator, pubParams)
         val secret = secretWithEncapsulationGetSecretMethod.invoke(result) as ByteArray
         val encapsulation = secretWithEncapsulationGetEncapsulationMethod.invoke(result) as ByteArray
-        val secretKey = SecretKey(secret)
+        val sharedSecret = SecureByteString(secret)
         secret.secureZero()
         KemResult(
-            sharedSecret = secretKey,
+            sharedSecret = sharedSecret,
             ciphertext = encapsulation
         )
     }
@@ -275,13 +275,13 @@ internal object BouncyCastlePqc {
     fun kemDecapsulate(
         key: MlKemPrivateKey,
         ciphertext: ByteArray
-    ): SecretKey = wrapInvocation {
+    ): SecureByteString = wrapInvocation {
         val params = algorithmToMlKemParameters(key.algorithm)
         val privParams = mlkemPrivParamsConstructor.newInstance(params, key.encoded.toByteArray())
         val extractor = mlkemExtractorConstructor.newInstance(privParams)
         val secret = mlkemExtractorExtractSecretMethod.invoke(extractor, ciphertext) as ByteArray
-        val secretKey = SecretKey(secret)
+        val sharedSecret = SecureByteString(secret)
         secret.secureZero()
-        secretKey
+        sharedSecret
     }
 }

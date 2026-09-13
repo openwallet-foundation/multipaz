@@ -6,6 +6,8 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.SecretKey
+import org.multipaz.crypto.secureZero
 import org.multipaz.device.AssertionRpcAuth
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.storage.Storage
@@ -187,7 +189,9 @@ class RpcNonceAndSession(
                         key = ByteString(Random.nextBytes(16))
                         table.insert("nonceCipherKey", key)
                     }
-                    nonceCipher = AesGcmCipher(key.toByteArray())
+                    val keyBytes = key.toByteArray()
+                    nonceCipher = AesGcmCipher(SecretKey(keyBytes))
+                    keyBytes.secureZero()
                 }
                 return nonceCipher!!
             }

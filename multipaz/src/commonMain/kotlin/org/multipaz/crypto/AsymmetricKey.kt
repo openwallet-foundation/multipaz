@@ -11,6 +11,7 @@ import org.multipaz.securearea.KeyLockedException
 import org.multipaz.prompt.Reason
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaRepository
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Private key that can be used to sign messages or used for key agreement, optionally with
@@ -79,29 +80,71 @@ sealed class AsymmetricKey : AutoCloseable {
      * @throws KeyLockedException if the key needs unlocking.
      * @throws KeyInvalidatedException if the key is no longer usable.
      */
+    @Throws(
+        IllegalArgumentException::class,
+        KeyLockedException::class,
+        KeyInvalidatedException::class,
+        CancellationException::class
+    )
     abstract suspend fun sign(message: ByteArray): Signature
 
     /**
      * Convenience method to sign [message] when this is an EC key.
      *
+     * @param message the data to sign.
+     * @return the signature.
      * @throws IllegalStateException if the key is not an EC key.
+     * @throws IllegalArgumentException if the signature algorithm isn't compatible with the key.
+     * @throws KeyLockedException if the key needs unlocking.
+     * @throws KeyInvalidatedException if the key is no longer usable.
      */
+    @Throws(
+        IllegalStateException::class,
+        IllegalArgumentException::class,
+        KeyLockedException::class,
+        KeyInvalidatedException::class,
+        CancellationException::class
+    )
     suspend fun signEc(message: ByteArray): EcSignature =
         sign(message) as? EcSignature ?: throw IllegalStateException("Not an EC signature")
 
     /**
      * Convenience method to sign [message] when this is an RSA key.
      *
+     * @param message the data to sign.
+     * @return the signature.
      * @throws IllegalStateException if the key is not an RSA key.
+     * @throws IllegalArgumentException if the signature algorithm isn't compatible with the key.
+     * @throws KeyLockedException if the key needs unlocking.
+     * @throws KeyInvalidatedException if the key is no longer usable.
      */
+    @Throws(
+        IllegalStateException::class,
+        IllegalArgumentException::class,
+        KeyLockedException::class,
+        KeyInvalidatedException::class,
+        CancellationException::class
+    )
     suspend fun signRsa(message: ByteArray): RsaSignature =
         sign(message) as? RsaSignature ?: throw IllegalStateException("Not an RSA signature")
 
     /**
      * Convenience method to sign [message] when this is an ML-DSA key.
      *
+     * @param message the data to sign.
+     * @return the signature.
      * @throws IllegalStateException if the key is not an ML-DSA key.
+     * @throws IllegalArgumentException if the signature algorithm isn't compatible with the key.
+     * @throws KeyLockedException if the key needs unlocking.
+     * @throws KeyInvalidatedException if the key is no longer usable.
      */
+    @Throws(
+        IllegalStateException::class,
+        IllegalArgumentException::class,
+        KeyLockedException::class,
+        KeyInvalidatedException::class,
+        CancellationException::class
+    )
     suspend fun signMlDsa(message: ByteArray): MlDsaSignature =
         sign(message) as? MlDsaSignature ?: throw IllegalStateException("Not an ML-DSA signature")
 
@@ -112,24 +155,38 @@ sealed class AsymmetricKey : AutoCloseable {
      * in any shape or form) and `keyUnlockData` isn't set or doesn't contain
      * what's needed, [KeyLockedException] is thrown.
      *
-     * @param otherKey The public EC key from the other party
-     * @return The shared secret.
-     * @throws IllegalArgumentException if the other key isn't the same curve.
-     * @throws IllegalArgumentException if there is no key with the given alias
-     *     or the key wasn't created with purpose [KeyPurpose.AGREE_KEY].
+     * @param otherKey public key of the other party
+     * @return the shared secret as a [SecureByteString].
      * @throws UnsupportedOperationException if this key does not support key agreement (e.g. RSA).
      * @throws KeyLockedException if the key needs unlocking.
      * @throws KeyInvalidatedException if the key is no longer usable.
      */
-    abstract suspend fun keyAgreement(otherKey: EcPublicKey): ByteArray
+    @Throws(
+        UnsupportedOperationException::class,
+        KeyLockedException::class,
+        KeyInvalidatedException::class,
+        CancellationException::class
+    )
+    abstract suspend fun keyAgreement(otherKey: EcPublicKey): SecureByteString
 
     /**
      * Performs Key Agreement using this key and [otherKey].
      *
+     * @param otherKey public key of the other party
+     * @return the shared secret as a [SecureByteString].
      * @throws IllegalArgumentException if [otherKey] is not an [EcPublicKey].
      * @throws UnsupportedOperationException if this key does not support key agreement (e.g. RSA).
+     * @throws KeyLockedException if the key needs unlocking.
+     * @throws KeyInvalidatedException if the key is no longer usable.
      */
-    suspend fun keyAgreement(otherKey: PublicKey): ByteArray =
+    @Throws(
+        IllegalArgumentException::class,
+        UnsupportedOperationException::class,
+        KeyLockedException::class,
+        KeyInvalidatedException::class,
+        CancellationException::class
+    )
+    suspend fun keyAgreement(otherKey: PublicKey): SecureByteString =
         when (otherKey) {
             is EcPublicKey -> keyAgreement(otherKey)
             is RsaPublicKey -> throw IllegalArgumentException("Key agreement is not supported with RSA public key")
@@ -240,8 +297,20 @@ sealed class AsymmetricKey : AutoCloseable {
         }
     ): X509Certified(), Explicit {
         override val publicKey: PublicKey get() = privateKey.publicKey
+        @Throws(
+            IllegalArgumentException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
         override suspend fun sign(message: ByteArray): Signature = sign(this, message)
-        override suspend fun keyAgreement(otherKey: EcPublicKey): ByteArray = keyAgreement(this, otherKey)
+        @Throws(
+            UnsupportedOperationException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
+        override suspend fun keyAgreement(otherKey: EcPublicKey): SecureByteString = keyAgreement(this, otherKey)
     }
 
     /** [AsymmetricKey] which is both [AsymmetricKey.Named] and [AsymmetricKey.Explicit]. */
@@ -256,8 +325,20 @@ sealed class AsymmetricKey : AutoCloseable {
         }
     ): Named(), Explicit {
         override val publicKey: PublicKey get() = privateKey.publicKey
+        @Throws(
+            IllegalArgumentException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
         override suspend fun sign(message: ByteArray): Signature = sign(this, message)
-        override suspend fun keyAgreement(otherKey: EcPublicKey): ByteArray = keyAgreement(this, otherKey)
+        @Throws(
+            UnsupportedOperationException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
+        override suspend fun keyAgreement(otherKey: EcPublicKey): SecureByteString = keyAgreement(this, otherKey)
     }
 
     /** [AsymmetricKey] which is both [AsymmetricKey.Anonymous] and [AsymmetricKey.Explicit]. */
@@ -271,8 +352,20 @@ sealed class AsymmetricKey : AutoCloseable {
         }
     ): Anonymous(), Explicit {
         override val publicKey: PublicKey get() = privateKey.publicKey
+        @Throws(
+            IllegalArgumentException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
         override suspend fun sign(message: ByteArray): Signature = sign(this, message)
-        override suspend fun keyAgreement(otherKey: EcPublicKey): ByteArray = keyAgreement(this, otherKey)
+        @Throws(
+            UnsupportedOperationException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
+        override suspend fun keyAgreement(otherKey: EcPublicKey): SecureByteString = keyAgreement(this, otherKey)
     }
 
     /** [AsymmetricKey] which is both [AsymmetricKey.X509Certified] and [AsymmetricKey.SecureAreaBased]. */
@@ -286,8 +379,20 @@ sealed class AsymmetricKey : AutoCloseable {
         SecureAreaBased {
         override val alias: String = keyInfo.alias
         override val publicKey: PublicKey get() = keyInfo.publicKey
+        @Throws(
+            IllegalArgumentException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
         override suspend fun sign(message: ByteArray): Signature = sign(this, message)
-        override suspend fun keyAgreement(otherKey: EcPublicKey): ByteArray = keyAgreement(this, otherKey)
+        @Throws(
+            UnsupportedOperationException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
+        override suspend fun keyAgreement(otherKey: EcPublicKey): SecureByteString = keyAgreement(this, otherKey)
     }
 
     /** [AsymmetricKey] which is both [AsymmetricKey.Named] and [AsymmetricKey.SecureAreaBased]. */
@@ -300,8 +405,20 @@ sealed class AsymmetricKey : AutoCloseable {
         override val algorithm: Algorithm = keyInfo.algorithm
     ): Named(), SecureAreaBased {
         override val publicKey: PublicKey get() = keyInfo.publicKey
+        @Throws(
+            IllegalArgumentException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
         override suspend fun sign(message: ByteArray): Signature = sign(this, message)
-        override suspend fun keyAgreement(otherKey: EcPublicKey): ByteArray = keyAgreement(this, otherKey)
+        @Throws(
+            UnsupportedOperationException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
+        override suspend fun keyAgreement(otherKey: EcPublicKey): SecureByteString = keyAgreement(this, otherKey)
     }
 
     /**
@@ -315,8 +432,20 @@ sealed class AsymmetricKey : AutoCloseable {
         override val algorithm: Algorithm = keyInfo.algorithm
     ): Anonymous(), SecureAreaBased {
         override val publicKey: PublicKey get() = keyInfo.publicKey
+        @Throws(
+            IllegalArgumentException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
         override suspend fun sign(message: ByteArray): Signature = sign(this, message)
-        override suspend fun keyAgreement(otherKey: EcPublicKey): ByteArray = keyAgreement(this, otherKey)
+        @Throws(
+            UnsupportedOperationException::class,
+            KeyLockedException::class,
+            KeyInvalidatedException::class,
+            CancellationException::class
+        )
+        override suspend fun keyAgreement(otherKey: EcPublicKey): SecureByteString = keyAgreement(this, otherKey)
     }
 
     companion object Companion {
@@ -333,9 +462,9 @@ sealed class AsymmetricKey : AutoCloseable {
                 unlockReason = secureAreaBased.unlockReason
             )
 
-        private suspend fun keyAgreement(explicit: Explicit, otherKey: EcPublicKey): ByteArray =
+        private suspend fun keyAgreement(explicit: Explicit, otherKey: EcPublicKey): SecureByteString =
             when (val priv = explicit.privateKey) {
-                is EcPrivateKey -> Crypto.keyAgreement(key = priv, otherKey = otherKey).use { it.encoded }
+                is EcPrivateKey -> Crypto.keyAgreement(key = priv, otherKey = otherKey)
                 is RsaPrivateKey -> throw UnsupportedOperationException("RSA keys do not support key agreement")
                 is MlDsaPrivateKey -> throw UnsupportedOperationException("ML-DSA keys do not support key agreement")
                 is MlKemPrivateKey -> throw UnsupportedOperationException("ML-KEM keys do not support key agreement")
@@ -344,7 +473,7 @@ sealed class AsymmetricKey : AutoCloseable {
         private suspend fun keyAgreement(
             secureAreaBased: SecureAreaBased,
             otherKey: EcPublicKey
-        ): ByteArray =
+        ): SecureByteString =
             secureAreaBased.secureArea.keyAgreement(
                 alias = secureAreaBased.alias,
                 otherKey = otherKey,
@@ -358,6 +487,11 @@ sealed class AsymmetricKey : AutoCloseable {
          * [SecureArea]-resident key using `secure_area` and `alias` fields. In either case, key
          * identification must be specified using `kid` or `x5c` fields.
          */
+        @Throws(
+            IllegalArgumentException::class,
+            IllegalStateException::class,
+            CancellationException::class
+        )
         suspend fun parse(
             json: String,
             secureAreaRepository: SecureAreaRepository?,
@@ -371,6 +505,11 @@ sealed class AsymmetricKey : AutoCloseable {
         /**
          * Parses json object that describes the private key.
          */
+        @Throws(
+            IllegalArgumentException::class,
+            IllegalStateException::class,
+            CancellationException::class
+        )
         suspend fun parse(
             json: JsonElement,
             secureAreaRepository: SecureAreaRepository?,
@@ -404,6 +543,7 @@ sealed class AsymmetricKey : AutoCloseable {
          * Similar to [parse], but does not handle [SecureArea]-based keys. It is suitable for
          * calling in non-coroutine contexts.
          */
+        @Throws(IllegalArgumentException::class)
         fun parseExplicit(json: String): AsymmetricKey =
             parseExplicit(Json.parseToJsonElement(json))
 
@@ -413,6 +553,7 @@ sealed class AsymmetricKey : AutoCloseable {
          * Similar to [parse], but does not handle [SecureArea]-based keys. It is suitable for
          * calling in non-coroutine contexts.
          */
+        @Throws(IllegalArgumentException::class)
         fun parseExplicit(json: JsonElement): AsymmetricKey {
             if (json !is JsonObject) {
                 throw IllegalArgumentException("expected json object")
@@ -428,6 +569,17 @@ sealed class AsymmetricKey : AutoCloseable {
             return X509CertifiedExplicit(x5c, privateKey)
         }
 
+        /**
+         * Creates an anonymous [AsymmetricKey] referencing a key residing in a [SecureArea].
+         *
+         * @param secureArea the Secure Area holding the key.
+         * @param alias the alias of the key.
+         * @param unlockReason reason for unlocking the key.
+         * @param algorithm the algorithm to use, or `null` to use the key's default algorithm.
+         * @return an anonymous [AsymmetricKey].
+         * @throws IllegalArgumentException if no key with the given alias exists.
+         */
+        @Throws(IllegalArgumentException::class, CancellationException::class)
         suspend fun anonymous(
             secureArea: SecureArea,
             alias: String,
@@ -467,7 +619,9 @@ sealed class AsymmetricKey : AutoCloseable {
          * @param algorithm the signing algorithm to use.
          * @param keySizeBits the RSA key size in bits (only used if [algorithm] is an RSA algorithm).
          * @return an ephemeral anonymous [AsymmetricKey].
+         * @throws IllegalArgumentException if the algorithm is not supported.
          */
+        @Throws(IllegalArgumentException::class, CancellationException::class)
         suspend fun ephemeral(
             algorithm: Algorithm = Algorithm.ESP256,
             keySizeBits: Int = 2048

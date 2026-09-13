@@ -28,6 +28,7 @@ import kotlinx.io.buffered
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.io.readByteArray
 import org.multipaz.crypto.Hkdf
+import org.multipaz.crypto.SecretKey
 import platform.CoreBluetooth.CBATTErrorSuccess
 import platform.CoreBluetooth.CBATTRequest
 import platform.CoreBluetooth.CBPeripheralManager
@@ -404,7 +405,9 @@ internal class BlePeripheralManagerIos: BlePeripheralManager {
         val ikm = Cbor.encode(Tagged(24, Bstr(Cbor.encode(eSenderKey.toCoseKey().toDataItem()))))
         val info = "BLEIdent".encodeToByteArray()
         val salt = null
-        identValue = Hkdf.deriveKey(Algorithm.HMAC_SHA256, ikm, salt, info, 16)
+        identValue = SecretKey(ikm).use {
+            Hkdf.deriveKey(Algorithm.HMAC_SHA256, it, salt, info, 16).use { key -> key.encoded }
+        }
     }
 
     override suspend fun waitForStateCharacteristicWriteOrL2CAPClient() {

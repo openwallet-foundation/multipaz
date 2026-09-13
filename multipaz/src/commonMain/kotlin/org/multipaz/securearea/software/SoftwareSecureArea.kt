@@ -27,6 +27,7 @@ import org.multipaz.crypto.PrivateKey
 import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.RsaPrivateKey
 import org.multipaz.crypto.SecretKey
+import org.multipaz.crypto.SecureByteString
 import org.multipaz.crypto.Signature
 import org.multipaz.crypto.secureZero
 import org.multipaz.prompt.requestPassphrase
@@ -258,8 +259,14 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
      * @param alias the alias for the key.
      * @param keyUnlockData unlock data, or `null`.
      * @return a [PrivateKey].
-     * @throws KeyLockedException
+     * @throws IllegalArgumentException if no key with the given alias exists.
+     * @throws KeyLockedException if the key needs unlocking.
      */
+    @Throws(
+        IllegalArgumentException::class,
+        KeyLockedException::class,
+        CancellationException::class
+    )
     suspend fun getPrivateKey(
         alias: String,
         keyUnlockData: KeyUnlockData?
@@ -321,7 +328,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         alias: String,
         otherKey: EcPublicKey,
         unlockReason: Reason
-    ): ByteArray {
+    ): SecureByteString {
         return interactionHelper(
             alias,
             unlockReason,
@@ -333,13 +340,13 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         alias: String,
         otherKey: EcPublicKey,
         keyUnlockData: KeyUnlockData?
-    ): ByteArray {
+    ): SecureByteString {
         val keyData = loadKey(alias, keyUnlockData)
         return keyData.privateKey.use { privateKey ->
             require(keyData.algorithm.isKeyAgreement) { "Key algorithm is not for Key Agreement" }
             val ecPrivateKey = privateKey as? EcPrivateKey
                 ?: throw IllegalArgumentException("Key is not an EC key")
-            Crypto.keyAgreement(ecPrivateKey, otherKey).use { it.encoded }
+            Crypto.keyAgreement(ecPrivateKey, otherKey)
         }
     }
 
@@ -347,7 +354,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         alias: String,
         ciphertext: ByteArray,
         unlockReason: Reason
-    ): ByteArray {
+    ): SecureByteString {
         return interactionHelper(
             alias,
             unlockReason,
@@ -359,13 +366,13 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         alias: String,
         ciphertext: ByteArray,
         keyUnlockData: KeyUnlockData?
-    ): ByteArray {
+    ): SecureByteString {
         val keyData = loadKey(alias, keyUnlockData)
         return keyData.privateKey.use { privateKey ->
             require(keyData.algorithm.isKeyEncapsulation) { "Key algorithm is not for Key Encapsulation" }
             val mlKemPrivateKey = privateKey as? MlKemPrivateKey
                 ?: throw IllegalArgumentException("Key is not an ML-KEM key")
-            Crypto.kemDecapsulate(mlKemPrivateKey, ciphertext).use { it.encoded }
+            Crypto.kemDecapsulate(mlKemPrivateKey, ciphertext)
         }
     }
 

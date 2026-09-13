@@ -10,6 +10,8 @@ import org.multipaz.crypto.MlDsaPublicKey
 import org.multipaz.crypto.MlDsaSignature
 import org.multipaz.crypto.MlKemPublicKey
 import org.multipaz.crypto.PublicKey
+import org.multipaz.crypto.SecretKey
+import org.multipaz.crypto.SecureByteString
 import org.multipaz.crypto.Signature
 import org.multipaz.prompt.Reason
 import org.multipaz.storage.Storage
@@ -230,7 +232,7 @@ class SecureEnclaveSecureArea private constructor(
         alias: String,
         otherKey: EcPublicKey,
         unlockReason: Reason
-    ): ByteArray {
+    ): SecureByteString {
         val (keyBlob, keyInfo) = loadKey(alias)
         check(otherKey.curve == EcCurve.P256)
         check(keyInfo.algorithm.isKeyAgreement)
@@ -257,7 +259,7 @@ class SecureEnclaveSecureArea private constructor(
         alias: String,
         ciphertext: ByteArray,
         unlockReason: Reason
-    ): ByteArray {
+    ): SecureByteString {
         val (keyBlob, keyInfo) = loadKey(alias)
         check(keyInfo.algorithm.isKeyEncapsulation)
         val unlockDataProvider = coroutineContext[KeyUnlockDataProvider.Key]

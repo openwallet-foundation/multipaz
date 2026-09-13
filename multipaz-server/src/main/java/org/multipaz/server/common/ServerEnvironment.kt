@@ -8,6 +8,8 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
+import org.multipaz.crypto.SecretKey
+import org.multipaz.crypto.secureZero
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.backend.Resources
@@ -116,7 +118,9 @@ class ServerEnvironment(): BackendEnvironment {
                 init.add(SecureAreaRepository::class, secureAreaRepository)
 
                 val messageEncryptionKey = persistentServerKey(name = "rpc")
-                val cipher = AesGcmCipher(messageEncryptionKey.toByteArray())
+                val keyBytes = messageEncryptionKey.toByteArray()
+                val cipher = AesGcmCipher(SecretKey(keyBytes))
+                keyBytes.secureZero()
                 init.add(SimpleCipher::class, cipher)
 
                 val localPoll = RpcNotificationsLocalPoll(cipher)

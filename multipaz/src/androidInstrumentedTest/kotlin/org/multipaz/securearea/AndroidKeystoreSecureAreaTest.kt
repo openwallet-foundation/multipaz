@@ -26,6 +26,8 @@ import org.multipaz.context.initializeApplication
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.SecretKey
+import org.multipaz.crypto.SecureByteString
 import org.multipaz.storage.android.AndroidStorage
 import org.multipaz.util.AndroidAttestationExtensionParser
 import kotlinx.coroutines.test.runTest
@@ -403,8 +405,7 @@ class AndroidKeystoreSecureAreaTest {
         Assert.assertNull(keyInfo.validUntil)
 
         // First do the ECDH from the perspective of our side...
-        val ourSharedSecret: ByteArray
-        ourSharedSecret = try {
+        val ourSharedSecret: SecureByteString = try {
             ks.keyAgreement("testKey", otherKey.publicKey)
         } catch (e: KeyLockedException) {
             throw AssertionError(e)
@@ -414,7 +415,8 @@ class AndroidKeystoreSecureAreaTest {
         val theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.ecPublicKey)
 
         // ... finally, check that both sides compute the same shared secret.
-        Assert.assertArrayEquals(theirSharedSecret.encoded, ourSharedSecret)
+        Assert.assertArrayEquals(theirSharedSecret.encoded, ourSharedSecret.encoded)
+        ourSharedSecret.close()
         theirSharedSecret.close()
         otherKey.close()
     }
@@ -451,7 +453,7 @@ class AndroidKeystoreSecureAreaTest {
         Assert.assertNull(keyInfo.validUntil)
 
         // First do the ECDH from the perspective of our side...
-        val ourSharedSecret: ByteArray = try {
+        val ourSharedSecret: SecureByteString = try {
             ks.keyAgreement("testKey", otherKey.publicKey)
         } catch (e: KeyLockedException) {
             throw AssertionError(e)
@@ -461,7 +463,8 @@ class AndroidKeystoreSecureAreaTest {
         val theirSharedSecret = Crypto.keyAgreement(otherKey, keyInfo.ecPublicKey)
 
         // ... finally, check that both sides compute the same shared secret.
-        Assert.assertArrayEquals(theirSharedSecret.encoded, ourSharedSecret)
+        Assert.assertArrayEquals(theirSharedSecret.encoded, ourSharedSecret.encoded)
+        ourSharedSecret.close()
         theirSharedSecret.close()
         otherKey.close()
     }

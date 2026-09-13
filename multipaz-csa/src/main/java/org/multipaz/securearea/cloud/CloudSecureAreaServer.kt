@@ -9,7 +9,9 @@ import org.multipaz.cose.CoseKey
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.SecretKey
 import org.multipaz.crypto.X500Name
+import org.multipaz.crypto.secureZero
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.X509KeyUsage
@@ -117,19 +119,25 @@ class CloudSecureAreaServer(
     private val openid4vciKeyAttestationCertification: String?,
     private val passphraseFailureEnforcer: PassphraseFailureEnforcer,
     private val allowSoftwareAttestation: Boolean = false,
-) {
-    private val stateEncryptionAlg: Algorithm get() = when (serverSecureAreaBoundKey.size) {
+) : AutoCloseable {
+    private val serverSecureAreaBoundSecretKey = SecretKey(serverSecureAreaBoundKey)
+
+    override fun close() {
+        serverSecureAreaBoundSecretKey.close()
+    }
+
+    private val stateEncryptionAlg: Algorithm get() = when (serverSecureAreaBoundSecretKey.size) {
         16 -> Algorithm.A128GCM
         24 -> Algorithm.A192GCM
         32 -> Algorithm.A256GCM
-        else -> throw IllegalStateException("Unexpected key size: ${serverSecureAreaBoundKey.size}")
+        else -> throw IllegalStateException("Unexpected key size: ${serverSecureAreaBoundSecretKey.size}")
     }
     private suspend fun encryptState(plaintext: ByteArray): ByteArray {
         val counter = encryptionGcmCounter
         val iv = ByteBuffer.allocate(12)
         iv.putInt(0, 0x00000000)
         iv.putLong(counter)
-        val ciphertext = Crypto.encrypt(stateEncryptionAlg, serverSecureAreaBoundKey, iv.array(), plaintext)
+        val ciphertext = Crypto.encrypt(stateEncryptionAlg, serverSecureAreaBoundSecretKey, iv.array(), plaintext)
         return iv.array() + ciphertext
     }
 
@@ -137,7 +145,7 @@ class CloudSecureAreaServer(
         require(cipherText.size >= 12) { "input too short" }
         val iv = cipherText.copyOfRange(0, 12)
         val encryptedData = cipherText.copyOfRange(12, cipherText.size)
-        val plaintext = Crypto.decrypt(stateEncryptionAlg, serverSecureAreaBoundKey, iv, encryptedData)
+        val plaintext = Crypto.decrypt(stateEncryptionAlg, serverSecureAreaBoundSecretKey, iv, encryptedData)
         return plaintext
     }
 
@@ -270,11 +278,11 @@ class CloudSecureAreaServer(
             ) + cloudRootAttestationKey.certChain.certificates
         )
         state.cloudBindingKey = cloudBindingKey.toCoseKey()
-        cloudBindingKey.close()
         val response1 = RegisterResponse1(
             cloudBindingKeyAttestation,
             state.encrypt()
         )
+        cloudBindingKey.close()
         Logger.d(TAG, "$remoteHost: RegisterRequest1: Client successfully registered")
         return Pair(200, response1.toCbor())
     }
@@ -339,11 +347,13 @@ class CloudSecureAreaServer(
                 add(request1.deviceNonce)
             }
         )
-        val signature = Crypto.sign(
-            state.context!!.cloudBindingKey!!.ecPrivateKey,
-            Algorithm.ES256,
-            dataToSign
-        )
+        val signature = state.context!!.cloudBindingKey!!.ecPrivateKey.use {
+            Crypto.sign(
+                it,
+                Algorithm.ES256,
+                dataToSign
+            )
+        }
 
         // Also derive SKDevice and SKCloud, and stash in state since we're going to need this later
         val zab = Crypto.keyAgreement(eCloudKey, request1.eDeviceKey.ecPublicKey)
@@ -975,17 +985,23 @@ class CloudSecureAreaServer(
             val storage = EphemeralStorage.deserialize(
                 ByteString(state.keyContext!!.cloudKeyStorage!!))
             val secureArea = SoftwareSecureArea.create(storage)
-            val Zab = secureArea.keyAgreement(
-                    "CloudKey",
-                    state.otherPublicKey!!.ecPublicKey,
-                )
+            val zabBytes = secureArea.keyAgreement(
+                "CloudKey",
+                state.otherPublicKey!!.ecPublicKey,
+            ).use { it.encoded }
             Logger.d(TAG, "$remoteHost: KeyAgreementRequest1: Calculated Zab")
-            val response1 = CloudSecureAreaProtocol.KeyAgreementResponse1(
-                CloudSecureAreaProtocol.RESULT_OK,
-                Zab,
-                0L)
+            val response1Cbor = try {
+                val response1 = CloudSecureAreaProtocol.KeyAgreementResponse1(
+                    CloudSecureAreaProtocol.RESULT_OK,
+                    zabBytes,
+                    0L
+                )
+                response1.toCbor()
+            } finally {
+                zabBytes.secureZero()
+            }
             val encryptedResponse1 = E2EEResponse(
-                encryptToDevice(e2eeState, response1.toCbor()),
+                encryptToDevice(e2eeState, response1Cbor),
                 e2eeState.encrypt()
             )
             return Pair(200, encryptedResponse1.toCbor())
@@ -1093,18 +1109,23 @@ class CloudSecureAreaServer(
                 ByteString(state.keyContext!!.cloudKeyStorage!!)
             )
             val secureArea = SoftwareSecureArea.create(storage)
-            val sharedSecret = secureArea.kemDecapsulate(
+            val sharedSecretBytes = secureArea.kemDecapsulate(
                 "CloudKey",
                 state.ciphertext!!,
-            )
+            ).use { it.encoded }
             Logger.d(TAG, "$remoteHost: KemDecapsulateRequest1: Decapsulated shared secret")
-            val response1 = CloudSecureAreaProtocol.KemDecapsulateResponse1(
-                CloudSecureAreaProtocol.RESULT_OK,
-                sharedSecret,
-                0L
-            )
+            val response1Cbor = try {
+                val response1 = CloudSecureAreaProtocol.KemDecapsulateResponse1(
+                    CloudSecureAreaProtocol.RESULT_OK,
+                    sharedSecretBytes,
+                    0L
+                )
+                response1.toCbor()
+            } finally {
+                sharedSecretBytes.secureZero()
+            }
             val encryptedResponse1 = E2EEResponse(
-                encryptToDevice(e2eeState, response1.toCbor()),
+                encryptToDevice(e2eeState, response1Cbor),
                 e2eeState.encrypt()
             )
             return Pair(200, encryptedResponse1.toCbor())
@@ -1160,7 +1181,9 @@ class CloudSecureAreaServer(
         val ivIdentifier = 0x00000000
         iv.putInt(4, ivIdentifier)
         iv.putInt(8, e2eeState.encryptedCounter++)
-        return Crypto.encrypt(Algorithm.A256GCM, e2eeState.skCloud!!, iv.array(), messagePlaintext)
+        return SecretKey(e2eeState.skCloud!!).use { key ->
+            Crypto.encrypt(Algorithm.A256GCM, key, iv.array(), messagePlaintext)
+        }
     }
 
     private suspend fun doE2EERequest(
@@ -1185,11 +1208,14 @@ class CloudSecureAreaServer(
         iv.putInt(4, ivIdentifier)
         iv.putInt(8, e2eeState.decryptedCounter)
         val plainText = try {
-            Crypto.decrypt(
-                Algorithm.A256GCM,
-                e2eeState.skDevice!!,
-                iv.array(),
-                request.encryptedRequest)
+            SecretKey(e2eeState.skDevice!!).use { key ->
+                Crypto.decrypt(
+                    Algorithm.A256GCM,
+                    key,
+                    iv.array(),
+                    request.encryptedRequest
+                )
+            }
         } catch (e: IllegalStateException) {
             return Pair(400, "Decryption failed".toByteArray())
         }

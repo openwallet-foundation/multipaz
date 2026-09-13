@@ -6,11 +6,13 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.KeyInvalidatedException
+import org.multipaz.securearea.KeyLockedException
 import org.multipaz.prompt.Reason
 import org.multipaz.securearea.SecureArea
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * JSON Web Signature support
@@ -25,10 +27,17 @@ object JsonWebSignature {
      * @param signatureAlgorithm a fully-specified signature algorithm to use.
      * @param claimsSet the claims set.
      * @param type the value to put in the "typ" header parameter or `null`.
-     * @param x5c: the certificate chain to put in the "x5c" header parameter or `null`.
+     * @param x5c the certificate chain to put in the "x5c" header parameter or `null`.
      * @return the compact serialization with the JWS.
+     * @throws IllegalArgumentException if the signature algorithm is not fully specified.
+     * @throws IllegalStateException if [key] has been destroyed.
      */
     @Deprecated("Use org.multipaz.jwt.buildJwt instead")
+    @Throws(
+        IllegalArgumentException::class,
+        IllegalStateException::class,
+        CancellationException::class
+    )
     suspend fun sign(
         key: EcPrivateKey,
         signatureAlgorithm: Algorithm,
@@ -63,13 +72,22 @@ object JsonWebSignature {
      *
      * @param secureArea the [SecureArea] for the key to sign with.
      * @param alias the alias for key to sign with.
-     * @param keyUnlockData the [KeyUnlockData] to use or `null`.
+     * @param unlockReason the reason for unlocking.
      * @param claimsSet the claims set.
      * @param type the value to put in the "typ" header parameter or `null`.
-     * @param x5c: the certificate chain to put in the "x5c" header parameter or `null`.
+     * @param x5c the certificate chain to put in the "x5c" header parameter or `null`.
      * @return the compact serialization of the JWS.
+     * @throws IllegalArgumentException if no key with the given alias exists or algorithm is incompatible.
+     * @throws KeyLockedException if the key needs unlocking.
+     * @throws KeyInvalidatedException if the key is no longer usable.
      */
     @Deprecated("Use org.multipaz.jwt.buildJwt instead")
+    @Throws(
+        IllegalArgumentException::class,
+        KeyLockedException::class,
+        KeyInvalidatedException::class,
+        CancellationException::class
+    )
     suspend fun sign(
         secureArea: SecureArea,
         alias: String,
@@ -103,6 +121,11 @@ object JsonWebSignature {
      * @throws IllegalArgumentException if the JWS is malformed.
      * @throws SignatureVerificationException if the signature check fails.
      */
+    @Throws(
+        IllegalArgumentException::class,
+        SignatureVerificationException::class,
+        CancellationException::class
+    )
     suspend fun verify(
         jws: String,
         publicKey: PublicKey
@@ -167,7 +190,9 @@ object JsonWebSignature {
      *
      * @param jws the compact serialization of the JWS.
      * @return a [JwsInfo] with information about the JWS.
+     * @throws IllegalArgumentException if the JWS is malformed.
      */
+    @Throws(IllegalArgumentException::class)
     fun getInfo(jws: String): JwsInfo {
         val splits = jws.split(".")
         require(splits.size == 3) { "Malformed JWS" }

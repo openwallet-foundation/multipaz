@@ -79,29 +79,32 @@ class Pkcs12Tests {
     @Test
     fun testAesCbcNistVectors() = runTest {
         // NIST SP 800-38A F.2.1 AES-128-CBC
-        val key128 = "2b7e151628aed2a6abf7158809cf4f3c".fromHex()
         val iv = "000102030405060708090a0b0c0d0e0f".fromHex()
         val pt = "6bc1bee22e409f96e93d7e117393172a".fromHex()
 
-        val ct = Crypto.encrypt(Algorithm.A128CBC, key128, iv, pt)
-        val decrypted = Crypto.decrypt(Algorithm.A128CBC, key128, iv, ct)
-        assertContentEquals(pt, decrypted)
+        SecretKey("2b7e151628aed2a6abf7158809cf4f3c".fromHex()).use { key128 ->
+            val ct = Crypto.encrypt(Algorithm.A128CBC, key128, iv, pt)
+            val decrypted = Crypto.decrypt(Algorithm.A128CBC, key128, iv, ct)
+            assertContentEquals(pt, decrypted)
+        }
 
         // AES-256-CBC
-        val key256 = "603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4".fromHex()
-        val ct256 = Crypto.encrypt(Algorithm.A256CBC, key256, iv, pt)
-        val decrypted256 = Crypto.decrypt(Algorithm.A256CBC, key256, iv, ct256)
-        assertContentEquals(pt, decrypted256)
+        SecretKey("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4".fromHex()).use { key256 ->
+            val ct256 = Crypto.encrypt(Algorithm.A256CBC, key256, iv, pt)
+            val decrypted256 = Crypto.decrypt(Algorithm.A256CBC, key256, iv, ct256)
+            assertContentEquals(pt, decrypted256)
+        }
     }
 
     @Test
     fun testAesCbcInvalidPaddingThrows() = runTest {
-        val key = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f".fromHex()
-        val iv = "000102030405060708090a0b0c0d0e0f".fromHex()
-        val corruptedCt = ByteArray(32) { 0x42 }
+        SecretKey("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f".fromHex()).use { key ->
+            val iv = "000102030405060708090a0b0c0d0e0f".fromHex()
+            val corruptedCt = ByteArray(32) { 0x42 }
 
-        assertFailsWith<IllegalStateException> {
-            Crypto.decrypt(Algorithm.A256CBC, key, iv, corruptedCt)
+            assertFailsWith<IllegalStateException> {
+                Crypto.decrypt(Algorithm.A256CBC, key, iv, corruptedCt)
+            }
         }
     }
 

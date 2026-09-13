@@ -29,6 +29,7 @@ import kotlinx.io.buffered
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.io.readByteArray
 import org.multipaz.crypto.Hkdf
+import org.multipaz.crypto.SecretKey
 import org.multipaz.util.getUInt32
 import platform.CoreBluetooth.CBCentralManager
 import platform.CoreBluetooth.CBCentralManagerDelegateProtocol
@@ -529,7 +530,9 @@ internal class BleCentralManagerIos : BleCentralManager {
         val ikm = Cbor.encode(Tagged(24, Bstr(Cbor.encode(eSenderKey.toCoseKey().toDataItem()))))
         val info = "BLEIdent".encodeToByteArray()
         val salt = null
-        val expectedIdentValue = Hkdf.deriveKey(Algorithm.HMAC_SHA256, ikm, salt, info, 16)
+        val expectedIdentValue = SecretKey(ikm).use {
+            Hkdf.deriveKey(Algorithm.HMAC_SHA256, it, salt, info, 16).use { key -> key.encoded }
+        }
         val identValue = identCharacteristic!!.value!!.toByteArray()
         if (!(expectedIdentValue contentEquals identValue)) {
             close()

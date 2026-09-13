@@ -32,6 +32,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.Hkdf
+import org.multipaz.crypto.SecretKey
 import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.securearea.KeyLockedException
 import org.multipaz.prompt.Reason
@@ -132,30 +133,32 @@ class DocumentGenerator
                 ).toDataItem()
             )
         } else {
-            val sharedSecret = secureArea.keyAgreement(
-                keyAlias,
-                eReaderKey!!,
-                unlockReason
-            )
             val sessionTranscriptBytes = Cbor.encode(Tagged(24, Bstr(encodedSessionTranscript)))
             val salt = Crypto.digest(Algorithm.SHA256, sessionTranscriptBytes)
             val info = "EMacKey".encodeToByteArray()
-            val eMacKey = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
-            encodedDeviceMac = Cbor.encode(
-                Cose.coseMac0(
-                    Algorithm.HMAC_SHA256,
-                    eMacKey,
-                    deviceAuthenticationBytes,
-                    false,
-                    mapOf(
-                        Pair(
-                            CoseNumberLabel(Cose.COSE_LABEL_ALG),
-                            Algorithm.HMAC_SHA256.coseAlgorithmIdentifier!!.toDataItem()
-                        )
-                    ),
-                    mapOf()
-                ).toDataItem()
-            )
+            encodedDeviceMac = secureArea.keyAgreement(
+                keyAlias,
+                eReaderKey!!,
+                unlockReason
+            ).use { sharedSecretKey ->
+                Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecretKey, salt, info, 32).use { eMacKey ->
+                    Cbor.encode(
+                        Cose.coseMac0(
+                            Algorithm.HMAC_SHA256,
+                            eMacKey,
+                            deviceAuthenticationBytes,
+                            false,
+                            mapOf(
+                                Pair(
+                                    CoseNumberLabel(Cose.COSE_LABEL_ALG),
+                                    Algorithm.HMAC_SHA256.coseAlgorithmIdentifier!!.toDataItem()
+                                )
+                            ),
+                            mapOf()
+                        ).toDataItem()
+                    )
+                }
+            }
         }
         val deviceAuthType: String
         val deviceAuthDataItem: DataItem

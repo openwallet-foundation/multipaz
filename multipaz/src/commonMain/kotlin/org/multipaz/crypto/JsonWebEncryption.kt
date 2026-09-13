@@ -10,11 +10,14 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.multipaz.securearea.KeyInvalidatedException
+import org.multipaz.securearea.KeyLockedException
 import org.multipaz.util.appendInt32
 import org.multipaz.util.deflate
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.inflate
 import org.multipaz.util.toBase64Url
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.ceil
 import kotlin.random.Random
 
@@ -36,7 +39,12 @@ object JsonWebEncryption {
      * @param kid if not `null`, this will be included as the value for the `kid` parameter in the header.
      * @param compressionLevel The compression level to use for DEFLATE compression or `null` to not compress.
      * @return the compact serialization of the JWE.
+     * @throws IllegalArgumentException if the encryption algorithm is not supported.
      */
+    @Throws(
+        IllegalArgumentException::class,
+        CancellationException::class
+    )
     suspend fun encrypt(
         claimsSet: JsonObject,
         recipientPublicKey: EcPublicKey,
@@ -113,7 +121,18 @@ object JsonWebEncryption {
      * @param encryptedJwt the compact serialization of the JWE.
      * @param recipientKey the recipients private key corresponding to the public key this was encrypted to.
      * @return the decrypted claims set.
+     * @throws IllegalArgumentException if the JWE format or algorithm is invalid or unsupported.
+     * @throws IllegalStateException if decryption fails.
+     * @throws KeyLockedException if the key needs unlocking.
+     * @throws KeyInvalidatedException if the key is no longer usable.
      */
+    @Throws(
+        IllegalArgumentException::class,
+        IllegalStateException::class,
+        KeyLockedException::class,
+        KeyInvalidatedException::class,
+        CancellationException::class
+    )
     suspend fun decrypt(
         encryptedJwt: String,
         recipientKey: AsymmetricKey
@@ -138,11 +157,8 @@ object JsonWebEncryption {
         val apu = ByteString(protectedHeader["apu"]?.jsonPrimitive?.content?.fromBase64Url() ?: byteArrayOf())
         val apv = ByteString(protectedHeader["apv"]?.jsonPrimitive?.content?.fromBase64Url() ?: byteArrayOf())
 
-        val sharedSecretBytes = recipientKey.keyAgreement(senderEphemeralKey)
-
         val algId = encAlg.joseAlgorithmIdentifier!!.toByteArray()
-        val contentEncryptionKey = SecretKey(sharedSecretBytes).use { sharedSecret ->
-            sharedSecretBytes.secureZero()
+        val contentEncryptionKey = recipientKey.keyAgreement(senderEphemeralKey).use { sharedSecret ->
             concatKDF(
                 sharedSecretZ = sharedSecret,
                 keyDataLenBits = keyDataLenBits,
@@ -185,7 +201,7 @@ object JsonWebEncryption {
      * For ECDH-ES, this KDF is used to derive the KEK for AES Key Wrap.
      */
     internal suspend fun concatKDF(
-        sharedSecretZ: SecretKey,
+        sharedSecretZ: SecureByteString,
         keyDataLenBits: Int, // Desired output key length in bits (e.g., 128, 192, 256 for AES Key Wrap)
         algorithmId: ByteString,
         partyUInfo: ByteString,

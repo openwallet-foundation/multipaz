@@ -8,6 +8,7 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
 import org.junit.Before
 import org.multipaz.context.initializeApplication
+import org.multipaz.crypto.SecretKey
 import org.multipaz.device.DeviceCheck
 import org.multipaz.device.toCbor
 import org.multipaz.rpc.handler.RpcAuthClientSession
@@ -64,7 +65,7 @@ class RpcAuthAssertionTest {
     private suspend fun buildDispatcher(authClientId: String? = "clientId"): RpcDispatcher {
         val builder = RpcDispatcherLocal.Builder()
         TestState.register(builder)
-        val cipher = AesGcmCipher(Random.Default.nextBytes(16))
+        val cipher = AesGcmCipher(SecretKey(Random.Default.nextBytes(16)))
         val environment = TestBackendEnvironment()
         val local = builder.build(environment, cipher, RpcExceptionMap.Builder().build())
         val secureArea = environment.secureAreaProvider.get()

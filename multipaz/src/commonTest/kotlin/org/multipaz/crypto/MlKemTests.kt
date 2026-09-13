@@ -213,7 +213,8 @@ class MlKemTests {
             assertEquals(32, kemResult.sharedSecret.size)
 
             val decapsulatedSecret = ks.kemDecapsulate(alias, kemResult.ciphertext)
-            assertContentEquals(kemResult.sharedSecret.encoded, decapsulatedSecret)
+            assertContentEquals(kemResult.sharedSecret.encoded, decapsulatedSecret.encoded)
+            decapsulatedSecret.close()
             kemResult.close()
         }
     }

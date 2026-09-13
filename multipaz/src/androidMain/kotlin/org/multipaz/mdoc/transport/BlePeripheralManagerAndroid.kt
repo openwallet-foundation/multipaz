@@ -40,6 +40,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.crypto.Hkdf
+import org.multipaz.crypto.SecretKey
 import org.multipaz.util.getUInt32
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -498,7 +499,9 @@ internal class BlePeripheralManagerAndroid: BlePeripheralManager {
         val ikm = Cbor.encode(Tagged(24, Bstr(Cbor.encode(eSenderKey.toCoseKey().toDataItem()))))
         val info = "BLEIdent".encodeToByteArray()
         val salt = null
-        identValue = Hkdf.deriveKey(Algorithm.HMAC_SHA256, ikm, salt, info, 16)
+        identValue = SecretKey(ikm).use {
+            Hkdf.deriveKey(Algorithm.HMAC_SHA256, it, salt, info, 16).use { key -> key.encoded }
+        }
     }
 
     override suspend fun waitForStateCharacteristicWriteOrL2CAPClient() {

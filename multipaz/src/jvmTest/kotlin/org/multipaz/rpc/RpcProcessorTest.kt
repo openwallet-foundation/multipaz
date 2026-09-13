@@ -9,6 +9,7 @@ import org.multipaz.rpc.annotation.RpcException
 import org.multipaz.rpc.annotation.RpcInterface
 import org.multipaz.rpc.annotation.RpcMethod
 import org.multipaz.rpc.annotation.RpcState
+import org.multipaz.crypto.SecretKey
 import org.multipaz.rpc.handler.AesGcmCipher
 import org.multipaz.rpc.handler.RpcDispatcherHttp
 import org.multipaz.rpc.handler.RpcDispatcherLocal
@@ -267,7 +268,7 @@ private fun TestScope.buildLocalDispatcher(
     val cipher = if (useNoopCipher) {
         NoopCipher
     } else {
-        AesGcmCipher(Random.Default.nextBytes(16))
+        AesGcmCipher(SecretKey(Random.Default.nextBytes(16)))
     }
     val environment = if (usePolling) {
         val notifications = RpcNotificationsLocalPoll(cipher)

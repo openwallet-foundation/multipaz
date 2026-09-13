@@ -8,7 +8,9 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
 import org.multipaz.crypto.Hkdf
+import org.multipaz.crypto.SecretKey
 import org.multipaz.crypto.SignatureVerificationException
+import org.multipaz.crypto.secureZero
 import org.multipaz.device.DeviceAttestationSoftware.Companion.generateAttestation
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureArea
@@ -86,18 +88,26 @@ data class DeviceAttestationSoftware(
             if (challenge.isEmpty()) {
                 Logger.w(TAG, "Generating proofOfSecret with an empty challenge is not secure")
             }
-            val key = Hkdf.deriveKey(
-                algorithm = Algorithm.HMAC_SHA256,
-                ikm = secret.encodeToByteArray(),
-                salt = if (challenge.isNotEmpty()) challenge.toByteArray() else null,
-                info = info,
-                length = 32
-            )
-            val mac = Crypto.mac(
-                algorithm = Algorithm.HMAC_SHA256,
-                key = key,
-                message = challenge.toByteArray() + secret.encodeToByteArray()
-            )
+            val secretBytes = secret.encodeToByteArray()
+            val mac = try {
+                SecretKey(secretBytes).use { ikmKey ->
+                    Hkdf.deriveKey(
+                        algorithm = Algorithm.HMAC_SHA256,
+                        ikm = ikmKey,
+                        salt = if (challenge.isNotEmpty()) challenge.toByteArray() else null,
+                        info = info,
+                        length = 32
+                    ).use { key ->
+                        Crypto.mac(
+                            algorithm = Algorithm.HMAC_SHA256,
+                            key = key,
+                            message = challenge.toByteArray() + secretBytes
+                        )
+                    }
+                }
+            } finally {
+                secretBytes.secureZero()
+            }
             return ByteString(mac)
         }
 
