@@ -1,5 +1,6 @@
 package org.multipaz.asn1
 
+import org.multipaz.crypto.Crypto
 import org.multipaz.util.toHex
 import kotlinx.io.bytestring.ByteStringBuilder
 import org.multipaz.asn1.ASN1Integer
@@ -58,7 +59,7 @@ class ASN1Integer(
          */
         fun fromRandom(
             numBits: Int,
-            random: Random = Random.Default
+            random: Random = Crypto.secureRandom
         ): ASN1Integer {
             require(numBits >= 8 && numBits.and(0x07) == 0) {
                 "numBits must be positive and a multiple of 8"

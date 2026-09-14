@@ -88,7 +88,7 @@ object MdocUtil {
      */
     fun generateIssuerNameSpaces(
         data: NameSpacedData,
-        randomProvider: Random,
+        randomProvider: Random = Crypto.secureRandom,
         dataElementRandomSize: Int,
         overrides: Map<String, Map<String, ByteArray>>?
     ): Map<String, List<ByteArray>> {

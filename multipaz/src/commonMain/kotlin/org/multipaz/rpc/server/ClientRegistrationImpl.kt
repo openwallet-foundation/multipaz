@@ -23,8 +23,8 @@ import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.RpcAuthError
 import org.multipaz.rpc.handler.RpcAuthException
 import org.multipaz.rpc.handler.RpcAuthInspectorAssertion
+import org.multipaz.crypto.Crypto
 import org.multipaz.util.fromBase64Url
-import kotlin.random.Random
 
 @RpcState(
     endpoint = "client_registration",
@@ -35,7 +35,7 @@ class ClientRegistrationImpl(
     var registrationChallenge: ByteString? = null,
 ): ClientRegistration {
     override suspend fun challenge(): ByteString {
-        return ByteString(Random.nextBytes(16)).also {
+        return ByteString(Crypto.secureRandom.nextBytes(16)).also {
             registrationChallenge = it
         }
     }

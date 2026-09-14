@@ -7,6 +7,8 @@ import org.multipaz.asn1.ASN1Integer
 import org.multipaz.asn1.ASN1ObjectIdentifier
 import org.multipaz.asn1.ASN1OctetString
 import org.multipaz.asn1.ASN1Sequence
+import kotlin.random.Random
+import kotlin.random.asKotlinRandom
 import java.security.GeneralSecurityException
 import java.security.KeyPairGenerator
 import java.security.SecureRandom
@@ -127,6 +129,8 @@ actual object Crypto {
             }
             return sb.toString()
         }
+
+    actual val secureRandom: Random = SecureRandom().asKotlinRandom()
 
     init {
     }

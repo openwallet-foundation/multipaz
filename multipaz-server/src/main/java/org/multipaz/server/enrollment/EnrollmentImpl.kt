@@ -50,10 +50,10 @@ import org.multipaz.server.common.enrollmentServerUrl
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.Eager
+import org.multipaz.crypto.Crypto
 import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
 import org.multipaz.util.truncateToWholeSeconds
-import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
@@ -277,7 +277,7 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
             // Request enrollment from the server
             // Channel needs some capacity so that sending the result to the channel is not blocked.
             val responseChannel = Channel<AsymmetricKey.X509Certified>(capacity = 1)
-            val requestId = Random.nextBytes(15).toBase64Url()
+            val requestId = Crypto.secureRandom.nextBytes(15).toBase64Url()
             val signingKeyDeferred = lazy {
                 // Launch lazily to avoid race conditions. By the time this is launched,
                 // ServerIdentityRecord has been created and inserted in enrollmentsMap.
@@ -302,7 +302,7 @@ class EnrollmentImpl: Enrollment, RpcAuthInspector by serverAuth {
                             val request = enrollment.request(
                                 requestId = requestId,
                                 identity = serverIdentity,
-                                nonce = ByteString(Random.nextBytes(15)),
+                                nonce = ByteString(Crypto.secureRandom.nextBytes(15)),
                                 expiration = expiration
                             )
                             val certChain = generateServerIdentityLeafCertificate(

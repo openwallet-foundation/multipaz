@@ -37,7 +37,6 @@ import org.multipaz.webtoken.buildJwt
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
-import kotlin.random.Random
 
 /**
  * Object that holds data necessary to verify Openid4VP credential presentation.
@@ -54,7 +53,7 @@ import kotlin.random.Random
 @CborSerializable
 class Openid4VpVerifierModel(
     val clientId: String,
-    val nonce: ByteString = ByteString(Random.nextBytes(15)),
+    val nonce: ByteString = ByteString(Crypto.secureRandom.nextBytes(15)),
     val ephemeralPrivateKey: EcPrivateKey,
     val requestedFormats: MutableMap<String, String> = mutableMapOf()
 ) : AutoCloseable {

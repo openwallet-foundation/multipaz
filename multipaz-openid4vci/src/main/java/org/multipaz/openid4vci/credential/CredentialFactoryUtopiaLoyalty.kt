@@ -23,9 +23,9 @@ import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.revocation.RevocationStatus
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
+import org.multipaz.crypto.Crypto
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.util.toBase64Url
-import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
@@ -86,7 +86,7 @@ class CredentialFactoryUtopiaLoyalty : CredentialFactory {
         val membershipId = if (loyaltyIDData.hasKey("membership_number")) {
             loyaltyIDData["membership_number"].asTstr
         } else {
-            (1000000 + Random.nextInt(9000000)).toString()
+            (1000000 + Crypto.secureRandom.nextInt(9000000)).toString()
         }
         val tier = if (loyaltyIDData.hasKey("tier")) {
             loyaltyIDData["tier"].asTstr

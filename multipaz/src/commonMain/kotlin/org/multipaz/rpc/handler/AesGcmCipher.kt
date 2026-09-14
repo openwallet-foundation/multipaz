@@ -21,7 +21,7 @@ class AesGcmCipher(
 
     override suspend fun encrypt(plaintext: ByteArray): ByteArray {
         val ciphertext = ByteStringBuilder()
-        val iv = Random.Default.nextBytes(12)
+        val iv = Crypto.secureRandom.nextBytes(12)
         ciphertext.append(iv)
         ciphertext.append(Crypto.encrypt(alg, secretKey, iv, plaintext))
         return ciphertext.toByteString().toByteArray()

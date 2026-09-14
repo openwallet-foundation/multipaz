@@ -8,7 +8,7 @@ import org.multipaz.util.toBase64Url
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import java.sql.SQLException
-import kotlin.random.Random
+import org.multipaz.crypto.Crypto
 
 class JdbcStorageTable(
     override val storage: JdbcStorage,
@@ -71,7 +71,7 @@ class JdbcStorageTable(
             var tries = 0
             // Loop until the key we generated is unique (if key is not null, we only loop once).
             while (true) {
-                newKey = key ?: Random.nextBytes(storage.keySize).toBase64Url()
+                newKey = key ?: Crypto.secureRandom.nextBytes(storage.keySize).toBase64Url()
                 val values = StringBuilder("?, ?")
                 if (spec.supportPartitions) {
                     values.append(", ?")

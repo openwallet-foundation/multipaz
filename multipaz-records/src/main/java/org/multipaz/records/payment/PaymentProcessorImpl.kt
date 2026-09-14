@@ -27,8 +27,8 @@ import org.multipaz.utopia.knowntypes.DigitalPaymentCredential
 import org.multipaz.verification.Iso18013PresentmentRecord
 import org.multipaz.verification.MdocVerifiedPresentation
 import org.multipaz.verification.OpenID4VPPresentmentRecord
+import org.multipaz.crypto.Crypto
 import kotlin.math.roundToLong
-import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -51,7 +51,7 @@ class PaymentProcessorImpl: PaymentProcessor, RpcAuthInspector by rpcAuth {
             amount = request.amount,
             currency = request.currency,
             time = Clock.System.now().truncateToWholeSeconds(),
-            nonce = ByteString(Random.nextBytes(15)),
+            nonce = ByteString(Crypto.secureRandom.nextBytes(15)),
             payerAccount = null,
             payerName = null,
             presentmentRecord = null

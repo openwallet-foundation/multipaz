@@ -6,6 +6,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import org.multipaz.crypto.Crypto
 import org.multipaz.provisioning.SecretCodeRequest
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.server.common.getBaseUrl
@@ -56,12 +57,12 @@ fun parseTxKind(txKind: String?, txPrompt: String?): SecretCodeRequest? {
 private const val NUMERIC_ALPHABET = "0123456789"
 private const val ALPHANUMERIC_ALPHABET = "23456789ABCDEFGHJKLMNPRSTUVWXYZ"  // skip 0/O/Q, 1/I
 
-fun SecretCodeRequest.generateRandom(): String {
+fun SecretCodeRequest.generateRandom(random: Random = Crypto.secureRandom): String {
     val alphabet = if (isNumeric) NUMERIC_ALPHABET else ALPHANUMERIC_ALPHABET
     val code = StringBuilder()
     val length = this.length ?: 6
     for (i in 0..<length) {
-        code.append(alphabet[Random.nextInt(alphabet.length)])
+        code.append(alphabet[random.nextInt(alphabet.length)])
     }
     return code.toString()
 }

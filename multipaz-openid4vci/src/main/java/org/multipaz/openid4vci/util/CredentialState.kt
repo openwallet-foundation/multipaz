@@ -6,6 +6,7 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.buildByteString
 import kotlinx.io.bytestring.decodeToString
 import org.multipaz.cbor.annotation.CborSerializable
+import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.X509Cert
 import org.multipaz.provisioning.CredentialFormat
@@ -129,7 +130,11 @@ class CredentialState(
          * @param cert certificate for the key used to sign this new credential
          * @return new credential identifier (bucket + index), see [CredentialId]
          */
-        suspend fun createCredentialId(format: CredentialFormat, cert: X509Cert): CredentialId {
+        suspend fun createCredentialId(
+            format: CredentialFormat,
+            cert: X509Cert,
+            random: Random = Crypto.secureRandom
+        ): CredentialId {
             val bucketInfo = BucketInfo(format.formatId, cert.ecPublicKey).toCbor().toBase64Url()
             val bucketTable = BackendEnvironment.getTable(bucketTableSpec)
             val dataTable = BackendEnvironment.getTable(dataTableSpec)
@@ -141,7 +146,7 @@ class CredentialState(
                             var bucketId: String
                             do {
                                 // We want short bucket id, 24 bits should be plenty, find an unused bucket
-                                bucketId = Random.nextBytes(3).toBase64Url()
+                                bucketId = random.nextBytes(3).toBase64Url()
                             } while (dataTable.enumerate(bucketId, limit = 1).isNotEmpty())
                             // Bucket only exists until the certificate for the key is valid
                             bucketTable.insert(
@@ -169,7 +174,7 @@ class CredentialState(
                 val currentKeySpaceSize = 1 shl currentKeySpaceSizeLog
                 repeat(currentKeySpaceSizeLog) {
                     try {
-                        val index = Random.nextInt(currentKeySpaceSize)
+                        val index = random.nextInt(currentKeySpaceSize)
                         dataTable.insert(
                             partitionId = bucketId,
                             key = encodeIndexToKey(index),

@@ -121,3 +121,16 @@ with the following changes
   `String` objects where they cannot be wiped from memory. Prefer `ByteArray` or `CharSequence` buffers that can be
   zeroed out immediately after use.
 
+* **Random number generation and testability:** Functions and classes that generate random data
+  (salts, IVs/nonces, tokens, challenges, key identifiers, session IDs, disclosure digests, etc.)
+  must accept a `random: Random` parameter (or constructor parameter) of type `kotlin.random.Random`.
+  The parameter must have a default value:
+  - Default to `Crypto.secureRandom` if the generated data is security-sensitive (e.g. cryptographic
+    keys, IVs, salts, nonces, session tokens, authorization codes, challenges, or privacy-preserving
+    blinding factors).
+  - Default to `Random.Default` only if the randomness is not security-sensitive (e.g. UI jitter,
+    fuzz testing, or non-security tie-breaking).
+  This design ensures that cryptographically secure randomness is always used by default in production,
+  while unit and integration tests can inject a deterministically seeded `Random(seed)` instance to
+  make cryptographic operations and protocol test vectors completely reproducible.
+

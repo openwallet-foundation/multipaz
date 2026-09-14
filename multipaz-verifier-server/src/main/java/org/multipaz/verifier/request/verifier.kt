@@ -102,7 +102,6 @@ import org.multipaz.verification.VerificationUtil
 import org.multipaz.verification.VerifierIdentity
 import java.net.URLEncoder
 import kotlin.io.encoding.ExperimentalEncodingApi
-import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
@@ -469,7 +468,7 @@ private suspend fun handleDcBegin(
     // Create a new session
     val issuerIdentifiers = parseIssuerIdentifiers(request.issuerIdentifiers)
     val session = Session(
-        nonce = ByteString(Random.Default.nextBytes(16)),
+        nonce = ByteString(Crypto.secureRandom.nextBytes(16)),
         origin = request.origin,
         host = request.host,
         encryptionKey = Crypto.createEcPrivateKey(EcCurve.P256),
@@ -623,7 +622,7 @@ private suspend fun handleDcBeginRawDcql(
     // Create a new session
     val issuerIdentifiers = parseIssuerIdentifiers(request.issuerIdentifiers)
     val session = Session(
-        nonce = ByteString(Random.Default.nextBytes(16)),
+        nonce = ByteString(Crypto.secureRandom.nextBytes(16)),
         origin = request.origin,
         host = request.host,
         encryptionKey = Crypto.createEcPrivateKey(EcCurve.P256),
@@ -974,7 +973,7 @@ private suspend fun handleAnnexABegin(
     // Create a new session
     val issuerIdentifiers = parseIssuerIdentifiers(request.issuerIdentifiers)
     val session = Session(
-        nonce = ByteString(Random.Default.nextBytes(16)),
+        nonce = ByteString(Crypto.secureRandom.nextBytes(16)),
         origin = request.origin,
         host = request.host,
         encryptionKey = eReaderKey,
@@ -1192,7 +1191,7 @@ private suspend fun handleOpenID4VPBegin(
     // Create a new session
     val issuerIdentifiers = parseIssuerIdentifiers(request.issuerIdentifiers)
     val session = Session(
-        nonce = ByteString(Random.Default.nextBytes(16)),
+        nonce = ByteString(Crypto.secureRandom.nextBytes(16)),
         origin = request.origin,
         host = request.host,
         encryptionKey = Crypto.createEcPrivateKey(EcCurve.P256),

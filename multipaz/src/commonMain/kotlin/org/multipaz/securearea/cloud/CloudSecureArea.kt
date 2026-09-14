@@ -132,7 +132,8 @@ open class CloudSecureArea protected constructor(
     private val storageTable: StorageTable,
     final override val identifier: String,
     val serverUrl: String,
-    httpClientEngineFactory: HttpClientEngineFactory<*>
+    httpClientEngineFactory: HttpClientEngineFactory<*>,
+    private val random: Random = Crypto.secureRandom
 ) : SecureArea {
     private var skDevice: SecretKey? = null
     private var skCloud: SecretKey? = null
@@ -251,7 +252,7 @@ open class CloudSecureArea protected constructor(
                     userAuthenticationTypes = setOf()
                 )
             )
-            val deviceChallenge = Random.Default.nextBytes(32)
+            val deviceChallenge = random.nextBytes(32)
 
             val deviceAttestationResult = DeviceCheck.generateAttestation(
                 platformSecureArea,
@@ -395,7 +396,7 @@ open class CloudSecureArea protected constructor(
             val request0 = E2EESetupRequest0(registrationContext!!.toByteArray())
             response = communicate(serverUrl, request0.toCbor())
             val response0 = CloudSecureAreaProtocol.Command.fromCbor(response) as E2EESetupResponse0
-            val deviceNonce = Random.Default.nextBytes(32)
+            val deviceNonce = random.nextBytes(32)
             val (zab, response1) = Crypto.createEcPrivateKey(EcCurve.P256).use { eDeviceKey ->
                 val dataToSign = Cbor.encode(
                     buildCborArray {
@@ -1178,8 +1179,9 @@ open class CloudSecureArea protected constructor(
         //
         private const val PLATFORM_SECURE_AREA_IDENTIFIER_PREFIX = "CloudSecureArea_"
 
+
         /**
-         * Creates an instance of [CloudSecureArea].
+         * Creates an instance of [CloudSecureArea] using default [Crypto.secureRandom].
          *
          * The given [identifier] must start with `CloudSecureArea` and if the application is only using
          * a single instance of [CloudSecureArea], just using this string as the identifier is fine.
@@ -1203,12 +1205,36 @@ open class CloudSecureArea protected constructor(
             identifier: String,
             serverUrl: String,
             httpClientEngineFactory: HttpClientEngineFactory<*>
+        ): CloudSecureArea = create(
+            storage = storage,
+            identifier = identifier,
+            serverUrl = serverUrl,
+            httpClientEngineFactory = httpClientEngineFactory,
+            random = Crypto.secureRandom
+        )
+
+        /**
+         * Creates an instance of CloudSecureArea.
+         *
+         * @param storage the storage engine to use for storing key material.
+         * @param identifier an identifier for the Cloud Secure Area.
+         * @param serverUrl the URL the Cloud Secure Area is using.
+         * @param httpClientEngineFactory the factory for creating the Ktor HTTP client engine (e.g. CIO)
+         * @param random the random provider to use.
+         */
+        suspend fun create(
+            storage: Storage,
+            identifier: String,
+            serverUrl: String,
+            httpClientEngineFactory: HttpClientEngineFactory<*>,
+            random: Random
         ): CloudSecureArea {
             val secureArea = CloudSecureArea(
                 storage.getTable(tableSpec),
                 identifier,
                 serverUrl,
-                httpClientEngineFactory
+                httpClientEngineFactory,
+                random
             )
             secureArea.initialize()
             return secureArea

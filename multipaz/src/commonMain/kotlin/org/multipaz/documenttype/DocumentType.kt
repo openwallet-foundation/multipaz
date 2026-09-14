@@ -34,6 +34,7 @@ import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.AsymmetricKey
+import org.multipaz.crypto.Crypto
 import org.multipaz.document.Document
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
@@ -415,7 +416,7 @@ class DocumentType private constructor(
         validUntil: Instant,
         expectedUpdate: Instant? = null,
         domain: String = "mdoc",
-        randomProvider: Random = Random,
+        randomProvider: Random = Crypto.secureRandom,
         includeElement: (namespaceName: String, dataElement: MdocDataElement) -> Boolean = { _, _ -> true },
         deviceKeyAuthorizedNamespaces: List<String> = emptyList(),
         deviceKeyAuthorizedDataElements: Map<String, List<String>> = emptyMap(),
@@ -520,7 +521,7 @@ class DocumentType private constructor(
         validFrom: Instant,
         validUntil: Instant,
         domain: String = "sdjwt",
-        randomProvider: Random = Random,
+        randomProvider: Random = Crypto.secureRandom,
     ): KeylessSdJwtVcCredential {
         require(jsonDocumentType != null)
 
@@ -581,7 +582,7 @@ class DocumentType private constructor(
         validFrom: Instant,
         validUntil: Instant,
         domain: String = "sdjwt",
-        randomProvider: Random = Random,
+        randomProvider: Random = Crypto.secureRandom,
     ): KeyBoundSdJwtVcCredential {
         require(jsonDocumentType != null)
 

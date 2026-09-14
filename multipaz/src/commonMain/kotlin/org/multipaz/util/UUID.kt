@@ -49,7 +49,13 @@ data class UUID(
             )
         }
 
-        fun randomUUID(random: Random = Random.Default): UUID = UUID.fromByteArray(random.nextBytes(16))
+        /**
+         * Generates a random [UUID].
+         *
+         * @param random the [Random] to use for randomness. Defaults to [Crypto.secureRandom].
+         * @return a new random [UUID].
+         */
+        fun randomUUID(random: Random = Crypto.secureRandom): UUID = UUID.fromByteArray(random.nextBytes(16))
     }
 }
 

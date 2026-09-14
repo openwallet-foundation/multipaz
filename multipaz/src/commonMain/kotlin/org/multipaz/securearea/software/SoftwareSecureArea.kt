@@ -66,7 +66,10 @@ import kotlin.random.Random
  *
  * Use [SoftwareSecureArea.create] to create an instance of SoftwareSecureArea.
  */
-class SoftwareSecureArea private constructor(private val storageTable: StorageTable) : SecureArea {
+class SoftwareSecureArea private constructor(
+    private val storageTable: StorageTable,
+    private val random: Random = Crypto.secureRandom
+) : SecureArea {
     override val identifier get() = IDENTIFIER
 
     override val displayName get() = "Software Secure Area"
@@ -129,7 +132,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
             val keyMetadata = if (settings.passphraseRequired) {
                 val secretKey = derivePrivateKeyEncryptionKey(encodedPublicKey, settings.passphrase!!)
                 val cleartextPrivateKey = Cbor.encode(privateKey.toCoseKey().toDataItem())
-                val iv = Random.Default.nextBytes(12)
+                val iv = random.nextBytes(12)
                 val encryptedPrivateKey = try {
                     Crypto.encrypt(
                         Algorithm.A256GCM,
@@ -500,12 +503,25 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         const val IDENTIFIER = "SoftwareSecureArea"
 
         /**
-         * Creates an instance of SoftwareSecureArea.
+         * Creates an instance of SoftwareSecureArea using default [Crypto.secureRandom].
          *
          * @param storage the storage engine to use for storing key material.
          */
-        suspend fun create(storage: Storage): SoftwareSecureArea {
-            return SoftwareSecureArea(storage.getTable(tableSpec))
+        suspend fun create(
+            storage: Storage
+        ): SoftwareSecureArea = create(storage, Crypto.secureRandom)
+
+        /**
+         * Creates an instance of SoftwareSecureArea.
+         *
+         * @param storage the storage engine to use for storing key material.
+         * @param random the random provider to use.
+         */
+        suspend fun create(
+            storage: Storage,
+            random: Random
+        ): SoftwareSecureArea {
+            return SoftwareSecureArea(storage.getTable(tableSpec), random)
         }
 
         private val tableSpec = StorageTableSpec(

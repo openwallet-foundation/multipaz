@@ -370,7 +370,7 @@ val Iso180137VerifierComponent: FC<Props> = FC {
                 )
             )
 
-            nonceHex = Random.nextBytes(16).toHex()
+            nonceHex = Crypto.secureRandom.nextBytes(16).toHex()
             newElemInputs = emptyMap()
             selectedDocReqInputs = emptyMap()
             loadInputText = ""
@@ -408,7 +408,7 @@ val Iso180137VerifierComponent: FC<Props> = FC {
                 )
             }
 
-            val randomNonce = Random.nextBytes(16).toHex()
+            val randomNonce = Crypto.secureRandom.nextBytes(16).toHex()
             nonceHex = randomNonce
 
             val dlType = docTypeRepo.documentTypes.find { it.mdocDocumentType?.docType == "org.iso.18013.5.1.mDL" }
@@ -1244,7 +1244,7 @@ val Iso180137VerifierComponent: FC<Props> = FC {
                             hover { background = Color("#475569") }
                         }
                         onClick = {
-                            nonceHex = Random.nextBytes(16).toHex()
+                            nonceHex = Crypto.secureRandom.nextBytes(16).toHex()
                             rebuildRequest()
                         }
                         +"🎲 Randomize Nonce"

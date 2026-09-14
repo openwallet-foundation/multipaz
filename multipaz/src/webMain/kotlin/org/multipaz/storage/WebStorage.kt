@@ -16,7 +16,7 @@ import org.multipaz.util.toBase64Url
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.js.ExperimentalWasmJsInterop
-import kotlin.random.Random
+import org.multipaz.crypto.Crypto
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlin.js.JsAny
@@ -198,7 +198,7 @@ private class WebStorageTable(
         var done = false
         var newKey = ""
         do {
-            newKey = key ?: Random.nextBytes(9).toBase64Url()
+            newKey = key ?: Crypto.secureRandom.nextBytes(9).toBase64Url()
             try {
                 val tx = db.transaction(jsArrayOf("records".toJsString()).unsafeCast<JsAny>(), "readwrite")
                 val store = tx.objectStore("records")

@@ -12,7 +12,7 @@ import org.multipaz.storage.base.SqlStatementMaker
 import org.multipaz.util.toBase64Url
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
-import kotlin.random.Random
+import org.multipaz.crypto.Crypto
 
 internal class AndroidStorageTable(
     override val storage: AndroidStorage,
@@ -90,7 +90,7 @@ internal class AndroidStorageTable(
             var newKey: String
             var done = false
             do {
-                newKey = key ?: Random.nextBytes(storage.keySize).toBase64Url()
+                newKey = key ?: Crypto.secureRandom.nextBytes(storage.keySize).toBase64Url()
                 val values = ContentValues().apply {
                     put("id", newKey)
                     if (spec.supportPartitions) {

@@ -2,6 +2,7 @@ package org.multipaz.records.payment
 
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.annotation.CborSerializable
+import org.multipaz.crypto.Crypto
 import org.multipaz.records.data.Identity
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable
@@ -17,12 +18,12 @@ data class PaymentAccount(
     val balance: Double
 ) {
     companion object {
-        suspend fun create(holderId: String): String {
+        suspend fun create(holderId: String, random: Random = Crypto.secureRandom): String {
             // We want accounts to be 8-digit numeric strings, so generate keys manually
             val table = BackendEnvironment.getTable(accountTableSpec)
             val data = PaymentAccount(holderId = holderId, balance = 0.0)
             while (true) {
-                val account = (Random.nextInt(90000000) + 10000000).toString()
+                val account = (random.nextInt(90000000) + 10000000).toString()
                 try {
                     return table.insert(
                         key = account,

@@ -2,6 +2,8 @@
 
 package org.multipaz.crypto
 
+import kotlin.math.min
+import kotlin.random.Random
 import js.array.jsArrayOf
 import js.buffer.toByteArray
 import js.objects.unsafeJso
@@ -212,6 +214,8 @@ actual object Crypto {
     actual val provider: String by lazy {
         "Web Crypto (${window.navigator.userAgent})"
     }
+
+    actual val secureRandom: Random = WebSecureRandom()
 
     actual suspend fun digest(
         algorithm: Algorithm,
@@ -1233,3 +1237,64 @@ actual object Crypto {
         return true
     }
 }
+
+private class WebSecureRandom : Random() {
+    companion object {
+        private const val MAX_CHUNK_SIZE = 65536
+    }
+
+    override fun nextBits(bitCount: Int): Int {
+        require(bitCount in 0..32) { "bitCount must be between 0 and 32" }
+        if (bitCount == 0) return 0
+        val bytes = ByteArray(4)
+        nextBytes(bytes)
+        val intValue = (bytes[0].toInt() and 0xFF shl 24) or
+                (bytes[1].toInt() and 0xFF shl 16) or
+                (bytes[2].toInt() and 0xFF shl 8) or
+                (bytes[3].toInt() and 0xFF)
+        return intValue ushr (32 - bitCount)
+    }
+
+    override fun nextBytes(array: ByteArray, fromIndex: Int, toIndex: Int): ByteArray {
+        require(fromIndex in 0..array.size && toIndex in 0..array.size && fromIndex <= toIndex) {
+            "fromIndex ($fromIndex) or toIndex ($toIndex) out of range [0, ${array.size}]"
+        }
+        var offset = fromIndex
+        while (offset < toIndex) {
+            val chunkSize = min(toIndex - offset, MAX_CHUNK_SIZE)
+            val temp = ByteArray(chunkSize)
+            val uint8Array = temp.toUint8Array()
+            crypto.getRandomValues(uint8Array)
+            val chunkBytes = uint8Array.buffer.toByteArray()
+            chunkBytes.copyInto(array, destinationOffset = offset)
+            offset += chunkSize
+        }
+        return array
+    }
+
+    override fun nextBytes(array: ByteArray): ByteArray =
+        nextBytes(array, 0, array.size)
+
+    override fun nextBytes(size: Int): ByteArray =
+        nextBytes(ByteArray(size))
+
+    override fun nextInt(): Int {
+        val bytes = ByteArray(4)
+        nextBytes(bytes)
+        return (bytes[0].toInt() and 0xFF shl 24) or
+                (bytes[1].toInt() and 0xFF shl 16) or
+                (bytes[2].toInt() and 0xFF shl 8) or
+                (bytes[3].toInt() and 0xFF)
+    }
+
+    override fun nextLong(): Long {
+        val bytes = ByteArray(8)
+        nextBytes(bytes)
+        var result = 0L
+        for (b in bytes) {
+            result = (result shl 8) or (b.toLong() and 0xFF)
+        }
+        return result
+    }
+}
+

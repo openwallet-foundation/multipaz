@@ -66,7 +66,8 @@ internal class OpenID4VCIProvisioningClient(
     val issuerConfiguration: IssuerConfiguration,
     val authorizationConfiguration: AuthorizationConfiguration,
     val secureArea: SecureArea,
-    val authorizationData: OpenID4VCIAuthorizationData
+    val authorizationData: OpenID4VCIAuthorizationData,
+    val random: Random = Crypto.secureRandom
 ): ProvisioningClient {
     var pkceCodeVerifier: String? = null
     var token: String? = null
@@ -305,7 +306,7 @@ internal class OpenID4VCIProvisioningClient(
     private suspend fun performPushedAuthorizationRequest(): String {
         maybeObtainClientAttestationChallenge()
 
-        pkceCodeVerifier = Random.nextBytes(32).toBase64Url()
+        pkceCodeVerifier = random.nextBytes(32).toBase64Url()
         val codeChallenge = Crypto.digest(
             Algorithm.SHA256,
             pkceCodeVerifier!!.encodeToByteArray()
@@ -358,7 +359,7 @@ internal class OpenID4VCIProvisioningClient(
             } else {
                 null
             }
-            val redirectState = createUniqueStateValue()
+            val redirectState = createUniqueStateValue(random)
             this.redirectState = redirectState
 
             val parParams = buildJsonObject {
@@ -759,9 +760,9 @@ internal class OpenID4VCIProvisioningClient(
         private val stateLock = Mutex()
         private val states = mutableSetOf<String>()
 
-        private suspend fun createUniqueStateValue(): String {
+        private suspend fun createUniqueStateValue(random: Random = Crypto.secureRandom): String {
             while (true) {
-                val state = Random.nextBytes(15).toBase64Url()
+                val state = random.nextBytes(15).toBase64Url()
                 stateLock.withLock {
                     if (states.add(state)) {
                         return state

@@ -17,7 +17,6 @@ import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import kotlin.concurrent.Volatile
-import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -186,7 +185,7 @@ class RpcNonceAndSession(
                 if (nonceCipher == null) {
                     var key = table.get("nonceCipherKey")
                     if (key == null) {
-                        key = ByteString(Random.nextBytes(16))
+                        key = ByteString(Crypto.secureRandom.nextBytes(16))
                         table.insert("nonceCipherKey", key)
                     }
                     val keyBytes = key.toByteArray()

@@ -142,7 +142,7 @@ class CloudSecureAreaProtocolTest {
         )
 
         return CloudSecureAreaServer(
-            serverSecureAreaBoundKey = Random.Default.nextBytes(32),
+            serverSecureAreaBoundKey = Crypto.secureRandom.nextBytes(32),
             attestationKey = attestationSigningKey,
             cloudRootAttestationKey = cloudBindingKeyAttestationSigningKey,
             e2eeKeyLimitSeconds = 10 * 60,
@@ -191,7 +191,7 @@ class CloudSecureAreaProtocolTest {
             val deviceBindingKey = Crypto.createEcPrivateKey(EcCurve.P256)
             val deviceAttestationKey = Crypto.createEcPrivateKey(EcCurve.P256)
             val deviceAttestation = DeviceAttestationSoftware(deviceAttestationKey.publicKey)
-            val deviceChallenge = Random.Default.nextBytes(32)
+            val deviceChallenge = Crypto.secureRandom.nextBytes(32)
 
             val regReq1 = RegisterRequest1(
                 deviceChallenge = deviceChallenge,
@@ -210,7 +210,7 @@ class CloudSecureAreaProtocolTest {
             val e2eeResp0 = CloudSecureAreaProtocol.Command.fromCbor(dataE0) as E2EESetupResponse0
 
             val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
-            val deviceNonce = Random.Default.nextBytes(32)
+            val deviceNonce = Crypto.secureRandom.nextBytes(32)
             val dataToSign = Cbor.encode(
                 buildCborArray {
                     add(eDeviceKey.publicKey.toCoseKey().toDataItem())

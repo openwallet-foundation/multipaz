@@ -44,11 +44,11 @@ import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.server.common.getBaseUrl
 import org.multipaz.server.payment.PaymentProcessor
 import org.multipaz.storage.StorageTableSpec
+import org.multipaz.crypto.Crypto
 import org.multipaz.util.Logger
 import org.multipaz.util.fromGlob
 import org.multipaz.util.truncateToWholeSeconds
 import java.lang.IllegalStateException
-import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -559,7 +559,7 @@ suspend fun enrollServer(
     withContext(RpcAuthClientSession()) {
         val now = Clock.System.now().truncateToWholeSeconds()
         val expiration = now + CERTIFICATE_DURATION
-        val nonce = ByteString(Random.nextBytes(15))
+        val nonce = ByteString(Crypto.secureRandom.nextBytes(15))
         val enrollmentRequest = enrollment.request(requestId, serverIdentity, nonce, expiration)
         if (enrollmentRequest.url != url) {
             throw InvalidRequestException("Unexpected url in enrollment request: '${enrollmentRequest.url}'")

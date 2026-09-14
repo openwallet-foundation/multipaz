@@ -52,7 +52,6 @@ import org.multipaz.util.toBase64Url
 import java.net.URI
 import kotlin.collections.component1
 import kotlin.collections.component2
-import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -116,7 +115,7 @@ private suspend fun authorizeUsingSystemOfRecord(
     call: ApplicationCall
 ) {
     val state = IssuanceState.getIssuanceState(id)
-    val codeVerifier = Random.nextBytes(32)
+    val codeVerifier = Crypto.secureRandom.nextBytes(32)
     state.systemOfRecordCodeVerifier = ByteString(codeVerifier)
     val codeChallenge = Crypto.digest(
         Algorithm.SHA256,
@@ -174,7 +173,7 @@ private suspend fun createJwtClientAssertion(
         key = getServerIdentity(ServerIdentity.RECORDS_CLIENT),
         expiresIn = 5.minutes
     ) {
-        put("jti", Random.nextBytes(18).toBase64Url())
+        put("jti", Crypto.secureRandom.nextBytes(18).toBase64Url())
         put("iss", clientId)
         put("sub", clientId) // RFC 7523 Section 3, item 2.B
         put("aud", aud)

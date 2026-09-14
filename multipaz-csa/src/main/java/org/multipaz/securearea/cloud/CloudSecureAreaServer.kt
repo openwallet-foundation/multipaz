@@ -73,21 +73,22 @@ import kotlin.random.Random
  * This code is not intended for production use.
  *
  * @param serverSecureAreaBoundKey the secret key used to encrypt/decrypt state externally stored.
+ *   Must be 16, 24, or 32 bytes.
  * @param attestationKey the private key used to sign attestations for keys created by clients.
- * @param attestationKeyCertification a certification of the attestation key.
- * @param cloudRootAttestationKey the private key used to sign attestations for `CloudBindingKey`.
- * @param cloudRootAttestationKeyCertification a certification of the attestation key for `CloudBindingKey`.
+ * @param cloudRootAttestationKey the root key used for issuing `CloudBindingKey` certificates.
  * @param e2eeKeyLimitSeconds Re-keying interval for end-to-end encryption.
  * @param iosReleaseBuild Whether a release build is required on iOS. When `false`, both debug and release builds
  *   are accepted.
- * @param iosAppIdentifier iOS app identifier that consists of a team id followed by a dot and app bundle name. If
- *   `null`, any app identifier is accepted. It must not be `null` if [iosReleaseBuild] is `true`
+ * @param iosAppIdentifiers A list of iOS App Identifiers (e.g. `9B5CR87588.org.multipaz.testapp`)
+ *   to allow. If empty, allow any app.
  * @param androidGmsAttestation whether to require attestations made for local key on clients is using the Google root.
  * @param androidVerifiedBootGreen whether to require clients are in verified boot state green.
  * @param androidAppSignatureCertificateDigests the allowed list of applications that can use the
  *   service. Each element is the bytes of the SHA-256 of a signing certificate, see the
  *   [Signature](https://developer.android.com/reference/android/content/pm/Signature) class in
  *   the Android SDK for details. If empty, allow any app.
+ * @param androidAppPackageNames A list of Android package names to allow. If empty, allow any app.
+ * @param androidKeystoreSecurityLevel The minimum required Android Keystore security level.
  * @param openid4vciKeyAttestationIssuer The value to use for the `iss` field in OpenID4VCI attestations or `null` to
  *   not include this field.
  * @param openid4vciKeyAttestationKeyStorage The value to use for the `key_storage` field in OpenID4VCI attestations or
@@ -99,6 +100,8 @@ import kotlin.random.Random
  * @param openid4vciKeyAttestationCertification The value to use for the `certification` field in OpenID4VCI
  *   attestations or `null` to not include this field.
  * @param passphraseFailureEnforcer the [PassphraseFailureEnforcer] to use.
+ * @param allowSoftwareAttestation whether to allow software attestation.
+ * @param random the [Random] instance to use (defaults to [Crypto.secureRandom]).
  */
 class CloudSecureAreaServer(
     private val serverSecureAreaBoundKey: ByteArray,
@@ -119,6 +122,7 @@ class CloudSecureAreaServer(
     private val openid4vciKeyAttestationCertification: String?,
     private val passphraseFailureEnforcer: PassphraseFailureEnforcer,
     private val allowSoftwareAttestation: Boolean = false,
+    private val random: Random = Crypto.secureRandom,
 ) : AutoCloseable {
     private val serverSecureAreaBoundSecretKey = SecretKey(serverSecureAreaBoundKey)
 
@@ -177,8 +181,8 @@ class CloudSecureAreaServer(
         state.registrationComplete = false
         state.clientPassphraseSalt = byteArrayOf()
         state.clientSaltedPassphrase = byteArrayOf()
-        state.attestationChallenge = ByteString(Random.Default.nextBytes(32))
-        state.cloudChallenge = Random.Default.nextBytes(32)
+        state.attestationChallenge = ByteString(random.nextBytes(32))
+        state.cloudChallenge = random.nextBytes(32)
         val response0 = RegisterResponse0(
             attestationChallenge = state.attestationChallenge!!,
             cloudChallenge = state.cloudChallenge!!,
@@ -309,7 +313,7 @@ class CloudSecureAreaServer(
                                             remoteHost: String): Pair<Int, ByteArray> {
         val state = E2EEState()
         state.context = RegisterState.decrypt(request0.registrationContext)
-        state.cloudNonce = Random.Default.nextBytes(32)
+        state.cloudNonce = random.nextBytes(32)
         val response0 = E2EESetupResponse0(
             state.cloudNonce!!,
             state.encrypt()
@@ -406,7 +410,7 @@ class CloudSecureAreaServer(
             return Pair(403, "Registration stage 2 already completed".toByteArray())
         }
         e2eeState.context!!.registrationComplete = true
-        e2eeState.context!!.clientPassphraseSalt = Random.Default.nextBytes(32)
+        e2eeState.context!!.clientPassphraseSalt = random.nextBytes(32)
         e2eeState.context!!.clientSaltedPassphrase = Crypto.digest(
             Algorithm.SHA256,
             e2eeState.context!!.clientPassphraseSalt + request0.passphrase.encodeToByteArray()
@@ -458,7 +462,7 @@ class CloudSecureAreaServer(
     ): Pair<Int, ByteArray> {
         val state = CreateKeyState()
         state.challenge = request0.challenge
-        state.cloudChallenge = Random.Default.nextBytes(32)
+        state.cloudChallenge = random.nextBytes(32)
         state.algorithm = Algorithm.fromName(request0.algorithm)
         state.validFromMillis = request0.validFromMillis
         state.validUntilMillis = request0.validUntilMillis
@@ -582,7 +586,7 @@ class CloudSecureAreaServer(
     ): Pair<Int, ByteArray> {
         val state = CreateKeyState()
         state.challenge = request0.challenge
-        state.cloudChallenge = Random.Default.nextBytes(32)
+        state.cloudChallenge = random.nextBytes(32)
         state.algorithm = Algorithm.fromName(request0.algorithm)
         state.validFromMillis = request0.validFromMillis
         state.validUntilMillis = request0.validUntilMillis
@@ -768,7 +772,7 @@ class CloudSecureAreaServer(
         val state = SignState()
         state.keyContext = decryptCreateKeyState(request0.keyContext)
         state.dataToSign = request0.dataToSign
-        state.cloudNonce = Random.Default.nextBytes(32)
+        state.cloudNonce = random.nextBytes(32)
         val response0 = CloudSecureAreaProtocol.SignResponse0(
             state.cloudNonce!!,
             encryptSignState(state)
@@ -909,7 +913,7 @@ class CloudSecureAreaServer(
         val state = KeyAgreementState()
         state.keyContext = decryptCreateKeyState(request0.keyContext)
         state.otherPublicKey = request0.otherPublicKey
-        state.cloudNonce = Random.Default.nextBytes(32)
+        state.cloudNonce = random.nextBytes(32)
         val response0 = CloudSecureAreaProtocol.KeyAgreementResponse0(
             state.cloudNonce!!,
             state.encrypt()
@@ -1033,7 +1037,7 @@ class CloudSecureAreaServer(
         val state = KemDecapsulateState()
         state.keyContext = decryptCreateKeyState(request0.keyContext)
         state.ciphertext = request0.ciphertext
-        state.cloudNonce = Random.Default.nextBytes(32)
+        state.cloudNonce = random.nextBytes(32)
         val response0 = CloudSecureAreaProtocol.KemDecapsulateResponse0(
             state.cloudNonce!!,
             state.encrypt()

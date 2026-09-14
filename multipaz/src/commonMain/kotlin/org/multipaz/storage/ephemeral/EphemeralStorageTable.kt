@@ -15,7 +15,7 @@ import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlin.math.abs
-import kotlin.random.Random
+import org.multipaz.crypto.Crypto
 
 internal class EphemeralStorageTable(
     override val storage: EphemeralStorage,
@@ -58,7 +58,7 @@ internal class EphemeralStorageTable(
             var keyToUse = key
             if (keyToUse == null) {
                 do {
-                    keyToUse = Random.Default.nextBytes(9).toBase64Url()
+                    keyToUse = Crypto.secureRandom.nextBytes(9).toBase64Url()
                     index = storedData.binarySearch(EphemeralStorageItem(partitionId, keyToUse))
                 } while (index >= 0)
             } else {

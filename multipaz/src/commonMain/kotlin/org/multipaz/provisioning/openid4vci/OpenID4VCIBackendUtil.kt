@@ -5,6 +5,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.PublicKey
 import org.multipaz.crypto.AsymmetricKey
 import org.multipaz.provisioning.CredentialKeyAttestation
@@ -34,18 +35,20 @@ object OpenID4VCIBackendUtil {
      * @param signingKey client's private key
      * @param clientId OpenID `client_id` value
      * @param authorizationServerIdentifier authorization server's identifier (URL)
+     * @param random random provider to use (defaults to [Crypto.secureRandom])
      * @return client assertion JWT
      */
     suspend fun createJwtClientAssertion(
         signingKey: AsymmetricKey,
         clientId: String,
         authorizationServerIdentifier: String,
+        random: Random = Crypto.secureRandom
     ): String = buildJwt(
         type = "JWT",
         key = signingKey,
         expiresIn = 5.minutes
     ) {
-        put("jti", Random.Default.nextBytes(18).toBase64Url())
+        put("jti", random.nextBytes(18).toBase64Url())
         put("iss", clientId)
         put("sub", clientId) // RFC 7523 Section 3, item 2.B
         put("aud", authorizationServerIdentifier)

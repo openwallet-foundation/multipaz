@@ -55,7 +55,7 @@ import kotlin.random.Random
 private suspend fun createSampleRequestJson(): String {
     return try {
         val key = Crypto.createEcPrivateKey(EcCurve.P256)
-        val nonce = Random.nextBytes(16)
+        val nonce = Crypto.secureRandom.nextBytes(16)
         val encInfo = buildCborArray {
             add("dcapi")
             addCborMap {
@@ -86,7 +86,7 @@ private suspend fun createSampleRequestJson(): String {
 
 private fun createSampleResponseJson(): String {
     return try {
-        val encBytes = Random.nextBytes(64)
+        val encBytes = Crypto.secureRandom.nextBytes(64)
         val encResponse = buildCborArray {
             add("dcapi")
             addCborMap {

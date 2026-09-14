@@ -8,11 +8,16 @@ import org.multipaz.securearea.SecureEnclaveKeyUnlockData
 import org.multipaz.util.UUID
 import org.multipaz.util.toByteArray
 import org.multipaz.util.toNSData
+import kotlin.random.Random
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.toNSData
 import platform.Foundation.NSData
 import platform.Foundation.NSUUID
+import platform.Security.SecRandomCopyBytes
+import platform.Security.kSecRandomDefault
 
 @OptIn(ExperimentalForeignApi::class)
 actual object Crypto {
@@ -48,6 +53,8 @@ actual object Crypto {
     )
 
     actual val provider: String = "CryptoKit"
+
+    actual val secureRandom: Random = IosSecureRandom()
 
     actual suspend fun digest(
         algorithm: Algorithm,
@@ -559,3 +566,61 @@ actual object Crypto {
         return true
     }
 }
+
+@OptIn(ExperimentalForeignApi::class)
+private class IosSecureRandom : Random() {
+    override fun nextBits(bitCount: Int): Int {
+        require(bitCount in 0..32) { "bitCount must be between 0 and 32" }
+        if (bitCount == 0) return 0
+        val bytes = ByteArray(4)
+        nextBytes(bytes)
+        val intValue = (bytes[0].toInt() and 0xFF shl 24) or
+                (bytes[1].toInt() and 0xFF shl 16) or
+                (bytes[2].toInt() and 0xFF shl 8) or
+                (bytes[3].toInt() and 0xFF)
+        return intValue ushr (32 - bitCount)
+    }
+
+    override fun nextBytes(array: ByteArray, fromIndex: Int, toIndex: Int): ByteArray {
+        require(fromIndex in 0..array.size && toIndex in 0..array.size && fromIndex <= toIndex) {
+            "fromIndex ($fromIndex) or toIndex ($toIndex) out of range [0, ${array.size}]"
+        }
+        val length = toIndex - fromIndex
+        if (length == 0) return array
+        array.usePinned { pinned ->
+            val status = SecRandomCopyBytes(
+                kSecRandomDefault,
+                length.toULong(),
+                pinned.addressOf(fromIndex)
+            )
+            check(status == 0) { "SecRandomCopyBytes failed with status $status" }
+        }
+        return array
+    }
+
+    override fun nextBytes(array: ByteArray): ByteArray =
+        nextBytes(array, 0, array.size)
+
+    override fun nextBytes(size: Int): ByteArray =
+        nextBytes(ByteArray(size))
+
+    override fun nextInt(): Int {
+        val bytes = ByteArray(4)
+        nextBytes(bytes)
+        return (bytes[0].toInt() and 0xFF shl 24) or
+                (bytes[1].toInt() and 0xFF shl 16) or
+                (bytes[2].toInt() and 0xFF shl 8) or
+                (bytes[3].toInt() and 0xFF)
+    }
+
+    override fun nextLong(): Long {
+        val bytes = ByteArray(8)
+        nextBytes(bytes)
+        var result = 0L
+        for (b in bytes) {
+            result = (result shl 8) or (b.toLong() and 0xFF)
+        }
+        return result
+    }
+}
+

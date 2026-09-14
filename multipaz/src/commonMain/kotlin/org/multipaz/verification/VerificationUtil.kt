@@ -1291,7 +1291,7 @@ object VerificationUtil {
         verifierIdentities: List<VerifierIdentity> = listOf(),
         origin: String? = null,
         transactionData: List<String>? = null,
-        nonce: ByteString = ByteString(Random.nextBytes(18)),
+        nonce: ByteString = ByteString(Crypto.secureRandom.nextBytes(18)),
         encryptResponse: Boolean = true,
         responseUri: String? = null,
         documentTypeRepository: DocumentTypeRepository? = null,

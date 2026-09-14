@@ -17,7 +17,8 @@ internal object OpenID4VCIUtil {
         clientId: String,
         requestUrl: String,
         dpopNonce: String?,
-        accessToken: String? = null
+        accessToken: String? = null,
+        random: Random = Crypto.secureRandom
     ): String {
         return buildJwt(
             type = "dpop+jwt",
@@ -39,7 +40,7 @@ internal object OpenID4VCIUtil {
             if (dpopNonce != null) {
                 put("nonce", dpopNonce)
             }
-            put("jti", Random.Default.nextBytes(15).toBase64Url())
+            put("jti", random.nextBytes(15).toBase64Url())
             if (accessToken != null) {
                 val hash = Crypto.digest(Algorithm.SHA256, accessToken.encodeToByteArray())
                 put("ath", hash.toBase64Url())
@@ -61,20 +62,22 @@ internal object OpenID4VCIUtil {
      * @param key client private key (that was previously attested by Wallet Attestation)
      * @param authenticationServerIdentifier authentication server identifier (URL)
      * @param challenge optional value for `challenge` claim
+     * @param random random provider to use (defaults to [Crypto.secureRandom])
      * @return client attestation proof-of-possession JWT
      */
     suspend fun createWalletAttestationPoP(
         clientId: String,
         key: AsymmetricKey,
         authenticationServerIdentifier: String,
-        challenge: String?
+        challenge: String?,
+        random: Random = Crypto.secureRandom
     ): String = buildJwt(
             type = "oauth-client-attestation-pop+jwt",
             key = key
         ) {
             put("iss", clientId)
             put("aud", authenticationServerIdentifier)
-            put("jti", Random.Default.nextBytes(15).toBase64Url())
+            put("jti", random.nextBytes(15).toBase64Url())
             if (challenge != null) {
                 put("challenge", challenge)
             }

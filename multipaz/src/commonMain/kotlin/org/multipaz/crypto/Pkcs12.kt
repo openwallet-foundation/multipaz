@@ -52,6 +52,7 @@ data class Pkcs12(
      * @param passphrase the passphrase used to encrypt the private key and certs, and compute the MAC,
      *                   or `null` for passwordless protection.
      * @param iterations iteration count for PBKDF2 and MAC derivation (default [DEFAULT_ITERATIONS]).
+     * @param random the [Random] instance to use for salts and IVs (defaults to [Crypto.secureRandom]).
      * @return the DER-encoded PKCS#12 file as [ByteString].
      * @throws IllegalArgumentException if the key algorithm or curve is not supported.
      */
@@ -61,7 +62,8 @@ data class Pkcs12(
     )
     suspend fun toDer(
         passphrase: String? = null,
-        iterations: Int = DEFAULT_ITERATIONS
+        iterations: Int = DEFAULT_ITERATIONS,
+        random: Random = Crypto.secureRandom
     ): ByteString {
         val effectivePassphrase = passphrase ?: ""
         val subjectPublicKey = when (val pub = privateKey.publicKey) {
@@ -74,8 +76,8 @@ data class Pkcs12(
         val privateKeyInfoDer = encodePrivateKeyInfo(privateKey)
 
         // 2. Encrypt PrivateKeyInfo into ShroudedKeyBag
-        val keySalt = Random.Default.nextBytes(16)
-        val keyIv = Random.Default.nextBytes(16)
+        val keySalt = random.nextBytes(16)
+        val keyIv = random.nextBytes(16)
         val derivedKey = Pbkdf2.deriveKey(
             prfAlgorithm = Algorithm.HMAC_SHA256,
             password = effectivePassphrase.encodeToByteArray(),
@@ -142,8 +144,8 @@ data class Pkcs12(
         val certsSafeContents = ASN1Sequence(certBags)
         val certsSafeContentsDer = ASN1.encode(certsSafeContents)
 
-        val certSalt = Random.Default.nextBytes(16)
-        val certIv = Random.Default.nextBytes(16)
+        val certSalt = random.nextBytes(16)
+        val certIv = random.nextBytes(16)
         val derivedCertKey = Pbkdf2.deriveKey(
             prfAlgorithm = Algorithm.HMAC_SHA256,
             password = effectivePassphrase.encodeToByteArray(),
@@ -195,7 +197,7 @@ data class Pkcs12(
         ))
 
         // 5. Compute MAC
-        val macSalt = Random.Default.nextBytes(16)
+        val macSalt = random.nextBytes(16)
         val macKey = Pkcs12Kdf.deriveKey(
             idByte = Pkcs12Kdf.ID_MAC_KEY,
             passphrase = effectivePassphrase,

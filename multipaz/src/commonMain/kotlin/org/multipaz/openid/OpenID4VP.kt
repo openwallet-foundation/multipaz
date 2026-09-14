@@ -344,6 +344,7 @@ object OpenID4VP {
         request: JsonObject,
         requesterIdentities: List<RequesterIdentity>,
         onDocumentsInFocus: (documents: List<Document>) -> Unit = {},
+        random: Random = Crypto.secureRandom
     ): OpenID4VPResponse {
         Logger.dJson(TAG, "request", request)
 
@@ -572,7 +573,7 @@ object OpenID4VP {
         // If using ZKP the response will be huge so compression helps
         val compressionLevel = if (usingZk) 9 else null
 
-        val walletGeneratedNonce = Random.nextBytes(16).toBase64Url()
+        val walletGeneratedNonce = random.nextBytes(16).toBase64Url()
         val response = if (reReaderPublicKey != null) {
             buildJsonObject {
                 put("response",
@@ -582,6 +583,7 @@ object OpenID4VP {
                         encAlg = reEncAlg,
                         apu = nonce.encodeToByteString(),
                         apv = walletGeneratedNonce.encodeToByteString(),
+                        random = random,
                         kid = reKid,
                         compressionLevel = compressionLevel
                     )

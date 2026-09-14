@@ -51,7 +51,7 @@ object JsonWebEncryption {
         encAlg: Algorithm,
         apu: ByteString?,
         apv: ByteString?,
-        random: Random = Random.Default,
+        random: Random = Crypto.secureRandom,
         kid: String? = null,
         compressionLevel: Int? = null
     ): String {

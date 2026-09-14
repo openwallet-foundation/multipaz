@@ -57,7 +57,7 @@ class ProvisioningSupport {
         
         if backend == nil {
             backend = OpenID4VCILocalBackend(
-                clientAssertionKey: AsymmetricKey.companion.parseExplicit(json:
+                clientAssertionKey: try! AsymmetricKey.companion.parseExplicit(json:
                     """
                     {
                         "kty": "EC",
@@ -70,7 +70,7 @@ class ProvisioningSupport {
                     }            
                     """.trimmingCharacters(in: .whitespacesAndNewlines)
                 ),
-                attestationKey: AsymmetricKey.companion.parseExplicit(json:
+                attestationKey: try! AsymmetricKey.companion.parseExplicit(json:
                     """
                     {
                         "kty": "EC",

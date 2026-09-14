@@ -10,6 +10,7 @@ import kotlinx.io.files.SystemFileSystem
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.multipaz.crypto.Crypto
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
@@ -170,10 +171,10 @@ class ShortLinkStore private constructor(
             return create(storage)
         }
 
-        private fun generateShortCode(length: Int): String {
+        private fun generateShortCode(length: Int, random: Random = Crypto.secureRandom): String {
             val sb = StringBuilder(length)
             for (i in 0 until length) {
-                sb.append(BASE62_CHARS[Random.nextInt(BASE62_CHARS.length)])
+                sb.append(BASE62_CHARS[random.nextInt(BASE62_CHARS.length)])
             }
             return sb.toString()
         }

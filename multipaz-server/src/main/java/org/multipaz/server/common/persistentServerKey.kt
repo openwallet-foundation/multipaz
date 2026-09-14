@@ -3,10 +3,10 @@ package org.multipaz.server.common
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.crypto.Crypto
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTableSpec
-import kotlin.random.Random
 
 /**
  * Loads/creates a random sequence of bytes that can be used as a symmetric key that does not
@@ -24,7 +24,7 @@ suspend fun persistentServerKey(
     val table = storageToUse.getTable(serverKeyTableSpec)
     return serverKeyLock.withLock {
         table.get(name) ?:
-            ByteString(Random.nextBytes(length)).also {
+            ByteString(Crypto.secureRandom.nextBytes(length)).also {
                 table.insert(key = name, data = it)
             }
     }

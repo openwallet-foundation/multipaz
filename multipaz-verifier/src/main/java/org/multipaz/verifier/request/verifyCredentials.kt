@@ -65,7 +65,6 @@ import kotlin.IllegalArgumentException
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
-import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 
@@ -130,7 +129,7 @@ suspend fun makeRequest(call: ApplicationCall) {
         requestTypes = requestTypes,
         dcql = dcqlQueryToUse,
         transactionData = transactions,
-        nonce = ByteString(nonce?.fromBase64Url() ?: Random.nextBytes(15)),
+        nonce = ByteString(nonce?.fromBase64Url() ?: Crypto.secureRandom.nextBytes(15)),
         origin = origin,
         responseUri = "$baseUrl/direct_post/$encodedSessionId",
         documentTypeRepository = BackendEnvironment.getInterface(DocumentTypeRepository::class)!!,

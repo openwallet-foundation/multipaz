@@ -427,7 +427,7 @@ class SdJwt private constructor(
             kbKey: PublicKey?,
             claims: String,
             digestAlgorithm: Algorithm = Algorithm.SHA256,
-            random: Random = Random.Default,
+            random: Random = Crypto.secureRandom,
             saltSizeNumBits: Int = 128,
             creationTime: Instant = Instant.DISTANT_PAST,
             expiresIn: Duration? = null
@@ -465,7 +465,7 @@ class SdJwt private constructor(
             kbKey: PublicKey?,
             claims: JsonObject,
             digestAlgorithm: Algorithm = Algorithm.SHA256,
-            random: Random = Random.Default,
+            random: Random = Crypto.secureRandom,
             saltSizeNumBits: Int = 128,
             creationTime: Instant = Instant.DISTANT_PAST,
             expiresIn: Duration? = null
@@ -613,7 +613,7 @@ class SdJwt private constructor(
             claims: String,
             nonSdClaims: String,
             digestAlgorithm: Algorithm = Algorithm.SHA256,
-            random: Random = Random.Default,
+            random: Random = Crypto.secureRandom,
             saltSizeNumBits: Int = 128,
             creationTime: Instant = Instant.DISTANT_PAST,
             expiresIn: Duration? = null
@@ -654,7 +654,7 @@ class SdJwt private constructor(
             claims: JsonObject,
             nonSdClaims: JsonObject,
             digestAlgorithm: Algorithm = Algorithm.SHA256,
-            random: Random = Random.Default,
+            random: Random = Crypto.secureRandom,
             saltSizeNumBits: Int = 128,
             creationTime: Instant = Instant.DISTANT_PAST,
             expiresIn: Duration? = null

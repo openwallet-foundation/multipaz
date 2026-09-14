@@ -10,7 +10,7 @@ import org.multipaz.storage.base.SqlStatementMaker
 import org.multipaz.util.toBase64Url
 import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
-import kotlin.random.Random
+import org.multipaz.crypto.Crypto
 
 class SqliteStorageTable(
     override val storage: SqliteStorage,
@@ -86,7 +86,7 @@ class SqliteStorageTable(
             var done = false
             // Loop until the key we generated is unique (if key is not null, we only loop once).
             do {
-                newKey = key ?: Random.nextBytes(storage.keySize).toBase64Url()
+                newKey = key ?: Crypto.secureRandom.nextBytes(storage.keySize).toBase64Url()
                 connection.prepare(sql.insertStatement).use { statement ->
                     var index = 1
                     if (spec.supportPartitions) {

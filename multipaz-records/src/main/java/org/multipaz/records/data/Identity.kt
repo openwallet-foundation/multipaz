@@ -3,6 +3,7 @@ package org.multipaz.records.data
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.Tstr
+import org.multipaz.crypto.Crypto
 import org.multipaz.records.payment.PaymentAccount
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.getTable
@@ -58,10 +59,10 @@ class Identity private constructor(
 
     companion object {
         /** Creates new identity with the given data */
-        suspend fun create(data: IdentityData): Identity {
+        suspend fun create(data: IdentityData, random: Random = Crypto.secureRandom): Identity {
             val table = BackendEnvironment.getTable(tableSpec)
             while (true) {
-                val n = Random.nextInt(100000000).toString().padStart(8, '0')
+                val n = random.nextInt(100000000).toString().padStart(8, '0')
                 val utopiaId = n.take(4) + "-" + n.substring(4, 8)
                 val core = data.core + ("utopia_id_number" to Tstr(utopiaId))
                 val records = data.records.minus("payment") // account numbers may need to be adjusted

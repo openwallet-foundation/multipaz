@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.timeout
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
+import org.multipaz.crypto.Crypto
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
@@ -21,7 +22,10 @@ import kotlin.time.Duration.Companion.minutes
  * Implementation for [RpcNotifications] that also implements [RpcPoll] interface to handle
  * long poll method for notification propagation.
  */
-class RpcNotificationsLocalPoll(private val cipher: SimpleCipher): RpcNotifications, RpcPoll {
+class RpcNotificationsLocalPoll(
+    private val cipher: SimpleCipher,
+    private val random: Random = Crypto.secureRandom
+): RpcNotifications, RpcPoll {
     private val mutex = Mutex()
     private val notificationFlow = MutableSharedFlow<Boolean>(
         extraBufferCapacity = 10,
@@ -78,7 +82,7 @@ class RpcNotificationsLocalPoll(private val cipher: SimpleCipher): RpcNotificati
                     }
                     Logger.i(TAG, "pushing notification for flow ${flowRef.target}")
                     result = RpcPoll.PollResult(
-                        consumeToken = Base64.encode(Random.Default.nextBytes(15)),
+                        consumeToken = Base64.encode(random.nextBytes(15)),
                         index = index,
                         notification = notification
                     )

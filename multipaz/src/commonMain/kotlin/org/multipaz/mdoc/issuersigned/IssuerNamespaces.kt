@@ -8,6 +8,7 @@ import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.Crypto
 import org.multipaz.request.MdocRequestedClaim
 import kotlin.collections.component1
 import kotlin.collections.component2
@@ -144,7 +145,7 @@ data class IssuerNamespaces(
      */
     class Builder(
         private val dataElementRandomSize: Int = 16,
-        private val randomProvider: Random = Random,
+        private val randomProvider: Random = Crypto.secureRandom,
     ) {
         private val builtNamespaces = mutableListOf<DataElements>()
 
@@ -214,7 +215,7 @@ data class IssuerNamespaces(
  */
 inline fun buildIssuerNamespaces(
     dataElementRandomSize: Int = 16,
-    randomProvider: Random = Random,
+    randomProvider: Random = Crypto.secureRandom,
     builderAction: IssuerNamespaces.Builder.() -> Unit
 ): IssuerNamespaces {
     val builder = IssuerNamespaces.Builder(dataElementRandomSize, randomProvider)

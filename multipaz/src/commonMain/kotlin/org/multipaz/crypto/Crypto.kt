@@ -3,6 +3,7 @@
 package org.multipaz.crypto
 
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.random.Random
 
 /**
  * Cryptographic support routines.
@@ -49,6 +50,16 @@ expect object Crypto {
      * A human-readable description of the underlying library used.
      */
     val provider: String
+
+    /**
+     * A cryptographically secure pseudo-random number generator (CSPRNG).
+     *
+     * This implements [Random] using a platform-dependent secure random source:
+     * - JVM / Android: `java.security.SecureRandom`
+     * - iOS: `SecRandomCopyBytes`
+     * - Web (JS / WasmJS): `crypto.getRandomValues`
+     */
+    val secureRandom: Random
 
     /**
      * Message digest function.

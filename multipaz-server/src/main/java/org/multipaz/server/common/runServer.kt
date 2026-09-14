@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.multipaz.crypto.Crypto
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.storage.Storage
 import org.multipaz.util.Logger
@@ -38,7 +39,6 @@ import java.io.FileWriter
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
 import java.io.StringWriter
-import kotlin.random.Random
 import kotlin.time.Duration.Companion.hours
 
 /**
@@ -72,7 +72,7 @@ fun runServer(
     }
     if (needAdminPassword) {
         adminPassword = configuration.getValue("admin_password")
-            ?: Random.nextBytes(15).toBase64Url().also {
+            ?: Crypto.secureRandom.nextBytes(15).toBase64Url().also {
                 Logger.e(TAG, "No 'admin_password' in config, generated: '$it'")
             }
     }
