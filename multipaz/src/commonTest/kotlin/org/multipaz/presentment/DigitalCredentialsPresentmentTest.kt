@@ -10,6 +10,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNamingStrategy
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -92,11 +93,15 @@ class DigitalCredentialsPresentmentTest {
         identifier: String,
         kbJwtResponseClaimName: String = identifier,
         openId4VpMdocResponseNamespace: String = identifier,
+        nestSdJwtResponseClaims: Boolean = true,
+        sdJwtKbType: String? = null,
     ): TransactionType<Boolean>(
         displayName = displayName,
         identifier = identifier,
         kbJwtResponseClaimName = kbJwtResponseClaimName,
         openId4VpMdocResponseNamespace = openId4VpMdocResponseNamespace,
+        nestSdJwtResponseClaims = nestSdJwtResponseClaims,
+        sdJwtKbType = sdJwtKbType,
     ) {
         @Serializable
         data class JsonData(
@@ -221,6 +226,41 @@ class DigitalCredentialsPresentmentTest {
         }
     }
 
+    /**
+     * A transaction type whose specification fixes its own KB-JWT claim shape — an ARRAY at the
+     * top level — and gives the key binding its own media type. Delegate SD-JWT is the real
+     * example: it sends one transaction data item per delegated payload and requires every one of
+     * their digests in the single `delegate_payload` array.
+     *
+     * Two of these in one request is the case that used to lose data: the claims went in with a
+     * plain put, so the second item overwrote the first and the wallet signed one authorization
+     * while the user had been shown two.
+     */
+    private abstract class ArrayClaimTransaction(
+        displayName: String,
+        identifier: String,
+        private val element: String,
+    ): BooleanTransaction(
+        displayName = displayName,
+        identifier = identifier,
+        nestSdJwtResponseClaims = false,
+        sdJwtKbType = "kb+sd-jwt",
+    ) {
+        override suspend fun generateSdJwtResponseClaims(
+            transactionData: TransactionData<Boolean>,
+            credential: Credential,
+            userInput: TransactionUserInput?,
+            docRequestId: Int?
+        ): Map<String, JsonElement> = buildMap {
+            putAll(super.generateSdJwtResponseClaims(transactionData, credential, userInput, docRequestId))
+            put("chain_payload", JsonArray(listOf(JsonPrimitive(element))))
+        }
+    }
+
+    private object ChainOneTransactionType: ArrayClaimTransaction("Chain one", "chain_one", "first")
+
+    private object ChainTwoTransactionType: ArrayClaimTransaction("Chain two", "chain_two", "second")
+
     // Unregistered transaction type, will cause an error
     private object BuzTransactionType: BooleanTransaction(
         displayName = "Buz",
@@ -251,6 +291,8 @@ class DigitalCredentialsPresentmentTest {
             )
         )
         documentStoreTestHarness.documentTypeRepository.addTransactionType(FooTransactionType)
+        documentStoreTestHarness.documentTypeRepository.addTransactionType(ChainOneTransactionType)
+        documentStoreTestHarness.documentTypeRepository.addTransactionType(ChainTwoTransactionType)
         documentStoreTestHarness.documentTypeRepository.addTransactionType(BarTransactionType)
         documentStoreTestHarness.documentTypeRepository.addTransactionType(PaymentTransaction)
         documentStoreTestHarness.provisionMdoc(
@@ -1016,6 +1058,77 @@ class DigitalCredentialsPresentmentTest {
         )
     }
 
+    /**
+     * Two transaction data items whose type fixes its own KB-JWT claim shape (an array at the top
+     * level), in one request.
+     *
+     * Pins two things a specification-conformant verifier depends on:
+     *  - every item contributes to the array; the last one does not replace the rest,
+     *  - the key binding carries the media type that specification defines, not `kb+jwt`.
+     */
+    suspend fun test_OID4VP_SDJWT_withUnnestedArrayTransactions(
+        versionDraftNumber: Int,
+        signRequest: Boolean,
+        encryptResponse: Boolean,
+    ) {
+        val version = when (versionDraftNumber) {
+            24 -> OpenID4VP.Version.DRAFT_24
+            29 -> OpenID4VP.Version.DRAFT_29
+            else -> throw IllegalArgumentException("Unknown draft number")
+        }
+        val encryptionKey = if (encryptResponse) Crypto.createEcPrivateKey(EcCurve.P256) else null
+        val sdJwtKb = test_OpenID4VP_sdJwt(
+            version = version,
+            signRequest = signRequest,
+            encryptionKey = encryptionKey,
+            dcql =
+                """
+                    {
+                      "credentials": [{
+                          "id": "pid",
+                          "format": "dc+sd-jwt",
+                          "meta": { "vct_values": [ "urn:eudi:pid:1" ] },
+                          "claims": [
+                            { "path": ["given_name"] }
+                    ]}]}
+                """.trimIndent().trim(),
+            transactionData = listOf(
+                makeTransactionData(ChainOneTransactionType, "pid"),
+                makeTransactionData(ChainTwoTransactionType, "pid"),
+            ),
+            expectedSdJwtResponse =
+                """
+                    {
+                      "iss": "https://example-issuer.com",
+                      "vct": "urn:eudi:pid:1",
+                      "given_name": "Erika"
+                    }
+                """.trimIndent().trim(),
+            // BOTH elements, in request order. Before the response claims were merged instead of
+            // overwritten this read `["second"]` — and nothing anywhere said the first was gone.
+            expectedKbJwtResponse = """
+                {
+                  "chain_payload": [
+                    "first",
+                    "second"
+                  ],
+                  "transaction_data_hashes": [
+                    "iMbbjMt9XR3dUjniJ-s0zPHiKKp8lKw3vfi0huZ3p1M",
+                    "sargcqg5M_bnU4KBvwmdBmeAWZZlAJAdR1P0eZ9eKWY"
+                  ]
+                }
+            """.trimIndent().trim()
+        )
+
+        // §5.1.4-style media type: a verifier reads `typ` to tell an extended key binding from a
+        // plain one, so answering `kb+jwt` here would make the whole delegation unrecognisable.
+        val kbHeader = Json.decodeFromString<JsonObject>(
+            sdJwtKb.compactSerialization.substringAfterLast('~').substringBefore('.')
+                .fromBase64Url().decodeToString()
+        )
+        assertEquals("kb+sd-jwt", kbHeader["typ"]!!.jsonPrimitive.content)
+    }
+
     suspend fun test_OID4VP_SDJWT_unknownTransaction(
         versionDraftNumber: Int,
         signRequest: Boolean,
@@ -1141,6 +1254,9 @@ class DigitalCredentialsPresentmentTest {
     @Test fun OID4VP_29_NoSignedRequest_EncryptedResponse_SDJWT_withTransaction() = runTestWithSetup { test_OID4VP_SDJWT_withTransaction(29, false, true) }
     @Test fun OID4VP_29_SignedRequest_NoEncryptedResponse_SDJWT_withTransaction() = runTestWithSetup { test_OID4VP_SDJWT_withTransaction(29, true, false) }
     @Test fun OID4VP_29_SignedRequest_EncryptedResponse_SDJWT_withTransaction() = runTestWithSetup { test_OID4VP_SDJWT_withTransaction(29, true, true) }
+
+    @Test fun OID4VP_29_NoSignedRequest_NoEncryptedResponse_SDJWT_withUnnestedArrayTransactions() = runTestWithSetup { test_OID4VP_SDJWT_withUnnestedArrayTransactions(29, false, false) }
+    @Test fun OID4VP_29_SignedRequest_EncryptedResponse_SDJWT_withUnnestedArrayTransactions() = runTestWithSetup { test_OID4VP_SDJWT_withUnnestedArrayTransactions(29, true, true) }
 
     @Test fun OID4VP_29_SignedRequest_EncryptedResponse_SDJWT_unknownTransaction() = runTestWithSetup { test_OID4VP_SDJWT_unknownTransaction(29, true, true) }
 

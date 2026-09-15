@@ -13,6 +13,7 @@ import org.multipaz.documenttype.MdocDocumentType
 import org.multipaz.documenttype.MdocNamespaceRequest
 import org.multipaz.documenttype.SingleDocumentCannedRequest
 import org.multipaz.documenttype.knowntypes.EUPersonalID
+import org.multipaz.documenttype.knowntypes.DelegateTransaction
 import org.multipaz.documenttype.knowntypes.PaymentTransaction
 
 /**
@@ -32,6 +33,7 @@ fun DocumentTypeRepository.addUtopiaTypes(locale: String = LocalizedStrings.getC
     addDocumentType(UtopiaNaturalization.getDocumentType(locale))
     addTransactionType(PingTransaction)
     addTransactionType(PaymentTransaction)
+    addTransactionType(DelegateTransaction)
     addExtraSingleDocumentCannedRequest(
         createEUPersonalIDWithTransactionCannedRequest(
             getDocumentTypeForMdoc(EUPersonalID.EUPID_NAMESPACE)!!

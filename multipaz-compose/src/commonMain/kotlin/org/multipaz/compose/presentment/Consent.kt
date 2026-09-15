@@ -96,6 +96,7 @@ import org.multipaz.credential.Credential
 import org.multipaz.document.Document
 import org.multipaz.documenttype.Icon
 import org.multipaz.documenttype.TransactionUserInput
+import org.multipaz.documenttype.knowntypes.DelegateTransaction
 import org.multipaz.documenttype.knowntypes.PaymentTransaction
 import org.multipaz.multipaz_compose.generated.resources.Res
 import org.multipaz.multipaz_compose.generated.resources.credential_presentment_button_cancel
@@ -837,6 +838,53 @@ private fun DisplayTransactionData(
                             }
                         )
                     }
+                }
+            }
+        }
+
+        DelegateTransaction -> {
+            val payload = transactionData.payload as DelegateTransaction.Payload
+            // A spending permission an agent will use later, when the person is not here. AP2
+            // requires the Mandate Content to be shown on a Trusted Surface before it is signed,
+            // and this screen is that surface — the page that asked for the signature is served
+            // by the party asking, so it cannot vouch for itself.
+            val headerText = if (hasClaims) {
+                "This spending permission will also be approved:"
+            } else {
+                "This spending permission will be approved:"
+            }
+            SharedStoredText(text = headerText)
+
+            // One transaction data item carries one Delegate Payload (Delegate SD-JWT §5.1.4), so
+            // a request delegating several mandates arrives as several items and this composable
+            // is called once per mandate.
+            val mandateType = DelegateTransaction.mandateType(payload.delegatePayload)
+            if (mandateType.isNotEmpty()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp, start = 4.dp, end = 4.dp),
+                ) {
+                    Icon(imageVector = Icons.Outlined.Info, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = mandateType,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+            for (line in DelegateTransaction.summarize(payload)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start,
+                    modifier = Modifier.fillMaxWidth().padding(start = 32.dp, top = 2.dp, bottom = 2.dp, end = 4.dp),
+                ) {
+                    Text(
+                        text = "${line.label}: ${line.value}",
+                        fontWeight = FontWeight.Normal,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         }

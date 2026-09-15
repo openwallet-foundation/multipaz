@@ -317,6 +317,10 @@ class SdJwt private constructor(
      * @param nonce the nonce, obtained from the verifier.
      * @param audience the audience, obtained from the verifier.
      * @param creationTime the time the presentation was made.
+     * @param type the `typ` header of the Key Binding JWT. Defaults to `kb+jwt`, the ordinary key
+     *   binding; a specification that extends the key binding gives it its own media type (for
+     *   instance Delegate SD-JWT requires `kb+sd-jwt`), and a verifier written to that
+     *   specification reads the `typ` to tell an extended key binding from a plain one.
      * @param additionalClaimBuilderAction builder block to add extra claims into SD-JWT+KB body
      */
     suspend fun present(
@@ -324,13 +328,14 @@ class SdJwt private constructor(
         nonce: String,
         audience: String,
         creationTime: Instant = Clock.System.now(),
+        type: String = "kb+jwt",
         additionalClaimBuilderAction: JsonObjectBuilder.() -> Unit = {}
     ): SdJwtKb {
         require(signingKey.publicKey == this.kbKey) {
             "Public part of signing key does not match key in `cnf` claim"
         }
         val kbJwt = buildJwt(
-            type = "kb+jwt",
+            type = type,
             key = signingKey,
             creationTime = creationTime
         ) {

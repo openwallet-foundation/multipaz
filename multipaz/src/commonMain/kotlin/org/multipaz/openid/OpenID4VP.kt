@@ -766,9 +766,29 @@ object OpenID4VP {
                 docRequestId
             )
             if (responseClaims.isNotEmpty()) {
-                transactionResponse[data.type.kbJwtResponseClaimName] = buildJsonObject {
+                if (data.type.nestSdJwtResponseClaims) {
+                    transactionResponse[data.type.kbJwtResponseClaimName] = buildJsonObject {
+                        for ((name, value) in responseClaims) {
+                            put(name, value)
+                        }
+                    }
+                } else {
+                    // The transaction type's specification fixes its own KB-JWT claim shape, so
+                    // the claims go in verbatim. Nesting them would wrap an array in an object
+                    // and produce a payload no verifier written against that spec can read.
+                    //
+                    // ARRAYS ACCUMULATE ACROSS ENTRIES rather than overwriting. A request may
+                    // carry several transaction data items of the same type — Delegate SD-JWT
+                    // sends one per delegated payload and requires EVERY one of their digests in
+                    // the signed claim — and a plain put kept only the last. The user would have
+                    // been shown several authorizations on the consent screen and signed one.
                     for ((name, value) in responseClaims) {
-                        put(name, value)
+                        val existing = transactionResponse[name]
+                        transactionResponse[name] = if (existing is JsonArray && value is JsonArray) {
+                            JsonArray(existing + value)
+                        } else {
+                            value
+                        }
                     }
                 }
             }
@@ -835,7 +855,10 @@ object OpenID4VP {
                 } else {
                     clientId
                 },
-                creationTime = Clock.System.now()
+                creationTime = Clock.System.now(),
+                // A transaction type whose specification extends the key binding names its own
+                // media type; everything else gets the ordinary `kb+jwt`.
+                type = match.transactionData.firstNotNullOfOrNull { it.type.sdJwtKbType } ?: "kb+jwt",
             ) {
                 if (!match.transactionData.isEmpty()) {
                     for ((key, response) in transactionResponse) {

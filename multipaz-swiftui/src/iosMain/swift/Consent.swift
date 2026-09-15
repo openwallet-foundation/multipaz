@@ -224,6 +224,41 @@ private struct DisplayTransactionData: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+        } else if transactionData.type.identifier == DelegateTransaction.shared.identifier {
+            if let payload = transactionData.payload as? DelegateTransaction.Payload {
+                // A spending permission an agent will use later, when the person is not here. AP2
+                // requires the Mandate Content to be shown on a Trusted Surface before it is
+                // signed, and this screen is that surface — the page that asked for the signature
+                // is served by the party asking, so it cannot vouch for itself.
+                let headerText = hasClaims ? "This spending permission will also be approved:" : "This spending permission will be approved:"
+                let summaries = DelegateTransaction.shared.summarize(payload: payload)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(headerText)
+                        .font(.system(size: 14, weight: .bold))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    // One transaction data item carries one Delegate Payload (Delegate SD-JWT
+                    // §5.1.4), so a request delegating several mandates arrives as several items
+                    // and this view is rendered once per mandate.
+                    let mandateType = DelegateTransaction.shared.mandateType(mandate: payload.delegatePayload)
+                    if !mandateType.isEmpty {
+                        HStack(spacing: 8) {
+                            Image(systemName: "info.circle")
+                                .imageScale(.small)
+                            Text(mandateType)
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                        .padding(.top, 4)
+                    }
+                    ForEach(Array(summaries.enumerated()), id: \.offset) { _, line in
+                        Text("\(line.label): \(line.value)")
+                            .font(.system(size: 14))
+                            .padding(.leading, 24)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         } else {
             let headerText = hasClaims ? "This \(transactionData.type.displayName) transaction will also be approved:" : "This \(transactionData.type.displayName) transaction will be approved:"
             VStack(alignment: .leading, spacing: 6) {
