@@ -121,6 +121,11 @@ internal class BleCentralManagerAndroid : BleCentralManager {
             state,
             continuation,
         )
+        continuation.invokeOnCancellation {
+            if (waitFor?.continuation === continuation) {
+                waitFor = null
+            }
+        }
     }
 
     private fun clearWaitCondition() {
@@ -178,6 +183,11 @@ internal class BleCentralManagerAndroid : BleCentralManager {
     private class ConnectionFailedException(
         message: String
     ) : Exception(message)
+
+    private class ServiceDiscoveryFailedException(
+        message: String,
+        cause: Throwable? = null,
+    ) : Exception(message, cause)
 
     private val scanCallback: ScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -275,7 +285,9 @@ internal class BleCentralManagerAndroid : BleCentralManager {
             try {
                 if (waitFor?.state == WaitState.PERIPHERAL_DISCOVER_SERVICES) {
                     if (status != BluetoothGatt.GATT_SUCCESS) {
-                        resumeWaitWithException(IllegalStateException("Expected GATT_SUCCESS but got $status"))
+                        resumeWaitWithException(
+                            ServiceDiscoveryFailedException("Expected GATT_SUCCESS but got $status")
+                        )
                     } else {
                         resumeWait()
                     }
@@ -564,13 +576,46 @@ internal class BleCentralManagerAndroid : BleCentralManager {
 
     override suspend fun peripheralDiscoverServices(uuid: UUID) {
         check(device != null && gatt != null)
-        suspendCancellableCoroutine<Boolean> { continuation ->
-            setWaitCondition(WaitState.PERIPHERAL_DISCOVER_SERVICES, continuation)
-            gatt!!.discoverServices()
-        }
-        service = gatt!!.getService(uuid.toJavaUuid())
-        if (service == null) {
-            throw IllegalStateException("No service with the given UUID")
+
+        // Service discovery sometimes fails initially if services have not yet
+        // been updated or populated by the peripheral/stack. We implement a retry loop.
+        var retryCount = 0
+        while (true) {
+            try {
+                suspendCancellableCoroutine<Boolean> { continuation ->
+                    setWaitCondition(WaitState.PERIPHERAL_DISCOVER_SERVICES, continuation)
+                    if (!gatt!!.discoverServices()) {
+                        resumeWaitWithException(
+                            ServiceDiscoveryFailedException("discoverServices() returned false")
+                        )
+                    }
+                }
+                service = gatt!!.getService(uuid.toJavaUuid())
+                if (service == null) {
+                    val discoveredUuids = gatt!!.services.map { it.uuid }
+                    throw ServiceDiscoveryFailedException(
+                        "No service with UUID $uuid. Discovered services: $discoveredUuids"
+                    )
+                }
+                break
+            } catch (error: ServiceDiscoveryFailedException) {
+                if (retryCount < 10) {
+                    retryCount++
+                    Logger.w(
+                        TAG,
+                        "Failed discovering service with UUID $uuid after $retryCount attempt(s), " +
+                                "retrying in 500 msec: ${error.message}"
+                    )
+                    delay(500.milliseconds)
+                } else {
+                    Logger.w(
+                        TAG,
+                        "Failed discovering service with UUID $uuid after $retryCount attempts. " +
+                                "Giving up."
+                    )
+                    throw IllegalStateException("No service with the given UUID", error)
+                }
+            }
         }
     }
 
