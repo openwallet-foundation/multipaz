@@ -690,9 +690,11 @@ class SdJwt private constructor(
                         claimValue = claim.value
                     )
                 }
-                putJsonArray("_sd") {
-                    for (hash in hashes) {
-                        add(JsonPrimitive(hash))
+                if (hashes.isNotEmpty()) {
+                    putJsonArray("_sd") {
+                        for (hash in hashes) {
+                            add(JsonPrimitive(hash))
+                        }
                     }
                 }
 
@@ -743,8 +745,10 @@ private suspend fun insertClaim(
             )
         }
         val mappedClaimValue = buildJsonObject {
-            putJsonArray("_sd") {
-                subClaimHashes.forEach { add(JsonPrimitive(it)) }
+            if (subClaimHashes.isNotEmpty()) {
+                putJsonArray("_sd") {
+                    subClaimHashes.forEach { add(JsonPrimitive(it)) }
+                }
             }
         }
         val disclosure = buildJsonArray {

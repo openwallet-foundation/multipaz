@@ -64,12 +64,14 @@ object DisclosureUtil {
         disclosures: List<JsonArray>,
         digestAlgorithm: Algorithm,
     ): JsonObjectBuilder {
-        put(
-            "_sd",
-            JsonArray(disclosures.map {
-                it.toClaimDigestElement(digestAlgorithm)
-            })
-        )
+        if (disclosures.isNotEmpty()) {
+            put(
+                "_sd",
+                JsonArray(disclosures.map {
+                    it.toClaimDigestElement(digestAlgorithm)
+                })
+            )
+        }
         return this
     }
 

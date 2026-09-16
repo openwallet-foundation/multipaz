@@ -57,6 +57,18 @@ class DisclosureUtilTest {
     }
 
     @Test
+    fun putClaimDisclosures_emptyListOfDisclosures_omitsSdArray() = runTest {
+        val resultJson = buildJsonObject {
+            putClaimDisclosureDigests(
+                emptyList(),
+                digestAlgorithm
+            )
+        }
+
+        assertEquals("{}", resultJson.toString())
+    }
+
+    @Test
     fun toArrayDisclosure_createsCorrectDisclosure() {
         val element = JsonPrimitive("value")
         val result = element.toArrayDisclosure("salt")
