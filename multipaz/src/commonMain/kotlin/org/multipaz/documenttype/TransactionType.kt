@@ -2,7 +2,11 @@ package org.multipaz.documenttype
 
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.decodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonPrimitive
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
@@ -84,6 +88,17 @@ const val ISO_18013_TRANSACTION_DATA_NAMESPACE = "org.iso.transactiondata"
  *  all [TransactionType] objects must have distinct values.
  * @param openId4VpMdocResponseNamespace namespace to use in `deviceSigned` namespace map in
  *  OpenID4VP response; defaults to [identifier].
+ * @param nestSdJwtResponseClaims whether the claims returned by [generateSdJwtResponseClaims] are
+ *  nested in a JSON object under [kbJwtResponseClaimName] (the default, and what every transaction
+ *  type that carries its own response fields wants). Set to `false` for transaction types defined
+ *  by a specification that fixes the exact shape and position of its own KB-JWT claims: those
+ *  claims are then merged into the KB-JWT payload verbatim, preserving arrays and primitives that
+ *  the nesting would otherwise wrap in an object.
+ * @param sdJwtKbType the `typ` header the Key Binding JWT must carry when this transaction type is
+ *  present, or `null` (the default) for the ordinary `kb+jwt`. A specification that extends the
+ *  key binding gives it its own media type — Delegate SD-JWT, for instance, requires `kb+sd-jwt`
+ *  — and a verifier written to that specification uses the `typ` to tell an extended key binding
+ *  from a plain one.
  */
 abstract class TransactionType<PayloadT: Any>(
     val displayName: String,
@@ -91,6 +106,8 @@ abstract class TransactionType<PayloadT: Any>(
     val kbJwtResponseClaimName: String = identifier,
     val iso18013RequestInfoIdentifier: String = identifier,
     val openId4VpMdocResponseNamespace: String = identifier,
+    val nestSdJwtResponseClaims: Boolean = true,
+    val sdJwtKbType: String? = null,
 ) {
     /**
      * Returns the DeviceSigned namespace to use for the given presentment protocol.
@@ -152,6 +169,17 @@ abstract class TransactionType<PayloadT: Any>(
             payload = parseOpenId4VpRequest(jsonString),
             protocol = TransactionProtocol.OPENID4VP,
             rawBytes = serialized,
+            // The verifier states which digest algorithms it accepts. Dropping it here left every
+            // transaction data item reporting `null`, so a request for SHA-384 was answered in
+            // SHA-256 — and a request mixing a type that DOES report one with a type that does not
+            // failed the whole presentation on the consistency check in
+            // `OpenID4VP.processTransactions`, with no indication of why.
+            hashAlgorithms = parseJoseHashAlgorithms(
+                (Json.parseToJsonElement(jsonString) as? JsonObject)
+                    ?.get("transaction_data_hashes_alg")
+                    ?.let { it as? JsonArray }
+                    ?.mapNotNull { alg -> (alg as? JsonPrimitive)?.contentOrNull }
+            ),
         )
     }
 
