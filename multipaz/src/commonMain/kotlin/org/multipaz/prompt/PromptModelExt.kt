@@ -1,6 +1,9 @@
 package org.multipaz.prompt
 
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.document.Document
+import org.multipaz.facematch.FaceMatcher
+import org.multipaz.facematch.SimulatedFaceMatcher
 import org.multipaz.presentment.CredentialSelection
 import org.multipaz.presentment.ConsentData
 import org.multipaz.prompt.PassphrasePromptDialogModel.PassphraseRequest
@@ -12,6 +15,8 @@ import kotlin.coroutines.cancellation.CancellationException
 fun PromptModel.getPassphraseDialogModel() = getDialogModel(PassphrasePromptDialogModel.DialogType)
 
 fun PromptModel.getConsentPromptDialogModel() = getDialogModel(ConsentPromptDialogModel.DialogType)
+
+fun PromptModel.getFaceMatcherDialogModel() = getDialogModel(FaceMatcherPromptDialogModel.DialogType)
 
 /**
  * Prompts user for authentication through a passphrase.
@@ -93,4 +98,49 @@ suspend fun PromptModel.requestConsent(
             onDocumentsInFocus = onDocumentsInFocus,
         )
     )
+}
+
+/**
+ * Prompts user to verify their identity by matching their face against a reference portrait.
+ *
+ * @param referencePortrait the reference portrait image bytes.
+ * @param reason user-facing description of the verification reason.
+ * @param matcher optional [FaceMatcher] to use for this request.
+ * @param document optional [Document] context.
+ * @return `true` if face match succeeded, `false` if dismissed or failed.
+ * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
+ * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
+ */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class,
+    PromptModelNotAvailableException::class,
+    PromptUiNotAvailableException::class
+)
+suspend fun PromptModel.showFaceMatcherPrompt(
+    referencePortrait: ByteString,
+    reason: Reason = Reason.HumanReadable(
+        title = "Verify it's you",
+        subtitle = "Look at the camera to verify your identity",
+        requireConfirmation = false
+    ),
+    matcher: FaceMatcher? = null,
+    document: Document? = null
+): Boolean {
+    val dialogModel = getFaceMatcherDialogModel()
+    val matcherToUse = matcher ?: dialogModel.defaultMatcher ?: SimulatedFaceMatcher()
+    val faceMatcherSession = matcherToUse.createSession(referencePortrait)
+    return try {
+        dialogModel.displayPrompt(
+            FaceMatcherPromptDialogModel.FaceMatcherRequest(
+                referencePortrait = referencePortrait,
+                reason = reason,
+                matcher = matcherToUse,
+                faceMatcherSession = faceMatcherSession,
+                document = document
+            )
+        )
+    } catch (e: PromptDismissedException) {
+        false
+    }
 }

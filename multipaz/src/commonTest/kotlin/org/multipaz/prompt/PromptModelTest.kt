@@ -1,7 +1,13 @@
 package org.multipaz.prompt
 
-import org.multipaz.securearea.PassphraseConstraints
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.io.bytestring.ByteString
+import org.multipaz.facematch.CameraFrame
+import org.multipaz.facematch.FaceMatcherPromptState
+import org.multipaz.facematch.PixelFormat
+import org.multipaz.facematch.SimulatedFaceMatcher
+import org.multipaz.securearea.PassphraseConstraints
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -207,6 +213,66 @@ class PromptModelTest {
         secondRequest.cancel()
     }
 
+    @Test
+    fun faceMatcherPromptSuccess() = runTest {
+        val testPortrait = ByteString(byteArrayOf(1, 2, 3, 4))
+        collectFaceMatcherDialogState { request ->
+            assertEquals(testPortrait, request.referencePortrait)
+            true
+        }
+
+        val result = promptModel.showFaceMatcherPrompt(
+            referencePortrait = testPortrait,
+            reason = Reason.HumanReadable("Title", "Subtitle", false)
+        )
+        assertTrue(result)
+    }
+
+    @Test
+    fun faceMatcherPromptDismissed() = runTest {
+        val testPortrait = ByteString(byteArrayOf(5, 6, 7, 8))
+        collectFaceMatcherDialogState {
+            throw PromptDismissedException()
+        }
+
+        val result = promptModel.showFaceMatcherPrompt(
+            referencePortrait = testPortrait,
+            reason = Reason.HumanReadable("Title", "Subtitle", false)
+        )
+        assertFalse(result)
+    }
+
+    @Test
+    fun simulatedFaceMatcherTest() = runTest {
+        var testTime = 1000L
+        val matcher = SimulatedFaceMatcher(
+            searchDurationMs = 50L,
+            matchConveyDurationMs = 500L,
+            simulatedConfidence = 0.99f,
+            enableLiveness = false,
+            clock = { testTime }
+        )
+        val frame = CameraFrame(
+            width = 640,
+            height = 480,
+            rotationDegrees = 0,
+            pixelFormat = PixelFormat.RGBA,
+            data = ByteString(byteArrayOf(0))
+        )
+        val portrait = ByteString(byteArrayOf(1, 2, 3))
+
+        val session = matcher.createSession(portrait)
+        session.feedFrame(frame)
+        assertEquals(FaceMatcherPromptState.Outcome.IN_PROGRESS, session.state.value.outcome)
+
+        testTime += 60L
+        session.feedFrame(frame)
+
+        testTime += 600L
+        session.feedFrame(frame)
+        assertEquals(FaceMatcherPromptState.Outcome.SUCCESS, session.state.value.outcome)
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun TestScope.collectDialogState(
         mockInput: suspend (request: PassphrasePromptDialogModel.PassphraseRequest) -> String
@@ -229,6 +295,39 @@ class PromptModelTest {
                             pendingResultChannel = state.resultChannel
                         } else {
                             state.resultChannel.send(passphrase)
+                        }
+                    }
+                }
+            } catch (err: CancellationException) {
+                pendingResultChannel?.close(PromptDismissedException())
+                throw err
+            } catch (err: Exception) {
+                fail("Unexpected error", err)
+            }
+        }
+        return dialogState
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun TestScope.collectFaceMatcherDialogState(
+        mockInput: suspend (request: FaceMatcherPromptDialogModel.FaceMatcherRequest) -> Boolean
+    ): MutableList<PromptDialogModel.DialogState<FaceMatcherPromptDialogModel.FaceMatcherRequest, Boolean>> {
+        val dialogState = mutableListOf<PromptDialogModel.DialogState<FaceMatcherPromptDialogModel.FaceMatcherRequest, Boolean>>()
+        mockUiJob = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            var pendingResultChannel: SendChannel<Boolean>? = null
+            try {
+                val dialogModel = promptModel.getDialogModel(FaceMatcherPromptDialogModel.DialogType)
+                dialogModel.dialogState.collect { state ->
+                    if (dialogState.isNotEmpty() || state !is PromptDialogModel.NoDialogState) {
+                        dialogState.add(state)
+                    }
+                    pendingResultChannel = null
+                    if (state is PromptDialogModel.DialogShownState) {
+                        try {
+                            val result = mockInput(state.parameters)
+                            state.resultChannel.send(result)
+                        } catch (e: PromptDismissedException) {
+                            state.resultChannel.close(e)
                         }
                     }
                 }

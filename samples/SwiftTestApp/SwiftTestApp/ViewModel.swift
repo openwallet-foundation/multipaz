@@ -48,6 +48,7 @@ class ViewModel {
     var readerTrustManager: TrustManager!
     var provisioningModel: ProvisioningModel!
     var provisioningSupport: ProvisioningSupport!
+    var faceMatcherRepository: FaceMatcherRepository!
 
     let promptModel = Platform.shared.promptModel
     
@@ -55,6 +56,11 @@ class ViewModel {
 
     func load() async {
         PromptModel.Companion.shared.setGlobal(promptModel: promptModel)
+        
+        faceMatcherRepository = FaceMatcherRepository()
+            .add(faceMatcher: FaceNetFaceMatcher())
+            .add(faceMatcher: SimulatedFaceMatcher())
+        promptModel.getFaceMatcherDialogModel().defaultMatcher = faceMatcherRepository.defaultMatcher
         
         storage = IosStorage(
             storageFileUrl: FileManager.default.containerURL(

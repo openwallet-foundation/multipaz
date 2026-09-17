@@ -103,6 +103,10 @@ import org.multipaz.nfc.ExternalNfcReaderStore
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.SimplePresentmentSource
 import org.multipaz.presentment.uriSchemePresentment
+import org.multipaz.facenet.FaceNetFaceMatcher
+import org.multipaz.facematch.FaceMatcherRepository
+import org.multipaz.facematch.SimulatedFaceMatcher
+import org.multipaz.prompt.FaceMatcherPromptDialogModel
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.promptModelRequestConsent
 import org.multipaz.prompt.promptModelSilentConsent
@@ -125,6 +129,7 @@ import org.multipaz.testapp.ui.AndroidKeystoreSecureAreaScreen
 import org.multipaz.testapp.ui.CertificateScreen
 import org.multipaz.testapp.ui.CertificateViewerExamplesScreen
 import org.multipaz.testapp.ui.ConsentPromptScreen
+import org.multipaz.testapp.ui.FaceMatcherPromptScreen
 import org.multipaz.testapp.ui.CredentialClaimsViewerScreen
 import org.multipaz.testapp.ui.CredentialViewerScreen
 import org.multipaz.testapp.ui.DcRequestScreen
@@ -201,6 +206,7 @@ class App private constructor (val promptModel: PromptModel) {
     lateinit var documentTypeRepository: DocumentTypeRepository
 
     lateinit var secureAreaRepository: SecureAreaRepository
+    lateinit var faceMatcherRepository: FaceMatcherRepository
     lateinit var softwareSecureArea: SoftwareSecureArea
     lateinit var documentStore: DocumentStore
     lateinit var documentModel: DocumentModel
@@ -335,6 +341,7 @@ class App private constructor (val promptModel: PromptModel) {
                 Pair(::trustManagersInit, "trustManagersInit"),
                 Pair(::provisioningModelInit, "provisioningModelInit"),
                 Pair(::zkSystemRepositoryInit, "zkSystemRepositoryInit"),
+                Pair(::faceMatcherRepositoryInit, "faceMatcherRepositoryInit"),
                 Pair(::observeModeInit, "observeModeInit"),
                 Pair(::digitalCredentialsInit, "digitalCredentialsInit"),
             )
@@ -478,6 +485,15 @@ class App private constructor (val promptModel: PromptModel) {
         zkSystemRepository = ZkSystemRepository().apply {
             add(longfellowSystem)
         }
+    }
+
+    private suspend fun faceMatcherRepositoryInit() {
+        faceMatcherRepository = FaceMatcherRepository().apply {
+            add(FaceNetFaceMatcher())
+            add(SimulatedFaceMatcher())
+        }
+        promptModel.getDialogModel(FaceMatcherPromptDialogModel.DialogType).defaultMatcher =
+            faceMatcherRepository.defaultMatcher
     }
 
     private val certsValidFrom = LocalDate.parse("2024-12-01").atStartOfDayIn(TimeZone.UTC)
@@ -1171,6 +1187,11 @@ class App private constructor (val promptModel: PromptModel) {
                                     ConsentPromptDestination
                                 )
                             },
+                            onClickFaceMatcherPrompt = {
+                                navController.navigate(
+                                    FaceMatcherPromptDestination
+                                )
+                            },
                             onClickQrCodes = { navController.navigate(QrCodesDestination) },
                             onClickNfc = { navController.navigate(NfcDestination) },
                             onClickIsoMdocProximitySharing = {
@@ -1533,8 +1554,19 @@ class App private constructor (val promptModel: PromptModel) {
                     WithAppBar(navController, "Consent Prompt use-cases") {
                         ConsentPromptScreen(
                             secureAreaRepository = secureAreaRepository,
+                            faceMatcherRepository = faceMatcherRepository,
                             promptModel = promptModel,
                             showToast = { message -> showToast(message) },
+                        )
+                    }
+                }
+                composable<FaceMatcherPromptDestination> { backStackEntry ->
+                    WithAppBar(navController, "Face Matcher Prompt use-cases") {
+                        FaceMatcherPromptScreen(
+                            promptModel = promptModel,
+                            faceMatcherRepository = faceMatcherRepository,
+                            showToast = { message -> showToast(message) },
+                            storage = TestAppConfiguration.storage,
                         )
                     }
                 }

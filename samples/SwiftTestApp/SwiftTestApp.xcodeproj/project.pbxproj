@@ -78,6 +78,8 @@
 		7B04AEBB2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AEBC2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift */; };
 		7B04AEBE2FCDDD1700DAEA40 /* LazyFloatingItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AEBD2FCDDD1700DAEA40 /* LazyFloatingItemList.swift */; };
 		7B04AEBF2FCDDD1700DAEA40 /* LazyFloatingItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AEBD2FCDDD1700DAEA40 /* LazyFloatingItemList.swift */; };
+		7B04AEF12FCDDD1700DAEA40 /* FaceMatcherPromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AEF02FCDDD1700DAEA40 /* FaceMatcherPromptDialog.swift */; };
+		7B04AEF22FCDDD1700DAEA40 /* FaceMatcherPromptDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B04AEF02FCDDD1700DAEA40 /* FaceMatcherPromptDialog.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -143,6 +145,7 @@
 		7B04AE782FCDDD1700DAEA40 /* X509CertViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = X509CertViewer.swift; sourceTree = "<group>"; };
 		7B04AEBC2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentProvisioningHandlerExt.swift; sourceTree = "<group>"; };
 		7B04AEBD2FCDDD1700DAEA40 /* LazyFloatingItemList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LazyFloatingItemList.swift; sourceTree = "<group>"; };
+		7B04AEF02FCDDD1700DAEA40 /* FaceMatcherPromptDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FaceMatcherPromptDialog.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -265,6 +268,7 @@
 				7B04AE782FCDDD1700DAEA40 /* X509CertViewer.swift */,
 				7B04AEBC2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift */,
 				7B04AEBD2FCDDD1700DAEA40 /* LazyFloatingItemList.swift */,
+				7B04AEF02FCDDD1700DAEA40 /* FaceMatcherPromptDialog.swift */,
 			);
 			name = swift;
 			path = "../../multipaz-swiftui/src/iosMain/swift";
@@ -460,6 +464,7 @@
 				7B04AEB92FCDDD1700DAEA40 /* FloatingItemCenteredText.swift in Sources */,
 				7B04AEBB2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift in Sources */,
 				7B04AEBE2FCDDD1700DAEA40 /* LazyFloatingItemList.swift in Sources */,
+				7B04AEF22FCDDD1700DAEA40 /* FaceMatcherPromptDialog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -501,6 +506,7 @@
 				7B04AE992FCDDD1700DAEA40 /* FloatingItemCenteredText.swift in Sources */,
 				7B04AEBA2FCDDD1700DAEA40 /* DocumentProvisioningHandlerExt.swift in Sources */,
 				7B04AEBF2FCDDD1700DAEA40 /* LazyFloatingItemList.swift in Sources */,
+				7B04AEF12FCDDD1700DAEA40 /* FaceMatcherPromptDialog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

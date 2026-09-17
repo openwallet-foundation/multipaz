@@ -5,8 +5,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.compose.prompt.PresentmentActivity
 import org.multipaz.document.Document
+import org.multipaz.documenttype.knowntypes.SampleData
 import org.multipaz.presentment.CredentialSelection
 import org.multipaz.presentment.PresentmentModel
 import org.multipaz.presentment.PresentmentCanceledException
@@ -15,10 +17,12 @@ import org.multipaz.presentment.ConsentData
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.prompt.promptModelRequestConsent
 import org.multipaz.prompt.showBiometricPrompt
+import org.multipaz.prompt.showFaceMatcherPrompt
 import org.multipaz.prompt.Reason
 import org.multipaz.request.Requester
 import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.securearea.UserAuthenticationType as PromptUserAuthenticationType
+import org.multipaz.util.fromBase64Url
 
 actual suspend fun launchAndroidPresentmentActivity(
     source: PresentmentSource,
@@ -75,6 +79,21 @@ actual suspend fun launchAndroidPresentmentActivity(
                     requireConfirmation = paData.authRequireConfirmation
                 )) {
                     throw PresentmentCanceledException("Presentment cancelled because user dismissed biometric prompt")
+                }
+            }
+            if (paData.requireFaceMatch) {
+                val portrait = paData.referencePortrait
+                    ?: ByteString(SampleData.PORTRAIT_BASE64URL.fromBase64Url())
+                if (!(PresentmentActivity.promptModel as AndroidPromptModel).showFaceMatcherPrompt(
+                    referencePortrait = portrait,
+                    matcher = paData.faceMatcher,
+                    reason = Reason.HumanReadable(
+                        title = "Verify it's you",
+                        subtitle = "Match your face against your document portrait",
+                        requireConfirmation = false
+                    )
+                )) {
+                    throw PresentmentCanceledException("Presentment cancelled because user dismissed face matcher prompt")
                 }
             }
 

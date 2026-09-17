@@ -99,6 +99,7 @@ kotlin {
                 implementation(libs.androidx.sqlite.framework)
 
                 api(project(":multipaz"))
+                api(project(":multipaz-facenet"))
                 api(project(":multipaz-doctypes"))
                 api(project(":multipaz-utopia"))
                 api(project(":multipaz-longfellow"))
@@ -164,6 +165,7 @@ kotlin {
                 implementation(libs.semver)
 
                 implementation(project(":multipaz"))
+                implementation(project(":multipaz-facenet"))
                 implementation(project(":multipaz-compose"))
                 implementation(project(":multipaz-dcapi"))
                 implementation(project(":multipaz-doctypes"))
