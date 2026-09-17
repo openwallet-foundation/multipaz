@@ -18,5 +18,9 @@ public struct PromptDialogs: View {
             toHumanReadable: toHumanReadable
         )
         ConsentPromptDialog(model: promptModel.getConsentPromptDialogModel())
+        FaceMatcherPromptDialog(
+            model: promptModel.getFaceMatcherDialogModel(),
+            toHumanReadable: toHumanReadable
+        )
     }
 }

@@ -89,6 +89,9 @@ data object PassphrasePromptDestination: Destination()
 data object ConsentPromptDestination: Destination()
 
 @Serializable
+data object FaceMatcherPromptDestination: Destination()
+
+@Serializable
 data object QrCodesDestination: Destination()
 
 @Serializable

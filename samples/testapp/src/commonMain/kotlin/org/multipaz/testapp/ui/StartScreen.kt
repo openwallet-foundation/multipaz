@@ -40,6 +40,7 @@ fun StartScreen(
     onClickPassphraseEntryField: () -> Unit = {},
     onClickPassphrasePrompt: () -> Unit = {},
     onClickConsentSheetList: () -> Unit = {},
+    onClickFaceMatcherPrompt: () -> Unit = {},
     onClickQrCodes: () -> Unit = {},
     onClickNfc: () -> Unit = {},
     onClickIsoMdocProximitySharing: () -> Unit = {},
@@ -208,6 +209,11 @@ fun StartScreen(
                 item {
                     TextButton(onClick = onClickConsentSheetList) {
                         Text("Consent prompt use-cases")
+                    }
+                }
+                item {
+                    TextButton(onClick = onClickFaceMatcherPrompt) {
+                        Text("Face Matcher Prompt use-cases")
                     }
                 }
                 item {

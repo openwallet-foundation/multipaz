@@ -26,6 +26,8 @@ import platform.UIKit.UIImage
  * @param uiImage the [UIImage] from the camera.
  */
 actual data class CameraImage(val uiImage: UIImage) {
+    actual val platformHandle: Any?
+        get() = uiImage
 
     actual fun toImageBitmap() : ImageBitmap {
         val skiaImage = uiImage.toSkiaImage() ?: throw IllegalStateException()

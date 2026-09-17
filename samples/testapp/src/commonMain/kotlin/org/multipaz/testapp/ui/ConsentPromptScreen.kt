@@ -72,6 +72,8 @@ import org.multipaz.presentment.CredentialSelection
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.SimplePresentmentSource
 import org.multipaz.presentment.ConsentData
+import org.multipaz.facematch.FaceMatcher
+import org.multipaz.facematch.FaceMatcherRepository
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.requestConsent
 import org.multipaz.request.Iso18013RequesterIdentity
@@ -180,6 +182,9 @@ private enum class PaPreselectedDocuments(
 data class AndroidPresentmentActivityData(
     val showConsent: Boolean = true,
     val requireAuth: Boolean = true,
+    val requireFaceMatch: Boolean = false,
+    val referencePortrait: ByteString? = null,
+    val faceMatcher: FaceMatcher? = null,
     val authRequireConfirmation: Boolean = false,
     val connectionDuration: Duration = 0.seconds,
     val sendResponseDuration: Duration = 0.seconds,
@@ -202,6 +207,7 @@ fun ConsentPromptScreen(
     secureAreaRepository: SecureAreaRepository,
     promptModel: PromptModel,
     showToast: (message: String) -> Unit,
+    faceMatcherRepository: FaceMatcherRepository? = null,
 ) {
     val coroutineScope = rememberCoroutineScope()
     var example by remember { mutableStateOf(Example.MDL_US_TRANSPORTATION) }
@@ -222,18 +228,31 @@ fun ConsentPromptScreen(
     var documentModel by remember { mutableStateOf<DocumentModel?>(null) }
     var paShowConsent by remember { mutableStateOf(true) }
     var paRequireAuth by remember { mutableStateOf(false) }
+    var paRequireFaceMatch by remember { mutableStateOf(false) }
+    var faceMatcherReferencePortrait by remember { mutableStateOf<ByteString?>(null) }
+    var selectedFaceMatcher by remember { mutableStateOf<FaceMatcher?>(faceMatcherRepository?.defaultMatcher) }
+    val hasReferencePortrait = faceMatcherReferencePortrait != null
+
     var paAuthRequireConfirmation by remember { mutableStateOf(false) }
     var paConnectionDuration by remember { mutableStateOf(PaDuration.PA_DURATION_NONE) }
     var paSendingDuration by remember { mutableStateOf(PaDuration.PA_DURATION_NONE) }
     var paPreselectedDocuments by remember { mutableStateOf(PaPreselectedDocuments.PRESELECTED_DOCUMENTS_NONE)}
-    lateinit var documentTypeRepository: DocumentTypeRepository
-    lateinit var documentMdl: Document
-    lateinit var documentPhotoId: Document
-    lateinit var documentPhotoId2: Document
-    lateinit var documentBoardingPass: Document
-    lateinit var documentPayment: Document
+
+    val documentTypeRepository = remember {
+        DocumentTypeRepository().apply {
+            addKnownTypes()
+            addUtopiaTypes()
+        }
+    }
+    var documentMdl by remember { mutableStateOf<Document?>(null) }
+    var documentPhotoId by remember { mutableStateOf<Document?>(null) }
+    var documentPhotoId2 by remember { mutableStateOf<Document?>(null) }
+    var documentBoardingPass by remember { mutableStateOf<Document?>(null) }
+    var documentPayment by remember { mutableStateOf<Document?>(null) }
 
     LaunchedEffect(Unit) {
+        faceMatcherReferencePortrait = getFaceMatcherReferencePortrait()
+
         cardArtMdl = Res.readBytes("files/utopia_driving_license_card_art.png")
         cardArtPhotoId = Res.readBytes("drawable/photo_id_card_art.png")
         cardArtBoardingPass = Res.readBytes("files/boarding-pass-utopia-airlines.png")
@@ -245,9 +264,6 @@ fun ConsentPromptScreen(
 
         val storage = EphemeralStorage()
         val secureArea = SoftwareSecureArea.create(storage)
-        documentTypeRepository = DocumentTypeRepository()
-        documentTypeRepository.addKnownTypes()
-        documentTypeRepository.addUtopiaTypes()
         documentStore = buildDocumentStore(storage, secureAreaRepository) {}
         documentModel = DocumentModel.create(documentStore = documentStore!!, documentTypeRepository = documentTypeRepository)
 
@@ -286,13 +302,13 @@ fun ConsentPromptScreen(
         val credsValidFrom = now - 0.5.days
         val credsValidUntil = dsCertValidFrom + 30.days
 
-        documentMdl = documentStore!!.createDocument(
+        val createdDocumentMdl = documentStore!!.createDocument(
             displayName = "Erika's driving license",
             typeDisplayName = "Utopia driving license",
             cardArt = ByteString(cardArtMdl)
         )
         DrivingLicense.getDocumentType().createMdocCredentialWithSampleData(
-            document = documentMdl,
+            document = createdDocumentMdl,
             secureArea = secureArea,
             createKeySettings = CreateKeySettings(),
             dsKey = dsKey,
@@ -302,13 +318,14 @@ fun ConsentPromptScreen(
             expectedUpdate = null,
             domain = "mdoc"
         )
-        documentPhotoId = documentStore!!.createDocument(
+        documentMdl = createdDocumentMdl
+        val createdDocumentPhotoId = documentStore!!.createDocument(
             displayName = "Erika's PhotoID",
             typeDisplayName = "Utopia PhotoID",
             cardArt = ByteString(cardArtPhotoId)
         )
         PhotoID.getDocumentType().createMdocCredentialWithSampleData(
-            document = documentPhotoId,
+            document = createdDocumentPhotoId,
             secureArea = secureArea,
             createKeySettings = CreateKeySettings(),
             dsKey = dsKey,
@@ -318,13 +335,14 @@ fun ConsentPromptScreen(
             expectedUpdate = null,
             domain = "mdoc"
         )
-        documentPhotoId2 = documentStore!!.createDocument(
+        documentPhotoId = createdDocumentPhotoId
+        val createdDocumentPhotoId2 = documentStore!!.createDocument(
             displayName = "Erika's PhotoID #2",
             typeDisplayName = "Utopia PhotoID",
             cardArt = ByteString(cardArtPhotoId)
         )
         PhotoID.getDocumentType().createMdocCredentialWithSampleData(
-            document = documentPhotoId2,
+            document = createdDocumentPhotoId2,
             secureArea = secureArea,
             createKeySettings = CreateKeySettings(),
             dsKey = dsKey,
@@ -334,13 +352,14 @@ fun ConsentPromptScreen(
             expectedUpdate = null,
             domain = "mdoc"
         )
-        documentBoardingPass = documentStore!!.createDocument(
+        documentPhotoId2 = createdDocumentPhotoId2
+        val createdDocumentBoardingPass = documentStore!!.createDocument(
             displayName = "Utopia 815 BOS to SFO",
             typeDisplayName = "Utopia Airlines boarding pass",
             cardArt = ByteString(cardArtBoardingPass)
         )
         UtopiaBoardingPass.getDocumentType().createMdocCredentialWithSampleData(
-            document = documentBoardingPass,
+            document = createdDocumentBoardingPass,
             secureArea = secureArea,
             createKeySettings = CreateKeySettings(),
             dsKey = dsKey,
@@ -350,13 +369,14 @@ fun ConsentPromptScreen(
             expectedUpdate = null,
             domain = "mdoc"
         )
-        documentPayment = documentStore!!.createDocument(
+        documentBoardingPass = createdDocumentBoardingPass
+        val createdDocumentPayment = documentStore!!.createDocument(
             displayName = "Erika's Payment Card Credential",
             typeDisplayName = "Payment Card",
             cardArt = ByteString(cardArtPayment)
         )
         DigitalPaymentCredential.getDocumentType().createMdocCredentialWithSampleData(
-            document = documentPayment,
+            document = createdDocumentPayment,
             secureArea = secureArea,
             createKeySettings = CreateKeySettings(),
             dsKey = dsKey,
@@ -376,6 +396,7 @@ fun ConsentPromptScreen(
                 )
             )
         )
+        documentPayment = createdDocumentPayment
         addCredentialsForOpenID4VPComplexExample(
             documentStore = documentStore!!,
             secureArea = secureArea,
@@ -485,19 +506,23 @@ fun ConsentPromptScreen(
         }
 
         item {
-            Button(onClick = {
-                launchConsent(launcher = { source, paData, requester, trustedRequesterIdentity, consentData,
-                                           preselectedDocuments, onDocumentsInFocus ->
-                        promptModel.requestConsent(
-                            requester = requester,
-                            trustedRequesterIdentity = trustedRequesterIdentity,
-                            consentData = consentData,
-                            preselectedDocuments = preselectedDocuments,
-                            onDocumentsInFocus = onDocumentsInFocus,
-                        )
-                    },
-                    paData = AndroidPresentmentActivityData()
-                )}) {
+            Button(
+                enabled = documentModel != null,
+                onClick = {
+                    launchConsent(launcher = { source, paData, requester, trustedRequesterIdentity, consentData,
+                                               preselectedDocuments, onDocumentsInFocus ->
+                            promptModel.requestConsent(
+                                requester = requester,
+                                trustedRequesterIdentity = trustedRequesterIdentity,
+                                consentData = consentData,
+                                preselectedDocuments = preselectedDocuments,
+                                onDocumentsInFocus = onDocumentsInFocus,
+                            )
+                        },
+                        paData = AndroidPresentmentActivityData()
+                    )
+                }
+            ) {
                 Text("Show Consent Prompt")
             }
         }
@@ -566,6 +591,40 @@ fun ConsentPromptScreen(
         }
 
         item {
+            SettingToggle(
+                title = "Require face matching",
+                subtitleOn = if (!hasReferencePortrait) {
+                    "Requires reference portrait from Face Matcher Prompt"
+                } else {
+                    null
+                },
+                subtitleOff = if (!hasReferencePortrait) {
+                    "Requires reference portrait from Face Matcher Prompt"
+                } else {
+                    null
+                },
+                isChecked = paRequireFaceMatch && hasReferencePortrait,
+                enabled = hasReferencePortrait,
+                onCheckedChange = { newValue ->
+                    paRequireFaceMatch = newValue
+                }
+            )
+        }
+
+        if (hasReferencePortrait && paRequireFaceMatch && faceMatcherRepository != null && faceMatcherRepository.all.size > 1) {
+            item {
+                SettingMultipleChoice(
+                    title = "Face matcher implementation",
+                    choices = faceMatcherRepository.all.map { it.displayName },
+                    initialChoice = (selectedFaceMatcher ?: faceMatcherRepository.defaultMatcher)?.displayName ?: "",
+                    onChoiceSelected = { choice ->
+                        selectedFaceMatcher = faceMatcherRepository.all.find { it.displayName == choice }
+                    }
+                )
+            }
+        }
+
+        item {
             SettingMultipleChoice(
                 title = "Connection time",
                 choices = PaDuration.entries.map { it.desc },
@@ -598,27 +657,32 @@ fun ConsentPromptScreen(
                 paData = AndroidPresentmentActivityData(
                     showConsent = paShowConsent,
                     requireAuth = paRequireAuth,
+                    requireFaceMatch = paRequireFaceMatch && (faceMatcherReferencePortrait != null),
+                    referencePortrait = faceMatcherReferencePortrait,
+                    faceMatcher = selectedFaceMatcher ?: faceMatcherRepository?.defaultMatcher,
                     authRequireConfirmation = paAuthRequireConfirmation,
                     connectionDuration = paConnectionDuration.duration,
                     sendResponseDuration = paSendingDuration.duration,
                     preselectedDocuments = when (paPreselectedDocuments) {
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_NONE -> listOf()
-                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL -> listOf(documentMdl)
-                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_PHOTOID -> listOf(documentPhotoId)
-                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_BOARDING_PASS -> listOf(documentBoardingPass)
-                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_PAYMENT -> listOf(documentPayment)
-                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID -> listOf(documentMdl, documentPhotoId)
+                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL -> listOfNotNull(documentMdl)
+                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_PHOTOID -> listOfNotNull(documentPhotoId)
+                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_BOARDING_PASS -> listOfNotNull(documentBoardingPass)
+                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_PAYMENT -> listOfNotNull(documentPayment)
+                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID -> listOfNotNull(documentMdl, documentPhotoId)
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL_AND_PHOTOID_AND_PHOTOID ->
-                            listOf(documentMdl, documentPhotoId, documentPhotoId2)
+                            listOfNotNull(documentMdl, documentPhotoId, documentPhotoId2)
                         PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL_AND_BOARDING_PASS ->
-                            listOf(documentMdl, documentBoardingPass)
-                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL_AND_OPTIONAL_BOARDING_PASS->
-                            listOf(documentMdl, documentBoardingPass)
+                            listOfNotNull(documentMdl, documentBoardingPass)
+                        PaPreselectedDocuments.PRESELECTED_DOCUMENTS_MDL_AND_OPTIONAL_BOARDING_PASS ->
+                            listOfNotNull(documentMdl, documentBoardingPass)
                     }
                 ),
-            ) }) {
-                Text("Show in PresentmentActivity")
-            }
+            ) },
+            enabled = documentModel != null
+        ) {
+            Text("Show in PresentmentActivity")
+        }
         }
     }
 }

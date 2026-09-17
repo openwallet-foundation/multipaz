@@ -101,5 +101,9 @@
     <true/>
     <key>UIFileSharingEnabled</key>
     <true/>
+	<key>NSCameraUsageDescription</key>
+	<string>This app uses the camera for face matching and QR codes</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app uses the photo library to select reference portraits</string>
 </dict>
 </plist>

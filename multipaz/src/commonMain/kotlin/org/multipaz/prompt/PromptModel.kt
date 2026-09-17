@@ -104,6 +104,7 @@ abstract class PromptModel protected constructor(
         open fun addCommonDialogs() = apply {
             addPromptDialogModel(PassphrasePromptDialogModel())
             addPromptDialogModel(ConsentPromptDialogModel())
+            addPromptDialogModel(FaceMatcherPromptDialogModel())
         }
 
         abstract fun build(): PromptModel

@@ -24,6 +24,9 @@ struct StartScreen: View {
                 Button(action: { viewModel.path.append(Destination.passphrasePromptScreen) }) {
                     Text("Passphrase Prompt")
                 }
+                Button(action: { viewModel.path.append(Destination.faceMatcherPromptScreen) }) {
+                    Text("Face Matcher Prompt")
+                }
                 Button(action: { viewModel.path.append(Destination.iso18013ProximityPresentmentScreen) }) {
                     Text("ISO 18013-5 Proximity Presentment")
                 }
