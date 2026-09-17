@@ -75,6 +75,8 @@ sealed class EcPrivateKey(
      */
     abstract override fun toCoseKey(additionalLabels: Map<CoseLabel, DataItem>): CoseKey
 
+    abstract override fun duplicate(): EcPrivateKey
+
     /**
      * Encode this key in PEM format
      *

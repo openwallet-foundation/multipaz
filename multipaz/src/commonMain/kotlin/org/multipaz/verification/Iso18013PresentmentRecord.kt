@@ -31,10 +31,23 @@ class Iso18013PresentmentRecord(
     val response: DataItem,
     val sessionTranscript: DataItem,
     val request: DataItem,
-    val eDeviceKey: EcPrivateKey?,
+    eDeviceKey: EcPrivateKey?,
     val encryptionInfo: ByteString?,
     val origin: String?,
 ): PresentmentRecord() {
+    val eDeviceKey: EcPrivateKey? = eDeviceKey?.duplicate()
+
+    override fun close() {
+        eDeviceKey?.close()
+    }
+
+    /**
+     * Destroys this presentment record by closing the ephemeral device key.
+     */
+    fun destroy() {
+        close()
+    }
+
     override suspend fun verifyNonce(nonce: ByteString) {
         if (encryptionInfo == null) {
             throw InvalidRequestException("encryptionInfo is required for verifyNonce")

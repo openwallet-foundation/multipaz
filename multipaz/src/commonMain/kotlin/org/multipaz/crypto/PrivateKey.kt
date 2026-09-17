@@ -79,6 +79,15 @@ sealed class PrivateKey : AutoCloseable {
     ): JsonObject
 
     /**
+     * Creates an independent duplicate of this private key with its own lifecycle and memory buffer.
+     * The returned key must be closed independently.
+     *
+     * @return a new [PrivateKey] instance containing the same key material.
+     * @throws IllegalStateException if this key has already been destroyed.
+     */
+    abstract fun duplicate(): PrivateKey
+
+    /**
      * The public part of the key.
      */
     abstract val publicKey: PublicKey

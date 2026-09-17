@@ -216,4 +216,67 @@ class PrivateKeyZeroingTest {
 
         assertFalse(mlDsaString.contains("ab"))
     }
+
+    @Test
+    fun testDuplicate() = runTest {
+        val ecKey = Crypto.createEcPrivateKey(EcCurve.P256) as EcPrivateKeyDoubleCoordinate
+        val ecDup = ecKey.duplicate()
+        assertFalse(ecDup.isDestroyed)
+        assertEquals(ecKey.curve, ecDup.curve)
+        assertContentEquals(ecKey.x, ecDup.x)
+        assertContentEquals(ecKey.y, ecDup.y)
+        assertContentEquals(ecKey.d, ecDup.d)
+
+        // Close original key
+        ecKey.close()
+        assertTrue(ecKey.isDestroyed)
+        assertFalse(ecDup.isDestroyed)
+
+        // Duplicate must still be usable for operations
+        val message = "Test message".encodeToByteArray()
+        val signature = Crypto.sign(ecDup, Algorithm.ES256, message)
+        Crypto.checkSignature(ecDup.publicKey, message, Algorithm.ES256, signature)
+
+        // Close duplicate
+        ecDup.close()
+        assertTrue(ecDup.isDestroyed)
+        assertFailsWith<IllegalStateException> { ecDup.d }
+
+        // Test with RSA
+        val rsaKey = Crypto.createRsaPrivateKey(2048)
+        val rsaDup = rsaKey.duplicate()
+        assertFalse(rsaDup.isDestroyed)
+        assertEquals(rsaKey.publicKey, rsaDup.publicKey)
+        rsaKey.close()
+        assertTrue(rsaKey.isDestroyed)
+        assertFalse(rsaDup.isDestroyed)
+        val rsaSig = Crypto.sign(rsaDup, Algorithm.RS256, message)
+        Crypto.checkSignature(rsaDup.publicKey, message, Algorithm.RS256, rsaSig)
+        rsaDup.close()
+        assertTrue(rsaDup.isDestroyed)
+
+        // Test with OKP
+        if (Crypto.supportedCurves.contains(EcCurve.ED25519)) {
+            val edKey = Crypto.createEcPrivateKey(EcCurve.ED25519) as EcPrivateKeyOkp
+            val edDup = edKey.duplicate()
+            assertFalse(edDup.isDestroyed)
+            edKey.close()
+            assertTrue(edKey.isDestroyed)
+            assertFalse(edDup.isDestroyed)
+            val edSig = Crypto.sign(edDup, Algorithm.EDDSA, message)
+            Crypto.checkSignature(edDup.publicKey, message, Algorithm.EDDSA, edSig)
+            edDup.close()
+            assertTrue(edDup.isDestroyed)
+        }
+    }
+
+    @Test
+    fun testDuplicateDestroyedKeyFails() = runTest {
+        val ecKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        ecKey.close()
+        assertTrue(ecKey.isDestroyed)
+        assertFailsWith<IllegalStateException> {
+            ecKey.duplicate()
+        }
+    }
 }

@@ -28,6 +28,7 @@ import org.multipaz.testUtilSetupCryptoProvider
 import org.multipaz.util.Constants
 import org.multipaz.util.fromHex
 import kotlin.test.BeforeTest
+import kotlin.test.assertFalse
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -70,6 +71,7 @@ class SessionEncryptionTest {
                 null
             )
         )
+        assertFalse(eReaderKey.isDestroyed)
 
         // Check that decryption works.
         var result = sessionEncryption.decryptMessage(
