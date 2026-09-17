@@ -26,6 +26,11 @@ class EcPrivateKeyOkp(
     val x: ByteArray
 ): EcPrivateKey(curve, d) {
 
+    override fun duplicate(): EcPrivateKeyOkp {
+        checkNotDestroyed()
+        return EcPrivateKeyOkp(curve, d, x)
+    }
+
     override fun toCoseKey(additionalLabels: Map<CoseLabel, DataItem>): CoseKey {
         checkNotDestroyed()
         return CoseKey(mapOf(

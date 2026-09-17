@@ -147,6 +147,11 @@ class RsaPrivateKey(
      */
     val d: ByteArray get() = privateExponent
 
+    override fun duplicate(): RsaPrivateKey {
+        checkNotDestroyed()
+        return RsaPrivateKey(publicKey, privateExponent, p, q, dp, dq, qInv)
+    }
+
     override fun toCoseKey(additionalLabels: Map<CoseLabel, DataItem>): CoseKey {
         checkNotDestroyed()
         val labels = mutableMapOf<CoseLabel, DataItem>(

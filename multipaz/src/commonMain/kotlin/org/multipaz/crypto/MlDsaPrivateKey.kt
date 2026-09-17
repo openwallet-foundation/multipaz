@@ -58,6 +58,11 @@ class MlDsaPrivateKey(
             return ByteString(_encoded)
         }
 
+    override fun duplicate(): MlDsaPrivateKey {
+        checkNotDestroyed()
+        return MlDsaPrivateKey(algorithm, encoded, publicKey)
+    }
+
     internal val encodedKeyMaterial: ByteArray
         get() {
             checkNotDestroyed()

@@ -106,7 +106,6 @@ class SessionEncryption(
             readerSK = Hkdf.deriveKey(Algorithm.HMAC_SHA256, sharedSecret, salt, info, 32)
         } finally {
             sharedSecret.close()
-            eSelfKey.close()
         }
         if (role == MdocRole.MDOC) {
             skSelf = deviceSK

@@ -28,6 +28,11 @@ class EcPrivateKeyDoubleCoordinate(
     val y: ByteArray
 ) : EcPrivateKey(curve, d) {
 
+    override fun duplicate(): EcPrivateKeyDoubleCoordinate {
+        checkNotDestroyed()
+        return EcPrivateKeyDoubleCoordinate(curve, d, x, y)
+    }
+
     override fun toCoseKey(additionalLabels: Map<CoseLabel, DataItem>): CoseKey {
         checkNotDestroyed()
         return CoseKey(

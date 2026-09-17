@@ -12,7 +12,7 @@ import kotlin.time.Instant
  * and verified (immediately or at a later time).
  */
 @CborSerializable
-sealed class PresentmentRecord() {
+sealed class PresentmentRecord() : AutoCloseable {
     /**
      * Verifies that the presentation was bound to the expected nonce.
      *
@@ -37,6 +37,8 @@ sealed class PresentmentRecord() {
         documentTypeRepository: DocumentTypeRepository? = null,
         zkSystemRepository: ZkSystemRepository? = null
     ): List<VerifiedPresentation>
+
+    override fun close() {}
 
     companion object
 }

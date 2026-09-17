@@ -11,6 +11,8 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.claim.MdocClaim
+import org.multipaz.crypto.Crypto
+import org.multipaz.crypto.EcCurve
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.mdoc.engagement.EngagementType
 import org.multipaz.mdoc.transport.NfcHybridTransportStats
@@ -672,6 +674,60 @@ class SimpleEventLoggerTests {
         assertEquals(400.milliseconds, retrieved.durationRequestSentToResponseReceived)
         assertEquals(300.milliseconds, retrieved.durationScanningTime)
         assertEquals(stats, retrieved.nfcHybridTransportStats)
+    }
+
+    @Test
+    fun testAddAndGetEventVerificationIso18013ProximityWithEDeviceKey() = runTest {
+        val fakeClock = FakeClock(Instant.fromEpochMilliseconds(3000))
+        val ephemeralStorage = EphemeralStorage(fakeClock)
+        val logger = SimpleEventLogger(storage = ephemeralStorage, partitionId = "test-partition", clock = fakeClock)
+
+        val originalKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        val presentmentRecord = Iso18013PresentmentRecord(
+            response = Simple.NULL,
+            sessionTranscript = Simple.NULL,
+            request = Simple.NULL,
+            eDeviceKey = originalKey,
+            encryptionInfo = null,
+            origin = null
+        )
+        // Close the original key - presentmentRecord must hold an independent duplicate
+        originalKey.close()
+        assertTrue(originalKey.isDestroyed)
+        assertFalse(presentmentRecord.eDeviceKey!!.isDestroyed)
+
+        val event = EventVerificationIso18013Proximity(
+            identifier = "",
+            timestamp = Instant.DISTANT_PAST,
+            presentmentRecord = presentmentRecord,
+            engagementType = EngagementType.QR_CODE,
+            durationNfcTapToEngagement = null,
+            durationEngagementReceivedToRequestSent = 50.milliseconds,
+            durationRequestSentToResponseReceived = 400.milliseconds,
+            durationScanningTime = null,
+            nfcHybridTransportStats = null
+        )
+
+        val savedEvent = logger.addEvent(event)
+        assertNotNull(savedEvent)
+        assertTrue(savedEvent is EventVerificationIso18013Proximity)
+
+        val eventsFromDb = logger.getEvents()
+        assertEquals(1, eventsFromDb.size)
+        val retrieved = eventsFromDb.first()
+        assertTrue(retrieved is EventVerificationIso18013Proximity)
+        val retrievedRecord = retrieved.presentmentRecord as Iso18013PresentmentRecord
+        assertNotNull(retrievedRecord.eDeviceKey)
+        assertFalse(retrievedRecord.eDeviceKey!!.isDestroyed)
+        assertEquals(presentmentRecord.eDeviceKey!!.publicKey, retrievedRecord.eDeviceKey!!.publicKey)
+
+        // Closing presentmentRecord closes its eDeviceKey
+        presentmentRecord.close()
+        assertTrue(presentmentRecord.eDeviceKey!!.isDestroyed)
+
+        // Using destroy() on retrievedRecord also destroys its key
+        retrievedRecord.destroy()
+        assertTrue(retrievedRecord.eDeviceKey!!.isDestroyed)
     }
 
     @Test
