@@ -1,0 +1,5 @@
+package = org.tensorflow.lite.c
+headers = c_api.h xnnpack_delegate.h
+headerFilter = *.h
+staticLibraries = libTensorFlowLiteC.a
+linkerOpts = -lc++
