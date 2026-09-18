@@ -89,7 +89,13 @@ kotlin {
 
         val androidMain by getting {
             dependencies {
-                // Placeholder for future Android FaceNet / TFLite dependencies
+                implementation(libs.face.detection)
+                implementation(libs.litert)
+                implementation(libs.litert.gpu)
+                implementation(libs.litert.support)
+                implementation(libs.kotlinx.coroutines.core)
+                implementation(libs.kotlinx.coroutines.android)
+                implementation(libs.androidx.camera.camera2)
             }
         }
     }

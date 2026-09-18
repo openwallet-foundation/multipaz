@@ -104,6 +104,7 @@ import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.SimplePresentmentSource
 import org.multipaz.presentment.uriSchemePresentment
 import org.multipaz.facenet.FaceNetFaceMatcher
+import org.multipaz.facenet.FaceNetModelConfig
 import org.multipaz.facematch.FaceMatcherRepository
 import org.multipaz.facematch.SimulatedFaceMatcher
 import org.multipaz.prompt.FaceMatcherPromptDialogModel
@@ -489,7 +490,14 @@ class App private constructor (val promptModel: PromptModel) {
 
     private suspend fun faceMatcherRepositoryInit() {
         faceMatcherRepository = FaceMatcherRepository().apply {
-            add(FaceNetFaceMatcher())
+            add(
+                FaceNetFaceMatcher(
+                    modelBytesProvider = {
+                        ByteString(Res.readBytes("files/facenet_512.tflite"))
+                    },
+                    config = FaceNetModelConfig.FACENET_512
+                )
+            )
             add(SimulatedFaceMatcher())
         }
         promptModel.getDialogModel(FaceMatcherPromptDialogModel.DialogType).defaultMatcher =

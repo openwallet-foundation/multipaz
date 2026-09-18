@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -154,6 +155,13 @@ private fun FaceMatcherBottomSheet(
     val promptState by faceMatcherSession.state.collectAsState()
 
     var isProcessingFrame by remember { mutableStateOf(false) }
+    var isDismissed by remember { mutableStateOf(false) }
+
+    DisposableEffect(faceMatcherSession) {
+        onDispose {
+            faceMatcherSession.cancel()
+        }
+    }
 
     var resolvedTitle by remember { mutableStateOf(title ?: "") }
     var resolvedSubtitle by remember { mutableStateOf(subtitle ?: "") }
@@ -185,7 +193,12 @@ private fun FaceMatcherBottomSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = { onDismissed() },
+        onDismissRequest = {
+            if (!isDismissed) {
+                isDismissed = true
+                onDismissed()
+            }
+        },
         sheetState = sheetState,
         dragHandle = null,
         containerColor = MaterialTheme.colorScheme.surface,
@@ -258,15 +271,13 @@ private fun FaceMatcherBottomSheet(
                             captureResolution = CameraCaptureResolution.MEDIUM,
                             showCameraPreview = true,
                             onFrameCaptured = { frame ->
-                                if (isSuccess || isProcessingFrame) return@Camera
+                                if (isDismissed || isSuccess || isProcessingFrame) return@Camera
                                 isProcessingFrame = true
-                                coroutineScope.launch {
-                                    try {
-                                        val promptFrame = frame.toPromptCameraFrame()
-                                        faceMatcherSession.feedFrame(promptFrame)
-                                    } finally {
-                                        isProcessingFrame = false
-                                    }
+                                try {
+                                    val promptFrame = frame.toPromptCameraFrame()
+                                    faceMatcherSession.feedFrame(promptFrame)
+                                } finally {
+                                    isProcessingFrame = false
                                 }
                             }
                         )
@@ -376,8 +387,11 @@ private fun FaceMatcherBottomSheet(
 
             TextButton(
                 onClick = {
-                    coroutineScope.launch { sheetState.hide() }
-                    onDismissed()
+                    if (!isDismissed) {
+                        isDismissed = true
+                        coroutineScope.launch { sheetState.hide() }
+                        onDismissed()
+                    }
                 }
             ) {
                 Text(cancelText)
