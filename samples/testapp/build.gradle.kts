@@ -75,6 +75,7 @@ kotlin {
             baseName = "Multipaz"
             isStatic = true
             export(project(":multipaz"))
+            export(project(":multipaz-facenet"))
             export(project(":multipaz-doctypes"))
             export(project(":multipaz-utopia"))
             export(project(":multipaz-longfellow"))

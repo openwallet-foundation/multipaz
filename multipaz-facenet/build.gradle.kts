@@ -3,6 +3,7 @@
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.konan.target.HostManager
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -14,6 +15,12 @@ val projectVersionCode: Int by rootProject.extra
 val projectVersionName: String by rootProject.extra
 
 val disableWebTargets = project.properties["disable.web.targets"]?.toString()?.toBoolean() ?: false
+
+val unpackTensorFlowLiteC by tasks.registering(Sync::class) {
+    val archiveFile = layout.projectDirectory.file("prebuilts/TensorFlowLiteC-ios-2.17.0.tar.gz")
+    from(tarTree(archiveFile))
+    into(layout.buildDirectory.dir("TensorFlowLiteC"))
+}
 
 kotlin {
     jvmToolchain(17)
@@ -50,23 +57,31 @@ kotlin {
         }
     }
 
+    val tfliteBaseDir = file("${project.layout.buildDirectory.get()}/TensorFlowLiteC")
+
     listOf(
         iosX64(),
         iosArm64(),
         iosSimulatorArm64()
-    ).forEach {
-        val platform = when (it.name) {
-            "iosX64" -> "iphonesimulator"
-            "iosArm64" -> "iphoneos"
-            "iosSimulatorArm64" -> "iphonesimulator"
-            else -> error("Unsupported target ${it.name}")
-        }
-        it.binaries.all {
-            linkerOpts(
-                "-L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/${platform}/",
-                "-Wl,-rpath,/usr/lib/swift",
-                "-lsqlite3"
-            )
+    ).forEach { target ->
+        if (HostManager.hostIsMac) {
+            target.compilations.getByName("main") {
+                val TensorFlowLiteC by cinterops.creating {
+                    definitionFile.set(project.file("src/iosMain/cinterop/TensorFlowLiteC.def"))
+                    includeDirs.headerFilterOnly("$tfliteBaseDir/include")
+                    extraOpts("-libraryPath", "$tfliteBaseDir/libs/${target.name}")
+                    val interopTask = tasks[interopProcessingTaskName]
+                    interopTask.dependsOn(unpackTensorFlowLiteC)
+                }
+            }
+            target.binaries.all {
+                linkerOpts(
+                    "-L$tfliteBaseDir/libs/${target.name}",
+                    "-Wl,-rpath,/usr/lib/swift",
+                    "-lc++",
+                    "-lsqlite3"
+                )
+            }
         }
     }
 
