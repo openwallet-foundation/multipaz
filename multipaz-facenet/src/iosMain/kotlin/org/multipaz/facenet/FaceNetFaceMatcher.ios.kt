@@ -11,5 +11,11 @@ internal actual fun createFaceNetSession(
     matcherName: String,
     matcherDisplayName: String
 ): FaceMatcherSession {
-    return SimulatedFaceMatcherSession(referencePortrait = referencePortrait)
+    return IosFaceNetSession(
+        referencePortrait = referencePortrait,
+        modelBytesProvider = modelBytesProvider,
+        config = config,
+        matcherName = matcherName,
+        matcherDisplayName = matcherDisplayName
+    )
 }

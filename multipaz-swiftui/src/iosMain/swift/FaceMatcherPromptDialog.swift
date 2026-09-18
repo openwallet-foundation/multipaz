@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import CoreImage
 
 private struct FaceMatcherPromptDialogData: Identifiable, Equatable {
     let id = UUID()
@@ -315,6 +316,7 @@ private class CameraViewController: UIViewController, AVCaptureVideoDataOutputSa
 
     private var isProcessing = false
     private var lastProcessedTime: TimeInterval = 0
+    private let ciContext = CIContext()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -325,6 +327,9 @@ private class CameraViewController: UIViewController, AVCaptureVideoDataOutputSa
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         previewLayer?.frame = view.bounds
+        if let previewConnection = previewLayer?.connection, previewConnection.isVideoOrientationSupported {
+            previewConnection.videoOrientation = .portrait
+        }
     }
 
     private func checkPermissionAndSetupCamera() {
@@ -360,8 +365,20 @@ private class CameraViewController: UIViewController, AVCaptureVideoDataOutputSa
             captureSession.addOutput(videoOutput)
         }
 
+        if let connection = videoOutput.connection(with: .video) {
+            if connection.isVideoOrientationSupported {
+                connection.videoOrientation = .portrait
+            }
+            if connection.isVideoMirroringSupported {
+                connection.isVideoMirrored = true
+            }
+        }
+
         let preview = AVCaptureVideoPreviewLayer(session: captureSession)
         preview.videoGravity = .resizeAspectFill
+        if let previewConnection = preview.connection, previewConnection.isVideoOrientationSupported {
+            previewConnection.videoOrientation = .portrait
+        }
         view.layer.addSublayer(preview)
         self.previewLayer = preview
 
@@ -394,35 +411,43 @@ private class CameraViewController: UIViewController, AVCaptureVideoDataOutputSa
             return
         }
 
-        guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        let width = Int32(CVPixelBufferGetWidth(imageBuffer))
-        let height = Int32(CVPixelBufferGetHeight(imageBuffer))
+        autoreleasepool {
+            guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+            let width = Int32(CVPixelBufferGetWidth(imageBuffer))
+            let height = Int32(CVPixelBufferGetHeight(imageBuffer))
 
-        isProcessing = true
-        lastProcessedTime = now
+            isProcessing = true
+            lastProcessedTime = now
 
-        // We intentionally do not retain sampleBuffer or imageBuffer across async tasks
-        // to avoid starving AVCaptureVideoDataOutput's buffer pool.
-        let frame = CameraFrame(
-            width: width,
-            height: height,
-            rotationDegrees: 0,
-            pixelFormat: PixelFormat.unknown,
-            data: Data().toByteString(),
-            platformHandle: nil
-        )
+            let ciImage = CIImage(cvPixelBuffer: imageBuffer)
+            guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else {
+                isProcessing = false
+                return
+            }
+            let uiImage = UIImage(cgImage: cgImage)
 
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            if let onFrame = self.onFrame {
-                onFrame(frame) { [weak self] in
-                    self?.frameQueue.async {
-                        self?.isProcessing = false
+            // Pass an independent UIImage as platformHandle so the CVPixelBuffer is released immediately.
+            let frame = CameraFrame(
+                width: width,
+                height: height,
+                rotationDegrees: 0,
+                pixelFormat: PixelFormat.unknown,
+                data: Data().toByteString(),
+                platformHandle: uiImage
+            )
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                if let onFrame = self.onFrame {
+                    onFrame(frame) { [weak self] in
+                        self?.frameQueue.async {
+                            self?.isProcessing = false
+                        }
                     }
-                }
-            } else {
-                self.frameQueue.async {
-                    self.isProcessing = false
+                } else {
+                    self.frameQueue.async {
+                        self.isProcessing = false
+                    }
                 }
             }
         }
