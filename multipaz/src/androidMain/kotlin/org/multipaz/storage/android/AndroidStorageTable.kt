@@ -55,13 +55,13 @@ internal class AndroidStorageTable(
                 (cursor as? AbstractWindowedCursor)?.window = CursorWindow(
                     "Larger Window", CURSOR_WINDOW_SIZE)
             }
-            if (cursor.moveToFirst()) {
-                val bytes = cursor.getBlob(0)
-                cursor.close()
-                ByteString(bytes)
-            } else {
-                cursor.close()
-                null
+            cursor.use {
+                if (it.moveToFirst()) {
+                    val bytes = it.getBlob(0)
+                    ByteString(bytes)
+                } else {
+                    null
+                }
             }
         }
     }
@@ -225,12 +225,17 @@ internal class AndroidStorageTable(
                 "id",
                 if (limit < Int.MAX_VALUE) "0, $limit" else null
             )
-            val list = mutableListOf<Pair<String, ByteString>>()
-            while (cursor.moveToNext()) {
-                list.add(Pair(cursor.getString(0), ByteString(cursor.getBlob(1))))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                (cursor as? AbstractWindowedCursor)?.window = CursorWindow(
+                    "Larger Window", CURSOR_WINDOW_SIZE)
             }
-            cursor.close()
-            list
+            cursor.use {
+                val list = mutableListOf<Pair<String, ByteString>>()
+                while (it.moveToNext()) {
+                    list.add(Pair(it.getString(0), ByteString(it.getBlob(1))))
+                }
+                list
+            }
         }
     }
 
@@ -250,6 +255,6 @@ internal class AndroidStorageTable(
     }
 
     companion object {
-        const val CURSOR_WINDOW_SIZE = 5 * 1024 * 1024L
+        const val CURSOR_WINDOW_SIZE = 16 * 1024 * 1024L
     }
 }

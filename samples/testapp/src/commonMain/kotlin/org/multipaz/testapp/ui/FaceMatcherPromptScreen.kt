@@ -87,6 +87,7 @@ suspend fun getFaceMatcherReferencePortrait(storage: Storage = TestAppConfigurat
         val table = storage.getTable(FACE_MATCHER_STORAGE_TABLE_SPEC)
         table.get(FACE_MATCHER_KEY_REFERENCE_PORTRAIT)
     } catch (e: Throwable) {
+        Logger.w(TAG, "Could not load reference portrait from storage", e)
         null
     }
 }
@@ -116,9 +117,16 @@ fun FaceMatcherPromptScreen(
         onResult = { files ->
             if (files.isNotEmpty()) {
                 coroutineScope.launch {
-                    savePortrait(storage, files.first())
-                    referencePortrait = files.first()
-                    showToast("Reference portrait selected from gallery")
+                    try {
+                        val raw = files.first()
+                        val normalized = normalizePortrait(raw)
+                        savePortrait(storage, normalized)
+                        referencePortrait = normalized
+                        showToast("Reference portrait selected from gallery")
+                    } catch (e: Throwable) {
+                        Logger.e(TAG, "Failed to save selected portrait", e)
+                        showToast("Failed to process image: ${e.message}")
+                    }
                 }
             }
         }
@@ -127,9 +135,17 @@ fun FaceMatcherPromptScreen(
     LaunchedEffect(Unit) {
         try {
             val table = storage.getTable(FACE_MATCHER_STORAGE_TABLE_SPEC)
-            referencePortrait = table.get(FACE_MATCHER_KEY_REFERENCE_PORTRAIT)
+            referencePortrait = try {
+                table.get(FACE_MATCHER_KEY_REFERENCE_PORTRAIT)
+            } catch (e: Throwable) {
+                Logger.e(TAG, "Failed to load reference portrait from storage, clearing corrupt entry", e)
+                try {
+                    table.delete(FACE_MATCHER_KEY_REFERENCE_PORTRAIT)
+                } catch (_: Throwable) {}
+                null
+            }
         } catch (e: Throwable) {
-            Logger.e(TAG, "Failed to load reference portrait from storage", e)
+            Logger.e(TAG, "Failed to access storage table", e)
         } finally {
             isLoading = false
         }
@@ -140,10 +156,16 @@ fun FaceMatcherPromptScreen(
             onDismiss = { showCameraCaptureDialog = false },
             onPortraitCaptured = { capturedBytes ->
                 coroutineScope.launch {
-                    savePortrait(storage, capturedBytes)
-                    referencePortrait = capturedBytes
-                    showCameraCaptureDialog = false
-                    showToast("Reference portrait captured from camera")
+                    try {
+                        val normalized = normalizePortrait(capturedBytes)
+                        savePortrait(storage, normalized)
+                        referencePortrait = normalized
+                        showCameraCaptureDialog = false
+                        showToast("Reference portrait captured from camera")
+                    } catch (e: Throwable) {
+                        Logger.e(TAG, "Failed to save captured portrait", e)
+                        showToast("Failed to process image: ${e.message}")
+                    }
                 }
             }
         )
@@ -448,12 +470,12 @@ fun FaceMatcherPromptScreen(
 }
 
 private suspend fun savePortrait(storage: Storage, bytes: ByteString) {
+    val normalized = normalizePortrait(bytes)
     val table: StorageTable = storage.getTable(FACE_MATCHER_STORAGE_TABLE_SPEC)
-    if (table.get(FACE_MATCHER_KEY_REFERENCE_PORTRAIT) == null) {
-        table.insert(key = FACE_MATCHER_KEY_REFERENCE_PORTRAIT, data = bytes)
-    } else {
-        table.update(key = FACE_MATCHER_KEY_REFERENCE_PORTRAIT, data = bytes)
-    }
+    try {
+        table.delete(FACE_MATCHER_KEY_REFERENCE_PORTRAIT)
+    } catch (_: Throwable) {}
+    table.insert(key = FACE_MATCHER_KEY_REFERENCE_PORTRAIT, data = normalized)
 }
 
 @Composable
@@ -593,4 +615,41 @@ private fun rotateImageBitmap(bitmap: ImageBitmap, degrees: Float): ImageBitmap 
     )
     canvas.restore()
     return newBitmap
+}
+
+private fun scaleImageBitmap(bitmap: ImageBitmap, targetWidth: Int, targetHeight: Int): ImageBitmap {
+    val newBitmap = ImageBitmap(targetWidth, targetHeight)
+    val canvas = Canvas(newBitmap)
+    val scaleX = targetWidth.toFloat() / bitmap.width.toFloat()
+    val scaleY = targetHeight.toFloat() / bitmap.height.toFloat()
+    canvas.save()
+    canvas.scale(scaleX, scaleY)
+    canvas.drawImage(
+        bitmap,
+        Offset.Zero,
+        Paint()
+    )
+    canvas.restore()
+    return newBitmap
+}
+
+private fun normalizePortrait(rawBytes: ByteString): ByteString {
+    return try {
+        val bitmap = decodeImage(rawBytes.toByteArray())
+        val maxDim = 800
+        val width = bitmap.width
+        val height = bitmap.height
+        if (width <= maxDim && height <= maxDim && rawBytes.size <= 500_000) {
+            rawBytes
+        } else {
+            val scale = maxDim.toFloat() / maxOf(width, height)
+            val targetWidth = (width * scale).toInt().coerceAtLeast(1)
+            val targetHeight = (height * scale).toInt().coerceAtLeast(1)
+            val scaledBitmap = scaleImageBitmap(bitmap, targetWidth, targetHeight)
+            encodeImageToPng(scaledBitmap)
+        }
+    } catch (e: Throwable) {
+        Logger.w(TAG, "Failed to normalize portrait image, using original", e)
+        rawBytes
+    }
 }

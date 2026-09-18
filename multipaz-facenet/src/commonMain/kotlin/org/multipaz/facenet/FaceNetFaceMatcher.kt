@@ -3,22 +3,41 @@ package org.multipaz.facenet
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.FaceMatcher
 import org.multipaz.facematch.FaceMatcherSession
-import org.multipaz.facematch.SimulatedFaceMatcher
 
 /**
- * A face matcher implementation based on Google's FaceNet.
+ * A face matcher implementation based on Google FaceNet and MobileFaceNet models.
  *
- * Initially delegates to [SimulatedFaceMatcher] while the build system and harness
- * are established, before plugging in the full on-device inference pipeline.
+ * @property modelBytesProvider an optional suspending lambda that supplies the `.tflite` model data.
+ *   If not provided, the platform implementation will attempt to resolve a default model (e.g. from assets)
+ *   or fall back to simulated verification.
+ * @property config configuration parameters specifying input dimensions, normalization, and match threshold.
+ * @property name unique machine identifier for this matcher.
+ * @property displayName human-readable display name.
  */
 class FaceNetFaceMatcher(
+    val modelBytesProvider: (suspend () -> ByteString)? = null,
+    val config: FaceNetModelConfig = FaceNetModelConfig.AUTO,
     override val name: String = "facenet",
-    override val displayName: String = "Google FaceNet",
-    private val delegate: FaceMatcher = SimulatedFaceMatcher(name = name, displayName = displayName)
+    override val displayName: String = "Google FaceNet"
 ) : FaceMatcher {
-    constructor() : this("facenet", "Google FaceNet")
+
+    constructor() : this(modelBytesProvider = null, config = FaceNetModelConfig.AUTO)
 
     override fun createSession(referencePortrait: ByteString): FaceMatcherSession {
-        return delegate.createSession(referencePortrait)
+        return createFaceNetSession(
+            referencePortrait = referencePortrait,
+            modelBytesProvider = modelBytesProvider,
+            config = config,
+            matcherName = name,
+            matcherDisplayName = displayName
+        )
     }
 }
+
+internal expect fun createFaceNetSession(
+    referencePortrait: ByteString,
+    modelBytesProvider: (suspend () -> ByteString)?,
+    config: FaceNetModelConfig,
+    matcherName: String,
+    matcherDisplayName: String
+): FaceMatcherSession
