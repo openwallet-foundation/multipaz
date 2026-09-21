@@ -1,7 +1,12 @@
 package org.multipaz.facenet
 
+import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.FaceMatcherSession
+import org.multipaz.util.toByteArray
+import platform.CoreGraphics.CGImageRelease
+import platform.UIKit.UIImage
+import platform.UIKit.UIImagePNGRepresentation
 
 internal actual val isFaceNetSupported: Boolean = true
 
@@ -41,3 +46,30 @@ internal actual suspend fun extractFaceEmbedding(
         }
     }
 }
+
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+internal actual suspend fun extractDetectedFaceCrop(
+    portrait: ByteString,
+    modelBytesProvider: suspend () -> ByteString,
+    config: FaceNetModelConfig
+): ByteString {
+    val targetSize = config.imageSquareSize ?: 112
+    IosFaceDetector().use { detector ->
+        val bytes = portrait.toByteArray()
+        val faces = detector.detectFaces(bytes)
+        if (faces.isEmpty()) {
+            throw IllegalArgumentException("No face detected in portrait")
+        }
+        val cgCrop = detector.extractFaceCropImage(bytes, faces[0], targetSize)
+            ?: throw IllegalStateException("Failed to extract face crop")
+        try {
+            val uiImage = UIImage.imageWithCGImage(cgCrop)
+            val nsData = UIImagePNGRepresentation(uiImage)
+                ?: throw IllegalStateException("Failed to encode face crop to PNG")
+            return ByteString(nsData.toByteArray())
+        } finally {
+            CGImageRelease(cgCrop)
+        }
+    }
+}
+

@@ -131,6 +131,7 @@ import org.multipaz.testapp.ui.CertificateScreen
 import org.multipaz.testapp.ui.CertificateViewerExamplesScreen
 import org.multipaz.testapp.ui.ConsentPromptScreen
 import org.multipaz.testapp.ui.FaceMatcherPromptScreen
+import org.multipaz.facenet.testdata.FaceTestData
 import org.multipaz.testapp.ui.CredentialClaimsViewerScreen
 import org.multipaz.testapp.ui.CredentialViewerScreen
 import org.multipaz.testapp.ui.DcRequestScreen
@@ -493,7 +494,7 @@ class App private constructor (val promptModel: PromptModel) {
             add(
                 FaceNetFaceMatcher(
                     modelBytesProvider = {
-                        ByteString(Res.readBytes("files/mobile_facenet.tflite"))
+                        FaceTestData.testModel
                     },
                     config = FaceNetModelConfig.MOBILE_FACENET
                 )

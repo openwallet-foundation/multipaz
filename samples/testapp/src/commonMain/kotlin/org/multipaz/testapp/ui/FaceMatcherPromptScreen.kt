@@ -6,11 +6,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -55,9 +59,11 @@ import org.multipaz.compose.decodeImage
 import org.multipaz.compose.encodeImageToPng
 import org.multipaz.compose.permissions.rememberCameraPermissionState
 import org.multipaz.compose.pickers.rememberImagePicker
-import org.multipaz.documenttype.knowntypes.SampleData
 import org.multipaz.facematch.FaceMatcher
 import org.multipaz.facematch.FaceMatcherRepository
+import org.multipaz.facenet.FaceNetFaceMatcher
+import org.multipaz.facenet.testdata.FaceSamplePortrait
+import org.multipaz.facenet.testdata.FaceTestData
 import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.Reason
@@ -67,7 +73,6 @@ import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.testapp.TestAppConfiguration
 import org.multipaz.util.Logger
-import org.multipaz.util.fromBase64Url
 
 private const val TAG = "FaceMatcherPromptScreen"
 
@@ -98,6 +103,7 @@ suspend fun getFaceMatcherReferencePortrait(storage: Storage = TestAppConfigurat
  * Allows capturing, selecting, or clearing a reference portrait stored in persistent storage,
  * and invoking [PromptModel.showFaceMatcherPrompt] against that reference portrait.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FaceMatcherPromptScreen(
     promptModel: PromptModel,
@@ -109,8 +115,37 @@ fun FaceMatcherPromptScreen(
     var referencePortrait by remember { mutableStateOf<ByteString?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var showCameraCaptureDialog by remember { mutableStateOf(false) }
+    var showSamplePortraitPicker by remember { mutableStateOf(false) }
     val matchers = faceMatcherRepository?.all ?: emptyList()
     var selectedMatcher by remember { mutableStateOf<FaceMatcher?>(faceMatcherRepository?.defaultMatcher) }
+    var detectedFaceCrop by remember { mutableStateOf<ByteString?>(null) }
+    var isExtractingCrop by remember { mutableStateOf(false) }
+    var cropError by remember { mutableStateOf<String?>(null) }
+
+    val faceNetMatcher = remember(selectedMatcher, matchers) {
+        (selectedMatcher as? FaceNetFaceMatcher)
+            ?: matchers.filterIsInstance<FaceNetFaceMatcher>().firstOrNull()
+    }
+
+    LaunchedEffect(referencePortrait, faceNetMatcher) {
+        val portrait = referencePortrait
+        if (portrait != null && faceNetMatcher != null && faceNetMatcher.isSupported) {
+            isExtractingCrop = true
+            cropError = null
+            try {
+                detectedFaceCrop = faceNetMatcher.extractFaceCrop(portrait)
+            } catch (e: Throwable) {
+                detectedFaceCrop = null
+                cropError = e.message ?: "No face detected"
+            } finally {
+                isExtractingCrop = false
+            }
+        } else {
+            detectedFaceCrop = null
+            cropError = null
+            isExtractingCrop = false
+        }
+    }
 
     val imagePicker = rememberImagePicker(
         allowMultiple = false,
@@ -165,6 +200,25 @@ fun FaceMatcherPromptScreen(
                     } catch (e: Throwable) {
                         Logger.e(TAG, "Failed to save captured portrait", e)
                         showToast("Failed to process image: ${e.message}")
+                    }
+                }
+            }
+        )
+    }
+
+    if (showSamplePortraitPicker) {
+        SamplePortraitPickerDialog(
+            onDismiss = { showSamplePortraitPicker = false },
+            onPortraitSelected = { selected ->
+                coroutineScope.launch {
+                    try {
+                        savePortrait(storage, selected.data)
+                        referencePortrait = selected.data
+                        showSamplePortraitPicker = false
+                        showToast("Selected ${selected.displayName}")
+                    } catch (e: Throwable) {
+                        Logger.e(TAG, "Failed to save sample portrait", e)
+                        showToast("Failed to save portrait: ${e.message}")
                     }
                 }
             }
@@ -234,50 +288,178 @@ fun FaceMatcherPromptScreen(
                             }
                         }
 
-                        if (bitmap != null) {
-                            Image(
-                                bitmap = bitmap,
-                                contentDescription = "Reference Portrait",
-                                modifier = Modifier
-                                    .size(160.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .border(
-                                        width = 2.dp,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        shape = RoundedCornerShape(12.dp)
-                                    )
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(160.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                                contentAlignment = Alignment.Center
+                        if (faceNetMatcher != null && faceNetMatcher.isSupported) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+                                verticalAlignment = Alignment.Top
                             ) {
-                                Text("Invalid Image", style = MaterialTheme.typography.bodySmall)
+                                // Left: Reference Portrait
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    if (bitmap != null) {
+                                        Image(
+                                            bitmap = bitmap,
+                                            contentDescription = "Reference Portrait",
+                                            modifier = Modifier
+                                                .size(130.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .border(
+                                                    width = 2.dp,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    shape = RoundedCornerShape(12.dp)
+                                                )
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(130.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("Invalid Image", style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
+                                    Text(
+                                        text = "Reference Portrait",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "${portraitBytes.size} bytes",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                // Right: FaceNet detected face
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    val cropBytes = detectedFaceCrop
+                                    val cropBitmap = remember(cropBytes) {
+                                        cropBytes?.let {
+                                            try {
+                                                decodeImage(it.toByteArray())
+                                            } catch (e: Throwable) {
+                                                null
+                                            }
+                                        }
+                                    }
+
+                                    if (isExtractingCrop) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(130.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                                        }
+                                    } else if (cropBitmap != null) {
+                                        Image(
+                                            bitmap = cropBitmap,
+                                            contentDescription = "FaceNet Face Detected",
+                                            modifier = Modifier
+                                                .size(130.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .border(
+                                                    width = 2.dp,
+                                                    color = MaterialTheme.colorScheme.secondary,
+                                                    shape = RoundedCornerShape(12.dp)
+                                                )
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(130.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = cropError ?: "No face detected",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                textAlign = TextAlign.Center,
+                                                color = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.padding(8.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Text(
+                                        text = "FaceNet face detected",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = if (cropBytes != null) "${cropBytes.size} bytes (112×112)" else "BlazeFace alignment",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
+                        } else {
+                            if (bitmap != null) {
+                                Image(
+                                    bitmap = bitmap,
+                                    contentDescription = "Reference Portrait",
+                                    modifier = Modifier
+                                        .size(160.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .border(
+                                            width = 2.dp,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(160.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("Invalid Image", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+
+                            Text(
+                                text = "Size: ${portraitBytes.size} bytes",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
 
-                        Text(
-                            text = "Size: ${portraitBytes.size} bytes",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             OutlinedButton(
-                                onClick = { showCameraCaptureDialog = true }
+                                onClick = { showCameraCaptureDialog = true },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                             ) {
-                                Text("Retake")
+                                Text("Retake", maxLines = 1)
                             }
                             OutlinedButton(
-                                onClick = { imagePicker.launch() }
+                                onClick = { imagePicker.launch() },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                             ) {
-                                Text("Pick Image")
+                                Text("Pick Image", maxLines = 1)
+                            }
+                            OutlinedButton(
+                                onClick = { showSamplePortraitPicker = true },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Text("Sample", maxLines = 1)
                             }
                             OutlinedButton(
                                 onClick = {
@@ -294,31 +476,32 @@ fun FaceMatcherPromptScreen(
                                             showToast("Failed to rotate: ${e.message}")
                                         }
                                     }
-                                }
+                                },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                             ) {
-                                Text("Rotate 90°")
+                                Text("Rotate 90°", maxLines = 1)
                             }
-                        }
-
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    try {
-                                        val table = storage.getTable(FACE_MATCHER_STORAGE_TABLE_SPEC)
-                                        table.delete(FACE_MATCHER_KEY_REFERENCE_PORTRAIT)
-                                        referencePortrait = null
-                                        showToast("Reference portrait cleared")
-                                    } catch (e: Throwable) {
-                                        Logger.e(TAG, "Failed to clear portrait", e)
-                                        showToast("Failed to clear portrait: ${e.message}")
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        try {
+                                            val table = storage.getTable(FACE_MATCHER_STORAGE_TABLE_SPEC)
+                                            table.delete(FACE_MATCHER_KEY_REFERENCE_PORTRAIT)
+                                            referencePortrait = null
+                                            showToast("Reference portrait cleared")
+                                        } catch (e: Throwable) {
+                                            Logger.e(TAG, "Failed to clear portrait", e)
+                                            showToast("Failed to clear portrait: ${e.message}")
+                                        }
                                     }
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
-                            Text("Clear Portrait")
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Text("Clear Portrait", maxLines = 1)
+                            }
                         }
                     } else {
                         Box(
@@ -371,16 +554,9 @@ fun FaceMatcherPromptScreen(
                                 Text("Pick from Gallery")
                             }
                             TextButton(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        val sampleBytes = ByteString(SampleData.PORTRAIT_BASE64URL.fromBase64Url())
-                                        savePortrait(storage, sampleBytes)
-                                        referencePortrait = sampleBytes
-                                        showToast("Sample portrait loaded")
-                                    }
-                                }
+                                onClick = { showSamplePortraitPicker = true }
                             ) {
-                                Text("Use Sample Portrait")
+                                Text("Pick from Sample portraits")
                             }
                         }
                     }
@@ -591,6 +767,93 @@ private fun CapturePortraitDialog(
                 }
             }
         },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun SamplePortraitPickerDialog(
+    onDismiss: () -> Unit,
+    onPortraitSelected: (FaceSamplePortrait) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Pick Sample Portrait",
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(FaceTestData.allPortraits.size) { index ->
+                    val sample = FaceTestData.allPortraits[index]
+                    val bitmap = remember(sample.id) {
+                        try {
+                            decodeImage(sample.data.toByteArray())
+                        } catch (e: Throwable) {
+                            null
+                        }
+                    }
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPortraitSelected(sample) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (bitmap != null) {
+                                Image(
+                                    bitmap = bitmap,
+                                    contentDescription = sample.displayName,
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.outlineVariant)
+                                )
+                            }
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = sample.displayName,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = sample.subtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Cancel")

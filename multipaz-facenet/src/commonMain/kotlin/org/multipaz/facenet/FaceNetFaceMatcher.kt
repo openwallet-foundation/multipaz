@@ -104,6 +104,33 @@ class FaceNetFaceMatcher(
         val embB = getFaceEmbedding(portraitB)
         return embA.calculateSimilarity(embB)
     }
+
+    /**
+     * Extracts the detected, aligned face crop image that is matched against.
+     *
+     * Detects the face via BlazeFace, aligns the eyes horizontally, crops, and scales
+     * to the model's square input resolution (typically 112x112), returning the encoded PNG bytes.
+     *
+     * @param portrait encoded image bytes (e.g. JPEG or PNG).
+     * @return the encoded PNG bytes of the aligned face crop.
+     * @throws IllegalArgumentException if no face is detected in [portrait] or decoding fails.
+     * @throws IllegalStateException if crop extraction fails.
+     * @throws UnsupportedOperationException if face matching is not supported on this platform.
+     */
+    suspend fun extractFaceCrop(portrait: ByteString): ByteString {
+        return extractDetectedFaceCrop(
+            portrait = portrait,
+            modelBytesProvider = modelBytesProvider,
+            config = config
+        )
+    }
+
+    /**
+     * Extracts the detected, aligned face crop image that is matched against.
+     *
+     * Alias for [extractFaceCrop].
+     */
+    suspend fun getDetectedFace(portrait: ByteString): ByteString = extractFaceCrop(portrait)
 }
 
 internal expect val isFaceNetSupported: Boolean
@@ -121,3 +148,9 @@ internal expect suspend fun extractFaceEmbedding(
     modelBytesProvider: suspend () -> ByteString,
     config: FaceNetModelConfig
 ): FaceEmbedding
+
+internal expect suspend fun extractDetectedFaceCrop(
+    portrait: ByteString,
+    modelBytesProvider: suspend () -> ByteString,
+    config: FaceNetModelConfig
+): ByteString

@@ -58,10 +58,7 @@ class ViewModel {
         PromptModel.Companion.shared.setGlobal(promptModel: promptModel)
         
         faceMatcherRepository = FaceMatcherRepository()
-        if let modelUrl = Bundle.main.url(forResource: "mobile_facenet", withExtension: "tflite"),
-           let modelData = try? Data(contentsOf: modelUrl) {
-            faceMatcherRepository.add(faceMatcher: FaceNetFaceMatcher(modelBytes: modelData.toByteString()))
-        }
+        faceMatcherRepository.add(faceMatcher: FaceNetFaceMatcher(modelBytes: FaceTestData.shared.testModel))
         faceMatcherRepository.add(faceMatcher: SimulatedFaceMatcher())
         promptModel.getFaceMatcherDialogModel().defaultMatcher = faceMatcherRepository.defaultMatcher
         

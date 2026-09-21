@@ -1,5 +1,6 @@
 package org.multipaz.facenet
 
+import org.multipaz.facenet.testdata.FaceTestData
 import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlin.test.Test
@@ -10,8 +11,8 @@ class FaceEmbeddingRegressionTest {
 
     @Test
     fun testGoldenVectorsCosineSimilarity() {
-        val sim = FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING.calculateSimilarity(
-            FaceTestData.QUALCOMM_DEMO_2_GOLDEN_EMBEDDING
+        val sim = FaceEmbedding(FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING).calculateSimilarity(
+            FaceEmbedding(FaceTestData.QUALCOMM_DEMO_2_GOLDEN_EMBEDDING)
         )
         // Verify exact regression against Qualcomm MobileFaceNet golden output vectors
         assertEquals(
@@ -28,8 +29,8 @@ class FaceEmbeddingRegressionTest {
 
     @Test
     fun testGoldenEmbeddingProperties() {
-        val emb1 = FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING
-        val emb2 = FaceTestData.QUALCOMM_DEMO_2_GOLDEN_EMBEDDING
+        val emb1 = FaceEmbedding(FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING)
+        val emb2 = FaceEmbedding(FaceTestData.QUALCOMM_DEMO_2_GOLDEN_EMBEDDING)
 
         assertEquals(128, emb1.embedding.size)
         assertEquals(128, emb2.embedding.size)
@@ -79,7 +80,7 @@ class FaceEmbeddingRegressionTest {
 
     @Test
     fun testSimilarityBoundaryConditions() {
-        val v = FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING
+        val v = FaceEmbedding(FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING)
         assertEquals(1.0f, v.calculateSimilarity(v), 0.0001f, "Self similarity must be 1.0")
 
         val inverted = FaceEmbedding(FloatArray(128) { -v.embedding[it] })

@@ -340,6 +340,97 @@ internal class IosFaceDetector(
     }
 
     /**
+     * Extracts an aligned square face crop of size [targetSize] x [targetSize] as a CGImageRef.
+     */
+    fun extractFaceCropImage(imageBytes: ByteArray, face: IosDetectedFace, targetSize: Int): CGImageRef? {
+        val cgImage = decodeToCgImage(imageBytes) ?: return null
+        return try {
+            extractFaceCropImage(cgImage, face, targetSize)
+        } finally {
+            CGImageRelease(cgImage)
+        }
+    }
+
+    fun extractFaceCropImage(sourceImage: CGImageRef, face: IosDetectedFace, targetSize: Int): CGImageRef? {
+        if (isClosed.value) return null
+
+        val imgW = CGImageGetWidth(sourceImage).toDouble()
+        val imgH = CGImageGetHeight(sourceImage).toDouble()
+        if (imgW <= 0.0 || imgH <= 0.0) return null
+
+        val colorSpace = CGColorSpaceCreateDeviceRGB()
+        val bitmapContext = CGBitmapContextCreate(
+            data = null,
+            width = targetSize.toULong(),
+            height = targetSize.toULong(),
+            bitsPerComponent = 8u,
+            bytesPerRow = (targetSize * 4).toULong(),
+            space = colorSpace,
+            bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value
+        )
+        CGColorSpaceRelease(colorSpace)
+
+        if (bitmapContext == null) {
+            Logger.e(TAG, "Failed to create CGBitmapContext for face crop")
+            return null
+        }
+
+        try {
+            renderFaceCropToContext(bitmapContext, sourceImage, face, targetSize, imgW, imgH)
+            return CGBitmapContextCreateImage(bitmapContext)
+        } finally {
+            CGContextRelease(bitmapContext)
+        }
+    }
+
+    private fun renderFaceCropToContext(
+        bitmapContext: platform.CoreGraphics.CGContextRef,
+        sourceImage: CGImageRef,
+        face: IosDetectedFace,
+        targetSize: Int,
+        imgW: Double,
+        imgH: Double
+    ) {
+        CGContextSaveGState(bitmapContext)
+        try {
+            val leftEye = face.leftEye
+            val rightEye = face.rightEye
+
+            val eyeDistance = hypot(leftEye.x - rightEye.x, leftEye.y - rightEye.y)
+            if (eyeDistance > 1.0) {
+                val cx = (leftEye.x + rightEye.x) / 2.0
+                val cy = (leftEye.y + rightEye.y) / 2.0
+                val eyeAngleRad = atan2(leftEye.y - rightEye.y, leftEye.x - rightEye.x)
+
+                val faceCropFactor = 3.2
+                val faceVerticalOffsetFactor = 0.13
+                val cropSize = eyeDistance * faceCropFactor
+                val verticalOffset = eyeDistance * faceVerticalOffsetFactor
+                val scale = targetSize.toDouble() / cropSize
+
+                val srcEyeCenterY = imgH - cy
+                val dstEyeCenterY = targetSize / 2.0 + verticalOffset * scale
+
+                val t1 = CGAffineTransformMakeTranslation(-cx, -srcEyeCenterY)
+                val t2 = CGAffineTransformMakeRotation(eyeAngleRad)
+                val t3 = CGAffineTransformMakeScale(scale, scale)
+                val t4 = CGAffineTransformMakeTranslation(targetSize / 2.0, dstEyeCenterY)
+
+                val transform = CGAffineTransformConcat(
+                    CGAffineTransformConcat(CGAffineTransformConcat(t1, t2), t3),
+                    t4
+                )
+                CGContextConcatCTM(bitmapContext, transform)
+                CGContextDrawImage(bitmapContext, CGRectMake(0.0, 0.0, imgW, imgH), sourceImage)
+            } else {
+                drawBoundingBoxFallback(bitmapContext, sourceImage, face.boundingBox, imgW, imgH, targetSize)
+            }
+        } finally {
+            CGContextRestoreGState(bitmapContext)
+        }
+    }
+
+    /**
      * Aligns eyes horizontally, centers the face with standard vertical offset,
      * scales to [targetSize] x [targetSize], and returns a FloatArray of raw RGB values in range [0, 255].
      */
@@ -368,45 +459,7 @@ internal class IosFaceDetector(
         }
 
         try {
-            CGContextSaveGState(bitmapContext)
-
-            val leftEye = face.leftEye
-            val rightEye = face.rightEye
-
-            val eyeDistance = hypot(leftEye.x - rightEye.x, leftEye.y - rightEye.y)
-            if (eyeDistance > 1.0) {
-                val cx = (leftEye.x + rightEye.x) / 2.0
-                val cy = (leftEye.y + rightEye.y) / 2.0
-                val eyeAngleRad = atan2(leftEye.y - rightEye.y, leftEye.x - rightEye.x)
-
-                val faceCropFactor = 3.2
-                val faceVerticalOffsetFactor = 0.13
-                val cropSize = eyeDistance * faceCropFactor
-                val verticalOffset = eyeDistance * faceVerticalOffsetFactor
-                val scale = targetSize.toDouble() / cropSize
-
-                // CoreGraphics Y points UP, whereas image pixel Y points DOWN.
-                // Source eye center in bottom-up CoreGraphics coords is (cx, imgH - cy).
-                // Destination eye center in bottom-up CoreGraphics coords is (targetSize/2, targetSize/2 + verticalOffset * scale).
-                val srcEyeCenterY = imgH - cy
-                val dstEyeCenterY = targetSize / 2.0 + verticalOffset * scale
-
-                val t1 = CGAffineTransformMakeTranslation(-cx, -srcEyeCenterY)
-                val t2 = CGAffineTransformMakeRotation(eyeAngleRad)
-                val t3 = CGAffineTransformMakeScale(scale, scale)
-                val t4 = CGAffineTransformMakeTranslation(targetSize / 2.0, dstEyeCenterY)
-
-                val transform = CGAffineTransformConcat(
-                    CGAffineTransformConcat(CGAffineTransformConcat(t1, t2), t3),
-                    t4
-                )
-                CGContextConcatCTM(bitmapContext, transform)
-                CGContextDrawImage(bitmapContext, CGRectMake(0.0, 0.0, imgW, imgH), sourceImage)
-            } else {
-                drawBoundingBoxFallback(bitmapContext, sourceImage, face.boundingBox, imgW, imgH, targetSize)
-            }
-
-            CGContextRestoreGState(bitmapContext)
+            renderFaceCropToContext(bitmapContext, sourceImage, face, targetSize, imgW, imgH)
 
             val rawData = CGBitmapContextGetData(bitmapContext) ?: return null
             val bytePtr = rawData.reinterpret<ByteVar>()

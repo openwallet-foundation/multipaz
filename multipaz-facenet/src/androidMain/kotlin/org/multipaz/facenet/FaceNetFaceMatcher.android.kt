@@ -1,5 +1,6 @@
 package org.multipaz.facenet
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.context.applicationContext
@@ -71,3 +72,38 @@ internal actual suspend fun extractFaceEmbedding(
         }
     }
 }
+
+internal actual suspend fun extractDetectedFaceCrop(
+    portrait: ByteString,
+    modelBytesProvider: suspend () -> ByteString,
+    config: FaceNetModelConfig
+): ByteString {
+    val targetSize = config.imageSquareSize ?: 112
+    AndroidFaceDetector().use { detector ->
+        val bytes = portrait.toByteArray()
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            ?: throw IllegalArgumentException("Failed to decode portrait bytes to bitmap")
+        val faces = try {
+            detector.detectFaces(bitmap)
+        } finally {
+            bitmap.recycle()
+        }
+        if (faces.isEmpty()) {
+            throw IllegalArgumentException("No face detected in portrait")
+        }
+        val freshBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        val crop = try {
+            detector.extractFaceCrop(freshBitmap, faces[0], targetSize)
+        } finally {
+            freshBitmap.recycle()
+        }
+        try {
+            val stream = java.io.ByteArrayOutputStream()
+            crop.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            return ByteString(stream.toByteArray())
+        } finally {
+            crop.recycle()
+        }
+    }
+}
+
