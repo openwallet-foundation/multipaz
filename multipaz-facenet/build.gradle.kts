@@ -23,6 +23,12 @@ val unpackTensorFlowLiteC by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("TensorFlowLiteC"))
 }
 
+val unpackTensorFlowLiteCDesktop by tasks.registering(Sync::class) {
+    val archiveFile = layout.projectDirectory.file("prebuilts/TensorFlowLiteC-desktop-2.17.1.tar.gz")
+    from(tarTree(archiveFile))
+    into(layout.buildDirectory.dir("generated/resources/tfliteDesktop"))
+}
+
 kotlin {
     jvmToolchain(17)
 
@@ -119,6 +125,13 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.coroutines.android)
                 implementation(libs.androidx.camera.camera2)
+            }
+        }
+
+        val jvmMain by getting {
+            resources.srcDir(unpackTensorFlowLiteCDesktop)
+            dependencies {
+                implementation(libs.jna)
             }
         }
     }

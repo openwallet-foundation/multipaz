@@ -152,7 +152,7 @@ class FaceMatchingTest {
             )
         }
 
-        // 6. Cross-Identity Matrix (All different identities must be below 0.65 threshold)
+        // 6. Cross-Identity Matrix (All different identities must be below model match threshold)
         println("\n=== Pairwise Similarity Matrix ===")
         for (i in names.indices) {
             for (j in i + 1 until names.size) {
@@ -162,8 +162,8 @@ class FaceMatchingTest {
                 println("$n1 vs $n2 : $sim")
                 if (identities[n1] != identities[n2]) {
                     assertTrue(
-                        sim < 0.65f,
-                        "Cross-identity similarity between $n1 and $n2 should be < 0.65 (was $sim)"
+                        sim < FaceNetModelConfig.MOBILE_FACENET.matchThreshold,
+                        "Cross-identity similarity between $n1 and $n2 should be < ${FaceNetModelConfig.MOBILE_FACENET.matchThreshold} (was $sim)"
                     )
                 }
             }
