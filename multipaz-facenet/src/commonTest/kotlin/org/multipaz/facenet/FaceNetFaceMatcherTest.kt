@@ -14,7 +14,7 @@ class FaceNetFaceMatcherTest {
     fun testProperties() {
         val matcher = FaceNetFaceMatcher()
         assertEquals("facenet", matcher.name)
-        assertEquals("Google FaceNet", matcher.displayName)
+        assertEquals("MobileFaceNet", matcher.displayName)
     }
 
     @Test
@@ -55,8 +55,8 @@ class FaceNetFaceMatcherTest {
 
         assertEquals(112, FaceNetModelConfig.MOBILE_FACENET.imageSquareSize)
         assertEquals(128, FaceNetModelConfig.MOBILE_FACENET.embeddingDim)
-        assertEquals(NormalizationMethod.SCALE_MINUS_ONE_TO_ONE, FaceNetModelConfig.MOBILE_FACENET.normalization)
-        assertEquals(0.65f, FaceNetModelConfig.MOBILE_FACENET.matchThreshold)
+        assertEquals(NormalizationMethod.SCALE_ZERO_TO_ONE, FaceNetModelConfig.MOBILE_FACENET.normalization)
+        assertEquals(0.70f, FaceNetModelConfig.MOBILE_FACENET.matchThreshold)
 
         val auto = FaceNetModelConfig.AUTO
         assertEquals(null, auto.imageSquareSize)

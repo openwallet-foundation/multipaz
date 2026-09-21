@@ -200,8 +200,7 @@ internal class IosFaceNetSession(
                         now
                     }
 
-                    val isMatched = (currentSimilarity != null && currentSimilarity >= config.matchThreshold)
-                            || bestSimilarity >= config.matchThreshold
+                    val isMatched = currentSimilarity != null && currentSimilarity >= config.matchThreshold
 
                     if (isMatched) {
                         consecutiveMatchFrames++
@@ -221,10 +220,17 @@ internal class IosFaceNetSession(
                         consecutiveMatchFrames = 0
                         if (now - straightStart > matchTimeoutMs) {
                             val percentage = (bestSimilarity * 100).toInt().coerceAtLeast(0)
-                            failSession(
-                                messageAbove = "Verification Failed",
-                                messageBelow = "Face does not match reference portrait ($percentage% match, required ${(config.matchThreshold * 100).toInt()}%)"
-                            )
+                            if (bestSimilarity >= config.matchThreshold) {
+                                failSession(
+                                    messageAbove = "Verification Failed",
+                                    messageBelow = "Unable to confirm match - please hold still and look directly at the camera"
+                                )
+                            } else {
+                                failSession(
+                                    messageAbove = "Verification Failed",
+                                    messageBelow = "Face does not match reference portrait ($percentage% match, required ${(config.matchThreshold * 100).toInt()}%)"
+                                )
+                            }
                             return
                         }
                         updateState(

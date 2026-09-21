@@ -15,6 +15,7 @@ import org.tensorflow.lite.c.TfLiteInterpreterAllocateTensors
 import org.tensorflow.lite.c.TfLiteInterpreterCreate
 import org.tensorflow.lite.c.TfLiteInterpreterDelete
 import org.tensorflow.lite.c.TfLiteInterpreterGetInputTensor
+import org.tensorflow.lite.c.TfLiteInterpreterGetInputTensorCount
 import org.tensorflow.lite.c.TfLiteInterpreterGetOutputTensor
 import org.tensorflow.lite.c.TfLiteInterpreterInvoke
 import org.tensorflow.lite.c.TfLiteInterpreterOptionsAddDelegate
@@ -52,15 +53,16 @@ internal class IosFaceNetInterpreter(
 
     val imageSquareSize: Int
     val embeddingDim: Int
+    private val isChannelsFirst: Boolean
+    private val inputCount: Int
+    private val outputBatch: Int
 
     init {
         val bytes = when {
             modelBytes != null && !modelBytes.isEmpty() -> modelBytes.toByteArray()
-            else -> loadModelFromBundle("facenet_512")
-                ?: loadModelFromBundle("mobile_facenet")
+            else -> loadModelFromBundle("mobile_facenet")
                 ?: throw IllegalStateException(
-                    "No FaceNet model provided and neither 'facenet_512.tflite' nor 'mobile_facenet.tflite' " +
-                            "found in main bundle."
+                    "No FaceNet model provided and 'mobile_facenet.tflite' not found in main bundle."
                 )
         }
 
@@ -94,28 +96,32 @@ internal class IosFaceNetInterpreter(
             throw IllegalStateException("Failed to allocate tensors in TfLiteInterpreter: status $allocStatus")
         }
 
+        inputCount = TfLiteInterpreterGetInputTensorCount(localInterpreter)
         val inputTensor = TfLiteInterpreterGetInputTensor(localInterpreter, 0)
         val numDims = if (inputTensor != null) TfLiteTensorNumDims(inputTensor) else 0
-        val inferredImageSize = if (inputTensor != null && numDims >= 3) {
-            TfLiteTensorDim(inputTensor, 1)
-        } else {
-            160
+        isChannelsFirst = inputTensor != null && numDims == 4 && TfLiteTensorDim(inputTensor, 1) == 3
+        val inferredImageSize = when {
+            isChannelsFirst -> TfLiteTensorDim(inputTensor, 2)
+            inputTensor != null && numDims >= 3 -> TfLiteTensorDim(inputTensor, 1)
+            else -> 112
         }
         imageSquareSize = config.imageSquareSize ?: inferredImageSize
 
         val outputTensor = TfLiteInterpreterGetOutputTensor(localInterpreter, 0)
         val outNumDims = if (outputTensor != null) TfLiteTensorNumDims(outputTensor) else 0
+        outputBatch = if (outputTensor != null && outNumDims >= 1) TfLiteTensorDim(outputTensor, 0) else 1
         val inferredEmbeddingDim = if (outputTensor != null && outNumDims >= 2) {
-            TfLiteTensorDim(outputTensor, 1)
+            TfLiteTensorDim(outputTensor, outNumDims - 1)
         } else {
-            512
+            128
         }
         embeddingDim = config.embeddingDim ?: inferredEmbeddingDim
 
         Logger.d(
             TAG,
             "FaceNet interpreter initialized on iOS: imageSquareSize=$imageSquareSize, " +
-                    "embeddingDim=$embeddingDim, normalization=${config.normalization}"
+                    "embeddingDim=$embeddingDim, isChannelsFirst=$isChannelsFirst, " +
+                    "inputCount=$inputCount, outputBatch=$outputBatch, normalization=${config.normalization}"
         )
     }
 
@@ -128,47 +134,84 @@ internal class IosFaceNetInterpreter(
             return null
         }
 
-        // Apply normalization
-        val normalizedFloats = when (config.normalization) {
+        val numPixels = imageSquareSize * imageSquareSize
+        val normalizedFloats = FloatArray(expectedSize)
+
+        when (config.normalization) {
             NormalizationMethod.STANDARDIZE -> {
-                val norm = FloatArray(rawRgbFloats.size)
                 var sum = 0.0f
-                for (i in rawRgbFloats.indices) {
-                    val v = (rawRgbFloats[i] - 127.5f) / 128.0f
-                    norm[i] = v
-                    sum += v
-                }
-                val mean = sum / norm.size
+                for (v in rawRgbFloats) sum += v
+                val mean = sum / rawRgbFloats.size
                 var sumSq = 0.0f
-                for (v in norm) {
+                for (v in rawRgbFloats) {
                     val diff = v - mean
                     sumSq += diff * diff
                 }
-                val std = sqrt(sumSq / norm.size)
-                val stdAdj = max(std, 1.0f / sqrt(norm.size.toFloat()))
-                for (i in norm.indices) {
-                    norm[i] = (norm[i] - mean) / stdAdj
+                val std = sqrt(sumSq / rawRgbFloats.size)
+                val stdAdj = max(std, 1.0f / sqrt(rawRgbFloats.size.toFloat()))
+                if (isChannelsFirst) {
+                    for (i in 0 until numPixels) {
+                        normalizedFloats[i] = (rawRgbFloats[i * 3 + 0] - mean) / stdAdj
+                        normalizedFloats[numPixels + i] = (rawRgbFloats[i * 3 + 1] - mean) / stdAdj
+                        normalizedFloats[2 * numPixels + i] = (rawRgbFloats[i * 3 + 2] - mean) / stdAdj
+                    }
+                } else {
+                    for (i in rawRgbFloats.indices) {
+                        normalizedFloats[i] = (rawRgbFloats[i] - mean) / stdAdj
+                    }
                 }
-                norm
             }
             NormalizationMethod.SCALE_MINUS_ONE_TO_ONE -> {
-                val norm = FloatArray(rawRgbFloats.size)
-                for (i in rawRgbFloats.indices) {
-                    norm[i] = (rawRgbFloats[i] - 127.5f) / 128.0f
+                if (isChannelsFirst) {
+                    for (i in 0 until numPixels) {
+                        normalizedFloats[i] = (rawRgbFloats[i * 3 + 0] - 127.5f) / 128.0f
+                        normalizedFloats[numPixels + i] = (rawRgbFloats[i * 3 + 1] - 127.5f) / 128.0f
+                        normalizedFloats[2 * numPixels + i] = (rawRgbFloats[i * 3 + 2] - 127.5f) / 128.0f
+                    }
+                } else {
+                    for (i in 0 until numPixels) {
+                        normalizedFloats[i * 3 + 0] = (rawRgbFloats[i * 3 + 0] - 127.5f) / 128.0f
+                        normalizedFloats[i * 3 + 1] = (rawRgbFloats[i * 3 + 1] - 127.5f) / 128.0f
+                        normalizedFloats[i * 3 + 2] = (rawRgbFloats[i * 3 + 2] - 127.5f) / 128.0f
+                    }
                 }
-                norm
+            }
+            NormalizationMethod.SCALE_ZERO_TO_ONE -> {
+                if (isChannelsFirst) {
+                    for (i in 0 until numPixels) {
+                        normalizedFloats[i] = rawRgbFloats[i * 3 + 0] / 255.0f
+                        normalizedFloats[numPixels + i] = rawRgbFloats[i * 3 + 1] / 255.0f
+                        normalizedFloats[2 * numPixels + i] = rawRgbFloats[i * 3 + 2] / 255.0f
+                    }
+                } else {
+                    for (i in 0 until numPixels) {
+                        normalizedFloats[i * 3 + 0] = rawRgbFloats[i * 3 + 0] / 255.0f
+                        normalizedFloats[i * 3 + 1] = rawRgbFloats[i * 3 + 1] / 255.0f
+                        normalizedFloats[i * 3 + 2] = rawRgbFloats[i * 3 + 2] / 255.0f
+                    }
+                }
             }
         }
 
-        val inputTensor = TfLiteInterpreterGetInputTensor(localInterpreter, 0) ?: return null
         val inputByteSize = (normalizedFloats.size * Float.SIZE_BYTES).toULong()
-        val copyInStatus = normalizedFloats.usePinned { pinned ->
-            TfLiteTensorCopyFromBuffer(inputTensor, pinned.addressOf(0), inputByteSize)
+        val copyInSuccess = normalizedFloats.usePinned { pinned ->
+            var allOk = true
+            for (idx in 0 until inputCount) {
+                val inTensor = TfLiteInterpreterGetInputTensor(localInterpreter, idx)
+                if (inTensor == null) {
+                    allOk = false
+                    break
+                }
+                val status = TfLiteTensorCopyFromBuffer(inTensor, pinned.addressOf(0), inputByteSize)
+                if (status != kTfLiteOk) {
+                    Logger.e(TAG, "TfLiteTensorCopyFromBuffer failed for input $idx with status $status")
+                    allOk = false
+                    break
+                }
+            }
+            allOk
         }
-        if (copyInStatus != kTfLiteOk) {
-            Logger.e(TAG, "TfLiteTensorCopyFromBuffer failed with status $copyInStatus")
-            return null
-        }
+        if (!copyInSuccess) return null
 
         val invokeStatus = TfLiteInterpreterInvoke(localInterpreter)
         if (invokeStatus != kTfLiteOk) {
@@ -177,15 +220,18 @@ internal class IosFaceNetInterpreter(
         }
 
         val outputTensor = TfLiteInterpreterGetOutputTensor(localInterpreter, 0) ?: return null
-        val outputFloats = FloatArray(embeddingDim)
-        val outputByteSize = (embeddingDim * Float.SIZE_BYTES).toULong()
-        val copyOutStatus = outputFloats.usePinned { pinned ->
+        val totalOutputFloats = outputBatch * embeddingDim
+        val allOutputs = FloatArray(totalOutputFloats)
+        val outputByteSize = (totalOutputFloats * Float.SIZE_BYTES).toULong()
+        val copyOutStatus = allOutputs.usePinned { pinned ->
             TfLiteTensorCopyToBuffer(outputTensor, pinned.addressOf(0), outputByteSize)
         }
         if (copyOutStatus != kTfLiteOk) {
             Logger.e(TAG, "TfLiteTensorCopyToBuffer failed with status $copyOutStatus")
             return null
         }
+
+        val outputFloats = allOutputs.copyOfRange(0, embeddingDim)
 
         // L2 normalize the embedding
         var magSq = 0.0f

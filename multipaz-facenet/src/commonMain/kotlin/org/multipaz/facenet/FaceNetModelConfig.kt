@@ -14,7 +14,7 @@ package org.multipaz.facenet
 data class FaceNetModelConfig(
     val imageSquareSize: Int? = null,
     val embeddingDim: Int? = null,
-    val normalization: NormalizationMethod = NormalizationMethod.STANDARDIZE,
+    val normalization: NormalizationMethod = NormalizationMethod.SCALE_ZERO_TO_ONE,
     val matchThreshold: Float = 0.70f,
     val useGpu: Boolean = false
 ) {
@@ -28,12 +28,12 @@ data class FaceNetModelConfig(
             useGpu = false
         )
 
-        /** Standard MobileFaceNet model configuration (112x112 input, 128-d output, [-1, 1] scaling). */
+        /** Standard MobileFaceNet model configuration (112x112 input, 128-d output, [0, 1] scaling). */
         val MOBILE_FACENET = FaceNetModelConfig(
             imageSquareSize = 112,
             embeddingDim = 128,
-            normalization = NormalizationMethod.SCALE_MINUS_ONE_TO_ONE,
-            matchThreshold = 0.65f,
+            normalization = NormalizationMethod.SCALE_ZERO_TO_ONE,
+            matchThreshold = 0.70f,
             useGpu = false
         )
 

@@ -493,9 +493,9 @@ class App private constructor (val promptModel: PromptModel) {
             add(
                 FaceNetFaceMatcher(
                     modelBytesProvider = {
-                        ByteString(Res.readBytes("files/facenet_512.tflite"))
+                        ByteString(Res.readBytes("files/mobile_facenet.tflite"))
                     },
-                    config = FaceNetModelConfig.FACENET_512
+                    config = FaceNetModelConfig.MOBILE_FACENET
                 )
             )
             add(SimulatedFaceMatcher())

@@ -278,8 +278,8 @@ internal class IosFaceDetector : AutoCloseable {
                     val cy = (leftEye.y + rightEye.y) / 2.0
                     val eyeAngleRad = atan2(leftEye.y - rightEye.y, leftEye.x - rightEye.x)
 
-                    val faceCropFactor = 4.0
-                    val faceVerticalOffsetFactor = 0.25
+                    val faceCropFactor = 3.2
+                    val faceVerticalOffsetFactor = 0.13
                     val cropSize = eyeDistance * faceCropFactor
                     val verticalOffset = eyeDistance * faceVerticalOffsetFactor
                     val scale = targetSize.toDouble() / cropSize
@@ -337,8 +337,8 @@ internal class IosFaceDetector : AutoCloseable {
         imgH: Double,
         targetSize: Int
     ) {
-        val marginX = bb.width * 0.2
-        val marginY = bb.height * 0.2
+        val marginX = bb.width * 0.1
+        val marginY = bb.height * 0.1
         val left = (bb.left - marginX).coerceAtLeast(0.0)
         val top = (bb.top - marginY).coerceAtLeast(0.0)
         val width = (bb.width + marginX * 2.0).coerceAtMost(imgW - left)
