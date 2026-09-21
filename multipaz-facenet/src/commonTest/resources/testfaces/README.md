@@ -1,6 +1,6 @@
 # Curated FaceNet Micro-Corpus Test Data
 
-This directory contains a lightweight, curated test corpus (~448 KB total) used for biometric face matching unit tests in `multipaz-facenet`.
+This directory contains a lightweight, curated test corpus (~1.05 MB total) used for biometric face matching unit tests in `multipaz-facenet`.
 
 ## Assets & Provenance
 
@@ -18,6 +18,10 @@ This directory contains a lightweight, curated test corpus (~448 KB total) used 
 | `bob_with_glasses_2.jpg` | Person 7 (Bob) [^3] | Synthetic frontal portrait with dark-rimmed glasses (Set B) | 281x384 | 40.7 KB | CC0 / Public Domain | AI-generated test sample |
 | `bob_without_glasses_1.jpg` | Person 7 (Bob) [^3] | Synthetic frontal portrait without glasses (Set A) | 282x384 | 46.2 KB | CC0 / Public Domain | AI-generated test sample |
 | `bob_without_glasses_2.jpg` | Person 7 (Bob) [^3] | Synthetic frontal portrait without glasses (Set B) | 282x384 | 54.7 KB | CC0 / Public Domain | AI-generated test sample |
+| `alice_with_glasses_1.jpg` | Person 8 (Alice) [^4] | Synthetic frontal portrait with glasses (Set A) | 1024x1024 | 167.9 KB | CC0 / Public Domain | AI-generated test sample |
+| `alice_with_glasses_2.jpg` | Person 8 (Alice) [^4] | Synthetic frontal portrait with glasses (Set B) | 1024x1024 | 149.7 KB | CC0 / Public Domain | AI-generated test sample |
+| `alice_without_glasses_1.jpg` | Person 8 (Alice) [^4] | Synthetic frontal portrait without glasses (Set A) | 1024x1024 | 124.7 KB | CC0 / Public Domain | AI-generated test sample |
+| `alice_without_glasses_2.jpg` | Person 8 (Alice) [^4] | Synthetic frontal portrait without glasses (Set B) | 1024x1024 | 173.9 KB | CC0 / Public Domain | AI-generated test sample |
 
 [^1]: **Erika Mustermann Identity Note:** While both portraits represent the fictitious German sample persona ["Erika Mustermann"](https://en.wikipedia.org/wiki/Mustermann) (see also [German Wikipedia](https://de.wikipedia.org/wiki/Mustermann#Erika_Mustermann)), the German Federal Printing Office (*Bundesdruckerei*) photographed different real-life employees for the 2001 passport and 2010 identity card document redesigns. Consequently, biometric facial recognition models correctly evaluate them as two distinct individuals (measured cosine similarity ~0.60, which is below the 0.70 same-person match threshold).
 
@@ -25,9 +29,15 @@ This directory contains a lightweight, curated test corpus (~448 KB total) used 
 
 [^3]: **Bob Eyewear Variation Note:** The four Bob portraits depict the same synthetic individual across variations in eyewear (two portraits with dark-rimmed glasses and two without glasses). Biometric verification models demonstrate reliable matching within the same eyewear condition (cosine similarity ~0.61, exceeding the 0.60 threshold) and across eyewear conditions (cosine similarity ~0.54–0.67, exceeding the 0.50 cross-variation threshold), while remaining sharply separated from unrelated identities (< 0.20).
 
+[^4]: **Alice Eyewear Variation Note:** The four Alice portraits depict the same synthetic individual across variations in eyewear (two portraits with glasses and two without glasses). Biometric verification models demonstrate reliable matching within the same eyewear condition (cosine similarity ~0.66–0.69, exceeding the 0.60 threshold) and across eyewear conditions (cosine similarity ~0.42–0.58, exceeding the 0.40 cross-variation threshold), while remaining sharply separated from unrelated identities (< 0.31).
+
 ## Cryptographic Hashes (SHA-256)
 
 ```
+0c931342ec7f3c3961058d3109aff0fb34005bb443dcc397daaa3504823b337d  alice_with_glasses_1.jpg
+a526f7a7c82f835bae9b178ae7003afbdbaeffc3559dbf398a8c4a604b016ac3  alice_with_glasses_2.jpg
+50f2d673d1a128169ef25f6dd5c16154f6ddecd4ff00fdaf79e3f6518ba018a4  alice_without_glasses_1.jpg
+21bd6a8ed960b3a58a1c80c87e18192734d82e1413a5eeaa3d42a5917d63ee04  alice_without_glasses_2.jpg
 65756c131c8325d1c6b74ef62054068eda4d2be7d98c7007958f51f8ba2cf843  bob_with_glasses_1.jpg
 903314a07d76c750c6c2f0475f6dba37e3cf496d134925e345c57a110666a691  bob_with_glasses_2.jpg
 9a7b6bd5726888b6194b6a6b3f3498461dc547f5d48ff1ae143a2d1798ac28e7  bob_without_glasses_1.jpg

@@ -29,6 +29,10 @@ class FaceMatchingTest {
             "bob_with_glasses_2" to (FaceTestData.decodeImageByteString(FaceTestData.BOB_WITH_GLASSES_2_BASE64) to "bob"),
             "bob_without_glasses_1" to (FaceTestData.decodeImageByteString(FaceTestData.BOB_WITHOUT_GLASSES_1_BASE64) to "bob"),
             "bob_without_glasses_2" to (FaceTestData.decodeImageByteString(FaceTestData.BOB_WITHOUT_GLASSES_2_BASE64) to "bob"),
+            "alice_with_glasses_1" to (FaceTestData.decodeImageByteString(FaceTestData.ALICE_WITH_GLASSES_1_BASE64) to "alice"),
+            "alice_with_glasses_2" to (FaceTestData.decodeImageByteString(FaceTestData.ALICE_WITH_GLASSES_2_BASE64) to "alice"),
+            "alice_without_glasses_1" to (FaceTestData.decodeImageByteString(FaceTestData.ALICE_WITHOUT_GLASSES_1_BASE64) to "alice"),
+            "alice_without_glasses_2" to (FaceTestData.decodeImageByteString(FaceTestData.ALICE_WITHOUT_GLASSES_2_BASE64) to "alice"),
         )
 
         val embeddings = mutableMapOf<String, FaceEmbedding>()
@@ -114,7 +118,41 @@ class FaceMatchingTest {
             )
         }
 
-        // 5. Cross-Identity Matrix (All different identities must be below 0.65 threshold)
+        // 5. Same Identity Test for Alice (Synthetic Portraits with and without glasses)
+        val aliceG1Emb = embeddings["alice_with_glasses_1"]!!
+        val aliceG2Emb = embeddings["alice_with_glasses_2"]!!
+        val aliceNoG1Emb = embeddings["alice_without_glasses_1"]!!
+        val aliceNoG2Emb = embeddings["alice_without_glasses_2"]!!
+
+        val simAliceGlasses = aliceG1Emb.calculateSimilarity(aliceG2Emb)
+        println("Alice with glasses 1 vs 2 similarity: $simAliceGlasses")
+        assertTrue(
+            simAliceGlasses >= 0.50f,
+            "Alice with glasses 1 vs 2 similarity ($simAliceGlasses) must be >= 0.50"
+        )
+
+        val simAliceNoGlasses = aliceNoG1Emb.calculateSimilarity(aliceNoG2Emb)
+        println("Alice without glasses 1 vs 2 similarity: $simAliceNoGlasses")
+        assertTrue(
+            simAliceNoGlasses >= 0.50f,
+            "Alice without glasses 1 vs 2 similarity ($simAliceNoGlasses) must be >= 0.50"
+        )
+
+        val aliceCrossPairs = listOf(
+            ("alice_with_glasses_1" to "alice_without_glasses_1") to aliceG1Emb.calculateSimilarity(aliceNoG1Emb),
+            ("alice_with_glasses_1" to "alice_without_glasses_2") to aliceG1Emb.calculateSimilarity(aliceNoG2Emb),
+            ("alice_with_glasses_2" to "alice_without_glasses_1") to aliceG2Emb.calculateSimilarity(aliceNoG1Emb),
+            ("alice_with_glasses_2" to "alice_without_glasses_2") to aliceG2Emb.calculateSimilarity(aliceNoG2Emb),
+        )
+        for ((pair, sim) in aliceCrossPairs) {
+            println("Alice cross-eyewear ${pair.first} vs ${pair.second} similarity: $sim")
+            assertTrue(
+                sim >= 0.40f,
+                "Alice cross-eyewear ${pair.first} vs ${pair.second} similarity ($sim) must be >= 0.40"
+            )
+        }
+
+        // 6. Cross-Identity Matrix (All different identities must be below 0.65 threshold)
         println("\n=== Pairwise Similarity Matrix ===")
         for (i in names.indices) {
             for (j in i + 1 until names.size) {
