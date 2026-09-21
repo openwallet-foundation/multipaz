@@ -8,12 +8,14 @@ package org.multipaz.facematch
  * @property ringSegments visual configuration for the 18 segments of the ring (indexed 0 to 17
  * clockwise from 12 o'clock).
  * @property outcome overall verification outcome.
+ * @property graphicsOverlay optional vector graphics to overlay on top of the camera video stream.
  */
 data class FaceMatcherPromptState(
     val messageAbove: String? = null,
     val messageBelow: String? = null,
     val ringSegments: List<RingSegment> = defaultSegments,
-    val outcome: Outcome = Outcome.IN_PROGRESS
+    val outcome: Outcome = Outcome.IN_PROGRESS,
+    val graphicsOverlay: FaceMatcherGraphics? = null
 ) {
     /** Overall outcome of the face verification session. */
     enum class Outcome {

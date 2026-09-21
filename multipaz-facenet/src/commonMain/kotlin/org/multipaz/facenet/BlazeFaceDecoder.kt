@@ -35,7 +35,9 @@ data class BlazeFaceDetection(
     val leftEarTragus: FacePoint2D,
     override val yaw: Float,
     override val pitch: Float,
-    override val roll: Float
+    override val roll: Float,
+    val imageWidth: Int = 0,
+    val imageHeight: Int = 0
 ) : DetectedFacePose
 
 /**
@@ -196,7 +198,9 @@ object BlazeFaceDecoder {
                     leftEarTragus = leftEar,
                     yaw = yaw,
                     pitch = pitch,
-                    roll = roll
+                    roll = roll,
+                    imageWidth = imageWidth.toInt(),
+                    imageHeight = imageHeight.toInt()
                 )
             )
         }

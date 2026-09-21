@@ -45,4 +45,13 @@ class CameraFrame(
         pixelFormat: PixelFormat,
         data: ByteString
     ) : this(width, height, rotationDegrees, pixelFormat, data, null)
+
+    /** Width in pixels after applying [rotationDegrees] to orient upright. */
+    val uprightWidth: Int
+        get() = if (rotationDegrees == 90 || rotationDegrees == 270) height else width
+
+    /** Height in pixels after applying [rotationDegrees] to orient upright. */
+    val uprightHeight: Int
+        get() = if (rotationDegrees == 90 || rotationDegrees == 270) width else height
 }
+

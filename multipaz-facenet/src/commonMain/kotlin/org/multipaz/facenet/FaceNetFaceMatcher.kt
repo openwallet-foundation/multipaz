@@ -15,17 +15,33 @@ import org.multipaz.facematch.FaceMatcherSession
 class FaceNetFaceMatcher(
     val modelBytesProvider: suspend () -> ByteString,
     val config: FaceNetModelConfig = FaceNetModelConfig.AUTO,
-    override val name: String = "facenet",
-    override val displayName: String = "MobileFaceNet"
+    val debug: Boolean = false,
+    override val name: String = if (debug) "facenet_debug" else "facenet",
+    override val displayName: String = if (debug) "MobileFaceNet (debug)" else "MobileFaceNet"
 ) : FaceMatcher {
+
+    override val providesGraphicsOverlay: Boolean
+        get() = debug
 
     constructor(
         modelBytes: ByteString
     ) : this(
         modelBytes = modelBytes,
         config = FaceNetModelConfig.AUTO,
+        debug = false,
         name = "facenet",
         displayName = "MobileFaceNet"
+    )
+
+    constructor(
+        modelBytes: ByteString,
+        debug: Boolean
+    ) : this(
+        modelBytes = modelBytes,
+        config = FaceNetModelConfig.AUTO,
+        debug = debug,
+        name = if (debug) "facenet_debug" else "facenet",
+        displayName = if (debug) "MobileFaceNet (debug)" else "MobileFaceNet"
     )
 
     constructor(
@@ -34,6 +50,7 @@ class FaceNetFaceMatcher(
     ) : this(
         modelBytes = modelBytes,
         config = config,
+        debug = false,
         name = "facenet",
         displayName = "MobileFaceNet"
     )
@@ -41,11 +58,13 @@ class FaceNetFaceMatcher(
     constructor(
         modelBytes: ByteString,
         config: FaceNetModelConfig = FaceNetModelConfig.AUTO,
-        name: String = "facenet",
-        displayName: String = "MobileFaceNet"
+        debug: Boolean = false,
+        name: String = if (debug) "facenet_debug" else "facenet",
+        displayName: String = if (debug) "MobileFaceNet (debug)" else "MobileFaceNet"
     ) : this(
         modelBytesProvider = { modelBytes },
         config = config,
+        debug = debug,
         name = name,
         displayName = displayName
     )
@@ -63,6 +82,7 @@ class FaceNetFaceMatcher(
             referencePortrait = referencePortrait,
             modelBytesProvider = modelBytesProvider,
             config = config,
+            debug = debug,
             matcherName = name,
             matcherDisplayName = displayName
         )
@@ -139,6 +159,7 @@ internal expect fun createFaceNetSession(
     referencePortrait: ByteString,
     modelBytesProvider: suspend () -> ByteString,
     config: FaceNetModelConfig,
+    debug: Boolean,
     matcherName: String,
     matcherDisplayName: String
 ): FaceMatcherSession

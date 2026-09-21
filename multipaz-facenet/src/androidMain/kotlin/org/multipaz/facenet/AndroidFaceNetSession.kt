@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.CameraFrame
+import org.multipaz.facematch.FaceMatcherGraphics
 import org.multipaz.util.Logger
 import kotlin.time.Clock
 
@@ -13,18 +14,30 @@ internal class AndroidFaceNetSession(
     referencePortrait: ByteString,
     private val modelBytesProvider: suspend () -> ByteString,
     config: FaceNetModelConfig,
+    debug: Boolean = false,
     matcherName: String = "facenet",
     matcherDisplayName: String = "MobileFaceNet",
     clock: () -> Long = { Clock.System.now().toEpochMilliseconds() }
 ) : FaceNetSessionBase<AndroidDetectedFace>(
     referencePortrait = referencePortrait,
     config = config,
+    debug = debug,
     matcherName = matcherName,
     matcherDisplayName = matcherDisplayName,
     clock = clock
 ) {
     private var detector: AndroidFaceDetector? = null
     private var interpreter: AndroidFaceNetInterpreter? = null
+
+    override fun buildDebugGraphics(
+        frame: CameraFrame,
+        faces: List<AndroidDetectedFace>,
+        currentSimilarity: Float?
+    ): FaceMatcherGraphics? {
+        val base = super.buildDebugGraphics(frame, faces, currentSimilarity) ?: return null
+        return base.copy(isMirrored = true)
+    }
+
 
     override suspend fun initializePipeline() {
         val modelBytes = modelBytesProvider()

@@ -120,6 +120,12 @@ private struct FaceMatcherPromptView: View {
                 .frame(width: 220, height: 284)
                 .clipShape(RoundedRectangle(cornerRadius: 36))
 
+                if let overlay = promptState?.graphicsOverlay, !overlay.items.isEmpty {
+                    FaceMatcherGraphicsOverlayView(overlay: overlay)
+                        .frame(width: 220, height: 284)
+                        .clipShape(RoundedRectangle(cornerRadius: 36))
+                }
+
                 if promptState?.outcome == FaceMatcherPromptState.Outcome.success {
                     Circle()
                         .fill(Color(red: 0.18, green: 0.49, blue: 0.20))
@@ -287,6 +293,112 @@ private struct SegmentedRingView: View {
                     with: .color(color),
                     style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
                 )
+            }
+        }
+    }
+}
+
+private struct FaceMatcherGraphicsOverlayView: View {
+    let overlay: FaceMatcherGraphics
+
+    var body: some View {
+        Canvas { context, size in
+            let frameW = CGFloat(overlay.frameWidth)
+            let frameH = CGFloat(overlay.frameHeight)
+            guard frameW > 0, frameH > 0 else { return }
+
+            let scale = max(size.width / frameW, size.height / frameH)
+            let offsetX = (size.width - frameW * scale) / 2.0
+            let offsetY = (size.height - frameH * scale) / 2.0
+
+            func mapX(_ x: Float) -> CGFloat {
+                let mappedX = overlay.isMirrored ? (frameW - CGFloat(x)) : CGFloat(x)
+                return mappedX * scale + offsetX
+            }
+            func mapY(_ y: Float) -> CGFloat {
+                return CGFloat(y) * scale + offsetY
+            }
+
+            for item in overlay.items {
+                if let pt = item as? FaceMatcherGraphicPoint {
+                    let cx = mapX(pt.x)
+                    let cy = mapY(pt.y)
+                    let r = CGFloat(pt.radius)
+                    let rect = CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2)
+                    let color = Color(
+                        red: Double(pt.color.red),
+                        green: Double(pt.color.green),
+                        blue: Double(pt.color.blue),
+                        opacity: Double(pt.color.alpha)
+                    )
+                    context.fill(SwiftUI.Path(ellipseIn: rect), with: .color(color))
+                } else if let line = item as? FaceMatcherGraphicLine {
+                    let x1 = mapX(line.startX)
+                    let y1 = mapY(line.startY)
+                    let x2 = mapX(line.endX)
+                    let y2 = mapY(line.endY)
+                    var path = SwiftUI.Path()
+                    path.move(to: CGPoint(x: x1, y: y1))
+                    path.addLine(to: CGPoint(x: x2, y: y2))
+                    let color = Color(
+                        red: Double(line.color.red),
+                        green: Double(line.color.green),
+                        blue: Double(line.color.blue),
+                        opacity: Double(line.color.alpha)
+                    )
+                    context.stroke(
+                        path,
+                        with: .color(color),
+                        style: StrokeStyle(lineWidth: CGFloat(line.strokeWidth), lineCap: .round)
+                    )
+                } else if let rectItem = item as? FaceMatcherGraphicRect {
+                    let l = mapX(rectItem.left)
+                    let r = mapX(rectItem.right)
+                    let t = mapY(rectItem.top)
+                    let b = mapY(rectItem.bottom)
+                    let minX = min(l, r)
+                    let maxX = max(l, r)
+                    let rect = CGRect(x: minX, y: t, width: maxX - minX, height: b - t)
+                    let color = Color(
+                        red: Double(rectItem.color.red),
+                        green: Double(rectItem.color.green),
+                        blue: Double(rectItem.color.blue),
+                        opacity: Double(rectItem.color.alpha)
+                    )
+                    context.stroke(
+                        SwiftUI.Path(rect),
+                        with: .color(color),
+                        style: StrokeStyle(lineWidth: CGFloat(rectItem.strokeWidth))
+                    )
+                } else if let textItem = item as? FaceMatcherGraphicText {
+                    let cx = mapX(textItem.x)
+                    let cy = mapY(textItem.y)
+                    let color = Color(
+                        red: Double(textItem.color.red),
+                        green: Double(textItem.color.green),
+                        blue: Double(textItem.color.blue),
+                        opacity: Double(textItem.color.alpha)
+                    )
+                    let resolved = context.resolve(
+                        SwiftUI.Text(textItem.text)
+                            .font(.system(size: CGFloat(textItem.fontSize), weight: .bold))
+                            .foregroundColor(color)
+                    )
+                    let textSize = resolved.measure(in: size)
+                    let padH: CGFloat = 6
+                    let padV: CGFloat = 2
+                    let bgRect = CGRect(
+                        x: cx - textSize.width / 2 - padH,
+                        y: cy - textSize.height / 2 - padV,
+                        width: textSize.width + padH * 2,
+                        height: textSize.height + padV * 2
+                    )
+                    context.fill(
+                        SwiftUI.Path(roundedRect: bgRect, cornerRadius: 4),
+                        with: .color(Color.black.opacity(0.65))
+                    )
+                    context.draw(resolved, at: CGPoint(x: cx, y: cy))
+                }
             }
         }
     }

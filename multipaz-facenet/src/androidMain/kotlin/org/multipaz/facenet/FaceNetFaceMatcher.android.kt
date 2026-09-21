@@ -21,6 +21,7 @@ internal actual fun createFaceNetSession(
     referencePortrait: ByteString,
     modelBytesProvider: suspend () -> ByteString,
     config: FaceNetModelConfig,
+    debug: Boolean,
     matcherName: String,
     matcherDisplayName: String
 ): FaceMatcherSession {
@@ -29,6 +30,7 @@ internal actual fun createFaceNetSession(
             referencePortrait = referencePortrait,
             modelBytesProvider = modelBytesProvider,
             config = config,
+            debug = debug,
             matcherName = matcherName,
             matcherDisplayName = matcherDisplayName
         )

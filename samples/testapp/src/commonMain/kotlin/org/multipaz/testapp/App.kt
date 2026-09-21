@@ -499,6 +499,15 @@ class App private constructor (val promptModel: PromptModel) {
                     config = FaceNetModelConfig.MOBILE_FACENET
                 )
             )
+            add(
+                FaceNetFaceMatcher(
+                    modelBytesProvider = {
+                        FaceTestData.testModel
+                    },
+                    config = FaceNetModelConfig.MOBILE_FACENET,
+                    debug = true
+                )
+            )
             add(SimulatedFaceMatcher())
         }
         promptModel.getDialogModel(FaceMatcherPromptDialogModel.DialogType).defaultMatcher =

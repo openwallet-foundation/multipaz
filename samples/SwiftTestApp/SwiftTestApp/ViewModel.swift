@@ -59,6 +59,7 @@ class ViewModel {
         
         faceMatcherRepository = FaceMatcherRepository()
         faceMatcherRepository.add(faceMatcher: FaceNetFaceMatcher(modelBytes: FaceTestData.shared.testModel))
+        faceMatcherRepository.add(faceMatcher: FaceNetFaceMatcher(modelBytes: FaceTestData.shared.testModel, debug: true))
         faceMatcherRepository.add(faceMatcher: SimulatedFaceMatcher())
         promptModel.getFaceMatcherDialogModel().defaultMatcher = faceMatcherRepository.defaultMatcher
         
