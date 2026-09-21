@@ -1,24 +1,21 @@
 package org.multipaz.facenet
 
-import android.content.Context
 import android.graphics.Bitmap
 import kotlinx.io.bytestring.ByteString
-import org.multipaz.context.applicationContext
+import kotlinx.io.bytestring.isEmpty
 import org.multipaz.util.Logger
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.CompatibilityList
 import org.tensorflow.lite.gpu.GpuDelegate
-import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.channels.FileChannel
 import kotlin.math.max
 import kotlin.math.sqrt
 
 private const val TAG = "AndroidFaceNetInterpreter"
 
 internal class AndroidFaceNetInterpreter(
-    modelBytes: ByteString?,
+    modelBytes: ByteString,
     val config: FaceNetModelConfig
 ) : AutoCloseable {
 
@@ -35,20 +32,14 @@ internal class AndroidFaceNetInterpreter(
     private val outputBatch: Int
 
     init {
-        val modelByteBuffer = if (modelBytes != null && modelBytes.size > 0) {
-            val bytes = modelBytes.toByteArray()
-            ByteBuffer.allocateDirect(bytes.size).apply {
-                order(ByteOrder.nativeOrder())
-                put(bytes)
-                rewind()
-            }
-        } else {
-            // Try loading default model from app assets
-            val ctx = try { applicationContext } catch (e: Throwable) { null }
-            loadModelFromAssets(ctx, "mobile_facenet.tflite")
-                ?: throw IllegalStateException(
-                    "No FaceNet model provided and 'mobile_facenet.tflite' not found in assets."
-                )
+        if (modelBytes.isEmpty()) {
+            throw IllegalArgumentException("No FaceNet model bytes provided")
+        }
+        val bytes = modelBytes.toByteArray()
+        val modelByteBuffer = ByteBuffer.allocateDirect(bytes.size).apply {
+            order(ByteOrder.nativeOrder())
+            put(bytes)
+            rewind()
         }
 
         val interpreterOptions = Interpreter.Options().apply {
@@ -236,33 +227,6 @@ internal class AndroidFaceNetInterpreter(
                 Logger.w(TAG, "Error closing GPU delegate", e)
             }
             gpuDelegate = null
-        }
-    }
-
-    companion object {
-        fun loadModelFromAssets(context: Context?, assetName: String): ByteBuffer? {
-            if (context == null) return null
-            return try {
-                val fileDescriptor = context.assets.openFd(assetName)
-                val inputStream = FileInputStream(fileDescriptor.fileDescriptor)
-                val fileChannel = inputStream.channel
-                val startOffset = fileDescriptor.startOffset
-                val declaredLength = fileDescriptor.declaredLength
-                fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
-            } catch (e: Exception) {
-                try {
-                    context.assets.open(assetName).use { stream ->
-                        val bytes = stream.readBytes()
-                        ByteBuffer.allocateDirect(bytes.size).apply {
-                            order(ByteOrder.nativeOrder())
-                            put(bytes)
-                            rewind()
-                        }
-                    }
-                } catch (e2: Exception) {
-                    null
-                }
-            }
         }
     }
 }

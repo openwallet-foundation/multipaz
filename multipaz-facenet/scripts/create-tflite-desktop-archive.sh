@@ -62,13 +62,9 @@ if [[ -f "${BUNDLE_DIR}/linux-aarch64/libtensorflowlite_c.so.${VERSION}" ]]; the
     mv "${BUNDLE_DIR}/linux-aarch64/libtensorflowlite_c.so.${VERSION}" "${BUNDLE_DIR}/linux-aarch64/libtensorflowlite_c.so"
 fi
 
-# 5. Default MobileFaceNet model
-MODEL_SRC="${FACENET_DIR}/../samples/testapp/src/commonMain/composeResources/files/mobile_facenet.tflite"
-if [[ -f "${MODEL_SRC}" ]]; then
-    cp "${MODEL_SRC}" "${BUNDLE_DIR}/mobile_facenet.tflite"
-fi
-
+# 5. Package bundle into tarball
 mkdir -p "${PREBUILTS_DIR}"
+chmod -R u+w "${BUNDLE_DIR}"
 echo "Packaging into ${OUTPUT_TARBALL}..."
 tar -czf "${OUTPUT_TARBALL}" -C "${BUNDLE_DIR}" .
 

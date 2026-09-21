@@ -11,7 +11,7 @@ import kotlin.math.sqrt
 private const val TAG = "JvmFaceNetInterpreter"
 
 internal class JvmFaceNetInterpreter(
-    modelBytes: ByteString?,
+    modelBytes: ByteString,
     val config: FaceNetModelConfig
 ) : AutoCloseable {
 
@@ -31,13 +31,10 @@ internal class JvmFaceNetInterpreter(
     private val outputBatch: Int
 
     init {
-        val bytes = when {
-            modelBytes != null && !modelBytes.isEmpty() -> modelBytes.toByteArray()
-            else -> loadDefaultModel()
-                ?: throw IllegalStateException(
-                    "No FaceNet model provided and 'mobile_facenet.tflite' not found in resources."
-                )
+        if (modelBytes.isEmpty()) {
+            throw IllegalArgumentException("No FaceNet model bytes provided")
         }
+        val bytes = modelBytes.toByteArray()
 
         val mem = Memory(bytes.size.toLong())
         mem.write(0, bytes, 0, bytes.size)
@@ -225,14 +222,6 @@ internal class JvmFaceNetInterpreter(
             model?.let { lib.TfLiteModelDelete(it) }
             model = null
             modelMemory = null
-        }
-    }
-
-    companion object {
-        private fun loadDefaultModel(): ByteArray? {
-            val stream = JvmFaceNetInterpreter::class.java.getResourceAsStream("/mobile_facenet.tflite")
-                ?: JvmFaceNetInterpreter::class.java.getResourceAsStream("mobile_facenet.tflite")
-            return stream?.use { it.readBytes() }
         }
     }
 }

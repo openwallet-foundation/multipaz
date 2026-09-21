@@ -7,7 +7,7 @@ internal actual val isFaceNetSupported: Boolean = true
 
 internal actual fun createFaceNetSession(
     referencePortrait: ByteString,
-    modelBytesProvider: (suspend () -> ByteString)?,
+    modelBytesProvider: suspend () -> ByteString,
     config: FaceNetModelConfig,
     matcherName: String,
     matcherDisplayName: String
@@ -23,10 +23,10 @@ internal actual fun createFaceNetSession(
 
 internal actual suspend fun extractFaceEmbedding(
     portrait: ByteString,
-    modelBytesProvider: (suspend () -> ByteString)?,
+    modelBytesProvider: suspend () -> ByteString,
     config: FaceNetModelConfig
 ): FaceEmbedding {
-    val modelBytes = modelBytesProvider?.invoke()
+    val modelBytes = modelBytesProvider()
     IosFaceNetInterpreter(modelBytes, config).use { interpreter ->
         IosFaceDetector().use { detector ->
             val bytes = portrait.toByteArray()

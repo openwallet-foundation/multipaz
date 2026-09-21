@@ -1,9 +1,12 @@
-@file:OptIn(ExperimentalWasmDsl::class)
+@file:OptIn(
+    ExperimentalWasmDsl::class,
+    kotlin.io.encoding.ExperimentalEncodingApi::class
+)
 
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import java.util.Base64
+import kotlin.io.encoding.Base64
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -41,7 +44,7 @@ abstract class GeneratePayloadsTask : DefaultTask() {
             writer.write("import kotlin.io.encoding.Base64\n\n")
             inputFiles.forEach { file ->
                 val bytes = file.readBytes()
-                val base64String = Base64.getEncoder().encodeToString(bytes)
+                val base64String = Base64.encode(bytes)
                 // Chunk safely below the JVM 65k string literal limit
                 val chunks = base64String.chunked(30000)
                 // Sanitize the filename to use as a Kotlin variable name

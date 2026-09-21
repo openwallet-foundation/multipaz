@@ -33,10 +33,6 @@ import org.tensorflow.lite.c.TfLiteTensorNumDims
 import org.tensorflow.lite.c.TfLiteXNNPackDelegateCreate
 import org.tensorflow.lite.c.TfLiteXNNPackDelegateDelete
 import org.tensorflow.lite.c.kTfLiteOk
-import platform.Foundation.NSBundle
-import platform.Foundation.NSData
-import platform.Foundation.NSProcessInfo
-import platform.Foundation.dataWithContentsOfFile
 import kotlin.math.max
 import kotlin.math.sqrt
 
@@ -44,7 +40,7 @@ private const val TAG = "IosFaceNetInterpreter"
 
 @OptIn(ExperimentalForeignApi::class)
 internal class IosFaceNetInterpreter(
-    modelBytes: ByteString?,
+    modelBytes: ByteString,
     val config: FaceNetModelConfig
 ) : AutoCloseable {
 
@@ -62,13 +58,10 @@ internal class IosFaceNetInterpreter(
     private val outputBatch: Int
 
     init {
-        val bytes = when {
-            modelBytes != null && !modelBytes.isEmpty() -> modelBytes.toByteArray()
-            else -> loadModelFromBundle("mobile_facenet")
-                ?: throw IllegalStateException(
-                    "No FaceNet model provided and 'mobile_facenet.tflite' not found in main bundle."
-                )
+        if (modelBytes.isEmpty()) {
+            throw IllegalArgumentException("No FaceNet model bytes provided")
         }
+        val bytes = modelBytes.toByteArray()
 
         val pinned = bytes.pin()
         pinnedModelBytes = pinned
@@ -272,42 +265,5 @@ internal class IosFaceNetInterpreter(
         }
         pinnedModelBytes?.unpin()
         pinnedModelBytes = null
-    }
-
-    companion object {
-        @OptIn(ExperimentalForeignApi::class)
-        private fun loadModelFromBundle(name: String): ByteArray? {
-            val path = NSBundle.mainBundle.pathForResource(name, ofType = "tflite")
-                ?: findFallbackModelPath("$name.tflite")
-                ?: return null
-            val data = NSData.dataWithContentsOfFile(path) ?: return null
-            val length = data.length.toInt()
-            val bytes = ByteArray(length)
-            if (length > 0) {
-                bytes.usePinned { pinned ->
-                    platform.posix.memcpy(pinned.addressOf(0), data.bytes, data.length)
-                }
-            }
-            return bytes
-        }
-
-        private fun findFallbackModelPath(filename: String): String? {
-            val rootDir = NSProcessInfo.processInfo.environment["MULTIPAZ_ROOT_DIR"] as? String
-            val hostHome = NSProcessInfo.processInfo.environment["SIMULATOR_HOST_HOME"] as? String
-            val candidates = listOfNotNull(
-                rootDir?.let { "$it/samples/testapp/src/commonMain/composeResources/files/$filename" },
-                "samples/testapp/src/commonMain/composeResources/files/$filename",
-                "../samples/testapp/src/commonMain/composeResources/files/$filename",
-                "../../samples/testapp/src/commonMain/composeResources/files/$filename",
-                "../../../samples/testapp/src/commonMain/composeResources/files/$filename",
-                hostHome?.let { "$it/StudioProjects/multipaz/samples/testapp/src/commonMain/composeResources/files/$filename" }
-            )
-            for (candidate in candidates) {
-                if (platform.posix.access(candidate, platform.posix.R_OK) == 0) {
-                    return candidate
-                }
-            }
-            return null
-        }
     }
 }

@@ -1,9 +1,13 @@
-@file:OptIn(ExperimentalWasmDsl::class)
+@file:OptIn(
+    ExperimentalWasmDsl::class,
+    kotlin.io.encoding.ExperimentalEncodingApi::class
+)
 
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.konan.target.HostManager
+import kotlin.io.encoding.Base64
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -27,6 +31,52 @@ val unpackTensorFlowLiteCDesktop by tasks.registering(Sync::class) {
     val archiveFile = layout.projectDirectory.file("prebuilts/TensorFlowLiteC-desktop-2.17.1.tar.gz")
     from(tarTree(archiveFile))
     into(layout.buildDirectory.dir("generated/resources/tfliteDesktop"))
+}
+
+abstract class GenerateTestModelTask : DefaultTask() {
+    @get:InputFile
+    abstract val inputFile: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @get:Input
+    abstract val packageName: Property<String>
+
+    @TaskAction
+    fun generate() {
+        val pkg = packageName.get()
+        val dir = outputDir.get().asFile
+        val packageDir = File(dir, pkg.replace('.', '/'))
+        packageDir.mkdirs()
+        val outFile = File(packageDir, "TestModelPayload.kt")
+        outFile.bufferedWriter().use { writer ->
+            writer.write("@file:OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)\n")
+            writer.write("package $pkg\n\n")
+            writer.write("import kotlin.io.encoding.Base64\n")
+            writer.write("import kotlinx.io.bytestring.ByteString\n\n")
+            val bytes = inputFile.get().asFile.readBytes()
+            val base64String = Base64.encode(bytes)
+            val chunks: List<String> = base64String.chunked(30000)
+            writer.write("private val chunks_mobile_facenet = arrayOf(\n")
+            for (chunk in chunks) {
+                writer.write("    \"$chunk\",\n")
+            }
+            writer.write(")\n\n")
+            writer.write("internal val testModelMobileFaceNet: ByteString by lazy {\n")
+            writer.write("    ByteString(Base64.decode(chunks_mobile_facenet.joinToString(\"\")))\n")
+            writer.write("}\n")
+        }
+    }
+}
+
+val generateTestModel by tasks.registering(GenerateTestModelTask::class) {
+    val modelFile = rootProject.layout.projectDirectory.file(
+        "samples/testapp/src/commonMain/composeResources/files/mobile_facenet.tflite"
+    )
+    inputFile.set(modelFile)
+    packageName.set("org.multipaz.facenet")
+    outputDir.set(layout.buildDirectory.dir("generated/source/testModel/commonTest"))
 }
 
 kotlin {
@@ -97,7 +147,6 @@ kotlin {
     tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest>().configureEach {
         standalone.set(false)
         device.set("booted")
-        environment("MULTIPAZ_ROOT_DIR", rootProject.projectDir.absolutePath)
     }
 
     applyDefaultHierarchyTemplate()
@@ -115,6 +164,7 @@ kotlin {
                 implementation(libs.kotlin.test)
                 implementation(libs.kotlinx.coroutines.test)
             }
+            kotlin.srcDir(generateTestModel)
         }
 
         val androidMain by getting {

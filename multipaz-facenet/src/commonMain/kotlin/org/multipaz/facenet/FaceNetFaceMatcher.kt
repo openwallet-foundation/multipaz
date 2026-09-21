@@ -7,21 +7,48 @@ import org.multipaz.facematch.FaceMatcherSession
 /**
  * A face matcher implementation based on Google FaceNet and MobileFaceNet models.
  *
- * @property modelBytesProvider an optional suspending lambda that supplies the `.tflite` model data.
- *   If not provided, the platform implementation will attempt to resolve a default model (e.g. from assets)
- *   or fall back to simulated verification.
+ * @property modelBytesProvider a suspending lambda that supplies the `.tflite` model data.
  * @property config configuration parameters specifying input dimensions, normalization, and match threshold.
  * @property name unique machine identifier for this matcher.
  * @property displayName human-readable display name.
  */
 class FaceNetFaceMatcher(
-    val modelBytesProvider: (suspend () -> ByteString)? = null,
+    val modelBytesProvider: suspend () -> ByteString,
     val config: FaceNetModelConfig = FaceNetModelConfig.AUTO,
     override val name: String = "facenet",
     override val displayName: String = "MobileFaceNet"
 ) : FaceMatcher {
 
-    constructor() : this(modelBytesProvider = null, config = FaceNetModelConfig.AUTO)
+    constructor(
+        modelBytes: ByteString
+    ) : this(
+        modelBytes = modelBytes,
+        config = FaceNetModelConfig.AUTO,
+        name = "facenet",
+        displayName = "MobileFaceNet"
+    )
+
+    constructor(
+        modelBytes: ByteString,
+        config: FaceNetModelConfig
+    ) : this(
+        modelBytes = modelBytes,
+        config = config,
+        name = "facenet",
+        displayName = "MobileFaceNet"
+    )
+
+    constructor(
+        modelBytes: ByteString,
+        config: FaceNetModelConfig = FaceNetModelConfig.AUTO,
+        name: String = "facenet",
+        displayName: String = "MobileFaceNet"
+    ) : this(
+        modelBytesProvider = { modelBytes },
+        config = config,
+        name = name,
+        displayName = displayName
+    )
 
     /**
      * Whether native on-device face matching is supported on the current platform runtime.
@@ -83,7 +110,7 @@ internal expect val isFaceNetSupported: Boolean
 
 internal expect fun createFaceNetSession(
     referencePortrait: ByteString,
-    modelBytesProvider: (suspend () -> ByteString)?,
+    modelBytesProvider: suspend () -> ByteString,
     config: FaceNetModelConfig,
     matcherName: String,
     matcherDisplayName: String
@@ -91,6 +118,6 @@ internal expect fun createFaceNetSession(
 
 internal expect suspend fun extractFaceEmbedding(
     portrait: ByteString,
-    modelBytesProvider: (suspend () -> ByteString)?,
+    modelBytesProvider: suspend () -> ByteString,
     config: FaceNetModelConfig
 ): FaceEmbedding
