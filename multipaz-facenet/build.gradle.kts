@@ -113,7 +113,6 @@ kotlin {
 
         val androidMain by getting {
             dependencies {
-                implementation(libs.face.detection)
                 implementation(libs.litert)
                 implementation(libs.litert.gpu)
                 implementation(libs.litert.support)

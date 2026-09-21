@@ -53,6 +53,10 @@ class FaceEmbeddingRegressionTest {
             "erika_mustermann_2001" to FaceTestData.ERIKA_MUSTERMANN_2001_BASE64,
             "male_portrait" to FaceTestData.MALE_PORTRAIT_BASE64,
             "female_portrait" to FaceTestData.FEMALE_PORTRAIT_BASE64,
+            "bob_with_glasses_1" to FaceTestData.BOB_WITH_GLASSES_1_BASE64,
+            "bob_with_glasses_2" to FaceTestData.BOB_WITH_GLASSES_2_BASE64,
+            "bob_without_glasses_1" to FaceTestData.BOB_WITHOUT_GLASSES_1_BASE64,
+            "bob_without_glasses_2" to FaceTestData.BOB_WITHOUT_GLASSES_2_BASE64,
         )
 
         for ((name, b64) in corpus) {
