@@ -18,7 +18,7 @@ class FaceNetFaceMatcher(
     val modelBytesProvider: (suspend () -> ByteString)? = null,
     val config: FaceNetModelConfig = FaceNetModelConfig.AUTO,
     override val name: String = "facenet",
-    override val displayName: String = "Google FaceNet"
+    override val displayName: String = "MobileFaceNet"
 ) : FaceMatcher {
 
     constructor() : this(modelBytesProvider = null, config = FaceNetModelConfig.AUTO)

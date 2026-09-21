@@ -188,8 +188,8 @@ internal class AndroidFaceDetector : Closeable {
                 val eyeAngleRad = atan2(leftEye.y - rightEye.y, leftEye.x - rightEye.x)
                 val eyeAngleDeg = Math.toDegrees(eyeAngleRad.toDouble()).toFloat()
 
-                val faceCropFactor = 4.0f
-                val faceVerticalOffsetFactor = 0.25f
+                val faceCropFactor = 3.2f
+                val faceVerticalOffsetFactor = 0.13f
                 val cropWidth = eyeDistance * faceCropFactor
                 val cropHeight = eyeDistance * faceCropFactor
                 val verticalOffset = eyeDistance * faceVerticalOffsetFactor
@@ -210,8 +210,8 @@ internal class AndroidFaceDetector : Closeable {
 
         // Fallback: bounding box crop
         val bb = face.boundingBox
-        val marginX = (bb.width() * 0.2f).toInt()
-        val marginY = (bb.height() * 0.2f).toInt()
+        val marginX = (bb.width() * 0.1f).toInt()
+        val marginY = (bb.height() * 0.1f).toInt()
         val left = (bb.left - marginX).coerceAtLeast(0)
         val top = (bb.top - marginY).coerceAtLeast(0)
         val right = (bb.right + marginX).coerceAtMost(sourceBitmap.width)
