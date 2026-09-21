@@ -56,6 +56,7 @@ compottie = "2.0.2"
 detekt = "1.23.8"
 haze = "1.7.0"
 litert = "1.4.0"
+jna = "5.14.0"
 # Kotlin/JS wrappers; require `./gradlew kotlinUpgradeYarnLock` after version changes
 # this is how npm works, that will update kotlin-js-store/yarn.lock (part of the repo)
 kotlin-wrappers = "2025.12.1"
@@ -161,6 +162,7 @@ haze-materials = { module = "dev.chrisbanes.haze:haze-materials", version.ref = 
 litert = { module = "com.google.ai.edge.litert:litert", version.ref = "litert" }
 litert-gpu = { module = "com.google.ai.edge.litert:litert-gpu", version.ref = "litert" }
 litert-support = { module = "com.google.ai.edge.litert:litert-support", version.ref = "litert" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 # Build Logic
 gradlePlugin-kotlin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 android-tools-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
