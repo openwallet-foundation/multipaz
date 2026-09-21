@@ -65,13 +65,13 @@ private data class ImageRefHolder(
 )
 
 internal class IosDetectedFace(
-    val yaw: Float,
-    val pitch: Float,
-    val roll: Float,
+    override val yaw: Float,
+    override val pitch: Float,
+    override val roll: Float,
     val leftEye: Point2D?,
     val rightEye: Point2D?,
     val boundingBox: Rect2D
-)
+) : DetectedFacePose
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 internal class IosFaceDetector : AutoCloseable {
@@ -112,8 +112,12 @@ internal class IosFaceDetector : AutoCloseable {
             val boundingBox = Rect2D(bbLeft, bbTop, bbPixelW, bbPixelH)
 
             val landmarks = obs.landmarks
-            val leftEye = computeEyeCenter(landmarks?.leftEye, bbOriginX, bbOriginY, bbWidth, bbHeight, imgW, imgH)
-            val rightEye = computeEyeCenter(landmarks?.rightEye, bbOriginX, bbOriginY, bbWidth, bbHeight, imgW, imgH)
+            // Apple Vision landmarks are named from the viewer's perspective:
+            // landmarks.leftEye is viewer-left (subject's right eye),
+            // landmarks.rightEye is viewer-right (subject's left eye).
+            // Map to standard subject perspective (consistent with MLKit and FaceLandmarkAlignment):
+            val leftEye = computeEyeCenter(landmarks?.rightEye, bbOriginX, bbOriginY, bbWidth, bbHeight, imgW, imgH)
+            val rightEye = computeEyeCenter(landmarks?.leftEye, bbOriginX, bbOriginY, bbWidth, bbHeight, imgW, imgH)
 
             IosDetectedFace(
                 yaw = yaw,
@@ -238,6 +242,45 @@ internal class IosFaceDetector : AutoCloseable {
     }
 
     /**
+     * Resizes [imageBytes] directly to [targetSize] x [targetSize] without face alignment or crop.
+     */
+    fun resizeImageDirect(imageBytes: ByteArray, targetSize: Int): FloatArray? {
+        val cgImage = decodeToCgImage(imageBytes) ?: return null
+        return try {
+            val colorSpace = CGColorSpaceCreateDeviceRGB()
+            val bitmapContext = CGBitmapContextCreate(
+                data = null,
+                width = targetSize.toULong(),
+                height = targetSize.toULong(),
+                bitsPerComponent = 8u,
+                bytesPerRow = (targetSize * 4).toULong(),
+                space = colorSpace,
+                bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value
+            )
+            CGColorSpaceRelease(colorSpace)
+            if (bitmapContext == null) return null
+            try {
+                CGContextDrawImage(bitmapContext, CGRectMake(0.0, 0.0, targetSize.toDouble(), targetSize.toDouble()), cgImage)
+                val rawData = CGBitmapContextGetData(bitmapContext) ?: return null
+                val bytePtr = rawData.reinterpret<ByteVar>()
+                val numPixels = targetSize * targetSize
+                val floatPixels = FloatArray(numPixels * 3)
+                var floatIdx = 0
+                for (i in 0 until numPixels) {
+                    floatPixels[floatIdx++] = (bytePtr[i * 4 + 0].toInt() and 0xFF).toFloat()
+                    floatPixels[floatIdx++] = (bytePtr[i * 4 + 1].toInt() and 0xFF).toFloat()
+                    floatPixels[floatIdx++] = (bytePtr[i * 4 + 2].toInt() and 0xFF).toFloat()
+                }
+                floatPixels
+            } finally {
+                CGContextRelease(bitmapContext)
+            }
+        } finally {
+            CGImageRelease(cgImage)
+        }
+    }
+
+    /**
      * Aligns eyes horizontally, centers the face with standard vertical offset,
      * scales to [targetSize] x [targetSize], and returns a FloatArray of raw RGB values in range [0, 255].
      */
@@ -284,19 +327,21 @@ internal class IosFaceDetector : AutoCloseable {
                     val verticalOffset = eyeDistance * faceVerticalOffsetFactor
                     val scale = targetSize.toDouble() / cropSize
 
-                    // Setup transform to map face center with eye leveling to output center
                     // CoreGraphics Y points UP, whereas image pixel Y points DOWN.
-                    // Map source (cx, cy) to bottom-up source coords: (cx, imgH - cy)
-                    val srcCenterY = imgH - (cy + verticalOffset)
+                    // Source eye center in bottom-up CoreGraphics coords is (cx, imgH - cy).
+                    // Destination eye center in bottom-up CoreGraphics coords is (targetSize/2, targetSize/2 + verticalOffset * scale).
+                    // In bottom-up coords, angle from right eye to left eye is -eyeAngleRad, so we rotate by +eyeAngleRad to level eyes.
+                    val srcEyeCenterY = imgH - cy
+                    val dstEyeCenterY = targetSize / 2.0 + verticalOffset * scale
 
-                    val t1 = CGAffineTransformMakeTranslation(targetSize / 2.0, targetSize / 2.0)
-                    val t2 = CGAffineTransformMakeScale(scale, scale)
-                    val t3 = CGAffineTransformMakeRotation(eyeAngleRad)
-                    val t4 = CGAffineTransformMakeTranslation(-cx, -srcCenterY)
+                    val t1 = CGAffineTransformMakeTranslation(-cx, -srcEyeCenterY)
+                    val t2 = CGAffineTransformMakeRotation(eyeAngleRad)
+                    val t3 = CGAffineTransformMakeScale(scale, scale)
+                    val t4 = CGAffineTransformMakeTranslation(targetSize / 2.0, dstEyeCenterY)
 
                     val transform = CGAffineTransformConcat(
-                        CGAffineTransformConcat(CGAffineTransformConcat(t4, t3), t2),
-                        t1
+                        CGAffineTransformConcat(CGAffineTransformConcat(t1, t2), t3),
+                        t4
                     )
                     CGContextConcatCTM(bitmapContext, transform)
                     CGContextDrawImage(bitmapContext, CGRectMake(0.0, 0.0, imgW, imgH), sourceImage)
@@ -363,22 +408,19 @@ internal class IosFaceDetector : AutoCloseable {
         imgH: Double
     ): Point2D? {
         if (region == null || region.pointCount == 0uL) return null
-        val points = region.normalizedPoints ?: return null
+        val pts = region.normalizedPoints ?: return null
         var sumX = 0.0
         var sumY = 0.0
         val count = region.pointCount.toInt()
         for (i in 0 until count) {
-            val pt = points[i]
-            sumX += pt.x
-            sumY += pt.y
+            val pt = pts[i]
+            val normX = bbOriginX + pt.x * bbWidth
+            val normY = bbOriginY + pt.y * bbHeight
+            sumX += normX * imgW
+            // Convert Vision bottom-up coordinates to top-down image coordinates:
+            sumY += (1.0 - normY) * imgH
         }
-        val avgNormX = sumX / count
-        val avgNormY = sumY / count
-        val fullNormX = bbOriginX + avgNormX * bbWidth
-        val fullNormY = bbOriginY + avgNormY * bbHeight
-        val pixelX = fullNormX * imgW
-        val pixelY = (1.0 - fullNormY) * imgH
-        return Point2D(pixelX, pixelY)
+        return Point2D(sumX / count, sumY / count)
     }
 
     private fun ensureUpright(sourceImage: CGImageRef, rotationDegrees: Int): Pair<CGImageRef, Boolean> {

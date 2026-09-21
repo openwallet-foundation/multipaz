@@ -88,6 +88,12 @@ kotlin {
         }
     }
 
+    tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest>().configureEach {
+        standalone.set(false)
+        device.set("booted")
+        environment("MULTIPAZ_ROOT_DIR", rootProject.projectDir.absolutePath)
+    }
+
     applyDefaultHierarchyTemplate()
 
     sourceSets {
@@ -143,6 +149,10 @@ android {
         singleVariant("release") {
             withSourcesJar()
         }
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 }
 

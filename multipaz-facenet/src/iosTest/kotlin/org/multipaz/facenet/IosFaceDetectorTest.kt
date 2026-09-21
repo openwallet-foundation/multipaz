@@ -1,6 +1,14 @@
 package org.multipaz.facenet
 
-import org.multipaz.util.fromBase64Url
+import kotlinx.cinterop.BetaInteropApi
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
+import kotlinx.io.bytestring.ByteString
+import platform.Foundation.NSData
+import platform.Foundation.NSProcessInfo
+import platform.Foundation.dataWithContentsOfFile
+import platform.posix.memcpy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -8,22 +16,152 @@ import kotlin.test.assertTrue
 
 class IosFaceDetectorTest {
 
-    private val portraitBase64 = "_9j_4QDKRXhpZgAATU0AKgAAAAgABgESAAMAAAABAAEAAAEaAAUAAAABAAAAVgEbAAUAAAABAAAAXgEoAAMAAAABAAIAAAITAAMAAAABAAEAAIdpAAQAAAABAAAAZgAAAAAAAABIAAAAAQAAAEgAAAABAAeQAAAHAAAABDAyMjGRAQAHAAAABAECAwCgAAAHAAAABDAxMDCgAQADAAAAAQABAACgAgAEAAAAAQAAAHigAwAEAAAAAQAAAJmkBgADAAAAAQAAAAAAAAAAAAD_2wCEAAQEBAQEBAcEBAcJBwcHCQ0JCQkJDRANDQ0NDRATEBAQEBAQExMTExMTExMXFxcXFxcbGxsbGx8fHx8fHx8fHx8BBQUFCAcIDQcHDSAWEhYgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIP_dAAQACP_AABEIAJkAeAMBIgACEQEDEQH_xAGiAAABBQEBAQEBAQAAAAAAAAAAAQIDBAUGBwgJCgsQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29_j5-gEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoLEQACAQIEBAMEBwUEBAABAncAAQIDEQQFITEGEkFRB2FxEyIygQgUQpGhscEJIzNS8BVictEKFiQ04SXxFxgZGiYnKCkqNTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqCg4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2dri4-Tl5ufo6ery8_T19vf4-fr_2gAMAwEAAhEDEQA_APouZf3r8_xGosgjFSSf6x_940yus84YvI5pjccA0uQoyccVyvizxHD4c06S6lbDgcZ65_pWVWsqcbs2oUJVXyoq-KvGWl-F7dmuZA854SNT8xP-FfLviHxr4i1-RmA-zwj7qr6erHtTtQke53eIvELEBz-5RurZ7BfX-VZIt7u7YS3ceO8FonQD-_Ie_wCNef8AE-ef_APXVP2ceSGhj-ZuHmXT5z35yf606a_tY0KqspDDHzHt-NT6kbfTFJcb7jbuYfwoPf6-lcsgnmzNIM56sewreCvqYyfL7pZsZYYZCvVWOVB-Xg9efpXZ2aOIxJZPGSOOx_CvO2mUEbQCvQEVrLqF5YquNpiYDaWUEfn1qpwbFTmket6TqswcQaxGCn99RwB7iutm01Y0-26cwkUAfdHb-leNadr8_mKkkMQJ-6A2Ff2BYkKfxx24r03QLjePtmnsy4-V4XG0qe4I7VxzTidcHzaHeaH4jMSo34Nn-Veo280NzGs0DB1YcV5CunQakDcWy7Jf41HANdB4evZdLnNhe8wyn5G_ut7_AF6Vthq_I7PY5cZheePNHdHoWc0cU9SSMHtS_N6GvWPDsf_Q-jJHXzG9Mmq7MynIHWppTtkb6mrVnb7ybqXG1BkGuidRQV2cVOk5tRRRuXi0yzN9e43f8s0x-VfPfiGN9e1OW91XP2Kx-eTP3S_VU_DvXruu3M1_N5yDdhhHEn95zwPwrjPEOly3UsHh22AMMPz3Ln-N-prwJ1nOXMz6mhhFSgoI8Mkik1q7bXL9f3KfLbQnsvbA9-K3ItPa2tG1Kdd0khxEn99z93P-yPyr0I-Ho2uFVgPLT73-FUNasGvdtnGuA4KAf3U9fYtQ6vQ1WGPCYdGudc1AxwZlRn-aTH3vVz7cfKPTHrWZ4jSKGcaVYDMUXEjjHzv3_AdK9_vtPXw_oxsbMbLm6XAYdUXvj07Y_CvPoPDQWBpxHlHOAPZa6Y4lJ-hyPBtqyPKbHT_tNvIzKRj5gO-Bx_hXRaVpr-QtndLvilzsPfftyMfUDGPpXpun-GY7eKMLwGZP--S3P6U5NEeOwSQjmORT-TYz-VOeKvsEMC42PJxpxtJDbuN2BwMfK69vx9a7jw6JbG4jmi5hYbQSeV_2T6r_ACrq9Q0UuiPt7bsY_A_596NO0zY23n1_Csp1-ZFxwvKzubZvLH2yIZK8SIPT_Gt94oL6ITJgk9D2PtWNY4h2MTwPlYDuOx_LirMYl0y98oHEMvK56D2_Cs4vqVKPQ7TS7gyWyxyE7k-XFamV9f0rlomlSTzk4PQ46FaufbH9B-Zr1KOKSikzxa-AbneB_9H6OKbrggDuavXzkW62cXC4yxpsCt5jtx1xn_Cq123lQlz2P61x46rf3UdeWUftmbpdms2pSTcf6MuF9Azf_Wp1ppCGB7zqZXKpn2POPStnw_b-XpzuRlpXY_ieBW7FHDFE-4_u7aMRL7kck1wxjoes6lmeWX2nrbhl6etYlvp6fPqFx9xQP_rCu4vkfUboW8C_e_z-lY3iFYY_9FXCW1uN0re4HA_pWL01O-OyieZ6pFJdziR_vSnaq-iitLUNJgsLNLZQPlXH1LVa8MW76_r5nK4htl3D6Cujntl1HxAqsD5MH7xz268ChLQu1pcvZGLJoqRywWyckNGnPrwKSXQoxpMg248sOPwQjFb-r3kFrfwLnnzBIcdhnI_StScIfDNzNzlmc_gzD_CtF1Ri9FFnAw2EdxpsD4yVO1vxH_6qoiw8qUbR0AOP51paTc4iktycLvAGfdcf0FaDfvhDJjBw0Z-o5oJktTFuLdrWAsOdgK_h1qzcRm-0pCPvoAyketas1uJrA7QOmR-WKr6KA1kocY_oM4rSJyzRS0y6324Y_wAPBHof8K0_tfutZaxC01J4gcK3IFau9f8AOKtO2hztH__S-o0jPmFF4wWNc9rU5iRVHUnIFdYi8vjHOen1rz7xDOTqQgQ_dAQY9Wrx8Qz28HFJHodiDFYwHjIGf0_xrntU1WFY0tSdqk7j6n1rpZWSLTFwcYTAb2xivMb-6tLSzbVtQXdljgegBwqgfQVFRrY68LT5veN7SrpY7SXUZQI2l_1YbsucDPoSf0ryXX_E1vrN02n6dvMMbnc-OHYcbvf2HpUXiTxP4ikgS6s7BIbV2_dfapNrSsBydi_dVQOprJ8OeI2vGD3FnbmIrvSa0O-NwDtJB7_NxRKjJLWOhdCvTdS3Nqes-EoY9M0ieYjDP0_LiodNmjfMC7d85wTn0yMVpWwgurIQw_dI4x0NZTaWLCT90Ru61l2O9QT5r7mVrqebqz3AwUDlEx2VMAVsyaraNok1pI_R-R6fNXIavepDMEmySTz6VlyeJtDtbeVZBvCkbyBx79KunqzGtGMYxTexlzX1vaFxFIMbgy4_EY_GuvsLtLiFXzn5w4I9xg_rXna-J_Bs05tZLR7Z24zIuzP51fWb-xB9sspPMsmPzIOWU-39RROPKZqSqL3Wek2EpeCSB_4cjFQaKygGLIO1wuOn3v8AIqTTDG881xEcpJ5ci47hl5_lVbRRvu7xB_C24fg39KqDOSoiXVYPKu45e_Q_yqHePSt3X4sDdtyP_wBRrktyf3RWkjGL0P_T-rLqT7OjsODub9K8s1ObOrCcHIMikfgo_rXo2vY8lynGM_nXmGoqfLEg4KqT9PT-VeBiJH0mDhoej6rdiLRYQuSzJGB9T1_lXKPZfabeOG8QOIySvtmt7UmaWKy5yvlRn_x2qEscjDehxQ_iud-GilBHEaz4a1UWYi065_dkuFEq79okBV1BH8DjqD07VwyaNfaPp8lgBCg8swoFTy40QncdiDpluTXrk91Oo2nbxWD9njvJh5_z88AVr9YlsH1GlfmcdSz4Okvhp8AvmEkgHzPjG7AwGx2yOtTatfsbsoPp-FdBb28drDvIxt7VyGp-W1wJR3PPFYSOmmluc5rUEc6M7Kx2jIxx-FeSrLdQC5iiiQiR1MatzgLnjj8_rivdvIjl-VuQa4e90eCO4Z7b5cGt6dXlOWthlUVnscN4e0e8-0gXdu08Ucs0ubpg2_zV27C3P7sf3cV0UWg3en6e7xHfH0eIdMdsHqcdB7V1NlmNNqkk_SuhtflQhxwfaqq1-dWMsNgY0XeJj-C71Z7AwH78cSpz1wrED9DWxou6DXLmPGBIG5-p6flisG1Eem67IsX3J4_l-ua6HS3xrrNnGc9vasKLIxVPlOs10GSz3ei_yrg9yeld9qYJtZU45UVxX2Y11NdjhgrI_9T6j1BBNC8eOUk5rz7VohHZSZ9Qv4ZrvXLreTbvuk4A_GuJ8R4W0-X--BgV89X1PqMJpZG08ytY2D8fdCf4UrRO446dK5qW6CaKIc_NDtl_AnNdL9o2kccEA_nQnq0dlL4VY5nUYpY87a5_RLif-02hdeh4r0G9-zyw-YcdcCq9rpMEWZTgMe_pS5feOpVVyaouyROJHR5VztGIgRkfhXO31qqj5xgGq-teGNK1S7S_u2ZbiLBSWMlWGPcUmuP9ptxFFKQAAN3em0KnpazMyJTvyh-QYrlNXJN4QoA9AKvaXolto_mm1ldvNbc5kYsT-dTyRW5vPNYjBpTVlcum1ezItMgYoCRWncfImKsq0ESDaeKyrm4SQ4Bzip5tDTl10Oc1O4SG6trluCJNg_GupsSx1cEd8dK8y8Zz7JtPgXjMobj6gV6Pocvn39sB_FtNXRjZJnmY2SlJpdD0LV9iIU7hgp_AVzm6P0rS1e53ymP_AGi1Yu8e36V13PMSP__V-n9QAFyyL_Ex_LNcRrmJZoLePGZeeeMDoP0rtL5S927J_eKD6ZrzHX7yO3uLi_flYV2Rj3xivn6259PhvhRzV7rMUeuNppbHmwlc9v3S_LXqWjzpqOl29zGfvRr_AIf0r5X1u6afbeCQx3EZbn2PUV7H8GfEH9p6HNp07Zkspig_3G-Zf8KzpxbjdnXKSjLlXyO-v4p4biJwnmBVJVc4GazJPEFpbnF2rwMeCGGQPx6V2NwgcDP8NY11p0V2CHXNXy9jenOL-M5ifWNOlyUuFK46iubuNesh8kkyfhR4h8KQmPzYR5cqnkpxn6ivP20ba7b1yTxu_wAKnra56caFOVPmizsU1vTwSPPQegNQyanpchEPmo2_gBa5iDw_bySD92AB3Izmuut9Os4IfLiRVx7Vo0rbnDKKjoitbTXCNJbSEsq7Sj_7J7H3FTRhmcnPAqeGMx5TualaPYPrXO0XF6Hl_jmfy9VssdV5_WvT_DUmyWK4b-Bf_rV4b4t1JJ_GIthytskZb6lhx_Ova9NgltleOTjZxn2NdihaETxqk1KpM3bi682RGPG5TVfK-9VryIwxwyoPujP61W-2v6fyovYxsf_W-pLwrBbyzL95dyp_vscV4F4wlyhso-QGGT6kmvfNTjHkEHoCxr5_1iI3Fyz-rg_gK-exHxWPqMJ8NzzHV7fah_E_nx_SrXwxvLjR_FCbOY7r91IO3JypH0xWxq1sdjbRz0p-haWbe-S66FSNo98iiM_daNPZ-8mfTJIYbuxqsSY1OamWPzYRPCcEgHFVTdRYIPUUzdLsYOokuvHSuUuE2vlVUj_drrruYMh2gYrm7gYG4qBioaVzugny7GU6rn5U571Crc9Oac90gJGOlUZbuFORxQ5LZEcheHH7zvWFrurxaZZtcHl8YRfUnpVpJpLt_Lg4Hqa4Xx2oijSIHnvUwjeSRNWXJB2PEzNJc3N9eSkmR3DZ_wB09K-vtLZbywhuOv2i3WT81H9a-SbHYc8ehx9P_rV9aeF7VoNH0qN-gto1YHtvXoffivVxGlrHzeF1uaNwN9l5B6xIvPsRmue8v_aH6V2F5CttdIkudsuI_wAO39Kl_syz_vD9K5kzqaP_1_qDXmAt2_3iBXj1zbjezkcCvVNcOdsf_TRq417AzMUxwTXz1bWR9XhV7iOEvtPbYCR7_jXn_wDabx-I7SLdwsqr7HsQRX0Tf6dEZFiRRwM_jXz1478Nah4f1S312FC1sZQXbB-Q9s_U4rSFK5tKVo3R9QaVKTDgnsP5VHcWaTk9j7VxnhPxNp9_aJslG7gH69671ZFkztxxWa1VjR3i7oxbfRYwj78n8a57UdL6oGIFd680ew9iK5XUpFVTyKUkktDajOTepwF7Yp5JYMd6_KcdxWDHA7HGK6iaRGYjr7VB5I6gDNZpG7EsoxBHXlHjt3ZmP1xXsaxlY8ngCvH_AByJbm5i0vTE826nYxxovXJXr7YrajH34o5MU_3cjl_BVlb3d15ZiUxQDzJWYZPy9hX0_YW-zRbaROMgD_vk1594f8HxeG9G-zSmOSZolSTaT1YgHFen3c0NqsdmvCRhY8fQcn866q8tTz6VLkikV9Y23Noj_wAXB_EcGuW2P_tVq2l2XuzpspysiMB_vDt-Iq__AGV_sN-VRYz0Wh__0PoOWQXDlC2Srkj8yKuG1Hykkcdf61eg_wBef97-prfl-5-FeKqZ9Iq1rJIwre3i-1jONzgBavahoVpeW8kUihkddrg8gg9RitNP-PyL610B-631rspU1YwqYlpxsfIPiL4V6hpMxvvCTMqA5MDHoP8AYP8AQ1ylh8SNT0C7MGtIU28ENwf1r7N1n_j0b6V85fE__X23-5Wc8PGWp108XLkvY6HR_F-j6_CJLadAWHTIqO_eIodrhhXCeB_9afxr16X7grhnTs-U6qOL0ukeWsFQks4PP0qvNremWUW6edAR_DkV39__AKv8a88m_wCP6T6VpSw_NLluKeNtb3ShHq2r-IPKi0CDZE5wbmYbYlX1z3_CvR_Cvg2x8Plr6YtJqkq_vLs4K89owfujtXWeF_8AkXLD_rkK7KHon-6f512woxhsck8Q5bo808Qx7bUzsV3Aqc4A71wF1qJurpCSAqoT-Jr3XWv-PE_QV56f9b_wA1hWhqaRrLl2ODhuhDq0DuwXbIh5PHp_9avRv7dtf-esX51lXf8Aro_w_kaWkoHJKp5H_9k"
+    private fun loadModelData(): NSData? {
+        val rootDir = NSProcessInfo.processInfo.environment["MULTIPAZ_ROOT_DIR"] as? String
+        val hostHome = NSProcessInfo.processInfo.environment["SIMULATOR_HOST_HOME"] as? String
+        val candidates = listOfNotNull(
+            rootDir?.let { "$it/samples/testapp/src/commonMain/composeResources/files/mobile_facenet.tflite" },
+            "samples/testapp/src/commonMain/composeResources/files/mobile_facenet.tflite",
+            "../samples/testapp/src/commonMain/composeResources/files/mobile_facenet.tflite",
+            "../../samples/testapp/src/commonMain/composeResources/files/mobile_facenet.tflite",
+            "../../../samples/testapp/src/commonMain/composeResources/files/mobile_facenet.tflite",
+            hostHome?.let { "$it/StudioProjects/multipaz/samples/testapp/src/commonMain/composeResources/files/mobile_facenet.tflite" }
+        )
+        for (candidate in candidates) {
+            val data = NSData.dataWithContentsOfFile(candidate)
+            if (data != null && data.length.toInt() > 0) {
+                return data
+            }
+        }
+        return null
+    }
 
+    @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
     @Test
-    fun testDetectFacesFromPortrait() {
-        val detector = IosFaceDetector()
-        val imageBytes = portraitBase64.fromBase64Url()
-        val faces = detector.detectFaces(imageBytes)
-        println("Detected faces count: ${faces.size}")
-        assertTrue(faces.isNotEmpty(), "Expected at least one face detected in reference portrait")
-        val face = faces[0]
-        println("Face bounding box: ${face.boundingBox}")
-        assertTrue(face.boundingBox.width > 0.0 && face.boundingBox.height > 0.0)
+    fun testFaceDetectionAndPairwiseSimilarity() {
+        val modelData = loadModelData()
+        assertNotNull(modelData, "mobile_facenet.tflite model file could not be located")
 
-        // Also test face crop extraction
-        val crop = detector.extractFaceCrop(imageBytes, face, 160)
-        assertNotNull(crop)
-        assertEquals(160 * 160 * 3, crop.size)
+        val modelBytes = ByteArray(modelData.length.toInt())
+        modelBytes.usePinned { pinned ->
+            memcpy(pinned.addressOf(0), modelData.bytes, modelData.length)
+        }
+        val interpreter = IosFaceNetInterpreter(ByteString(modelBytes), FaceNetModelConfig.MOBILE_FACENET)
+        val detector = IosFaceDetector()
+
+        // 1. Direct Resize Regression against Golden Vectors
+        val q1Bytes = FaceTestData.decodeImageBytes(FaceTestData.QUALCOMM_DEMO_1_BASE64)
+        val q2Bytes = FaceTestData.decodeImageBytes(FaceTestData.QUALCOMM_DEMO_2_BASE64)
+
+        val q1Direct = detector.resizeImageDirect(q1Bytes, 112)
+        val q2Direct = detector.resizeImageDirect(q2Bytes, 112)
+        assertNotNull(q1Direct)
+        assertNotNull(q2Direct)
+
+        val q1Emb = interpreter.getEmbedding(q1Direct)
+        val q2Emb = interpreter.getEmbedding(q2Direct)
+        assertNotNull(q1Emb)
+        assertNotNull(q2Emb)
+
+        val simDirect = q1Emb.calculateSimilarity(q2Emb)
+        assertEquals(FaceTestData.QUALCOMM_DEMO_PAIR_DIRECT_COSINE, simDirect, 0.005f)
+
+        // 2. Detection, Alignment, and Embeddings across Curated Test Corpus
+        val corpus = mapOf(
+            "qualcomm_1" to (FaceTestData.decodeImageBytes(FaceTestData.QUALCOMM_DEMO_1_BASE64) to "qualcomm"),
+            "qualcomm_2" to (FaceTestData.decodeImageBytes(FaceTestData.QUALCOMM_DEMO_2_BASE64) to "qualcomm"),
+            "warren" to (FaceTestData.decodeImageBytes(FaceTestData.WARREN_PORTRAIT_BASE64) to "warren"),
+            "warren_114th" to (FaceTestData.decodeImageBytes(FaceTestData.WARREN_PORTRAIT_114TH_BASE64) to "warren"),
+            "erika_2010" to (FaceTestData.decodeImageBytes(FaceTestData.ERIKA_MUSTERMANN_BASE64) to "erika_2010"),
+            "erika_2001" to (FaceTestData.decodeImageBytes(FaceTestData.ERIKA_MUSTERMANN_2001_BASE64) to "erika_2001"),
+            "male" to (FaceTestData.decodeImageBytes(FaceTestData.MALE_PORTRAIT_BASE64) to "male"),
+            "female" to (FaceTestData.decodeImageBytes(FaceTestData.FEMALE_PORTRAIT_BASE64) to "female")
+        )
+
+        val embeddings = mutableMapOf<String, FaceEmbedding>()
+        val identities = mutableMapOf<String, String>()
+
+        for ((name, pair) in corpus) {
+            val (bytes, identity) = pair
+            identities[name] = identity
+
+            val faces = detector.detectFaces(bytes)
+            assertTrue(faces.isNotEmpty(), "Expected at least 1 face detected in $name")
+
+            val face = faces[0]
+            println("$name: bbox=${face.boundingBox}, leftEye=${face.leftEye}, rightEye=${face.rightEye}")
+            assertNotNull(face.leftEye, "Left eye landmark missing for $name")
+            assertNotNull(face.rightEye, "Right eye landmark missing for $name")
+
+            val crop = detector.extractFaceCrop(bytes, face, 112)
+            assertNotNull(crop, "Failed to extract aligned face crop for $name")
+            assertEquals(112 * 112 * 3, crop.size)
+
+            val emb = interpreter.getEmbedding(crop)
+            assertNotNull(emb, "Failed to compute embedding for $name")
+            assertEquals(128, emb.embedding.size)
+
+            embeddings[name] = emb
+        }
+
+        val names = embeddings.keys.toList()
+
+        // 3. Same Identity Test (Qualcomm official demo pair: two different photos of the same individual)
+        val q1EmbDet = embeddings["qualcomm_1"]!!
+        val q2EmbDet = embeddings["qualcomm_2"]!!
+        val simQualcomm = q1EmbDet.calculateSimilarity(q2EmbDet)
+        println("Qualcomm demo pair ALIGNED similarity: $simQualcomm")
+        assertTrue(
+            simQualcomm >= FaceNetModelConfig.MOBILE_FACENET.matchThreshold,
+            "Qualcomm same-identity pair similarity ($simQualcomm) must be >= threshold (${FaceNetModelConfig.MOBILE_FACENET.matchThreshold})"
+        )
+
+        // 4. Same Identity Test (Elizabeth Warren 113th vs 114th Congress)
+        val warrenBytes = FaceTestData.decodeImageBytes(FaceTestData.WARREN_PORTRAIT_BASE64)
+        val warren114thBytes = FaceTestData.decodeImageBytes(FaceTestData.WARREN_PORTRAIT_114TH_BASE64)
+        val w1Direct = detector.resizeImageDirect(warrenBytes, 112)!!
+        val w2Direct = detector.resizeImageDirect(warren114thBytes, 112)!!
+        val w1DirectEmb = interpreter.getEmbedding(w1Direct)!!
+        val w2DirectEmb = interpreter.getEmbedding(w2Direct)!!
+        val simWarrenDirect = w1DirectEmb.calculateSimilarity(w2DirectEmb)
+        println("Warren 113th vs 114th DIRECT RESIZE similarity: $simWarrenDirect")
+
+        val warrenEmb = embeddings["warren"]!!
+        val warren114thEmb = embeddings["warren_114th"]!!
+        val simWarren = warrenEmb.calculateSimilarity(warren114thEmb)
+        println("Warren 113th vs 114th ALIGNED similarity: $simWarren")
+        assertTrue(
+            simWarren >= 0.50f,
+            "Warren 113th vs 114th cross-session similarity ($simWarren) must be >= 0.50"
+        )
+
+        // 5. Test Erika Mustermann 2001 vs 2010:
+        // Bundesdruckerei used different employees as sample models for the 2001 Reisepass
+        // and 2010 Personalausweis, so they are distinct individuals.
+        val erika2010Emb = embeddings["erika_2010"]!!
+        val erika2001Emb = embeddings["erika_2001"]!!
+        val simErika = erika2010Emb.calculateSimilarity(erika2001Emb)
+        println("Erika 2001 vs 2010 ALIGNED similarity: $simErika")
+        assertTrue(
+            simErika < FaceNetModelConfig.MOBILE_FACENET.matchThreshold,
+            "Erika 2001 and 2010 should not match as same person ($simErika < ${FaceNetModelConfig.MOBILE_FACENET.matchThreshold})"
+        )
+
+        // 6. Cross-Identity Matrix (All different identities must be below 0.65 threshold)
+        println("\n=== Pairwise Similarity Matrix ===")
+        for (i in names.indices) {
+            for (j in i + 1 until names.size) {
+                val n1 = names[i]
+                val n2 = names[j]
+                val sim = embeddings[n1]!!.calculateSimilarity(embeddings[n2]!!)
+                println("$n1 vs $n2 : $sim")
+                if (identities[n1] != identities[n2]) {
+                    assertTrue(
+                        sim < 0.65f,
+                        "Cross-identity similarity between $n1 and $n2 should be < 0.65 (was $sim)"
+                    )
+                }
+            }
+        }
     }
 }
