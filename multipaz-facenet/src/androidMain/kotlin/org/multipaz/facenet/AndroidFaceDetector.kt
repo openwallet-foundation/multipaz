@@ -13,7 +13,6 @@ import org.multipaz.facematch.CameraFrame
 import org.multipaz.util.Logger
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.GpuDelegate
-import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.atan2
@@ -33,7 +32,7 @@ typealias AndroidDetectedFace = BlazeFaceDetection
  */
 internal class AndroidFaceDetector(
     modelBytes: ByteString? = null
-) : Closeable {
+) : AutoCloseable {
 
     private val interpreter: Interpreter
     private var gpuDelegate: GpuDelegate? = null
@@ -47,8 +46,11 @@ internal class AndroidFaceDetector(
     init {
         val bytes = when {
             modelBytes != null && !modelBytes.isEmpty() -> modelBytes.toByteArray()
-            else -> tryLoadFromAssets(applicationContext, "face_detection_short_range.tflite")
-                ?: BlazeFaceModelData.defaultModelBytes.toByteArray()
+            else -> {
+                val ctx = try { applicationContext } catch (e: Throwable) { null }
+                tryLoadFromAssets(ctx, "face_detection_short_range.tflite")
+                    ?: BlazeFaceModelData.defaultModelBytes.toByteArray()
+            }
         }
 
         val modelByteBuffer = ByteBuffer.allocateDirect(bytes.size).apply {
