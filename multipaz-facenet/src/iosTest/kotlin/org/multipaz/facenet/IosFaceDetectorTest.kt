@@ -75,7 +75,11 @@ class IosFaceDetectorTest {
             "erika_2010" to (FaceTestData.decodeImageBytes(FaceTestData.ERIKA_MUSTERMANN_BASE64) to "erika_2010"),
             "erika_2001" to (FaceTestData.decodeImageBytes(FaceTestData.ERIKA_MUSTERMANN_2001_BASE64) to "erika_2001"),
             "male" to (FaceTestData.decodeImageBytes(FaceTestData.MALE_PORTRAIT_BASE64) to "male"),
-            "female" to (FaceTestData.decodeImageBytes(FaceTestData.FEMALE_PORTRAIT_BASE64) to "female")
+            "female" to (FaceTestData.decodeImageBytes(FaceTestData.FEMALE_PORTRAIT_BASE64) to "female"),
+            "bob_with_glasses_1" to (FaceTestData.decodeImageBytes(FaceTestData.BOB_WITH_GLASSES_1_BASE64) to "bob"),
+            "bob_with_glasses_2" to (FaceTestData.decodeImageBytes(FaceTestData.BOB_WITH_GLASSES_2_BASE64) to "bob"),
+            "bob_without_glasses_1" to (FaceTestData.decodeImageBytes(FaceTestData.BOB_WITHOUT_GLASSES_1_BASE64) to "bob"),
+            "bob_without_glasses_2" to (FaceTestData.decodeImageBytes(FaceTestData.BOB_WITHOUT_GLASSES_2_BASE64) to "bob"),
         )
 
         val embeddings = mutableMapOf<String, FaceEmbedding>()
@@ -83,6 +87,7 @@ class IosFaceDetectorTest {
 
         for ((name, pair) in corpus) {
             val (bytes, identity) = pair
+            println("CORPUS_CHECK: $name, bytes.size=${bytes.size}")
             identities[name] = identity
 
             val faces = detector.detectFaces(bytes)
@@ -147,7 +152,33 @@ class IosFaceDetectorTest {
             "Erika 2001 and 2010 should not match as same person ($simErika < ${FaceNetModelConfig.MOBILE_FACENET.matchThreshold})"
         )
 
-        // 6. Cross-Identity Matrix (All different identities must be below 0.65 threshold)
+        // 6. Same Identity Test for Bob (Synthetic Portraits with and without glasses)
+        val bobG1Emb = embeddings["bob_with_glasses_1"]!!
+        val bobG2Emb = embeddings["bob_with_glasses_2"]!!
+        val bobNoG1Emb = embeddings["bob_without_glasses_1"]!!
+        val bobNoG2Emb = embeddings["bob_without_glasses_2"]!!
+
+        val simBobGlasses = bobG1Emb.calculateSimilarity(bobG2Emb)
+        println("Bob with glasses 1 vs 2 similarity: $simBobGlasses")
+
+        val simBobNoGlasses = bobNoG1Emb.calculateSimilarity(bobNoG2Emb)
+        println("Bob without glasses 1 vs 2 similarity: $simBobNoGlasses")
+
+        val crossPairs = listOf(
+            ("bob_with_glasses_1" to "bob_without_glasses_1") to bobG1Emb.calculateSimilarity(bobNoG1Emb),
+            ("bob_with_glasses_1" to "bob_without_glasses_2") to bobG1Emb.calculateSimilarity(bobNoG2Emb),
+            ("bob_with_glasses_2" to "bob_without_glasses_1") to bobG2Emb.calculateSimilarity(bobNoG1Emb),
+            ("bob_with_glasses_2" to "bob_without_glasses_2") to bobG2Emb.calculateSimilarity(bobNoG2Emb),
+        )
+        for ((pair, sim) in crossPairs) {
+            println("Bob cross-eyewear ${pair.first} vs ${pair.second} similarity: $sim")
+            assertTrue(
+                sim >= 0.50f,
+                "Bob cross-eyewear ${pair.first} vs ${pair.second} similarity ($sim) must be >= 0.50"
+            )
+        }
+
+        // 7. Cross-Identity Matrix (All different identities must be below 0.65 threshold)
         println("\n=== Pairwise Similarity Matrix ===")
         for (i in names.indices) {
             for (j in i + 1 until names.size) {
@@ -163,5 +194,14 @@ class IosFaceDetectorTest {
                 }
             }
         }
+
+        assertTrue(
+            simBobGlasses >= 0.60f,
+            "Bob with glasses 1 vs 2 similarity ($simBobGlasses) must be >= 0.60"
+        )
+        assertTrue(
+            simBobNoGlasses >= 0.60f,
+            "Bob without glasses 1 vs 2 similarity ($simBobNoGlasses) must be >= 0.60"
+        )
     }
 }

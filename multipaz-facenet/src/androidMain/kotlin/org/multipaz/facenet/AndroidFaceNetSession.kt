@@ -2,21 +2,12 @@ package org.multipaz.facenet
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import com.google.mlkit.vision.face.Face
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.CameraFrame
 import org.multipaz.util.Logger
 import kotlin.time.Clock
 
 private const val TAG = "AndroidFaceNetSession"
-
-internal class AndroidDetectedFace(
-    val face: Face
-) : DetectedFacePose {
-    override val yaw: Float get() = face.headEulerAngleY
-    override val pitch: Float get() = face.headEulerAngleX
-    override val roll: Float get() = face.headEulerAngleZ
-}
 
 internal class AndroidFaceNetSession(
     referencePortrait: ByteString,
@@ -80,13 +71,13 @@ internal class AndroidFaceNetSession(
 
     override suspend fun detectFaces(frame: CameraFrame): List<AndroidDetectedFace> {
         val activeDetector = detector ?: return emptyList()
-        return activeDetector.detectFaces(frame).map { AndroidDetectedFace(it) }
+        return activeDetector.detectFaces(frame)
     }
 
     override suspend fun computeCameraEmbedding(frame: CameraFrame, face: AndroidDetectedFace): FaceEmbedding? {
         val activeDetector = detector ?: return null
         val activeInterpreter = interpreter ?: return null
-        val faceCrop: Bitmap = activeDetector.extractFaceCrop(frame, face.face, activeInterpreter.imageSquareSize)
+        val faceCrop: Bitmap = activeDetector.extractFaceCrop(frame, face, activeInterpreter.imageSquareSize)
             ?: return null
         val cameraEmbedding = try {
             activeInterpreter.getEmbedding(faceCrop)

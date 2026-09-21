@@ -1,6 +1,6 @@
 # Curated FaceNet Micro-Corpus Test Data
 
-This directory contains a lightweight, curated test corpus (~255 KB total) used for biometric face matching unit tests in `multipaz-facenet`.
+This directory contains a lightweight, curated test corpus (~448 KB total) used for biometric face matching unit tests in `multipaz-facenet`.
 
 ## Assets & Provenance
 
@@ -14,14 +14,24 @@ This directory contains a lightweight, curated test corpus (~255 KB total) used 
 | `erika_mustermann_2001.jpg` | Person 4 (Erika 2001) [^1] | Official German identity card sample portrait (2001) | 709x924 | 74.7 KB | Public Domain | Wikimedia Commons (`File:Erika_Mustermann_2001.jpg`, Bundesdruckerei) |
 | `male_portrait.jpg` | Person 5 (Male) | OpenID4VCI credential portrait | 312x312 | 12.9 KB | Apache-2.0 | `multipaz-openid4vci` resources |
 | `female_portrait.jpg`| Person 6 (Female) | OpenID4VCI credential portrait | 319x319 | 15.7 KB | Apache-2.0 | `multipaz-openid4vci` resources |
+| `bob_with_glasses_1.jpg` | Person 7 (Bob) [^3] | Synthetic frontal portrait with dark-rimmed glasses (Set A) | 282x384 | 51.0 KB | CC0 / Public Domain | AI-generated test sample |
+| `bob_with_glasses_2.jpg` | Person 7 (Bob) [^3] | Synthetic frontal portrait with dark-rimmed glasses (Set B) | 281x384 | 40.7 KB | CC0 / Public Domain | AI-generated test sample |
+| `bob_without_glasses_1.jpg` | Person 7 (Bob) [^3] | Synthetic frontal portrait without glasses (Set A) | 282x384 | 46.2 KB | CC0 / Public Domain | AI-generated test sample |
+| `bob_without_glasses_2.jpg` | Person 7 (Bob) [^3] | Synthetic frontal portrait without glasses (Set B) | 282x384 | 54.7 KB | CC0 / Public Domain | AI-generated test sample |
 
 [^1]: **Erika Mustermann Identity Note:** While both portraits represent the fictitious German sample persona ["Erika Mustermann"](https://en.wikipedia.org/wiki/Mustermann) (see also [German Wikipedia](https://de.wikipedia.org/wiki/Mustermann#Erika_Mustermann)), the German Federal Printing Office (*Bundesdruckerei*) photographed different real-life employees for the 2001 passport and 2010 identity card document redesigns. Consequently, biometric facial recognition models correctly evaluate them as two distinct individuals (measured cosine similarity ~0.60, which is below the 0.70 same-person match threshold).
 
-[^2]: **Elizabeth Warren Cross-Session Portrait Note:** Both portraits depict the same individual (Senator Elizabeth Warren). However, they originate from two separate congressional portrait sessions (113th and 114th Congress) with pronounced appearance and capture differences: different eyeglass frames (dark-rimmed rectangular wire vs. rimless oval), hairstyle (swept-back exposing forehead vs. front bangs covering forehead), lighting (indoor studio flash on blue backdrop vs. outdoor diffuse daylight on marble pillars), and facial expression (closed-mouth vs. open-tooth smile). Compact 128-d MobileFaceNet embeddings yield a similarity score of ~0.54 between them, which exceeds the cross-session threshold of 0.50 and remains well differentiated from unrelated identities (< 0.49), while falling below the high-certainty single-session verification threshold (0.70).
+[^2]: **Elizabeth Warren Cross-Session Portrait Note:** Both portraits depict the same individual (Senator Elizabeth Warren). However, they originate from two separate congressional portrait sessions (113th and 114th Congress) with pronounced appearance and capture differences: different eyeglass frames (dark-rimmed rectangular wire vs. rimless oval), hairstyle (swept-back exposing forehead vs. front bangs covering forehead), lighting (indoor studio flash on blue backdrop vs. outdoor diffuse daylight on marble pillars), and facial expression (closed-mouth vs. open-tooth smile). With BlazeFace landmark-aligned face cropping, MobileFaceNet embeddings yield a similarity score of ~0.83 between them (compared to ~0.47 for direct unaligned resize), demonstrating the efficacy of facial landmark alignment. The match threshold is asserted at $\ge 0.50$, remaining well differentiated from unrelated identities (< 0.30).
+
+[^3]: **Bob Eyewear Variation Note:** The four Bob portraits depict the same synthetic individual across variations in eyewear (two portraits with dark-rimmed glasses and two without glasses). Biometric verification models demonstrate reliable matching within the same eyewear condition (cosine similarity ~0.61, exceeding the 0.60 threshold) and across eyewear conditions (cosine similarity ~0.54–0.67, exceeding the 0.50 cross-variation threshold), while remaining sharply separated from unrelated identities (< 0.20).
 
 ## Cryptographic Hashes (SHA-256)
 
 ```
+65756c131c8325d1c6b74ef62054068eda4d2be7d98c7007958f51f8ba2cf843  bob_with_glasses_1.jpg
+903314a07d76c750c6c2f0475f6dba37e3cf496d134925e345c57a110666a691  bob_with_glasses_2.jpg
+9a7b6bd5726888b6194b6a6b3f3498461dc547f5d48ff1ae143a2d1798ac28e7  bob_without_glasses_1.jpg
+377185aa2870b7a4a00d8ef72c2c21597ff29eb28624b79432fdc6007075143a  bob_without_glasses_2.jpg
 da8b022d67b11078903fa4dcc58e84ae145744d3ec5b8bd7feb3e27cd0a9f67c  erika_mustermann.jpg
 7e0bbb7fadac619b9e8c59d569cbc5e19482785bb4837734c19106ec49355d10  erika_mustermann_2001.jpg
 44e56ffc0049801159f70dfd4046288ac249ddb3c203ad0b34d6222f95c74792  female_portrait.jpg
