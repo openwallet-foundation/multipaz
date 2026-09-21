@@ -188,7 +188,12 @@ internal class JvmFaceDetector(
         return detectFaces(image)
     }
 
-    fun extractFaceCrop(sourceImage: BufferedImage, face: BlazeFaceDetection, targetSize: Int): FloatArray? {
+    fun extractFaceCropImage(imageBytes: ByteArray, face: BlazeFaceDetection, targetSize: Int): BufferedImage? {
+        val sourceImage = ImageIO.read(ByteArrayInputStream(imageBytes)) ?: return null
+        return extractFaceCropImage(sourceImage, face, targetSize)
+    }
+
+    fun extractFaceCropImage(sourceImage: BufferedImage, face: BlazeFaceDetection, targetSize: Int): BufferedImage? {
         val imgW = sourceImage.width.toDouble()
         val imgH = sourceImage.height.toDouble()
         if (imgW <= 0.0 || imgH <= 0.0) return null
@@ -242,6 +247,11 @@ internal class JvmFaceDetector(
         } finally {
             g2d.dispose()
         }
+        return cropImage
+    }
+
+    fun extractFaceCrop(sourceImage: BufferedImage, face: BlazeFaceDetection, targetSize: Int): FloatArray? {
+        val cropImage = extractFaceCropImage(sourceImage, face, targetSize) ?: return null
 
         val numPixels = targetSize * targetSize
         val floatPixels = FloatArray(numPixels * 3)

@@ -20,6 +20,7 @@ kotlin {
         it.binaries.framework {
             export(project(":multipaz"))
             export(project(":multipaz-facenet"))
+            export(project(":multipaz-facenet-test-data"))
             export(project(":multipaz-dcapi"))
             export(project(":multipaz-doctypes"))
             export(project(":multipaz-longfellow"))
@@ -57,6 +58,7 @@ kotlin {
             dependencies {
                 api(project(":multipaz"))
                 api(project(":multipaz-facenet"))
+                api(project(":multipaz-facenet-test-data"))
                 api(project(":multipaz-dcapi"))
                 api(project(":multipaz-doctypes"))
                 api(project(":multipaz-utopia"))

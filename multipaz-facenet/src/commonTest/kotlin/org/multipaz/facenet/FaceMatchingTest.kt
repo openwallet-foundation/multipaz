@@ -1,6 +1,7 @@
 package org.multipaz.facenet
 
 import kotlinx.coroutines.test.runTest
+import org.multipaz.facenet.testdata.FaceTestData
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -9,9 +10,37 @@ import kotlin.test.assertTrue
 class FaceMatchingTest {
 
     @Test
+    fun testExtractFaceCrop() = runTest {
+        val matcher = FaceNetFaceMatcher(
+            modelBytes = FaceTestData.testModel,
+            config = FaceNetModelConfig.MOBILE_FACENET
+        )
+        if (!matcher.isSupported) {
+            println("Skipping testExtractFaceCrop: not supported on this platform")
+            return@runTest
+        }
+
+        val portraitBytes = FaceTestData.decodeImageByteString(FaceTestData.QUALCOMM_DEMO_1_BASE64)
+        val cropBytes = matcher.extractFaceCrop(portraitBytes)
+        assertTrue(cropBytes.size > 0, "Crop bytes should not be empty")
+
+        // PNG header verification: 89 50 4E 47 0D 0A 1A 0A
+        val raw = cropBytes.toByteArray()
+        assertTrue(raw.size >= 8, "Crop bytes too small for PNG header")
+        assertEquals(0x89.toByte(), raw[0])
+        assertEquals(0x50.toByte(), raw[1]) // 'P'
+        assertEquals(0x4E.toByte(), raw[2]) // 'N'
+        assertEquals(0x47.toByte(), raw[3]) // 'G'
+
+        // Alias getDetectedFace returns identical crop
+        val aliasBytes = matcher.getDetectedFace(portraitBytes)
+        assertEquals(cropBytes.size, aliasBytes.size)
+    }
+
+    @Test
     fun testFaceMatchingPairwiseSimilarity() = runTest {
         val matcher = FaceNetFaceMatcher(
-            modelBytes = testModelMobileFaceNet,
+            modelBytes = FaceTestData.testModel,
             config = FaceNetModelConfig.MOBILE_FACENET
         )
         if (!matcher.isSupported) {
@@ -176,7 +205,7 @@ class FaceMatchingTest {
     @Test
     fun testDirectPortraitMatchingConvenience() = runTest {
         val matcher = FaceNetFaceMatcher(
-            modelBytes = testModelMobileFaceNet,
+            modelBytes = FaceTestData.testModel,
             config = FaceNetModelConfig.MOBILE_FACENET
         )
         if (!matcher.isSupported) {

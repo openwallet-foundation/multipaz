@@ -2,6 +2,7 @@ package org.multipaz.facenet
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.facenet.testdata.FaceTestData
 import org.multipaz.facematch.CameraFrame
 import org.multipaz.facematch.FaceMatcherPromptState
 import org.multipaz.facematch.PromptColor
@@ -39,7 +40,7 @@ class FaceNetSessionTest {
 
         override suspend fun initializePipeline() {
             pipelineInitError?.let { throw it }
-            referenceEmbedding = FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING
+            referenceEmbedding = FaceEmbedding(FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING)
         }
 
         override suspend fun detectFaces(frame: CameraFrame): List<MockDetectedFace> {
@@ -188,7 +189,7 @@ class FaceNetSessionTest {
         val v = FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING
         // Create an embedding that yields ~0.55 similarity
         val lowMatchEmb = FaceEmbedding(FloatArray(128) {
-            v.embedding[it] * 0.55f + (if (it < 64) v.embedding[it + 64] else -v.embedding[it - 64]) * 0.835164f
+            v[it] * 0.55f + (if (it < 64) v[it + 64] else -v[it - 64]) * 0.835164f
         })
         session.mockFaces = listOf(MockDetectedFace())
         session.mockEmbedding = lowMatchEmb
@@ -221,10 +222,10 @@ class FaceNetSessionTest {
         var currentTime = 1000L
         val session = TestFaceNetSession(clock = { currentTime })
 
-        val matchingEmb = FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING
+        val matchingEmb = FaceEmbedding(FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING)
         val nonMatchingEmb = FaceTestData.QUALCOMM_DEMO_2_GOLDEN_EMBEDDING.let { golden ->
             // Inverted vector -> negative similarity
-            FaceEmbedding(FloatArray(128) { idx -> -golden.embedding[idx] })
+            FaceEmbedding(FloatArray(128) { idx -> -golden[idx] })
         }
 
         session.mockFaces = listOf(MockDetectedFace())
@@ -255,7 +256,7 @@ class FaceNetSessionTest {
     fun testFullVerificationLifecycleToCompletion() = runTest {
         var currentTime = 1000L
         val session = TestFaceNetSession(clock = { currentTime }, randomSeed = 100L)
-        val matchingEmb = FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING
+        val matchingEmb = FaceEmbedding(FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING)
 
         session.mockFaces = listOf(MockDetectedFace())
         session.mockEmbedding = matchingEmb

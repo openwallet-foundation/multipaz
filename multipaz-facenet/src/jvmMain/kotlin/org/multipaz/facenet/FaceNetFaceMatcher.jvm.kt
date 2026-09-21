@@ -42,3 +42,24 @@ internal actual suspend fun extractFaceEmbedding(
         }
     }
 }
+
+internal actual suspend fun extractDetectedFaceCrop(
+    portrait: ByteString,
+    modelBytesProvider: suspend () -> ByteString,
+    config: FaceNetModelConfig
+): ByteString {
+    val targetSize = config.imageSquareSize ?: 112
+    JvmFaceDetector().use { detector ->
+        val bytes = portrait.toByteArray()
+        val faces = detector.detectFaces(bytes)
+        if (faces.isEmpty()) {
+            throw IllegalArgumentException("No face detected in portrait")
+        }
+        val cropImage = detector.extractFaceCropImage(bytes, faces[0], targetSize)
+            ?: throw IllegalStateException("Failed to extract face crop")
+        val baos = java.io.ByteArrayOutputStream()
+        javax.imageio.ImageIO.write(cropImage, "png", baos)
+        return ByteString(baos.toByteArray())
+    }
+}
+

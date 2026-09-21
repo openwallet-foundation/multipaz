@@ -64,10 +64,14 @@ struct FaceMatcherPromptScreen: View {
     @State private var isLoading: Bool = true
     @State private var showCameraSheet: Bool = false
     @State private var showCameraUnavailableAlert: Bool = false
+    @State private var showSamplePortraitPicker: Bool = false
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
     @State private var isVerifying: Bool = false
     @State private var toastMessage: String? = nil
     @State private var selectedMatcherDisplayName: String = ""
+    @State private var detectedFaceCrop: ByteString? = nil
+    @State private var isExtractingCrop: Bool = false
+    @State private var cropError: String? = nil
 
     var body: some View {
         ScrollView {
@@ -88,19 +92,25 @@ struct FaceMatcherPromptScreen: View {
             }
             await loadStoredPortrait()
         }
+        .task(id: referencePortrait) {
+            await extractFaceCrop(for: referencePortrait)
+        }
         .onChange(of: selectedPhotoItem) { _, newItem in
             handlePhotoPickerResult(newItem)
         }
         .fullScreenCover(isPresented: $showCameraSheet) {
             cameraSheetContent
         }
+        .sheet(isPresented: $showSamplePortraitPicker) {
+            samplePortraitPickerSheet
+        }
         .alert("Camera Unavailable", isPresented: $showCameraUnavailableAlert) {
-            Button("Use Sample Portrait") {
-                loadSamplePortrait()
+            Button("Pick from Sample portraits") {
+                showSamplePortraitPicker = true
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Camera is not available on this device/simulator. Would you like to use the sample portrait instead?")
+            Text("Camera is not available on this device/simulator. Would you like to pick one of the sample portraits instead?")
         }
     }
 
@@ -153,28 +163,96 @@ struct FaceMatcherPromptScreen: View {
     private func portraitDisplaySection(portrait: ByteString) -> some View {
         let uiImage = UIImage(data: portrait.toNSData())
 
-        if let uiImage {
-            Image(uiImage: uiImage)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 160, height: 160)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.accentColor, lineWidth: 2)
-                )
+        if faceNetMatcher != nil {
+            HStack(alignment: .top, spacing: 16) {
+                // Left: Reference Portrait
+                VStack(spacing: 4) {
+                    if let uiImage {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 130, height: 130)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.accentColor, lineWidth: 2)
+                            )
+                    } else {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(.secondarySystemBackground))
+                            .frame(width: 130, height: 130)
+                            .overlay(Text("Invalid Image").font(.caption))
+                    }
+                    Text("Reference Portrait")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                    Text("\(portrait.toNSData().count) bytes")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                // Right: FaceNet face detected
+                VStack(spacing: 4) {
+                    if isExtractingCrop {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(.secondarySystemBackground))
+                            .frame(width: 130, height: 130)
+                            .overlay(ProgressView())
+                    } else if let detectedFaceCrop, let cropImage = UIImage(data: detectedFaceCrop.toNSData()) {
+                        Image(uiImage: cropImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 130, height: 130)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.secondary, lineWidth: 2)
+                            )
+                    } else {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(.secondarySystemBackground))
+                            .frame(width: 130, height: 130)
+                            .overlay(
+                                Text(cropError ?? "No face detected")
+                                    .font(.caption2)
+                                    .foregroundStyle(.red)
+                                    .multilineTextAlignment(.center)
+                                    .padding(8)
+                            )
+                    }
+                    Text("FaceNet face detected")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.accentColor)
+                    Text(detectedFaceCrop != nil ? "\(detectedFaceCrop!.toNSData().count) bytes (112×112)" : "BlazeFace alignment")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
         } else {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.secondarySystemBackground))
-                .frame(width: 160, height: 160)
-                .overlay(Text("Invalid Image").font(.caption))
+            if let uiImage {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 160, height: 160)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.accentColor, lineWidth: 2)
+                    )
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.secondarySystemBackground))
+                    .frame(width: 160, height: 160)
+                    .overlay(Text("Invalid Image").font(.caption))
+            }
+
+            Text("Size: \(portrait.toNSData().count) bytes")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
 
-        Text("Size: \(portrait.toNSData().count) bytes")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             Button("Retake") {
                 openCamera()
             }
@@ -185,11 +263,17 @@ struct FaceMatcherPromptScreen: View {
             }
             .buttonStyle(.bordered)
 
+            Button("Sample") {
+                showSamplePortraitPicker = true
+            }
+            .buttonStyle(.bordered)
+
             Button("Rotate 90°") {
                 rotatePortrait()
             }
             .buttonStyle(.bordered)
         }
+        .lineLimit(1)
 
         Button(role: .destructive) {
             clearPortrait()
@@ -242,9 +326,9 @@ struct FaceMatcherPromptScreen: View {
             .buttonStyle(.bordered)
 
             Button {
-                loadSamplePortrait()
+                showSamplePortraitPicker = true
             } label: {
-                Text("Use Sample Portrait")
+                Text("Pick from Sample portraits")
             }
             .buttonStyle(.borderless)
         }
@@ -365,13 +449,54 @@ struct FaceMatcherPromptScreen: View {
         }
     }
 
-    private func loadSamplePortrait() {
+    @ViewBuilder
+    private var samplePortraitPickerSheet: some View {
+        NavigationStack {
+            List(FaceTestData.shared.allPortraits, id: \.id) { sample in
+                Button {
+                    selectSamplePortrait(sample)
+                } label: {
+                    HStack(spacing: 12) {
+                        if let uiImage = UIImage(data: sample.data.toNSData()) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 50, height: 50)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(sample.displayName)
+                                .font(.body)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                            Text(sample.subtitle)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .navigationTitle("Pick Sample Portrait")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        showSamplePortraitPicker = false
+                    }
+                }
+            }
+        }
+    }
+
+    private func selectSamplePortrait(_ sample: FaceSamplePortrait) {
         Task {
-            let sampleData = Data(SampleData.shared.PORTRAIT_BASE64URL.fromBase64Url().toNSData())
-            let portraitBytes = sampleData.toByteString()
-            await saveFaceMatcherReferencePortrait(storage: viewModel.storage, portrait: portraitBytes)
-            referencePortrait = portraitBytes
-            showToast("Sample portrait loaded")
+            await saveFaceMatcherReferencePortrait(storage: viewModel.storage, portrait: sample.data)
+            referencePortrait = sample.data
+            showSamplePortraitPicker = false
+            showToast("Loaded \(sample.displayName)")
         }
     }
 
@@ -396,6 +521,29 @@ struct FaceMatcherPromptScreen: View {
             referencePortrait = nil
             showToast("Reference portrait cleared")
         }
+    }
+
+    private var faceNetMatcher: FaceNetFaceMatcher? {
+        viewModel.faceMatcherRepository?.all.first(where: { $0 is FaceNetFaceMatcher }) as? FaceNetFaceMatcher
+    }
+
+    private func extractFaceCrop(for portrait: ByteString?) async {
+        guard let portrait, let matcher = faceNetMatcher else {
+            detectedFaceCrop = nil
+            cropError = nil
+            isExtractingCrop = false
+            return
+        }
+        isExtractingCrop = true
+        cropError = nil
+        do {
+            let crop = try await matcher.extractFaceCrop(portrait: portrait)
+            detectedFaceCrop = crop
+        } catch {
+            detectedFaceCrop = nil
+            cropError = error.localizedDescription
+        }
+        isExtractingCrop = false
     }
 
     private func verifyFace() {

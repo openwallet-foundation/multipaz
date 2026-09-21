@@ -23,3 +23,12 @@ internal actual suspend fun extractFaceEmbedding(
 ): FaceEmbedding {
     throw UnsupportedOperationException("Face matching is not supported on this platform")
 }
+
+internal actual suspend fun extractDetectedFaceCrop(
+    portrait: ByteString,
+    modelBytesProvider: suspend () -> ByteString,
+    config: FaceNetModelConfig
+): ByteString {
+    throw UnsupportedOperationException("Face matching is not supported on this platform")
+}
+

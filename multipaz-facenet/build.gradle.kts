@@ -33,52 +33,6 @@ val unpackTensorFlowLiteCDesktop by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("generated/resources/tfliteDesktop"))
 }
 
-abstract class GenerateTestModelTask : DefaultTask() {
-    @get:InputFile
-    abstract val inputFile: RegularFileProperty
-
-    @get:OutputDirectory
-    abstract val outputDir: DirectoryProperty
-
-    @get:Input
-    abstract val packageName: Property<String>
-
-    @TaskAction
-    fun generate() {
-        val pkg = packageName.get()
-        val dir = outputDir.get().asFile
-        val packageDir = File(dir, pkg.replace('.', '/'))
-        packageDir.mkdirs()
-        val outFile = File(packageDir, "TestModelPayload.kt")
-        outFile.bufferedWriter().use { writer ->
-            writer.write("@file:OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)\n")
-            writer.write("package $pkg\n\n")
-            writer.write("import kotlin.io.encoding.Base64\n")
-            writer.write("import kotlinx.io.bytestring.ByteString\n\n")
-            val bytes = inputFile.get().asFile.readBytes()
-            val base64String = Base64.encode(bytes)
-            val chunks: List<String> = base64String.chunked(30000)
-            writer.write("private val chunks_mobile_facenet = arrayOf(\n")
-            for (chunk in chunks) {
-                writer.write("    \"$chunk\",\n")
-            }
-            writer.write(")\n\n")
-            writer.write("internal val testModelMobileFaceNet: ByteString by lazy {\n")
-            writer.write("    ByteString(Base64.decode(chunks_mobile_facenet.joinToString(\"\")))\n")
-            writer.write("}\n")
-        }
-    }
-}
-
-val generateTestModel by tasks.registering(GenerateTestModelTask::class) {
-    val modelFile = rootProject.layout.projectDirectory.file(
-        "samples/testapp/src/commonMain/composeResources/files/mobile_facenet.tflite"
-    )
-    inputFile.set(modelFile)
-    packageName.set("org.multipaz.facenet")
-    outputDir.set(layout.buildDirectory.dir("generated/source/testModel/commonTest"))
-}
-
 kotlin {
     jvmToolchain(17)
 
@@ -163,8 +117,8 @@ kotlin {
             dependencies {
                 implementation(libs.kotlin.test)
                 implementation(libs.kotlinx.coroutines.test)
+                implementation(project(":multipaz-facenet-test-data"))
             }
-            kotlin.srcDir(generateTestModel)
         }
 
         val androidMain by getting {
