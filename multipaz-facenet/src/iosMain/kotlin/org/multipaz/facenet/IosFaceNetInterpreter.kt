@@ -5,7 +5,9 @@ import cnames.structs.TfLiteInterpreterOptions
 import cnames.structs.TfLiteModel
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.Pinned
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.pin
 import kotlinx.cinterop.usePinned
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.isEmpty
@@ -45,6 +47,7 @@ internal class IosFaceNetInterpreter(
     val config: FaceNetModelConfig
 ) : AutoCloseable {
 
+    private var pinnedModelBytes: Pinned<ByteArray>? = null
     private var model: CPointer<TfLiteModel>? = null
     private var options: CPointer<TfLiteInterpreterOptions>? = null
     private var xnnpackDelegate: CPointer<TfLiteDelegate>? = null
@@ -66,9 +69,10 @@ internal class IosFaceNetInterpreter(
                 )
         }
 
-        val localModel = bytes.usePinned { pinned ->
-            TfLiteModelCreate(pinned.addressOf(0), bytes.size.toULong())
-        } ?: throw IllegalStateException("Failed to parse TensorFlow Lite model from bytes.")
+        val pinned = bytes.pin()
+        pinnedModelBytes = pinned
+        val localModel = TfLiteModelCreate(pinned.addressOf(0), bytes.size.toULong())
+            ?: throw IllegalStateException("Failed to parse TensorFlow Lite model from bytes.")
         model = localModel
 
         val localOptions = TfLiteInterpreterOptionsCreate()
@@ -265,6 +269,8 @@ internal class IosFaceNetInterpreter(
             TfLiteModelDelete(it)
             model = null
         }
+        pinnedModelBytes?.unpin()
+        pinnedModelBytes = null
     }
 
     companion object {

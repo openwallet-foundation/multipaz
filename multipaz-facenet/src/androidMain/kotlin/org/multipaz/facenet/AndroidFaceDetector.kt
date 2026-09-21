@@ -196,9 +196,9 @@ internal class AndroidFaceDetector : Closeable {
 
                 val scale = targetSize.toFloat() / cropWidth
                 val matrix = Matrix().apply {
-                    postTranslate(-cx, -(cy + verticalOffset))
+                    postTranslate(-cx, -cy)
                     postRotate(-eyeAngleDeg)
-                    postTranslate(cropWidth / 2f, cropHeight / 2f)
+                    postTranslate(cropWidth / 2f, cropHeight / 2f - verticalOffset)
                     postScale(scale, scale)
                 }
 
