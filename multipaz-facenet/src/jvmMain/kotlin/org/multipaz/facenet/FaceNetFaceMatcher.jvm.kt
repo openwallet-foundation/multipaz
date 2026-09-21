@@ -7,8 +7,8 @@ internal actual val isFaceNetSupported: Boolean
     get() = TfLiteCLibrary.isAvailable
 
 internal actual fun createFaceNetSession(
-    referencePortrait: ByteString,
-    modelBytesProvider: suspend () -> ByteString,
+    referencePortrait: ByteString?,
+    modelBytes: ByteString,
     config: FaceNetModelConfig,
     debug: Boolean,
     matcherName: String,
@@ -16,7 +16,7 @@ internal actual fun createFaceNetSession(
 ): FaceMatcherSession {
     return JvmFaceNetSession(
         referencePortrait = referencePortrait,
-        modelBytesProvider = modelBytesProvider,
+        modelBytes = modelBytes,
         config = config,
         debug = debug,
         matcherName = matcherName,
@@ -26,10 +26,9 @@ internal actual fun createFaceNetSession(
 
 internal actual suspend fun extractFaceEmbedding(
     portrait: ByteString,
-    modelBytesProvider: suspend () -> ByteString,
+    modelBytes: ByteString,
     config: FaceNetModelConfig
 ): FaceEmbedding {
-    val modelBytes = modelBytesProvider()
     JvmFaceNetInterpreter(modelBytes, config).use { interpreter ->
         JvmFaceDetector().use { detector ->
             val bytes = portrait.toByteArray()
@@ -47,7 +46,7 @@ internal actual suspend fun extractFaceEmbedding(
 
 internal actual suspend fun extractDetectedFaceCrop(
     portrait: ByteString,
-    modelBytesProvider: suspend () -> ByteString,
+    modelBytes: ByteString,
     config: FaceNetModelConfig
 ): ByteString {
     val targetSize = config.imageSquareSize ?: 112

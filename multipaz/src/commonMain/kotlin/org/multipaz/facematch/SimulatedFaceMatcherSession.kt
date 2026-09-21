@@ -10,7 +10,7 @@ import kotlin.time.Clock
  * Holds isolated session state for one verification run.
  */
 class SimulatedFaceMatcherSession(
-    referencePortrait: ByteString,
+    referencePortrait: ByteString? = null,
     private val searchDurationMs: Long = 2500L,
     private val matchConveyDurationMs: Long = 1500L,
     private val challengeDurationMs: Long = 3000L,
@@ -23,6 +23,7 @@ class SimulatedFaceMatcherSession(
         INITIAL_SEARCH,
         MATCH_CONVEYED,
         LIVENESS_CHALLENGE,
+        CAPTURING,
         COMPLETED
     }
 
@@ -34,15 +35,19 @@ class SimulatedFaceMatcherSession(
     // Generate randomized challenges to defeat deepfakes
     private val challenges: List<RingDirection> = if (enableLiveness) {
         val pool = listOf(RingDirection.LEFT, RingDirection.RIGHT, RingDirection.UP, RingDirection.DOWN)
-        val shuffled = pool.shuffled(Random(clock())).take(2)
-        shuffled + listOf(RingDirection.CENTER)
+        if (referencePortrait == null) {
+            pool.shuffled(Random(clock())).take(3)
+        } else {
+            val shuffled = pool.shuffled(Random(clock())).take(2)
+            shuffled + listOf(RingDirection.CENTER)
+        }
     } else {
         emptyList()
     }
 
     init {
         updateState(
-            messageAbove = "Verify Identity",
+            messageAbove = if (referencePortrait == null) "Check Liveness" else "Verify Identity",
             messageBelow = "Position your face and look at the camera",
             ringSegments = FaceMatcherPromptState.defaultSegments,
             outcome = FaceMatcherPromptState.Outcome.IN_PROGRESS
@@ -65,16 +70,32 @@ class SimulatedFaceMatcherSession(
             Phase.INITIAL_SEARCH -> {
                 val elapsed = now - start
                 if (elapsed < searchDurationMs) {
-                    val searchProgress = (elapsed.toFloat() / searchDurationMs.toFloat()).coerceIn(0f, 1f)
                     val pulse = (kotlin.math.sin(elapsed / 250.0) * 0.35 + 0.65).toFloat()
                     val pulseColor = PromptColor.lerp(PromptColor.DARK_GRAY, PromptColor.BLUE, pulse)
                     updateState(
-                        messageAbove = "Verify Identity",
+                        messageAbove = if (referencePortrait == null) "Check Liveness" else "Verify Identity",
                         messageBelow = "Hold still...",
                         ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
                             RingSegment(color = pulseColor, scale = 1.0f)
                         }
                     )
+                } else if (referencePortrait == null) {
+                    if (challenges.isNotEmpty()) {
+                        phase = Phase.LIVENESS_CHALLENGE
+                        phaseStartTime = now
+                        currentChallengeIndex = 0
+                        showCurrentChallenge(0f)
+                    } else {
+                        phase = Phase.CAPTURING
+                        phaseStartTime = now
+                        updateState(
+                            messageAbove = "Hold Still",
+                            messageBelow = "Capturing portrait image...",
+                            ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
+                                RingSegment(color = PromptColor.GREEN, scale = 1.15f)
+                            }
+                        )
+                    }
                 } else {
                     phase = Phase.MATCH_CONVEYED
                     phaseStartTime = now
@@ -112,9 +133,28 @@ class SimulatedFaceMatcherSession(
                     if (currentChallengeIndex < challenges.size) {
                         phaseStartTime = now
                         showCurrentChallenge(0f)
+                    } else if (referencePortrait == null) {
+                        phase = Phase.CAPTURING
+                        phaseStartTime = now
+                        updateState(
+                            messageAbove = "Hold Still",
+                            messageBelow = "Capturing portrait image...",
+                            ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
+                                RingSegment(color = PromptColor.GREEN, scale = 1.15f)
+                            }
+                        )
                     } else {
                         completeSuccess()
                     }
+                }
+            }
+
+            Phase.CAPTURING -> {
+                val elapsed = now - phaseStartTime
+                if (elapsed >= 1000L) {
+                    val dummyImage = frame.data.takeIf { it.size > 0 }
+                        ?: ByteString(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte()))
+                    completeSuccess(capturedImage = dummyImage)
                 }
             }
 
@@ -147,15 +187,16 @@ class SimulatedFaceMatcherSession(
         )
     }
 
-    private fun completeSuccess() {
+    private fun completeSuccess(capturedImage: ByteString? = null) {
         phase = Phase.COMPLETED
         updateState(
-            messageAbove = "Identity Verified",
-            messageBelow = "Verification successful",
+            messageAbove = if (referencePortrait == null) "Portrait Captured" else "Identity Verified",
+            messageBelow = if (referencePortrait == null) "Liveness verified" else "Verification successful",
             ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
                 RingSegment(color = PromptColor.GREEN, scale = 1.2f)
             },
-            outcome = FaceMatcherPromptState.Outcome.SUCCESS
+            outcome = FaceMatcherPromptState.Outcome.SUCCESS,
+            capturedImage = capturedImage
         )
     }
 }

@@ -295,7 +295,7 @@ internal class AndroidFaceDetector(
         }
     }
 
-    private fun rotateBitmap(bitmap: Bitmap, degrees: Int): Bitmap {
+    internal fun rotateBitmap(bitmap: Bitmap, degrees: Int): Bitmap {
         val normDegrees = ((degrees % 360) + 360) % 360
         if (normDegrees == 0) return bitmap
         val matrix = Matrix().apply { postRotate(normDegrees.toFloat()) }

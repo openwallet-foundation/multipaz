@@ -41,7 +41,7 @@ interface DetectedFacePose {
  * - Visual feedback: pulsing rings during positioning and progressive green fill during challenges.
  */
 abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
-    referencePortrait: ByteString,
+    referencePortrait: ByteString? = null,
     val config: FaceNetModelConfig,
     val debug: Boolean = false,
     val matcherName: String = "facenet",
@@ -53,12 +53,15 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
     override val providesGraphicsOverlay: Boolean
         get() = debug
 
+    val isLivenessOnly: Boolean
+        get() = (referencePortrait == null)
 
     enum class Phase {
         INITIALIZING,
         POSITIONING,
         MATCH_CONVEYED,
         LIVENESS_CHALLENGE,
+        CAPTURING,
         COMPLETED,
         FAILED
     }
@@ -79,7 +82,11 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
     private var initializationAttempted = false
 
     private val pool = listOf(RingDirection.LEFT, RingDirection.RIGHT, RingDirection.UP, RingDirection.DOWN)
-    val challenges: List<RingDirection> = pool.shuffled(Random(randomSeed)).take(2) + listOf(RingDirection.CENTER)
+    val challenges: List<RingDirection> = if (isLivenessOnly) {
+        pool.shuffled(Random(randomSeed)).take(3)
+    } else {
+        pool.shuffled(Random(randomSeed)).take(2) + listOf(RingDirection.CENTER)
+    }
     var currentChallengeIndex = 0
         protected set
     private var consecutivePoseFrames = 0
@@ -93,7 +100,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
 
     init {
         updateState(
-            messageAbove = "Verify Identity",
+            messageAbove = if (isLivenessOnly) "Check Liveness" else "Verify Identity",
             messageBelow = "Position your face and look at the camera",
             ringSegments = FaceMatcherPromptState.defaultSegments,
             outcome = FaceMatcherPromptState.Outcome.IN_PROGRESS
@@ -120,6 +127,11 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
      * Releases platform resources when session is closed or cancelled.
      */
     protected abstract fun onSessionClosed()
+
+    /**
+     * Captures a high-resolution upright portrait photo from [frame] when in enrollment mode.
+     */
+    protected abstract suspend fun captureHighResolutionImage(frame: CameraFrame): ByteString?
 
     override suspend fun feedFrame(frame: CameraFrame) {
         if (isCancelled || state.value.outcome != FaceMatcherPromptState.Outcome.IN_PROGRESS) {
@@ -157,7 +169,8 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
         }
 
         if (isCancelled) return
-        val refEmb = referenceEmbedding ?: return
+        val refEmb = referenceEmbedding
+        if (!isLivenessOnly && refEmb == null) return
 
         val faces = detectFaces(frame)
         if (isCancelled) return
@@ -180,6 +193,12 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                     Phase.LIVENESS_CHALLENGE -> {
                         updateState(
                             messageBelow = "Face lost, looking for face...",
+                            graphicsOverlay = null
+                        )
+                    }
+                    Phase.CAPTURING -> {
+                        updateState(
+                            messageBelow = "Face lost, hold still...",
                             graphicsOverlay = null
                         )
                     }
@@ -215,8 +234,8 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
 
         var currentSimilarity: Float? = null
 
-        // Whenever the face is facing straight, compute and evaluate embedding
-        if (isFacingStraight) {
+        // Whenever the face is facing straight and we have a reference embedding, compute similarity
+        if (isFacingStraight && refEmb != null) {
             try {
                 val cameraEmbedding = computeCameraEmbedding(frame, face)
                 if (cameraEmbedding != null) {
@@ -245,34 +264,18 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                 val pulseColor = PromptColor.lerp(PromptColor.DARK_GRAY, PromptColor.BLUE, pulse)
 
                 if (isFacingStraight) {
-                    val straightStart = straightFaceStartTime ?: run {
-                        straightFaceStartTime = now
-                        now
-                    }
-
-                    val isMatched = currentSimilarity != null && currentSimilarity >= config.matchThreshold
-
-                    if (isMatched) {
+                    if (isLivenessOnly) {
                         consecutiveMatchFrames++
                         if (consecutiveMatchFrames >= 2) {
-                            phase = Phase.MATCH_CONVEYED
+                            phase = Phase.LIVENESS_CHALLENGE
                             phaseStartTime = now
-                            straightFaceStartTime = null
-                            val percent = ((currentSimilarity ?: bestSimilarity) * 100).toInt()
-                            val matchedMsg = if (debug) "Face Matched ($percent%)" else "Face Matched"
-                            updateState(
-                                messageAbove = matchedMsg,
-                                messageBelow = "Hold still...",
-                                ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
-                                    RingSegment(color = PromptColor.GREEN, scale = 1.15f)
-                                },
-                                graphicsOverlay = debugGraphics
-                            )
+                            currentChallengeIndex = 0
+                            consecutivePoseFrames = 0
+                            consecutiveMatchFrames = 0
+                            showChallenge(0.0f, debugGraphics)
                         } else {
-                            val percent = ((currentSimilarity ?: bestSimilarity) * 100).toInt()
-                            val verifyingMsg = if (debug) "Verifying Identity ($percent%)" else "Verifying Identity"
                             updateState(
-                                messageAbove = verifyingMsg,
+                                messageAbove = "Position your face",
                                 messageBelow = "Hold still...",
                                 ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
                                     RingSegment(color = pulseColor, scale = 1.0f)
@@ -281,36 +284,73 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                             )
                         }
                     } else {
-                        consecutiveMatchFrames = 0
-                        if (now - straightStart > matchTimeoutMs) {
-                            val percentage = (bestSimilarity * 100).toInt().coerceAtLeast(0)
-                            if (bestSimilarity >= config.matchThreshold) {
-                                failSession(
-                                    messageAbove = "Verification Failed",
-                                    messageBelow = "Unable to confirm match - please hold still and look directly at the camera"
+                        val straightStart = straightFaceStartTime ?: run {
+                            straightFaceStartTime = now
+                            now
+                        }
+
+                        val isMatched = currentSimilarity != null && currentSimilarity >= config.matchThreshold
+
+                        if (isMatched) {
+                            consecutiveMatchFrames++
+                            if (consecutiveMatchFrames >= 2) {
+                                phase = Phase.MATCH_CONVEYED
+                                phaseStartTime = now
+                                straightFaceStartTime = null
+                                val percent = ((currentSimilarity ?: bestSimilarity) * 100).toInt()
+                                val matchedMsg = if (debug) "Face Matched ($percent%)" else "Face Matched"
+                                updateState(
+                                    messageAbove = matchedMsg,
+                                    messageBelow = "Hold still...",
+                                    ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
+                                        RingSegment(color = PromptColor.GREEN, scale = 1.15f)
+                                    },
+                                    graphicsOverlay = debugGraphics
                                 )
                             } else {
-                                failSession(
-                                    messageAbove = "Verification Failed",
-                                    messageBelow = "Face does not match reference portrait ($percentage% match, required ${(config.matchThreshold * 100).toInt()}%)"
+                                val percent = ((currentSimilarity ?: bestSimilarity) * 100).toInt()
+                                val verifyingMsg = if (debug) "Verifying Identity ($percent%)" else "Verifying Identity"
+                                updateState(
+                                    messageAbove = verifyingMsg,
+                                    messageBelow = "Hold still...",
+                                    ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
+                                        RingSegment(color = pulseColor, scale = 1.0f)
+                                    },
+                                    graphicsOverlay = debugGraphics
                                 )
                             }
-                            return
-                        }
-                        val verifyingMsg = if (debug && currentSimilarity != null) {
-                            val percent = (currentSimilarity * 100).toInt()
-                            "Verifying Identity ($percent%)"
                         } else {
-                            "Verifying Identity"
+                            consecutiveMatchFrames = 0
+                            if (now - straightStart > matchTimeoutMs) {
+                                val percentage = (bestSimilarity * 100).toInt().coerceAtLeast(0)
+                                if (bestSimilarity >= config.matchThreshold) {
+                                    failSession(
+                                        messageAbove = "Verification Failed",
+                                        messageBelow = "Unable to confirm match - please hold still and look directly at the camera"
+                                    )
+                                } else {
+                                    failSession(
+                                        messageAbove = "Verification Failed",
+                                        messageBelow = "Face does not match reference portrait ($percentage% match, required ${(config.matchThreshold * 100).toInt()}%)"
+                                    )
+                                }
+                                return
+                            }
+                            val verifyingMsg = if (debug && currentSimilarity != null) {
+                                val percent = (currentSimilarity * 100).toInt()
+                                "Verifying Identity ($percent%)"
+                            } else {
+                                "Verifying Identity"
+                            }
+                            updateState(
+                                messageAbove = verifyingMsg,
+                                messageBelow = "Hold still and look directly at the camera...",
+                                ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
+                                    RingSegment(color = pulseColor, scale = 1.0f)
+                                },
+                                graphicsOverlay = debugGraphics
+                            )
                         }
-                        updateState(
-                            messageAbove = verifyingMsg,
-                            messageBelow = "Hold still and look directly at the camera...",
-                            ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
-                                RingSegment(color = pulseColor, scale = 1.0f)
-                            },
-                            graphicsOverlay = debugGraphics
-                        )
                     }
                 } else {
                     straightFaceStartTime = null
@@ -364,7 +404,21 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                         consecutivePoseFrames = 0
                         currentChallengeIndex++
                         if (currentChallengeIndex >= challenges.size) {
-                            finalizeVerification()
+                            if (isLivenessOnly) {
+                                phase = Phase.CAPTURING
+                                phaseStartTime = now
+                                consecutiveMatchFrames = 0
+                                updateState(
+                                    messageAbove = "Hold Still",
+                                    messageBelow = "Hold still to capture photo...",
+                                    ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
+                                        RingSegment(color = PromptColor.GREEN, scale = 1.15f)
+                                    },
+                                    graphicsOverlay = debugGraphics
+                                )
+                            } else {
+                                finalizeVerification()
+                            }
                         } else {
                             phaseStartTime = now
                             showChallenge(0.0f, debugGraphics)
@@ -372,6 +426,45 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                     }
                 } else {
                     consecutivePoseFrames = 0
+                }
+            }
+
+            Phase.CAPTURING -> {
+                if (isFacingStraight) {
+                    consecutiveMatchFrames++
+                    if (consecutiveMatchFrames >= 2) {
+                        val photoBytes = captureHighResolutionImage(frame)
+                        phase = Phase.COMPLETED
+                        updateState(
+                            messageAbove = "Portrait Captured",
+                            messageBelow = "Liveness verified",
+                            ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
+                                RingSegment(color = PromptColor.GREEN, scale = 1.2f)
+                            },
+                            outcome = FaceMatcherPromptState.Outcome.SUCCESS,
+                            capturedImage = photoBytes,
+                            graphicsOverlay = null
+                        )
+                    } else {
+                        updateState(
+                            messageAbove = "Hold Still",
+                            messageBelow = "Capturing portrait image...",
+                            ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
+                                RingSegment(color = PromptColor.GREEN, scale = 1.15f)
+                            },
+                            graphicsOverlay = debugGraphics
+                        )
+                    }
+                } else {
+                    consecutiveMatchFrames = 0
+                    updateState(
+                        messageAbove = "Hold Still",
+                        messageBelow = "Look directly at the camera...",
+                        ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
+                            RingSegment(color = PromptColor.DARK_GRAY, scale = 1.0f)
+                        },
+                        graphicsOverlay = debugGraphics
+                    )
                 }
             }
 

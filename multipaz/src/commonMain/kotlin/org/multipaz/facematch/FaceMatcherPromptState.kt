@@ -1,5 +1,7 @@
 package org.multipaz.facematch
 
+import kotlinx.io.bytestring.ByteString
+
 /**
  * State of the face matcher prompt dialog observed by the UI layer.
  *
@@ -9,13 +11,15 @@ package org.multipaz.facematch
  * clockwise from 12 o'clock).
  * @property outcome overall verification outcome.
  * @property graphicsOverlay optional vector graphics to overlay on top of the camera video stream.
+ * @property capturedImage optional high-resolution portrait photo bytes captured during liveness enrollment.
  */
 data class FaceMatcherPromptState(
     val messageAbove: String? = null,
     val messageBelow: String? = null,
     val ringSegments: List<RingSegment> = defaultSegments,
     val outcome: Outcome = Outcome.IN_PROGRESS,
-    val graphicsOverlay: FaceMatcherGraphics? = null
+    val graphicsOverlay: FaceMatcherGraphics? = null,
+    val capturedImage: ByteString? = null
 ) {
     /** Overall outcome of the face verification session. */
     enum class Outcome {

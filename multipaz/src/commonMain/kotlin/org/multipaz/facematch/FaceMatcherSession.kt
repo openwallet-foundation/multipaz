@@ -15,7 +15,7 @@ import kotlinx.io.bytestring.ByteString
  * @property referencePortrait reference portrait image bytes to verify against.
  */
 abstract class FaceMatcherSession(
-    val referencePortrait: ByteString
+    val referencePortrait: ByteString? = null
 ) {
     /**
      * Whether this session optionally supplies graphics to overlay on top of the matching video stream.
@@ -48,14 +48,16 @@ abstract class FaceMatcherSession(
         messageBelow: String? = _state.value.messageBelow,
         ringSegments: List<RingSegment> = _state.value.ringSegments,
         outcome: FaceMatcherPromptState.Outcome = _state.value.outcome,
-        graphicsOverlay: FaceMatcherGraphics? = _state.value.graphicsOverlay
+        graphicsOverlay: FaceMatcherGraphics? = _state.value.graphicsOverlay,
+        capturedImage: ByteString? = _state.value.capturedImage
     ) {
         _state.value = FaceMatcherPromptState(
             messageAbove = messageAbove,
             messageBelow = messageBelow,
             ringSegments = ringSegments,
             outcome = outcome,
-            graphicsOverlay = graphicsOverlay
+            graphicsOverlay = graphicsOverlay,
+            capturedImage = capturedImage
         )
     }
 

@@ -144,3 +144,50 @@ suspend fun PromptModel.showFaceMatcherPrompt(
         false
     }
 }
+
+/**
+ * Prompts the user to perform active liveness head poses and capture an upright portrait photo.
+ *
+ * @param reason user-facing description of the verification reason.
+ * @param matcher the [FaceMatcher] to use, or default from the dialog model if null.
+ * @param document optional document associated with this request.
+ * @return the captured high-resolution portrait photo [ByteString], or null if verification failed or was cancelled.
+ */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class,
+    PromptModelNotAvailableException::class,
+    PromptUiNotAvailableException::class
+)
+suspend fun PromptModel.showFaceLivenessPrompt(
+    reason: Reason = Reason.HumanReadable(
+        title = "Check Liveness",
+        subtitle = "Follow the prompts to confirm liveness and capture your photo",
+        requireConfirmation = false
+    ),
+    matcher: FaceMatcher? = null,
+    document: Document? = null
+): ByteString? {
+    val dialogModel = getFaceMatcherDialogModel()
+    val matcherToUse = matcher ?: dialogModel.defaultMatcher ?: SimulatedFaceMatcher()
+    val faceMatcherSession = matcherToUse.createLivenessSession()
+    val success = try {
+        dialogModel.displayPrompt(
+            FaceMatcherPromptDialogModel.FaceMatcherRequest(
+                referencePortrait = null,
+                reason = reason,
+                matcher = matcherToUse,
+                faceMatcherSession = faceMatcherSession,
+                document = document
+            )
+        )
+    } catch (e: PromptDismissedException) {
+        false
+    }
+    return if (success) {
+        faceMatcherSession.state.value.capturedImage
+    } else {
+        null
+    }
+}
+

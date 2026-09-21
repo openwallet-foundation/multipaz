@@ -493,17 +493,13 @@ class App private constructor (val promptModel: PromptModel) {
         faceMatcherRepository = FaceMatcherRepository().apply {
             add(
                 FaceNetFaceMatcher(
-                    modelBytesProvider = {
-                        FaceTestData.testModel
-                    },
+                    modelBytes = FaceTestData.testModel,
                     config = FaceNetModelConfig.MOBILE_FACENET
                 )
             )
             add(
                 FaceNetFaceMatcher(
-                    modelBytesProvider = {
-                        FaceTestData.testModel
-                    },
+                    modelBytes = FaceTestData.testModel,
                     config = FaceNetModelConfig.MOBILE_FACENET,
                     debug = true
                 )

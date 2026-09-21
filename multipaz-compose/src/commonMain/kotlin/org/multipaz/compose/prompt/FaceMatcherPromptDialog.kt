@@ -121,7 +121,14 @@ fun FaceMatcherPromptDialog(
             ?: remember { SimulatedFaceMatcher() }
 
         val faceMatcherSession = remember(dialogParameters) {
-            dialogParameters.faceMatcherSession ?: matcher.createSession(dialogParameters.referencePortrait)
+            dialogParameters.faceMatcherSession ?: run {
+                val ref = dialogParameters.referencePortrait
+                if (ref != null) {
+                    matcher.createSession(ref)
+                } else {
+                    matcher.createLivenessSession()
+                }
+            }
         }
 
         val title = humanReadableTitle?.ifEmpty { null }
@@ -275,7 +282,7 @@ private fun FaceMatcherBottomSheet(
                         Camera(
                             modifier = Modifier.fillMaxSize(),
                             cameraSelection = CameraSelection.DEFAULT_FRONT_CAMERA,
-                            captureResolution = CameraCaptureResolution.MEDIUM,
+                            captureResolution = CameraCaptureResolution.HIGH,
                             showCameraPreview = true,
                             onFrameCaptured = { frame ->
                                 if (isDismissed || isSuccess || isProcessingFrame) return@Camera

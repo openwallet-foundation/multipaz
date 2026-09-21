@@ -7,8 +7,8 @@ import org.multipaz.facematch.SimulatedFaceMatcherSession
 internal actual val isFaceNetSupported: Boolean = false
 
 internal actual fun createFaceNetSession(
-    referencePortrait: ByteString,
-    modelBytesProvider: suspend () -> ByteString,
+    referencePortrait: ByteString?,
+    modelBytes: ByteString,
     config: FaceNetModelConfig,
     debug: Boolean,
     matcherName: String,
@@ -19,7 +19,7 @@ internal actual fun createFaceNetSession(
 
 internal actual suspend fun extractFaceEmbedding(
     portrait: ByteString,
-    modelBytesProvider: suspend () -> ByteString,
+    modelBytes: ByteString,
     config: FaceNetModelConfig
 ): FaceEmbedding {
     throw UnsupportedOperationException("Face matching is not supported on this platform")
@@ -27,7 +27,7 @@ internal actual suspend fun extractFaceEmbedding(
 
 internal actual suspend fun extractDetectedFaceCrop(
     portrait: ByteString,
-    modelBytesProvider: suspend () -> ByteString,
+    modelBytes: ByteString,
     config: FaceNetModelConfig
 ): ByteString {
     throw UnsupportedOperationException("Face matching is not supported on this platform")

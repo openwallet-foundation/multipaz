@@ -7,13 +7,13 @@ import org.multipaz.facematch.FaceMatcherSession
 /**
  * A face matcher implementation based on Google FaceNet and MobileFaceNet models.
  *
- * @property modelBytesProvider a suspending lambda that supplies the `.tflite` model data.
+ * @property modelBytes the `.tflite` model data.
  * @property config configuration parameters specifying input dimensions, normalization, and match threshold.
  * @property name unique machine identifier for this matcher.
  * @property displayName human-readable display name.
  */
 class FaceNetFaceMatcher(
-    val modelBytesProvider: suspend () -> ByteString,
+    val modelBytes: ByteString,
     val config: FaceNetModelConfig = FaceNetModelConfig.AUTO,
     val debug: Boolean = false,
     override val name: String = if (debug) "facenet_debug" else "facenet",
@@ -55,20 +55,6 @@ class FaceNetFaceMatcher(
         displayName = "MobileFaceNet"
     )
 
-    constructor(
-        modelBytes: ByteString,
-        config: FaceNetModelConfig = FaceNetModelConfig.AUTO,
-        debug: Boolean = false,
-        name: String = if (debug) "facenet_debug" else "facenet",
-        displayName: String = if (debug) "MobileFaceNet (debug)" else "MobileFaceNet"
-    ) : this(
-        modelBytesProvider = { modelBytes },
-        config = config,
-        debug = debug,
-        name = name,
-        displayName = displayName
-    )
-
     /**
      * Whether native on-device face matching is supported on the current platform runtime.
      *
@@ -77,10 +63,24 @@ class FaceNetFaceMatcher(
     val isSupported: Boolean
         get() = isFaceNetSupported
 
+    override val supportsLiveness: Boolean
+        get() = isSupported
+
     override fun createSession(referencePortrait: ByteString): FaceMatcherSession {
         return createFaceNetSession(
             referencePortrait = referencePortrait,
-            modelBytesProvider = modelBytesProvider,
+            modelBytes = modelBytes,
+            config = config,
+            debug = debug,
+            matcherName = name,
+            matcherDisplayName = displayName
+        )
+    }
+
+    override fun createLivenessSession(): FaceMatcherSession {
+        return createFaceNetSession(
+            referencePortrait = null,
+            modelBytes = modelBytes,
             config = config,
             debug = debug,
             matcherName = name,
@@ -103,7 +103,7 @@ class FaceNetFaceMatcher(
     suspend fun getFaceEmbedding(portrait: ByteString): FaceEmbedding {
         return extractFaceEmbedding(
             portrait = portrait,
-            modelBytesProvider = modelBytesProvider,
+            modelBytes = modelBytes,
             config = config
         )
     }
@@ -140,7 +140,7 @@ class FaceNetFaceMatcher(
     suspend fun extractFaceCrop(portrait: ByteString): ByteString {
         return extractDetectedFaceCrop(
             portrait = portrait,
-            modelBytesProvider = modelBytesProvider,
+            modelBytes = modelBytes,
             config = config
         )
     }
@@ -156,8 +156,8 @@ class FaceNetFaceMatcher(
 internal expect val isFaceNetSupported: Boolean
 
 internal expect fun createFaceNetSession(
-    referencePortrait: ByteString,
-    modelBytesProvider: suspend () -> ByteString,
+    referencePortrait: ByteString?,
+    modelBytes: ByteString,
     config: FaceNetModelConfig,
     debug: Boolean,
     matcherName: String,
@@ -166,12 +166,12 @@ internal expect fun createFaceNetSession(
 
 internal expect suspend fun extractFaceEmbedding(
     portrait: ByteString,
-    modelBytesProvider: suspend () -> ByteString,
+    modelBytes: ByteString,
     config: FaceNetModelConfig
 ): FaceEmbedding
 
 internal expect suspend fun extractDetectedFaceCrop(
     portrait: ByteString,
-    modelBytesProvider: suspend () -> ByteString,
+    modelBytes: ByteString,
     config: FaceNetModelConfig
 ): ByteString

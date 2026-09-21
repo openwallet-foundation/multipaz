@@ -72,6 +72,9 @@ struct FaceMatcherPromptScreen: View {
     @State private var detectedFaceCrop: ByteString? = nil
     @State private var isExtractingCrop: Bool = false
     @State private var cropError: String? = nil
+    @State private var isCheckingLiveness: Bool = false
+    @State private var capturedPortraitForDialog: ByteString? = nil
+    @State private var showCapturedPortraitSheet: Bool = false
 
     var body: some View {
         ScrollView {
@@ -103,6 +106,11 @@ struct FaceMatcherPromptScreen: View {
         }
         .sheet(isPresented: $showSamplePortraitPicker) {
             samplePortraitPickerSheet
+        }
+        .sheet(isPresented: $showCapturedPortraitSheet) {
+            if let captured = capturedPortraitForDialog {
+                capturedPortraitSheet(captured: captured)
+            }
         }
         .alert("Camera Unavailable", isPresented: $showCameraUnavailableAlert) {
             Button("Pick from Sample portraits") {
@@ -186,7 +194,13 @@ struct FaceMatcherPromptScreen: View {
                     Text("Reference Portrait")
                         .font(.caption)
                         .fontWeight(.semibold)
-                    Text("\(portrait.toNSData().count) bytes")
+                    let resInfo: String = {
+                        if let uiImage, let cgImage = uiImage.cgImage {
+                            return "\(cgImage.width)×\(cgImage.height) • "
+                        }
+                        return ""
+                    }()
+                    Text("\(resInfo)\(portrait.toNSData().count / 1024) KB")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -247,7 +261,13 @@ struct FaceMatcherPromptScreen: View {
                     .overlay(Text("Invalid Image").font(.caption))
             }
 
-            Text("Size: \(portrait.toNSData().count) bytes")
+            let resInfo: String = {
+                if let uiImage, let cgImage = uiImage.cgImage {
+                    return "\(cgImage.width)×\(cgImage.height) • "
+                }
+                return ""
+            }()
+            Text("Size: \(resInfo)\(portrait.toNSData().count / 1024) KB")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -376,6 +396,23 @@ struct FaceMatcherPromptScreen: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(referencePortrait == nil || isVerifying)
+
+            Button {
+                checkLivenessAndCapture()
+            } label: {
+                HStack {
+                    if isCheckingLiveness {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .accentColor))
+                            .padding(.trailing, 8)
+                    }
+                    Text(isCheckingLiveness ? "Checking Liveness..." : "Check liveness and capture portrait image")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(isVerifying || isCheckingLiveness)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -571,6 +608,109 @@ struct FaceMatcherPromptScreen: View {
                 }
             } catch {
                 showToast("Face verification dismissed or failed")
+            }
+        }
+    }
+
+    private func checkLivenessAndCapture() {
+        isCheckingLiveness = true
+        let matcher = viewModel.faceMatcherRepository?.all.first(where: { $0.displayName == selectedMatcherDisplayName })
+            ?? viewModel.faceMatcherRepository?.defaultMatcher
+        Task {
+            defer { isCheckingLiveness = false }
+            do {
+                let capturedImage = try await viewModel.promptModel.showFaceLivenessPrompt(
+                    reason: ReasonHumanReadable(
+                        title: "Check Liveness",
+                        subtitle: "Follow the prompts and hold still to capture your portrait",
+                        requireConfirmation: false
+                    ),
+                    matcher: matcher,
+                    document: nil
+                )
+                if let capturedImage {
+                    capturedPortraitForDialog = capturedImage
+                    showCapturedPortraitSheet = true
+                    showToast("Liveness confirmed! Portrait captured.")
+                } else {
+                    showToast("Liveness check failed or canceled")
+                }
+            } catch {
+                showToast("Liveness check dismissed or failed")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func capturedPortraitSheet(captured: ByteString) -> some View {
+        let uiImage = UIImage(data: captured.toNSData())
+        let resolutionText: String = {
+            if let uiImage, let cgImage = uiImage.cgImage {
+                return "\(cgImage.width) × \(cgImage.height)"
+            } else if let uiImage {
+                return "\(Int(uiImage.size.width * uiImage.scale)) × \(Int(uiImage.size.height * uiImage.scale))"
+            }
+            return "Unknown"
+        }()
+        let sizeKb = captured.toNSData().count / 1024
+
+        NavigationStack {
+            VStack(spacing: 16) {
+                if let uiImage {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 220, height: 220)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.accentColor, lineWidth: 2)
+                        )
+                } else {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.secondarySystemBackground))
+                        .frame(width: 220, height: 220)
+                        .overlay(Text("Invalid Image").font(.caption))
+                }
+
+                VStack(spacing: 4) {
+                    Text("Resolution: \(resolutionText) (\(sizeKb) KB)")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.accentColor)
+
+                    Text("Liveness check passed! High-resolution photo captured.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal)
+
+                Button {
+                    Task {
+                        await saveFaceMatcherReferencePortrait(storage: viewModel.storage, portrait: captured)
+                        referencePortrait = captured
+                        showCapturedPortraitSheet = false
+                        showToast("Reference portrait updated from captured photo")
+                    }
+                } label: {
+                    Text("Use as Reference Portrait")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.horizontal)
+
+                Spacer()
+            }
+            .padding(.top, 24)
+            .navigationTitle("Captured Portrait")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") {
+                        showCapturedPortraitSheet = false
+                    }
+                }
             }
         }
     }
