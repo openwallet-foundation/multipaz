@@ -8,7 +8,6 @@ import org.multipaz.util.Logger
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.CompatibilityList
 import org.tensorflow.lite.gpu.GpuDelegate
-import java.io.Closeable
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -21,7 +20,7 @@ private const val TAG = "AndroidFaceNetInterpreter"
 internal class AndroidFaceNetInterpreter(
     modelBytes: ByteString?,
     val config: FaceNetModelConfig
-) : Closeable {
+) : AutoCloseable {
 
     private val interpreter: Interpreter
     private var gpuDelegate: GpuDelegate? = null
@@ -45,7 +44,8 @@ internal class AndroidFaceNetInterpreter(
             }
         } else {
             // Try loading default model from app assets
-            loadModelFromAssets(applicationContext, "mobile_facenet.tflite")
+            val ctx = try { applicationContext } catch (e: Throwable) { null }
+            loadModelFromAssets(ctx, "mobile_facenet.tflite")
                 ?: throw IllegalStateException(
                     "No FaceNet model provided and 'mobile_facenet.tflite' not found in assets."
                 )
@@ -240,7 +240,8 @@ internal class AndroidFaceNetInterpreter(
     }
 
     companion object {
-        fun loadModelFromAssets(context: Context, assetName: String): ByteBuffer? {
+        fun loadModelFromAssets(context: Context?, assetName: String): ByteBuffer? {
+            if (context == null) return null
             return try {
                 val fileDescriptor = context.assets.openFd(assetName)
                 val inputStream = FileInputStream(fileDescriptor.fileDescriptor)

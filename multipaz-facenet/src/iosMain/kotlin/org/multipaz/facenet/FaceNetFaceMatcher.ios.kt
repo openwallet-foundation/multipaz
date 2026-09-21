@@ -2,7 +2,8 @@ package org.multipaz.facenet
 
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.FaceMatcherSession
-import org.multipaz.facematch.SimulatedFaceMatcherSession
+
+internal actual val isFaceNetSupported: Boolean = true
 
 internal actual fun createFaceNetSession(
     referencePortrait: ByteString,
@@ -18,4 +19,25 @@ internal actual fun createFaceNetSession(
         matcherName = matcherName,
         matcherDisplayName = matcherDisplayName
     )
+}
+
+internal actual suspend fun extractFaceEmbedding(
+    portrait: ByteString,
+    modelBytesProvider: (suspend () -> ByteString)?,
+    config: FaceNetModelConfig
+): FaceEmbedding {
+    val modelBytes = modelBytesProvider?.invoke()
+    IosFaceNetInterpreter(modelBytes, config).use { interpreter ->
+        IosFaceDetector().use { detector ->
+            val bytes = portrait.toByteArray()
+            val faces = detector.detectFaces(bytes)
+            if (faces.isEmpty()) {
+                throw IllegalArgumentException("No face detected in portrait")
+            }
+            val crop = detector.extractFaceCrop(bytes, faces[0], interpreter.imageSquareSize)
+                ?: throw IllegalStateException("Failed to extract face crop")
+            return interpreter.getEmbedding(crop)
+                ?: throw IllegalStateException("Failed to compute face embedding")
+        }
+    }
 }
