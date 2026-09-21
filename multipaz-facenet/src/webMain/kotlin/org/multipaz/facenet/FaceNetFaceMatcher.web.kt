@@ -10,6 +10,7 @@ internal actual fun createFaceNetSession(
     referencePortrait: ByteString,
     modelBytesProvider: suspend () -> ByteString,
     config: FaceNetModelConfig,
+    debug: Boolean,
     matcherName: String,
     matcherDisplayName: String
 ): FaceMatcherSession {

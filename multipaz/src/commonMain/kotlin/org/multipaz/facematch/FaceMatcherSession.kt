@@ -17,6 +17,12 @@ import kotlinx.io.bytestring.ByteString
 abstract class FaceMatcherSession(
     val referencePortrait: ByteString
 ) {
+    /**
+     * Whether this session optionally supplies graphics to overlay on top of the matching video stream.
+     */
+    open val providesGraphicsOverlay: Boolean
+        get() = false
+
     protected val _state = MutableStateFlow(FaceMatcherPromptState())
 
     /** Observable reactive state stream consumed by Compose and SwiftUI dialogs. */
@@ -41,13 +47,15 @@ abstract class FaceMatcherSession(
         messageAbove: String? = _state.value.messageAbove,
         messageBelow: String? = _state.value.messageBelow,
         ringSegments: List<RingSegment> = _state.value.ringSegments,
-        outcome: FaceMatcherPromptState.Outcome = _state.value.outcome
+        outcome: FaceMatcherPromptState.Outcome = _state.value.outcome,
+        graphicsOverlay: FaceMatcherGraphics? = _state.value.graphicsOverlay
     ) {
         _state.value = FaceMatcherPromptState(
             messageAbove = messageAbove,
             messageBelow = messageBelow,
             ringSegments = ringSegments,
-            outcome = outcome
+            outcome = outcome,
+            graphicsOverlay = graphicsOverlay
         )
     }
 

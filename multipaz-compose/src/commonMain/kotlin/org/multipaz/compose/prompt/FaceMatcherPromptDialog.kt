@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -43,9 +44,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString
@@ -60,6 +65,8 @@ import org.multipaz.multipaz_compose.generated.resources.face_matcher_prompt_def
 import org.multipaz.multipaz_compose.generated.resources.face_matcher_prompt_default_title
 import org.multipaz.multipaz_compose.generated.resources.face_matcher_prompt_grant_permission
 import org.multipaz.multipaz_compose.generated.resources.face_matcher_prompt_permission_required
+import org.multipaz.facematch.FaceMatcherGraphic
+import org.multipaz.facematch.FaceMatcherGraphics
 import org.multipaz.facematch.FaceMatcherPromptState
 import org.multipaz.facematch.FaceMatcherSession
 import org.multipaz.facematch.RingSegment
@@ -282,6 +289,14 @@ private fun FaceMatcherBottomSheet(
                             }
                         )
 
+                        val overlay = promptState.graphicsOverlay
+                        if (overlay != null && overlay.items.isNotEmpty()) {
+                            FaceMatcherOverlay(
+                                overlay = overlay,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
                         if (isSuccess) {
                             Box(
                                 modifier = Modifier
@@ -443,4 +458,100 @@ private fun createRoundedRectPath(
     )
     path.close()
     return path
+}
+
+@Composable
+private fun FaceMatcherOverlay(
+    overlay: FaceMatcherGraphics,
+    modifier: Modifier = Modifier
+) {
+    val textMeasurer = rememberTextMeasurer()
+    Canvas(modifier = modifier) {
+        val viewW = size.width
+        val viewH = size.height
+        val frameW = overlay.frameWidth.toFloat()
+        val frameH = overlay.frameHeight.toFloat()
+        if (frameW <= 0f || frameH <= 0f) return@Canvas
+
+        val scale = maxOf(viewW / frameW, viewH / frameH)
+        val offsetX = (viewW - frameW * scale) / 2f
+        val offsetY = (viewH - frameH * scale) / 2f
+
+        fun mapX(x: Float): Float {
+            val mappedX = if (overlay.isMirrored) (frameW - x) else x
+            return mappedX * scale + offsetX
+        }
+
+        fun mapY(y: Float): Float = y * scale + offsetY
+
+        for (item in overlay.items) {
+            when (item) {
+                is FaceMatcherGraphic.Point -> {
+                    val cx = mapX(item.x)
+                    val cy = mapY(item.y)
+                    drawCircle(
+                        color = Color(item.color.argb),
+                        radius = item.radius.dp.toPx(),
+                        center = Offset(cx, cy)
+                    )
+                }
+                is FaceMatcherGraphic.Line -> {
+                    val x1 = mapX(item.startX)
+                    val y1 = mapY(item.startY)
+                    val x2 = mapX(item.endX)
+                    val y2 = mapY(item.endY)
+                    drawLine(
+                        color = Color(item.color.argb),
+                        start = Offset(x1, y1),
+                        end = Offset(x2, y2),
+                        strokeWidth = item.strokeWidth.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                }
+                is FaceMatcherGraphic.Rect -> {
+                    val l = mapX(item.left)
+                    val r = mapX(item.right)
+                    val t = mapY(item.top)
+                    val b = mapY(item.bottom)
+                    val minX = minOf(l, r)
+                    val maxX = maxOf(l, r)
+                    drawRect(
+                        color = Color(item.color.argb),
+                        topLeft = Offset(minX, t),
+                        size = Size(maxX - minX, b - t),
+                        style = Stroke(width = item.strokeWidth.dp.toPx())
+                    )
+                }
+                is FaceMatcherGraphic.Text -> {
+                    val cx = mapX(item.x)
+                    val cy = mapY(item.y)
+                    val layoutResult = textMeasurer.measure(
+                        text = item.text,
+                        style = TextStyle(
+                            fontSize = item.fontSize.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(item.color.argb)
+                        )
+                    )
+                    val padH = 6.dp.toPx()
+                    val padV = 2.dp.toPx()
+                    val textW = layoutResult.size.width.toFloat()
+                    val textH = layoutResult.size.height.toFloat()
+                    val topLeftX = cx - textW / 2f
+                    val topLeftY = cy - textH / 2f
+
+                    drawRoundRect(
+                        color = Color.Black.copy(alpha = 0.65f),
+                        topLeft = Offset(topLeftX - padH, topLeftY - padV),
+                        size = Size(textW + padH * 2f, textH + padV * 2f),
+                        cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
+                    )
+                    drawText(
+                        textLayoutResult = layoutResult,
+                        topLeft = Offset(topLeftX, topLeftY)
+                    )
+                }
+            }
+        }
+    }
 }

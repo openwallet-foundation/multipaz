@@ -4,12 +4,16 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facenet.testdata.FaceTestData
 import org.multipaz.facematch.CameraFrame
+import org.multipaz.facematch.FaceMatcherGraphic
+import org.multipaz.facematch.FaceMatcherGraphics
 import org.multipaz.facematch.FaceMatcherPromptState
 import org.multipaz.facematch.PromptColor
 import org.multipaz.facematch.RingDirection
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class FaceNetSessionTest {
@@ -23,17 +27,19 @@ class FaceNetSessionTest {
     private class TestFaceNetSession(
         referencePortrait: ByteString = ByteString(),
         config: FaceNetModelConfig = FaceNetModelConfig.MOBILE_FACENET,
+        debug: Boolean = false,
         clock: () -> Long,
         randomSeed: Long = 42L
-    ) : FaceNetSessionBase<MockDetectedFace>(
+    ) : FaceNetSessionBase<DetectedFacePose>(
         referencePortrait = referencePortrait,
         config = config,
+        debug = debug,
         matcherName = "facenet",
         matcherDisplayName = "MobileFaceNet",
         clock = clock,
         randomSeed = randomSeed
     ) {
-        var mockFaces: List<MockDetectedFace> = emptyList()
+        var mockFaces: List<DetectedFacePose> = emptyList()
         var mockEmbedding: FaceEmbedding? = null
         var pipelineInitError: Exception? = null
         var isClosed = false
@@ -43,11 +49,11 @@ class FaceNetSessionTest {
             referenceEmbedding = FaceEmbedding(FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING)
         }
 
-        override suspend fun detectFaces(frame: CameraFrame): List<MockDetectedFace> {
+        override suspend fun detectFaces(frame: CameraFrame): List<DetectedFacePose> {
             return mockFaces
         }
 
-        override suspend fun computeCameraEmbedding(frame: CameraFrame, face: MockDetectedFace): FaceEmbedding? {
+        override suspend fun computeCameraEmbedding(frame: CameraFrame, face: DetectedFacePose): FaceEmbedding? {
             return mockEmbedding
         }
 
@@ -316,4 +322,52 @@ class FaceNetSessionTest {
         session.feedFrame(dummyFrame)
         assertEquals(FaceMatcherPromptState.Outcome.IN_PROGRESS, session.state.value.outcome)
     }
+
+    @Test
+    fun testDebugGraphicsOverlay() = runTest {
+        var currentTime = 1000L
+        val session = TestFaceNetSession(
+            debug = true,
+            clock = { currentTime }
+        )
+        assertTrue(session.providesGraphicsOverlay)
+
+        val detection = BlazeFaceDetection(
+            score = 0.95f,
+            boundingBox = FaceBoundingBox(50.0, 60.0, 100.0, 120.0),
+            rightEye = FacePoint2D(70f, 90f),
+            leftEye = FacePoint2D(130f, 90f),
+            noseTip = FacePoint2D(100f, 120f),
+            mouthCenter = FacePoint2D(100f, 150f),
+            rightEarTragus = FacePoint2D(40f, 100f),
+            leftEarTragus = FacePoint2D(160f, 100f),
+            yaw = 5f,
+            pitch = -3f,
+            roll = 0f
+        )
+        session.mockFaces = listOf(detection)
+        session.mockEmbedding = FaceEmbedding(FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING)
+        session.feedFrame(dummyFrame)
+
+        val overlay = session.state.value.graphicsOverlay
+        assertNotNull(overlay)
+        assertEquals(dummyFrame.uprightWidth, overlay.frameWidth)
+        assertEquals(dummyFrame.uprightHeight, overlay.frameHeight)
+        assertTrue(overlay.items.isNotEmpty())
+
+        // Check bounding box rect exists
+        assertTrue(overlay.items.any { it is FaceMatcherGraphic.Rect })
+        // Check points exist (keypoints)
+        assertTrue(overlay.items.any { it is FaceMatcherGraphic.Point })
+        // Check lines exist (wireframe and pose ray)
+        assertTrue(overlay.items.any { it is FaceMatcherGraphic.Line })
+        // Check match percentage text exists
+        assertTrue(overlay.items.any { it is FaceMatcherGraphic.Text && it.text == "100%" })
+
+        // When no face is detected, graphicsOverlay is cleared to null
+        session.mockFaces = emptyList()
+        session.feedFrame(dummyFrame)
+        assertNull(session.state.value.graphicsOverlay)
+    }
 }
+

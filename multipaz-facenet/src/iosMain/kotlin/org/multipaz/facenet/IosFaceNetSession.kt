@@ -13,12 +13,14 @@ internal class IosFaceNetSession(
     referencePortrait: ByteString,
     private val modelBytesProvider: suspend () -> ByteString,
     config: FaceNetModelConfig,
+    debug: Boolean = false,
     matcherName: String = "facenet",
     matcherDisplayName: String = "MobileFaceNet",
     clock: () -> Long = { Clock.System.now().toEpochMilliseconds() }
 ) : FaceNetSessionBase<IosDetectedFace>(
     referencePortrait = referencePortrait,
     config = config,
+    debug = debug,
     matcherName = matcherName,
     matcherDisplayName = matcherDisplayName,
     clock = clock

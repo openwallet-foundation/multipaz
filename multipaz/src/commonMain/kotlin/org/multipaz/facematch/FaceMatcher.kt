@@ -17,6 +17,12 @@ interface FaceMatcher {
         get() = name
 
     /**
+     * Whether this matcher optionally supplies graphics to overlay on top of the matching video stream.
+     */
+    val providesGraphicsOverlay: Boolean
+        get() = false
+
+    /**
      * Creates a new [FaceMatcherSession] for a verification session against [referencePortrait].
      *
      * @param referencePortrait the reference portrait image bytes to verify against.

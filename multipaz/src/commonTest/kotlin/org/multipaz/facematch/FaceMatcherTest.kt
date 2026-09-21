@@ -108,4 +108,30 @@ class FaceMatcherTest {
         assertTrue(segments[11].color != PromptColor.BRIGHT_GREEN)
         assertEquals(PromptColor.DARK_GRAY, segments[10].color)
     }
+
+    @Test
+    fun testGraphicsOverlay() {
+        val defaultState = FaceMatcherPromptState()
+        kotlin.test.assertNull(defaultState.graphicsOverlay)
+
+        val pt = FaceMatcherGraphic.Point(10f, 20f, PromptColor.BRIGHT_GREEN, 3f)
+        val line = FaceMatcherGraphic.Line(0f, 0f, 100f, 100f, PromptColor.BLUE, 2f)
+        val rect = FaceMatcherGraphic.Rect(10f, 10f, 50f, 50f, PromptColor.RED, 1.5f)
+        val text = FaceMatcherGraphic.Text("85%", 50f, 20f, PromptColor.BRIGHT_GREEN, 14f)
+
+        val graphics = FaceMatcherGraphics(
+            frameWidth = 480,
+            frameHeight = 640,
+            isMirrored = true,
+            items = listOf(pt, line, rect, text)
+        )
+        assertEquals(480, graphics.frameWidth)
+        assertEquals(640, graphics.frameHeight)
+        assertTrue(graphics.isMirrored)
+        assertEquals(4, graphics.items.size)
+
+        val stateWithGraphics = FaceMatcherPromptState(graphicsOverlay = graphics)
+        assertEquals(graphics, stateWithGraphics.graphicsOverlay)
+    }
 }
+

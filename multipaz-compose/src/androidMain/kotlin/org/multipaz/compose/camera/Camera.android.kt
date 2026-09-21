@@ -117,7 +117,7 @@ actual fun Camera(
                         cameraImage = CameraImage(imageProxy),
                         width = imageProxy.width,
                         height = imageProxy.height,
-                        rotation = calculateDetectorAngle(currentDisplayRotation, cameraSelection),
+                        rotation = imageProxy.imageInfo.rotationDegrees,
                         previewTransformation = transformationProxy
                     )
                     onFrameCaptured(frame)
@@ -128,6 +128,8 @@ actual fun Camera(
             try {
                 if (showCameraPreview && activePreviewView != null) {
                     val preview = Preview.Builder()
+                        .setResolutionSelector(resolutionSelector)
+                        .setTargetRotation(currentDisplayRotation)
                         .build()
                         .also {
                             activePreviewView!!.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
@@ -188,16 +190,6 @@ actual fun Camera(
     }
 }
 
-/** Required as MLKit face detector accepts only bitmaps with upright face composition. */
-private fun calculateDetectorAngle(currentDisplayRotation: Int, cameraSelection: CameraSelection): Int {
-    return when (currentDisplayRotation) {
-        Surface.ROTATION_0 -> if (cameraSelection.isMirrored()) 0 else 180
-        Surface.ROTATION_90 -> 90
-        Surface.ROTATION_180 -> if (cameraSelection.isMirrored()) 180 else 0
-        Surface.ROTATION_270 -> 270
-        else -> 0
-    }
-}
 
 private fun CameraCaptureResolution.getDimensions(): Size {
     return when (this) {
