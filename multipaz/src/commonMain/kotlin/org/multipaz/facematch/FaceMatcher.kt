@@ -23,10 +23,26 @@ interface FaceMatcher {
         get() = false
 
     /**
+     * Whether this matcher supports active liveness detection and portrait photo capture.
+     */
+    val supportsLiveness: Boolean
+        get() = false
+
+    /**
      * Creates a new [FaceMatcherSession] for a verification session against [referencePortrait].
      *
      * @param referencePortrait the reference portrait image bytes to verify against.
      * @return a new [FaceMatcherSession] instance for this verification session.
      */
     fun createSession(referencePortrait: ByteString): FaceMatcherSession
+
+    /**
+     * Creates a new [FaceMatcherSession] for active liveness checking and portrait photo capture.
+     *
+     * @return a new [FaceMatcherSession] instance for this liveness session.
+     * @throws UnsupportedOperationException if this matcher does not support liveness detection.
+     */
+    fun createLivenessSession(): FaceMatcherSession {
+        throw UnsupportedOperationException("$displayName does not support liveness detection")
+    }
 }

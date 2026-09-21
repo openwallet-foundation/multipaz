@@ -67,6 +67,7 @@ import org.multipaz.facenet.testdata.FaceTestData
 import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.Reason
+import org.multipaz.prompt.showFaceLivenessPrompt
 import org.multipaz.prompt.showFaceMatcherPrompt
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
@@ -121,6 +122,7 @@ fun FaceMatcherPromptScreen(
     var detectedFaceCrop by remember { mutableStateOf<ByteString?>(null) }
     var isExtractingCrop by remember { mutableStateOf(false) }
     var cropError by remember { mutableStateOf<String?>(null) }
+    var capturedPortraitDialogBytes by remember { mutableStateOf<ByteString?>(null) }
 
     val faceNetMatcher = remember(selectedMatcher, matchers) {
         (selectedMatcher as? FaceNetFaceMatcher)
@@ -218,6 +220,28 @@ fun FaceMatcherPromptScreen(
                         showToast("Selected ${selected.displayName}")
                     } catch (e: Throwable) {
                         Logger.e(TAG, "Failed to save sample portrait", e)
+                        showToast("Failed to save portrait: ${e.message}")
+                    }
+                }
+            }
+        )
+    }
+ 
+    if (capturedPortraitDialogBytes != null) {
+        val capturedBytes = capturedPortraitDialogBytes!!
+        CapturedPortraitDialog(
+            portraitBytes = capturedBytes,
+            onDismiss = { capturedPortraitDialogBytes = null },
+            onUseAsReference = {
+                coroutineScope.launch {
+                    try {
+                        val normalized = normalizePortrait(capturedBytes)
+                        savePortrait(storage, normalized)
+                        referencePortrait = normalized
+                        capturedPortraitDialogBytes = null
+                        showToast("Reference portrait updated from captured photo")
+                    } catch (e: Throwable) {
+                        Logger.e(TAG, "Failed to save captured portrait", e)
                         showToast("Failed to save portrait: ${e.message}")
                     }
                 }
@@ -328,8 +352,9 @@ fun FaceMatcherPromptScreen(
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.SemiBold
                                     )
+                                    val resInfo = if (bitmap != null) "${bitmap.width}×${bitmap.height} • " else ""
                                     Text(
-                                        text = "${portraitBytes.size} bytes",
+                                        text = "$resInfo${portraitBytes.size / 1024} KB",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -431,8 +456,9 @@ fun FaceMatcherPromptScreen(
                                 }
                             }
 
+                            val resInfo = if (bitmap != null) "${bitmap.width}×${bitmap.height} • " else ""
                             Text(
-                                text = "Size: ${portraitBytes.size} bytes",
+                                text = "Size: $resInfo${portraitBytes.size / 1024} KB",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -631,6 +657,39 @@ fun FaceMatcherPromptScreen(
                         Text("Verify Face (Show Face Matcher Prompt)")
                     }
 
+                    OutlinedButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                try {
+                                    val matcherToUse = selectedMatcher ?: faceMatcherRepository?.defaultMatcher
+                                    val captured = promptModel.showFaceLivenessPrompt(
+                                        matcher = matcherToUse,
+                                        reason = Reason.HumanReadable(
+                                            title = "Check Liveness",
+                                            subtitle = "Follow the prompts and hold still to capture your portrait",
+                                            requireConfirmation = false
+                                        )
+                                    )
+                                    if (captured != null) {
+                                        capturedPortraitDialogBytes = captured
+                                        showToast("Liveness confirmed! Portrait captured.")
+                                    } else {
+                                        showToast("Liveness check failed or dismissed")
+                                    }
+                                } catch (e: PromptDismissedException) {
+                                    showToast("Liveness check cancelled")
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Throwable) {
+                                    showToast("Error: ${e.message}")
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Check liveness and capture portrait image")
+                    }
+
                     if (referencePortrait == null) {
                         Text(
                             text = "A reference portrait is required to enable face verification.",
@@ -704,7 +763,7 @@ private fun CapturePortraitDialog(
                         Camera(
                             modifier = Modifier.fillMaxSize(),
                             cameraSelection = cameraSelection,
-                            captureResolution = CameraCaptureResolution.MEDIUM,
+                            captureResolution = CameraCaptureResolution.HIGH,
                             showCameraPreview = true,
                             onFrameCaptured = { frame ->
                                 if (shouldCapture && !isCapturing) {
@@ -899,10 +958,10 @@ private fun scaleImageBitmap(bitmap: ImageBitmap, targetWidth: Int, targetHeight
 private fun normalizePortrait(rawBytes: ByteString): ByteString {
     return try {
         val bitmap = decodeImage(rawBytes.toByteArray())
-        val maxDim = 800
+        val maxDim = 1920
         val width = bitmap.width
         val height = bitmap.height
-        if (width <= maxDim && height <= maxDim && rawBytes.size <= 500_000) {
+        if (width <= maxDim && height <= maxDim && rawBytes.size <= 2_000_000) {
             rawBytes
         } else {
             val scale = maxDim.toFloat() / maxOf(width, height)
@@ -916,3 +975,79 @@ private fun normalizePortrait(rawBytes: ByteString): ByteString {
         rawBytes
     }
 }
+
+@Composable
+private fun CapturedPortraitDialog(
+    portraitBytes: ByteString,
+    onDismiss: () -> Unit,
+    onUseAsReference: () -> Unit
+) {
+    val bitmap = remember(portraitBytes) {
+        try {
+            decodeImage(portraitBytes.toByteArray())
+        } catch (e: Throwable) {
+            null
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Captured Portrait") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = "Captured Portrait",
+                        modifier = Modifier
+                            .size(200.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(
+                                width = 2.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(200.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Invalid Image", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                val resolutionText = if (bitmap != null) "${bitmap.width} × ${bitmap.height}" else "Unknown"
+                Text(
+                    text = "Resolution: $resolutionText (${portraitBytes.size / 1024} KB)",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Liveness check passed! High-resolution photo captured.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onUseAsReference) {
+                Text("Use as Reference Portrait")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+

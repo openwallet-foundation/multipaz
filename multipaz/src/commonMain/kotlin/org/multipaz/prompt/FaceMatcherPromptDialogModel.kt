@@ -26,7 +26,7 @@ class FaceMatcherPromptDialogModel(
      * @property document optional document being verified.
      */
     data class FaceMatcherRequest(
-        val referencePortrait: ByteString,
+        val referencePortrait: ByteString? = null,
         val reason: Reason = Reason.HumanReadable(
             title = "Verify it's you",
             subtitle = "Look at the camera to verify your identity",

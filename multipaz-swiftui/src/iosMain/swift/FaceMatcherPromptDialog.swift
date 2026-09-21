@@ -52,8 +52,14 @@ struct FaceMatcherPromptDialog: View {
             }
             .sheet(item: $data) { data in
                 let matcher = data.state.parameters?.matcher ?? model.defaultMatcher ?? SimulatedFaceMatcher()
-                let portrait = data.state.parameters!.referencePortrait
-                let faceMatcherSession = data.state.parameters?.faceMatcherSession ?? matcher.createSession(referencePortrait: portrait)
+                let portrait = data.state.parameters?.referencePortrait
+                let faceMatcherSession = data.state.parameters?.faceMatcherSession ?? {
+                    if let portrait {
+                        return matcher.createSession(referencePortrait: portrait)
+                    } else {
+                        return matcher.createLivenessSession()
+                    }
+                }()
                 FaceMatcherPromptView(
                     title: humanReadableReason?.title ?? "Verify it's you",
                     subtitle: humanReadableReason?.subtitle ?? "Look at the camera to verify your identity",
@@ -469,6 +475,12 @@ private class CameraViewController: UIViewController, AVCaptureVideoDataOutputSa
 
         if captureSession.canAddInput(input) {
             captureSession.addInput(input)
+        }
+
+        if captureSession.canSetSessionPreset(.hd1920x1080) {
+            captureSession.sessionPreset = .hd1920x1080
+        } else if captureSession.canSetSessionPreset(.high) {
+            captureSession.sessionPreset = .high
         }
 
         videoOutput.alwaysDiscardsLateVideoFrames = true

@@ -11,6 +11,7 @@ import java.awt.RenderingHints
 import java.awt.geom.AffineTransform
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
 import kotlin.math.atan2
 import kotlin.math.hypot
@@ -186,6 +187,14 @@ internal class JvmFaceDetector(
     fun detectFaces(frame: CameraFrame): List<BlazeFaceDetection> {
         val image = decodeFrameToImage(frame) ?: return emptyList()
         return detectFaces(image)
+    }
+
+    fun captureUprightJpeg(frame: CameraFrame): ByteString? {
+        val image = decodeFrameToImage(frame) ?: return null
+        val baos = ByteArrayOutputStream()
+        val success = ImageIO.write(image, "jpeg", baos)
+        if (!success) return null
+        return ByteString(baos.toByteArray())
     }
 
     fun extractFaceCropImage(imageBytes: ByteArray, face: BlazeFaceDetection, targetSize: Int): BufferedImage? {

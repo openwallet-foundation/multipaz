@@ -25,7 +25,7 @@ class FaceNetSessionTest {
     ) : DetectedFacePose
 
     private class TestFaceNetSession(
-        referencePortrait: ByteString = ByteString(),
+        referencePortrait: ByteString? = ByteString(),
         config: FaceNetModelConfig = FaceNetModelConfig.MOBILE_FACENET,
         debug: Boolean = false,
         clock: () -> Long,
@@ -43,10 +43,17 @@ class FaceNetSessionTest {
         var mockEmbedding: FaceEmbedding? = null
         var pipelineInitError: Exception? = null
         var isClosed = false
+        var capturedBytes: ByteString? = ByteString(byteArrayOf(1, 2, 3))
 
         override suspend fun initializePipeline() {
             pipelineInitError?.let { throw it }
-            referenceEmbedding = FaceEmbedding(FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING)
+            if (referencePortrait != null) {
+                referenceEmbedding = FaceEmbedding(FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING)
+            }
+        }
+
+        override suspend fun captureHighResolutionImage(frame: CameraFrame): ByteString? {
+            return capturedBytes
         }
 
         override suspend fun detectFaces(frame: CameraFrame): List<DetectedFacePose> {
@@ -368,6 +375,65 @@ class FaceNetSessionTest {
         session.mockFaces = emptyList()
         session.feedFrame(dummyFrame)
         assertNull(session.state.value.graphicsOverlay)
+    }
+
+    @Test
+    fun testLivenessSessionWithImageCapture() = runTest {
+        var currentTime = 1000L
+        val session = TestFaceNetSession(
+            referencePortrait = null,
+            clock = { currentTime },
+            randomSeed = 42L
+        )
+
+        assertTrue(session.isLivenessOnly)
+        assertEquals(3, session.challenges.size)
+        assertEquals("Check Liveness", session.state.value.messageAbove)
+        assertEquals("Position your face and look at the camera", session.state.value.messageBelow)
+
+        // 2 consecutive straight frames to pass POSITIONING directly to LIVENESS_CHALLENGE
+        session.mockFaces = listOf(MockDetectedFace(yaw = 0f, pitch = 0f, roll = 0f))
+        session.feedFrame(dummyFrame)
+        assertEquals(FaceNetSessionBase.Phase.POSITIONING, session.phase)
+        session.feedFrame(dummyFrame)
+        assertEquals(FaceNetSessionBase.Phase.LIVENESS_CHALLENGE, session.phase)
+
+        // Perform each of the 3 challenges
+        for (step in session.challenges.indices) {
+            val direction = session.challenges[step]
+            val pose = when (direction) {
+                RingDirection.LEFT -> MockDetectedFace(yaw = 20f)
+                RingDirection.RIGHT -> MockDetectedFace(yaw = -20f)
+                RingDirection.UP -> MockDetectedFace(pitch = 16f)
+                RingDirection.DOWN -> MockDetectedFace(pitch = -16f)
+                RingDirection.CENTER -> MockDetectedFace(yaw = 0f, pitch = 0f)
+            }
+            session.mockFaces = listOf(pose)
+            session.feedFrame(dummyFrame)
+            session.feedFrame(dummyFrame)
+            session.feedFrame(dummyFrame)
+        }
+
+        // After completing 3 challenges, transitions to CAPTURING phase
+        assertEquals(FaceNetSessionBase.Phase.CAPTURING, session.phase)
+        assertEquals("Hold Still", session.state.value.messageAbove)
+        assertEquals("Hold still to capture photo...", session.state.value.messageBelow)
+        assertNull(session.state.value.capturedImage)
+
+        // Frame 1 in CAPTURING with steady straight face: steadyHoldFrames = 1
+        session.mockFaces = listOf(MockDetectedFace(yaw = 0f, pitch = 0f, roll = 0f))
+        session.feedFrame(dummyFrame)
+        assertEquals(FaceNetSessionBase.Phase.CAPTURING, session.phase)
+
+        // Frame 2 in CAPTURING with steady straight face: steadyHoldFrames = 2 -> captures photo and completes!
+        session.feedFrame(dummyFrame)
+        assertEquals(FaceNetSessionBase.Phase.COMPLETED, session.phase)
+        assertEquals(FaceMatcherPromptState.Outcome.SUCCESS, session.state.value.outcome)
+        assertEquals("Portrait Captured", session.state.value.messageAbove)
+        assertEquals("Liveness verified", session.state.value.messageBelow)
+        assertNotNull(session.state.value.capturedImage)
+        assertEquals(ByteString(byteArrayOf(1, 2, 3)), session.state.value.capturedImage)
+        assertTrue(session.state.value.ringSegments.all { it.color == PromptColor.GREEN })
     }
 }
 

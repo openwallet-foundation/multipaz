@@ -17,6 +17,7 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.isEmpty
 import org.multipaz.facematch.CameraFrame
 import org.multipaz.util.Logger
+import org.multipaz.util.toByteArray
 import org.tensorflow.lite.c.TfLiteDelegate
 import org.tensorflow.lite.c.TfLiteInterpreterAllocateTensors
 import org.tensorflow.lite.c.TfLiteInterpreterCreate
@@ -67,6 +68,7 @@ import platform.Foundation.dataWithContentsOfFile
 import platform.ImageIO.CGImageSourceCreateImageAtIndex
 import platform.ImageIO.CGImageSourceCreateWithData
 import platform.UIKit.UIImage
+import platform.UIKit.UIImageJPEGRepresentation
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.hypot
@@ -253,6 +255,23 @@ internal class IosFaceDetector(
         val (uprightImage, isAllocated) = ensureUpright(holder.cgImage, frame.rotationDegrees)
         return try {
             detectFaces(uprightImage)
+        } finally {
+            if (isAllocated) {
+                CGImageRelease(uprightImage)
+            }
+            if (holder.needsRelease) {
+                CGImageRelease(holder.cgImage)
+            }
+        }
+    }
+
+    fun captureUprightJpeg(frame: CameraFrame): ByteString? {
+        val holder = extractCgImage(frame) ?: return null
+        val (uprightImage, isAllocated) = ensureUpright(holder.cgImage, frame.rotationDegrees)
+        return try {
+            val uiImage = UIImage.imageWithCGImage(uprightImage)
+            val nsData = UIImageJPEGRepresentation(uiImage, 0.95) ?: return null
+            ByteString(nsData.toByteArray())
         } finally {
             if (isAllocated) {
                 CGImageRelease(uprightImage)

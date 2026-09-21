@@ -11,8 +11,8 @@ import platform.UIKit.UIImagePNGRepresentation
 internal actual val isFaceNetSupported: Boolean = true
 
 internal actual fun createFaceNetSession(
-    referencePortrait: ByteString,
-    modelBytesProvider: suspend () -> ByteString,
+    referencePortrait: ByteString?,
+    modelBytes: ByteString,
     config: FaceNetModelConfig,
     debug: Boolean,
     matcherName: String,
@@ -20,7 +20,7 @@ internal actual fun createFaceNetSession(
 ): FaceMatcherSession {
     return IosFaceNetSession(
         referencePortrait = referencePortrait,
-        modelBytesProvider = modelBytesProvider,
+        modelBytes = modelBytes,
         config = config,
         debug = debug,
         matcherName = matcherName,
@@ -30,10 +30,9 @@ internal actual fun createFaceNetSession(
 
 internal actual suspend fun extractFaceEmbedding(
     portrait: ByteString,
-    modelBytesProvider: suspend () -> ByteString,
+    modelBytes: ByteString,
     config: FaceNetModelConfig
 ): FaceEmbedding {
-    val modelBytes = modelBytesProvider()
     IosFaceNetInterpreter(modelBytes, config).use { interpreter ->
         IosFaceDetector().use { detector ->
             val bytes = portrait.toByteArray()
@@ -52,7 +51,7 @@ internal actual suspend fun extractFaceEmbedding(
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 internal actual suspend fun extractDetectedFaceCrop(
     portrait: ByteString,
-    modelBytesProvider: suspend () -> ByteString,
+    modelBytes: ByteString,
     config: FaceNetModelConfig
 ): ByteString {
     val targetSize = config.imageSquareSize ?: 112

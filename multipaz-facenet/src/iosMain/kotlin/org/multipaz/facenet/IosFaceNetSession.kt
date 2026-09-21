@@ -10,8 +10,8 @@ private const val TAG = "IosFaceNetSession"
 
 @OptIn(ExperimentalForeignApi::class)
 internal class IosFaceNetSession(
-    referencePortrait: ByteString,
-    private val modelBytesProvider: suspend () -> ByteString,
+    referencePortrait: ByteString? = null,
+    private val modelBytes: ByteString,
     config: FaceNetModelConfig,
     debug: Boolean = false,
     matcherName: String = "facenet",
@@ -29,26 +29,36 @@ internal class IosFaceNetSession(
     private var interpreter: IosFaceNetInterpreter? = null
 
     override suspend fun initializePipeline() {
-        val modelBytes = modelBytesProvider()
         val interp = IosFaceNetInterpreter(modelBytes, config)
         val det = IosFaceDetector()
 
-        val refBytes = referencePortrait.toByteArray()
-        val refFaces = det.detectFaces(refBytes)
-        if (refFaces.isEmpty()) {
-            throw IllegalArgumentException("No face detected in reference portrait")
+        val refPortrait = referencePortrait
+        if (refPortrait != null) {
+            val refBytes = refPortrait.toByteArray()
+            val refFaces = det.detectFaces(refBytes)
+            if (refFaces.isEmpty()) {
+                throw IllegalArgumentException("No face detected in reference portrait")
+            }
+
+            val refFaceCrop = det.extractFaceCrop(refBytes, refFaces[0], interp.imageSquareSize)
+                ?: throw IllegalStateException("Failed to extract face crop from reference portrait")
+
+            val embedding = interp.getEmbedding(refFaceCrop)
+                ?: throw IllegalStateException("Failed to compute embedding from reference portrait")
+
+            referenceEmbedding = embedding
+            Logger.d(TAG, "Pipeline initialized successfully with embedding size ${embedding.embedding.size}")
+        } else {
+            Logger.d(TAG, "Pipeline initialized for liveness-only session (no reference portrait)")
         }
-
-        val refFaceCrop = det.extractFaceCrop(refBytes, refFaces[0], interp.imageSquareSize)
-            ?: throw IllegalStateException("Failed to extract face crop from reference portrait")
-
-        val embedding = interp.getEmbedding(refFaceCrop)
-            ?: throw IllegalStateException("Failed to compute embedding from reference portrait")
 
         interpreter = interp
         detector = det
-        referenceEmbedding = embedding
-        Logger.d(TAG, "Pipeline initialized successfully with embedding size ${embedding.embedding.size}")
+    }
+
+    override suspend fun captureHighResolutionImage(frame: CameraFrame): ByteString? {
+        val activeDetector = detector ?: return null
+        return activeDetector.captureUprightJpeg(frame)
     }
 
     override suspend fun detectFaces(frame: CameraFrame): List<IosDetectedFace> {

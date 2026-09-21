@@ -37,9 +37,24 @@ class SimulatedFaceMatcher(
         { Clock.System.now().toEpochMilliseconds() }
     )
 
+    override val supportsLiveness: Boolean
+        get() = true
+
     override fun createSession(referencePortrait: ByteString): FaceMatcherSession {
         return SimulatedFaceMatcherSession(
             referencePortrait = referencePortrait,
+            searchDurationMs = searchDurationMs,
+            matchConveyDurationMs = matchConveyDurationMs,
+            challengeDurationMs = challengeDurationMs,
+            simulatedConfidence = simulatedConfidence,
+            enableLiveness = enableLiveness,
+            clock = clock
+        )
+    }
+
+    override fun createLivenessSession(): FaceMatcherSession {
+        return SimulatedFaceMatcherSession(
+            referencePortrait = null,
             searchDurationMs = searchDurationMs,
             matchConveyDurationMs = matchConveyDurationMs,
             challengeDurationMs = challengeDurationMs,
