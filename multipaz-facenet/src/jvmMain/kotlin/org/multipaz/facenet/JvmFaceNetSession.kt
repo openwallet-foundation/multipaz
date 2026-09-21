@@ -9,7 +9,7 @@ private const val TAG = "JvmFaceNetSession"
 
 internal class JvmFaceNetSession(
     referencePortrait: ByteString,
-    private val modelBytesProvider: (suspend () -> ByteString)?,
+    private val modelBytesProvider: suspend () -> ByteString,
     config: FaceNetModelConfig,
     matcherName: String = "facenet",
     matcherDisplayName: String = "MobileFaceNet",
@@ -25,7 +25,7 @@ internal class JvmFaceNetSession(
     private var interpreter: JvmFaceNetInterpreter? = null
 
     override suspend fun initializePipeline() {
-        val modelBytes = modelBytesProvider?.invoke()
+        val modelBytes = modelBytesProvider()
         val interp = JvmFaceNetInterpreter(modelBytes, config)
         val det = JvmFaceDetector()
 

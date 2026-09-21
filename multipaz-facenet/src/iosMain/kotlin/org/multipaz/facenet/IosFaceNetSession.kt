@@ -11,7 +11,7 @@ private const val TAG = "IosFaceNetSession"
 @OptIn(ExperimentalForeignApi::class)
 internal class IosFaceNetSession(
     referencePortrait: ByteString,
-    private val modelBytesProvider: (suspend () -> ByteString)?,
+    private val modelBytesProvider: suspend () -> ByteString,
     config: FaceNetModelConfig,
     matcherName: String = "facenet",
     matcherDisplayName: String = "MobileFaceNet",
@@ -27,7 +27,7 @@ internal class IosFaceNetSession(
     private var interpreter: IosFaceNetInterpreter? = null
 
     override suspend fun initializePipeline() {
-        val modelBytes = modelBytesProvider?.invoke()
+        val modelBytes = modelBytesProvider()
         val interp = IosFaceNetInterpreter(modelBytes, config)
         val det = IosFaceDetector()
 

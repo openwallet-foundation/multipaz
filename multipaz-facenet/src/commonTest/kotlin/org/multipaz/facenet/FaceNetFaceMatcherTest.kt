@@ -12,14 +12,14 @@ class FaceNetFaceMatcherTest {
 
     @Test
     fun testProperties() {
-        val matcher = FaceNetFaceMatcher()
+        val matcher = FaceNetFaceMatcher(modelBytes = ByteString())
         assertEquals("facenet", matcher.name)
         assertEquals("MobileFaceNet", matcher.displayName)
     }
 
     @Test
     fun testCreateSession() = runTest {
-        val matcher = FaceNetFaceMatcher()
+        val matcher = FaceNetFaceMatcher(modelBytes = ByteString())
         val session = matcher.createSession(ByteString())
         assertNotNull(session)
         assertEquals(FaceMatcherPromptState.NUM_RING_SEGMENTS, session.state.value.ringSegments.size)

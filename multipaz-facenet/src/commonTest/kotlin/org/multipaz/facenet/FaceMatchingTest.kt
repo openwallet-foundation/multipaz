@@ -10,7 +10,10 @@ class FaceMatchingTest {
 
     @Test
     fun testFaceMatchingPairwiseSimilarity() = runTest {
-        val matcher = FaceNetFaceMatcher(config = FaceNetModelConfig.MOBILE_FACENET)
+        val matcher = FaceNetFaceMatcher(
+            modelBytes = testModelMobileFaceNet,
+            config = FaceNetModelConfig.MOBILE_FACENET
+        )
         if (!matcher.isSupported) {
             println("Skipping FaceMatchingTest: not supported on this platform")
             return@runTest
@@ -172,7 +175,10 @@ class FaceMatchingTest {
 
     @Test
     fun testDirectPortraitMatchingConvenience() = runTest {
-        val matcher = FaceNetFaceMatcher(config = FaceNetModelConfig.MOBILE_FACENET)
+        val matcher = FaceNetFaceMatcher(
+            modelBytes = testModelMobileFaceNet,
+            config = FaceNetModelConfig.MOBILE_FACENET
+        )
         if (!matcher.isSupported) {
             println("Skipping testDirectPortraitMatchingConvenience: not supported on this platform")
             return@runTest

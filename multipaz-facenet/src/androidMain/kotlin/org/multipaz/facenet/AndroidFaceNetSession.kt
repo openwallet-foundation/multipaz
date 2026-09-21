@@ -11,7 +11,7 @@ private const val TAG = "AndroidFaceNetSession"
 
 internal class AndroidFaceNetSession(
     referencePortrait: ByteString,
-    private val modelBytesProvider: (suspend () -> ByteString)?,
+    private val modelBytesProvider: suspend () -> ByteString,
     config: FaceNetModelConfig,
     matcherName: String = "facenet",
     matcherDisplayName: String = "MobileFaceNet",
@@ -27,7 +27,7 @@ internal class AndroidFaceNetSession(
     private var interpreter: AndroidFaceNetInterpreter? = null
 
     override suspend fun initializePipeline() {
-        val modelBytes = modelBytesProvider?.invoke()
+        val modelBytes = modelBytesProvider()
         val interp = AndroidFaceNetInterpreter(modelBytes, config)
         val det = AndroidFaceDetector()
 
