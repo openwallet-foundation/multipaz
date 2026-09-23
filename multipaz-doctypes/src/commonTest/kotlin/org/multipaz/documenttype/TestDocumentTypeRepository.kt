@@ -78,11 +78,11 @@ class TestDocumentTypeRepository {
         assertNotNull(aadhaarNamespace)
 
         listOf(
-            "ResidentName",
-            "EnrolmentNumber",
-            "Mobile",
-            "Email",
-            "Dob",
+            "resident_name",
+            "enrolment_number",
+            "mobile",
+            "email",
+            "dob",
         ).forEach { dataElementName ->
             assertTrue(
                 aadhaarNamespace.dataElements.containsKey(dataElementName),
