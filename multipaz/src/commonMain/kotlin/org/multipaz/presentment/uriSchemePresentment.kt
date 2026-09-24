@@ -51,6 +51,19 @@ import kotlin.coroutines.cancellation.CancellationException
 private const val TAG = "uriSchemePresentment"
 
 /**
+ * Parses the query component of [uri] into parameters.
+ *
+ * [parseUrlEncodedParameters] splits on `&` and then on the first `=`, so handing it a whole
+ * URI folds the scheme into the first key: `openid4vp://?request_uri=...` yields the single key
+ * `openid4vp://?request_uri`. Taking the substring after the first `?` keeps that from happening,
+ * which matters because a signed request object carries `client_id` and a verifier may send
+ * `request_uri` as the only query parameter.
+ *
+ * A URI with no `?` yields no parameters.
+ */
+internal fun parseQueryParameters(uri: String) = uri.substringAfter('?', "").parseUrlEncodedParameters()
+
+/**
  * Present credentials according to OpenID4VP 1.0 w/ URI schemes.
  *
  * @param source the source of truth used for presentment.
@@ -88,7 +101,7 @@ suspend fun uriSchemePresentment(
             onDocumentsInFocus = onDocumentsInFocus
         )
     }
-    val parameters = uri.parseUrlEncodedParameters()
+    val parameters = parseQueryParameters(uri)
     // TODO: maybe also support `request` in addition to `request_uri`, that is, the case
     //   where the request is passed by value instead of reference
     val requestUri = parameters["request_uri"] ?: throw IllegalStateException("No request_uri")
