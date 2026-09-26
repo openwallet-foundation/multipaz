@@ -5,9 +5,13 @@ import kotlinx.io.bytestring.decodeToString
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import org.multipaz.claim.JsonClaim
+import org.multipaz.claim.findDisplayName
+import org.multipaz.credential.Credential
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.sdjwt.SdJwt
+import org.multipaz.util.currentLocale
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
@@ -44,7 +48,23 @@ interface SdJwtVcCredential {
 
     suspend fun getClaimsImpl(
         documentTypeRepository: DocumentTypeRepository?
+    ): List<JsonClaim> = getClaimsImpl(documentTypeRepository, listOf(currentLocale))
+
+    /**
+     * Gets the top-level claims in the credential, see [Credential.getClaims].
+     *
+     * @param documentTypeRepository a [DocumentTypeRepository] or `null`.
+     * @param locales BCP 47 language tags, most preferred first, used to pick display names from
+     *   [org.multipaz.document.Document.claimDescriptions].
+     * @return a list of claims with values.
+     * @throws IllegalStateException if the credential is not signed with an X.509-certified key.
+     */
+    @Throws(IllegalStateException::class, CancellationException::class)
+    suspend fun getClaimsImpl(
+        documentTypeRepository: DocumentTypeRepository?,
+        locales: List<String>
     ): List<JsonClaim> {
+        val claimDescriptions = (this as? Credential)?.document?.claimDescriptions ?: emptyList()
         val ret = mutableListOf<JsonClaim>()
         val sdJwt = SdJwt.fromCompactSerialization(issuerProvidedData.decodeToString())
         // We only support keys that are certified with the certificate chain. Web-based resolution
@@ -59,12 +79,15 @@ interface SdJwtVcCredential {
         val dt = documentTypeRepository?.getDocumentTypeForJson(vct)
         for ((claimName, claimValue) in processedJwt) {
             val attribute = dt?.jsonDocumentType?.claims?.get(claimName)
+            val claimPath = buildJsonArray { add(claimName) }
             ret.add(
                 JsonClaim(
-                    displayName = dt?.jsonDocumentType?.claims?.get(claimName)?.displayName ?: claimName,
+                    displayName = dt?.jsonDocumentType?.claims?.get(claimName)?.displayName
+                        ?: claimDescriptions.findDisplayName(claimPath, locales)
+                        ?: claimName,
                     attribute = attribute,
                     vct = vct,
-                    claimPath = buildJsonArray { add(claimName) },
+                    claimPath = claimPath,
                     value = claimValue
                 )
             )

@@ -25,7 +25,8 @@ internal data class DocumentData(
     val mpzPassVersion: Long? = null,
     val readerIdentifiers: List<ByteString>? = null,
     val metadata: ByteString? = null,  // serialized AbstractDocumentMetadata
-    val tagsData: ByteString? = null   // serialized Tags
+    val tagsData: ByteString? = null,  // serialized Tags
+    val claimDescriptions: ByteString? = null  // serialized List<ClaimDescription>
 ) {
     companion object
 }
