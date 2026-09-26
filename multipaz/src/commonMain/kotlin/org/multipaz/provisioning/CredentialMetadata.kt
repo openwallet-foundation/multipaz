@@ -1,6 +1,7 @@
 package org.multipaz.provisioning
 
 import org.multipaz.cbor.annotation.CborSerializable
+import org.multipaz.claim.ClaimDescription
 
 /**
  * Metadata for a particular type of credential that an issuer can provision.
@@ -14,7 +15,12 @@ data class CredentialMetadata(
     /** Determines how the key to which the credential is bound should be provided to the issuer */
     val keyBindingType: KeyBindingType,
     /** Maximum number of credentials that can be requested in a single request */
-    val maxBatchSize: Int
+    val maxBatchSize: Int,
+    /**
+     * Descriptions of the claims in this credential, including their display names, or `null` if the
+     * issuer did not provide any.
+     */
+    val claims: List<ClaimDescription>? = null
 ) {
     companion object
 }

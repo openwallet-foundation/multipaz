@@ -409,6 +409,31 @@ abstract class Credential {
         documentTypeRepository: DocumentTypeRepository?
     ): List<Claim>
 
+    /**
+     * Gets the claims in the credential, naming them in the language which best matches [locales].
+     *
+     * This works like the [getClaims] function without [locales], which uses the current platform
+     * locale, except that the given languages are used to pick the display name of a claim from
+     * [Document.claimDescriptions] when [documentTypeRepository] has no entry for it. See
+     * [org.multipaz.claim.ClaimDisplay.locale] for how languages are matched.
+     *
+     * The default implementation ignores [locales] and calls [getClaims] without it. The delegation goes this way,
+     * rather than the other way around, so that the overload without [locales] can stay abstract and subclasses
+     * which only implement that one keep compiling. Implementations in this library override both and have the
+     * overload without [locales] call this one with the current locale.
+     *
+     * @param documentTypeRepository a [DocumentTypeRepository] or `null`.
+     * @param locales BCP 47 language tags, most preferred first, e.g. `["ja-JP", "en-US"]`.
+     * @return a list of claims with values.
+     * @throws IllegalStateException if claims could not be read (e.g. due to unsupported
+     *  credential syntax)
+     */
+    @Throws(IllegalStateException::class, CancellationException::class)
+    open suspend fun getClaims(
+        documentTypeRepository: DocumentTypeRepository?,
+        locales: List<String>
+    ): List<Claim> = getClaims(documentTypeRepository)
+
     companion object {
         private const val TAG = "Credential"
 

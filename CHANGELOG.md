@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.102.0] - Not yet released, expected Oct or Nov 2026
 Significant changes since Multipaz 0.101.0 include:
 - TODO
+- Claim display names from OpenID4VCI issuer metadata: The claims descriptions of a credential configuration (Appendix B.2 of OpenID4VCI 1.0) are now available as `CredentialMetadata.claims` and stored with the document as `Document.claimDescriptions`. `Credential.getClaims()` uses them to name claims of document types unknown to the `DocumentTypeRepository`, and a new overload taking a list of preferred languages picks the display name in the user's language, matching language tags according to RFC 4647.
 
 ## [0.101.0] - 2026-09-10
 Significant changes since Multipaz 0.100.0 include:
