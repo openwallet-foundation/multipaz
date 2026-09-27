@@ -33,6 +33,9 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.storage.base.BaseStorageTable
 import org.multipaz.tags.Tags
+import org.multipaz.claim.ClaimDescription
+import org.multipaz.claim.decodeClaimDescriptions
+import org.multipaz.claim.encodeToCbor
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.concurrent.Volatile
@@ -174,6 +177,16 @@ class Document internal constructor(
     val readerIdentifiers: List<ByteString> get() = data.readerIdentifiers ?: emptyList()
 
     /**
+     * Descriptions of the claims in the document, including their display names, as provided by the issuer.
+     *
+     * These are used by [Credential.getClaims] to name claims for which the
+     * [org.multipaz.documenttype.DocumentTypeRepository] has no entry. An empty list is returned if the issuer
+     * did not provide any.
+     */
+    val claimDescriptions: List<ClaimDescription>
+        get() = data.claimDescriptions?.let { decodeClaimDescriptions(it) } ?: emptyList()
+
+    /**
      * A [Tags] for storing application-specific data.
      *
      * Applications must use collision-resistant keys when using the [Tags] instance.
@@ -200,7 +213,8 @@ class Document internal constructor(
                         null
                     } else {
                         ByteString(Cbor.encode(newData))
-                    }
+                    },
+                    claimDescriptions = data.claimDescriptions
                 )
                 // Emit events only if something actually changed.
                 if (data != this.data) {
@@ -461,7 +475,8 @@ class Document internal constructor(
                 mpzPassVersion = data.mpzPassVersion,
                 readerIdentifiers = data.readerIdentifiers ?: emptyList(),
                 metadata = metadata,
-                tags = Tags.Editor(this@Document.tags._tags)
+                tags = Tags.Editor(this@Document.tags._tags),
+                claimDescriptions = claimDescriptions
             )
             editAction.invoke(editor)
             val newTagsData = if (editor.tags.tags.isEmpty()) {
@@ -484,7 +499,8 @@ class Document internal constructor(
                 mpzPassVersion = editor.mpzPassVersion,
                 readerIdentifiers = editor.readerIdentifiers.ifEmpty { null },
                 metadata = editor.metadata?.serialize(),
-                tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) }
+                tagsData = newTagsData?.let { ByteString(Cbor.encode(it)) },
+                claimDescriptions = editor.claimDescriptions.ifEmpty { null }?.encodeToCbor()
             )
             // Emit events only if something actually changed.
             if (data != this.data) {
@@ -517,6 +533,7 @@ class Document internal constructor(
      * @property readerIdentifiers A list of reader identifiers for reader authentication.
      * @property metadata A [AbstractDocumentMetadata] for storing application-specific data.
      * @property tags A [Tags] for storing application-specific data.
+     * @property claimDescriptions Descriptions of the claims in the document as provided by the issuer.
      */
     class Editor internal constructor(
         var provisioned: Boolean,
@@ -531,7 +548,8 @@ class Document internal constructor(
         var mpzPassVersion: Long?,
         var readerIdentifiers: List<ByteString> = emptyList(),
         var metadata: AbstractDocumentMetadata?,
-        val tags: Tags.Editor
+        val tags: Tags.Editor,
+        var claimDescriptions: List<ClaimDescription> = emptyList()
     )
 
     /**

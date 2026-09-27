@@ -15,6 +15,8 @@
  */
 package org.multipaz.document
 
+import org.multipaz.claim.ClaimDescription
+import org.multipaz.claim.encodeToCbor
 import org.multipaz.credential.CredentialLoader
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaRepository
@@ -153,6 +155,36 @@ class DocumentStore private constructor(
         created: Instant = Clock.System.now(),
         readerIdentifiers: List<ByteString> = emptyList(),
         metadata: AbstractDocumentMetadata? = null,
+    ): Document = createDocumentInternal(
+        displayName = displayName,
+        typeDisplayName = typeDisplayName,
+        cardArt = cardArt,
+        issuerLogo = issuerLogo,
+        authorizationData = authorizationData,
+        appData = appData,
+        created = created,
+        readerIdentifiers = readerIdentifiers,
+        metadata = metadata,
+        claimDescriptions = null
+    )
+
+    /**
+     * Like [createDocument], but also sets [Document.claimDescriptions].
+     *
+     * This is not part of [createDocument] so that its signature, which Swift callers have to spell out in full,
+     * stays the same.
+     */
+    internal suspend fun createDocumentInternal(
+        displayName: String? = null,
+        typeDisplayName: String? = null,
+        cardArt: ByteString? = null,
+        issuerLogo: ByteString? = null,
+        authorizationData: ByteString? = null,
+        appData: ByteString? = null,
+        created: Instant = Clock.System.now(),
+        readerIdentifiers: List<ByteString> = emptyList(),
+        metadata: AbstractDocumentMetadata? = null,
+        claimDescriptions: List<ClaimDescription>? = null,
     ): Document {
         val table = storage.getTable(documentTableSpec)
         val data = DocumentData(
@@ -165,7 +197,8 @@ class DocumentStore private constructor(
             authorizationData = authorizationData,
             appData = appData,
             readerIdentifiers = readerIdentifiers.ifEmpty { null },
-            metadata = metadata?.serialize()
+            metadata = metadata?.serialize(),
+            claimDescriptions = claimDescriptions?.ifEmpty { null }?.encodeToCbor()
         )
         // NB: insertion in the storage is when the document is actually added, it may be
         // inserted in the cache before we manage to call lock.withLock below
