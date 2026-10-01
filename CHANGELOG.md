@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.102.0] - Not yet released, expected Oct or Nov 2026
 Significant changes since Multipaz 0.101.0 include:
 - TODO
+- Fixed `X509Crl` parsing of CRLs with no revoked certificates: `revokedSerials` now returns an empty list instead of throwing when `revokedCertificates` is absent (RFC 5280 section 5.1.2.6), and `X509Crl.Builder` omits the field when there are no entries.
 
 ## [0.101.0] - 2026-09-10
 Significant changes since Multipaz 0.100.0 include:

@@ -4,6 +4,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.asn1.ASN1
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.asn1.ASN1Sequence
 import org.multipaz.asn1.OID
 import org.multipaz.testUtilSetupCryptoProvider
 import org.multipaz.util.fromHex
@@ -11,6 +12,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
@@ -68,6 +70,46 @@ class X509CrlTests {
     }
 
     @Test
+    fun roundtripNoRevokedCertificates() = runTest {
+        val signingKey = AsymmetricKey.ephemeral()
+        val now = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
+        val newCrl = buildX509Crl(
+            signingKey = signingKey,
+            issuer = X500Name.fromName("CN=foobar"),
+            thisUpdate = now,
+            nextUpdate = now + 5.hours
+        ) {}
+        val crl = X509Crl(newCrl.encoded)
+        crl.verify(signingKey.publicKey)
+        // RFC 5280 section 5.1.2.6: revokedCertificates must be absent when empty,
+        // so the TBS is version, signature, issuer, thisUpdate, nextUpdate.
+        val tbs = (ASN1.decode(crl.encoded.toByteArray()) as ASN1Sequence).elements[0] as ASN1Sequence
+        assertEquals(5, tbs.elements.size)
+        assertEquals(now + 5.hours, crl.nextUpdate)
+        assertTrue(crl.revokedSerials.isEmpty())
+    }
+
+    @Test
+    fun roundtripNoRevokedCertificatesWithExtensions() = runTest {
+        val signingKey = AsymmetricKey.ephemeral()
+        val now = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
+        val newCrl = buildX509Crl(
+            signingKey = signingKey,
+            issuer = X500Name.fromName("CN=foobar"),
+            thisUpdate = now,
+            nextUpdate = null
+        ) {
+            addExtension("1.2.3", false, ByteString(3, 1, 2))
+        }
+        val crl = X509Crl(newCrl.encoded)
+        crl.verify(signingKey.publicKey)
+        assertNull(crl.nextUpdate)
+        assertTrue(crl.revokedSerials.isEmpty())
+        assertEquals(1, crl.extensions.size)
+        assertEquals("1.2.3", crl.extensions[0].oid)
+    }
+
+    @Test
     fun testOpenssl() = runTest {
         // Test openssl-created certificate and crl
         val cert = X509Cert.fromPem(
@@ -101,6 +143,46 @@ class X509CrlTests {
         assertEquals(cert.subject, crl.issuer)
         val expectedSerial = ASN1.decode("020900d049681aec04273d".fromHex()) as ASN1Integer
         assertEquals(expectedSerial, crl.revokedSerials[0])
+    }
+
+    @Test
+    fun testOpensslNoRevokedCertificates() = runTest {
+        // Test openssl-created certificate and crl
+        val cert = X509Cert.fromPem(
+            """
+                -----BEGIN CERTIFICATE-----
+                MIIBgzCCASmgAwIBAgIUI/4l9PGA99RwM0t61oUXlF7aURgwCgYIKoZIzj0EAwIw
+                FzEVMBMGA1UEAwwMVGVzdCBSb290IENBMB4XDTI2MTAwMTA4NTMxNFoXDTM2MDky
+                ODA4NTMxNFowFzEVMBMGA1UEAwwMVGVzdCBSb290IENBMFkwEwYHKoZIzj0CAQYI
+                KoZIzj0DAQcDQgAEx8/MynFdzQcYgRIv5hZuorOo2HAe35YXsN7vCcDpPiV1/17e
+                DXqPqaAhyIIv7fcJ+4JFLDgXxefDUNKr8X//WaNTMFEwHQYDVR0OBBYEFBpzTYLV
+                sLBhLkaisLATPsb2WTYBMB8GA1UdIwQYMBaAFBpzTYLVsLBhLkaisLATPsb2WTYB
+                MA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIhAJ6IPLDznPmcTn2N
+                Q6CpkrgHhS1bt++pxmPI9ApaDHaDAiBBarO+A+QfmQOsoGCeEvFPeLSK0s/6TzZW
+                UKZnta1vjA==
+                -----END CERTIFICATE-----
+            """.trimIndent()
+        )
+        // NB: this is v2 CRL with the CRL Number extension and no revoked certificates,
+        // so the revokedCertificates element is absent from tbs (RFC 5280 section 5.1.2.6)
+        val crl = X509Crl.fromPem(
+            """
+                -----BEGIN X509 CRL-----
+                MIGuMFYCAQEwCgYIKoZIzj0EAwIwFzEVMBMGA1UEAwwMVGVzdCBSb290IENBFw0y
+                NjEwMDEwODUzMTRaFw0zNjA5MjgwODUzMTRaoA4wDDAKBgNVHRQEAwIBATAKBggq
+                hkjOPQQDAgNIADBFAiEAn4oQoFfoyKhm6GyeS0fAjQ050+fMYVuZQHVdOvChZVkC
+                IEeIfRppuAjcRzI4iPUUKZtCuF2Kjjt4qpcoNPpOSBvi
+                -----END X509 CRL-----
+            """.trimIndent()
+        )
+        crl.verify(cert.ecPublicKey)
+        assertEquals(1, crl.version)
+        assertEquals(cert.subject, crl.issuer)
+        assertEquals(Instant.parse("2036-09-28T08:53:14Z"), crl.nextUpdate)
+        assertTrue(crl.revokedSerials.isEmpty())
+        assertEquals(1, crl.extensions.size)
+        // CRL Number
+        assertEquals("2.5.29.20", crl.extensions[0].oid)
     }
 
     @Test

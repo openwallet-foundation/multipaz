@@ -113,7 +113,11 @@ data class X509Crl(override val encoded: ByteString): X509Signed() {
                 tbsList.add(ASN1Time(nextUpdateTruncated))
             }
 
-            tbsList.add(ASN1Sequence(revoked))
+            // RFC 5280 section 5.1.2.6: when there are no revoked certificates,
+            // the revokedCertificates list must be absent.
+            if (revoked.isNotEmpty()) {
+                tbsList.add(ASN1Sequence(revoked))
+            }
         }
     }
 
@@ -156,8 +160,9 @@ data class X509Crl(override val encoded: ByteString): X509Signed() {
                 if (curr is ASN1Sequence) {
                     add(curr)  // revoked list
                 } else {
-                    // empty revoked list
-                    add(ASN1Sequence(listOf(ASN1Sequence(listOf()))))
+                    // revokedCertificates is absent when no certificates are revoked
+                    // (RFC 5280 section 5.1.2.6), add an empty list as a placeholder
+                    add(ASN1Sequence(listOf()))
                 }
                 // extensions are not part of NormalizedTbs
             })
