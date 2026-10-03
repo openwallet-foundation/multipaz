@@ -1,6 +1,5 @@
 package org.multipaz.util
 
-import io.ktor.utils.io.core.toByteArray
 import kotlinx.io.bytestring.buildByteString
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -339,21 +338,21 @@ class ByteArrayUtilTest {
 
     @Test
     fun getString_validRange() {
-        val byteArray = "Hello, World!".toByteArray()
+        val byteArray = "Hello, World!".encodeToByteArray()
         val result = byteArray.getString(0, 5)
         assertEquals("Hello", result)
     }
 
     @Test
     fun getString_emptyString() {
-        val byteArray = "Hello, World!".toByteArray()
+        val byteArray = "Hello, World!".encodeToByteArray()
         val result = byteArray.getString(0, 0)
         assertEquals("", result)
     }
 
     @Test
     fun getString_offsetBeyondEnd() {
-        val byteArray = "Hello, World!".toByteArray()
+        val byteArray = "Hello, World!".encodeToByteArray()
         assertFailsWith<IndexOutOfBoundsException> {
             byteArray.getString(13, 1)
         }
@@ -361,7 +360,7 @@ class ByteArrayUtilTest {
 
     @Test
     fun getString_offsetAndNumBytesBeyondEnd() {
-        val byteArray = "Hello, World!".toByteArray()
+        val byteArray = "Hello, World!".encodeToByteArray()
         assertFailsWith<IndexOutOfBoundsException> {
             byteArray.getString(10, 5)
         }
@@ -369,7 +368,7 @@ class ByteArrayUtilTest {
 
     @Test
     fun getString_negativeOffset() {
-        val byteArray = "Hello, World!".toByteArray()
+        val byteArray = "Hello, World!".encodeToByteArray()
         assertFailsWith<IndexOutOfBoundsException> {
             byteArray.getString(-1, 5)
         }

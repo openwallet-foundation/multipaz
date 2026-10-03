@@ -15,9 +15,7 @@
  */
 package org.multipaz.mdoc.mso
 
-import io.ktor.util.toUpperCasePreservingASCIIRules
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.CborBuilder
 import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.crypto.Algorithm
@@ -296,7 +294,7 @@ class MobileSecurityObjectGenerator(
             checkNotNull(mSigned) { "Must call setValidityInfo before generating" }
             require(mDigestAlgorithm in listOf(Algorithm.SHA256, Algorithm.SHA384, Algorithm.SHA512))
             put("version", "1.0")
-            put("digestAlgorithm", mDigestAlgorithm.hashAlgorithmName!!.toUpperCasePreservingASCIIRules())
+            put("digestAlgorithm", mDigestAlgorithm.hashAlgorithmName!!.uppercase())
             put("docType", mDocType)
             put("valueDigests", mValueDigestsOuter.end().build())
             put("deviceKeyInfo", generateDeviceKey())

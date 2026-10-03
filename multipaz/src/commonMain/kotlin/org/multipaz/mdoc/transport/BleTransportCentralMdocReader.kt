@@ -1,7 +1,7 @@
 package org.multipaz.mdoc.transport
 
-import io.ktor.client.utils.unwrapCancellationException
 import kotlinx.coroutines.CancellationException
+import org.multipaz.util.unwrapCancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

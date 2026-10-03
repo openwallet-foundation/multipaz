@@ -29,3 +29,15 @@ comments:
     active: true
     excludes: ['**/test/**', '**/androidTest/**', '**/commonTest/**', '**/jvmTest/**', '**/androidUnitTest/**', '**/androidInstrumentedTest/**', '**/jsTest/**', '**/iosTest/**', '**/build/generated/**', '**/commonMain/generated/**']
     searchProtectedProperty: false
+
+style:
+  active: true
+  ForbiddenImport:
+    active: true
+    imports:
+      - value: 'io.ktor.util.*'
+        reason: 'Use Kotlin standard library equivalents instead of Ktor utilities.'
+      - value: 'io.ktor.utils.*'
+        reason: 'Use Kotlin standard library or kotlinx.coroutines/kotlinx.io equivalents instead of Ktor utilities.'
+      - value: 'io.ktor.client.utils.*'
+        reason: 'Use Kotlin standard library or internal Multipaz utilities instead of Ktor client utilities.'

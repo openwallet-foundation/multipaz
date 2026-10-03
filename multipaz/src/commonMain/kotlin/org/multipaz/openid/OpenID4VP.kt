@@ -1,6 +1,5 @@
 package org.multipaz.openid
 
-import io.ktor.utils.io.core.toByteArray
 import kotlinx.io.bytestring.decodeToString
 import kotlin.time.Clock
 import kotlinx.io.bytestring.encodeToByteString
@@ -184,7 +183,7 @@ object OpenID4VP {
             }
             if (jsonTransactionData.isNotEmpty()) {
                 put("transaction_data", JsonArray(jsonTransactionData.map {
-                    JsonPrimitive(it.toByteArray().toBase64Url())
+                    JsonPrimitive(it.encodeToByteArray().toBase64Url())
                 }))
             }
         }

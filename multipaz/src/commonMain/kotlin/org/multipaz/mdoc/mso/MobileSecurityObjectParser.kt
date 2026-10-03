@@ -15,7 +15,6 @@
  */
 package org.multipaz.mdoc.mso
 
-import io.ktor.util.toLowerCasePreservingASCIIRules
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.DataItem
@@ -227,7 +226,7 @@ class MobileSecurityObjectParser(
             }
             require(mso["digestAlgorithm"].asTstr in listOf("SHA-256", "SHA-384", "SHA-512"))
             digestAlgorithm = Algorithm.fromHashAlgorithmIdentifier(
-                mso["digestAlgorithm"].asTstr.toLowerCasePreservingASCIIRules())
+                mso["digestAlgorithm"].asTstr.lowercase())
             val allowableDigestAlgorithms = listOf(Algorithm.SHA256, Algorithm.SHA384, Algorithm.SHA512)
             require(digestAlgorithm in allowableDigestAlgorithms) {
                 "Given digest algorithm '$digestAlgorithm' one of $allowableDigestAlgorithms"

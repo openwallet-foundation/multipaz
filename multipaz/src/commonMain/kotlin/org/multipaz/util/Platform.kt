@@ -2,7 +2,6 @@
 
 package org.multipaz.util
 
-import io.ktor.client.engine.HttpClientEngineFactory
 import org.multipaz.prompt.PromptModel
 import org.multipaz.securearea.SecureArea
 import org.multipaz.storage.Storage
