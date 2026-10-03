@@ -34,7 +34,7 @@ data class FaceMatcherPromptState(
 
         /** Default ring segment configuration (all neutral dark gray). */
         val defaultSegments: List<RingSegment> = List(NUM_RING_SEGMENTS) {
-            RingSegment(color = PromptColor.DARK_GRAY, scale = 1.0f)
+            RingSegment(color = RingColor.DARK_GRAY, scale = 1.0f)
         }
     }
 }

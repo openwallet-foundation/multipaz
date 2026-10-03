@@ -5,7 +5,6 @@ import kotlinx.coroutines.delay
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.CameraFrame
 import org.multipaz.facematch.FaceMatcherPromptState
-import org.multipaz.facematch.PixelFormat
 import org.multipaz.facematch.SimulatedFaceMatcher
 import org.multipaz.securearea.PassphraseConstraints
 import kotlinx.coroutines.CoroutineScope
@@ -255,9 +254,7 @@ class PromptModelTest {
         val frame = CameraFrame(
             width = 640,
             height = 480,
-            rotationDegrees = 0,
-            pixelFormat = PixelFormat.RGBA,
-            data = ByteString(byteArrayOf(0))
+            rotationDegrees = 0
         )
         val portrait = ByteString(byteArrayOf(1, 2, 3))
 

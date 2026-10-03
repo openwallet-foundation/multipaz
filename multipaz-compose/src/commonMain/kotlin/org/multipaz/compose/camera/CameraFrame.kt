@@ -1,9 +1,7 @@
 package org.multipaz.compose.camera
 
 import androidx.compose.ui.graphics.Matrix
-import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.CameraFrame as FacematchCameraFrame
-import org.multipaz.facematch.PixelFormat
 
 /**
  * Type containing a frame captured from the [Camera] composable.
@@ -53,8 +51,6 @@ fun CameraFrame.toCameraFrame(): FacematchCameraFrame {
         width = width,
         height = height,
         rotationDegrees = rotation,
-        pixelFormat = PixelFormat.UNKNOWN,
-        data = ByteString(),
         platformHandle = cameraImage.platformHandle
     )
 }

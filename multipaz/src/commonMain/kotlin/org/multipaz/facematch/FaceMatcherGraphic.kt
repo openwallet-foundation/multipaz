@@ -15,7 +15,7 @@ sealed interface FaceMatcherGraphic {
     data class Point(
         val x: Float,
         val y: Float,
-        val color: PromptColor = PromptColor.BRIGHT_GREEN,
+        val color: RingColor = RingColor.BRIGHT_GREEN,
         val radius: Float = 3.0f
     ) : FaceMatcherGraphic
 
@@ -34,7 +34,7 @@ sealed interface FaceMatcherGraphic {
         val startY: Float,
         val endX: Float,
         val endY: Float,
-        val color: PromptColor = PromptColor.BRIGHT_GREEN,
+        val color: RingColor = RingColor.BRIGHT_GREEN,
         val strokeWidth: Float = 2.0f
     ) : FaceMatcherGraphic
 
@@ -53,7 +53,7 @@ sealed interface FaceMatcherGraphic {
         val top: Float,
         val right: Float,
         val bottom: Float,
-        val color: PromptColor = PromptColor.BRIGHT_GREEN,
+        val color: RingColor = RingColor.BRIGHT_GREEN,
         val strokeWidth: Float = 2.0f
     ) : FaceMatcherGraphic
 
@@ -70,7 +70,7 @@ sealed interface FaceMatcherGraphic {
         val text: String,
         val x: Float,
         val y: Float,
-        val color: PromptColor = PromptColor.BRIGHT_GREEN,
+        val color: RingColor = RingColor.BRIGHT_GREEN,
         val fontSize: Float = 14.0f
     ) : FaceMatcherGraphic
 }

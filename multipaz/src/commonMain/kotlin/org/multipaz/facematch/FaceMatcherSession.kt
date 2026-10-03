@@ -64,7 +64,7 @@ abstract class FaceMatcherSession(
     /**
      * Sets all 18 ring segments to a uniform color and scale.
      */
-    protected fun setAllRingSegments(color: PromptColor, scale: Float = 1.0f) {
+    protected fun setAllRingSegments(color: RingColor, scale: Float = 1.0f) {
         updateState(
             ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
                 RingSegment(color = color, scale = scale)
@@ -86,12 +86,12 @@ abstract class FaceMatcherSession(
     protected fun computeDirectionSegments(
         direction: RingDirection,
         progress: Float,
-        activeColor: PromptColor = PromptColor.BRIGHT_GREEN,
-        baseColor: PromptColor = PromptColor.DARK_GRAY
+        activeColor: RingColor = RingColor.BRIGHT_GREEN,
+        baseColor: RingColor = RingColor.DARK_GRAY
     ): List<RingSegment> {
         val p = progress.coerceIn(0f, 1f)
         if (direction == RingDirection.CENTER) {
-            val color = PromptColor.lerp(baseColor, activeColor, p)
+            val color = RingColor.lerp(baseColor, activeColor, p)
             val scale = 1.0f + 0.5f * p
             return List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
                 RingSegment(color = color, scale = scale)
@@ -124,7 +124,7 @@ abstract class FaceMatcherSession(
                 val rawFalloff = (0.5f * (1.0f + kotlin.math.cos((dist / maxRadius) * kotlin.math.PI))).toFloat()
                 val normalizedFalloff = (rawFalloff / peakFalloff).coerceIn(0f, 1f)
                 val segmentProgress = (p * normalizedFalloff).coerceIn(0f, 1f)
-                val color = PromptColor.lerp(baseColor, activeColor, segmentProgress)
+                val color = RingColor.lerp(baseColor, activeColor, segmentProgress)
                 val scale = 1.0f + 0.55f * segmentProgress
                 RingSegment(color = color, scale = scale)
             } else {

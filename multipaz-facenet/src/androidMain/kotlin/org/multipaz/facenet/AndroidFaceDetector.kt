@@ -185,19 +185,6 @@ internal class AndroidFaceDetector(
             platformHandle is Bitmap -> {
                 detectFaces(platformHandle, frame.rotationDegrees)
             }
-            frame.data.size > 0 -> {
-                val bytes = frame.data.toByteArray()
-                val rawBitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                if (rawBitmap != null) {
-                    try {
-                        detectFaces(rawBitmap, frame.rotationDegrees)
-                    } finally {
-                        rawBitmap.recycle()
-                    }
-                } else {
-                    emptyList()
-                }
-            }
             else -> emptyList()
         }
     }
@@ -216,17 +203,6 @@ internal class AndroidFaceDetector(
             platformHandle is Bitmap -> {
                 val bitmap = rotateBitmap(platformHandle, frame.rotationDegrees)
                 Pair(bitmap, bitmap != platformHandle)
-            }
-            frame.data.size > 0 -> {
-                val bytes = frame.data.toByteArray()
-                val rawBitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                if (rawBitmap != null) {
-                    val bitmap = rotateBitmap(rawBitmap, frame.rotationDegrees)
-                    if (bitmap != rawBitmap) rawBitmap.recycle()
-                    Pair(bitmap, true)
-                } else {
-                    Pair(null, false)
-                }
             }
             else -> Pair(null, false)
         }

@@ -7,6 +7,6 @@ package org.multipaz.facematch
  * @property scale thickness multiplier (1.0 = standard, >1.0 = expanded/bulging outward).
  */
 data class RingSegment(
-    val color: PromptColor = PromptColor.DARK_GRAY,
+    val color: RingColor = RingColor.DARK_GRAY,
     val scale: Float = 1.0f
 )

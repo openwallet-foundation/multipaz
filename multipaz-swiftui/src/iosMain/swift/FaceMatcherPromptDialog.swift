@@ -189,8 +189,6 @@ private struct FaceMatcherPromptView: View {
                     width: 640,
                     height: 480,
                     rotationDegrees: 0,
-                    pixelFormat: PixelFormat.unknown,
-                    data: Data().toByteString(),
                     platformHandle: nil
                 )
                 _ = try? await faceMatcherSession.feedFrame(frame: frame)
@@ -555,8 +553,6 @@ private class CameraViewController: UIViewController, AVCaptureVideoDataOutputSa
                 width: width,
                 height: height,
                 rotationDegrees: 0,
-                pixelFormat: PixelFormat.unknown,
-                data: Data().toByteString(),
                 platformHandle: uiImage
             )
 

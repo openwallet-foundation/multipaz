@@ -4,20 +4,21 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class FaceMatcherTest {
 
     @Test
-    fun testPromptColor() {
-        val color = PromptColor.fromRgba(255, 0, 128, 255)
+    fun testRingColor() {
+        val color = RingColor.fromRgba(255, 0, 128, 255)
         assertEquals(1.0f, color.alpha)
         assertEquals(1.0f, color.red)
         assertEquals(0.0f, color.green)
         assertTrue(color.blue > 0.49f && color.blue < 0.51f)
 
-        val lerped = PromptColor.lerp(PromptColor.BLACK, PromptColor.WHITE, 0.5f)
+        val lerped = RingColor.lerp(RingColor.BLACK, RingColor.WHITE, 0.5f)
         assertTrue(lerped.red > 0.49f && lerped.red < 0.51f)
         assertTrue(lerped.green > 0.49f && lerped.green < 0.51f)
         assertTrue(lerped.blue > 0.49f && lerped.blue < 0.51f)
@@ -46,9 +47,7 @@ class FaceMatcherTest {
         val dummyFrame = CameraFrame(
             width = 640,
             height = 480,
-            rotationDegrees = 0,
-            pixelFormat = PixelFormat.UNKNOWN,
-            data = ByteString()
+            rotationDegrees = 0
         )
 
         // Session 1
@@ -104,9 +103,9 @@ class FaceMatcherTest {
         assertEquals(1.0f, segments[10].scale)
 
         // Edge segment 11 has a gentle partial fade (neither pure dark gray nor pure bright green)
-        assertTrue(segments[11].color != PromptColor.DARK_GRAY)
-        assertTrue(segments[11].color != PromptColor.BRIGHT_GREEN)
-        assertEquals(PromptColor.DARK_GRAY, segments[10].color)
+        assertTrue(segments[11].color != RingColor.DARK_GRAY)
+        assertTrue(segments[11].color != RingColor.BRIGHT_GREEN)
+        assertEquals(RingColor.DARK_GRAY, segments[10].color)
     }
 
     @Test
@@ -114,10 +113,10 @@ class FaceMatcherTest {
         val defaultState = FaceMatcherPromptState()
         kotlin.test.assertNull(defaultState.graphicsOverlay)
 
-        val pt = FaceMatcherGraphic.Point(10f, 20f, PromptColor.BRIGHT_GREEN, 3f)
-        val line = FaceMatcherGraphic.Line(0f, 0f, 100f, 100f, PromptColor.BLUE, 2f)
-        val rect = FaceMatcherGraphic.Rect(10f, 10f, 50f, 50f, PromptColor.RED, 1.5f)
-        val text = FaceMatcherGraphic.Text("85%", 50f, 20f, PromptColor.BRIGHT_GREEN, 14f)
+        val pt = FaceMatcherGraphic.Point(10f, 20f, RingColor.BRIGHT_GREEN, 3f)
+        val line = FaceMatcherGraphic.Line(0f, 0f, 100f, 100f, RingColor.BLUE, 2f)
+        val rect = FaceMatcherGraphic.Rect(10f, 10f, 50f, 50f, RingColor.RED, 1.5f)
+        val text = FaceMatcherGraphic.Text("85%", 50f, 20f, RingColor.BRIGHT_GREEN, 14f)
 
         val graphics = FaceMatcherGraphics(
             frameWidth = 480,
@@ -132,6 +131,31 @@ class FaceMatcherTest {
 
         val stateWithGraphics = FaceMatcherPromptState(graphicsOverlay = graphics)
         assertEquals(graphics, stateWithGraphics.graphicsOverlay)
+    }
+
+    @Test
+    fun testCameraFrameRotationDegrees() {
+        for (rot in listOf(0, 90, 180, 270)) {
+            val frame = CameraFrame(width = 640, height = 480, rotationDegrees = rot)
+            assertEquals(rot, frame.rotationDegrees)
+            if (rot == 90 || rot == 270) {
+                assertEquals(480, frame.uprightWidth)
+                assertEquals(640, frame.uprightHeight)
+            } else {
+                assertEquals(640, frame.uprightWidth)
+                assertEquals(480, frame.uprightHeight)
+            }
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            CameraFrame(width = 640, height = 480, rotationDegrees = 45)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            CameraFrame(width = 640, height = 480, rotationDegrees = -90)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            CameraFrame(width = 640, height = 480, rotationDegrees = 360)
+        }
     }
 }
 

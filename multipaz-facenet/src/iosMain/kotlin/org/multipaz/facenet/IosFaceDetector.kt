@@ -591,10 +591,6 @@ internal class IosFaceDetector(
                 val cg = platformHandle.CGImage ?: return null
                 ImageRefHolder(cg, needsRelease = false)
             }
-            frame.data.size > 0 -> {
-                val cg = decodeToCgImage(frame.data.toByteArray()) ?: return null
-                ImageRefHolder(cg, needsRelease = true)
-            }
             else -> null
         }
     }

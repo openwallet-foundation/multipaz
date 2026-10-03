@@ -7,7 +7,7 @@ import org.multipaz.facematch.CameraFrame
 import org.multipaz.facematch.FaceMatcherGraphic
 import org.multipaz.facematch.FaceMatcherGraphics
 import org.multipaz.facematch.FaceMatcherPromptState
-import org.multipaz.facematch.PromptColor
+import org.multipaz.facematch.RingColor
 import org.multipaz.facematch.RingDirection
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -70,11 +70,9 @@ class FaceNetSessionTest {
     }
 
     private val dummyFrame = CameraFrame(
-        data = ByteString(),
         width = 640,
         height = 480,
-        rotationDegrees = 0,
-        platformHandle = null
+        rotationDegrees = 0
     )
 
     @Test
@@ -86,7 +84,7 @@ class FaceNetSessionTest {
         assertEquals("Position your face and look at the camera", session.state.value.messageBelow)
         assertEquals(FaceMatcherPromptState.Outcome.IN_PROGRESS, session.state.value.outcome)
         assertEquals(FaceMatcherPromptState.NUM_RING_SEGMENTS, session.state.value.ringSegments.size)
-        assertTrue(session.state.value.ringSegments.all { it.color == PromptColor.DARK_GRAY })
+        assertTrue(session.state.value.ringSegments.all { it.color == RingColor.DARK_GRAY })
     }
 
     @Test
@@ -106,7 +104,7 @@ class FaceNetSessionTest {
         assertEquals(FaceMatcherPromptState.Outcome.FAILED, session.state.value.outcome)
         assertEquals("Verification Failed", session.state.value.messageAbove)
         assertEquals("Verification timed out", session.state.value.messageBelow)
-        assertTrue(session.state.value.ringSegments.all { it.color == PromptColor.RED })
+        assertTrue(session.state.value.ringSegments.all { it.color == RingColor.RED })
     }
 
     @Test
@@ -308,7 +306,7 @@ class FaceNetSessionTest {
         assertEquals(FaceMatcherPromptState.Outcome.SUCCESS, session.state.value.outcome)
         assertEquals("Identity Verified", session.state.value.messageAbove)
         assertEquals("Verification successful", session.state.value.messageBelow)
-        assertTrue(session.state.value.ringSegments.all { it.color == PromptColor.GREEN })
+        assertTrue(session.state.value.ringSegments.all { it.color == RingColor.GREEN })
     }
 
     @Test
@@ -433,7 +431,7 @@ class FaceNetSessionTest {
         assertEquals("Liveness verified", session.state.value.messageBelow)
         assertNotNull(session.state.value.capturedImage)
         assertEquals(ByteString(byteArrayOf(1, 2, 3)), session.state.value.capturedImage)
-        assertTrue(session.state.value.ringSegments.all { it.color == PromptColor.GREEN })
+        assertTrue(session.state.value.ringSegments.all { it.color == RingColor.GREEN })
     }
 }
 

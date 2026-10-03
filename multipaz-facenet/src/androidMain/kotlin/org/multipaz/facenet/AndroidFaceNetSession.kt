@@ -111,22 +111,6 @@ internal class AndroidFaceNetSession(
                 }
                 Pair(bitmap, bitmap != platformHandle)
             }
-            frame.data.size > 0 -> {
-                val bytes = frame.data.toByteArray()
-                val rawBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                if (rawBitmap != null) {
-                    val activeDet = detector
-                    val bitmap = if (activeDet != null) {
-                        activeDet.rotateBitmap(rawBitmap, frame.rotationDegrees)
-                    } else {
-                        rawBitmap
-                    }
-                    if (bitmap != rawBitmap) rawBitmap.recycle()
-                    Pair(bitmap, true)
-                } else {
-                    Pair(null, false)
-                }
-            }
             else -> Pair(null, false)
         }
 

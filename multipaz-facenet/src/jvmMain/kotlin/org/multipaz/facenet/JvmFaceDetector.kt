@@ -290,11 +290,7 @@ internal class JvmFaceDetector(
     }
 
     private fun decodeFrameToImage(frame: CameraFrame): BufferedImage? {
-        val rawImage = (frame.platformHandle as? BufferedImage)
-            ?: if (frame.data.size > 0) {
-                ImageIO.read(ByteArrayInputStream(frame.data.toByteArray()))
-            } else null
-            ?: return null
+        val rawImage = (frame.platformHandle as? BufferedImage) ?: return null
 
         if (frame.rotationDegrees == 0) return rawImage
 
