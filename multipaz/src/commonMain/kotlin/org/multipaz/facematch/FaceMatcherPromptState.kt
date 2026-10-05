@@ -10,7 +10,7 @@ import kotlinx.io.bytestring.ByteString
  * @property ringSegments visual configuration for the 18 segments of the ring (indexed 0 to 17
  * clockwise from 12 o'clock).
  * @property outcome overall verification outcome.
- * @property graphicsOverlay optional vector graphics to overlay on top of the camera video stream.
+ * @property overlay optional ARGB bitmap overlay to draw on top of the camera video stream.
  * @property capturedImage optional high-resolution portrait photo bytes captured during liveness enrollment.
  */
 data class FaceMatcherPromptState(
@@ -18,7 +18,7 @@ data class FaceMatcherPromptState(
     val messageBelow: String? = null,
     val ringSegments: List<RingSegment> = defaultSegments,
     val outcome: Outcome = Outcome.IN_PROGRESS,
-    val graphicsOverlay: FaceMatcherGraphics? = null,
+    val overlay: OverlayFrame? = null,
     val capturedImage: ByteString? = null
 ) {
     /** Overall outcome of the face verification session. */
@@ -34,7 +34,7 @@ data class FaceMatcherPromptState(
 
         /** Default ring segment configuration (all neutral dark gray). */
         val defaultSegments: List<RingSegment> = List(NUM_RING_SEGMENTS) {
-            RingSegment(color = RingColor.DARK_GRAY, scale = 1.0f)
+            RingSegment(color = Color.DARK_GRAY, scale = 1.0f)
         }
     }
 }

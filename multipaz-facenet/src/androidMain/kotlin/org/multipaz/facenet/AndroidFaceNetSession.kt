@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.CameraFrame
-import org.multipaz.facematch.FaceMatcherGraphics
 import org.multipaz.util.Logger
 import java.io.ByteArrayOutputStream
 import kotlin.time.Clock
@@ -31,14 +30,6 @@ internal class AndroidFaceNetSession(
     private var detector: AndroidFaceDetector? = null
     private var interpreter: AndroidFaceNetInterpreter? = null
 
-    override fun buildDebugGraphics(
-        frame: CameraFrame,
-        faces: List<AndroidDetectedFace>,
-        currentSimilarity: Float?
-    ): FaceMatcherGraphics? {
-        val base = super.buildDebugGraphics(frame, faces, currentSimilarity) ?: return null
-        return base.copy(isMirrored = true)
-    }
 
     override suspend fun initializePipeline() {
         val interp = AndroidFaceNetInterpreter(modelBytes, config)

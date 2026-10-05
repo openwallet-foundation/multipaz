@@ -4,10 +4,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facenet.testdata.FaceTestData
 import org.multipaz.facematch.CameraFrame
-import org.multipaz.facematch.FaceMatcherGraphic
-import org.multipaz.facematch.FaceMatcherGraphics
+import org.multipaz.facematch.Color
 import org.multipaz.facematch.FaceMatcherPromptState
-import org.multipaz.facematch.RingColor
 import org.multipaz.facematch.RingDirection
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -84,7 +82,7 @@ class FaceNetSessionTest {
         assertEquals("Position your face and look at the camera", session.state.value.messageBelow)
         assertEquals(FaceMatcherPromptState.Outcome.IN_PROGRESS, session.state.value.outcome)
         assertEquals(FaceMatcherPromptState.NUM_RING_SEGMENTS, session.state.value.ringSegments.size)
-        assertTrue(session.state.value.ringSegments.all { it.color == RingColor.DARK_GRAY })
+        assertTrue(session.state.value.ringSegments.all { it.color == Color.DARK_GRAY })
     }
 
     @Test
@@ -104,7 +102,7 @@ class FaceNetSessionTest {
         assertEquals(FaceMatcherPromptState.Outcome.FAILED, session.state.value.outcome)
         assertEquals("Verification Failed", session.state.value.messageAbove)
         assertEquals("Verification timed out", session.state.value.messageBelow)
-        assertTrue(session.state.value.ringSegments.all { it.color == RingColor.RED })
+        assertTrue(session.state.value.ringSegments.all { it.color == Color.RED })
     }
 
     @Test
@@ -306,7 +304,7 @@ class FaceNetSessionTest {
         assertEquals(FaceMatcherPromptState.Outcome.SUCCESS, session.state.value.outcome)
         assertEquals("Identity Verified", session.state.value.messageAbove)
         assertEquals("Verification successful", session.state.value.messageBelow)
-        assertTrue(session.state.value.ringSegments.all { it.color == RingColor.GREEN })
+        assertTrue(session.state.value.ringSegments.all { it.color == Color.GREEN })
     }
 
     @Test
@@ -329,13 +327,13 @@ class FaceNetSessionTest {
     }
 
     @Test
-    fun testDebugGraphicsOverlay() = runTest {
+    fun testDebugOverlay() = runTest {
         var currentTime = 1000L
         val session = TestFaceNetSession(
             debug = true,
             clock = { currentTime }
         )
-        assertTrue(session.providesGraphicsOverlay)
+        assertTrue(session.providesOverlay)
 
         val detection = BlazeFaceDetection(
             score = 0.95f,
@@ -354,25 +352,19 @@ class FaceNetSessionTest {
         session.mockEmbedding = FaceEmbedding(FaceTestData.QUALCOMM_DEMO_1_GOLDEN_EMBEDDING)
         session.feedFrame(dummyFrame)
 
-        val overlay = session.state.value.graphicsOverlay
+        val overlay = session.state.value.overlay
         assertNotNull(overlay)
-        assertEquals(dummyFrame.uprightWidth, overlay.frameWidth)
-        assertEquals(dummyFrame.uprightHeight, overlay.frameHeight)
-        assertTrue(overlay.items.isNotEmpty())
+        assertEquals(dummyFrame.uprightWidth, overlay.width)
+        assertEquals(dummyFrame.uprightHeight, overlay.height)
+        assertEquals(dummyFrame.uprightWidth * dummyFrame.uprightHeight, overlay.argb.size)
 
-        // Check bounding box rect exists
-        assertTrue(overlay.items.any { it is FaceMatcherGraphic.Rect })
-        // Check points exist (keypoints)
-        assertTrue(overlay.items.any { it is FaceMatcherGraphic.Point })
-        // Check lines exist (wireframe and pose ray)
-        assertTrue(overlay.items.any { it is FaceMatcherGraphic.Line })
-        // Check match percentage text exists
-        assertTrue(overlay.items.any { it is FaceMatcherGraphic.Text && it.text == "100%" })
+        // Check that non-transparent pixels exist
+        assertTrue(overlay.argb.any { it != 0 })
 
-        // When no face is detected, graphicsOverlay is cleared to null
+        // When no face is detected, overlay is cleared to null
         session.mockFaces = emptyList()
         session.feedFrame(dummyFrame)
-        assertNull(session.state.value.graphicsOverlay)
+        assertNull(session.state.value.overlay)
     }
 
     @Test
@@ -431,7 +423,7 @@ class FaceNetSessionTest {
         assertEquals("Liveness verified", session.state.value.messageBelow)
         assertNotNull(session.state.value.capturedImage)
         assertEquals(ByteString(byteArrayOf(1, 2, 3)), session.state.value.capturedImage)
-        assertTrue(session.state.value.ringSegments.all { it.color == RingColor.GREEN })
+        assertTrue(session.state.value.ringSegments.all { it.color == Color.GREEN })
     }
 }
 

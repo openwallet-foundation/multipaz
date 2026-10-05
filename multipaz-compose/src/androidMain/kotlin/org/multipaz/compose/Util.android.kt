@@ -20,6 +20,7 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.compose.camera.CameraFrame
 import org.multipaz.context.AndroidUiContext
 import org.multipaz.context.applicationContext
+import org.multipaz.facematch.OverlayFrame
 import org.multipaz.util.Logger
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -270,3 +271,9 @@ actual fun rememberUiBoundCoroutineScope(
     val context = LocalContext.current
     return rememberCoroutineScope { getContext() + AndroidUiContext(context) }
 }
+
+actual fun OverlayFrame.toImageBitmap(): ImageBitmap {
+    val bitmap = Bitmap.createBitmap(argb, width, height, Bitmap.Config.ARGB_8888)
+    return bitmap.asImageBitmap()
+}
+

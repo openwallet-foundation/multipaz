@@ -9,11 +9,10 @@ import kotlin.random.Random
 import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.CameraFrame
-import org.multipaz.facematch.FaceMatcherGraphic
-import org.multipaz.facematch.FaceMatcherGraphics
+import org.multipaz.facematch.Color
 import org.multipaz.facematch.FaceMatcherPromptState
 import org.multipaz.facematch.FaceMatcherSession
-import org.multipaz.facematch.RingColor
+import org.multipaz.facematch.OverlayFrame
 import org.multipaz.facematch.RingDirection
 import org.multipaz.facematch.RingSegment
 import org.multipaz.util.Logger
@@ -50,7 +49,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
     randomSeed: Long = clock()
 ) : FaceMatcherSession(referencePortrait) {
 
-    override val providesGraphicsOverlay: Boolean
+    override val providesOverlay: Boolean
         get() = debug
 
     val isLivenessOnly: Boolean
@@ -187,25 +186,25 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                             messageAbove = "Position your face",
                             messageBelow = "No face detected",
                             ringSegments = FaceMatcherPromptState.defaultSegments,
-                            graphicsOverlay = null
+                            overlay = null
                         )
                     }
                     Phase.LIVENESS_CHALLENGE -> {
                         updateState(
                             messageBelow = "Face lost, looking for face...",
-                            graphicsOverlay = null
+                            overlay = null
                         )
                     }
                     Phase.CAPTURING -> {
                         updateState(
                             messageBelow = "Face lost, hold still...",
-                            graphicsOverlay = null
+                            overlay = null
                         )
                     }
                     else -> {}
                 }
             } else if (debug) {
-                updateState(graphicsOverlay = null)
+                updateState(overlay = null)
             }
             return
         }
@@ -219,7 +218,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                 messageAbove = "Multiple faces detected",
                 messageBelow = "Ensure only one person is in the frame",
                 ringSegments = FaceMatcherPromptState.defaultSegments,
-                graphicsOverlay = null
+                overlay = null
             )
             return
         }
@@ -255,13 +254,13 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
 
         if (isCancelled) return
 
-        val debugGraphics = if (debug) buildDebugGraphics(frame, faces, currentSimilarity) else null
+        val debugOverlay = if (debug) buildDebugOverlay(frame, faces, currentSimilarity) else null
 
         when (phase) {
             Phase.POSITIONING -> {
                 val elapsed = now - phaseStartTime
                 val pulse = (sin(elapsed / 250.0) * 0.35 + 0.65).toFloat()
-                val pulseColor = RingColor.lerp(RingColor.DARK_GRAY, RingColor.BLUE, pulse)
+                val pulseColor = Color.lerp(Color.DARK_GRAY, Color.BLUE, pulse)
 
                 if (isFacingStraight) {
                     if (isLivenessOnly) {
@@ -272,7 +271,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                             currentChallengeIndex = 0
                             consecutivePoseFrames = 0
                             consecutiveMatchFrames = 0
-                            showChallenge(0.0f, debugGraphics)
+                            showChallenge(0.0f, debugOverlay)
                         } else {
                             updateState(
                                 messageAbove = "Position your face",
@@ -280,7 +279,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                                 ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
                                     RingSegment(color = pulseColor, scale = 1.0f)
                                 },
-                                graphicsOverlay = debugGraphics
+                                overlay = debugOverlay
                             )
                         }
                     } else {
@@ -303,9 +302,9 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                                     messageAbove = matchedMsg,
                                     messageBelow = "Hold still...",
                                     ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
-                                        RingSegment(color = RingColor.GREEN, scale = 1.15f)
+                                        RingSegment(color = Color.GREEN, scale = 1.15f)
                                     },
-                                    graphicsOverlay = debugGraphics
+                                    overlay = debugOverlay
                                 )
                             } else {
                                 val percent = ((currentSimilarity ?: bestSimilarity) * 100).toInt()
@@ -316,7 +315,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                                     ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
                                         RingSegment(color = pulseColor, scale = 1.0f)
                                     },
-                                    graphicsOverlay = debugGraphics
+                                    overlay = debugOverlay
                                 )
                             }
                         } else {
@@ -348,7 +347,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                                 ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
                                     RingSegment(color = pulseColor, scale = 1.0f)
                                 },
-                                graphicsOverlay = debugGraphics
+                                overlay = debugOverlay
                             )
                         }
                     }
@@ -369,7 +368,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                         ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
                             RingSegment(color = pulseColor, scale = 1.0f)
                         },
-                        graphicsOverlay = debugGraphics
+                        overlay = debugOverlay
                     )
                 }
             }
@@ -381,14 +380,14 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                     phaseStartTime = now
                     currentChallengeIndex = 0
                     consecutivePoseFrames = 0
-                    showChallenge(0.0f, debugGraphics)
+                    showChallenge(0.0f, debugOverlay)
                 } else {
                     val scale = 1.15f - (elapsed.toFloat() / matchConveyDurationMs) * 0.15f
                     updateState(
                         ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
-                            RingSegment(color = RingColor.GREEN, scale = scale)
+                            RingSegment(color = Color.GREEN, scale = scale)
                         },
-                        graphicsOverlay = debugGraphics
+                        overlay = debugOverlay
                     )
                 }
             }
@@ -396,7 +395,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
             Phase.LIVENESS_CHALLENGE -> {
                 val challenge = challenges[currentChallengeIndex]
                 val progress = computeChallengeProgress(challenge, yaw, pitch)
-                showChallenge(progress, debugGraphics)
+                showChallenge(progress, debugOverlay)
 
                 if (progress >= 0.85f) {
                     consecutivePoseFrames++
@@ -412,16 +411,16 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                                     messageAbove = "Hold Still",
                                     messageBelow = "Hold still to capture photo...",
                                     ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
-                                        RingSegment(color = RingColor.GREEN, scale = 1.15f)
+                                        RingSegment(color = Color.GREEN, scale = 1.15f)
                                     },
-                                    graphicsOverlay = debugGraphics
+                                    overlay = debugOverlay
                                 )
                             } else {
                                 finalizeVerification()
                             }
                         } else {
                             phaseStartTime = now
-                            showChallenge(0.0f, debugGraphics)
+                            showChallenge(0.0f, debugOverlay)
                         }
                     }
                 } else {
@@ -439,20 +438,20 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                             messageAbove = "Portrait Captured",
                             messageBelow = "Liveness verified",
                             ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
-                                RingSegment(color = RingColor.GREEN, scale = 1.2f)
+                                RingSegment(color = Color.GREEN, scale = 1.2f)
                             },
                             outcome = FaceMatcherPromptState.Outcome.SUCCESS,
                             capturedImage = photoBytes,
-                            graphicsOverlay = null
+                            overlay = null
                         )
                     } else {
                         updateState(
                             messageAbove = "Hold Still",
                             messageBelow = "Capturing portrait image...",
                             ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
-                                RingSegment(color = RingColor.GREEN, scale = 1.15f)
+                                RingSegment(color = Color.GREEN, scale = 1.15f)
                             },
-                            graphicsOverlay = debugGraphics
+                            overlay = debugOverlay
                         )
                     }
                 } else {
@@ -461,9 +460,9 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                         messageAbove = "Hold Still",
                         messageBelow = "Look directly at the camera...",
                         ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
-                            RingSegment(color = RingColor.DARK_GRAY, scale = 1.0f)
+                            RingSegment(color = Color.DARK_GRAY, scale = 1.0f)
                         },
-                        graphicsOverlay = debugGraphics
+                        overlay = debugOverlay
                     )
                 }
             }
@@ -487,7 +486,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
         }
     }
 
-    private fun showChallenge(progress: Float, debugGraphics: FaceMatcherGraphics? = null) {
+    private fun showChallenge(progress: Float, debugOverlay: OverlayFrame? = null) {
         val direction = challenges[currentChallengeIndex]
         val (promptTitle, promptDetail) = when (direction) {
             RingDirection.LEFT -> "Look to your left" to "Turn your head left"
@@ -501,211 +500,33 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
         val segments = computeDirectionSegments(
             direction = direction,
             progress = progress,
-            activeColor = RingColor.BRIGHT_GREEN,
-            baseColor = RingColor.DARK_GRAY
+            activeColor = Color.BRIGHT_GREEN,
+            baseColor = Color.DARK_GRAY
         )
 
         updateState(
             messageAbove = "$promptTitle ($stepText)",
             messageBelow = promptDetail,
             ringSegments = segments,
-            graphicsOverlay = debugGraphics
+            overlay = debugOverlay
         )
     }
 
     /**
-     * Builds vector graphics for detected faces to overlay on the camera video stream when in debug mode.
+     * Builds an ARGB bitmap overlay for detected faces on top of the camera video stream when in debug mode.
      */
-    protected open fun buildDebugGraphics(
+    protected open fun buildDebugOverlay(
         frame: CameraFrame,
         faces: List<TFace>,
         currentSimilarity: Float?
-    ): FaceMatcherGraphics? {
+    ): OverlayFrame? {
         if (!debug || faces.isEmpty()) return null
-        val face = faces[0] as? BlazeFaceDetection ?: return null
-
-        val items = mutableListOf<FaceMatcherGraphic>()
-
-        // 1. Face bounding box
-        items.add(
-            FaceMatcherGraphic.Rect(
-                left = face.boundingBox.left.toFloat(),
-                top = face.boundingBox.top.toFloat(),
-                right = face.boundingBox.right.toFloat(),
-                bottom = face.boundingBox.bottom.toFloat(),
-                color = RingColor.BRIGHT_GREEN,
-                strokeWidth = 2.0f
-            )
-        )
-
-        val rightEye = face.rightEye
-        val leftEye = face.leftEye
-        val nose = face.noseTip
-        val mouth = face.mouthCenter
-        val rightEar = face.rightEarTragus
-        val leftEar = face.leftEarTragus
-
-        // 2. Facial wireframe / alignment lines
-        // Eye-to-eye axis line
-        items.add(
-            FaceMatcherGraphic.Line(
-                startX = rightEye.x.toFloat(),
-                startY = rightEye.y.toFloat(),
-                endX = leftEye.x.toFloat(),
-                endY = leftEye.y.toFloat(),
-                color = RingColor.BRIGHT_GREEN,
-                strokeWidth = 1.5f
-            )
-        )
-
-        // Eye midpoint to nose
-        val eyeMidX = (rightEye.x + leftEye.x).toFloat() / 2f
-        val eyeMidY = (rightEye.y + leftEye.y).toFloat() / 2f
-        items.add(
-            FaceMatcherGraphic.Line(
-                startX = eyeMidX,
-                startY = eyeMidY,
-                endX = nose.x.toFloat(),
-                endY = nose.y.toFloat(),
-                color = RingColor.BRIGHT_GREEN,
-                strokeWidth = 1.5f
-            )
-        )
-
-        // Nose to mouth
-        items.add(
-            FaceMatcherGraphic.Line(
-                startX = nose.x.toFloat(),
-                startY = nose.y.toFloat(),
-                endX = mouth.x.toFloat(),
-                endY = mouth.y.toFloat(),
-                color = RingColor.BRIGHT_GREEN,
-                strokeWidth = 1.5f
-            )
-        )
-
-        // Eye to nose triangles (translucent)
-        val meshColor = RingColor(0x8069F0AEL)
-        items.add(
-            FaceMatcherGraphic.Line(
-                startX = rightEye.x.toFloat(),
-                startY = rightEye.y.toFloat(),
-                endX = nose.x.toFloat(),
-                endY = nose.y.toFloat(),
-                color = meshColor,
-                strokeWidth = 1.0f
-            )
-        )
-        items.add(
-            FaceMatcherGraphic.Line(
-                startX = leftEye.x.toFloat(),
-                startY = leftEye.y.toFloat(),
-                endX = nose.x.toFloat(),
-                endY = nose.y.toFloat(),
-                color = meshColor,
-                strokeWidth = 1.0f
-            )
-        )
-
-        // Mouth to ears (translucent blue)
-        val earColor = RingColor(0x802979FFL)
-        items.add(
-            FaceMatcherGraphic.Line(
-                startX = mouth.x.toFloat(),
-                startY = mouth.y.toFloat(),
-                endX = rightEar.x.toFloat(),
-                endY = rightEar.y.toFloat(),
-                color = earColor,
-                strokeWidth = 1.0f
-            )
-        )
-        items.add(
-            FaceMatcherGraphic.Line(
-                startX = mouth.x.toFloat(),
-                startY = mouth.y.toFloat(),
-                endX = leftEar.x.toFloat(),
-                endY = leftEar.y.toFloat(),
-                color = earColor,
-                strokeWidth = 1.0f
-            )
-        )
-
-        // 3. Keypoints (points/circles)
-        items.add(FaceMatcherGraphic.Point(rightEye.x.toFloat(), rightEye.y.toFloat(), RingColor.BRIGHT_GREEN, radius = 4f))
-        items.add(FaceMatcherGraphic.Point(leftEye.x.toFloat(), leftEye.y.toFloat(), RingColor.BRIGHT_GREEN, radius = 4f))
-        items.add(FaceMatcherGraphic.Point(nose.x.toFloat(), nose.y.toFloat(), RingColor.RED, radius = 4f))
-        items.add(FaceMatcherGraphic.Point(mouth.x.toFloat(), mouth.y.toFloat(), RingColor(0xFFFFD600L), radius = 4f))
-        items.add(FaceMatcherGraphic.Point(rightEar.x.toFloat(), rightEar.y.toFloat(), RingColor.BLUE, radius = 3.5f))
-        items.add(FaceMatcherGraphic.Point(leftEar.x.toFloat(), leftEar.y.toFloat(), RingColor.BLUE, radius = 3.5f))
-
-        // 4. 3D Head pose direction vector (projected from nose tip)
-        val eyeDist = hypot(leftEye.x - rightEye.x, leftEye.y - rightEye.y).toFloat()
-        if (eyeDist > 1f) {
-            val rayLength = eyeDist * 0.9f
-            val radYaw = face.yaw * (PI / 180.0)
-            val radPitch = face.pitch * (PI / 180.0)
-            val rayDx = (sin(radYaw) * rayLength).toFloat()
-            val rayDy = (sin(radPitch) * rayLength).toFloat()
-            val rayEndX = nose.x.toFloat() + rayDx
-            val rayEndY = nose.y.toFloat() + rayDy
-
-            items.add(
-                FaceMatcherGraphic.Line(
-                    startX = nose.x.toFloat(),
-                    startY = nose.y.toFloat(),
-                    endX = rayEndX,
-                    endY = rayEndY,
-                    color = RingColor(0xFFFF5252L),
-                    strokeWidth = 3.0f
-                )
-            )
-            items.add(
-                FaceMatcherGraphic.Point(
-                    x = rayEndX,
-                    y = rayEndY,
-                    color = RingColor(0xFFFF5252L),
-                    radius = 4.5f
-                )
-            )
-        }
-
-        // 5. Match percentage label above face bounding box
-        val similarityToDisplay = currentSimilarity ?: if (bestSimilarity > 0f) bestSimilarity else null
-        if (similarityToDisplay != null) {
-            val percentage = (similarityToDisplay * 100).toInt().coerceIn(0, 100)
-            val isMatch = similarityToDisplay >= config.matchThreshold
-            val labelColor = if (isMatch) {
-                RingColor.BRIGHT_GREEN
-            } else if (similarityToDisplay >= 0.4f) {
-                RingColor(0xFFFFD600L) // Amber/Yellow
-            } else {
-                RingColor(0xFFFF5252L) // Red
-            }
-            val centerX = face.boundingBox.centerX.toFloat()
-            val textY = if (face.boundingBox.top >= 24.0) {
-                (face.boundingBox.top - 14.0).toFloat()
-            } else {
-                (face.boundingBox.top + 18.0).toFloat()
-            }
-            items.add(
-                FaceMatcherGraphic.Text(
-                    text = "$percentage%",
-                    x = centerX,
-                    y = textY,
-                    color = labelColor,
-                    fontSize = 16.0f
-                )
-            )
-        }
-
-        val frameWidth = if (face.imageWidth > 0) face.imageWidth else frame.uprightWidth
-        val frameHeight = if (face.imageHeight > 0) face.imageHeight else frame.uprightHeight
-
-        return FaceMatcherGraphics(
-            frameWidth = frameWidth,
-            frameHeight = frameHeight,
-            isMirrored = false,
-            items = items
+        return renderDebugOverlay(
+            frame = frame,
+            faces = faces,
+            currentSimilarity = currentSimilarity,
+            bestSimilarity = bestSimilarity,
+            matchThreshold = config.matchThreshold
         )
     }
 
@@ -718,10 +539,10 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                 messageAbove = verifiedMsg,
                 messageBelow = "Verification successful",
                 ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
-                    RingSegment(color = RingColor.GREEN, scale = 1.2f)
+                    RingSegment(color = Color.GREEN, scale = 1.2f)
                 },
                 outcome = FaceMatcherPromptState.Outcome.SUCCESS,
-                graphicsOverlay = null
+                overlay = null
             )
         } else {
             val percentage = (bestSimilarity * 100).toInt().coerceAtLeast(0)
@@ -738,10 +559,10 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
             messageAbove = messageAbove,
             messageBelow = messageBelow,
             ringSegments = List(FaceMatcherPromptState.NUM_RING_SEGMENTS) {
-                RingSegment(color = RingColor.RED, scale = 1.0f)
+                RingSegment(color = Color.RED, scale = 1.0f)
             },
             outcome = FaceMatcherPromptState.Outcome.FAILED,
-            graphicsOverlay = null
+            overlay = null
         )
     }
 

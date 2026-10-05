@@ -1,11 +1,16 @@
 package org.multipaz.facematch
 
+import kotlin.experimental.ExperimentalObjCName
+import kotlin.native.ObjCName
+
 /**
  * Platform-independent 32-bit ARGB color value used for face matcher ring segments and graphics.
  *
  * @property argb 32-bit ARGB integer encoded as Long (e.g. 0xFF00FF00L for opaque green).
  */
-data class RingColor(val argb: Long) {
+@OptIn(ExperimentalObjCName::class)
+@ObjCName(name = "MpzColor", swiftName = "MpzColor")
+data class Color(val argb: Long) {
     /** Alpha component in range 0.0f..1.0f. */
     val alpha: Float get() = ((argb shr 24) and 0xFF) / 255f
 
@@ -19,36 +24,36 @@ data class RingColor(val argb: Long) {
     val blue: Float get() = (argb and 0xFF) / 255f
 
     companion object {
-        val TRANSPARENT = RingColor(0x00000000L)
-        val BLACK = RingColor(0xFF000000L)
-        val WHITE = RingColor(0xFFFFFFFFL)
-        val DARK_GRAY = RingColor(0xFF2E2E2EL)
-        val GRAY = RingColor(0xFF757575L)
-        val LIGHT_GRAY = RingColor(0xFFBDBDBDL)
-        val GREEN = RingColor(0xFF00C853L)
-        val BRIGHT_GREEN = RingColor(0xFF69F0AEL)
-        val RED = RingColor(0xFFD50000L)
-        val BLUE = RingColor(0xFF2979FFL)
+        val TRANSPARENT = Color(0x00000000L)
+        val BLACK = Color(0xFF000000L)
+        val WHITE = Color(0xFFFFFFFFL)
+        val DARK_GRAY = Color(0xFF2E2E2EL)
+        val GRAY = Color(0xFF757575L)
+        val LIGHT_GRAY = Color(0xFFBDBDBDL)
+        val GREEN = Color(0xFF00C853L)
+        val BRIGHT_GREEN = Color(0xFF69F0AEL)
+        val RED = Color(0xFFD50000L)
+        val BLUE = Color(0xFF2979FFL)
 
         /**
-         * Creates a [RingColor] from individual 0..255 RGB channels and optional alpha.
+         * Creates a [Color] from individual 0..255 RGB channels and optional alpha.
          */
-        fun fromRgba(red: Int, green: Int, blue: Int, alpha: Int = 255): RingColor {
+        fun fromRgba(red: Int, green: Int, blue: Int, alpha: Int = 255): Color {
             val a = (alpha.coerceIn(0, 255).toLong() and 0xFF) shl 24
             val r = (red.coerceIn(0, 255).toLong() and 0xFF) shl 16
             val g = (green.coerceIn(0, 255).toLong() and 0xFF) shl 8
             val b = (blue.coerceIn(0, 255).toLong() and 0xFF)
-            return RingColor(a or r or g or b)
+            return Color(a or r or g or b)
         }
 
         /**
-         * Linearly interpolates between two [RingColor]s.
+         * Linearly interpolates between two [Color]s.
          *
          * @param start the starting color when fraction is 0.0.
          * @param end the ending color when fraction is 1.0.
          * @param fraction progress from 0.0 to 1.0.
          */
-        fun lerp(start: RingColor, end: RingColor, fraction: Float): RingColor {
+        fun lerp(start: Color, end: Color, fraction: Float): Color {
             val f = fraction.coerceIn(0f, 1f)
             val a = start.alpha + (end.alpha - start.alpha) * f
             val r = start.red + (end.red - start.red) * f
@@ -58,7 +63,7 @@ data class RingColor(val argb: Long) {
             val rInt = (r * 255f + 0.5f).toInt().coerceIn(0, 255).toLong() shl 16
             val gInt = (g * 255f + 0.5f).toInt().coerceIn(0, 255).toLong() shl 8
             val bInt = (b * 255f + 0.5f).toInt().coerceIn(0, 255).toLong()
-            return RingColor(aInt or rInt or gInt or bInt)
+            return Color(aInt or rInt or gInt or bInt)
         }
     }
 }

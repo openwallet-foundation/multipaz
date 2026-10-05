@@ -11,14 +11,14 @@ import kotlin.test.assertTrue
 class FaceMatcherTest {
 
     @Test
-    fun testRingColor() {
-        val color = RingColor.fromRgba(255, 0, 128, 255)
+    fun testColor() {
+        val color = Color.fromRgba(255, 0, 128, 255)
         assertEquals(1.0f, color.alpha)
         assertEquals(1.0f, color.red)
         assertEquals(0.0f, color.green)
         assertTrue(color.blue > 0.49f && color.blue < 0.51f)
 
-        val lerped = RingColor.lerp(RingColor.BLACK, RingColor.WHITE, 0.5f)
+        val lerped = Color.lerp(Color.BLACK, Color.WHITE, 0.5f)
         assertTrue(lerped.red > 0.49f && lerped.red < 0.51f)
         assertTrue(lerped.green > 0.49f && lerped.green < 0.51f)
         assertTrue(lerped.blue > 0.49f && lerped.blue < 0.51f)
@@ -103,34 +103,45 @@ class FaceMatcherTest {
         assertEquals(1.0f, segments[10].scale)
 
         // Edge segment 11 has a gentle partial fade (neither pure dark gray nor pure bright green)
-        assertTrue(segments[11].color != RingColor.DARK_GRAY)
-        assertTrue(segments[11].color != RingColor.BRIGHT_GREEN)
-        assertEquals(RingColor.DARK_GRAY, segments[10].color)
+        assertTrue(segments[11].color != Color.DARK_GRAY)
+        assertTrue(segments[11].color != Color.BRIGHT_GREEN)
+        assertEquals(Color.DARK_GRAY, segments[10].color)
     }
 
     @Test
-    fun testGraphicsOverlay() {
+    fun testOverlayFrame() {
         val defaultState = FaceMatcherPromptState()
-        kotlin.test.assertNull(defaultState.graphicsOverlay)
+        kotlin.test.assertNull(defaultState.overlay)
 
-        val pt = FaceMatcherGraphic.Point(10f, 20f, RingColor.BRIGHT_GREEN, 3f)
-        val line = FaceMatcherGraphic.Line(0f, 0f, 100f, 100f, RingColor.BLUE, 2f)
-        val rect = FaceMatcherGraphic.Rect(10f, 10f, 50f, 50f, RingColor.RED, 1.5f)
-        val text = FaceMatcherGraphic.Text("85%", 50f, 20f, RingColor.BRIGHT_GREEN, 14f)
-
-        val graphics = FaceMatcherGraphics(
-            frameWidth = 480,
-            frameHeight = 640,
-            isMirrored = true,
-            items = listOf(pt, line, rect, text)
+        val pixels = IntArray(100 * 100)
+        pixels[0] = Color.BRIGHT_GREEN.argb.toInt()
+        val overlay = OverlayFrame(
+            width = 100,
+            height = 100,
+            argb = pixels,
+            isMirrored = true
         )
-        assertEquals(480, graphics.frameWidth)
-        assertEquals(640, graphics.frameHeight)
-        assertTrue(graphics.isMirrored)
-        assertEquals(4, graphics.items.size)
+        assertEquals(100, overlay.width)
+        assertEquals(100, overlay.height)
+        assertTrue(overlay.isMirrored)
+        assertEquals(Color.BRIGHT_GREEN.argb.toInt(), overlay[0, 0])
+        assertEquals(0, overlay[1, 1])
 
-        val stateWithGraphics = FaceMatcherPromptState(graphicsOverlay = graphics)
-        assertEquals(graphics, stateWithGraphics.graphicsOverlay)
+        overlay[1, 1] = Color.RED.argb.toInt()
+        assertEquals(Color.RED.argb.toInt(), overlay[1, 1])
+
+        val bytes = overlay.toByteArray()
+        assertEquals(100 * 100 * 4, bytes.size)
+
+        val stateWithOverlay = FaceMatcherPromptState(overlay = overlay)
+        assertEquals(overlay, stateWithOverlay.overlay)
+
+        assertFailsWith<IllegalArgumentException> {
+            OverlayFrame(width = 0, height = 100, argb = IntArray(0))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OverlayFrame(width = 100, height = 100, argb = IntArray(50))
+        }
     }
 
     @Test

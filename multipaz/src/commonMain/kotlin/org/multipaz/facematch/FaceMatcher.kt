@@ -17,9 +17,9 @@ interface FaceMatcher {
         get() = name
 
     /**
-     * Whether this matcher optionally supplies graphics to overlay on top of the matching video stream.
+     * Whether this matcher optionally supplies a bitmap overlay to draw on top of the matching video stream.
      */
-    val providesGraphicsOverlay: Boolean
+    val providesOverlay: Boolean
         get() = false
 
     /**
