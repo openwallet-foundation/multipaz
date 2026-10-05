@@ -18,3 +18,4 @@ Multipaz usecase:
 
 | Organization | Description | Contacts | Link |
 | --- | --- | --- | --- | 
+| Khaklin Technologies | Multipaz (JVM target) as the holder library in a test wallet that presents SD-JWT VC credentials over OpenID4VP to polaris-oid4vp, an open-source Python OpenID4VP 1.0 + HAIP verifier, in its interoperability walks | @EgorKhaklin | [lab/interop/multipaz](https://github.com/EgorKhaklin/polaris-id/tree/main/lab/interop/multipaz) |
