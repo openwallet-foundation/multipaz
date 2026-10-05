@@ -20,9 +20,6 @@ class FaceNetFaceMatcher(
     override val displayName: String = if (debug) "MobileFaceNet (debug)" else "MobileFaceNet"
 ) : FaceMatcher {
 
-    override val providesOverlay: Boolean
-        get() = debug
-
     constructor(
         modelBytes: ByteString
     ) : this(

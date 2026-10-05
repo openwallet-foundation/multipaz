@@ -1,6 +1,5 @@
 package org.multipaz.compose.prompt
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -9,8 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,13 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathMeasure
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -65,7 +60,6 @@ import org.multipaz.multipaz_compose.generated.resources.face_matcher_prompt_gra
 import org.multipaz.multipaz_compose.generated.resources.face_matcher_prompt_permission_required
 import org.multipaz.facematch.FaceMatcherPromptState
 import org.multipaz.facematch.FaceMatcherSession
-import org.multipaz.facematch.RingSegment
 import org.multipaz.facematch.SimulatedFaceMatcher
 import org.multipaz.prompt.ConvertToHumanReadableFn
 import org.multipaz.prompt.FaceMatcherPromptDialogModel
@@ -226,7 +220,11 @@ private fun FaceMatcherBottomSheet(
                 text = titleText,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .wrapContentHeight(Alignment.CenterVertically)
             )
 
             if (!cameraPermissionState.isGranted) {
@@ -263,122 +261,59 @@ private fun FaceMatcherBottomSheet(
                 val isSuccess = promptState.outcome == FaceMatcherPromptState.Outcome.SUCCESS
 
                 val cornerRadius = 36.dp
+                // Camera feed clipped inside vertical rectangle with rounded corners
                 Box(
                     modifier = Modifier
-                        .size(width = 232.dp, height = 296.dp),
+                        .size(width = 220.dp, height = 284.dp)
+                        .clip(RoundedCornerShape(cornerRadius)),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Camera feed clipped inside vertical rectangle with rounded corners
-                    Box(
-                        modifier = Modifier
-                            .size(width = 220.dp, height = 284.dp)
-                            .clip(RoundedCornerShape(cornerRadius)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Camera(
-                            modifier = Modifier.fillMaxSize(),
-                            cameraSelection = CameraSelection.DEFAULT_FRONT_CAMERA,
-                            captureResolution = CameraCaptureResolution.HIGH,
-                            showCameraPreview = true,
-                            onFrameCaptured = { frame ->
-                                if (isDismissed || isSuccess || isProcessingFrame) return@Camera
-                                isProcessingFrame = true
-                                try {
-                                    val promptFrame = frame.toPromptCameraFrame()
-                                    faceMatcherSession.feedFrame(promptFrame)
-                                } finally {
-                                    isProcessingFrame = false
-                                }
+                    Camera(
+                        modifier = Modifier.fillMaxSize(),
+                        cameraSelection = CameraSelection.DEFAULT_FRONT_CAMERA,
+                        captureResolution = CameraCaptureResolution.HIGH,
+                        showCameraPreview = true,
+                        onFrameCaptured = { frame ->
+                            if (isDismissed || isSuccess || isProcessingFrame) return@Camera
+                            isProcessingFrame = true
+                            try {
+                                val promptFrame = frame.toPromptCameraFrame()
+                                faceMatcherSession.feedFrame(promptFrame)
+                            } finally {
+                                isProcessingFrame = false
                             }
+                        }
+                    )
+
+                    val overlay = promptState.overlay
+                    if (overlay != null) {
+                        FaceMatcherOverlay(
+                            overlay = overlay,
+                            modifier = Modifier.fillMaxSize()
                         )
-
-                        val overlay = promptState.overlay
-                        if (overlay != null) {
-                            FaceMatcherOverlay(
-                                overlay = overlay,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-
-                        if (isSuccess) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = 0.3f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(64.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF2E7D32)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(40.dp)
-                                    )
-                                }
-                            }
-                        }
                     }
 
-                    // 18-segment ring rendered on Canvas over solid black border
-                    val segments = promptState.ringSegments
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val baseStroke = 5.dp.toPx()
-                        val blackBorderWidth = 10.dp.toPx()
-                        val numSegments = FaceMatcherPromptState.NUM_RING_SEGMENTS
-                        val pad = 6.dp.toPx()
-                        val cornerRadiusPx = cornerRadius.toPx()
-                        val rect = Rect(pad, pad, size.width - pad, size.height - pad)
-                        val fullPath = createRoundedRectPath(rect, cornerRadiusPx)
-
-                        // 1. Solid black border around the vertical rounded rectangle
-                        drawPath(
-                            path = fullPath,
-                            color = Color.Black,
-                            style = Stroke(
-                                width = blackBorderWidth,
-                                cap = StrokeCap.Round
-                            )
-                        )
-
-                        // 2. Draw 18 segments on top of the black border
-                        val pathMeasure = PathMeasure()
-                        pathMeasure.setPath(fullPath, forceClosed = true)
-                        val totalLength = pathMeasure.length
-                        val slotLength = totalLength / numSegments.toFloat()
-                        val segLength = slotLength * 0.72f
-
-                        for (i in 0 until numSegments) {
-                            val segment = segments.getOrElse(i) { RingSegment() }
-                            val centerDist = (i.toFloat() / numSegments.toFloat()) * totalLength
-                            val rawStart = centerDist - segLength / 2f
-                            val rawEnd = centerDist + segLength / 2f
-
-                            val segPath = Path()
-                            if (rawStart < 0f) {
-                                pathMeasure.getSegment(totalLength + rawStart, totalLength, segPath, startWithMoveTo = true)
-                                pathMeasure.getSegment(0f, rawEnd, segPath, startWithMoveTo = false)
-                            } else if (rawEnd > totalLength) {
-                                pathMeasure.getSegment(rawStart, totalLength, segPath, startWithMoveTo = true)
-                                pathMeasure.getSegment(0f, rawEnd - totalLength, segPath, startWithMoveTo = false)
-                            } else {
-                                pathMeasure.getSegment(rawStart, rawEnd, segPath, startWithMoveTo = true)
-                            }
-
-                            val strokeWidth = baseStroke * segment.scale
-                            drawPath(
-                                path = segPath,
-                                color = Color(segment.color.argb),
-                                style = Stroke(
-                                    width = strokeWidth,
-                                    cap = StrokeCap.Round
+                    if (isSuccess) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.3f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF2E7D32)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(40.dp)
                                 )
-                            )
+                            }
                         }
                     }
                 }
@@ -393,7 +328,11 @@ private fun FaceMatcherBottomSheet(
                         } else {
                             MaterialTheme.colorScheme.onSurface
                         },
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 44.dp)
+                            .wrapContentHeight(Alignment.CenterVertically)
                     )
                 }
             }
@@ -418,50 +357,6 @@ private fun FaceMatcherBottomSheet(
     }
 }
 
-private fun createRoundedRectPath(
-    rect: Rect,
-    cornerRadius: Float
-): Path {
-    val path = Path()
-    val r = cornerRadius.coerceAtMost(minOf(rect.width, rect.height) / 2f)
-    val centerX = rect.center.x
-    val left = rect.left
-    val top = rect.top
-    val right = rect.right
-    val bottom = rect.bottom
-
-    path.moveTo(centerX, top)
-    path.lineTo(right - r, top)
-    path.arcTo(
-        rect = Rect(right - 2f * r, top, right, top + 2f * r),
-        startAngleDegrees = -90f,
-        sweepAngleDegrees = 90f,
-        forceMoveTo = false
-    )
-    path.lineTo(right, bottom - r)
-    path.arcTo(
-        rect = Rect(right - 2f * r, bottom - 2f * r, right, bottom),
-        startAngleDegrees = 0f,
-        sweepAngleDegrees = 90f,
-        forceMoveTo = false
-    )
-    path.lineTo(left + r, bottom)
-    path.arcTo(
-        rect = Rect(left, bottom - 2f * r, left + 2f * r, bottom),
-        startAngleDegrees = 90f,
-        sweepAngleDegrees = 90f,
-        forceMoveTo = false
-    )
-    path.lineTo(left, top + r)
-    path.arcTo(
-        rect = Rect(left, top, left + 2f * r, top + 2f * r),
-        startAngleDegrees = 180f,
-        sweepAngleDegrees = 90f,
-        forceMoveTo = false
-    )
-    path.close()
-    return path
-}
 
 @Composable
 private fun FaceMatcherOverlay(
@@ -473,11 +368,7 @@ private fun FaceMatcherOverlay(
         bitmap = imageBitmap,
         contentDescription = null,
         contentScale = ContentScale.Crop,
-        modifier = if (overlay.isMirrored) {
-            modifier.graphicsLayer(scaleX = -1f)
-        } else {
-            modifier
-        }
+        modifier = modifier
     )
 }
 

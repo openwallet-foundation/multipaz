@@ -6,31 +6,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 class FaceMatcherTest {
-
-    @Test
-    fun testColor() {
-        val color = Color.fromRgba(255, 0, 128, 255)
-        assertEquals(1.0f, color.alpha)
-        assertEquals(1.0f, color.red)
-        assertEquals(0.0f, color.green)
-        assertTrue(color.blue > 0.49f && color.blue < 0.51f)
-
-        val lerped = Color.lerp(Color.BLACK, Color.WHITE, 0.5f)
-        assertTrue(lerped.red > 0.49f && lerped.red < 0.51f)
-        assertTrue(lerped.green > 0.49f && lerped.green < 0.51f)
-        assertTrue(lerped.blue > 0.49f && lerped.blue < 0.51f)
-    }
-
-    @Test
-    fun testRingSegments() {
-        assertEquals(18, FaceMatcherPromptState.NUM_RING_SEGMENTS)
-        val defaultState = FaceMatcherPromptState()
-        assertEquals(18, defaultState.ringSegments.size)
-        assertEquals(FaceMatcherPromptState.Outcome.IN_PROGRESS, defaultState.outcome)
-    }
 
     @Test
     fun testSimulatedFaceMatcherSession() = runTest {
@@ -86,61 +63,27 @@ class FaceMatcherTest {
     }
 
     @Test
-    fun testDirectionSegmentsFade() {
-        class TestSession : FaceMatcherSession(ByteString()) {
-            override suspend fun feedFrame(frame: CameraFrame) {}
-            fun testSegments(dir: RingDirection, progress: Float) =
-                computeDirectionSegments(dir, progress)
-        }
-        val session = TestSession()
-        val segments = session.testSegments(RingDirection.LEFT, 1.0f)
-        assertEquals(18, segments.size)
-
-        // Center of LEFT (indices 13 and 14) should have highest scale and bright green
-        assertTrue(segments[13].scale > segments[12].scale)
-        assertTrue(segments[12].scale > segments[11].scale)
-        assertTrue(segments[11].scale > segments[10].scale)
-        assertEquals(1.0f, segments[10].scale)
-
-        // Edge segment 11 has a gentle partial fade (neither pure dark gray nor pure bright green)
-        assertTrue(segments[11].color != Color.DARK_GRAY)
-        assertTrue(segments[11].color != Color.BRIGHT_GREEN)
-        assertEquals(Color.DARK_GRAY, segments[10].color)
-    }
-
-    @Test
     fun testOverlayFrame() {
         val defaultState = FaceMatcherPromptState()
         kotlin.test.assertNull(defaultState.overlay)
 
-        val pixels = IntArray(100 * 100)
-        pixels[0] = Color.BRIGHT_GREEN.argb.toInt()
         val overlay = OverlayFrame(
             width = 100,
             height = 100,
-            argb = pixels,
-            isMirrored = true
+            platformHandle = "mockHandle"
         )
         assertEquals(100, overlay.width)
         assertEquals(100, overlay.height)
-        assertTrue(overlay.isMirrored)
-        assertEquals(Color.BRIGHT_GREEN.argb.toInt(), overlay[0, 0])
-        assertEquals(0, overlay[1, 1])
-
-        overlay[1, 1] = Color.RED.argb.toInt()
-        assertEquals(Color.RED.argb.toInt(), overlay[1, 1])
-
-        val bytes = overlay.toByteArray()
-        assertEquals(100 * 100 * 4, bytes.size)
+        assertEquals("mockHandle", overlay.platformHandle)
 
         val stateWithOverlay = FaceMatcherPromptState(overlay = overlay)
         assertEquals(overlay, stateWithOverlay.overlay)
 
         assertFailsWith<IllegalArgumentException> {
-            OverlayFrame(width = 0, height = 100, argb = IntArray(0))
+            OverlayFrame(width = 0, height = 100)
         }
         assertFailsWith<IllegalArgumentException> {
-            OverlayFrame(width = 100, height = 100, argb = IntArray(50))
+            OverlayFrame(width = 100, height = 0)
         }
     }
 
@@ -169,4 +112,3 @@ class FaceMatcherTest {
         }
     }
 }
-

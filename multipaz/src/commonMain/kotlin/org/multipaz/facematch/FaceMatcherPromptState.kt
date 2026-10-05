@@ -7,16 +7,13 @@ import kotlinx.io.bytestring.ByteString
  *
  * @property messageAbove primary text displayed above the camera preview (e.g. instructions).
  * @property messageBelow secondary status or feedback text displayed below the camera preview.
- * @property ringSegments visual configuration for the 18 segments of the ring (indexed 0 to 17
- * clockwise from 12 o'clock).
  * @property outcome overall verification outcome.
- * @property overlay optional ARGB bitmap overlay to draw on top of the camera video stream.
+ * @property overlay optional bitmap overlay to draw on top of the camera video stream.
  * @property capturedImage optional high-resolution portrait photo bytes captured during liveness enrollment.
  */
 data class FaceMatcherPromptState(
     val messageAbove: String? = null,
     val messageBelow: String? = null,
-    val ringSegments: List<RingSegment> = defaultSegments,
     val outcome: Outcome = Outcome.IN_PROGRESS,
     val overlay: OverlayFrame? = null,
     val capturedImage: ByteString? = null
@@ -26,15 +23,5 @@ data class FaceMatcherPromptState(
         IN_PROGRESS,
         SUCCESS,
         FAILED
-    }
-
-    companion object {
-        /** Total number of segments around the perimeter (18 segments). */
-        const val NUM_RING_SEGMENTS = 18
-
-        /** Default ring segment configuration (all neutral dark gray). */
-        val defaultSegments: List<RingSegment> = List(NUM_RING_SEGMENTS) {
-            RingSegment(color = Color.DARK_GRAY, scale = 1.0f)
-        }
     }
 }

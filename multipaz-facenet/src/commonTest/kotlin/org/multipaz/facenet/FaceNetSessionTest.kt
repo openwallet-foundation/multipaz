@@ -4,9 +4,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facenet.testdata.FaceTestData
 import org.multipaz.facematch.CameraFrame
-import org.multipaz.facematch.Color
 import org.multipaz.facematch.FaceMatcherPromptState
-import org.multipaz.facematch.RingDirection
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -81,8 +79,8 @@ class FaceNetSessionTest {
         assertEquals("Verify Identity", session.state.value.messageAbove)
         assertEquals("Position your face and look at the camera", session.state.value.messageBelow)
         assertEquals(FaceMatcherPromptState.Outcome.IN_PROGRESS, session.state.value.outcome)
-        assertEquals(FaceMatcherPromptState.NUM_RING_SEGMENTS, session.state.value.ringSegments.size)
-        assertTrue(session.state.value.ringSegments.all { it.color == Color.DARK_GRAY })
+        assertEquals(RingSegment.NUM_SEGMENTS, session.ringSegments.size)
+        assertTrue(session.ringSegments.all { it.color == RingSegment.COLOR_DARK_GRAY })
     }
 
     @Test
@@ -102,7 +100,7 @@ class FaceNetSessionTest {
         assertEquals(FaceMatcherPromptState.Outcome.FAILED, session.state.value.outcome)
         assertEquals("Verification Failed", session.state.value.messageAbove)
         assertEquals("Verification timed out", session.state.value.messageBelow)
-        assertTrue(session.state.value.ringSegments.all { it.color == Color.RED })
+        assertTrue(session.ringSegments.all { it.color == RingSegment.COLOR_RED })
     }
 
     @Test
@@ -285,11 +283,11 @@ class FaceNetSessionTest {
         for (step in session.challenges.indices) {
             val direction = session.challenges[step]
             val pose = when (direction) {
-                RingDirection.LEFT -> MockDetectedFace(yaw = 20f)
-                RingDirection.RIGHT -> MockDetectedFace(yaw = -20f)
-                RingDirection.UP -> MockDetectedFace(pitch = 16f)
-                RingDirection.DOWN -> MockDetectedFace(pitch = -16f)
-                RingDirection.CENTER -> MockDetectedFace(yaw = 0f, pitch = 0f)
+                FaceNetSessionBase.ChallengeDirection.LEFT -> MockDetectedFace(yaw = 20f)
+                FaceNetSessionBase.ChallengeDirection.RIGHT -> MockDetectedFace(yaw = -20f)
+                FaceNetSessionBase.ChallengeDirection.UP -> MockDetectedFace(pitch = 16f)
+                FaceNetSessionBase.ChallengeDirection.DOWN -> MockDetectedFace(pitch = -16f)
+                FaceNetSessionBase.ChallengeDirection.CENTER -> MockDetectedFace(yaw = 0f, pitch = 0f)
             }
             session.mockFaces = listOf(pose)
 
@@ -304,7 +302,7 @@ class FaceNetSessionTest {
         assertEquals(FaceMatcherPromptState.Outcome.SUCCESS, session.state.value.outcome)
         assertEquals("Identity Verified", session.state.value.messageAbove)
         assertEquals("Verification successful", session.state.value.messageBelow)
-        assertTrue(session.state.value.ringSegments.all { it.color == Color.GREEN })
+        assertTrue(session.ringSegments.all { it.color == RingSegment.COLOR_GREEN })
     }
 
     @Test
@@ -333,7 +331,6 @@ class FaceNetSessionTest {
             debug = true,
             clock = { currentTime }
         )
-        assertTrue(session.providesOverlay)
 
         val detection = BlazeFaceDetection(
             score = 0.95f,
@@ -356,15 +353,12 @@ class FaceNetSessionTest {
         assertNotNull(overlay)
         assertEquals(dummyFrame.uprightWidth, overlay.width)
         assertEquals(dummyFrame.uprightHeight, overlay.height)
-        assertEquals(dummyFrame.uprightWidth * dummyFrame.uprightHeight, overlay.argb.size)
+        assertNotNull(overlay.platformHandle)
 
-        // Check that non-transparent pixels exist
-        assertTrue(overlay.argb.any { it != 0 })
-
-        // When no face is detected, overlay is cleared to null
+        // When no face is detected, overlay continues to show ring
         session.mockFaces = emptyList()
         session.feedFrame(dummyFrame)
-        assertNull(session.state.value.overlay)
+        assertNotNull(session.state.value.overlay)
     }
 
     @Test
@@ -392,11 +386,11 @@ class FaceNetSessionTest {
         for (step in session.challenges.indices) {
             val direction = session.challenges[step]
             val pose = when (direction) {
-                RingDirection.LEFT -> MockDetectedFace(yaw = 20f)
-                RingDirection.RIGHT -> MockDetectedFace(yaw = -20f)
-                RingDirection.UP -> MockDetectedFace(pitch = 16f)
-                RingDirection.DOWN -> MockDetectedFace(pitch = -16f)
-                RingDirection.CENTER -> MockDetectedFace(yaw = 0f, pitch = 0f)
+                FaceNetSessionBase.ChallengeDirection.LEFT -> MockDetectedFace(yaw = 20f)
+                FaceNetSessionBase.ChallengeDirection.RIGHT -> MockDetectedFace(yaw = -20f)
+                FaceNetSessionBase.ChallengeDirection.UP -> MockDetectedFace(pitch = 16f)
+                FaceNetSessionBase.ChallengeDirection.DOWN -> MockDetectedFace(pitch = -16f)
+                FaceNetSessionBase.ChallengeDirection.CENTER -> MockDetectedFace(yaw = 0f, pitch = 0f)
             }
             session.mockFaces = listOf(pose)
             session.feedFrame(dummyFrame)
@@ -423,7 +417,16 @@ class FaceNetSessionTest {
         assertEquals("Liveness verified", session.state.value.messageBelow)
         assertNotNull(session.state.value.capturedImage)
         assertEquals(ByteString(byteArrayOf(1, 2, 3)), session.state.value.capturedImage)
-        assertTrue(session.state.value.ringSegments.all { it.color == Color.GREEN })
+        assertTrue(session.ringSegments.all { it.color == RingSegment.COLOR_GREEN })
+    }
+
+    @Test
+    fun testOverlayRenderedDuringSession() = runTest {
+        var currentTime = 1000L
+        val session = TestFaceNetSession(clock = { currentTime })
+        session.mockFaces = listOf(MockDetectedFace())
+        session.feedFrame(dummyFrame)
+        assertNotNull(session.state.value.overlay)
     }
 }
 

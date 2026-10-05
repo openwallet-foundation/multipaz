@@ -97,7 +97,7 @@ internal class IosFaceDetector(
 
     private val isClosed = kotlinx.atomicfu.atomic(false)
 
-    private var pinnedModelBytes: Pinned<ByteArray>? = null
+    private var modelData: kotlinx.cinterop.COpaquePointer? = null
     private var model: CPointer<TfLiteModel>? = null
     private var options: CPointer<TfLiteInterpreterOptions>? = null
     private var xnnpackDelegate: CPointer<TfLiteDelegate>? = null
@@ -113,11 +113,19 @@ internal class IosFaceDetector(
                 ?: BlazeFaceModelData.defaultModelBytes.toByteArray()
         }
 
-        val pinned = bytes.pin()
-        pinnedModelBytes = pinned
+        val nativeBytes = platform.posix.malloc(bytes.size.toULong())
+            ?: throw OutOfMemoryError("Failed to allocate native memory for BlazeFace model")
+        bytes.usePinned { pinned ->
+            platform.posix.memcpy(nativeBytes, pinned.addressOf(0), bytes.size.toULong())
+        }
+        modelData = nativeBytes
 
-        val localModel = TfLiteModelCreate(pinned.addressOf(0), bytes.size.toULong())
-            ?: throw IllegalStateException("Failed to parse BlazeFace model from bytes.")
+        val localModel = TfLiteModelCreate(nativeBytes, bytes.size.toULong())
+            ?: run {
+                platform.posix.free(nativeBytes)
+                modelData = null
+                throw IllegalStateException("Failed to parse BlazeFace model from bytes.")
+            }
         model = localModel
 
         val localOptions = TfLiteInterpreterOptionsCreate()
@@ -631,8 +639,10 @@ internal class IosFaceDetector(
             TfLiteModelDelete(it)
             model = null
         }
-        pinnedModelBytes?.unpin()
-        pinnedModelBytes = null
+        modelData?.let {
+            platform.posix.free(it)
+            modelData = null
+        }
     }
 
     companion object {

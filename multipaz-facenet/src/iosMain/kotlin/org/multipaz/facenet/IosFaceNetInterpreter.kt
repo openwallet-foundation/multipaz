@@ -3,11 +3,10 @@ package org.multipaz.facenet
 import cnames.structs.TfLiteInterpreter
 import cnames.structs.TfLiteInterpreterOptions
 import cnames.structs.TfLiteModel
+import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.Pinned
 import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.pin
 import kotlinx.cinterop.usePinned
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.isEmpty
@@ -26,6 +25,7 @@ import org.tensorflow.lite.c.TfLiteInterpreterOptionsDelete
 import org.tensorflow.lite.c.TfLiteInterpreterOptionsSetNumThreads
 import org.tensorflow.lite.c.TfLiteModelCreate
 import org.tensorflow.lite.c.TfLiteModelDelete
+import org.tensorflow.lite.c.TfLiteTensorByteSize
 import org.tensorflow.lite.c.TfLiteTensorCopyFromBuffer
 import org.tensorflow.lite.c.TfLiteTensorCopyToBuffer
 import org.tensorflow.lite.c.TfLiteTensorDim
@@ -33,6 +33,9 @@ import org.tensorflow.lite.c.TfLiteTensorNumDims
 import org.tensorflow.lite.c.TfLiteXNNPackDelegateCreate
 import org.tensorflow.lite.c.TfLiteXNNPackDelegateDelete
 import org.tensorflow.lite.c.kTfLiteOk
+import platform.posix.free
+import platform.posix.malloc
+import platform.posix.memcpy
 import kotlin.math.max
 import kotlin.math.sqrt
 
@@ -44,11 +47,12 @@ internal class IosFaceNetInterpreter(
     val config: FaceNetModelConfig
 ) : AutoCloseable {
 
-    private var pinnedModelBytes: Pinned<ByteArray>? = null
+    private var modelData: COpaquePointer? = null
     private var model: CPointer<TfLiteModel>? = null
     private var options: CPointer<TfLiteInterpreterOptions>? = null
     private var xnnpackDelegate: CPointer<TfLiteDelegate>? = null
     private var interpreter: CPointer<TfLiteInterpreter>? = null
+    @kotlin.concurrent.Volatile
     private var isClosed = false
 
     val imageSquareSize: Int
@@ -63,10 +67,19 @@ internal class IosFaceNetInterpreter(
         }
         val bytes = modelBytes.toByteArray()
 
-        val pinned = bytes.pin()
-        pinnedModelBytes = pinned
-        val localModel = TfLiteModelCreate(pinned.addressOf(0), bytes.size.toULong())
-            ?: throw IllegalStateException("Failed to parse TensorFlow Lite model from bytes.")
+        val nativeBytes = malloc(bytes.size.toULong())
+            ?: throw OutOfMemoryError("Failed to allocate native memory for FaceNet model")
+        bytes.usePinned { pinned ->
+            memcpy(nativeBytes, pinned.addressOf(0), bytes.size.toULong())
+        }
+        modelData = nativeBytes
+
+        val localModel = TfLiteModelCreate(nativeBytes, bytes.size.toULong())
+            ?: run {
+                free(nativeBytes)
+                modelData = null
+                throw IllegalStateException("Failed to parse TensorFlow Lite model from bytes.")
+            }
         model = localModel
 
         val localOptions = TfLiteInterpreterOptionsCreate()
@@ -191,25 +204,20 @@ internal class IosFaceNetInterpreter(
             }
         }
 
+        val inTensor = TfLiteInterpreterGetInputTensor(localInterpreter, 0) ?: return null
+        val expectedByteSize = TfLiteTensorByteSize(inTensor)
         val inputByteSize = (normalizedFloats.size * Float.SIZE_BYTES).toULong()
-        val copyInSuccess = normalizedFloats.usePinned { pinned ->
-            var allOk = true
-            for (idx in 0 until inputCount) {
-                val inTensor = TfLiteInterpreterGetInputTensor(localInterpreter, idx)
-                if (inTensor == null) {
-                    allOk = false
-                    break
-                }
-                val status = TfLiteTensorCopyFromBuffer(inTensor, pinned.addressOf(0), inputByteSize)
-                if (status != kTfLiteOk) {
-                    Logger.e(TAG, "TfLiteTensorCopyFromBuffer failed for input $idx with status $status")
-                    allOk = false
-                    break
-                }
-            }
-            allOk
+        if (expectedByteSize != inputByteSize) {
+            Logger.e(TAG, "Input tensor byte size mismatch: expected $expectedByteSize, got $inputByteSize")
+            return null
         }
-        if (!copyInSuccess) return null
+        val copyInSuccess = normalizedFloats.usePinned { pinned ->
+            TfLiteTensorCopyFromBuffer(inTensor, pinned.addressOf(0), inputByteSize) == kTfLiteOk
+        }
+        if (!copyInSuccess) {
+            Logger.e(TAG, "TfLiteTensorCopyFromBuffer failed")
+            return null
+        }
 
         val invokeStatus = TfLiteInterpreterInvoke(localInterpreter)
         if (invokeStatus != kTfLiteOk) {
@@ -263,7 +271,9 @@ internal class IosFaceNetInterpreter(
             TfLiteModelDelete(it)
             model = null
         }
-        pinnedModelBytes?.unpin()
-        pinnedModelBytes = null
+        modelData?.let {
+            free(it)
+            modelData = null
+        }
     }
 }

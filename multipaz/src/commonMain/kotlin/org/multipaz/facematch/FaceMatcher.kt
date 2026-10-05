@@ -17,12 +17,6 @@ interface FaceMatcher {
         get() = name
 
     /**
-     * Whether this matcher optionally supplies a bitmap overlay to draw on top of the matching video stream.
-     */
-    val providesOverlay: Boolean
-        get() = false
-
-    /**
      * Whether this matcher supports active liveness detection and portrait photo capture.
      */
     val supportsLiveness: Boolean

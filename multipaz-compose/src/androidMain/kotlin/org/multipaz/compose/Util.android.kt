@@ -273,7 +273,10 @@ actual fun rememberUiBoundCoroutineScope(
 }
 
 actual fun OverlayFrame.toImageBitmap(): ImageBitmap {
-    val bitmap = Bitmap.createBitmap(argb, width, height, Bitmap.Config.ARGB_8888)
-    return bitmap.asImageBitmap()
+    val bitmap = platformHandle as? Bitmap
+    if (bitmap != null) {
+        return bitmap.asImageBitmap()
+    }
+    return ImageBitmap(width, height)
 }
 

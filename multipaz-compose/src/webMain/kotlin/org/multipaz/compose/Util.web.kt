@@ -61,11 +61,6 @@ actual fun rememberUiBoundCoroutineScope(
 ): CoroutineScope = rememberCoroutineScope(getContext)
 
 actual fun OverlayFrame.toImageBitmap(): ImageBitmap {
-    val skiaImage = Image.makeRaster(
-        ImageInfo.makeN32Premul(width, height),
-        toByteArray(),
-        width * 4
-    )
-    return skiaImage.toComposeImageBitmap()
+    return (platformHandle as? ImageBitmap) ?: ImageBitmap(width, height)
 }
 

@@ -109,6 +109,7 @@ private struct FaceMatcherPromptView: View {
                 .font(.title2)
                 .fontWeight(.bold)
                 .multilineTextAlignment(.center)
+                .frame(minHeight: 56)
 
             Spacer()
 
@@ -142,20 +143,15 @@ private struct FaceMatcherPromptView: View {
                                 .foregroundColor(.white)
                         )
                 }
-
-                let segments = promptState?.ringSegments ?? []
-                SegmentedRingView(segments: segments)
-                    .frame(width: 232, height: 296)
             }
-            .frame(width: 232, height: 296)
+            .frame(width: 220, height: 284)
 
             let belowText = promptState?.messageBelow ?? subtitle
-            if !belowText.isEmpty {
-                Text(belowText)
-                    .font(.body)
-                    .foregroundColor(promptState?.outcome == FaceMatcherPromptState.Outcome.failed ? .red : .secondary)
-                    .multilineTextAlignment(.center)
-            }
+            Text(belowText)
+                .font(.body)
+                .foregroundColor(promptState?.outcome == FaceMatcherPromptState.Outcome.failed ? .red : .secondary)
+                .multilineTextAlignment(.center)
+                .frame(minHeight: 44)
 
             Spacer()
 
@@ -198,145 +194,16 @@ private struct FaceMatcherPromptView: View {
     }
 }
 
-private func createRoundedRectPath(rect: CGRect, cornerRadius: CGFloat) -> SwiftUI.Path {
-    var path = SwiftUI.Path()
-    let r = min(cornerRadius, min(rect.width, rect.height) / 2.0)
-    let centerX = rect.midX
-    let left = rect.minX
-    let top = rect.minY
-    let right = rect.maxX
-    let bottom = rect.maxY
-
-    path.move(to: CGPoint(x: centerX, y: top))
-    path.addLine(to: CGPoint(x: right - r, y: top))
-    path.addArc(
-        center: CGPoint(x: right - r, y: top + r),
-        radius: r,
-        startAngle: Angle(degrees: -90),
-        endAngle: Angle(degrees: 0),
-        clockwise: false
-    )
-    path.addLine(to: CGPoint(x: right, y: bottom - r))
-    path.addArc(
-        center: CGPoint(x: right - r, y: bottom - r),
-        radius: r,
-        startAngle: Angle(degrees: 0),
-        endAngle: Angle(degrees: 90),
-        clockwise: false
-    )
-    path.addLine(to: CGPoint(x: left + r, y: bottom))
-    path.addArc(
-        center: CGPoint(x: left + r, y: bottom - r),
-        radius: r,
-        startAngle: Angle(degrees: 90),
-        endAngle: Angle(degrees: 180),
-        clockwise: false
-    )
-    path.addLine(to: CGPoint(x: left, y: top + r))
-    path.addArc(
-        center: CGPoint(x: left + r, y: top + r),
-        radius: r,
-        startAngle: Angle(degrees: 180),
-        endAngle: Angle(degrees: 270),
-        clockwise: false
-    )
-    path.closeSubpath()
-    return path
-}
-
-private struct SegmentedRingView: View {
-    let segments: [RingSegment]
-
-    var body: some View {
-        Canvas { context, size in
-            let numSegments = 18
-            let baseStrokeWidth: CGFloat = 5.0
-            let blackBorderWidth: CGFloat = 10.0
-            let pad: CGFloat = 6.0
-            let cornerRadius: CGFloat = 36.0
-            let rect = CGRect(x: pad, y: pad, width: size.width - pad * 2, height: size.height - pad * 2)
-            let fullPath = createRoundedRectPath(rect: rect, cornerRadius: cornerRadius)
-
-            // 1. Solid black border around the vertical rounded rectangle
-            context.stroke(
-                fullPath,
-                with: .color(Color.black),
-                style: StrokeStyle(lineWidth: blackBorderWidth, lineCap: .round)
-            )
-
-            // 2. Draw 18 segments on top of the black border
-            let count = min(numSegments, segments.count)
-            let segFrac: CGFloat = (1.0 / CGFloat(numSegments)) * 0.72
-
-            for i in 0..<count {
-                let segment = segments[i]
-                let centerFrac = CGFloat(i) / CGFloat(numSegments)
-                let rawStart = centerFrac - segFrac / 2.0
-                let rawEnd = centerFrac + segFrac / 2.0
-
-                var segPath = SwiftUI.Path()
-                if rawStart < 0.0 {
-                    segPath.addPath(fullPath.trimmedPath(from: 1.0 + rawStart, to: 1.0))
-                    segPath.addPath(fullPath.trimmedPath(from: 0.0, to: rawEnd))
-                } else if rawEnd > 1.0 {
-                    segPath.addPath(fullPath.trimmedPath(from: rawStart, to: 1.0))
-                    segPath.addPath(fullPath.trimmedPath(from: 0.0, to: rawEnd - 1.0))
-                } else {
-                    segPath = fullPath.trimmedPath(from: rawStart, to: rawEnd)
-                }
-
-                let strokeWidth = baseStrokeWidth * CGFloat(segment.scale)
-                let color = SwiftUI.Color(
-                    red: Double(segment.color.red),
-                    green: Double(segment.color.green),
-                    blue: Double(segment.color.blue),
-                    opacity: Double(segment.color.alpha)
-                )
-                context.stroke(
-                    segPath,
-                    with: .color(color),
-                    style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
-                )
-            }
-        }
-    }
-}
-
 private struct FaceMatcherOverlayView: View {
     let overlay: OverlayFrame
 
     var body: some View {
-        if let image = createUIImage(from: overlay) {
+        if let image = overlay.platformHandle as? UIImage {
             Image(uiImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .scaleEffect(x: overlay.isMirrored ? -1 : 1, y: 1)
+                .allowsHitTesting(false)
         }
-    }
-
-    private func createUIImage(from overlay: OverlayFrame) -> UIImage? {
-        let width = Int(overlay.width)
-        let height = Int(overlay.height)
-        guard width > 0, height > 0 else { return nil }
-        let data = overlay.toByteString().toNSData() as CFData
-        guard let provider = CGDataProvider(data: data) else { return nil }
-        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
-        guard let cgImage = CGImage(
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bitsPerPixel: 32,
-            bytesPerRow: width * 4,
-            space: colorSpace,
-            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
-            provider: provider,
-            decode: nil,
-            shouldInterpolate: true,
-            intent: .defaultIntent
-        ) else {
-            return nil
-        }
-        return UIImage(cgImage: cgImage)
     }
 }
 
@@ -425,14 +292,20 @@ private class CameraViewController: UIViewController, AVCaptureVideoDataOutputSa
                 connection.videoOrientation = .portrait
             }
             if connection.isVideoMirroringSupported {
-                connection.isVideoMirrored = true
+                connection.isVideoMirrored = false
             }
         }
 
         let preview = AVCaptureVideoPreviewLayer(session: captureSession)
         preview.videoGravity = .resizeAspectFill
-        if let previewConnection = preview.connection, previewConnection.isVideoOrientationSupported {
-            previewConnection.videoOrientation = .portrait
+        if let previewConnection = preview.connection {
+            if previewConnection.isVideoOrientationSupported {
+                previewConnection.videoOrientation = .portrait
+            }
+            if previewConnection.isVideoMirroringSupported {
+                previewConnection.automaticallyAdjustsVideoMirroring = false
+                previewConnection.isVideoMirrored = true
+            }
         }
         view.layer.addSublayer(preview)
         self.previewLayer = preview

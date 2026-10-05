@@ -22,7 +22,6 @@ class FaceNetFaceMatcherTest {
         val matcher = FaceNetFaceMatcher(modelBytes = ByteString())
         val session = matcher.createSession(ByteString())
         assertNotNull(session)
-        assertEquals(FaceMatcherPromptState.NUM_RING_SEGMENTS, session.state.value.ringSegments.size)
         assertEquals(FaceMatcherPromptState.Outcome.IN_PROGRESS, session.state.value.outcome)
     }
 
