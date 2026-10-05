@@ -3,7 +3,6 @@ package org.multipaz.prompt
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.document.Document
 import org.multipaz.facematch.FaceMatcher
-import org.multipaz.facematch.SimulatedFaceMatcher
 import org.multipaz.presentment.CredentialSelection
 import org.multipaz.presentment.ConsentData
 import org.multipaz.prompt.PassphrasePromptDialogModel.PassphraseRequest
@@ -128,7 +127,8 @@ suspend fun PromptModel.showFaceMatcherPrompt(
     document: Document? = null
 ): Boolean {
     val dialogModel = getFaceMatcherDialogModel()
-    val matcherToUse = matcher ?: dialogModel.defaultMatcher ?: SimulatedFaceMatcher()
+    val matcherToUse = matcher ?: dialogModel.defaultMatcher
+        ?: throw IllegalStateException("No FaceMatcher provided or configured as default")
     val faceMatcherSession = matcherToUse.createSession(referencePortrait)
     return try {
         dialogModel.displayPrompt(
@@ -156,6 +156,7 @@ suspend fun PromptModel.showFaceMatcherPrompt(
 @Throws(
     CancellationException::class,
     IllegalStateException::class,
+    UnsupportedOperationException::class,
     PromptModelNotAvailableException::class,
     PromptUiNotAvailableException::class
 )
@@ -169,7 +170,8 @@ suspend fun PromptModel.showFaceLivenessPrompt(
     document: Document? = null
 ): ByteString? {
     val dialogModel = getFaceMatcherDialogModel()
-    val matcherToUse = matcher ?: dialogModel.defaultMatcher ?: SimulatedFaceMatcher()
+    val matcherToUse = matcher ?: dialogModel.defaultMatcher
+        ?: throw IllegalStateException("No FaceMatcher provided or configured as default")
     val faceMatcherSession = matcherToUse.createLivenessSession()
     val success = try {
         dialogModel.displayPrompt(

@@ -2,7 +2,6 @@ package org.multipaz.facenet
 
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.FaceMatcherSession
-import org.multipaz.facematch.SimulatedFaceMatcherSession
 
 internal actual val isFaceNetSupported: Boolean = false
 
@@ -14,7 +13,7 @@ internal actual fun createFaceNetSession(
     matcherName: String,
     matcherDisplayName: String
 ): FaceMatcherSession {
-    return SimulatedFaceMatcherSession(referencePortrait = referencePortrait)
+    throw UnsupportedOperationException("Face matching is not supported on this platform")
 }
 
 internal actual suspend fun extractFaceEmbedding(

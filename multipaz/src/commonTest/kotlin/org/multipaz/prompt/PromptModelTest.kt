@@ -4,8 +4,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.CameraFrame
-import org.multipaz.facematch.FaceMatcherPromptState
-import org.multipaz.facematch.SimulatedFaceMatcher
+import org.multipaz.facematch.FaceMatcher
+import org.multipaz.facematch.FaceMatcherSession
 import org.multipaz.securearea.PassphraseConstraints
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,9 +33,20 @@ class PromptModelTest {
     private lateinit var promptModel: TestPromptModel
     private var mockUiJob: Job? = null
 
+    private class TestFaceMatcherSession(referencePortrait: ByteString?) : FaceMatcherSession(referencePortrait) {
+        override suspend fun feedFrame(frame: CameraFrame) {}
+    }
+
+    private class TestFaceMatcher : FaceMatcher {
+        override val name: String = "test"
+        override fun createSession(referencePortrait: ByteString): FaceMatcherSession =
+            TestFaceMatcherSession(referencePortrait)
+    }
+
     @BeforeTest
     fun resetSharedState() {
         promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build()
+        promptModel.getDialogModel(FaceMatcherPromptDialogModel.DialogType).defaultMatcher = TestFaceMatcher()
         mockUiJob = null
     }
 
@@ -242,32 +253,14 @@ class PromptModelTest {
     }
 
     @Test
-    fun simulatedFaceMatcherTest() = runTest {
-        var testTime = 1000L
-        val matcher = SimulatedFaceMatcher(
-            searchDurationMs = 50L,
-            matchConveyDurationMs = 500L,
-            simulatedConfidence = 0.99f,
-            enableLiveness = false,
-            clock = { testTime }
-        )
-        val frame = CameraFrame(
-            width = 640,
-            height = 480,
-            rotationDegrees = 0
-        )
-        val portrait = ByteString(byteArrayOf(1, 2, 3))
-
-        val session = matcher.createSession(portrait)
-        session.feedFrame(frame)
-        assertEquals(FaceMatcherPromptState.Outcome.IN_PROGRESS, session.state.value.outcome)
-
-        testTime += 60L
-        session.feedFrame(frame)
-
-        testTime += 600L
-        session.feedFrame(frame)
-        assertEquals(FaceMatcherPromptState.Outcome.SUCCESS, session.state.value.outcome)
+    fun faceMatcherPromptNoMatcherConfigured() = runTest {
+        val unconfiguredModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build()
+        assertFailsWith<IllegalStateException> {
+            unconfiguredModel.showFaceMatcherPrompt(
+                referencePortrait = ByteString(byteArrayOf(1, 2, 3, 4)),
+                reason = Reason.HumanReadable("Title", "Subtitle", false)
+            )
+        }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

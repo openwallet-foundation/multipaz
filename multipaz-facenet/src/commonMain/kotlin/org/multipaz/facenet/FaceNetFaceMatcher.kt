@@ -3,6 +3,7 @@ package org.multipaz.facenet
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.FaceMatcher
 import org.multipaz.facematch.FaceMatcherSession
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * A face matcher implementation based on Google FaceNet and MobileFaceNet models.
@@ -97,6 +98,12 @@ class FaceNetFaceMatcher(
      * @throws IllegalStateException if crop extraction or embedding computation fails.
      * @throws UnsupportedOperationException if face matching is not supported on this platform.
      */
+    @Throws(
+        IllegalArgumentException::class,
+        IllegalStateException::class,
+        UnsupportedOperationException::class,
+        CancellationException::class
+    )
     suspend fun getFaceEmbedding(portrait: ByteString): FaceEmbedding {
         return extractFaceEmbedding(
             portrait = portrait,
@@ -116,6 +123,12 @@ class FaceNetFaceMatcher(
      * @throws IllegalArgumentException if no face is detected in either portrait.
      * @throws UnsupportedOperationException if face matching is not supported on this platform.
      */
+    @Throws(
+        IllegalArgumentException::class,
+        IllegalStateException::class,
+        UnsupportedOperationException::class,
+        CancellationException::class
+    )
     suspend fun matchPortraits(portraitA: ByteString, portraitB: ByteString): Float {
         val embA = getFaceEmbedding(portraitA)
         val embB = getFaceEmbedding(portraitB)
@@ -134,6 +147,12 @@ class FaceNetFaceMatcher(
      * @throws IllegalStateException if crop extraction fails.
      * @throws UnsupportedOperationException if face matching is not supported on this platform.
      */
+    @Throws(
+        IllegalArgumentException::class,
+        IllegalStateException::class,
+        UnsupportedOperationException::class,
+        CancellationException::class
+    )
     suspend fun extractFaceCrop(portrait: ByteString): ByteString {
         return extractDetectedFaceCrop(
             portrait = portrait,
@@ -147,6 +166,12 @@ class FaceNetFaceMatcher(
      *
      * Alias for [extractFaceCrop].
      */
+    @Throws(
+        IllegalArgumentException::class,
+        IllegalStateException::class,
+        UnsupportedOperationException::class,
+        CancellationException::class
+    )
     suspend fun getDetectedFace(portrait: ByteString): ByteString = extractFaceCrop(portrait)
 }
 

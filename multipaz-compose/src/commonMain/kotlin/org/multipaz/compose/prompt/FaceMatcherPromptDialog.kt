@@ -60,7 +60,6 @@ import org.multipaz.multipaz_compose.generated.resources.face_matcher_prompt_gra
 import org.multipaz.multipaz_compose.generated.resources.face_matcher_prompt_permission_required
 import org.multipaz.facematch.FaceMatcherPromptState
 import org.multipaz.facematch.FaceMatcherSession
-import org.multipaz.facematch.SimulatedFaceMatcher
 import org.multipaz.prompt.ConvertToHumanReadableFn
 import org.multipaz.prompt.FaceMatcherPromptDialogModel
 import org.multipaz.prompt.PromptDialogModel
@@ -106,12 +105,12 @@ fun FaceMatcherPromptDialog(
 
     if (dialogStateValue is PromptDialogModel.DialogShownState) {
         val dialogParameters = dialogStateValue.parameters
-        val matcher = dialogParameters.matcher
-            ?: (model as? FaceMatcherPromptDialogModel)?.defaultMatcher
-            ?: remember { SimulatedFaceMatcher() }
 
         val faceMatcherSession = remember(dialogParameters) {
             dialogParameters.faceMatcherSession ?: run {
+                val matcher = dialogParameters.matcher
+                    ?: (model as? FaceMatcherPromptDialogModel)?.defaultMatcher
+                    ?: throw IllegalStateException("No FaceMatcher available")
                 val ref = dialogParameters.referencePortrait
                 if (ref != null) {
                     matcher.createSession(ref)

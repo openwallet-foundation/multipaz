@@ -51,13 +51,20 @@ struct FaceMatcherPromptDialog: View {
                 }
             }
             .sheet(item: $data) { data in
-                let matcher = data.state.parameters?.matcher ?? model.defaultMatcher ?? SimulatedFaceMatcher()
+                let matcher = data.state.parameters?.matcher ?? model.defaultMatcher
                 let portrait = data.state.parameters?.referencePortrait
                 let faceMatcherSession = data.state.parameters?.faceMatcherSession ?? {
+                    guard let matcher else {
+                        fatalError("No FaceMatcher available")
+                    }
                     if let portrait {
                         return matcher.createSession(referencePortrait: portrait)
                     } else {
-                        return matcher.createLivenessSession()
+                        do {
+                            return try matcher.createLivenessSession()
+                        } catch {
+                            fatalError("Matcher does not support liveness: \(error)")
+                        }
                     }
                 }()
                 FaceMatcherPromptView(

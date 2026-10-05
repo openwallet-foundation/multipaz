@@ -106,7 +106,6 @@ import org.multipaz.presentment.uriSchemePresentment
 import org.multipaz.facenet.FaceNetFaceMatcher
 import org.multipaz.facenet.FaceNetModelConfig
 import org.multipaz.facematch.FaceMatcherRepository
-import org.multipaz.facematch.SimulatedFaceMatcher
 import org.multipaz.prompt.FaceMatcherPromptDialogModel
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.promptModelRequestConsent
@@ -504,7 +503,6 @@ class App private constructor (val promptModel: PromptModel) {
                     debug = true
                 )
             )
-            add(SimulatedFaceMatcher())
         }
         promptModel.getDialogModel(FaceMatcherPromptDialogModel.DialogType).defaultMatcher =
             faceMatcherRepository.defaultMatcher

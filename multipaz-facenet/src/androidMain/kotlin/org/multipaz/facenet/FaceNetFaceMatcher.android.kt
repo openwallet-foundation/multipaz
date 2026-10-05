@@ -5,7 +5,6 @@ import android.graphics.BitmapFactory
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.context.applicationContext
 import org.multipaz.facematch.FaceMatcherSession
-import org.multipaz.facematch.SimulatedFaceMatcherSession
 import org.multipaz.util.Logger
 
 private const val TAG = "FaceNetFaceMatcher"
@@ -25,19 +24,14 @@ internal actual fun createFaceNetSession(
     matcherName: String,
     matcherDisplayName: String
 ): FaceMatcherSession {
-    return try {
-        AndroidFaceNetSession(
-            referencePortrait = referencePortrait,
-            modelBytes = modelBytes,
-            config = config,
-            debug = debug,
-            matcherName = matcherName,
-            matcherDisplayName = matcherDisplayName
-        )
-    } catch (e: Exception) {
-        Logger.w(TAG, "Failed to instantiate AndroidFaceNetSession, falling back to simulated", e)
-        SimulatedFaceMatcherSession(referencePortrait = referencePortrait)
-    }
+    return AndroidFaceNetSession(
+        referencePortrait = referencePortrait,
+        modelBytes = modelBytes,
+        config = config,
+        debug = debug,
+        matcherName = matcherName,
+        matcherDisplayName = matcherDisplayName
+    )
 }
 
 internal actual suspend fun extractFaceEmbedding(

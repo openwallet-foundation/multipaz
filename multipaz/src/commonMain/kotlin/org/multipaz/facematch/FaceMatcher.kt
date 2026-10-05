@@ -36,6 +36,7 @@ interface FaceMatcher {
      * @return a new [FaceMatcherSession] instance for this liveness session.
      * @throws UnsupportedOperationException if this matcher does not support liveness detection.
      */
+    @Throws(UnsupportedOperationException::class)
     fun createLivenessSession(): FaceMatcherSession {
         throw UnsupportedOperationException("$displayName does not support liveness detection")
     }

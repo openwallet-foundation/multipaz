@@ -578,7 +578,14 @@ struct FaceMatcherPromptScreen: View {
             detectedFaceCrop = crop
         } catch {
             detectedFaceCrop = nil
-            cropError = error.localizedDescription
+            let nsError = error as NSError
+            if let kt = nsError.userInfo["KotlinException"] as? KotlinThrowable, let msg = kt.message {
+                cropError = msg
+            } else if let kt = error as? KotlinThrowable, let msg = kt.message {
+                cropError = msg
+            } else {
+                cropError = error.localizedDescription
+            }
         }
         isExtractingCrop = false
     }
