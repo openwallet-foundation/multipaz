@@ -15,26 +15,15 @@ data class FaceNetModelConfig(
     val imageSquareSize: Int? = null,
     val embeddingDim: Int? = null,
     val normalization: NormalizationMethod = NormalizationMethod.SCALE_ZERO_TO_ONE,
-    val matchThreshold: Float = 0.70f,
-    val useGpu: Boolean = false
+    val matchThreshold: Float = 0.70f
 ) {
     companion object {
-        /** Standard Google FaceNet model configuration (160x160 input, 512-d output, standardization). */
-        val FACENET_512 = FaceNetModelConfig(
-            imageSquareSize = 160,
-            embeddingDim = 512,
-            normalization = NormalizationMethod.STANDARDIZE,
-            matchThreshold = 0.70f,
-            useGpu = false
-        )
-
         /** Standard MobileFaceNet model configuration (112x112 input, 128-d output, [0, 1] scaling). */
         val MOBILE_FACENET = FaceNetModelConfig(
             imageSquareSize = 112,
             embeddingDim = 128,
             normalization = NormalizationMethod.SCALE_ZERO_TO_ONE,
-            matchThreshold = 0.70f,
-            useGpu = false
+            matchThreshold = 0.70f
         )
 
         /** Inferred configuration: image dimension and embedding size are read directly from model tensors. */

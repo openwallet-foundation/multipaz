@@ -12,7 +12,6 @@ import org.multipaz.context.applicationContext
 import org.multipaz.facematch.CameraFrame
 import org.multipaz.util.Logger
 import org.tensorflow.lite.Interpreter
-import org.tensorflow.lite.gpu.GpuDelegate
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.atan2
@@ -35,7 +34,6 @@ internal class AndroidFaceDetector(
 ) : AutoCloseable {
 
     private val interpreter: Interpreter
-    private var gpuDelegate: GpuDelegate? = null
     private val lock = Any()
     @Volatile
     private var isClosed = false
@@ -287,12 +285,6 @@ internal class AndroidFaceDetector(
             } catch (e: Exception) {
                 Logger.w(TAG, "Error closing face detector interpreter", e)
             }
-            try {
-                gpuDelegate?.close()
-            } catch (e: Exception) {
-                Logger.w(TAG, "Error closing GPU delegate", e)
-            }
-            gpuDelegate = null
         }
     }
 

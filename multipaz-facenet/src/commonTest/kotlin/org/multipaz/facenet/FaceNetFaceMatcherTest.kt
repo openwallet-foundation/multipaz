@@ -79,11 +79,6 @@ class FaceNetFaceMatcherTest {
 
     @Test
     fun testFaceNetModelConfigs() {
-        assertEquals(160, FaceNetModelConfig.FACENET_512.imageSquareSize)
-        assertEquals(512, FaceNetModelConfig.FACENET_512.embeddingDim)
-        assertEquals(NormalizationMethod.STANDARDIZE, FaceNetModelConfig.FACENET_512.normalization)
-        assertEquals(0.70f, FaceNetModelConfig.FACENET_512.matchThreshold)
-
         assertEquals(112, FaceNetModelConfig.MOBILE_FACENET.imageSquareSize)
         assertEquals(128, FaceNetModelConfig.MOBILE_FACENET.embeddingDim)
         assertEquals(NormalizationMethod.SCALE_ZERO_TO_ONE, FaceNetModelConfig.MOBILE_FACENET.normalization)

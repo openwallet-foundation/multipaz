@@ -5,8 +5,6 @@ import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.isEmpty
 import org.multipaz.util.Logger
 import org.tensorflow.lite.Interpreter
-import org.tensorflow.lite.gpu.CompatibilityList
-import org.tensorflow.lite.gpu.GpuDelegate
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.max
@@ -20,7 +18,6 @@ internal class AndroidFaceNetInterpreter(
 ) : AutoCloseable {
 
     private val interpreter: Interpreter
-    private var gpuDelegate: GpuDelegate? = null
     private val lock = Any()
     @Volatile
     private var isClosed = false
@@ -45,19 +42,6 @@ internal class AndroidFaceNetInterpreter(
         val interpreterOptions = Interpreter.Options().apply {
             numThreads = 4
             useXNNPACK = true
-            if (config.useGpu) {
-                val compatList = CompatibilityList()
-                if (compatList.isDelegateSupportedOnThisDevice) {
-                    try {
-                        val delegate = GpuDelegate(compatList.bestOptionsForThisDevice)
-                        gpuDelegate = delegate
-                        addDelegate(delegate)
-                        Logger.d(TAG, "GPU delegate enabled")
-                    } catch (e: Exception) {
-                        Logger.w(TAG, "Failed to initialize GPU delegate, falling back to CPU", e)
-                    }
-                }
-            }
         }
 
         interpreter = Interpreter(modelByteBuffer, interpreterOptions)
@@ -221,12 +205,6 @@ internal class AndroidFaceNetInterpreter(
             } catch (e: Exception) {
                 Logger.w(TAG, "Error closing interpreter", e)
             }
-            try {
-                gpuDelegate?.close()
-            } catch (e: Exception) {
-                Logger.w(TAG, "Error closing GPU delegate", e)
-            }
-            gpuDelegate = null
         }
     }
 }

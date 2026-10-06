@@ -22,7 +22,7 @@ class FaceNetSessionTest {
     ) : DetectedFacePose
 
     private class TestFaceNetSession(
-        referencePortrait: ByteString = ByteString(),
+        referencePortrait: ByteString = FaceTestData.decodeImageByteString(FaceTestData.QUALCOMM_DEMO_1_BASE64),
         config: FaceNetModelConfig = FaceNetModelConfig.MOBILE_FACENET,
         debug: Boolean = false,
         clock: () -> Long,

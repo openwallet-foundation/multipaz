@@ -124,7 +124,6 @@ kotlin {
         val androidMain by getting {
             dependencies {
                 implementation(libs.litert)
-                implementation(libs.litert.gpu)
                 implementation(libs.litert.support)
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.coroutines.android)
