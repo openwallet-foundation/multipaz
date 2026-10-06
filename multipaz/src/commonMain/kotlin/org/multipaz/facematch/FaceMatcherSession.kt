@@ -11,7 +11,7 @@ import kotlinx.io.bytestring.ByteString
  * A fresh session instance is created per verification attempt via [FaceMatcher.createSession].
  * It directly controls the messages above and below the camera preview, the overlay, and verification status.
  *
- * @property referencePortrait reference portrait image bytes to verify against.
+ * @property referencePortrait reference portrait image bytes in PNG, JPEG, or JPEG 2000 format to verify against.
  */
 abstract class FaceMatcherSession(
     val referencePortrait: ByteString

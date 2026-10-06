@@ -31,10 +31,6 @@ class FaceMatchingTest {
         assertEquals(0x50.toByte(), raw[1]) // 'P'
         assertEquals(0x4E.toByte(), raw[2]) // 'N'
         assertEquals(0x47.toByte(), raw[3]) // 'G'
-
-        // Alias getDetectedFace returns identical crop
-        val aliasBytes = matcher.getDetectedFace(portraitBytes)
-        assertEquals(cropBytes.size, aliasBytes.size)
     }
 
     @Test

@@ -160,19 +160,6 @@ class FaceNetFaceMatcher(
             config = config
         )
     }
-
-    /**
-     * Extracts the detected, aligned face crop image that is matched against.
-     *
-     * Alias for [extractFaceCrop].
-     */
-    @Throws(
-        IllegalArgumentException::class,
-        IllegalStateException::class,
-        UnsupportedOperationException::class,
-        CancellationException::class
-    )
-    suspend fun getDetectedFace(portrait: ByteString): ByteString = extractFaceCrop(portrait)
 }
 
 internal expect val isFaceNetSupported: Boolean
