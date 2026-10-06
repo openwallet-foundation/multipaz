@@ -27,7 +27,8 @@ class FaceNetSessionTest {
         config: FaceNetModelConfig = FaceNetModelConfig.MOBILE_FACENET,
         debug: Boolean = false,
         clock: () -> Long,
-        randomSeed: Long = 42L
+        randomSeed: Long = 42L,
+        enablePoseSmoothing: Boolean = false
     ) : FaceNetSessionBase<DetectedFacePose>(
         referencePortrait = referencePortrait,
         config = config,
@@ -35,7 +36,8 @@ class FaceNetSessionTest {
         matcherName = "facenet",
         matcherDisplayName = "MobileFaceNet",
         clock = clock,
-        randomSeed = randomSeed
+        randomSeed = randomSeed,
+        enablePoseSmoothing = enablePoseSmoothing
     ) {
         var mockFaces: List<DetectedFacePose> = emptyList()
         var mockEmbedding: FaceEmbedding? = null
@@ -64,14 +66,16 @@ class FaceNetSessionTest {
         config: FaceNetModelConfig = FaceNetModelConfig.MOBILE_FACENET,
         debug: Boolean = false,
         clock: () -> Long,
-        randomSeed: Long = 42L
+        randomSeed: Long = 42L,
+        enablePoseSmoothing: Boolean = false
     ) : FaceNetLivenessSessionBase<DetectedFacePose>(
         config = config,
         debug = debug,
         matcherName = "facenet",
         matcherDisplayName = "MobileFaceNet",
         clock = clock,
-        randomSeed = randomSeed
+        randomSeed = randomSeed,
+        enablePoseSmoothing = enablePoseSmoothing
     ) {
         var mockFaces: List<DetectedFacePose> = emptyList()
         var pipelineInitError: Exception? = null
@@ -518,6 +522,41 @@ class FaceNetSessionTest {
         assertFailsWith<IllegalArgumentException> {
             TestFaceNetSession(referencePortrait = gifBytes, clock = { 0L })
         }
+    }
+
+    @Test
+    fun testPoseSmoothingFiltersSingleFrameJitterSpikes() = runTest {
+        var currentTime = 1000L
+        val sessionWithSmoothing = TestFaceNetSession(
+            clock = { currentTime },
+            enablePoseSmoothing = true
+        )
+
+        // Frame 1: straight face
+        sessionWithSmoothing.mockFaces = listOf(MockDetectedFace(yaw = 0f, pitch = 0f, roll = 0f))
+        sessionWithSmoothing.feedFrame(dummyFrame)
+        assertEquals("Hold still and look directly at the camera...", sessionWithSmoothing.state.value.messageBelow)
+
+        // Frame 2: single-frame landmark jitter spike (yaw = 15° for one frame, 33ms later)
+        // With smoothing, the filtered yaw stays well below 12°, preventing prompt flicker.
+        currentTime += 33L
+        sessionWithSmoothing.mockFaces = listOf(MockDetectedFace(yaw = 15f, pitch = 0f, roll = 0f))
+        sessionWithSmoothing.feedFrame(dummyFrame)
+        assertEquals("Hold still and look directly at the camera...", sessionWithSmoothing.state.value.messageBelow)
+
+        // Contrast with a session with smoothing disabled
+        var currentTimeUnsmoothed = 1000L
+        val sessionUnsmoothed = TestFaceNetSession(
+            clock = { currentTimeUnsmoothed },
+            enablePoseSmoothing = false
+        )
+        sessionUnsmoothed.mockFaces = listOf(MockDetectedFace(yaw = 0f, pitch = 0f, roll = 0f))
+        sessionUnsmoothed.feedFrame(dummyFrame)
+
+        currentTimeUnsmoothed += 33L
+        sessionUnsmoothed.mockFaces = listOf(MockDetectedFace(yaw = 15f, pitch = 0f, roll = 0f))
+        sessionUnsmoothed.feedFrame(dummyFrame)
+        assertEquals("Turn your head slightly to the right", sessionUnsmoothed.state.value.messageBelow)
     }
 }
 

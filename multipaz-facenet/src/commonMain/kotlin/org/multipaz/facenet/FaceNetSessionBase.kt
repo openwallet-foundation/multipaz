@@ -33,7 +33,8 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
     val matcherName: String = "facenet",
     val matcherDisplayName: String = "MobileFaceNet",
     val clock: () -> Long = { Clock.System.now().toEpochMilliseconds() },
-    randomSeed: Long = clock()
+    randomSeed: Long = clock(),
+    val enablePoseSmoothing: Boolean = true
 ) : FaceMatcherSession(referencePortrait) {
 
     init {
@@ -78,6 +79,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
     private var missedFaceFrames = 0
     private var consecutiveMatchFrames = 0
     private var straightFaceStartTime: Long? = null
+    private val headPoseFilter = HeadPoseFilter()
 
     val matchTimeoutMs = 8000L
     val sessionTimeoutMs = 25000L
@@ -198,11 +200,11 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
             return
         }
 
-        val faces = detectFaces(frame)
+        val detectedFaces = detectFaces(frame)
 
         if (isCancelled) return
 
-        if (faces.isEmpty()) {
+        if (detectedFaces.isEmpty()) {
             missedFaceFrames++
             consecutiveMatchFrames = 0
             straightFaceStartTime = null
@@ -210,6 +212,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
 
             val overlay = createOverlay(frame, emptyList(), null)
             if (missedFaceFrames >= 3) {
+                headPoseFilter.reset()
                 when (phase) {
                     Phase.POSITIONING -> {
                         updateState(
@@ -232,13 +235,14 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
             return
         }
 
-        if (faces.size > 1) {
+        if (detectedFaces.size > 1) {
             missedFaceFrames = 0
             consecutiveMatchFrames = 0
             straightFaceStartTime = null
             consecutivePoseFrames = 0
+            headPoseFilter.reset()
             currentRingSegments = RingSegment.defaultSegments
-            val overlay = createOverlay(frame, faces, null)
+            val overlay = createOverlay(frame, detectedFaces, null)
             updateState(
                 messageAbove = "Multiple faces detected",
                 messageBelow = "Ensure only one person is in the frame",
@@ -248,10 +252,25 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
         }
 
         missedFaceFrames = 0
-        val face = faces[0]
-        val yaw = face.yaw
-        val pitch = face.pitch
-        val roll = face.roll
+        val rawFace = detectedFaces[0]
+        val (yaw, pitch, roll) = if (enablePoseSmoothing) {
+            headPoseFilter.filter(
+                yaw = rawFace.yaw,
+                pitch = rawFace.pitch,
+                roll = rawFace.roll,
+                timestampMillis = now
+            )
+        } else {
+            Triple(rawFace.yaw, rawFace.pitch, rawFace.roll)
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        val face = if (enablePoseSmoothing && rawFace is BlazeFaceDetection) {
+            rawFace.copy(yaw = yaw, pitch = pitch, roll = roll) as TFace
+        } else {
+            rawFace
+        }
+        val faces = listOf(face)
 
         val isFacingStraight = abs(yaw) < 12.0f && abs(pitch) < 12.0f && abs(roll) < 15.0f
 
@@ -463,6 +482,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
     ) {
         if (bestSimilarity >= config.matchThreshold) {
             phase = Phase.COMPLETED
+            headPoseFilter.reset()
             val percent = (bestSimilarity * 100).toInt()
             val verifiedMsg = if (debug) "Identity Verified ($percent%)" else "Identity Verified"
             currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
@@ -494,6 +514,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
         overlay: OverlayFrame? = null
     ) {
         phase = Phase.FAILED
+        headPoseFilter.reset()
         updateState(
             messageAbove = messageAbove,
             messageBelow = messageBelow,
@@ -504,6 +525,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
 
     override fun cancel() {
         isCancelled = true
+        headPoseFilter.reset()
         if (frameMutex.tryLock()) {
             try {
                 onSessionClosed()
