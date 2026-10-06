@@ -328,45 +328,6 @@ internal class IosFaceDetector(
     }
 
     /**
-     * Resizes [imageBytes] directly to [targetSize] x [targetSize] without face alignment or crop.
-     */
-    fun resizeImageDirect(imageBytes: ByteArray, targetSize: Int): FloatArray? {
-        val cgImage = decodeToCgImage(imageBytes) ?: return null
-        return try {
-            val colorSpace = CGColorSpaceCreateDeviceRGB()
-            val bitmapContext = CGBitmapContextCreate(
-                data = null,
-                width = targetSize.toULong(),
-                height = targetSize.toULong(),
-                bitsPerComponent = 8u,
-                bytesPerRow = (targetSize * 4).toULong(),
-                space = colorSpace,
-                bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value
-            )
-            CGColorSpaceRelease(colorSpace)
-            if (bitmapContext == null) return null
-            try {
-                CGContextDrawImage(bitmapContext, CGRectMake(0.0, 0.0, targetSize.toDouble(), targetSize.toDouble()), cgImage)
-                val rawData = CGBitmapContextGetData(bitmapContext) ?: return null
-                val bytePtr = rawData.reinterpret<ByteVar>()
-                val numPixels = targetSize * targetSize
-                val floatPixels = FloatArray(numPixels * 3)
-                var floatIdx = 0
-                for (i in 0 until numPixels) {
-                    floatPixels[floatIdx++] = (bytePtr[i * 4 + 0].toInt() and 0xFF).toFloat()
-                    floatPixels[floatIdx++] = (bytePtr[i * 4 + 1].toInt() and 0xFF).toFloat()
-                    floatPixels[floatIdx++] = (bytePtr[i * 4 + 2].toInt() and 0xFF).toFloat()
-                }
-                floatPixels
-            } finally {
-                CGContextRelease(bitmapContext)
-            }
-        } finally {
-            CGImageRelease(cgImage)
-        }
-    }
-
-    /**
      * Extracts an aligned square face crop of size [targetSize] x [targetSize] as a CGImageRef.
      */
     fun extractFaceCropImage(imageBytes: ByteArray, face: IosDetectedFace, targetSize: Int): CGImageRef? {

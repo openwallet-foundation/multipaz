@@ -87,13 +87,13 @@ internal fun computeChallengeProgress(direction: ChallengeDirection, yaw: Float,
     }
 }
 
-internal fun getChallengePromptTexts(direction: ChallengeDirection): Pair<String, String> {
+internal fun getChallengePromptText(direction: ChallengeDirection): String {
     return when (direction) {
-        ChallengeDirection.LEFT -> "Look to your left" to "Turn your head left"
-        ChallengeDirection.RIGHT -> "Look to your right" to "Turn your head right"
-        ChallengeDirection.UP -> "Look up" to "Tilt your head up"
-        ChallengeDirection.DOWN -> "Look down" to "Tilt your head down"
-        ChallengeDirection.CENTER -> "Look at the camera" to "Look straight ahead"
+        ChallengeDirection.LEFT -> "Turn your head left"
+        ChallengeDirection.RIGHT -> "Turn your head right"
+        ChallengeDirection.UP -> "Tilt your head up"
+        ChallengeDirection.DOWN -> "Tilt your head down"
+        ChallengeDirection.CENTER -> "Look straight ahead"
     }
 }
 

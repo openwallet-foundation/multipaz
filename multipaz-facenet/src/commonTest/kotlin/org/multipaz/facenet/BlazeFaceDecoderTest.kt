@@ -83,4 +83,13 @@ class BlazeFaceDecoderTest {
         assertEquals('L'.code.toByte(), raw[6])
         assertEquals('3'.code.toByte(), raw[7])
     }
+
+    @Test
+    fun testFaceBoundingBoxProperties() {
+        val bb = FaceBoundingBox(left = 100.0, top = 150.0, width = 80.0, height = 120.0)
+        assertEquals(180.0, bb.right, 0.001)
+        assertEquals(270.0, bb.bottom, 0.001)
+        assertEquals(140.0, bb.centerX, 0.001)
+        assertEquals(210.0, bb.centerY, 0.001)
+    }
 }

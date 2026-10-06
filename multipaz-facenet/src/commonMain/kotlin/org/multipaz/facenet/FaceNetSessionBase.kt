@@ -439,11 +439,11 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
 
     private fun showChallenge(progress: Float, overlay: OverlayFrame? = null) {
         val direction = challenges[currentChallengeIndex]
-        val (promptTitle, promptDetail) = getChallengePromptTexts(direction)
+        val promptText = getChallengePromptText(direction)
         val stepText = "Step ${currentChallengeIndex + 1} of ${challenges.size}"
 
         updateState(
-            message = "$promptDetail ($stepText)",
+            message = "$promptText ($stepText)",
             overlay = overlay
         )
     }

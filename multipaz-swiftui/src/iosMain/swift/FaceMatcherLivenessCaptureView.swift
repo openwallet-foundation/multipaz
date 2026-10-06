@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /**
  * SwiftUI View for interactive face liveness verification and portrait photo capture.
@@ -117,41 +116,5 @@ public struct FaceMatcherLivenessCaptureView: View {
             }
         }
         #endif
-    }
-}
-
-/**
- * UIKit UIView wrapper for [FaceMatcherLivenessCaptureView] to enable easy integration into
- * UIKit-based applications and view controllers.
- */
-public class FaceMatcherLivenessCaptureUIView: UIView {
-    private var hostingController: UIHostingController<FaceMatcherLivenessCaptureView>?
-
-    public init(
-        session: FaceMatcherLivenessSession,
-        onSuccess: @escaping (ByteString) -> Void,
-        onFailed: (() -> Void)? = nil
-    ) {
-        super.init(frame: .zero)
-        let rootView = FaceMatcherLivenessCaptureView(
-            session: session,
-            onSuccess: onSuccess,
-            onFailed: onFailed
-        )
-        let hc = UIHostingController(rootView: rootView)
-        self.hostingController = hc
-        hc.view.translatesAutoresizingMaskIntoConstraints = false
-        hc.view.backgroundColor = .clear
-        addSubview(hc.view)
-        NSLayoutConstraint.activate([
-            hc.view.topAnchor.constraint(equalTo: topAnchor),
-            hc.view.leadingAnchor.constraint(equalTo: leadingAnchor),
-            hc.view.trailingAnchor.constraint(equalTo: trailingAnchor),
-            hc.view.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
     }
 }
