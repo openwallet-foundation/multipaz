@@ -181,6 +181,7 @@ dependencies {
     dokka(project(":multipaz-longfellow"))
     dokka(project(":multipaz-cbor-rpc"))
     dokka(project(":multipaz-android-legacy"))
+    dokka(project(":multipaz-facenet"))
 }
 
 subprojects {
