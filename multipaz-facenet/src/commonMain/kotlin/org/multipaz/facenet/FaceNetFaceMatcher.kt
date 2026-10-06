@@ -2,6 +2,7 @@ package org.multipaz.facenet
 
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.FaceMatcher
+import org.multipaz.facematch.FaceMatcherLivenessSession
 import org.multipaz.facematch.FaceMatcherSession
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -75,9 +76,8 @@ class FaceNetFaceMatcher(
         )
     }
 
-    override fun createLivenessSession(): FaceMatcherSession {
-        return createFaceNetSession(
-            referencePortrait = null,
+    override fun createLivenessSession(): FaceMatcherLivenessSession {
+        return createFaceNetLivenessSession(
             modelBytes = modelBytes,
             config = config,
             debug = debug,
@@ -178,13 +178,21 @@ class FaceNetFaceMatcher(
 internal expect val isFaceNetSupported: Boolean
 
 internal expect fun createFaceNetSession(
-    referencePortrait: ByteString?,
+    referencePortrait: ByteString,
     modelBytes: ByteString,
     config: FaceNetModelConfig,
     debug: Boolean,
     matcherName: String,
     matcherDisplayName: String
 ): FaceMatcherSession
+
+internal expect fun createFaceNetLivenessSession(
+    modelBytes: ByteString,
+    config: FaceNetModelConfig,
+    debug: Boolean,
+    matcherName: String,
+    matcherDisplayName: String
+): FaceMatcherLivenessSession
 
 internal expect suspend fun extractFaceEmbedding(
     portrait: ByteString,

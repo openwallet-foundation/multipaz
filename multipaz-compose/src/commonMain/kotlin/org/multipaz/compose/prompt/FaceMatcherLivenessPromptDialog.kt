@@ -1,6 +1,5 @@
 package org.multipaz.compose.prompt
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,43 +37,41 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.io.bytestring.ByteString
 import org.jetbrains.compose.resources.getString
 import org.multipaz.compose.camera.Camera
 import org.multipaz.compose.camera.CameraCaptureResolution
 import org.multipaz.compose.camera.CameraSelection
 import org.multipaz.compose.camera.toPromptCameraFrame
-import org.multipaz.compose.toImageBitmap
-import org.multipaz.facematch.OverlayFrame
 import org.multipaz.compose.permissions.rememberCameraPermissionState
+import org.multipaz.facematch.FaceMatcherLivenessPromptState
+import org.multipaz.facematch.FaceMatcherLivenessSession
 import org.multipaz.multipaz_compose.generated.resources.Res
+import org.multipaz.multipaz_compose.generated.resources.face_matcher_liveness_prompt_default_subtitle
+import org.multipaz.multipaz_compose.generated.resources.face_matcher_liveness_prompt_default_title
 import org.multipaz.multipaz_compose.generated.resources.face_matcher_prompt_cancel
-import org.multipaz.multipaz_compose.generated.resources.face_matcher_prompt_default_subtitle
-import org.multipaz.multipaz_compose.generated.resources.face_matcher_prompt_default_title
 import org.multipaz.multipaz_compose.generated.resources.face_matcher_prompt_grant_permission
 import org.multipaz.multipaz_compose.generated.resources.face_matcher_prompt_permission_required
-import org.multipaz.facematch.FaceMatcherPromptState
-import org.multipaz.facematch.FaceMatcherSession
 import org.multipaz.prompt.ConvertToHumanReadableFn
-import org.multipaz.prompt.FaceMatcherPromptDialogModel
+import org.multipaz.prompt.FaceMatcherLivenessPromptDialogModel
 import org.multipaz.prompt.PromptDialogModel
 import org.multipaz.prompt.PromptDismissedException
 
 /**
- * Composable dialog that prompts the user to perform face matching using the front camera.
+ * Composable dialog that prompts the user to perform active liveness verification and capture a portrait photo.
  *
- * @param model the dialog model managing the face matcher request.
+ * @param model the dialog model managing the liveness request.
  * @param toHumanReadable function to convert reasons to human-readable strings.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FaceMatcherPromptDialog(
-    model: PromptDialogModel<FaceMatcherPromptDialogModel.FaceMatcherRequest, Boolean>,
+fun FaceMatcherLivenessPromptDialog(
+    model: PromptDialogModel<FaceMatcherLivenessPromptDialogModel.FaceMatcherLivenessRequest, ByteString?>,
     toHumanReadable: ConvertToHumanReadableFn
 ) {
     val dialogState = model.dialogState.collectAsState(PromptDialogModel.NoDialogState())
@@ -106,31 +103,31 @@ fun FaceMatcherPromptDialog(
     if (dialogStateValue is PromptDialogModel.DialogShownState) {
         val dialogParameters = dialogStateValue.parameters
 
-        val faceMatcherSession = remember(dialogParameters) {
-            dialogParameters.faceMatcherSession ?: run {
+        val faceMatcherLivenessSession = remember(dialogParameters) {
+            dialogParameters.faceMatcherLivenessSession ?: run {
                 val matcher = dialogParameters.matcher
-                    ?: (model as? FaceMatcherPromptDialogModel)?.defaultMatcher
+                    ?: (model as? FaceMatcherLivenessPromptDialogModel)?.defaultMatcher
                     ?: throw IllegalStateException("No FaceMatcher available")
-                matcher.createSession(dialogParameters.referencePortrait)
+                matcher.createLivenessSession()
             }
         }
 
         val title = humanReadableTitle?.ifEmpty { null }
         val subtitle = humanReadableSubtitle?.ifEmpty { null }
 
-        FaceMatcherBottomSheet(
+        FaceMatcherLivenessBottomSheet(
             sheetState = sheetState,
             title = title,
             subtitle = subtitle,
-            faceMatcherSession = faceMatcherSession,
-            onMatched = {
+            faceMatcherLivenessSession = faceMatcherLivenessSession,
+            onSuccess = { capturedImage ->
                 coroutineScope.launch {
-                    dialogStateValue.resultChannel.send(true)
+                    dialogStateValue.resultChannel.send(capturedImage)
                 }
             },
             onDismissed = {
                 coroutineScope.launch {
-                    faceMatcherSession.cancel()
+                    faceMatcherLivenessSession.cancel()
                     dialogStateValue.resultChannel.close(PromptDismissedException())
                 }
             }
@@ -140,24 +137,24 @@ fun FaceMatcherPromptDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FaceMatcherBottomSheet(
+private fun FaceMatcherLivenessBottomSheet(
     sheetState: SheetState,
     title: String?,
     subtitle: String?,
-    faceMatcherSession: FaceMatcherSession,
-    onMatched: () -> Unit,
+    faceMatcherLivenessSession: FaceMatcherLivenessSession,
+    onSuccess: (ByteString?) -> Unit,
     onDismissed: () -> Unit,
 ) {
     val coroutineScope = rememberCoroutineScope()
     val cameraPermissionState = rememberCameraPermissionState()
-    val promptState by faceMatcherSession.state.collectAsState()
+    val promptState by faceMatcherLivenessSession.state.collectAsState()
 
     var isProcessingFrame by remember { mutableStateOf(false) }
     var isDismissed by remember { mutableStateOf(false) }
 
-    DisposableEffect(faceMatcherSession) {
+    DisposableEffect(faceMatcherLivenessSession) {
         onDispose {
-            faceMatcherSession.cancel()
+            faceMatcherLivenessSession.cancel()
         }
     }
 
@@ -166,12 +163,12 @@ private fun FaceMatcherBottomSheet(
 
     LaunchedEffect(title, subtitle) {
         if (title == null) {
-            resolvedTitle = getString(Res.string.face_matcher_prompt_default_title)
+            resolvedTitle = getString(Res.string.face_matcher_liveness_prompt_default_title)
         } else {
             resolvedTitle = title
         }
         if (subtitle == null) {
-            resolvedSubtitle = getString(Res.string.face_matcher_prompt_default_subtitle)
+            resolvedSubtitle = getString(Res.string.face_matcher_liveness_prompt_default_subtitle)
         } else {
             resolvedSubtitle = subtitle
         }
@@ -184,9 +181,9 @@ private fun FaceMatcherBottomSheet(
     }
 
     LaunchedEffect(promptState.outcome) {
-        if (promptState.outcome == FaceMatcherPromptState.Outcome.SUCCESS) {
+        if (promptState.outcome == FaceMatcherLivenessPromptState.Outcome.SUCCESS) {
             delay(1200)
-            onMatched()
+            onSuccess(promptState.capturedImage)
         }
     }
 
@@ -252,10 +249,9 @@ private fun FaceMatcherBottomSheet(
                     }
                 }
             } else {
-                val isSuccess = promptState.outcome == FaceMatcherPromptState.Outcome.SUCCESS
+                val isSuccess = promptState.outcome == FaceMatcherLivenessPromptState.Outcome.SUCCESS
 
                 val cornerRadius = 36.dp
-                // Camera feed clipped inside vertical rectangle with rounded corners
                 Box(
                     modifier = Modifier
                         .size(width = 220.dp, height = 284.dp)
@@ -272,7 +268,7 @@ private fun FaceMatcherBottomSheet(
                             isProcessingFrame = true
                             try {
                                 val promptFrame = frame.toPromptCameraFrame()
-                                faceMatcherSession.feedFrame(promptFrame)
+                                faceMatcherLivenessSession.feedFrame(promptFrame)
                             } finally {
                                 isProcessingFrame = false
                             }
@@ -317,7 +313,7 @@ private fun FaceMatcherBottomSheet(
                     Text(
                         text = statusText,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (promptState.outcome == FaceMatcherPromptState.Outcome.FAILED) {
+                        color = if (promptState.outcome == FaceMatcherLivenessPromptState.Outcome.FAILED) {
                             MaterialTheme.colorScheme.error
                         } else {
                             MaterialTheme.colorScheme.onSurface
@@ -350,19 +346,3 @@ private fun FaceMatcherBottomSheet(
         }
     }
 }
-
-
-@Composable
-internal fun FaceMatcherOverlay(
-    overlay: OverlayFrame,
-    modifier: Modifier = Modifier
-) {
-    val imageBitmap = remember(overlay) { overlay.toImageBitmap() }
-    Image(
-        bitmap = imageBitmap,
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        modifier = modifier
-    )
-}
-

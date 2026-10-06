@@ -17,6 +17,8 @@ fun PromptModel.getConsentPromptDialogModel() = getDialogModel(ConsentPromptDial
 
 fun PromptModel.getFaceMatcherDialogModel() = getDialogModel(FaceMatcherPromptDialogModel.DialogType)
 
+fun PromptModel.getFaceMatcherLivenessDialogModel() = getDialogModel(FaceMatcherLivenessPromptDialogModel.DialogType)
+
 /**
  * Prompts user for authentication through a passphrase.
  *
@@ -169,26 +171,20 @@ suspend fun PromptModel.showFaceLivenessPrompt(
     matcher: FaceMatcher? = null,
     document: Document? = null
 ): ByteString? {
-    val dialogModel = getFaceMatcherDialogModel()
+    val dialogModel = getFaceMatcherLivenessDialogModel()
     val matcherToUse = matcher ?: dialogModel.defaultMatcher
         ?: throw IllegalStateException("No FaceMatcher provided or configured as default")
     val faceMatcherSession = matcherToUse.createLivenessSession()
-    val success = try {
+    return try {
         dialogModel.displayPrompt(
-            FaceMatcherPromptDialogModel.FaceMatcherRequest(
-                referencePortrait = null,
+            FaceMatcherLivenessPromptDialogModel.FaceMatcherLivenessRequest(
                 reason = reason,
                 matcher = matcherToUse,
-                faceMatcherSession = faceMatcherSession,
+                faceMatcherLivenessSession = faceMatcherSession,
                 document = document
             )
         )
     } catch (e: PromptDismissedException) {
-        false
-    }
-    return if (success) {
-        faceMatcherSession.state.value.capturedImage
-    } else {
         null
     }
 }

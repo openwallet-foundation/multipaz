@@ -31,13 +31,13 @@ interface FaceMatcher {
     fun createSession(referencePortrait: ByteString): FaceMatcherSession
 
     /**
-     * Creates a new [FaceMatcherSession] for active liveness checking and portrait photo capture.
+     * Creates a new [FaceMatcherLivenessSession] for active liveness checking and portrait photo capture.
      *
-     * @return a new [FaceMatcherSession] instance for this liveness session.
+     * @return a new [FaceMatcherLivenessSession] instance for this liveness session.
      * @throws UnsupportedOperationException if this matcher does not support liveness detection.
      */
     @Throws(UnsupportedOperationException::class)
-    fun createLivenessSession(): FaceMatcherSession {
+    fun createLivenessSession(): FaceMatcherLivenessSession {
         throw UnsupportedOperationException("$displayName does not support liveness detection")
     }
 }

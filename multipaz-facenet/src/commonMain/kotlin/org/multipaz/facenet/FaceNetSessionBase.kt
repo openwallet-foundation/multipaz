@@ -1,9 +1,7 @@
 package org.multipaz.facenet
 
 import kotlin.concurrent.Volatile
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 import kotlin.time.Clock
@@ -18,15 +16,6 @@ import org.multipaz.util.Logger
 private const val TAG = "FaceNetSessionBase"
 
 /**
- * Common pose interface for detected faces across platforms.
- */
-interface DetectedFacePose {
-    val yaw: Float
-    val pitch: Float
-    val roll: Float
-}
-
-/**
  * Base class containing the shared biometric verification state machine for FaceNet.
  *
  * Implements:
@@ -38,7 +27,7 @@ interface DetectedFacePose {
  * - Dynamic visual feedback via [OverlayFrame]: pulsing ring during positioning, progressive highlight during challenges.
  */
 abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
-    referencePortrait: ByteString? = null,
+    referencePortrait: ByteString,
     val config: FaceNetModelConfig,
     val debug: Boolean = false,
     val matcherName: String = "facenet",
@@ -47,23 +36,11 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
     randomSeed: Long = clock()
 ) : FaceMatcherSession(referencePortrait) {
 
-    enum class ChallengeDirection {
-        LEFT,
-        RIGHT,
-        UP,
-        DOWN,
-        CENTER
-    }
-
-    val isLivenessOnly: Boolean
-        get() = (referencePortrait == null)
-
     enum class Phase {
         INITIALIZING,
         POSITIONING,
         MATCH_CONVEYED,
         LIVENESS_CHALLENGE,
-        CAPTURING,
         COMPLETED,
         FAILED
     }
@@ -88,11 +65,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
         get() = currentRingSegments
 
     private val pool = listOf(ChallengeDirection.LEFT, ChallengeDirection.RIGHT, ChallengeDirection.UP, ChallengeDirection.DOWN)
-    val challenges: List<ChallengeDirection> = if (isLivenessOnly) {
-        pool.shuffled(Random(randomSeed)).take(3)
-    } else {
-        pool.shuffled(Random(randomSeed)).take(2) + listOf(ChallengeDirection.CENTER)
-    }
+    val challenges: List<ChallengeDirection> = pool.shuffled(Random(randomSeed)).take(2) + listOf(ChallengeDirection.CENTER)
     var currentChallengeIndex = 0
         protected set
     private var consecutivePoseFrames = 0
@@ -106,7 +79,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
 
     init {
         updateState(
-            messageAbove = if (isLivenessOnly) "Check Liveness" else "Verify Identity",
+            messageAbove = "Verify Identity",
             messageBelow = "Position your face and look at the camera",
             outcome = FaceMatcherPromptState.Outcome.IN_PROGRESS
         )
@@ -133,11 +106,6 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
      */
     protected abstract fun onSessionClosed()
 
-    /**
-     * Captures a high-resolution upright portrait photo from [frame] when in enrollment mode.
-     */
-    protected abstract suspend fun captureHighResolutionImage(frame: CameraFrame): ByteString?
-
     protected open fun createOverlay(
         frame: CameraFrame,
         faces: List<TFace>,
@@ -160,73 +128,72 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
         if (isCancelled || state.value.outcome != FaceMatcherPromptState.Outcome.IN_PROGRESS) {
             return
         }
+
         if (!frameMutex.tryLock()) {
-            // Drop frame: earlier frame is still being processed
             return
         }
+
         try {
-            if (isCancelled || state.value.outcome != FaceMatcherPromptState.Outcome.IN_PROGRESS) {
-                return
-            }
             processFrame(frame)
         } finally {
-            try {
-                if (isCancelled || state.value.outcome != FaceMatcherPromptState.Outcome.IN_PROGRESS) {
-                    onSessionClosed()
-                }
-            } finally {
-                frameMutex.unlock()
-            }
+            frameMutex.unlock()
         }
     }
 
     private suspend fun processFrame(frame: CameraFrame) {
-        if (isCancelled || state.value.outcome != FaceMatcherPromptState.Outcome.IN_PROGRESS) {
+        val now = clock()
+        if (startTime == null) {
+            startTime = now
+            phaseStartTime = now
+        }
+
+        if (phase == Phase.INITIALIZING) {
+            if (!initializationAttempted) {
+                initializationAttempted = true
+                try {
+                    initializePipeline()
+                    if (referenceEmbedding == null) {
+                        failSession("Setup Failed", "Could not extract face from reference photo")
+                        return
+                    }
+                    phase = Phase.POSITIONING
+                    phaseStartTime = now
+                    updateState(
+                        messageAbove = "Position your face",
+                        messageBelow = "Look directly at the camera"
+                    )
+                } catch (e: Exception) {
+                    Logger.e(TAG, "Failed to initialize pipeline", e)
+                    failSession("Initialization Failed", e.message ?: "Could not start camera pipeline")
+                    return
+                }
+            } else {
+                return
+            }
+        }
+
+        val refEmb = referenceEmbedding
+        if (refEmb == null) {
+            failSession("Setup Failed", "Missing reference face embedding")
             return
         }
 
-        val now = clock()
-        val sessionStart = startTime ?: run {
-            startTime = now
-            phaseStartTime = now
-            now
-        }
-
-        if (now - sessionStart > sessionTimeoutMs) {
+        if (now - startTime!! > sessionTimeoutMs) {
+            val percentage = (bestSimilarity * 100).toInt().coerceAtLeast(0)
             currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
                 RingSegment(color = RingSegment.COLOR_RED, scale = 1.0f)
             }
             val overlay = createOverlay(frame, emptyList(), null)
-            failSession("Verification Failed", "Verification timed out", overlay)
+            failSession(
+                messageAbove = "Verification Failed",
+                messageBelow = "Face verification timed out ($percentage% match, required ${(config.matchThreshold * 100).toInt()}%)",
+                overlay = overlay
+            )
             return
         }
 
-        if (!initializationAttempted) {
-            initializationAttempted = true
-            try {
-                initializePipeline()
-            } catch (e: Exception) {
-                if (isCancelled) return
-                Logger.e(TAG, "Pipeline initialization failed", e)
-                currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
-                    RingSegment(color = RingSegment.COLOR_RED, scale = 1.0f)
-                }
-                failSession("Verification Error", e.message ?: "Failed to initialize face matching model")
-                return
-            }
-            if (isCancelled) {
-                onSessionClosed()
-                return
-            }
-            phase = Phase.POSITIONING
-            phaseStartTime = now
-        }
-
-        if (isCancelled) return
-        val refEmb = referenceEmbedding
-        if (!isLivenessOnly && refEmb == null) return
-
         val faces = detectFaces(frame)
+
         if (isCancelled) return
 
         if (faces.isEmpty()) {
@@ -234,8 +201,8 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
             consecutiveMatchFrames = 0
             straightFaceStartTime = null
             consecutivePoseFrames = 0
-            currentRingSegments = RingSegment.defaultSegments
-            val overlay = createOverlay(frame, faces, null)
+
+            val overlay = createOverlay(frame, emptyList(), null)
             if (missedFaceFrames >= 3) {
                 when (phase) {
                     Phase.POSITIONING -> {
@@ -248,12 +215,6 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                     Phase.LIVENESS_CHALLENGE -> {
                         updateState(
                             messageBelow = "Face lost, looking for face...",
-                            overlay = overlay
-                        )
-                    }
-                    Phase.CAPTURING -> {
-                        updateState(
-                            messageBelow = "Face lost, hold still...",
                             overlay = overlay
                         )
                     }
@@ -292,8 +253,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
 
         if (isCancelled) return
 
-        // Whenever the face is facing straight and we have a reference embedding, compute similarity
-        if (isFacingStraight && refEmb != null) {
+        if (isFacingStraight) {
             try {
                 val cameraEmbedding = computeCameraEmbedding(frame, face)
                 if (cameraEmbedding != null) {
@@ -320,105 +280,81 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                 val pulseColor = RingSegment.lerpColor(RingSegment.COLOR_DARK_GRAY, RingSegment.COLOR_BLUE, pulse)
 
                 if (isFacingStraight) {
-                    if (isLivenessOnly) {
+                    val straightStart = straightFaceStartTime ?: run {
+                        straightFaceStartTime = now
+                        now
+                    }
+
+                    val isMatched = currentSimilarity != null && currentSimilarity >= config.matchThreshold
+
+                    if (isMatched) {
                         consecutiveMatchFrames++
                         if (consecutiveMatchFrames >= 2) {
-                            phase = Phase.LIVENESS_CHALLENGE
+                            phase = Phase.MATCH_CONVEYED
                             phaseStartTime = now
-                            currentChallengeIndex = 0
-                            consecutivePoseFrames = 0
-                            consecutiveMatchFrames = 0
-                            currentRingSegments = computeDirectionSegments(challenges[0], 0.0f)
-                            val overlay = createOverlay(frame, faces, currentSimilarity)
-                            showChallenge(0.0f, overlay)
-                        } else {
+                            straightFaceStartTime = null
+                            val percent = ((currentSimilarity ?: bestSimilarity) * 100).toInt()
+                            val matchedMsg = if (debug) "Face Matched ($percent%)" else "Face Matched"
                             currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
-                                RingSegment(color = pulseColor, scale = 1.0f)
+                                RingSegment(color = RingSegment.COLOR_GREEN, scale = 1.15f)
                             }
                             val overlay = createOverlay(frame, faces, currentSimilarity)
                             updateState(
-                                messageAbove = "Position your face",
+                                messageAbove = matchedMsg,
                                 messageBelow = "Hold still...",
                                 overlay = overlay
                             )
-                        }
-                    } else {
-                        val straightStart = straightFaceStartTime ?: run {
-                            straightFaceStartTime = now
-                            now
-                        }
-
-                        val isMatched = currentSimilarity != null && currentSimilarity >= config.matchThreshold
-
-                        if (isMatched) {
-                            consecutiveMatchFrames++
-                            if (consecutiveMatchFrames >= 2) {
-                                phase = Phase.MATCH_CONVEYED
-                                phaseStartTime = now
-                                straightFaceStartTime = null
-                                val percent = ((currentSimilarity ?: bestSimilarity) * 100).toInt()
-                                val matchedMsg = if (debug) "Face Matched ($percent%)" else "Face Matched"
-                                currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
-                                    RingSegment(color = RingSegment.COLOR_GREEN, scale = 1.15f)
-                                }
-                                val overlay = createOverlay(frame, faces, currentSimilarity)
-                                updateState(
-                                    messageAbove = matchedMsg,
-                                    messageBelow = "Hold still...",
-                                    overlay = overlay
-                                )
-                            } else {
-                                val percent = ((currentSimilarity ?: bestSimilarity) * 100).toInt()
-                                val verifyingMsg = if (debug) "Verifying Identity ($percent%)" else "Verifying Identity"
-                                currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
-                                    RingSegment(color = pulseColor, scale = 1.0f)
-                                }
-                                val overlay = createOverlay(frame, faces, currentSimilarity)
-                                updateState(
-                                    messageAbove = verifyingMsg,
-                                    messageBelow = "Hold still...",
-                                    overlay = overlay
-                                )
-                            }
                         } else {
-                            consecutiveMatchFrames = 0
-                            if (now - straightStart > matchTimeoutMs) {
-                                val percentage = (bestSimilarity * 100).toInt().coerceAtLeast(0)
-                                currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
-                                    RingSegment(color = RingSegment.COLOR_RED, scale = 1.0f)
-                                }
-                                val overlay = createOverlay(frame, faces, currentSimilarity)
-                                if (bestSimilarity >= config.matchThreshold) {
-                                    failSession(
-                                        messageAbove = "Verification Failed",
-                                        messageBelow = "Unable to confirm match - please hold still and look directly at the camera",
-                                        overlay = overlay
-                                    )
-                                } else {
-                                    failSession(
-                                        messageAbove = "Verification Failed",
-                                        messageBelow = "Face does not match reference portrait ($percentage% match, required ${(config.matchThreshold * 100).toInt()}%)",
-                                        overlay = overlay
-                                    )
-                                }
-                                return
-                            }
-                            val verifyingMsg = if (debug && currentSimilarity != null) {
-                                val percent = (currentSimilarity * 100).toInt()
-                                "Verifying Identity ($percent%)"
-                            } else {
-                                "Verifying Identity"
-                            }
+                            val percent = ((currentSimilarity ?: bestSimilarity) * 100).toInt()
+                            val verifyingMsg = if (debug) "Verifying Identity ($percent%)" else "Verifying Identity"
                             currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
                                 RingSegment(color = pulseColor, scale = 1.0f)
                             }
                             val overlay = createOverlay(frame, faces, currentSimilarity)
                             updateState(
                                 messageAbove = verifyingMsg,
-                                messageBelow = "Hold still and look directly at the camera...",
+                                messageBelow = "Hold still...",
                                 overlay = overlay
                             )
                         }
+                    } else {
+                        consecutiveMatchFrames = 0
+                        if (now - straightStart > matchTimeoutMs) {
+                            val percentage = (bestSimilarity * 100).toInt().coerceAtLeast(0)
+                            currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
+                                RingSegment(color = RingSegment.COLOR_RED, scale = 1.0f)
+                            }
+                            val overlay = createOverlay(frame, faces, currentSimilarity)
+                            if (bestSimilarity >= config.matchThreshold) {
+                                failSession(
+                                    messageAbove = "Verification Failed",
+                                    messageBelow = "Unable to confirm match - please hold still and look directly at the camera",
+                                    overlay = overlay
+                                )
+                            } else {
+                                failSession(
+                                    messageAbove = "Verification Failed",
+                                    messageBelow = "Face does not match reference portrait ($percentage% match, required ${(config.matchThreshold * 100).toInt()}%)",
+                                    overlay = overlay
+                                )
+                            }
+                            return
+                        }
+                        val verifyingMsg = if (debug && currentSimilarity != null) {
+                            val percent = (currentSimilarity * 100).toInt()
+                            "Verifying Identity ($percent%)"
+                        } else {
+                            "Verifying Identity"
+                        }
+                        currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
+                            RingSegment(color = pulseColor, scale = 1.0f)
+                        }
+                        val overlay = createOverlay(frame, faces, currentSimilarity)
+                        updateState(
+                            messageAbove = verifyingMsg,
+                            messageBelow = "Hold still and look directly at the camera...",
+                            overlay = overlay
+                        )
                     }
                 } else {
                     straightFaceStartTime = null
@@ -454,173 +390,57 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                     val overlay = createOverlay(frame, faces, currentSimilarity)
                     showChallenge(0.0f, overlay)
                 } else {
-                    val scale = 1.15f - (elapsed.toFloat() / matchConveyDurationMs) * 0.15f
+                    val percent = ((currentSimilarity ?: bestSimilarity) * 100).toInt()
+                    val matchedMsg = if (debug) "Face Matched ($percent%)" else "Face Matched"
                     currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
-                        RingSegment(color = RingSegment.COLOR_GREEN, scale = scale)
+                        RingSegment(color = RingSegment.COLOR_GREEN, scale = 1.15f)
                     }
                     val overlay = createOverlay(frame, faces, currentSimilarity)
-                    updateState(overlay = overlay)
+                    updateState(
+                        messageAbove = matchedMsg,
+                        messageBelow = "Hold still...",
+                        overlay = overlay
+                    )
                 }
             }
 
             Phase.LIVENESS_CHALLENGE -> {
-                val challenge = challenges[currentChallengeIndex]
-                val progress = computeChallengeProgress(challenge, yaw, pitch)
-                currentRingSegments = computeDirectionSegments(challenge, progress)
-                val overlay = createOverlay(frame, faces, currentSimilarity)
-                showChallenge(progress, overlay)
+                val direction = challenges[currentChallengeIndex]
+                val progress = computeChallengeProgress(direction, yaw, pitch)
 
-                if (progress >= 0.85f) {
+                currentRingSegments = computeDirectionSegments(direction, progress)
+                val overlay = createOverlay(frame, faces, currentSimilarity)
+
+                if (progress >= 1.0f) {
                     consecutivePoseFrames++
-                    if (consecutivePoseFrames >= 3) {
-                        consecutivePoseFrames = 0
+                    if (consecutivePoseFrames >= 2) {
                         currentChallengeIndex++
+                        consecutivePoseFrames = 0
                         if (currentChallengeIndex >= challenges.size) {
-                            if (isLivenessOnly) {
-                                phase = Phase.CAPTURING
-                                phaseStartTime = now
-                                consecutiveMatchFrames = 0
-                                currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
-                                    RingSegment(color = RingSegment.COLOR_GREEN, scale = 1.15f)
-                                }
-                                val capOverlay = createOverlay(frame, faces, currentSimilarity)
-                                updateState(
-                                    messageAbove = "Hold Still",
-                                    messageBelow = "Hold still to capture photo...",
-                                    overlay = capOverlay
-                                )
-                            } else {
-                                finalizeVerification(frame, faces, currentSimilarity)
-                            }
+                            finalizeVerification(frame, faces, currentSimilarity)
+                            return
                         } else {
-                            phaseStartTime = now
-                            currentRingSegments = computeDirectionSegments(challenges[currentChallengeIndex], 0.0f)
+                            val nextDirection = challenges[currentChallengeIndex]
+                            currentRingSegments = computeDirectionSegments(nextDirection, 0.0f)
                             val nextOverlay = createOverlay(frame, faces, currentSimilarity)
                             showChallenge(0.0f, nextOverlay)
+                            return
                         }
                     }
                 } else {
                     consecutivePoseFrames = 0
                 }
-            }
 
-            Phase.CAPTURING -> {
-                if (isFacingStraight) {
-                    consecutiveMatchFrames++
-                    if (consecutiveMatchFrames >= 2) {
-                        val photoBytes = captureHighResolutionImage(frame)
-                        phase = Phase.COMPLETED
-                        currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
-                            RingSegment(color = RingSegment.COLOR_GREEN, scale = 1.2f)
-                        }
-                        updateState(
-                            messageAbove = "Portrait Captured",
-                            messageBelow = "Liveness verified",
-                            outcome = FaceMatcherPromptState.Outcome.SUCCESS,
-                            capturedImage = photoBytes,
-                            overlay = null
-                        )
-                    } else {
-                        currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
-                            RingSegment(color = RingSegment.COLOR_GREEN, scale = 1.15f)
-                        }
-                        val overlay = createOverlay(frame, faces, currentSimilarity)
-                        updateState(
-                            messageAbove = "Hold Still",
-                            messageBelow = "Capturing portrait image...",
-                            overlay = overlay
-                        )
-                    }
-                } else {
-                    consecutiveMatchFrames = 0
-                    currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
-                        RingSegment(color = RingSegment.COLOR_DARK_GRAY, scale = 1.0f)
-                    }
-                    val overlay = createOverlay(frame, faces, currentSimilarity)
-                    updateState(
-                        messageAbove = "Hold Still",
-                        messageBelow = "Look directly at the camera...",
-                        overlay = overlay
-                    )
-                }
+                showChallenge(progress, overlay)
             }
 
             Phase.COMPLETED, Phase.FAILED, Phase.INITIALIZING -> {}
         }
     }
 
-    protected fun computeDirectionSegments(
-        direction: ChallengeDirection,
-        progress: Float,
-        activeColor: Int = RingSegment.COLOR_BRIGHT_GREEN,
-        baseColor: Int = RingSegment.COLOR_DARK_GRAY
-    ): List<RingSegment> {
-        val p = progress.coerceIn(0f, 1f)
-        if (direction == ChallengeDirection.CENTER) {
-            val color = RingSegment.lerpColor(baseColor, activeColor, p)
-            val scale = 1.0f + 0.5f * p
-            return List(RingSegment.NUM_SEGMENTS) {
-                RingSegment(color = color, scale = scale)
-            }
-        }
-
-        val targetCenter = when (direction) {
-            ChallengeDirection.UP -> 0.0f
-            ChallengeDirection.RIGHT -> 4.5f
-            ChallengeDirection.DOWN -> 9.0f
-            ChallengeDirection.LEFT -> 13.5f
-            ChallengeDirection.CENTER -> 0.0f
-        }
-
-        val maxRadius = 3.5f
-        val minDistance = when (direction) {
-            ChallengeDirection.LEFT, ChallengeDirection.RIGHT -> 0.5f
-            else -> 0.0f
-        }
-        val peakFalloff = (0.5f * (1.0f + cos((minDistance / maxRadius) * PI))).toFloat()
-
-        return List(RingSegment.NUM_SEGMENTS) { index ->
-            val rawDiff = abs(index.toFloat() - targetCenter)
-            val dist = minOf(rawDiff, 18f - rawDiff)
-
-            if (dist < maxRadius) {
-                val rawFalloff = (0.5f * (1.0f + cos((dist / maxRadius) * PI))).toFloat()
-                val normalizedFalloff = (rawFalloff / peakFalloff).coerceIn(0f, 1f)
-                val segmentProgress = (p * normalizedFalloff).coerceIn(0f, 1f)
-                val color = RingSegment.lerpColor(baseColor, activeColor, segmentProgress)
-                val scale = 1.0f + 0.55f * segmentProgress
-                RingSegment(color = color, scale = scale)
-            } else {
-                RingSegment(color = baseColor, scale = 1.0f)
-            }
-        }
-    }
-
-    private fun computeChallengeProgress(direction: ChallengeDirection, yaw: Float, pitch: Float): Float {
-        val yawThreshold = 18.0f
-        val pitchThreshold = 14.0f
-        return when (direction) {
-            ChallengeDirection.LEFT -> (yaw / yawThreshold).coerceIn(0f, 1f)
-            ChallengeDirection.RIGHT -> (-yaw / yawThreshold).coerceIn(0f, 1f)
-            ChallengeDirection.UP -> (pitch / pitchThreshold).coerceIn(0f, 1f)
-            ChallengeDirection.DOWN -> (-pitch / pitchThreshold).coerceIn(0f, 1f)
-            ChallengeDirection.CENTER -> {
-                val deviation = maxOf(abs(yaw), abs(pitch))
-                if (deviation <= 8.0f) 1.0f else (1.0f - ((deviation - 8.0f) / 10.0f)).coerceIn(0f, 1f)
-            }
-        }
-    }
-
     private fun showChallenge(progress: Float, overlay: OverlayFrame? = null) {
         val direction = challenges[currentChallengeIndex]
-        val (promptTitle, promptDetail) = when (direction) {
-            ChallengeDirection.LEFT -> "Look to your left" to "Turn your head left"
-            ChallengeDirection.RIGHT -> "Look to your right" to "Turn your head right"
-            ChallengeDirection.UP -> "Look up" to "Tilt your head up"
-            ChallengeDirection.DOWN -> "Look down" to "Tilt your head down"
-            ChallengeDirection.CENTER -> "Look at the camera" to "Look straight ahead"
-        }
-
+        val (promptTitle, promptDetail) = getChallengePromptTexts(direction)
         val stepText = "Step ${currentChallengeIndex + 1} of ${challenges.size}"
 
         updateState(

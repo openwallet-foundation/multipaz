@@ -7,6 +7,7 @@ import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.prompt.BiometricPromptDialogModel
 import org.multipaz.prompt.ConsentPromptDialogModel
 import org.multipaz.prompt.ConvertToHumanReadableFn
+import org.multipaz.prompt.FaceMatcherLivenessPromptDialogModel
 import org.multipaz.prompt.FaceMatcherPromptDialogModel
 import org.multipaz.prompt.PassphrasePromptDialogModel
 import org.multipaz.prompt.PromptDialogModel
@@ -48,6 +49,12 @@ actual fun PromptDialogs(
     if (!excludeTypes.contains(FaceMatcherPromptDialogModel.DialogType)) {
         FaceMatcherPromptDialog(
             model = model.getDialogModel(FaceMatcherPromptDialogModel.DialogType),
+            toHumanReadable = toHumanReadable
+        )
+    }
+    if (!excludeTypes.contains(FaceMatcherLivenessPromptDialogModel.DialogType)) {
+        FaceMatcherLivenessPromptDialog(
+            model = model.getDialogModel(FaceMatcherLivenessPromptDialogModel.DialogType),
             toHumanReadable = toHumanReadable
         )
     }

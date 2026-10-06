@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.context.applicationContext
+import org.multipaz.facematch.FaceMatcherLivenessSession
 import org.multipaz.facematch.FaceMatcherSession
 import org.multipaz.util.Logger
 
@@ -17,7 +18,7 @@ internal actual val isFaceNetSupported: Boolean
     }
 
 internal actual fun createFaceNetSession(
-    referencePortrait: ByteString?,
+    referencePortrait: ByteString,
     modelBytes: ByteString,
     config: FaceNetModelConfig,
     debug: Boolean,
@@ -26,6 +27,22 @@ internal actual fun createFaceNetSession(
 ): FaceMatcherSession {
     return AndroidFaceNetSession(
         referencePortrait = referencePortrait,
+        modelBytes = modelBytes,
+        config = config,
+        debug = debug,
+        matcherName = matcherName,
+        matcherDisplayName = matcherDisplayName
+    )
+}
+
+internal actual fun createFaceNetLivenessSession(
+    modelBytes: ByteString,
+    config: FaceNetModelConfig,
+    debug: Boolean,
+    matcherName: String,
+    matcherDisplayName: String
+): FaceMatcherLivenessSession {
+    return AndroidFaceNetLivenessSession(
         modelBytes = modelBytes,
         config = config,
         debug = debug,

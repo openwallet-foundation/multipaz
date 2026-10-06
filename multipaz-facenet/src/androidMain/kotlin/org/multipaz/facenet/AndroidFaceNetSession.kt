@@ -1,18 +1,16 @@
 package org.multipaz.facenet
 
-import androidx.camera.core.ImageProxy
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.CameraFrame
 import org.multipaz.util.Logger
-import java.io.ByteArrayOutputStream
 import kotlin.time.Clock
 
 private const val TAG = "AndroidFaceNetSession"
 
 internal class AndroidFaceNetSession(
-    referencePortrait: ByteString? = null,
+    referencePortrait: ByteString,
     private val modelBytes: ByteString,
     config: FaceNetModelConfig,
     debug: Boolean = false,
@@ -30,91 +28,46 @@ internal class AndroidFaceNetSession(
     private var detector: AndroidFaceDetector? = null
     private var interpreter: AndroidFaceNetInterpreter? = null
 
-
     override suspend fun initializePipeline() {
         val interp = AndroidFaceNetInterpreter(modelBytes, config)
         val det = AndroidFaceDetector()
 
-        val refPortrait = referencePortrait
-        if (refPortrait != null) {
-            val refBytes = refPortrait.toByteArray()
-            val refBitmap = BitmapFactory.decodeByteArray(refBytes, 0, refBytes.size)
-                ?: throw IllegalArgumentException("Failed to decode reference portrait bytes to image")
+        val refBytes = referencePortrait.toByteArray()
+        val refBitmap = BitmapFactory.decodeByteArray(refBytes, 0, refBytes.size)
+            ?: throw IllegalArgumentException("Failed to decode reference portrait bytes to image")
 
-            val refFaces = try {
-                det.detectFaces(refBitmap)
-            } finally {
-                refBitmap.recycle()
-            }
-
-            if (refFaces.isEmpty()) {
-                throw IllegalArgumentException("No face detected in reference portrait")
-            }
-
-            val refFaceCrop = try {
-                val freshBitmap = BitmapFactory.decodeByteArray(refBytes, 0, refBytes.size)
-                try {
-                    det.extractFaceCrop(freshBitmap, refFaces[0], interp.imageSquareSize)
-                } finally {
-                    freshBitmap.recycle()
-                }
-            } catch (e: Exception) {
-                throw IllegalStateException("Failed to extract face crop from reference portrait", e)
-            }
-
-            val embedding = interp.getEmbedding(refFaceCrop)
-            refFaceCrop.recycle()
-
-            if (embedding == null) {
-                throw IllegalStateException("Failed to compute embedding from reference portrait")
-            }
-            referenceEmbedding = embedding
-            Logger.d(TAG, "Pipeline initialized successfully with embedding size ${embedding.embedding.size}")
-        } else {
-            Logger.d(TAG, "Pipeline initialized for liveness only")
+        val refFaces = try {
+            det.detectFaces(refBitmap)
+        } finally {
+            refBitmap.recycle()
         }
+
+        if (refFaces.isEmpty()) {
+            throw IllegalArgumentException("No face detected in reference portrait")
+        }
+
+        val refFaceCrop = try {
+            val freshBitmap = BitmapFactory.decodeByteArray(refBytes, 0, refBytes.size)
+            try {
+                det.extractFaceCrop(freshBitmap, refFaces[0], interp.imageSquareSize)
+            } finally {
+                freshBitmap.recycle()
+            }
+        } catch (e: Exception) {
+            throw IllegalStateException("Failed to extract face crop from reference portrait", e)
+        }
+
+        val embedding = interp.getEmbedding(refFaceCrop)
+        refFaceCrop.recycle()
+
+        if (embedding == null) {
+            throw IllegalStateException("Failed to compute embedding from reference portrait")
+        }
+        referenceEmbedding = embedding
+        Logger.d(TAG, "Pipeline initialized successfully with embedding size ${embedding.embedding.size}")
 
         interpreter = interp
         detector = det
-    }
-
-    override suspend fun captureHighResolutionImage(frame: CameraFrame): ByteString? {
-        val platformHandle = frame.platformHandle
-        val (sourceBitmap, shouldRecycle) = when {
-            platformHandle is ImageProxy -> {
-                val rotationDegrees = platformHandle.imageInfo.rotationDegrees
-                val rawBitmap = platformHandle.toBitmap()
-                val activeDet = detector
-                val bitmap = if (activeDet != null) {
-                    activeDet.rotateBitmap(rawBitmap, rotationDegrees)
-                } else {
-                    rawBitmap
-                }
-                if (bitmap != rawBitmap) rawBitmap.recycle()
-                Pair(bitmap, true)
-            }
-            platformHandle is Bitmap -> {
-                val activeDet = detector
-                val bitmap = if (activeDet != null) {
-                    activeDet.rotateBitmap(platformHandle, frame.rotationDegrees)
-                } else {
-                    platformHandle
-                }
-                Pair(bitmap, bitmap != platformHandle)
-            }
-            else -> Pair(null, false)
-        }
-
-        if (sourceBitmap == null) return null
-        try {
-            val stream = ByteArrayOutputStream()
-            sourceBitmap.compress(Bitmap.CompressFormat.JPEG, 95, stream)
-            return ByteString(stream.toByteArray())
-        } finally {
-            if (shouldRecycle) {
-                sourceBitmap.recycle()
-            }
-        }
     }
 
     override suspend fun detectFaces(frame: CameraFrame): List<AndroidDetectedFace> {

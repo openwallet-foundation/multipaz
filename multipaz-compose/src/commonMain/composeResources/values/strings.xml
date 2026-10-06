@@ -242,4 +242,7 @@
     <string name="face_matcher_prompt_permission_required">Camera permission is required to verify your identity</string>
     <string name="face_matcher_prompt_grant_permission">Grant Permission</string>
     <string name="face_matcher_prompt_cancel">Cancel</string>
+    <!-- FaceMatcherLivenessPromptDialog.kt -->
+    <string name="face_matcher_liveness_prompt_default_title">Take a portrait</string>
+    <string name="face_matcher_liveness_prompt_default_subtitle">Follow the prompts to confirm liveness and capture your photo</string>
 </resources>

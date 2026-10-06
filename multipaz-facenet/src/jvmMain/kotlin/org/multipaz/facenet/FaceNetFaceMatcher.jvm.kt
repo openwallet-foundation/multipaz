@@ -1,13 +1,14 @@
 package org.multipaz.facenet
 
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.facematch.FaceMatcherLivenessSession
 import org.multipaz.facematch.FaceMatcherSession
 
 internal actual val isFaceNetSupported: Boolean
     get() = TfLiteCLibrary.isAvailable
 
 internal actual fun createFaceNetSession(
-    referencePortrait: ByteString?,
+    referencePortrait: ByteString,
     modelBytes: ByteString,
     config: FaceNetModelConfig,
     debug: Boolean,
@@ -16,6 +17,22 @@ internal actual fun createFaceNetSession(
 ): FaceMatcherSession {
     return JvmFaceNetSession(
         referencePortrait = referencePortrait,
+        modelBytes = modelBytes,
+        config = config,
+        debug = debug,
+        matcherName = matcherName,
+        matcherDisplayName = matcherDisplayName
+    )
+}
+
+internal actual fun createFaceNetLivenessSession(
+    modelBytes: ByteString,
+    config: FaceNetModelConfig,
+    debug: Boolean,
+    matcherName: String,
+    matcherDisplayName: String
+): FaceMatcherLivenessSession {
+    return JvmFaceNetLivenessSession(
         modelBytes = modelBytes,
         config = config,
         debug = debug,

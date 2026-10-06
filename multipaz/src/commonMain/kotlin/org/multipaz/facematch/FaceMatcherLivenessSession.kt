@@ -6,30 +6,26 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.io.bytestring.ByteString
 
 /**
- * Session driving the interactive face matching verification UI against a reference portrait.
+ * Session driving the interactive face liveness verification and photo capture UI.
  *
- * A fresh session instance is created per verification attempt via [FaceMatcher.createSession].
+ * A fresh session instance is created per liveness attempt via [FaceMatcher.createLivenessSession].
  * It directly controls the messages above and below the camera preview, the overlay, and verification outcome.
- *
- * @property referencePortrait reference portrait image bytes to verify against.
  */
-abstract class FaceMatcherSession(
-    val referencePortrait: ByteString
-) {
-    protected val _state = MutableStateFlow(FaceMatcherPromptState())
+abstract class FaceMatcherLivenessSession {
+    protected val _state = MutableStateFlow(FaceMatcherLivenessPromptState())
 
     /** Observable reactive state stream consumed by UI dialogs. */
-    val state: StateFlow<FaceMatcherPromptState> = _state.asStateFlow()
+    val state: StateFlow<FaceMatcherLivenessPromptState> = _state.asStateFlow()
 
     /**
-     * Feeds a camera frame captured from the front camera into the matcher session.
+     * Feeds a camera frame captured from the front camera into the liveness session.
      *
      * @param frame camera frame to process.
      */
     abstract suspend fun feedFrame(frame: CameraFrame)
 
     /**
-     * Cancels the verification session and releases any associated resources.
+     * Cancels the liveness session and releases any associated resources.
      */
     open fun cancel() {}
 
@@ -39,14 +35,16 @@ abstract class FaceMatcherSession(
     protected fun updateState(
         messageAbove: String? = _state.value.messageAbove,
         messageBelow: String? = _state.value.messageBelow,
-        outcome: FaceMatcherPromptState.Outcome = _state.value.outcome,
-        overlay: OverlayFrame? = _state.value.overlay
+        outcome: FaceMatcherLivenessPromptState.Outcome = _state.value.outcome,
+        overlay: OverlayFrame? = _state.value.overlay,
+        capturedImage: ByteString? = _state.value.capturedImage
     ) {
-        _state.value = FaceMatcherPromptState(
+        _state.value = FaceMatcherLivenessPromptState(
             messageAbove = messageAbove,
             messageBelow = messageBelow,
             outcome = outcome,
-            overlay = overlay
+            overlay = overlay,
+            capturedImage = capturedImage
         )
     }
 }
