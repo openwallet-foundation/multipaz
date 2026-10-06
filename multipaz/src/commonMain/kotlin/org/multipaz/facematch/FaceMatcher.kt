@@ -7,6 +7,9 @@ import kotlinx.io.bytestring.ByteString
  *
  * Implementations are registered in [FaceMatcherRepository] and instantiate a
  * fresh [FaceMatcherSession] for each verification attempt.
+ *
+ * The `multipaz-facenet` library provides an implementation based on Google FaceNet
+ * and the MobileFaceNet model which can be used for development and testing.
  */
 interface FaceMatcher {
     /** Unique machine identifier for this matcher (e.g. "simulated", "facenet"). */
@@ -25,14 +28,9 @@ interface FaceMatcher {
     /**
      * Creates a new [FaceMatcherSession] for a verification session against [referencePortrait].
      *
-     * The [referencePortrait] parameter must be an encoded image in one of the supported formats:
-     * - PNG (Portable Network Graphics)
-     * - JPEG (Joint Photographic Experts Group)
-     * - JPEG 2000 (JP2 file format or raw J2K codestream)
-     *
-     * @param referencePortrait the reference portrait image bytes to verify against in PNG, JPEG, or JPEG 2000 format.
+     * @param referencePortrait the reference portrait image bytes to verify against.
      * @return a new [FaceMatcherSession] instance for this verification session.
-     * @throws IllegalArgumentException if [referencePortrait] is not in a supported image format.
+     * @throws IllegalArgumentException if [referencePortrait] is invalid or in an unsupported format.
      */
     fun createSession(referencePortrait: ByteString): FaceMatcherSession
 

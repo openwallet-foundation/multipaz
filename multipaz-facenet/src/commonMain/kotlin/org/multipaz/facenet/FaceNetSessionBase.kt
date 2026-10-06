@@ -36,6 +36,12 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
     randomSeed: Long = clock()
 ) : FaceMatcherSession(referencePortrait) {
 
+    init {
+        require(isSupportedReferencePortraitFormat(referencePortrait)) {
+            "Unsupported reference portrait format. Supported formats are PNG, JPEG, and JPEG 2000."
+        }
+    }
+
     enum class Phase {
         INITIALIZING,
         POSITIONING,

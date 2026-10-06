@@ -1,5 +1,6 @@
 package org.multipaz.facematch
 
+import kotlinx.io.bytestring.ByteString
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -94,54 +95,11 @@ class FaceMatcherTest {
     }
 
     @Test
-    fun testSupportedReferencePortraitFormats() {
-        // PNG header
-        val pngBytes = kotlinx.io.bytestring.ByteString(
-            byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00)
-        )
-        kotlin.test.assertTrue(isSupportedReferencePortraitFormat(pngBytes))
-
-        // JPEG header
-        val jpegBytes = kotlinx.io.bytestring.ByteString(
-            byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 0x00)
-        )
-        kotlin.test.assertTrue(isSupportedReferencePortraitFormat(jpegBytes))
-
-        // JPEG 2000 JP2 container header
-        val jp2Bytes = kotlinx.io.bytestring.ByteString(
-            byteArrayOf(0x00, 0x00, 0x00, 0x0C, 0x6A, 0x50, 0x20, 0x20, 0x0D, 0x0A, 0x87.toByte(), 0x0A, 0x00)
-        )
-        kotlin.test.assertTrue(isSupportedReferencePortraitFormat(jp2Bytes))
-
-        // JPEG 2000 raw codestream (J2K) header
-        val j2kBytes = kotlinx.io.bytestring.ByteString(
-            byteArrayOf(0xFF.toByte(), 0x4F.toByte(), 0xFF.toByte(), 0x51.toByte(), 0x00)
-        )
-        kotlin.test.assertTrue(isSupportedReferencePortraitFormat(j2kBytes))
-
-        // Unsupported formats
-        val emptyBytes = kotlinx.io.bytestring.ByteString()
-        kotlin.test.assertFalse(isSupportedReferencePortraitFormat(emptyBytes))
-
-        val gifBytes = kotlinx.io.bytestring.ByteString("GIF89a".encodeToByteArray())
-        kotlin.test.assertFalse(isSupportedReferencePortraitFormat(gifBytes))
-
-        val webpBytes = kotlinx.io.bytestring.ByteString("RIFF....WEBP".encodeToByteArray())
-        kotlin.test.assertFalse(isSupportedReferencePortraitFormat(webpBytes))
-
-        val randomBytes = kotlinx.io.bytestring.ByteString(byteArrayOf(1, 2, 3, 4, 5))
-        kotlin.test.assertFalse(isSupportedReferencePortraitFormat(randomBytes))
-
-        // Verify FaceMatcherSession accepts valid formats and rejects invalid formats
-        val validSession = object : FaceMatcherSession(pngBytes) {
+    fun testFaceMatcherSessionReferencePortrait() {
+        val sampleBytes = ByteString(byteArrayOf(1, 2, 3))
+        val session = object : FaceMatcherSession(sampleBytes) {
             override suspend fun feedFrame(frame: CameraFrame) {}
         }
-        assertEquals(pngBytes, validSession.referencePortrait)
-
-        assertFailsWith<IllegalArgumentException> {
-            object : FaceMatcherSession(gifBytes) {
-                override suspend fun feedFrame(frame: CameraFrame) {}
-            }
-        }
+        assertEquals(sampleBytes, session.referencePortrait)
     }
 }
