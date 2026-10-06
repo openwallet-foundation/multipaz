@@ -1,7 +1,13 @@
 package org.multipaz.prompt
 
-import org.multipaz.securearea.PassphraseConstraints
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.io.bytestring.ByteString
+import org.multipaz.facematch.CameraFrame
+import org.multipaz.facematch.FaceMatcher
+import org.multipaz.facematch.FaceMatcherLivenessSession
+import org.multipaz.facematch.FaceMatcherSession
+import org.multipaz.securearea.PassphraseConstraints
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -20,6 +26,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -27,6 +34,22 @@ import kotlin.test.fail
 class PromptModelTest {
     private lateinit var promptModel: TestPromptModel
     private var mockUiJob: Job? = null
+
+    private class TestFaceMatcherSession(referencePortrait: ByteString) : FaceMatcherSession(referencePortrait) {
+        override suspend fun feedFrame(frame: CameraFrame) {}
+    }
+
+    private class TestFaceMatcherLivenessSession : FaceMatcherLivenessSession() {
+        override suspend fun feedFrame(frame: CameraFrame) {}
+    }
+
+    private class TestFaceMatcher : FaceMatcher {
+        override val name: String = "test"
+        override fun createSession(referencePortrait: ByteString): FaceMatcherSession =
+            TestFaceMatcherSession(referencePortrait)
+        override fun createLivenessSession(): FaceMatcherLivenessSession =
+            TestFaceMatcherLivenessSession()
+    }
 
     @BeforeTest
     fun resetSharedState() {
@@ -207,6 +230,68 @@ class PromptModelTest {
         secondRequest.cancel()
     }
 
+    @Test
+    fun faceMatcherPromptSuccess() = runTest {
+        val testPortrait = ByteString(byteArrayOf(1, 2, 3, 4))
+        val testMatcher = TestFaceMatcher()
+        collectFaceMatcherDialogState { request ->
+            assertNotNull(request.faceMatcherSession)
+            assertEquals(FaceMatchingReason, request.reason)
+            true
+        }
+
+        val result = promptModel.showFaceMatcherPrompt(
+            matcher = testMatcher,
+            referencePortrait = testPortrait
+        )
+        assertTrue(result)
+    }
+
+    @Test
+    fun faceMatcherPromptCustomReason() = runTest {
+        val testPortrait = ByteString(byteArrayOf(1, 2, 3, 4))
+        val testMatcher = TestFaceMatcher()
+        val customReason = Reason.HumanReadable("Custom Title", "Custom Subtitle", false)
+        collectFaceMatcherDialogState { request ->
+            assertEquals(customReason, request.reason)
+            true
+        }
+
+        val result = promptModel.showFaceMatcherPrompt(
+            matcher = testMatcher,
+            referencePortrait = testPortrait,
+            reason = customReason
+        )
+        assertTrue(result)
+    }
+
+    @Test
+    fun faceMatcherPromptDismissed() = runTest {
+        val testPortrait = ByteString(byteArrayOf(5, 6, 7, 8))
+        val testMatcher = TestFaceMatcher()
+        collectFaceMatcherDialogState {
+            throw PromptDismissedException()
+        }
+
+        val result = promptModel.showFaceMatcherPrompt(
+            matcher = testMatcher,
+            referencePortrait = testPortrait
+        )
+        assertFalse(result)
+    }
+
+    @Test
+    fun faceMatcherPromptNoDialogRegistered() = runTest {
+        val unconfiguredModel = TestPromptModel.Builder().build()
+        assertFailsWith<IllegalStateException> {
+            unconfiguredModel.showFaceMatcherPrompt(
+                matcher = TestFaceMatcher(),
+                referencePortrait = ByteString(byteArrayOf(1, 2, 3, 4))
+            )
+        }
+    }
+
+
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun TestScope.collectDialogState(
         mockInput: suspend (request: PassphrasePromptDialogModel.PassphraseRequest) -> String
@@ -241,6 +326,40 @@ class PromptModelTest {
         }
         return dialogState
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun TestScope.collectFaceMatcherDialogState(
+        mockInput: suspend (request: FaceMatcherPromptDialogModel.FaceMatcherRequest) -> Boolean
+    ): MutableList<PromptDialogModel.DialogState<FaceMatcherPromptDialogModel.FaceMatcherRequest, Boolean>> {
+        val dialogState = mutableListOf<PromptDialogModel.DialogState<FaceMatcherPromptDialogModel.FaceMatcherRequest, Boolean>>()
+        mockUiJob = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            var pendingResultChannel: SendChannel<Boolean>? = null
+            try {
+                val dialogModel = promptModel.getDialogModel(FaceMatcherPromptDialogModel.DialogType)
+                dialogModel.dialogState.collect { state ->
+                    if (dialogState.isNotEmpty() || state !is PromptDialogModel.NoDialogState) {
+                        dialogState.add(state)
+                    }
+                    pendingResultChannel = null
+                    if (state is PromptDialogModel.DialogShownState) {
+                        try {
+                            val result = mockInput(state.parameters)
+                            state.resultChannel.send(result)
+                        } catch (e: PromptDismissedException) {
+                            state.resultChannel.close(e)
+                        }
+                    }
+                }
+            } catch (err: CancellationException) {
+                pendingResultChannel?.close(PromptDismissedException())
+                throw err
+            } catch (err: Exception) {
+                fail("Unexpected error", err)
+            }
+        }
+        return dialogState
+    }
+
 
     companion object {
         // Special value to indicate that no result should be sent

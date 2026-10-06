@@ -1,6 +1,7 @@
 package org.multipaz.compose.camera
 
 import androidx.compose.ui.graphics.Matrix
+import org.multipaz.facematch.CameraFrame as FacematchCameraFrame
 
 /**
  * Type containing a frame captured from the [Camera] composable.
@@ -41,3 +42,20 @@ data class CameraFrame(
     /** Determine if the rotation angle indicates the camera was used from a landscape phone orientation mode. */
     val isLandscape: Boolean = (rotation == 90 || rotation == 270)
 }
+
+/**
+ * Converts this compose [CameraFrame] to an [FacematchCameraFrame].
+ */
+fun CameraFrame.toCameraFrame(): FacematchCameraFrame {
+    return FacematchCameraFrame(
+        width = width,
+        height = height,
+        rotationDegrees = rotation,
+        platformHandle = cameraImage.platformHandle
+    )
+}
+
+/**
+ * Converts this compose [CameraFrame] to an [FacematchCameraFrame].
+ */
+fun CameraFrame.toPromptCameraFrame(): FacematchCameraFrame = toCameraFrame()

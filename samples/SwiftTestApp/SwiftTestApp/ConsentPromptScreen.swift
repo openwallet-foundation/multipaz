@@ -1254,7 +1254,8 @@ extension DocumentStore {
             random: KotlinRandom.companion,
             saltSizeNumBits: 128,
             creationTime: KotlinInstant.companion.DISTANT_PAST,
-            expiresIn: nil
+            expiresIn: nil,
+            type: "dc+sd-jwt"
         )
         
         try await credential.certify(

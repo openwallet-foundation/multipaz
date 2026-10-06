@@ -13,8 +13,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.io.bytestring.ByteString
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
+import org.jetbrains.skia.ImageInfo
 import org.multipaz.compose.camera.CameraFrame
 import org.multipaz.compose.camera.CameraImage
+import org.multipaz.compose.camera.toSkiaImage
+import org.multipaz.facematch.OverlayFrame
 import platform.CoreGraphics.CGBitmapContextCreate
 import platform.CoreGraphics.CGBitmapContextCreateImage
 import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
@@ -159,4 +162,16 @@ actual fun ImageBitmap.cropRotateScaleImage(
 actual fun rememberUiBoundCoroutineScope(
     getContext: @DisallowComposableCalls () -> CoroutineContext
 ): CoroutineScope = rememberCoroutineScope(getContext)
+
+actual fun OverlayFrame.toImageBitmap(): ImageBitmap {
+    val uiImage = platformHandle as? UIImage
+    if (uiImage != null) {
+        val skiaImage = uiImage.toSkiaImage()
+        if (skiaImage != null) {
+            return skiaImage.toComposeImageBitmap()
+        }
+    }
+    return ImageBitmap(width, height)
+}
+
 

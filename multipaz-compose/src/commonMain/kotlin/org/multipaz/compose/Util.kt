@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.compose.camera.CameraFrame
+import org.multipaz.facematch.OverlayFrame
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 
@@ -160,3 +161,9 @@ expect fun rememberUiBoundCoroutineScope(
         EmptyCoroutineContext
     }
 ): CoroutineScope
+
+/**
+ * Converts an [OverlayFrame] into an [ImageBitmap] for rendering in Compose.
+ */
+expect fun OverlayFrame.toImageBitmap(): ImageBitmap
+

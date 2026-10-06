@@ -1,6 +1,8 @@
 package org.multipaz.prompt
 
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.document.Document
+import org.multipaz.facematch.FaceMatcher
 import org.multipaz.presentment.CredentialSelection
 import org.multipaz.presentment.ConsentData
 import org.multipaz.prompt.PassphrasePromptDialogModel.PassphraseRequest
@@ -9,9 +11,14 @@ import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.securearea.PassphraseConstraints
 import kotlin.coroutines.cancellation.CancellationException
 
+/** Gets the [PassphrasePromptDialogModel] from this [PromptModel]. */
 fun PromptModel.getPassphraseDialogModel() = getDialogModel(PassphrasePromptDialogModel.DialogType)
 
+/** Gets the [ConsentPromptDialogModel] from this [PromptModel]. */
 fun PromptModel.getConsentPromptDialogModel() = getDialogModel(ConsentPromptDialogModel.DialogType)
+
+/** Gets the [FaceMatcherPromptDialogModel] from this [PromptModel]. */
+fun PromptModel.getFaceMatcherDialogModel() = getDialogModel(FaceMatcherPromptDialogModel.DialogType)
 
 /**
  * Prompts user for authentication through a passphrase.
@@ -94,3 +101,39 @@ suspend fun PromptModel.requestConsent(
         )
     )
 }
+
+/**
+ * Prompts user to verify their identity by matching their face against a reference portrait using [matcher].
+ *
+ * @param matcher the [FaceMatcher] to use for face verification.
+ * @param referencePortrait the reference portrait image bytes.
+ * @param reason the [Reason] describing why face matching is being requested. Defaults to [FaceMatchingReason].
+ * @return `true` if face match succeeded, `false` if dismissed, failed, or cancelled.
+ * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
+ * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
+ */
+@Throws(
+    CancellationException::class,
+    IllegalStateException::class,
+    PromptModelNotAvailableException::class,
+    PromptUiNotAvailableException::class
+)
+suspend fun PromptModel.showFaceMatcherPrompt(
+    matcher: FaceMatcher,
+    referencePortrait: ByteString,
+    reason: Reason = FaceMatchingReason
+): Boolean {
+    val dialogModel = getFaceMatcherDialogModel()
+    val faceMatcherSession = matcher.createSession(referencePortrait)
+    return try {
+        dialogModel.displayPrompt(
+            FaceMatcherPromptDialogModel.FaceMatcherRequest(
+                faceMatcherSession = faceMatcherSession,
+                reason = reason
+            )
+        )
+    } catch (e: PromptDismissedException) {
+        false
+    }
+}
+
