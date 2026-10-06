@@ -17,6 +17,9 @@ The project provides libraries written in [Kotlin Multiplatform](https://kotlinl
   according to ISO/IEC 18013-7:2025 and OpenID4VP 1.0.
 - `multipaz-compose` provides rich UI elements to be used in Compose
   applications.
+- [`multipaz-facenet`](multipaz-facenet/README.md) provides on-device and server-side
+  biometric face matching and active liveness verification using MediaPipe BlazeFace
+  and MobileFaceNet.
 - `multipaz-utopia` contains document and transaction data types specific
   to the Multipaz Utopia universe.
 - `multipaz-doctypes` contains standardized document and transaction data
