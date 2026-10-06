@@ -26,8 +26,8 @@ The images in `testfaces/` constitute a lightweight, curated test corpus used ac
 | `qualcomm_demo_1.png` | Person 1 (Demo A) | Frontal portrait in PNG format | 250x250 | 90.8 KB | BSD-3-Clause | Converted from `qualcomm_demo_1.jpg` |
 | `qualcomm_demo_1.jp2` | Person 1 (Demo A) | Frontal portrait in JPEG 2000 format | 250x250 | 15.7 KB | BSD-3-Clause | Converted from `qualcomm_demo_1.jpg` |
 | `qualcomm_demo_2.jpg` | Person 1 (Demo B) | Frontal portrait, canonical demo pair input 2 | 250x250 | 9.0 KB | BSD-3-Clause | Qualcomm AI Hub MobileFaceNet (`v0.62.2`) |
-| `warren_portrait.jpg` | Person 2 (Warren) | Official U.S. Senate portrait with glasses (113th Congress) | 204x250 | 10.8 KB | Public Domain | U.S. Congress (`unitedstates/images`, 17 U.S.C. § 105) |
-| `warren_portrait_114th.jpg` | Person 2 (Warren) | Official U.S. Senate portrait with glasses (114th Congress) | 960x1200 | 77.3 KB | Public Domain | Wikimedia Commons (`File:Elizabeth_Warren,_official_portrait,_114th_Congress.jpg`, U.S. Congress) |
+| `synthetic_senator_1.jpg` | Person 2 (Synthetic Senator) | Synthetic frontal portrait of a woman senator (Set 1) | 687x1024 | 84.6 KB | CC0 / Public Domain | AI-generated test sample |
+| `synthetic_senator_2.jpg` | Person 2 (Synthetic Senator) | Synthetic frontal portrait of a woman senator (Set 2) | 687x1024 | 80.9 KB | CC0 / Public Domain | AI-generated test sample |
 | `erika_mustermann.jpg` | Person 3 (Erika 2010) | Official German identity card sample portrait (2010) | 420x540 | 117.0 KB | Public Domain | Wikimedia Commons (`File:Erika_Mustermann_2010.jpg`, Bundesdruckerei) |
 | `erika_mustermann_2001.jpg` | Person 4 (Erika 2001) | Official German identity card sample portrait (2001) | 709x924 | 74.7 KB | Public Domain | Wikimedia Commons (`File:Erika_Mustermann_2001.jpg`, Bundesdruckerei) |
 | `male_portrait.jpg` | Person 5 (Male) | OpenID4VCI credential portrait | 312x312 | 12.9 KB | Apache-2.0 | `multipaz-openid4vci` resources |

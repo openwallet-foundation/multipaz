@@ -47,8 +47,8 @@ class FaceMatchingTest {
         val corpus = mapOf(
             "qualcomm_1" to (FaceTestData.decodeImageByteString(FaceTestData.QUALCOMM_DEMO_1_BASE64) to "qualcomm"),
             "qualcomm_2" to (FaceTestData.decodeImageByteString(FaceTestData.QUALCOMM_DEMO_2_BASE64) to "qualcomm"),
-            "warren" to (FaceTestData.decodeImageByteString(FaceTestData.WARREN_PORTRAIT_BASE64) to "warren"),
-            "warren_114th" to (FaceTestData.decodeImageByteString(FaceTestData.WARREN_PORTRAIT_114TH_BASE64) to "warren"),
+            "synthetic_senator_1" to (FaceTestData.decodeImageByteString(FaceTestData.SYNTHETIC_SENATOR_1_BASE64) to "synthetic_senator"),
+            "synthetic_senator_2" to (FaceTestData.decodeImageByteString(FaceTestData.SYNTHETIC_SENATOR_2_BASE64) to "synthetic_senator"),
             "erika_2010" to (FaceTestData.decodeImageByteString(FaceTestData.ERIKA_MUSTERMANN_BASE64) to "erika_2010"),
             "erika_2001" to (FaceTestData.decodeImageByteString(FaceTestData.ERIKA_MUSTERMANN_2001_BASE64) to "erika_2001"),
             "male" to (FaceTestData.decodeImageByteString(FaceTestData.MALE_PORTRAIT_BASE64) to "male"),
@@ -90,14 +90,14 @@ class FaceMatchingTest {
             "Qualcomm same-identity pair similarity ($simQualcomm) must be >= threshold (${FaceNetModelConfig.MOBILE_FACENET.matchThreshold})"
         )
 
-        // 2. Same Identity Test (Elizabeth Warren 113th vs 114th Congress)
-        val warrenEmb = embeddings["warren"]!!
-        val warren114thEmb = embeddings["warren_114th"]!!
-        val simWarren = warrenEmb.calculateSimilarity(warren114thEmb)
-        println("Warren 113th vs 114th ALIGNED similarity: $simWarren")
+        // 2. Same Identity Test (Synthetic Senator 1 vs 2)
+        val senator1Emb = embeddings["synthetic_senator_1"]!!
+        val senator2Emb = embeddings["synthetic_senator_2"]!!
+        val simSenator = senator1Emb.calculateSimilarity(senator2Emb)
+        println("Synthetic Senator 1 vs 2 ALIGNED similarity: $simSenator")
         assertTrue(
-            simWarren >= 0.50f,
-            "Warren 113th vs 114th cross-session similarity ($simWarren) must be >= 0.50"
+            simSenator >= 0.55f,
+            "Synthetic Senator 1 vs 2 cross-session similarity ($simSenator) must be >= 0.55"
         )
 
         // 3. Test Erika Mustermann 2001 vs 2010:

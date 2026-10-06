@@ -48,8 +48,8 @@ class FaceEmbeddingRegressionTest {
         val corpus = listOf(
             "qualcomm_demo_1" to FaceTestData.QUALCOMM_DEMO_1_BASE64,
             "qualcomm_demo_2" to FaceTestData.QUALCOMM_DEMO_2_BASE64,
-            "warren_portrait" to FaceTestData.WARREN_PORTRAIT_BASE64,
-            "warren_portrait_114th" to FaceTestData.WARREN_PORTRAIT_114TH_BASE64,
+            "synthetic_senator_1" to FaceTestData.SYNTHETIC_SENATOR_1_BASE64,
+            "synthetic_senator_2" to FaceTestData.SYNTHETIC_SENATOR_2_BASE64,
             "erika_mustermann" to FaceTestData.ERIKA_MUSTERMANN_BASE64,
             "erika_mustermann_2001" to FaceTestData.ERIKA_MUSTERMANN_2001_BASE64,
             "male_portrait" to FaceTestData.MALE_PORTRAIT_BASE64,
