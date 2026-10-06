@@ -233,7 +233,7 @@
     <string name="floating_item_heading_and_date_time_not_set">Not set</string>
 
     <!-- FaceMatcherPromptDialog.kt -->
-    <string name="face_matcher_prompt_default_title">Verify it\'s you</string>
+    <string name="face_matcher_prompt_default_title">Verify it's you</string>
     <string name="face_matcher_prompt_default_subtitle">Look at the camera to verify your identity</string>
     <string name="face_matcher_prompt_position_face">Position your face in the frame</string>
     <string name="face_matcher_prompt_hold_still">Hold still…</string>

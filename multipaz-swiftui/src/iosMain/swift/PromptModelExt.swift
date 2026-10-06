@@ -35,6 +35,17 @@ extension PromptModel {
         }
         return humanReadable
     }
+
+    public func showFaceMatcherPrompt(
+        matcher: any FaceMatcher,
+        referencePortrait: ByteString
+    ) async throws -> KotlinBoolean {
+        return try await self.showFaceMatcherPrompt(
+            matcher: matcher,
+            referencePortrait: referencePortrait,
+            reason: FaceMatchingReason.shared
+        )
+    }
 }
 
 private class PassphraseEvalulatorHandler: KotlinSuspendFunction1 {

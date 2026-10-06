@@ -84,14 +84,11 @@ actual suspend fun launchAndroidPresentmentActivity(
             if (paData.requireFaceMatch) {
                 val portrait = paData.referencePortrait
                     ?: ByteString(SampleData.PORTRAIT_BASE64URL.fromBase64Url())
+                val faceMatcher = paData.faceMatcher
+                    ?: throw IllegalStateException("No face matcher configured")
                 if (!(PresentmentActivity.promptModel as AndroidPromptModel).showFaceMatcherPrompt(
-                    referencePortrait = portrait,
-                    matcher = paData.faceMatcher,
-                    reason = Reason.HumanReadable(
-                        title = "Verify it's you",
-                        subtitle = "Match your face against your document portrait",
-                        requireConfirmation = false
-                    )
+                    matcher = faceMatcher,
+                    referencePortrait = portrait
                 )) {
                     throw PresentmentCanceledException("Presentment cancelled because user dismissed face matcher prompt")
                 }

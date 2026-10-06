@@ -28,16 +28,6 @@ public struct FaceMatcherLivenessCaptureView: View {
 
     public var body: some View {
         VStack(spacing: 16) {
-            let titleText = promptState?.messageAbove ?? ""
-            if !titleText.isEmpty {
-                Text(titleText)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .multilineTextAlignment(.center)
-                    .frame(minHeight: 56)
-                    .frame(maxWidth: .infinity)
-            }
-
             let isSuccess = promptState?.status == FaceMatcherLivenessPromptState.Status.success
             let cornerRadius: CGFloat = 36
 
@@ -78,9 +68,9 @@ public struct FaceMatcherLivenessCaptureView: View {
             }
             .frame(width: 220, height: 284)
 
-            let belowText = promptState?.messageBelow ?? ""
-            if !belowText.isEmpty {
-                Text(belowText)
+            let messageText = promptState?.message ?? ""
+            if !messageText.isEmpty {
+                Text(messageText)
                     .font(.body)
                     .foregroundColor(promptState?.status == FaceMatcherLivenessPromptState.Status.failed ? .red : .secondary)
                     .multilineTextAlignment(.center)

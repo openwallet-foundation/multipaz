@@ -51,6 +51,21 @@ public func defaultToHumanReadable(
             requireConfirmation: false
         )
     }
+    if reason is FaceMatchingReason {
+        return ReasonHumanReadable(
+            title: NSLocalizedString(
+                "face_matcher_prompt_default_title",
+                value: "Verify it's you",
+                comment: "Title for face matching prompt"
+            ),
+            subtitle: NSLocalizedString(
+                "face_matcher_prompt_default_subtitle",
+                value: "Look at the camera to verify your identity",
+                comment: "Subtitle for face matching prompt"
+            ),
+            requireConfirmation: false
+        )
+    }
     return ReasonHumanReadable(
         title: NSLocalizedString(
             "key_unlock_default_title",

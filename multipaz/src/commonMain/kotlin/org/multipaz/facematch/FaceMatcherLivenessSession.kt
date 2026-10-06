@@ -33,15 +33,13 @@ abstract class FaceMatcherLivenessSession {
      * Atomically updates the prompt UI state.
      */
     protected fun updateState(
-        messageAbove: String? = _state.value.messageAbove,
-        messageBelow: String? = _state.value.messageBelow,
+        message: String? = _state.value.message,
         status: FaceMatcherLivenessPromptState.Status = _state.value.status,
         overlay: OverlayFrame? = _state.value.overlay,
         capturedImage: ByteString? = _state.value.capturedImage
     ) {
         _state.value = FaceMatcherLivenessPromptState(
-            messageAbove = messageAbove,
-            messageBelow = messageBelow,
+            message = message,
             status = status,
             overlay = overlay,
             capturedImage = if (status == FaceMatcherLivenessPromptState.Status.SUCCESS) capturedImage else null

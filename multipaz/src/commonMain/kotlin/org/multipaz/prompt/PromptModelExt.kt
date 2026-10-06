@@ -103,13 +103,12 @@ suspend fun PromptModel.requestConsent(
 }
 
 /**
- * Prompts user to verify their identity by matching their face against a reference portrait.
+ * Prompts user to verify their identity by matching their face against a reference portrait using [matcher].
  *
+ * @param matcher the [FaceMatcher] to use for face verification.
  * @param referencePortrait the reference portrait image bytes.
- * @param reason user-facing description of the verification reason.
- * @param matcher optional [FaceMatcher] to use for this request.
- * @param document optional [Document] context.
- * @return `true` if face match succeeded, `false` if dismissed or failed.
+ * @param reason the [Reason] describing why face matching is being requested. Defaults to [FaceMatchingReason].
+ * @return `true` if face match succeeded, `false` if dismissed, failed, or cancelled.
  * @throws PromptModelNotAvailableException if `coroutineContext` does not have [PromptModel].
  * @throws PromptUiNotAvailableException if the UI layer hasn't bound any UI for [PromptModel].
  */
@@ -120,27 +119,17 @@ suspend fun PromptModel.requestConsent(
     PromptUiNotAvailableException::class
 )
 suspend fun PromptModel.showFaceMatcherPrompt(
+    matcher: FaceMatcher,
     referencePortrait: ByteString,
-    reason: Reason = Reason.HumanReadable(
-        title = "Verify it's you",
-        subtitle = "Look at the camera to verify your identity",
-        requireConfirmation = false
-    ),
-    matcher: FaceMatcher? = null,
-    document: Document? = null
+    reason: Reason = FaceMatchingReason
 ): Boolean {
     val dialogModel = getFaceMatcherDialogModel()
-    val matcherToUse = matcher ?: dialogModel.defaultMatcher
-        ?: throw IllegalStateException("No FaceMatcher provided or configured as default")
-    val faceMatcherSession = matcherToUse.createSession(referencePortrait)
+    val faceMatcherSession = matcher.createSession(referencePortrait)
     return try {
         dialogModel.displayPrompt(
             FaceMatcherPromptDialogModel.FaceMatcherRequest(
-                referencePortrait = referencePortrait,
-                reason = reason,
-                matcher = matcherToUse,
                 faceMatcherSession = faceMatcherSession,
-                document = document
+                reason = reason
             )
         )
     } catch (e: PromptDismissedException) {

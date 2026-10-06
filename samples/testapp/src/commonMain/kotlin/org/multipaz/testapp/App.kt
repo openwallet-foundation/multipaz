@@ -106,7 +106,6 @@ import org.multipaz.presentment.uriSchemePresentment
 import org.multipaz.facenet.FaceNetFaceMatcher
 import org.multipaz.facenet.FaceNetModelConfig
 import org.multipaz.facematch.FaceMatcherRepository
-import org.multipaz.prompt.FaceMatcherPromptDialogModel
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.promptModelRequestConsent
 import org.multipaz.prompt.promptModelSilentConsent
@@ -506,8 +505,6 @@ class App private constructor (val promptModel: PromptModel) {
                 )
             )
         }
-        promptModel.getDialogModel(FaceMatcherPromptDialogModel.DialogType).defaultMatcher =
-            faceMatcherRepository.defaultMatcher
     }
 
     private val certsValidFrom = LocalDate.parse("2024-12-01").atStartOfDayIn(TimeZone.UTC)
@@ -1612,7 +1609,7 @@ class App private constructor (val promptModel: PromptModel) {
                         FakeIssuerApprovalScreen(
                             portraitBytes = capturedPortraitForApproval.value,
                             onApprove = {
-                                showToast("Portrait approved and sent to fake issuer")
+                                showToast("Portrait approved and sent to issuer")
                                 capturedPortraitForApproval.value = null
                                 navController.popBackStack<FaceMatcherPromptDestination>(inclusive = false)
                             },

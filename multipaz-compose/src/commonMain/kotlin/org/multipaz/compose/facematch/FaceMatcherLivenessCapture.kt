@@ -112,20 +112,6 @@ fun FaceMatcherLivenessCapture(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        val titleText = promptState.messageAbove ?: ""
-        if (titleText.isNotEmpty()) {
-            Text(
-                text = titleText,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-                    .wrapContentHeight(Alignment.CenterVertically)
-            )
-        }
-
         if (!cameraPermissionState.isGranted) {
             Column(
                 modifier = Modifier
@@ -216,7 +202,7 @@ fun FaceMatcherLivenessCapture(
                 }
             }
 
-            val statusText = promptState.messageBelow ?: ""
+            val statusText = promptState.message ?: ""
             if (statusText.isNotEmpty()) {
                 Text(
                     text = statusText,

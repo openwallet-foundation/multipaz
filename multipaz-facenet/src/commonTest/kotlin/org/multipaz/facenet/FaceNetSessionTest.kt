@@ -110,8 +110,7 @@ class FaceNetSessionTest {
         var currentTime = 1000L
         val session = TestFaceNetSession(clock = { currentTime })
 
-        assertEquals("Verify Identity", session.state.value.messageAbove)
-        assertEquals("Position your face and look at the camera", session.state.value.messageBelow)
+        assertEquals("Position your face and look at the camera", session.state.value.message)
         assertEquals(FaceMatcherPromptState.Status.IN_PROGRESS, session.state.value.status)
         assertEquals(RingSegment.NUM_SEGMENTS, session.ringSegments.size)
         assertTrue(session.ringSegments.all { it.color == RingSegment.COLOR_DARK_GRAY })
@@ -132,8 +131,7 @@ class FaceNetSessionTest {
         session.feedFrame(dummyFrame)
 
         assertEquals(FaceMatcherPromptState.Status.FAILED, session.state.value.status)
-        assertEquals("Verification Failed", session.state.value.messageAbove)
-        assertEquals("Face verification timed out (0% match, required 70%)", session.state.value.messageBelow)
+        assertEquals("Face verification timed out", session.state.value.message)
         assertTrue(session.ringSegments.all { it.color == RingSegment.COLOR_RED })
     }
 
@@ -146,8 +144,7 @@ class FaceNetSessionTest {
         session.feedFrame(dummyFrame)
 
         assertEquals(FaceMatcherPromptState.Status.FAILED, session.state.value.status)
-        assertEquals("Initialization Failed", session.state.value.messageAbove)
-        assertEquals("Corrupt TFLite model data", session.state.value.messageBelow)
+        assertEquals("Corrupt TFLite model data", session.state.value.message)
     }
 
     @Test
@@ -158,15 +155,11 @@ class FaceNetSessionTest {
 
         // Frames 1 and 2: no face, missed count increments
         session.feedFrame(dummyFrame)
-        assertEquals("Position your face", session.state.value.messageAbove)
-
         session.feedFrame(dummyFrame)
-        assertEquals("Position your face", session.state.value.messageAbove)
 
         // Frame 3: missedFaceFrames >= 3 triggers "No face detected"
         session.feedFrame(dummyFrame)
-        assertEquals("Position your face", session.state.value.messageAbove)
-        assertEquals("No face detected", session.state.value.messageBelow)
+        assertEquals("No face detected", session.state.value.message)
     }
 
     @Test
@@ -177,8 +170,7 @@ class FaceNetSessionTest {
 
         session.feedFrame(dummyFrame)
 
-        assertEquals("Multiple faces detected", session.state.value.messageAbove)
-        assertEquals("Ensure only one person is in the frame", session.state.value.messageBelow)
+        assertEquals("Ensure only one person is in the frame", session.state.value.message)
     }
 
     @Test
@@ -193,35 +185,35 @@ class FaceNetSessionTest {
         // Turn right prompt (yaw > 12)
         session.mockFaces = listOf(MockDetectedFace(yaw = 20f))
         session.feedFrame(dummyFrame)
-        assertEquals("Turn your head slightly to the right", session.state.value.messageBelow)
+        assertEquals("Turn your head slightly to the right", session.state.value.message)
 
         // Turn left prompt (yaw < -12)
         session.mockFaces = listOf(MockDetectedFace(yaw = -20f))
         session.feedFrame(dummyFrame)
-        assertEquals("Turn your head slightly to the left", session.state.value.messageBelow)
+        assertEquals("Turn your head slightly to the left", session.state.value.message)
 
         // Tilt down prompt (pitch > 12)
         session.mockFaces = listOf(MockDetectedFace(pitch = 20f))
         session.feedFrame(dummyFrame)
-        assertEquals("Tilt your head slightly down", session.state.value.messageBelow)
+        assertEquals("Tilt your head slightly down", session.state.value.message)
 
         // Tilt up prompt (pitch < -12)
         session.mockFaces = listOf(MockDetectedFace(pitch = -20f))
         session.feedFrame(dummyFrame)
-        assertEquals("Tilt your head slightly up", session.state.value.messageBelow)
+        assertEquals("Tilt your head slightly up", session.state.value.message)
 
         // Roll prompt (roll > 15 or < -15)
         session.mockFaces = listOf(MockDetectedFace(roll = 25f))
         session.feedFrame(dummyFrame)
-        assertEquals("Keep your head level", session.state.value.messageBelow)
+        assertEquals("Keep your head level", session.state.value.message)
 
         session.mockFaces = listOf(MockDetectedFace(roll = -25f))
         session.feedFrame(dummyFrame)
-        assertEquals("Keep your head level", session.state.value.messageBelow)
+        assertEquals("Keep your head level", session.state.value.message)
     }
 
     @Test
-    fun testMatchTimeoutWithFormattedPercentageError() = runTest {
+    fun testMatchTimeoutWithoutMatch() = runTest {
         var currentTime = 1000L
         val session = TestFaceNetSession(clock = { currentTime })
 
@@ -238,7 +230,7 @@ class FaceNetSessionTest {
         // First straight face frame at t = 1000
         session.feedFrame(dummyFrame)
         assertEquals(FaceNetSessionBase.Phase.POSITIONING, session.phase)
-        assertEquals("Verifying Identity", session.state.value.messageAbove)
+        assertEquals("Hold still and look directly at the camera...", session.state.value.message)
 
         // Advance 4 seconds (still within matchTimeoutMs)
         currentTime = 5000L
@@ -251,11 +243,7 @@ class FaceNetSessionTest {
 
         assertEquals(FaceNetSessionBase.Phase.FAILED, session.phase)
         assertEquals(FaceMatcherPromptState.Status.FAILED, session.state.value.status)
-        assertEquals("Verification Failed", session.state.value.messageAbove)
-        assertTrue(
-            session.state.value.messageBelow?.startsWith("Face does not match reference portrait (55% match, required 70%)") == true,
-            "Expected formatted mismatch message with percentage but got: ${session.state.value.messageBelow}"
-        )
+        assertEquals("Face does not match reference portrait", session.state.value.message)
     }
 
     @Test
@@ -289,8 +277,7 @@ class FaceNetSessionTest {
         // Frame 4: second consecutive matching embedding -> consecutiveMatchFrames = 2 -> advances!
         session.feedFrame(dummyFrame)
         assertEquals(FaceNetSessionBase.Phase.MATCH_CONVEYED, session.phase)
-        assertEquals("Face Matched", session.state.value.messageAbove)
-        assertEquals("Hold still...", session.state.value.messageBelow)
+        assertEquals("Hold still...", session.state.value.message)
     }
 
     @Test
@@ -334,8 +321,7 @@ class FaceNetSessionTest {
         // All challenges completed -> SUCCESS
         assertEquals(FaceNetSessionBase.Phase.COMPLETED, session.phase)
         assertEquals(FaceMatcherPromptState.Status.SUCCESS, session.state.value.status)
-        assertEquals("Identity Verified", session.state.value.messageAbove)
-        assertEquals("Verification successful", session.state.value.messageBelow)
+        assertEquals("Identity verified", session.state.value.message)
         assertTrue(session.ringSegments.all { it.color == RingSegment.COLOR_GREEN })
         assertNotNull(session.state.value.overlay)
     }
@@ -405,8 +391,7 @@ class FaceNetSessionTest {
         )
 
         assertEquals(3, session.challenges.size)
-        assertEquals("Check Liveness", session.state.value.messageAbove)
-        assertEquals("Position your face and look at the camera", session.state.value.messageBelow)
+        assertEquals("Position your face and look at the camera", session.state.value.message)
 
         // 2 consecutive straight frames to pass POSITIONING directly to LIVENESS_CHALLENGE
         session.mockFaces = listOf(MockDetectedFace(yaw = 0f, pitch = 0f, roll = 0f))
@@ -434,8 +419,7 @@ class FaceNetSessionTest {
         // After completing 3 challenges, transitions to PREPARE_FOR_PHOTO phase (duration 2000ms)
         assertEquals(FaceNetLivenessSessionBase.Phase.PREPARE_FOR_PHOTO, session.phase)
         assertEquals(FaceMatcherLivenessPromptState.Status.IN_PROGRESS, session.state.value.status)
-        assertEquals("Hold Still", session.state.value.messageAbove)
-        assertEquals("Preparing photo...", session.state.value.messageBelow)
+        assertEquals("Hold still...", session.state.value.message)
         assertNull(session.state.value.capturedImage)
 
         // Before 2000ms elapsed, stays in PREPARE_FOR_PHOTO
@@ -448,8 +432,7 @@ class FaceNetSessionTest {
         currentTime += 1100L
         session.feedFrame(dummyFrame)
         assertEquals(FaceNetLivenessSessionBase.Phase.CAPTURING, session.phase)
-        assertEquals("Hold Still", session.state.value.messageAbove)
-        assertEquals("Capturing portrait image...", session.state.value.messageBelow)
+        assertEquals("Hold still...", session.state.value.message)
         assertNull(session.state.value.capturedImage)
 
         // Frame 1 in CAPTURING with steady straight face: steadyHoldFrames = 1
@@ -461,8 +444,7 @@ class FaceNetSessionTest {
         session.feedFrame(dummyFrame)
         assertEquals(FaceNetLivenessSessionBase.Phase.COMPLETED, session.phase)
         assertEquals(FaceMatcherLivenessPromptState.Status.SUCCESS, session.state.value.status)
-        assertEquals("Portrait Captured", session.state.value.messageAbove)
-        assertEquals("Liveness verified", session.state.value.messageBelow)
+        assertEquals("Portrait captured", session.state.value.message)
         assertNotNull(session.state.value.capturedImage)
         assertEquals(ByteString(byteArrayOf(1, 2, 3)), session.state.value.capturedImage)
         assertTrue(session.ringSegments.all { it.color == RingSegment.COLOR_GREEN })
@@ -537,14 +519,14 @@ class FaceNetSessionTest {
         // Frame 1: straight face
         sessionWithSmoothing.mockFaces = listOf(MockDetectedFace(yaw = 0f, pitch = 0f, roll = 0f))
         sessionWithSmoothing.feedFrame(dummyFrame)
-        assertEquals("Hold still and look directly at the camera...", sessionWithSmoothing.state.value.messageBelow)
+        assertEquals("Hold still and look directly at the camera...", sessionWithSmoothing.state.value.message)
 
         // Frame 2: single-frame landmark jitter spike (yaw = 15° for one frame, 33ms later)
         // With smoothing, the filtered yaw stays well below 12°, preventing prompt flicker.
         currentTime += 33L
         sessionWithSmoothing.mockFaces = listOf(MockDetectedFace(yaw = 15f, pitch = 0f, roll = 0f))
         sessionWithSmoothing.feedFrame(dummyFrame)
-        assertEquals("Hold still and look directly at the camera...", sessionWithSmoothing.state.value.messageBelow)
+        assertEquals("Hold still and look directly at the camera...", sessionWithSmoothing.state.value.message)
 
         // Contrast with a session with smoothing disabled
         var currentTimeUnsmoothed = 1000L
@@ -558,7 +540,7 @@ class FaceNetSessionTest {
         currentTimeUnsmoothed += 33L
         sessionUnsmoothed.mockFaces = listOf(MockDetectedFace(yaw = 15f, pitch = 0f, roll = 0f))
         sessionUnsmoothed.feedFrame(dummyFrame)
-        assertEquals("Turn your head slightly to the right", sessionUnsmoothed.state.value.messageBelow)
+        assertEquals("Turn your head slightly to the right", sessionUnsmoothed.state.value.message)
     }
 }
 

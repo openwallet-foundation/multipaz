@@ -51,20 +51,7 @@ struct FaceMatcherPromptDialog: View {
                 }
             }
             .sheet(item: $data) { data in
-                let matcher = data.state.parameters?.matcher ?? model.defaultMatcher
-                let portrait = data.state.parameters?.referencePortrait
-                let faceMatcherSession: FaceMatcherSession = {
-                    if let existing = data.state.parameters?.faceMatcherSession {
-                        return existing
-                    }
-                    guard let matcher else {
-                        fatalError("No FaceMatcher available")
-                    }
-                    guard let portrait else {
-                        fatalError("Reference portrait is required for FaceMatcherPromptDialog")
-                    }
-                    return matcher.createSession(referencePortrait: portrait)
-                }()
+                let faceMatcherSession = data.state.parameters!.faceMatcherSession
                 FaceMatcherPromptView(
                     title: humanReadableReason?.title ?? "Verify it's you",
                     subtitle: humanReadableReason?.subtitle ?? "Look at the camera to verify your identity",
@@ -86,6 +73,13 @@ struct FaceMatcherPromptDialog: View {
     }
 }
 
+private struct FaceMatcherSheetHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 private struct FaceMatcherPromptView: View {
     let title: String
     let subtitle: String
@@ -94,29 +88,39 @@ private struct FaceMatcherPromptView: View {
     let onCancel: () -> Void
 
     @State private var promptState: FaceMatcherPromptState? = nil
+    @State private var contentHeight: CGFloat = 460
 
     var body: some View {
-        VStack(spacing: 20) {
-            HStack {
-                Spacer()
-                Button {
-                    faceMatcherSession.cancel()
-                    onCancel()
-                } label: {
-                    Image(systemName: "xmark")
+        VStack(spacing: 16) {
+            VStack(spacing: 6) {
+                ZStack {
+                    Text(title)
                         .font(.title2)
-                        .foregroundStyle(.secondary)
-                        .padding()
+                        .fontWeight(.bold)
+                        .frame(maxWidth: .infinity, alignment: .center)
+
+                    HStack {
+                        Spacer()
+                        Button {
+                            faceMatcherSession.cancel()
+                            onCancel()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(8)
+                        }
+                    }
+                }
+
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
                 }
             }
-
-            Text(promptState?.messageAbove ?? title)
-                .font(.title2)
-                .fontWeight(.bold)
-                .multilineTextAlignment(.center)
-                .frame(minHeight: 56)
-
-            Spacer()
+            .padding(.top, 16)
 
             ZStack {
                 CameraPreview(onFrame: { frame, completion in
@@ -151,22 +155,29 @@ private struct FaceMatcherPromptView: View {
             }
             .frame(width: 220, height: 284)
 
-            let belowText = promptState?.messageBelow ?? subtitle
-            Text(belowText)
+            let messageText = promptState?.message ?? ""
+            Text(messageText)
                 .font(.body)
                 .foregroundColor(promptState?.status == FaceMatcherPromptState.Status.failed ? .red : .secondary)
                 .multilineTextAlignment(.center)
-                .frame(minHeight: 44)
-
-            Spacer()
-
-            Button("Cancel") {
-                faceMatcherSession.cancel()
-                onCancel()
-            }
-            .padding(.bottom, 16)
+                .frame(minHeight: 24)
         }
         .padding(.horizontal, 24)
+        .padding(.bottom, 24)
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: FaceMatcherSheetHeightKey.self, value: proxy.size.height)
+            }
+        )
+        .onPreferenceChange(FaceMatcherSheetHeightKey.self) { newHeight in
+            if newHeight > 100 && abs(newHeight - contentHeight) > 2 {
+                DispatchQueue.main.async {
+                    contentHeight = newHeight
+                }
+            }
+        }
+        .presentationDetents([.height(contentHeight)])
         .task {
             promptState = faceMatcherSession.state.value
             startSimulationTimerIfNeeded()

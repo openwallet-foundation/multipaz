@@ -66,7 +66,6 @@ import org.multipaz.facenet.testdata.FaceSamplePortrait
 import org.multipaz.facenet.testdata.FaceTestData
 import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.prompt.PromptModel
-import org.multipaz.prompt.Reason
 import org.multipaz.prompt.showFaceMatcherPrompt
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
@@ -606,14 +605,10 @@ fun FaceMatcherPromptScreen(
                             coroutineScope.launch {
                                 try {
                                     val matcherToUse = selectedMatcher ?: faceMatcherRepository?.defaultMatcher
+                                        ?: throw IllegalStateException("No face matcher available")
                                     val matched = promptModel.showFaceMatcherPrompt(
-                                        referencePortrait = portrait,
                                         matcher = matcherToUse,
-                                        reason = Reason.HumanReadable(
-                                            title = "Verify Identity",
-                                            subtitle = "Please look at the camera to match your face",
-                                            requireConfirmation = false
-                                        )
+                                        referencePortrait = portrait
                                     )
                                     if (matched) {
                                         showToast("Face matched successfully!")

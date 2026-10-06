@@ -5,8 +5,7 @@ import kotlinx.io.bytestring.ByteString
 /**
  * State of the face matcher liveness prompt dialog observed by the UI layer.
  *
- * @property messageAbove primary text displayed above the camera preview (e.g. instructions).
- * @property messageBelow secondary status or feedback text displayed below the camera preview.
+ * @property message instructional or status message displayed to the user.
  * @property status overall verification status.
  * @property overlay optional bitmap overlay to draw on top of the camera video stream.
  * @property capturedImage portrait photo bytes captured during liveness verification.
@@ -15,8 +14,7 @@ import kotlinx.io.bytestring.ByteString
  * in upright portrait orientation. For all other statuses, this property is `null`.
  */
 data class FaceMatcherLivenessPromptState(
-    val messageAbove: String? = null,
-    val messageBelow: String? = null,
+    val message: String? = null,
     val status: Status = Status.IN_PROGRESS,
     val overlay: OverlayFrame? = null,
     val capturedImage: ByteString? = null

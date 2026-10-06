@@ -37,14 +37,12 @@ abstract class FaceMatcherSession(
      * Atomically updates the prompt UI state.
      */
     protected fun updateState(
-        messageAbove: String? = _state.value.messageAbove,
-        messageBelow: String? = _state.value.messageBelow,
+        message: String? = _state.value.message,
         status: FaceMatcherPromptState.Status = _state.value.status,
         overlay: OverlayFrame? = _state.value.overlay
     ) {
         _state.value = FaceMatcherPromptState(
-            messageAbove = messageAbove,
-            messageBelow = messageBelow,
+            message = message,
             status = status,
             overlay = overlay
         )

@@ -16,14 +16,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -44,7 +45,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.camera.Camera
 import org.multipaz.compose.camera.CameraCaptureResolution
 import org.multipaz.compose.camera.CameraSelection
@@ -64,12 +65,13 @@ import org.multipaz.prompt.ConvertToHumanReadableFn
 import org.multipaz.prompt.FaceMatcherPromptDialogModel
 import org.multipaz.prompt.PromptDialogModel
 import org.multipaz.prompt.PromptDismissedException
+import org.multipaz.prompt.Reason
 
 /**
  * Composable dialog that prompts the user to perform face matching using the front camera.
  *
  * @param model the dialog model managing the face matcher request.
- * @param toHumanReadable function to convert reasons to human-readable strings.
+ * @param toHumanReadable function to convert reason to localized human-readable text.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,46 +85,24 @@ fun FaceMatcherPromptDialog(
         skipPartiallyExpanded = true,
     )
     val dialogStateValue = dialogState.value
-    var humanReadableTitle by remember { mutableStateOf<String?>(null) }
-    var humanReadableSubtitle by remember { mutableStateOf<String?>(null) }
 
+    var humanReadableReason by remember(dialogStateValue) { mutableStateOf<Reason.HumanReadable?>(null) }
     LaunchedEffect(dialogStateValue) {
         if (dialogStateValue is PromptDialogModel.DialogShownState) {
-            val parameters = dialogStateValue.parameters
-            try {
-                val hr = toHumanReadable(parameters.reason, null)
-                humanReadableTitle = hr.title
-                humanReadableSubtitle = hr.subtitle
-            } catch (e: Exception) {
-                humanReadableTitle = null
-                humanReadableSubtitle = null
-            }
+            humanReadableReason = toHumanReadable(dialogStateValue.parameters.reason, null)
         } else {
-            humanReadableTitle = null
-            humanReadableSubtitle = null
+            humanReadableReason = null
         }
     }
 
     if (dialogStateValue is PromptDialogModel.DialogShownState) {
         val dialogParameters = dialogStateValue.parameters
 
-        val faceMatcherSession = remember(dialogParameters) {
-            dialogParameters.faceMatcherSession ?: run {
-                val matcher = dialogParameters.matcher
-                    ?: (model as? FaceMatcherPromptDialogModel)?.defaultMatcher
-                    ?: throw IllegalStateException("No FaceMatcher available")
-                matcher.createSession(dialogParameters.referencePortrait)
-            }
-        }
-
-        val title = humanReadableTitle?.ifEmpty { null }
-        val subtitle = humanReadableSubtitle?.ifEmpty { null }
-
         FaceMatcherBottomSheet(
             sheetState = sheetState,
-            title = title,
-            subtitle = subtitle,
-            faceMatcherSession = faceMatcherSession,
+            faceMatcherSession = dialogParameters.faceMatcherSession,
+            title = humanReadableReason?.title,
+            subtitle = humanReadableReason?.subtitle,
             onMatched = {
                 coroutineScope.launch {
                     dialogStateValue.resultChannel.send(true)
@@ -130,7 +110,7 @@ fun FaceMatcherPromptDialog(
             },
             onDismissed = {
                 coroutineScope.launch {
-                    faceMatcherSession.cancel()
+                    dialogParameters.faceMatcherSession.cancel()
                     dialogStateValue.resultChannel.close(PromptDismissedException())
                 }
             }
@@ -142,9 +122,9 @@ fun FaceMatcherPromptDialog(
 @Composable
 private fun FaceMatcherBottomSheet(
     sheetState: SheetState,
+    faceMatcherSession: FaceMatcherSession,
     title: String?,
     subtitle: String?,
-    faceMatcherSession: FaceMatcherSession,
     onMatched: () -> Unit,
     onDismissed: () -> Unit,
 ) {
@@ -158,22 +138,6 @@ private fun FaceMatcherBottomSheet(
     DisposableEffect(faceMatcherSession) {
         onDispose {
             faceMatcherSession.cancel()
-        }
-    }
-
-    var resolvedTitle by remember { mutableStateOf(title ?: "") }
-    var resolvedSubtitle by remember { mutableStateOf(subtitle ?: "") }
-
-    LaunchedEffect(title, subtitle) {
-        if (title == null) {
-            resolvedTitle = getString(Res.string.face_matcher_prompt_default_title)
-        } else {
-            resolvedTitle = title
-        }
-        if (subtitle == null) {
-            resolvedSubtitle = getString(Res.string.face_matcher_prompt_default_subtitle)
-        } else {
-            resolvedSubtitle = subtitle
         }
     }
 
@@ -205,21 +169,50 @@ private fun FaceMatcherBottomSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .padding(top = 24.dp, bottom = 24.dp),
+                .padding(top = 16.dp, bottom = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            val titleText = promptState.messageAbove ?: resolvedTitle
-            Text(
-                text = titleText,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-                    .wrapContentHeight(Alignment.CenterVertically)
-            )
+            Box(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = title ?: stringResource(Res.string.face_matcher_prompt_default_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.Center)
+                        .padding(horizontal = 48.dp)
+                )
+                IconButton(
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                    onClick = {
+                        if (!isDismissed) {
+                            isDismissed = true
+                            coroutineScope.launch { sheetState.hide() }
+                            onDismissed()
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = stringResource(Res.string.face_matcher_prompt_cancel)
+                    )
+                }
+            }
+
+            val resolvedSubtitle = subtitle ?: stringResource(Res.string.face_matcher_prompt_default_subtitle)
+            if (resolvedSubtitle.isNotEmpty()) {
+                Text(
+                    text = resolvedSubtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
             if (!cameraPermissionState.isGranted) {
                 Column(
@@ -229,14 +222,8 @@ private fun FaceMatcherBottomSheet(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    var permissionRequiredText by remember { mutableStateOf("") }
-                    var grantPermissionText by remember { mutableStateOf("") }
-                    LaunchedEffect(Unit) {
-                        permissionRequiredText = getString(Res.string.face_matcher_prompt_permission_required)
-                        grantPermissionText = getString(Res.string.face_matcher_prompt_grant_permission)
-                    }
                     Text(
-                        text = permissionRequiredText,
+                        text = stringResource(Res.string.face_matcher_prompt_permission_required),
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -248,7 +235,7 @@ private fun FaceMatcherBottomSheet(
                             }
                         }
                     ) {
-                        Text(grantPermissionText)
+                        Text(stringResource(Res.string.face_matcher_prompt_grant_permission))
                     }
                 }
             } else {
@@ -312,10 +299,10 @@ private fun FaceMatcherBottomSheet(
                     }
                 }
 
-                val statusText = promptState.messageBelow ?: resolvedSubtitle
-                if (statusText.isNotEmpty()) {
+                val messageText = promptState.message.orEmpty()
+                if (messageText.isNotEmpty()) {
                     Text(
-                        text = statusText,
+                        text = messageText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (promptState.status == FaceMatcherPromptState.Status.FAILED) {
                             MaterialTheme.colorScheme.error
@@ -329,23 +316,6 @@ private fun FaceMatcherBottomSheet(
                             .wrapContentHeight(Alignment.CenterVertically)
                     )
                 }
-            }
-
-            var cancelText by remember { mutableStateOf("") }
-            LaunchedEffect(Unit) {
-                cancelText = getString(Res.string.face_matcher_prompt_cancel)
-            }
-
-            TextButton(
-                onClick = {
-                    if (!isDismissed) {
-                        isDismissed = true
-                        coroutineScope.launch { sheetState.hide() }
-                        onDismissed()
-                    }
-                }
-            ) {
-                Text(cancelText)
             }
         }
     }

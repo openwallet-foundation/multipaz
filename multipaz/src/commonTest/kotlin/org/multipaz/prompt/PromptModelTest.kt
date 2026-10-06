@@ -26,6 +26,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -53,8 +54,6 @@ class PromptModelTest {
     @BeforeTest
     fun resetSharedState() {
         promptModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build()
-        val matcher = TestFaceMatcher()
-        promptModel.getDialogModel(FaceMatcherPromptDialogModel.DialogType).defaultMatcher = matcher
         mockUiJob = null
     }
 
@@ -234,14 +233,34 @@ class PromptModelTest {
     @Test
     fun faceMatcherPromptSuccess() = runTest {
         val testPortrait = ByteString(byteArrayOf(1, 2, 3, 4))
+        val testMatcher = TestFaceMatcher()
         collectFaceMatcherDialogState { request ->
-            assertEquals(testPortrait, request.referencePortrait)
+            assertNotNull(request.faceMatcherSession)
+            assertEquals(FaceMatchingReason, request.reason)
             true
         }
 
         val result = promptModel.showFaceMatcherPrompt(
+            matcher = testMatcher,
+            referencePortrait = testPortrait
+        )
+        assertTrue(result)
+    }
+
+    @Test
+    fun faceMatcherPromptCustomReason() = runTest {
+        val testPortrait = ByteString(byteArrayOf(1, 2, 3, 4))
+        val testMatcher = TestFaceMatcher()
+        val customReason = Reason.HumanReadable("Custom Title", "Custom Subtitle", false)
+        collectFaceMatcherDialogState { request ->
+            assertEquals(customReason, request.reason)
+            true
+        }
+
+        val result = promptModel.showFaceMatcherPrompt(
+            matcher = testMatcher,
             referencePortrait = testPortrait,
-            reason = Reason.HumanReadable("Title", "Subtitle", false)
+            reason = customReason
         )
         assertTrue(result)
     }
@@ -249,24 +268,25 @@ class PromptModelTest {
     @Test
     fun faceMatcherPromptDismissed() = runTest {
         val testPortrait = ByteString(byteArrayOf(5, 6, 7, 8))
+        val testMatcher = TestFaceMatcher()
         collectFaceMatcherDialogState {
             throw PromptDismissedException()
         }
 
         val result = promptModel.showFaceMatcherPrompt(
-            referencePortrait = testPortrait,
-            reason = Reason.HumanReadable("Title", "Subtitle", false)
+            matcher = testMatcher,
+            referencePortrait = testPortrait
         )
         assertFalse(result)
     }
 
     @Test
-    fun faceMatcherPromptNoMatcherConfigured() = runTest {
-        val unconfiguredModel = TestPromptModel.Builder().apply { addCommonDialogs() }.build()
+    fun faceMatcherPromptNoDialogRegistered() = runTest {
+        val unconfiguredModel = TestPromptModel.Builder().build()
         assertFailsWith<IllegalStateException> {
             unconfiguredModel.showFaceMatcherPrompt(
-                referencePortrait = ByteString(byteArrayOf(1, 2, 3, 4)),
-                reason = Reason.HumanReadable("Title", "Subtitle", false)
+                matcher = TestFaceMatcher(),
+                referencePortrait = ByteString(byteArrayOf(1, 2, 3, 4))
             )
         }
     }

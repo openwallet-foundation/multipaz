@@ -37,7 +37,8 @@ import kotlinx.io.bytestring.ByteString
 import org.multipaz.compose.decodeImage
 
 /**
- * Screen asking the user for approval to send the verified captured portrait to a fake credential issuer.
+ * Screen showing simulated credential provisioning and asking the user for approval
+ * to send the verified captured portrait to the issuer.
  *
  * @param portraitBytes the captured portrait image bytes.
  * @param onApprove invoked when the user approves sending the portrait to the issuer.
@@ -139,7 +140,7 @@ fun FakeIssuerApprovalScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "Credential Provisioning Request",
+                        text = "Simulated Provisioning Request",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -157,8 +158,7 @@ fun FakeIssuerApprovalScreen(
 
         item {
             Text(
-                text = "The issuer requires this portrait photo to issue your digital credential. " +
-                    "Do you approve sending this portrait to the fake issuer?",
+                text = "Simulating provisioning. This is what a wallet app could send to the issuer after user approval.",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface,

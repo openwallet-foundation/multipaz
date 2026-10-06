@@ -87,8 +87,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
 
     init {
         updateState(
-            messageAbove = "Verify Identity",
-            messageBelow = "Position your face and look at the camera",
+            message = "Position your face and look at the camera",
             status = FaceMatcherPromptState.Status.IN_PROGRESS
         )
     }
@@ -161,18 +160,17 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                 try {
                     initializePipeline()
                     if (referenceEmbedding == null) {
-                        failSession("Setup Failed", "Could not extract face from reference photo")
+                        failSession("Could not extract face from reference photo")
                         return
                     }
                     phase = Phase.POSITIONING
                     phaseStartTime = now
                     updateState(
-                        messageAbove = "Position your face",
-                        messageBelow = "Look directly at the camera"
+                        message = "Position your face and look at the camera"
                     )
                 } catch (e: Exception) {
                     Logger.e(TAG, "Failed to initialize pipeline", e)
-                    failSession("Initialization Failed", e.message ?: "Could not start camera pipeline")
+                    failSession(e.message ?: "Could not start camera pipeline")
                     return
                 }
             } else {
@@ -182,19 +180,17 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
 
         val refEmb = referenceEmbedding
         if (refEmb == null) {
-            failSession("Setup Failed", "Missing reference face embedding")
+            failSession("Missing reference face embedding")
             return
         }
 
         if (now - startTime!! > sessionTimeoutMs) {
-            val percentage = (bestSimilarity * 100).toInt().coerceAtLeast(0)
             currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
                 RingSegment(color = RingSegment.COLOR_RED, scale = 1.0f)
             }
             val overlay = createOverlay(frame, emptyList(), null)
             failSession(
-                messageAbove = "Verification Failed",
-                messageBelow = "Face verification timed out ($percentage% match, required ${(config.matchThreshold * 100).toInt()}%)",
+                message = "Face verification timed out",
                 overlay = overlay
             )
             return
@@ -216,14 +212,13 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                 when (phase) {
                     Phase.POSITIONING -> {
                         updateState(
-                            messageAbove = "Position your face",
-                            messageBelow = "No face detected",
+                            message = "No face detected",
                             overlay = overlay
                         )
                     }
                     Phase.LIVENESS_CHALLENGE -> {
                         updateState(
-                            messageBelow = "Face lost, looking for face...",
+                            message = "Looking for face...",
                             overlay = overlay
                         )
                     }
@@ -244,8 +239,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
             currentRingSegments = RingSegment.defaultSegments
             val overlay = createOverlay(frame, detectedFaces, null)
             updateState(
-                messageAbove = "Multiple faces detected",
-                messageBelow = "Ensure only one person is in the frame",
+                message = "Ensure only one person is in the frame",
                 overlay = overlay
             )
             return
@@ -318,66 +312,50 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                             phase = Phase.MATCH_CONVEYED
                             phaseStartTime = now
                             straightFaceStartTime = null
-                            val percent = ((currentSimilarity ?: bestSimilarity) * 100).toInt()
-                            val matchedMsg = if (debug) "Face Matched ($percent%)" else "Face Matched"
                             currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
                                 RingSegment(color = RingSegment.COLOR_GREEN, scale = 1.15f)
                             }
                             val overlay = createOverlay(frame, faces, currentSimilarity)
                             updateState(
-                                messageAbove = matchedMsg,
-                                messageBelow = "Hold still...",
+                                message = "Hold still...",
                                 overlay = overlay
                             )
                         } else {
-                            val percent = ((currentSimilarity ?: bestSimilarity) * 100).toInt()
-                            val verifyingMsg = if (debug) "Verifying Identity ($percent%)" else "Verifying Identity"
                             currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
                                 RingSegment(color = pulseColor, scale = 1.0f)
                             }
                             val overlay = createOverlay(frame, faces, currentSimilarity)
                             updateState(
-                                messageAbove = verifyingMsg,
-                                messageBelow = "Hold still...",
+                                message = "Hold still...",
                                 overlay = overlay
                             )
                         }
                     } else {
                         consecutiveMatchFrames = 0
                         if (now - straightStart > matchTimeoutMs) {
-                            val percentage = (bestSimilarity * 100).toInt().coerceAtLeast(0)
                             currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
                                 RingSegment(color = RingSegment.COLOR_RED, scale = 1.0f)
                             }
                             val overlay = createOverlay(frame, faces, currentSimilarity)
                             if (bestSimilarity >= config.matchThreshold) {
                                 failSession(
-                                    messageAbove = "Verification Failed",
-                                    messageBelow = "Unable to confirm match - please hold still and look directly at the camera",
+                                    message = "Unable to confirm match - please hold still and look directly at the camera",
                                     overlay = overlay
                                 )
                             } else {
                                 failSession(
-                                    messageAbove = "Verification Failed",
-                                    messageBelow = "Face does not match reference portrait ($percentage% match, required ${(config.matchThreshold * 100).toInt()}%)",
+                                    message = "Face does not match reference portrait",
                                     overlay = overlay
                                 )
                             }
                             return
-                        }
-                        val verifyingMsg = if (debug && currentSimilarity != null) {
-                            val percent = (currentSimilarity * 100).toInt()
-                            "Verifying Identity ($percent%)"
-                        } else {
-                            "Verifying Identity"
                         }
                         currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
                             RingSegment(color = pulseColor, scale = 1.0f)
                         }
                         val overlay = createOverlay(frame, faces, currentSimilarity)
                         updateState(
-                            messageAbove = verifyingMsg,
-                            messageBelow = "Hold still and look directly at the camera...",
+                            message = "Hold still and look directly at the camera...",
                             overlay = overlay
                         )
                     }
@@ -397,8 +375,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                     }
                     val overlay = createOverlay(frame, faces, currentSimilarity)
                     updateState(
-                        messageAbove = "Position your face",
-                        messageBelow = prompt,
+                        message = prompt,
                         overlay = overlay
                     )
                 }
@@ -415,15 +392,12 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
                     val overlay = createOverlay(frame, faces, currentSimilarity)
                     showChallenge(0.0f, overlay)
                 } else {
-                    val percent = ((currentSimilarity ?: bestSimilarity) * 100).toInt()
-                    val matchedMsg = if (debug) "Face Matched ($percent%)" else "Face Matched"
                     currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
                         RingSegment(color = RingSegment.COLOR_GREEN, scale = 1.15f)
                     }
                     val overlay = createOverlay(frame, faces, currentSimilarity)
                     updateState(
-                        messageAbove = matchedMsg,
-                        messageBelow = "Hold still...",
+                        message = "Hold still...",
                         overlay = overlay
                     )
                 }
@@ -469,8 +443,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
         val stepText = "Step ${currentChallengeIndex + 1} of ${challenges.size}"
 
         updateState(
-            messageAbove = "$promptTitle ($stepText)",
-            messageBelow = promptDetail,
+            message = "$promptDetail ($stepText)",
             overlay = overlay
         )
     }
@@ -483,42 +456,35 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
         if (bestSimilarity >= config.matchThreshold) {
             phase = Phase.COMPLETED
             headPoseFilter.reset()
-            val percent = (bestSimilarity * 100).toInt()
-            val verifiedMsg = if (debug) "Identity Verified ($percent%)" else "Identity Verified"
             currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
                 RingSegment(color = RingSegment.COLOR_GREEN, scale = 1.2f)
             }
             val successOverlay = createOverlay(frame, faces, currentSimilarity)
             updateState(
-                messageAbove = verifiedMsg,
-                messageBelow = "Verification successful",
+                message = "Identity verified",
                 status = FaceMatcherPromptState.Status.SUCCESS,
                 overlay = successOverlay
             )
         } else {
-            val percentage = (bestSimilarity * 100).toInt().coerceAtLeast(0)
             currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
                 RingSegment(color = RingSegment.COLOR_RED, scale = 1.0f)
             }
             val overlay = createOverlay(frame, faces, currentSimilarity)
             failSession(
-                messageAbove = "Verification Failed",
-                messageBelow = "Face does not match reference portrait ($percentage% match, required ${(config.matchThreshold * 100).toInt()}%)",
+                message = "Face does not match reference portrait",
                 overlay = overlay
             )
         }
     }
 
     protected fun failSession(
-        messageAbove: String,
-        messageBelow: String,
+        message: String,
         overlay: OverlayFrame? = null
     ) {
         phase = Phase.FAILED
         headPoseFilter.reset()
         updateState(
-            messageAbove = messageAbove,
-            messageBelow = messageBelow,
+            message = message,
             status = FaceMatcherPromptState.Status.FAILED,
             overlay = overlay
         )

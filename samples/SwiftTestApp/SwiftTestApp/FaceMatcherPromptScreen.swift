@@ -635,18 +635,17 @@ struct FaceMatcherPromptScreen: View {
         isVerifying = true
         let matcher = viewModel.faceMatcherRepository?.all.first(where: { $0.displayName == selectedMatcherDisplayName })
             ?? viewModel.faceMatcherRepository?.defaultMatcher
+        guard let matcher else {
+            isVerifying = false
+            showToast("No face matcher available")
+            return
+        }
         Task {
             defer { isVerifying = false }
             do {
                 let matched = try await viewModel.promptModel.showFaceMatcherPrompt(
-                    referencePortrait: portrait,
-                    reason: ReasonHumanReadable(
-                        title: "Verify Identity",
-                        subtitle: "Please look at the camera to match your face",
-                        requireConfirmation: false
-                    ),
                     matcher: matcher,
-                    document: nil
+                    referencePortrait: portrait
                 )
                 if matched.boolValue {
                     showToast("Face matched successfully!")

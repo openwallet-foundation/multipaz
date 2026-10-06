@@ -1,18 +1,11 @@
 package org.multipaz.prompt
 
-import kotlinx.io.bytestring.ByteString
-import org.multipaz.document.Document
-import org.multipaz.facematch.FaceMatcher
 import org.multipaz.facematch.FaceMatcherSession
 
 /**
  * Prompt dialog model for verifying user identity with a face matcher against a reference portrait.
- *
- * @param defaultMatcher default [FaceMatcher] to use if not specified in the request.
  */
-class FaceMatcherPromptDialogModel(
-    var defaultMatcher: FaceMatcher? = null
-) : PromptDialogModel<FaceMatcherPromptDialogModel.FaceMatcherRequest, Boolean>() {
+class FaceMatcherPromptDialogModel : PromptDialogModel<FaceMatcherPromptDialogModel.FaceMatcherRequest, Boolean>() {
 
     /** Dialog type identifier for [FaceMatcherPromptDialogModel]. */
     object DialogType : PromptDialogModel.DialogType<FaceMatcherPromptDialogModel>
@@ -21,21 +14,11 @@ class FaceMatcherPromptDialogModel(
     /**
      * Request parameters for face matching.
      *
-     * @property referencePortrait the reference portrait image bytes to verify against.
-     * @property reason user-facing description of the verification reason.
-     * @property matcher optional [FaceMatcher] to use, overriding [defaultMatcher].
-     * @property faceMatcherSession optional active [FaceMatcherSession] driving verification.
-     * @property document optional document being verified.
+     * @property faceMatcherSession active [FaceMatcherSession] driving verification.
+     * @property reason the [Reason] for face matching.
      */
     data class FaceMatcherRequest(
-        val referencePortrait: ByteString,
-        val reason: Reason = Reason.HumanReadable(
-            title = "Verify it's you",
-            subtitle = "Look at the camera to verify your identity",
-            requireConfirmation = false
-        ),
-        val matcher: FaceMatcher? = null,
-        val faceMatcherSession: FaceMatcherSession? = null,
-        val document: Document? = null
+        val faceMatcherSession: FaceMatcherSession,
+        val reason: Reason = FaceMatchingReason
     )
 }

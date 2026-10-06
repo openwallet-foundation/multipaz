@@ -61,7 +61,6 @@ class ViewModel {
         faceMatcherRepository = FaceMatcherRepository()
         faceMatcherRepository.add(faceMatcher: FaceNetFaceMatcher(modelBytes: FaceTestData.shared.testModel))
         faceMatcherRepository.add(faceMatcher: FaceNetFaceMatcher(modelBytes: FaceTestData.shared.testModel, debug: true))
-        promptModel.getFaceMatcherDialogModel().defaultMatcher = faceMatcherRepository.defaultMatcher
         
         storage = IosStorage(
             storageFileUrl: FileManager.default.containerURL(

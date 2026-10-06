@@ -74,8 +74,7 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
 
     init {
         updateState(
-            messageAbove = "Check Liveness",
-            messageBelow = "Position your face and look at the camera",
+            message = "Position your face and look at the camera",
             status = FaceMatcherLivenessPromptState.Status.IN_PROGRESS
         )
     }
@@ -149,12 +148,11 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
                     phase = Phase.POSITIONING
                     phaseStartTime = now
                     updateState(
-                        messageAbove = "Position your face",
-                        messageBelow = "Look directly at the camera"
+                        message = "Position your face and look at the camera"
                     )
                 } catch (e: Exception) {
                     Logger.e(TAG, "Failed to initialize pipeline", e)
-                    failSession("Initialization Failed", e.message ?: "Could not start camera pipeline")
+                    failSession(e.message ?: "Could not start camera pipeline")
                     return
                 }
             } else {
@@ -163,10 +161,7 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
         }
 
         if (now - startTime!! > sessionTimeoutMs) {
-            failSession(
-                messageAbove = "Verification Failed",
-                messageBelow = "Liveness check timed out - please try again"
-            )
+            failSession("Liveness check timed out - please try again")
             return
         }
 
@@ -185,20 +180,19 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
                 when (phase) {
                     Phase.POSITIONING -> {
                         updateState(
-                            messageAbove = "Position your face",
-                            messageBelow = "No face detected",
+                            message = "No face detected",
                             overlay = overlay
                         )
                     }
                     Phase.LIVENESS_CHALLENGE -> {
                         updateState(
-                            messageBelow = "Face lost, looking for face...",
+                            message = "Looking for face...",
                             overlay = overlay
                         )
                     }
                     Phase.PREPARE_FOR_PHOTO, Phase.CAPTURING -> {
                         updateState(
-                            messageBelow = "Face lost, hold still...",
+                            message = "Looking for face...",
                             overlay = overlay
                         )
                     }
@@ -218,8 +212,7 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
             currentRingSegments = RingSegment.defaultSegments
             val overlay = createOverlay(frame, detectedFaces)
             updateState(
-                messageAbove = "Multiple faces detected",
-                messageBelow = "Ensure only one person is in the frame",
+                message = "Ensure only one person is in the frame",
                 overlay = overlay
             )
             return
@@ -273,8 +266,7 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
                         }
                         val overlay = createOverlay(frame, faces)
                         updateState(
-                            messageAbove = "Position your face",
-                            messageBelow = "Hold still...",
+                            message = "Hold still...",
                             overlay = overlay
                         )
                     }
@@ -293,8 +285,7 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
                     }
                     val overlay = createOverlay(frame, faces)
                     updateState(
-                        messageAbove = "Position your face",
-                        messageBelow = prompt,
+                        message = prompt,
                         overlay = overlay
                     )
                 }
@@ -321,8 +312,7 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
                             }
                             val prepOverlay = createOverlay(frame, faces)
                             updateState(
-                                messageAbove = "Hold Still",
-                                messageBelow = "Preparing photo...",
+                                message = "Hold still...",
                                 status = FaceMatcherLivenessPromptState.Status.IN_PROGRESS,
                                 overlay = prepOverlay
                             )
@@ -354,15 +344,13 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
                     phaseStartTime = now
                     consecutiveMatchFrames = 0
                     updateState(
-                        messageAbove = "Hold Still",
-                        messageBelow = "Capturing portrait image...",
+                        message = "Hold still...",
                         status = FaceMatcherLivenessPromptState.Status.IN_PROGRESS,
                         overlay = overlay
                     )
                 } else {
                     updateState(
-                        messageAbove = "Hold Still",
-                        messageBelow = "Preparing photo...",
+                        message = "Hold still...",
                         status = FaceMatcherLivenessPromptState.Status.IN_PROGRESS,
                         overlay = overlay
                     )
@@ -375,7 +363,7 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
                     if (consecutiveMatchFrames >= 2) {
                         val photoBytes = captureHighResolutionImage(frame)
                         if (photoBytes == null) {
-                            failSession("Capture Failed", "Could not capture portrait photo")
+                            failSession("Could not capture portrait photo")
                             return
                         }
                         phase = Phase.COMPLETED
@@ -385,8 +373,7 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
                         }
                         val successOverlay = createOverlay(frame, faces)
                         updateState(
-                            messageAbove = "Portrait Captured",
-                            messageBelow = "Liveness verified",
+                            message = "Portrait captured",
                             status = FaceMatcherLivenessPromptState.Status.SUCCESS,
                             capturedImage = photoBytes,
                             overlay = successOverlay
@@ -397,8 +384,7 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
                         }
                         val overlay = createOverlay(frame, faces)
                         updateState(
-                            messageAbove = "Hold Still",
-                            messageBelow = "Capturing portrait image...",
+                            message = "Hold still...",
                             overlay = overlay
                         )
                     }
@@ -409,8 +395,7 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
                     }
                     val overlay = createOverlay(frame, faces)
                     updateState(
-                        messageAbove = "Hold Still",
-                        messageBelow = "Look directly at the camera...",
+                        message = "Look directly at the camera...",
                         overlay = overlay
                     )
                 }
@@ -426,23 +411,20 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
         val stepText = "Step ${currentChallengeIndex + 1} of ${challenges.size}"
 
         updateState(
-            messageAbove = "$promptTitle ($stepText)",
-            messageBelow = promptDetail,
+            message = "$promptDetail ($stepText)",
             status = FaceMatcherLivenessPromptState.Status.IN_PROGRESS,
             overlay = overlay
         )
     }
 
     protected fun failSession(
-        messageAbove: String,
-        messageBelow: String,
+        message: String,
         overlay: OverlayFrame? = null
     ) {
         phase = Phase.FAILED
         headPoseFilter.reset()
         updateState(
-            messageAbove = messageAbove,
-            messageBelow = messageBelow,
+            message = message,
             status = FaceMatcherLivenessPromptState.Status.FAILED,
             overlay = overlay
         )

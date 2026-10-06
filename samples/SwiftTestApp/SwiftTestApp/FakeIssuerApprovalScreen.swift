@@ -2,7 +2,8 @@ import SwiftUI
 import Multipaz
 
 /**
- * Screen asking the user for approval to send the verified captured portrait to a fake credential issuer.
+ * Screen showing simulated credential provisioning and asking the user for approval
+ * to send the verified captured portrait to the issuer.
  */
 struct FakeIssuerApprovalScreen: View {
     @Environment(ViewModel.self) private var viewModel
@@ -48,7 +49,7 @@ struct FakeIssuerApprovalScreen: View {
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Credential Provisioning Request")
+                    Text("Simulated Provisioning Request")
                         .font(.headline)
                         .fontWeight(.bold)
 
@@ -64,7 +65,7 @@ struct FakeIssuerApprovalScreen: View {
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
 
-                Text("The issuer requires this portrait photo to issue your digital credential. Do you approve sending this portrait to the fake issuer?")
+                Text("Simulating provisioning. This is what a wallet app could send to the issuer after user approval.")
                     .font(.body)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.primary)
@@ -72,7 +73,7 @@ struct FakeIssuerApprovalScreen: View {
 
                 VStack(spacing: 12) {
                     Button {
-                        viewModel.pendingToastMessage = "Portrait approved and sent to fake issuer"
+                        viewModel.pendingToastMessage = "Portrait approved and sent to issuer"
                         popBackToFaceMatcherPromptScreen()
                     } label: {
                         Text("Approve and Send to Issuer")
