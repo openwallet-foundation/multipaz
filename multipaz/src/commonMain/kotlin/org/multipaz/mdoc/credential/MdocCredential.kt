@@ -41,6 +41,10 @@ import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.util.Logger
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import org.multipaz.claim.findDisplayName
+import org.multipaz.util.currentLocale
 
 /**
  * An mdoc credential, according to [ISO/IEC 18013-5:2021](https://www.iso.org/standard/69084.html).
@@ -246,16 +250,30 @@ class MdocCredential : SecureAreaBoundCredential {
 
     override suspend fun getClaims(
         documentTypeRepository: DocumentTypeRepository?
+    ): List<MdocClaim> = getClaims(documentTypeRepository, listOf(currentLocale))
+
+    override suspend fun getClaims(
+        documentTypeRepository: DocumentTypeRepository?,
+        locales: List<String>
     ): List<MdocClaim> {
         val dt = documentTypeRepository?.getDocumentTypeForMdoc(docType)
         val namespaces = issuerSigned.getOrNull("nameSpaces")
             ?: return emptyList()
+        val claimDescriptions = document.claimDescriptions
         val ret = mutableListOf<MdocClaim>()
         for ((namespaceName, innerMap) in IssuerNamespaces.fromDataItem(namespaces).data) {
             for ((dataElementName, issuerSignedItem) in innerMap) {
                 val mdocAttr = dt?.mdocDocumentType?.namespaces?.get(namespaceName)?.dataElements?.get(dataElementName)
                 val claim = MdocClaim(
-                    displayName = mdocAttr?.attribute?.displayName ?: dataElementName,
+                    displayName = mdocAttr?.attribute?.displayName
+                        ?: claimDescriptions.findDisplayName(
+                            path = buildJsonArray {
+                                add(namespaceName)
+                                add(dataElementName)
+                            },
+                            locales = locales
+                        )
+                        ?: dataElementName,
                     attribute = mdocAttr?.attribute,
                     docType = docType,
                     namespaceName = namespaceName,

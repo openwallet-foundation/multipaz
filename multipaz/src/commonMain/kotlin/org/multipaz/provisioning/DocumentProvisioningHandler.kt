@@ -113,7 +113,7 @@ open class DocumentProvisioningHandler(
         documentAuthorizationData: ByteString?,
         appData: ByteString?
     ): Document =
-        documentStore.createDocument(
+        documentStore.createDocumentInternal(
             displayName = credentialMetadata.display.text,
             typeDisplayName = credentialMetadata.display.text,
             cardArt = credentialMetadata.display.logo,
@@ -124,7 +124,8 @@ open class DocumentProvisioningHandler(
                 credentialDisplay = credentialMetadata.display,
                 issuerDisplay = issuerMetadata.display,
                 authorizationData = documentAuthorizationData
-            )
+            ),
+            claimDescriptions = credentialMetadata.claims
         )
 
     override suspend fun updateDocument(
