@@ -107,7 +107,7 @@ class FaceNetSessionTest {
 
         assertEquals("Verify Identity", session.state.value.messageAbove)
         assertEquals("Position your face and look at the camera", session.state.value.messageBelow)
-        assertEquals(FaceMatcherPromptState.Outcome.IN_PROGRESS, session.state.value.outcome)
+        assertEquals(FaceMatcherPromptState.Status.IN_PROGRESS, session.state.value.status)
         assertEquals(RingSegment.NUM_SEGMENTS, session.ringSegments.size)
         assertTrue(session.ringSegments.all { it.color == RingSegment.COLOR_DARK_GRAY })
     }
@@ -120,13 +120,13 @@ class FaceNetSessionTest {
         // First frame establishes startTime = 1000L
         session.mockFaces = listOf(MockDetectedFace())
         session.feedFrame(dummyFrame)
-        assertEquals(FaceMatcherPromptState.Outcome.IN_PROGRESS, session.state.value.outcome)
+        assertEquals(FaceMatcherPromptState.Status.IN_PROGRESS, session.state.value.status)
 
         // Advance past sessionTimeoutMs (25000L)
         currentTime = 1000L + 26000L
         session.feedFrame(dummyFrame)
 
-        assertEquals(FaceMatcherPromptState.Outcome.FAILED, session.state.value.outcome)
+        assertEquals(FaceMatcherPromptState.Status.FAILED, session.state.value.status)
         assertEquals("Verification Failed", session.state.value.messageAbove)
         assertEquals("Face verification timed out (0% match, required 70%)", session.state.value.messageBelow)
         assertTrue(session.ringSegments.all { it.color == RingSegment.COLOR_RED })
@@ -140,7 +140,7 @@ class FaceNetSessionTest {
 
         session.feedFrame(dummyFrame)
 
-        assertEquals(FaceMatcherPromptState.Outcome.FAILED, session.state.value.outcome)
+        assertEquals(FaceMatcherPromptState.Status.FAILED, session.state.value.status)
         assertEquals("Initialization Failed", session.state.value.messageAbove)
         assertEquals("Corrupt TFLite model data", session.state.value.messageBelow)
     }
@@ -245,7 +245,7 @@ class FaceNetSessionTest {
         session.feedFrame(dummyFrame)
 
         assertEquals(FaceNetSessionBase.Phase.FAILED, session.phase)
-        assertEquals(FaceMatcherPromptState.Outcome.FAILED, session.state.value.outcome)
+        assertEquals(FaceMatcherPromptState.Status.FAILED, session.state.value.status)
         assertEquals("Verification Failed", session.state.value.messageAbove)
         assertTrue(
             session.state.value.messageBelow?.startsWith("Face does not match reference portrait (55% match, required 70%)") == true,
@@ -328,7 +328,7 @@ class FaceNetSessionTest {
 
         // All challenges completed -> SUCCESS
         assertEquals(FaceNetSessionBase.Phase.COMPLETED, session.phase)
-        assertEquals(FaceMatcherPromptState.Outcome.SUCCESS, session.state.value.outcome)
+        assertEquals(FaceMatcherPromptState.Status.SUCCESS, session.state.value.status)
         assertEquals("Identity Verified", session.state.value.messageAbove)
         assertEquals("Verification successful", session.state.value.messageBelow)
         assertTrue(session.ringSegments.all { it.color == RingSegment.COLOR_GREEN })
@@ -350,7 +350,7 @@ class FaceNetSessionTest {
         // Further frames are ignored
         session.mockFaces = listOf(MockDetectedFace())
         session.feedFrame(dummyFrame)
-        assertEquals(FaceMatcherPromptState.Outcome.IN_PROGRESS, session.state.value.outcome)
+        assertEquals(FaceMatcherPromptState.Status.IN_PROGRESS, session.state.value.status)
     }
 
     @Test
@@ -427,7 +427,7 @@ class FaceNetSessionTest {
 
         // After completing 3 challenges, transitions to PREPARE_FOR_PHOTO phase (duration 2000ms)
         assertEquals(FaceNetLivenessSessionBase.Phase.PREPARE_FOR_PHOTO, session.phase)
-        assertEquals(FaceMatcherLivenessPromptState.Outcome.PREPARE_FOR_PHOTO, session.state.value.outcome)
+        assertEquals(FaceMatcherLivenessPromptState.Status.PREPARE_FOR_PHOTO, session.state.value.status)
         assertEquals("Hold Still", session.state.value.messageAbove)
         assertEquals("Preparing photo...", session.state.value.messageBelow)
         assertNull(session.state.value.capturedImage)
@@ -436,7 +436,7 @@ class FaceNetSessionTest {
         currentTime += 1000L
         session.feedFrame(dummyFrame)
         assertEquals(FaceNetLivenessSessionBase.Phase.PREPARE_FOR_PHOTO, session.phase)
-        assertEquals(FaceMatcherLivenessPromptState.Outcome.PREPARE_FOR_PHOTO, session.state.value.outcome)
+        assertEquals(FaceMatcherLivenessPromptState.Status.PREPARE_FOR_PHOTO, session.state.value.status)
 
         // After 2000ms elapsed, transitions to CAPTURING
         currentTime += 1100L
@@ -454,7 +454,7 @@ class FaceNetSessionTest {
         // Frame 2 in CAPTURING with steady straight face: steadyHoldFrames = 2 -> captures photo and completes!
         session.feedFrame(dummyFrame)
         assertEquals(FaceNetLivenessSessionBase.Phase.COMPLETED, session.phase)
-        assertEquals(FaceMatcherLivenessPromptState.Outcome.SUCCESS, session.state.value.outcome)
+        assertEquals(FaceMatcherLivenessPromptState.Status.SUCCESS, session.state.value.status)
         assertEquals("Portrait Captured", session.state.value.messageAbove)
         assertEquals("Liveness verified", session.state.value.messageBelow)
         assertNotNull(session.state.value.capturedImage)

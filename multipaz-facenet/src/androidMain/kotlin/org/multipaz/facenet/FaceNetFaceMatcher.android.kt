@@ -59,7 +59,7 @@ internal actual suspend fun extractFaceEmbedding(
     AndroidFaceNetInterpreter(modelBytes, config).use { interpreter ->
         AndroidFaceDetector().use { detector ->
             val bytes = portrait.toByteArray()
-            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            val bitmap = decodePortraitBytesToBitmap(bytes)
                 ?: throw IllegalArgumentException("Failed to decode portrait bytes to bitmap")
             val faces = try {
                 detector.detectFaces(bitmap)
@@ -69,7 +69,8 @@ internal actual suspend fun extractFaceEmbedding(
             if (faces.isEmpty()) {
                 throw IllegalArgumentException("No face detected in portrait")
             }
-            val freshBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            val freshBitmap = decodePortraitBytesToBitmap(bytes)
+                ?: throw IllegalArgumentException("Failed to decode portrait bytes to bitmap")
             val crop = try {
                 detector.extractFaceCrop(freshBitmap, faces[0], interpreter.imageSquareSize)
             } finally {
@@ -93,7 +94,7 @@ internal actual suspend fun extractDetectedFaceCrop(
     val targetSize = config.imageSquareSize ?: 112
     AndroidFaceDetector().use { detector ->
         val bytes = portrait.toByteArray()
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        val bitmap = decodePortraitBytesToBitmap(bytes)
             ?: throw IllegalArgumentException("Failed to decode portrait bytes to bitmap")
         val faces = try {
             detector.detectFaces(bitmap)
@@ -103,7 +104,8 @@ internal actual suspend fun extractDetectedFaceCrop(
         if (faces.isEmpty()) {
             throw IllegalArgumentException("No face detected in portrait")
         }
-        val freshBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        val freshBitmap = decodePortraitBytesToBitmap(bytes)
+            ?: throw IllegalArgumentException("Failed to decode portrait bytes to bitmap")
         val crop = try {
             detector.extractFaceCrop(freshBitmap, faces[0], targetSize)
         } finally {

@@ -33,7 +33,7 @@ internal class AndroidFaceNetSession(
         val det = AndroidFaceDetector()
 
         val refBytes = referencePortrait.toByteArray()
-        val refBitmap = BitmapFactory.decodeByteArray(refBytes, 0, refBytes.size)
+        val refBitmap = decodePortraitBytesToBitmap(refBytes)
             ?: throw IllegalArgumentException("Failed to decode reference portrait bytes to image")
 
         val refFaces = try {
@@ -47,7 +47,8 @@ internal class AndroidFaceNetSession(
         }
 
         val refFaceCrop = try {
-            val freshBitmap = BitmapFactory.decodeByteArray(refBytes, 0, refBytes.size)
+            val freshBitmap = decodePortraitBytesToBitmap(refBytes)
+                ?: throw IllegalArgumentException("Failed to decode reference portrait bytes to image")
             try {
                 det.extractFaceCrop(freshBitmap, refFaces[0], interp.imageSquareSize)
             } finally {

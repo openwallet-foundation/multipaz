@@ -14,6 +14,7 @@ class FaceMatcherPromptDialogModel(
     var defaultMatcher: FaceMatcher? = null
 ) : PromptDialogModel<FaceMatcherPromptDialogModel.FaceMatcherRequest, Boolean>() {
 
+    /** Dialog type identifier for [FaceMatcherPromptDialogModel]. */
     object DialogType : PromptDialogModel.DialogType<FaceMatcherPromptDialogModel>
     override val dialogType: DialogType get() = DialogType
 

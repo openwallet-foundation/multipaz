@@ -3,8 +3,10 @@ package org.multipaz.facenet
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.facematch.FaceMatcherPromptState
+import org.multipaz.facenet.testdata.FaceTestData
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -18,11 +20,41 @@ class FaceNetFaceMatcherTest {
     }
 
     @Test
-    fun testCreateSession() = runTest {
+    fun testCreateSessionSupportedFormats() = runTest {
         val matcher = FaceNetFaceMatcher(modelBytes = ByteString())
-        val session = matcher.createSession(ByteString())
-        assertNotNull(session)
-        assertEquals(FaceMatcherPromptState.Outcome.IN_PROGRESS, session.state.value.outcome)
+
+        // JPEG format
+        val jpegPortrait = FaceTestData.decodeImageByteString(FaceTestData.QUALCOMM_DEMO_1_BASE64)
+        val jpegSession = matcher.createSession(jpegPortrait)
+        assertNotNull(jpegSession)
+        assertEquals(FaceMatcherPromptState.Status.IN_PROGRESS, jpegSession.state.value.status)
+
+        // PNG format
+        val pngPortrait = FaceTestData.decodeImageByteString(FaceTestData.QUALCOMM_DEMO_1_PNG_BASE64)
+        val pngSession = matcher.createSession(pngPortrait)
+        assertNotNull(pngSession)
+        assertEquals(FaceMatcherPromptState.Status.IN_PROGRESS, pngSession.state.value.status)
+
+        // JPEG 2000 format
+        val jp2Portrait = FaceTestData.decodeImageByteString(FaceTestData.QUALCOMM_DEMO_1_JP2_BASE64)
+        val jp2Session = matcher.createSession(jp2Portrait)
+        assertNotNull(jp2Session)
+        assertEquals(FaceMatcherPromptState.Status.IN_PROGRESS, jp2Session.state.value.status)
+
+        // Unsupported format: empty ByteString
+        assertFailsWith<IllegalArgumentException> {
+            matcher.createSession(ByteString())
+        }
+
+        // Unsupported format: raw invalid bytes
+        assertFailsWith<IllegalArgumentException> {
+            matcher.createSession(ByteString(byteArrayOf(1, 2, 3, 4)))
+        }
+
+        // Unsupported format: GIF header
+        assertFailsWith<IllegalArgumentException> {
+            matcher.createSession(ByteString("GIF89a".encodeToByteArray()))
+        }
     }
 
     @Test

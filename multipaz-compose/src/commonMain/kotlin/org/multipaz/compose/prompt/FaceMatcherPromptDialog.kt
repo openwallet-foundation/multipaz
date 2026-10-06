@@ -183,8 +183,8 @@ private fun FaceMatcherBottomSheet(
         }
     }
 
-    LaunchedEffect(promptState.outcome) {
-        if (promptState.outcome == FaceMatcherPromptState.Outcome.SUCCESS) {
+    LaunchedEffect(promptState.status) {
+        if (promptState.status == FaceMatcherPromptState.Status.SUCCESS) {
             delay(1200)
             onMatched()
         }
@@ -252,7 +252,7 @@ private fun FaceMatcherBottomSheet(
                     }
                 }
             } else {
-                val isSuccess = promptState.outcome == FaceMatcherPromptState.Outcome.SUCCESS
+                val isSuccess = promptState.status == FaceMatcherPromptState.Status.SUCCESS
 
                 val cornerRadius = 36.dp
                 // Camera feed clipped inside vertical rectangle with rounded corners
@@ -317,7 +317,7 @@ private fun FaceMatcherBottomSheet(
                     Text(
                         text = statusText,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (promptState.outcome == FaceMatcherPromptState.Outcome.FAILED) {
+                        color = if (promptState.status == FaceMatcherPromptState.Status.FAILED) {
                             MaterialTheme.colorScheme.error
                         } else {
                             MaterialTheme.colorScheme.onSurface

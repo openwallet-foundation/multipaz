@@ -129,6 +129,7 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.coroutines.android)
                 implementation(libs.androidx.camera.camera2)
+                implementation(libs.jj2000)
             }
         }
 
@@ -136,6 +137,7 @@ kotlin {
             resources.srcDir(unpackTensorFlowLiteCDesktop)
             dependencies {
                 implementation(libs.jna)
+                implementation(libs.jj2000)
             }
         }
     }

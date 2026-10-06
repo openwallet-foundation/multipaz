@@ -180,8 +180,8 @@ private fun FaceMatcherLivenessBottomSheet(
         }
     }
 
-    LaunchedEffect(promptState.outcome) {
-        if (promptState.outcome == FaceMatcherLivenessPromptState.Outcome.SUCCESS) {
+    LaunchedEffect(promptState.status) {
+        if (promptState.status == FaceMatcherLivenessPromptState.Status.SUCCESS) {
             delay(1200)
             onSuccess(promptState.capturedImage)
         }
@@ -249,7 +249,7 @@ private fun FaceMatcherLivenessBottomSheet(
                     }
                 }
             } else {
-                val isSuccess = promptState.outcome == FaceMatcherLivenessPromptState.Outcome.SUCCESS
+                val isSuccess = promptState.status == FaceMatcherLivenessPromptState.Status.SUCCESS
 
                 val cornerRadius = 36.dp
                 Box(
@@ -313,7 +313,7 @@ private fun FaceMatcherLivenessBottomSheet(
                     Text(
                         text = statusText,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (promptState.outcome == FaceMatcherLivenessPromptState.Outcome.FAILED) {
+                        color = if (promptState.status == FaceMatcherLivenessPromptState.Status.FAILED) {
                             MaterialTheme.colorScheme.error
                         } else {
                             MaterialTheme.colorScheme.onSurface

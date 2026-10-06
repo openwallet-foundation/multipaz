@@ -122,7 +122,7 @@ private struct FaceMatcherPromptView: View {
 
             ZStack {
                 CameraPreview(onFrame: { frame, completion in
-                    guard promptState?.outcome != FaceMatcherPromptState.Outcome.success else {
+                    guard promptState?.status != FaceMatcherPromptState.Status.success else {
                         completion()
                         return
                     }
@@ -140,7 +140,7 @@ private struct FaceMatcherPromptView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 36))
                 }
 
-                if promptState?.outcome == FaceMatcherPromptState.Outcome.success {
+                if promptState?.status == FaceMatcherPromptState.Status.success {
                     Circle()
                         .fill(Color(red: 0.18, green: 0.49, blue: 0.20))
                         .frame(width: 64, height: 64)
@@ -156,7 +156,7 @@ private struct FaceMatcherPromptView: View {
             let belowText = promptState?.messageBelow ?? subtitle
             Text(belowText)
                 .font(.body)
-                .foregroundColor(promptState?.outcome == FaceMatcherPromptState.Outcome.failed ? .red : .secondary)
+                .foregroundColor(promptState?.status == FaceMatcherPromptState.Status.failed ? .red : .secondary)
                 .multilineTextAlignment(.center)
                 .frame(minHeight: 44)
 
@@ -174,7 +174,7 @@ private struct FaceMatcherPromptView: View {
             startSimulationTimerIfNeeded()
             for await state in faceMatcherSession.state {
                 self.promptState = state
-                if state.outcome == FaceMatcherPromptState.Outcome.success {
+                if state.status == FaceMatcherPromptState.Status.success {
                     try? await Task.sleep(nanoseconds: 1_200_000_000)
                     onSuccess()
                 }
@@ -185,9 +185,9 @@ private struct FaceMatcherPromptView: View {
     private func startSimulationTimerIfNeeded() {
         #if targetEnvironment(simulator)
         Task {
-            while promptState?.outcome == nil || promptState?.outcome == FaceMatcherPromptState.Outcome.inProgress {
+            while promptState?.status == nil || promptState?.status == FaceMatcherPromptState.Status.inProgress {
                 try? await Task.sleep(nanoseconds: 100_000_000)
-                guard promptState?.outcome == nil || promptState?.outcome == FaceMatcherPromptState.Outcome.inProgress else { break }
+                guard promptState?.status == nil || promptState?.status == FaceMatcherPromptState.Status.inProgress else { break }
                 let frame = CameraFrame(
                     width: 640,
                     height: 480,

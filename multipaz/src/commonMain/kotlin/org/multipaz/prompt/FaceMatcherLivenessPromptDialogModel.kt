@@ -14,6 +14,7 @@ class FaceMatcherLivenessPromptDialogModel(
     var defaultMatcher: FaceMatcher? = null
 ) : PromptDialogModel<FaceMatcherLivenessPromptDialogModel.FaceMatcherLivenessRequest, ByteString?>() {
 
+    /** Dialog type identifier for [FaceMatcherLivenessPromptDialogModel]. */
     object DialogType : PromptDialogModel.DialogType<FaceMatcherLivenessPromptDialogModel>
     override val dialogType: DialogType get() = DialogType
 

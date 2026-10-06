@@ -9,7 +9,7 @@ import kotlinx.io.bytestring.ByteString
  * Session driving the interactive face liveness verification and photo capture UI.
  *
  * A fresh session instance is created per liveness attempt via [FaceMatcher.createLivenessSession].
- * It directly controls the messages above and below the camera preview, the overlay, and verification outcome.
+ * It directly controls the messages above and below the camera preview, the overlay, and verification status.
  */
 abstract class FaceMatcherLivenessSession {
     protected val _state = MutableStateFlow(FaceMatcherLivenessPromptState())
@@ -35,16 +35,16 @@ abstract class FaceMatcherLivenessSession {
     protected fun updateState(
         messageAbove: String? = _state.value.messageAbove,
         messageBelow: String? = _state.value.messageBelow,
-        outcome: FaceMatcherLivenessPromptState.Outcome = _state.value.outcome,
+        status: FaceMatcherLivenessPromptState.Status = _state.value.status,
         overlay: OverlayFrame? = _state.value.overlay,
         capturedImage: ByteString? = _state.value.capturedImage
     ) {
         _state.value = FaceMatcherLivenessPromptState(
             messageAbove = messageAbove,
             messageBelow = messageBelow,
-            outcome = outcome,
+            status = status,
             overlay = overlay,
-            capturedImage = capturedImage
+            capturedImage = if (status == FaceMatcherLivenessPromptState.Status.SUCCESS) capturedImage else null
         )
     }
 }

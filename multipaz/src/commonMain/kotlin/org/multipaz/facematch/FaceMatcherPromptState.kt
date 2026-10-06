@@ -5,19 +5,24 @@ package org.multipaz.facematch
  *
  * @property messageAbove primary text displayed above the camera preview (e.g. instructions).
  * @property messageBelow secondary status or feedback text displayed below the camera preview.
- * @property outcome overall verification outcome.
+ * @property status overall verification status.
  * @property overlay optional bitmap overlay to draw on top of the camera video stream.
  */
 data class FaceMatcherPromptState(
     val messageAbove: String? = null,
     val messageBelow: String? = null,
-    val outcome: Outcome = Outcome.IN_PROGRESS,
+    val status: Status = Status.IN_PROGRESS,
     val overlay: OverlayFrame? = null
 ) {
-    /** Overall outcome of the face verification session. */
-    enum class Outcome {
+    /** Overall status of the face verification session. */
+    enum class Status {
+        /** Verification is actively in progress. */
         IN_PROGRESS,
+
+        /** Face matched successfully against the reference portrait. */
         SUCCESS,
+
+        /** Face matching failed or could not be completed. */
         FAILED
     }
 }

@@ -44,6 +44,8 @@ abstract class GenerateTestDataTask : DefaultTask() {
 
         val portraits = listOf(
             PortraitMeta("qualcomm_demo_1.jpg", "qualcomm_demo_1", "Qualcomm Demo 1", "Official MobileFaceNet demo portrait (BSD-3-Clause)", "QUALCOMM_DEMO_1_BASE64"),
+            PortraitMeta("qualcomm_demo_1.png", "qualcomm_demo_1_png", "Qualcomm Demo 1 (PNG)", "Official MobileFaceNet demo portrait in PNG format", "QUALCOMM_DEMO_1_PNG_BASE64"),
+            PortraitMeta("qualcomm_demo_1.jp2", "qualcomm_demo_1_jp2", "Qualcomm Demo 1 (JPEG 2000)", "Official MobileFaceNet demo portrait in JPEG 2000 format", "QUALCOMM_DEMO_1_JP2_BASE64"),
             PortraitMeta("qualcomm_demo_2.jpg", "qualcomm_demo_2", "Qualcomm Demo 2", "Official MobileFaceNet demo portrait (BSD-3-Clause)", "QUALCOMM_DEMO_2_BASE64"),
             PortraitMeta("warren_portrait.jpg", "warren_portrait", "Elizabeth Warren (113th)", "U.S. Congress official portrait with glasses", "WARREN_PORTRAIT_BASE64"),
             PortraitMeta("warren_portrait_114th.jpg", "warren_portrait_114th", "Elizabeth Warren (114th)", "U.S. Congress official portrait with glasses", "WARREN_PORTRAIT_114TH_BASE64"),

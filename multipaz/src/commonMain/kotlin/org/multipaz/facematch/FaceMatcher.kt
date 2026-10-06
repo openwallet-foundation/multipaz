@@ -25,8 +25,14 @@ interface FaceMatcher {
     /**
      * Creates a new [FaceMatcherSession] for a verification session against [referencePortrait].
      *
-     * @param referencePortrait the reference portrait image bytes to verify against.
+     * The [referencePortrait] parameter must be an encoded image in one of the supported formats:
+     * - PNG (Portable Network Graphics)
+     * - JPEG (Joint Photographic Experts Group)
+     * - JPEG 2000 (JP2 file format or raw J2K codestream)
+     *
+     * @param referencePortrait the reference portrait image bytes to verify against in PNG, JPEG, or JPEG 2000 format.
      * @return a new [FaceMatcherSession] instance for this verification session.
+     * @throws IllegalArgumentException if [referencePortrait] is not in a supported image format.
      */
     fun createSession(referencePortrait: ByteString): FaceMatcherSession
 

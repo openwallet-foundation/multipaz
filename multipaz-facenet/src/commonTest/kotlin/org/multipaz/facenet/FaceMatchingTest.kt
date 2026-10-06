@@ -221,4 +221,53 @@ class FaceMatchingTest {
             "Direct matchPortraits similarity ($similarity) should be >= 0.70"
         )
     }
+
+    @Test
+    fun testSupportedFormats() = runTest {
+        val matcher = FaceNetFaceMatcher(
+            modelBytes = FaceTestData.testModel,
+            config = FaceNetModelConfig.MOBILE_FACENET
+        )
+        if (!matcher.isSupported) {
+            println("Skipping testSupportedFormats: not supported on this platform")
+            return@runTest
+        }
+
+        val jpegBytes = FaceTestData.decodeImageByteString(FaceTestData.QUALCOMM_DEMO_1_BASE64)
+        val pngBytes = FaceTestData.decodeImageByteString(FaceTestData.QUALCOMM_DEMO_1_PNG_BASE64)
+        val jp2Bytes = FaceTestData.decodeImageByteString(FaceTestData.QUALCOMM_DEMO_1_JP2_BASE64)
+
+        // Verify face crop extraction works for all three formats
+        val jpegCrop = matcher.extractFaceCrop(jpegBytes)
+        val pngCrop = matcher.extractFaceCrop(pngBytes)
+        val jp2Crop = matcher.extractFaceCrop(jp2Bytes)
+        assertTrue(jpegCrop.size > 0, "JPEG crop should not be empty")
+        assertTrue(pngCrop.size > 0, "PNG crop should not be empty")
+        assertTrue(jp2Crop.size > 0, "JP2 crop should not be empty")
+
+        // Compute embeddings
+        val jpegEmb = matcher.getFaceEmbedding(jpegBytes)
+        val pngEmb = matcher.getFaceEmbedding(pngBytes)
+        val jp2Emb = matcher.getFaceEmbedding(jp2Bytes)
+        assertNotNull(jpegEmb, "Failed to compute embedding from JPEG")
+        assertNotNull(pngEmb, "Failed to compute embedding from PNG")
+        assertNotNull(jp2Emb, "Failed to compute embedding from JPEG 2000")
+
+        // Verify pairwise similarities between identical image across formats
+        val simJpegPng = jpegEmb.calculateSimilarity(pngEmb)
+        val simJpegJp2 = jpegEmb.calculateSimilarity(jp2Emb)
+        val simPngJp2 = pngEmb.calculateSimilarity(jp2Emb)
+
+        println("JPEG vs PNG similarity: $simJpegPng")
+        println("JPEG vs JP2 similarity: $simJpegJp2")
+        println("PNG vs JP2 similarity: $simPngJp2")
+
+        assertTrue(simJpegPng >= 0.98f, "JPEG and PNG embeddings should be nearly identical ($simJpegPng)")
+        assertTrue(simJpegJp2 >= 0.98f, "JPEG and JP2 embeddings should be nearly identical ($simJpegJp2)")
+        assertTrue(simPngJp2 >= 0.98f, "PNG and JP2 embeddings should be nearly identical ($simPngJp2)")
+
+        // Direct matching convenience across formats
+        val directSim = matcher.matchPortraits(pngBytes, jp2Bytes)
+        assertTrue(directSim >= 0.98f, "Direct match between PNG and JP2 should be >= 0.98 ($directSim)")
+    }
 }

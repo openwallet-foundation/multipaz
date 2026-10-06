@@ -11,12 +11,16 @@ import org.multipaz.request.TrustedRequesterIdentity
 import org.multipaz.securearea.PassphraseConstraints
 import kotlin.coroutines.cancellation.CancellationException
 
+/** Gets the [PassphrasePromptDialogModel] from this [PromptModel]. */
 fun PromptModel.getPassphraseDialogModel() = getDialogModel(PassphrasePromptDialogModel.DialogType)
 
+/** Gets the [ConsentPromptDialogModel] from this [PromptModel]. */
 fun PromptModel.getConsentPromptDialogModel() = getDialogModel(ConsentPromptDialogModel.DialogType)
 
+/** Gets the [FaceMatcherPromptDialogModel] from this [PromptModel]. */
 fun PromptModel.getFaceMatcherDialogModel() = getDialogModel(FaceMatcherPromptDialogModel.DialogType)
 
+/** Gets the [FaceMatcherLivenessPromptDialogModel] from this [PromptModel]. */
 fun PromptModel.getFaceMatcherLivenessDialogModel() = getDialogModel(FaceMatcherLivenessPromptDialogModel.DialogType)
 
 /**
@@ -153,7 +157,8 @@ suspend fun PromptModel.showFaceMatcherPrompt(
  * @param reason user-facing description of the verification reason.
  * @param matcher the [FaceMatcher] to use, or default from the dialog model if null.
  * @param document optional document associated with this request.
- * @return the captured high-resolution portrait photo [ByteString], or null if verification failed or was cancelled.
+ * @return the captured upright portrait photo [ByteString] (uncropped full camera frame in JPEG format),
+ * or null if verification failed or was cancelled.
  */
 @Throws(
     CancellationException::class,

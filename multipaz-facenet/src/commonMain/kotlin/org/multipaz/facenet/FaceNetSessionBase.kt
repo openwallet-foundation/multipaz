@@ -81,7 +81,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
         updateState(
             messageAbove = "Verify Identity",
             messageBelow = "Position your face and look at the camera",
-            outcome = FaceMatcherPromptState.Outcome.IN_PROGRESS
+            status = FaceMatcherPromptState.Status.IN_PROGRESS
         )
     }
 
@@ -125,7 +125,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
     private val frameMutex = Mutex()
 
     override suspend fun feedFrame(frame: CameraFrame) {
-        if (isCancelled || state.value.outcome != FaceMatcherPromptState.Outcome.IN_PROGRESS) {
+        if (isCancelled || state.value.status != FaceMatcherPromptState.Status.IN_PROGRESS) {
             return
         }
 
@@ -465,7 +465,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
             updateState(
                 messageAbove = verifiedMsg,
                 messageBelow = "Verification successful",
-                outcome = FaceMatcherPromptState.Outcome.SUCCESS,
+                status = FaceMatcherPromptState.Status.SUCCESS,
                 overlay = null
             )
         } else {
@@ -491,7 +491,7 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
         updateState(
             messageAbove = messageAbove,
             messageBelow = messageBelow,
-            outcome = FaceMatcherPromptState.Outcome.FAILED,
+            status = FaceMatcherPromptState.Status.FAILED,
             overlay = overlay
         )
     }

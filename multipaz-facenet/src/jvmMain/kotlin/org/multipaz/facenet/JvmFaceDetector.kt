@@ -179,8 +179,21 @@ internal class JvmFaceDetector(
         }
     }
 
+    private fun decodeImageBytesToBufferedImage(imageBytes: ByteArray): BufferedImage? {
+        val image = ImageIO.read(ByteArrayInputStream(imageBytes))
+        if (image != null) {
+            return image
+        }
+        return try {
+            decodeJpeg2000ToBufferedImage(imageBytes)
+        } catch (e: Throwable) {
+            Logger.w(TAG, "Failed to decode image as JPEG 2000", e)
+            null
+        }
+    }
+
     fun detectFaces(imageBytes: ByteArray): List<BlazeFaceDetection> {
-        val image = ImageIO.read(ByteArrayInputStream(imageBytes)) ?: return emptyList()
+        val image = decodeImageBytesToBufferedImage(imageBytes) ?: return emptyList()
         return detectFaces(image)
     }
 
@@ -198,7 +211,7 @@ internal class JvmFaceDetector(
     }
 
     fun extractFaceCropImage(imageBytes: ByteArray, face: BlazeFaceDetection, targetSize: Int): BufferedImage? {
-        val sourceImage = ImageIO.read(ByteArrayInputStream(imageBytes)) ?: return null
+        val sourceImage = decodeImageBytesToBufferedImage(imageBytes) ?: return null
         return extractFaceCropImage(sourceImage, face, targetSize)
     }
 
@@ -280,7 +293,7 @@ internal class JvmFaceDetector(
     }
 
     fun extractFaceCrop(imageBytes: ByteArray, face: BlazeFaceDetection, targetSize: Int): FloatArray? {
-        val image = ImageIO.read(ByteArrayInputStream(imageBytes)) ?: return null
+        val image = decodeImageBytesToBufferedImage(imageBytes) ?: return null
         return extractFaceCrop(image, face, targetSize)
     }
 

@@ -7,22 +7,32 @@ import kotlinx.io.bytestring.ByteString
  *
  * @property messageAbove primary text displayed above the camera preview (e.g. instructions).
  * @property messageBelow secondary status or feedback text displayed below the camera preview.
- * @property outcome overall verification outcome.
+ * @property status overall verification status.
  * @property overlay optional bitmap overlay to draw on top of the camera video stream.
- * @property capturedImage optional high-resolution portrait photo bytes captured during liveness enrollment.
+ * @property capturedImage portrait photo bytes captured during liveness verification.
+ * This property is set if - and only if - [status] is [Status.SUCCESS]. When set, the image
+ * is the uncropped full camera frame encoded in JPEG format at the resolution of the camera stream
+ * in upright portrait orientation. For all other statuses, this property is `null`.
  */
 data class FaceMatcherLivenessPromptState(
     val messageAbove: String? = null,
     val messageBelow: String? = null,
-    val outcome: Outcome = Outcome.IN_PROGRESS,
+    val status: Status = Status.IN_PROGRESS,
     val overlay: OverlayFrame? = null,
     val capturedImage: ByteString? = null
 ) {
-    /** Overall outcome of the face liveness verification session. */
-    enum class Outcome {
+    /** Overall status of the face liveness verification session. */
+    enum class Status {
+        /** Liveness challenge poses or face positioning are actively in progress. */
         IN_PROGRESS,
+
+        /** Active challenges passed; holding still in preparation for portrait photo capture. */
         PREPARE_FOR_PHOTO,
+
+        /** Liveness verified and portrait photo successfully captured. */
         SUCCESS,
+
+        /** Liveness verification failed or could not be completed. */
         FAILED
     }
 }
