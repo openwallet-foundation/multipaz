@@ -21,10 +21,6 @@ class FaceMatcherTest {
         assertEquals(FaceMatcherLivenessPromptState.Status.IN_PROGRESS, defaultLivenessState.status)
         assertNull(defaultLivenessState.capturedImage)
 
-        val livenessPrepState = FaceMatcherLivenessPromptState(status = FaceMatcherLivenessPromptState.Status.PREPARE_FOR_PHOTO)
-        assertEquals(FaceMatcherLivenessPromptState.Status.PREPARE_FOR_PHOTO, livenessPrepState.status)
-        assertNull(livenessPrepState.capturedImage)
-
         val dummyImage = kotlinx.io.bytestring.ByteString(byteArrayOf(1, 2, 3))
         val livenessSuccessState = FaceMatcherLivenessPromptState(
             status = FaceMatcherLivenessPromptState.Status.SUCCESS,

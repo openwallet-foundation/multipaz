@@ -9,6 +9,7 @@ import SwiftUI
 class ViewModel {
 
     var path: [Destination] = []
+    var pendingToastMessage: String? = nil
 
     let verticalCardListState = VerticalCardListState()
 

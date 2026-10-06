@@ -53,19 +53,17 @@ struct FaceMatcherPromptDialog: View {
             .sheet(item: $data) { data in
                 let matcher = data.state.parameters?.matcher ?? model.defaultMatcher
                 let portrait = data.state.parameters?.referencePortrait
-                let faceMatcherSession = data.state.parameters?.faceMatcherSession ?? {
+                let faceMatcherSession: FaceMatcherSession = {
+                    if let existing = data.state.parameters?.faceMatcherSession {
+                        return existing
+                    }
                     guard let matcher else {
                         fatalError("No FaceMatcher available")
                     }
-                    if let portrait {
-                        return matcher.createSession(referencePortrait: portrait)
-                    } else {
-                        do {
-                            return try matcher.createLivenessSession()
-                        } catch {
-                            fatalError("Matcher does not support liveness: \(error)")
-                        }
+                    guard let portrait else {
+                        fatalError("Reference portrait is required for FaceMatcherPromptDialog")
                     }
+                    return matcher.createSession(referencePortrait: portrait)
                 }()
                 FaceMatcherPromptView(
                     title: humanReadableReason?.title ?? "Verify it's you",
@@ -201,7 +199,7 @@ private struct FaceMatcherPromptView: View {
     }
 }
 
-private struct FaceMatcherOverlayView: View {
+struct FaceMatcherOverlayView: View {
     let overlay: OverlayFrame
 
     var body: some View {
@@ -215,7 +213,7 @@ private struct FaceMatcherOverlayView: View {
 }
 
 
-private struct CameraPreview: UIViewControllerRepresentable {
+struct CameraPreview: UIViewControllerRepresentable {
     let onFrame: (CameraFrame, @escaping () -> Void) -> Void
 
     func makeUIViewController(context: Context) -> CameraViewController {
@@ -229,7 +227,7 @@ private struct CameraPreview: UIViewControllerRepresentable {
     }
 }
 
-private class CameraViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDelegate {
+class CameraViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDelegate {
     var onFrame: ((CameraFrame, @escaping () -> Void) -> Void)?
 
     private let captureSession = AVCaptureSession()

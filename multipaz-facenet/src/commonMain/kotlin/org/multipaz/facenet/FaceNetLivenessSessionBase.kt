@@ -20,7 +20,7 @@ private const val TAG = "FaceNetLivenessSessionBase"
  *
  * Implements:
  * - Active liveness challenges: prompts random directional head turns.
- * - Preparation for photo capture: 2-second hold-still phase emitting [FaceMatcherLivenessPromptState.Status.PREPARE_FOR_PHOTO].
+ * - Preparation for photo capture: 2-second hold-still phase before capturing photo.
  * - High-resolution portrait photo capture upon completing the hold-still phase.
  * - Dynamic visual feedback via [OverlayFrame] and segmented challenge ring.
  */
@@ -323,7 +323,7 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
                             updateState(
                                 messageAbove = "Hold Still",
                                 messageBelow = "Preparing photo...",
-                                status = FaceMatcherLivenessPromptState.Status.PREPARE_FOR_PHOTO,
+                                status = FaceMatcherLivenessPromptState.Status.IN_PROGRESS,
                                 overlay = prepOverlay
                             )
                             return
@@ -356,14 +356,14 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
                     updateState(
                         messageAbove = "Hold Still",
                         messageBelow = "Capturing portrait image...",
-                        status = FaceMatcherLivenessPromptState.Status.PREPARE_FOR_PHOTO,
+                        status = FaceMatcherLivenessPromptState.Status.IN_PROGRESS,
                         overlay = overlay
                     )
                 } else {
                     updateState(
                         messageAbove = "Hold Still",
                         messageBelow = "Preparing photo...",
-                        status = FaceMatcherLivenessPromptState.Status.PREPARE_FOR_PHOTO,
+                        status = FaceMatcherLivenessPromptState.Status.IN_PROGRESS,
                         overlay = overlay
                     )
                 }
@@ -383,12 +383,13 @@ abstract class FaceNetLivenessSessionBase<TFace : DetectedFacePose>(
                         currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
                             RingSegment(color = RingSegment.COLOR_GREEN, scale = 1.2f)
                         }
+                        val successOverlay = createOverlay(frame, faces)
                         updateState(
                             messageAbove = "Portrait Captured",
                             messageBelow = "Liveness verified",
                             status = FaceMatcherLivenessPromptState.Status.SUCCESS,
                             capturedImage = photoBytes,
-                            overlay = null
+                            overlay = successOverlay
                         )
                     } else {
                         currentRingSegments = List(RingSegment.NUM_SEGMENTS) {

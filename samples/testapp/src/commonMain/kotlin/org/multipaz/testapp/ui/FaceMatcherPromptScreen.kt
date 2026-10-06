@@ -67,7 +67,6 @@ import org.multipaz.facenet.testdata.FaceTestData
 import org.multipaz.prompt.PromptDismissedException
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.Reason
-import org.multipaz.prompt.showFaceLivenessPrompt
 import org.multipaz.prompt.showFaceMatcherPrompt
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
@@ -110,7 +109,8 @@ fun FaceMatcherPromptScreen(
     promptModel: PromptModel,
     showToast: (message: String) -> Unit,
     faceMatcherRepository: FaceMatcherRepository? = null,
-    storage: Storage = TestAppConfiguration.storage
+    storage: Storage = TestAppConfiguration.storage,
+    onNavigateToLivenessCaptureComposable: (matcher: FaceMatcher?) -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     var referencePortrait by remember { mutableStateOf<ByteString?>(null) }
@@ -119,10 +119,10 @@ fun FaceMatcherPromptScreen(
     var showSamplePortraitPicker by remember { mutableStateOf(false) }
     val matchers = faceMatcherRepository?.all ?: emptyList()
     var selectedMatcher by remember { mutableStateOf<FaceMatcher?>(faceMatcherRepository?.defaultMatcher) }
+    var selectedLivenessMatcher by remember { mutableStateOf<FaceMatcher?>(faceMatcherRepository?.defaultMatcher) }
     var detectedFaceCrop by remember { mutableStateOf<ByteString?>(null) }
     var isExtractingCrop by remember { mutableStateOf(false) }
     var cropError by remember { mutableStateOf<String?>(null) }
-    var capturedPortraitDialogBytes by remember { mutableStateOf<ByteString?>(null) }
 
     val faceNetMatcher = remember(selectedMatcher, matchers) {
         (selectedMatcher as? FaceNetFaceMatcher)
@@ -220,28 +220,6 @@ fun FaceMatcherPromptScreen(
                         showToast("Selected ${selected.displayName}")
                     } catch (e: Throwable) {
                         Logger.e(TAG, "Failed to save sample portrait", e)
-                        showToast("Failed to save portrait: ${e.message}")
-                    }
-                }
-            }
-        )
-    }
- 
-    if (capturedPortraitDialogBytes != null) {
-        val capturedBytes = capturedPortraitDialogBytes!!
-        CapturedPortraitDialog(
-            portraitBytes = capturedBytes,
-            onDismiss = { capturedPortraitDialogBytes = null },
-            onUseAsReference = {
-                coroutineScope.launch {
-                    try {
-                        val normalized = normalizePortrait(capturedBytes)
-                        savePortrait(storage, normalized)
-                        referencePortrait = normalized
-                        capturedPortraitDialogBytes = null
-                        showToast("Reference portrait updated from captured photo")
-                    } catch (e: Throwable) {
-                        Logger.e(TAG, "Failed to save captured portrait", e)
                         showToast("Failed to save portrait: ${e.message}")
                     }
                 }
@@ -657,39 +635,6 @@ fun FaceMatcherPromptScreen(
                         Text("Verify Face (Show Face Matcher Prompt)")
                     }
 
-                    OutlinedButton(
-                        onClick = {
-                            coroutineScope.launch {
-                                try {
-                                    val matcherToUse = selectedMatcher ?: faceMatcherRepository?.defaultMatcher
-                                    val captured = promptModel.showFaceLivenessPrompt(
-                                        matcher = matcherToUse,
-                                        reason = Reason.HumanReadable(
-                                            title = "Check Liveness",
-                                            subtitle = "Follow the prompts and hold still to capture your portrait",
-                                            requireConfirmation = false
-                                        )
-                                    )
-                                    if (captured != null) {
-                                        capturedPortraitDialogBytes = captured
-                                        showToast("Liveness confirmed! Portrait captured.")
-                                    } else {
-                                        showToast("Liveness check failed or dismissed")
-                                    }
-                                } catch (e: PromptDismissedException) {
-                                    showToast("Liveness check cancelled")
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (e: Throwable) {
-                                    showToast("Error: ${e.message}")
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Check liveness and capture portrait image")
-                    }
-
                     if (referencePortrait == null) {
                         Text(
                             text = "A reference portrait is required to enable face verification.",
@@ -697,6 +642,53 @@ fun FaceMatcherPromptScreen(
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.align(Alignment.CenterHorizontally)
                         )
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Liveness Verification",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Performs interactive face liveness verification and captures a portrait photo " +
+                            "without requiring a pre-existing reference portrait. Useful for credential " +
+                            "provisioning and onboarding workflows.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (matchers.size > 1) {
+                        SettingMultipleChoice(
+                            title = "Face matcher implementation",
+                            choices = matchers.map { it.displayName },
+                            initialChoice = (selectedLivenessMatcher ?: faceMatcherRepository?.defaultMatcher)?.displayName ?: "",
+                            onChoiceSelected = { choice ->
+                                selectedLivenessMatcher = matchers.find { it.displayName == choice }
+                            }
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            val matcherToUse = selectedLivenessMatcher ?: faceMatcherRepository?.defaultMatcher
+                            onNavigateToLivenessCaptureComposable(matcherToUse)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Check liveness and capture portrait image")
                     }
                 }
             }
@@ -976,78 +968,4 @@ private fun normalizePortrait(rawBytes: ByteString): ByteString {
     }
 }
 
-@Composable
-private fun CapturedPortraitDialog(
-    portraitBytes: ByteString,
-    onDismiss: () -> Unit,
-    onUseAsReference: () -> Unit
-) {
-    val bitmap = remember(portraitBytes) {
-        try {
-            decodeImage(portraitBytes.toByteArray())
-        } catch (e: Throwable) {
-            null
-        }
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Captured Portrait") },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (bitmap != null) {
-                    Image(
-                        bitmap = bitmap,
-                        contentDescription = "Captured Portrait",
-                        modifier = Modifier
-                            .size(200.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .border(
-                                width = 2.dp,
-                                color = MaterialTheme.colorScheme.primary,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(200.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Invalid Image", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                val resolutionText = if (bitmap != null) "${bitmap.width} × ${bitmap.height}" else "Unknown"
-                Text(
-                    text = "Resolution: $resolutionText (${portraitBytes.size / 1024} KB)",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = "Liveness check passed! High-resolution photo captured.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = onUseAsReference) {
-                Text("Use as Reference Portrait")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
-            }
-        }
-    )
-}
 

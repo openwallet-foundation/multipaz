@@ -20,9 +20,6 @@ fun PromptModel.getConsentPromptDialogModel() = getDialogModel(ConsentPromptDial
 /** Gets the [FaceMatcherPromptDialogModel] from this [PromptModel]. */
 fun PromptModel.getFaceMatcherDialogModel() = getDialogModel(FaceMatcherPromptDialogModel.DialogType)
 
-/** Gets the [FaceMatcherLivenessPromptDialogModel] from this [PromptModel]. */
-fun PromptModel.getFaceMatcherLivenessDialogModel() = getDialogModel(FaceMatcherLivenessPromptDialogModel.DialogType)
-
 /**
  * Prompts user for authentication through a passphrase.
  *
@@ -148,49 +145,6 @@ suspend fun PromptModel.showFaceMatcherPrompt(
         )
     } catch (e: PromptDismissedException) {
         false
-    }
-}
-
-/**
- * Prompts the user to perform active liveness head poses and capture an upright portrait photo.
- *
- * @param reason user-facing description of the verification reason.
- * @param matcher the [FaceMatcher] to use, or default from the dialog model if null.
- * @param document optional document associated with this request.
- * @return the captured upright portrait photo [ByteString] (uncropped full camera frame in JPEG format),
- * or null if verification failed or was cancelled.
- */
-@Throws(
-    CancellationException::class,
-    IllegalStateException::class,
-    UnsupportedOperationException::class,
-    PromptModelNotAvailableException::class,
-    PromptUiNotAvailableException::class
-)
-suspend fun PromptModel.showFaceLivenessPrompt(
-    reason: Reason = Reason.HumanReadable(
-        title = "Check Liveness",
-        subtitle = "Follow the prompts to confirm liveness and capture your photo",
-        requireConfirmation = false
-    ),
-    matcher: FaceMatcher? = null,
-    document: Document? = null
-): ByteString? {
-    val dialogModel = getFaceMatcherLivenessDialogModel()
-    val matcherToUse = matcher ?: dialogModel.defaultMatcher
-        ?: throw IllegalStateException("No FaceMatcher provided or configured as default")
-    val faceMatcherSession = matcherToUse.createLivenessSession()
-    return try {
-        dialogModel.displayPrompt(
-            FaceMatcherLivenessPromptDialogModel.FaceMatcherLivenessRequest(
-                reason = reason,
-                matcher = matcherToUse,
-                faceMatcherLivenessSession = faceMatcherSession,
-                document = document
-            )
-        )
-    } catch (e: PromptDismissedException) {
-        null
     }
 }
 

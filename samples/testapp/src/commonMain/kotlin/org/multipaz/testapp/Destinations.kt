@@ -92,6 +92,14 @@ data object ConsentPromptDestination: Destination()
 data object FaceMatcherPromptDestination: Destination()
 
 @Serializable
+data class FaceLivenessCaptureComposableDestination(
+    val matcherName: String? = null
+): Destination()
+
+@Serializable
+data object FakeIssuerApprovalDestination: Destination()
+
+@Serializable
 data object QrCodesDestination: Destination()
 
 @Serializable

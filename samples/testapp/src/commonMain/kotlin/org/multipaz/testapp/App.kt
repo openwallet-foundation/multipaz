@@ -106,7 +106,6 @@ import org.multipaz.presentment.uriSchemePresentment
 import org.multipaz.facenet.FaceNetFaceMatcher
 import org.multipaz.facenet.FaceNetModelConfig
 import org.multipaz.facematch.FaceMatcherRepository
-import org.multipaz.prompt.FaceMatcherLivenessPromptDialogModel
 import org.multipaz.prompt.FaceMatcherPromptDialogModel
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.promptModelRequestConsent
@@ -131,6 +130,8 @@ import org.multipaz.testapp.ui.CertificateScreen
 import org.multipaz.testapp.ui.CertificateViewerExamplesScreen
 import org.multipaz.testapp.ui.ConsentPromptScreen
 import org.multipaz.testapp.ui.FaceMatcherPromptScreen
+import org.multipaz.testapp.ui.FaceLivenessCaptureComposableScreen
+import org.multipaz.testapp.ui.FakeIssuerApprovalScreen
 import org.multipaz.facenet.testdata.FaceTestData
 import org.multipaz.testapp.ui.CredentialClaimsViewerScreen
 import org.multipaz.testapp.ui.CredentialViewerScreen
@@ -506,8 +507,6 @@ class App private constructor (val promptModel: PromptModel) {
             )
         }
         promptModel.getDialogModel(FaceMatcherPromptDialogModel.DialogType).defaultMatcher =
-            faceMatcherRepository.defaultMatcher
-        promptModel.getDialogModel(FaceMatcherLivenessPromptDialogModel.DialogType).defaultMatcher =
             faceMatcherRepository.defaultMatcher
     }
 
@@ -1138,6 +1137,7 @@ class App private constructor (val promptModel: PromptModel) {
                 clientPreferences = CompletableDeferred(provisioningSupport.getOpenID4VCIClientPreferences()),
                 backend = CompletableDeferred(provisioningSupport.getOpenID4VCIBackend())
             )
+            val capturedPortraitForApproval = remember { mutableStateOf<ByteString?>(null) }
             NavHost(
                 navController = navController,
                 startDestination = StartDestination,
@@ -1582,6 +1582,45 @@ class App private constructor (val promptModel: PromptModel) {
                             faceMatcherRepository = faceMatcherRepository,
                             showToast = { message -> showToast(message) },
                             storage = TestAppConfiguration.storage,
+                            onNavigateToLivenessCaptureComposable = { matcher ->
+                                navController.navigate(
+                                    FaceLivenessCaptureComposableDestination(matcher?.name)
+                                )
+                            }
+                        )
+                    }
+                }
+                composable<FaceLivenessCaptureComposableDestination> { backStackEntry ->
+                    val destination = backStackEntry.toRoute<FaceLivenessCaptureComposableDestination>()
+                    val matcher = destination.matcherName?.let { faceMatcherRepository?.lookup(it) }
+                        ?: faceMatcherRepository?.defaultMatcher
+                    WithAppBar(navController, "Check Liveness (Composable)") {
+                        FaceLivenessCaptureComposableScreen(
+                            faceMatcher = matcher,
+                            onPortraitCaptured = { portrait ->
+                                capturedPortraitForApproval.value = portrait
+                                navController.navigate(FakeIssuerApprovalDestination)
+                            },
+                            onCancel = {
+                                navController.popBackStack()
+                            }
+                        )
+                    }
+                }
+                composable<FakeIssuerApprovalDestination> { backStackEntry ->
+                    WithAppBar(navController, "Approve Portrait for Issuer") {
+                        FakeIssuerApprovalScreen(
+                            portraitBytes = capturedPortraitForApproval.value,
+                            onApprove = {
+                                showToast("Portrait approved and sent to fake issuer")
+                                capturedPortraitForApproval.value = null
+                                navController.popBackStack<FaceMatcherPromptDestination>(inclusive = false)
+                            },
+                            onCancel = {
+                                showToast("Provisioning cancelled")
+                                capturedPortraitForApproval.value = null
+                                navController.popBackStack<FaceMatcherPromptDestination>(inclusive = false)
+                            }
                         )
                     }
                 }

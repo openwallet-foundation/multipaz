@@ -26,9 +26,6 @@ data class FaceMatcherLivenessPromptState(
         /** Liveness challenge poses or face positioning are actively in progress. */
         IN_PROGRESS,
 
-        /** Active challenges passed; holding still in preparation for portrait photo capture. */
-        PREPARE_FOR_PHOTO,
-
         /** Liveness verified and portrait photo successfully captured. */
         SUCCESS,
 

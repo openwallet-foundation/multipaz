@@ -5,8 +5,11 @@ import kotlinx.io.bytestring.ByteString
 /**
  * Interface for verifying user identity via face matching.
  *
- * Implementations are registered in [FaceMatcherRepository] and instantiate a
- * fresh [FaceMatcherSession] for each verification attempt.
+ * The normal way to use [createSession] is through the prompt machinery via
+ * [org.multipaz.prompt.showFaceMatcherPrompt].
+ *
+ * The normal way to use [createLivenessSession] is through the `FaceMatcherLivenessCapture()`
+ * composable in `multipaz-compose` or `FaceMatcherLivenessCaptureView` in `multipaz-swiftui`.
  *
  * The `multipaz-facenet` library provides an implementation based on Google FaceNet
  * and the MobileFaceNet model which can be used for development and testing.
@@ -42,6 +45,9 @@ interface FaceMatcher {
      * Throughout the verification session, the implementation can feed back real-time information, instructions,
      * status messages, and visual overlays to the user through the use of [FaceMatcherSession.updateState].
      *
+     * The normal way to use this function is through the prompt machinery via
+     * [org.multipaz.prompt.showFaceMatcherPrompt].
+     *
      * The [referencePortrait] parameter must be an encoded image in one of the supported formats:
      * - PNG (Portable Network Graphics)
      * - JPEG (Joint Photographic Experts Group)
@@ -56,6 +62,9 @@ interface FaceMatcher {
     /**
      * Creates a new [FaceMatcherLivenessSession] driving an interactive session to check user liveness and
      * capture a verified portrait photo of the subject.
+     *
+     * The normal way to use this function is through the `FaceMatcherLivenessCapture()` composable in
+     * `multipaz-compose` or `FaceMatcherLivenessCaptureView` in `multipaz-swiftui`.
      *
      * Unlike [createSession], this flow operates without a reference portrait and is typically used during
      * user onboarding, credential issuance, or provisioning flows where a fresh, verified live portrait photo

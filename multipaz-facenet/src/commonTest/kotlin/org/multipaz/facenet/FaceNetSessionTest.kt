@@ -337,6 +337,7 @@ class FaceNetSessionTest {
         assertEquals("Identity Verified", session.state.value.messageAbove)
         assertEquals("Verification successful", session.state.value.messageBelow)
         assertTrue(session.ringSegments.all { it.color == RingSegment.COLOR_GREEN })
+        assertNotNull(session.state.value.overlay)
     }
 
     @Test
@@ -432,7 +433,7 @@ class FaceNetSessionTest {
 
         // After completing 3 challenges, transitions to PREPARE_FOR_PHOTO phase (duration 2000ms)
         assertEquals(FaceNetLivenessSessionBase.Phase.PREPARE_FOR_PHOTO, session.phase)
-        assertEquals(FaceMatcherLivenessPromptState.Status.PREPARE_FOR_PHOTO, session.state.value.status)
+        assertEquals(FaceMatcherLivenessPromptState.Status.IN_PROGRESS, session.state.value.status)
         assertEquals("Hold Still", session.state.value.messageAbove)
         assertEquals("Preparing photo...", session.state.value.messageBelow)
         assertNull(session.state.value.capturedImage)
@@ -441,7 +442,7 @@ class FaceNetSessionTest {
         currentTime += 1000L
         session.feedFrame(dummyFrame)
         assertEquals(FaceNetLivenessSessionBase.Phase.PREPARE_FOR_PHOTO, session.phase)
-        assertEquals(FaceMatcherLivenessPromptState.Status.PREPARE_FOR_PHOTO, session.state.value.status)
+        assertEquals(FaceMatcherLivenessPromptState.Status.IN_PROGRESS, session.state.value.status)
 
         // After 2000ms elapsed, transitions to CAPTURING
         currentTime += 1100L
@@ -465,6 +466,7 @@ class FaceNetSessionTest {
         assertNotNull(session.state.value.capturedImage)
         assertEquals(ByteString(byteArrayOf(1, 2, 3)), session.state.value.capturedImage)
         assertTrue(session.ringSegments.all { it.color == RingSegment.COLOR_GREEN })
+        assertNotNull(session.state.value.overlay)
     }
 
     @Test

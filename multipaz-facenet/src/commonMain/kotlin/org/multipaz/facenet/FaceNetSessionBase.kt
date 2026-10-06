@@ -488,11 +488,12 @@ abstract class FaceNetSessionBase<TFace : DetectedFacePose>(
             currentRingSegments = List(RingSegment.NUM_SEGMENTS) {
                 RingSegment(color = RingSegment.COLOR_GREEN, scale = 1.2f)
             }
+            val successOverlay = createOverlay(frame, faces, currentSimilarity)
             updateState(
                 messageAbove = verifiedMsg,
                 messageBelow = "Verification successful",
                 status = FaceMatcherPromptState.Status.SUCCESS,
-                overlay = null
+                overlay = successOverlay
             )
         } else {
             val percentage = (bestSimilarity * 100).toInt().coerceAtLeast(0)
