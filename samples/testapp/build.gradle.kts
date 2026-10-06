@@ -75,6 +75,8 @@ kotlin {
             baseName = "Multipaz"
             isStatic = true
             export(project(":multipaz"))
+            export(project(":multipaz-facenet"))
+            export(project(":multipaz-facenet-test-data"))
             export(project(":multipaz-doctypes"))
             export(project(":multipaz-utopia"))
             export(project(":multipaz-longfellow"))
@@ -99,6 +101,8 @@ kotlin {
                 implementation(libs.androidx.sqlite.framework)
 
                 api(project(":multipaz"))
+                api(project(":multipaz-facenet"))
+                api(project(":multipaz-facenet-test-data"))
                 api(project(":multipaz-doctypes"))
                 api(project(":multipaz-utopia"))
                 api(project(":multipaz-longfellow"))
@@ -164,6 +168,8 @@ kotlin {
                 implementation(libs.semver)
 
                 implementation(project(":multipaz"))
+                implementation(project(":multipaz-facenet"))
+                implementation(project(":multipaz-facenet-test-data"))
                 implementation(project(":multipaz-compose"))
                 implementation(project(":multipaz-dcapi"))
                 implementation(project(":multipaz-doctypes"))

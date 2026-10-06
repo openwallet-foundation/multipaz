@@ -9,6 +9,7 @@ import SwiftUI
 class ViewModel {
 
     var path: [Destination] = []
+    var pendingToastMessage: String? = nil
 
     let verticalCardListState = VerticalCardListState()
 
@@ -48,6 +49,7 @@ class ViewModel {
     var readerTrustManager: TrustManager!
     var provisioningModel: ProvisioningModel!
     var provisioningSupport: ProvisioningSupport!
+    var faceMatcherRepository: FaceMatcherRepository!
 
     let promptModel = Platform.shared.promptModel
     
@@ -55,6 +57,10 @@ class ViewModel {
 
     func load() async {
         PromptModel.Companion.shared.setGlobal(promptModel: promptModel)
+        
+        faceMatcherRepository = FaceMatcherRepository()
+        faceMatcherRepository.add(faceMatcher: FaceNetFaceMatcher(modelBytes: FaceTestData.shared.testModel))
+        faceMatcherRepository.add(faceMatcher: FaceNetFaceMatcher(modelBytes: FaceTestData.shared.testModel, debug: true))
         
         storage = IosStorage(
             storageFileUrl: FileManager.default.containerURL(

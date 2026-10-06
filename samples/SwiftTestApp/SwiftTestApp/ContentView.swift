@@ -35,10 +35,13 @@ struct ContentView: View {
                     ClaimsScreen(documentId: documentId, credentialId: credentialId)
                 case .consentPromptScreen: ConsentPromptScreen()
                 case .passphrasePromptScreen: PassphrasePromptScreen()
+                case .faceMatcherPromptScreen: FaceMatcherPromptScreen()
                 case .iso18013ProximityPresentmentScreen: Iso18013ProximityPresentmentScreen()
                 case .certificateViewerScreen(let certificates): CertificateViewerScreen(certificates: certificates)
                 case .certificateExamplesScreen: CertificateExamplesScreen()
                 case .floatingItemListScreen: FloatingItemListScreen()
+                case .faceLivenessCaptureScreen(let matcherName): FaceLivenessCaptureScreen(matcherName: matcherName)
+                case .fakeIssuerApprovalScreen(let portraitBytes): FakeIssuerApprovalScreen(portraitBytes: portraitBytes)
                 }
             }
             .sheet(
